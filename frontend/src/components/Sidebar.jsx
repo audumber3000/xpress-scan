@@ -44,9 +44,15 @@ const Sidebar = () => {
       setUser(data.user);
     };
     getUser();
+
     // Listen for auth changes
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null);
+      if (session?.user) {
+        // Force refresh user metadata after OAuth login
+        supabase.auth.getUser().then(({ data }) => setUser(data.user));
+      } else {
+        setUser(null);
+      }
     });
     return () => {
       listener.subscription.unsubscribe();
