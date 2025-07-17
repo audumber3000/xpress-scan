@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "perfect-chalice-459509-p1",
+  "private_key_id": "e0d9c692f0f740ecc2fac170f795ddf48e2a290c",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC0STTfAw8q3BSE\nyiY0UTRVE7Vt5OYbKunncLsoafqKE1YJngYPEyYNg2NOseyxvecsuCUomXuuBfdq\nAIPphOC9JX485Anb7/mvSeYDnA/rPOtDkwS7a4xjHhfvFSONIeRABI/F7tvVGPRu\nf4YJOTV4C6XVBkWmPRVUOKjlwmPEiXKaATfVK09KO2tjsL1+OmIrN2uIiKGqs2A0\nsZIwObiadYGUoMhcTE2GDP801aRJHFSynm/3XejHAx1VDRGe5kkCJn8vIpSSXWCo\nOn9/vcOnCdkTT8cPXOhNaVIgeVCf60+RrgrkHdk+pbaoNk1AbgP2t0dalsHBfjRY\nh8thSWvjAgMBAAECggEAOf9O9etLBtOz+h/5+FyjRDdJ52d6qwS8KIs4ekDVq3Oa\n+w8ODe1wEWrSGK/eYDOiWd2Hfq8ZfZtHw58U0JvBnLeiC76keU+S+FQCneinqlp3\nqM5z+EMZ74zv0Cbxv+ZGQl31ToyPxdb4U0/M88ymqc69c3FIGLmP0f9EPl2xsLin\ndA87k0qLo+d9IHwTdbHGiJBzEA4vsmGC3CuUwY2HLsWZqgidSTFy2s8V77ezkvkt\n0silekQYyeSbmZH2H3qZaEdKE5h4hiUxbI/nqanmG0A7Fg8wB0HKWwVhg5PNvbRz\nBXEFFU1gbpVFi+FRPX844YALFq4tAiZsMtIsxECmwQKBgQD0osm+gBMe4UaKM9xM\nqLDCpllaQECdG8xMhfIIkKs5dBkP3LhK6xxs1TJFr3lRCtHCnEgDLfA3ThaA55ND\nWzYrBMlLUuRkNa4pLiVSlMsM5/89U8LZFlgiCa6/WqF0RpbzXp1GXo0ROE6ylmnC\ny4qm9cNgKWCJJNX18Igq17DbgwKBgQC8qSsqeQXLSCuX4grpoV7g+ZsCVC2M2chm\n7Fd3Grbiw122wLt8b8genUgL7BcodQhZF0RRPJGV9SYyZbW+p+1zQXZ6mpT1KPLh\nPnJtUImWRoLTuLkdccchvHb4OUpDa5oGYLJK8oCZQJ2DepDlP4pkBoPSIN1j+AMT\n1Oya1mRgIQKBgQCle2jVAHXusZyx6BrhkErhoP1YW5ZZsHAmY4Ux3gq1Np+tZzUT\nGK+Fv0HeebCq7ZKu/mCIJg8UmjIGyJ+JNK4Ts40m8s+kKdvB54E/t38TH+w8Y+iu\nSLsda0dWEcydhxKdVic1bsgmGdzCWZT5PA5ymlSrO9Idc1l4oFi8AmOUWQKBgQCk\nhGkOCqdQ08igFBAsF/qi+UeBSmLGVwv5JNRJGtSs/mz0dzGHm/rJJ6KyMtknAJed\nCTscFFNoj3UVsbhBYDMitM1asP6Ao4rZfRlP1lGE6Ewh0Q4sbRGXi7+7SkpGbMjO\nEvinfr1B5yT0iKdeIoDOJRhC30HwcVBNtPn3NEonwQKBgC2u5AktUkpKulOZxoXN\n8cpFX56R/buRKir/EgQSSIRy+Ofinkw2c4h0wKn8NmYJtChv0UXUGczLx7599CoC\nUMd53/0O2KpVf8cCANND4Dd3oZzyiRIc7f0bJ3IEMBD0iMeSZOH/mZrmgLX7eJmE\nf8Kh0rPwNhnoNOfUXVPsxm75\n-----END PRIVATE KEY-----\n",
+  "client_email": "xpressscan@perfect-chalice-459509-p1.iam.gserviceaccount.com",
+  "client_id": "112631484693130915098",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/xpressscan%40perfect-chalice-459509-p1.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
