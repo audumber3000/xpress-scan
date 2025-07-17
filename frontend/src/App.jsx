@@ -40,6 +40,23 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
   const location = useLocation();
 
+  // Parse access token from URL hash after OAuth login
+  useEffect(() => {
+    if (window.location.hash && window.location.hash.includes('access_token')) {
+      const params = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
+      if (accessToken) {
+        localStorage.setItem('access_token', accessToken);
+      }
+      if (refreshToken) {
+        localStorage.setItem('refresh_token', refreshToken);
+      }
+      // Optionally, remove the hash from the URL
+      window.location.hash = '';
+    }
+  }, []);
+
   useEffect(() => {
     const currentSession = supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
