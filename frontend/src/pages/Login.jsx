@@ -13,7 +13,8 @@ const Login = () => {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    console.log('LOGIN RESPONSE', data, error);
     if (error) {
       setError(error.message);
     } else {
