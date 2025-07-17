@@ -91,11 +91,11 @@ function AppContent() {
       <Sidebar />
       <main className="flex-1 w-full h-full">
         <Routes>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/patients" element={<Patients />} />
-          <Route path="/patient-intake" element={<PatientIntake />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/voice-reporting" element={<VoiceReporting />} />
+          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/patients" element={<ProtectedRoute><Patients /></ProtectedRoute>} />
+          <Route path="/patient-intake" element={<ProtectedRoute><PatientIntake /></ProtectedRoute>} />
+          <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+          <Route path="/voice-reporting" element={<ProtectedRoute><VoiceReporting /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </main>
