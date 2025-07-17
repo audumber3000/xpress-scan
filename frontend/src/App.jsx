@@ -7,33 +7,13 @@ import Reports from "./pages/Reports";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import VoiceReporting from "./pages/VoiceReporting";
-import { supabase } from "./supabaseClient";
-import { useEffect, useState } from "react";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 function ProtectedRoute({ children }) {
-  const [session, setSession] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { session, loading } = useAuth();
   const location = useLocation();
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data, error }) => {
-      if (error) {
-        console.error("Supabase getSession error:", error);
-      }
-      setSession(data.session);
-      setLoading(false);
-      console.log("[ProtectedRoute] Session:", data.session);
-    });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      console.log("[ProtectedRoute] Auth state changed. Session:", session);
-    });
-    return () => {
-      listener.subscription.unsubscribe();
-    };
-  }, []);
 
   if (loading) return <div>Loading...</div>;
   if (!session) return <Navigate to="/login" state={{ from: location }} replace />;
@@ -41,44 +21,8 @@ function ProtectedRoute({ children }) {
 }
 
 function AppContent() {
-  const [session, setSession] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { session, loading } = useAuth();
   const location = useLocation();
-
-  // Parse access token from URL hash after OAuth login
-  useEffect(() => {
-    if (window.location.hash && window.location.hash.includes('access_token')) {
-      const params = new URLSearchParams(window.location.hash.substring(1));
-      const accessToken = params.get('access_token');
-      const refreshToken = params.get('refresh_token');
-      if (accessToken) {
-        localStorage.setItem('access_token', accessToken);
-      }
-      if (refreshToken) {
-        localStorage.setItem('refresh_token', refreshToken);
-      }
-      // Optionally, remove the hash from the URL
-      window.location.hash = '';
-    }
-  }, []);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data, error }) => {
-      if (error) {
-        console.error("Supabase getSession error:", error);
-      }
-      setSession(data.session);
-      setLoading(false);
-      console.log("[AppContent] Session:", data.session);
-    });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      console.log("[AppContent] Auth state changed. Session:", session);
-    });
-    return () => {
-      listener.subscription.unsubscribe();
-    };
-  }, []);
 
   // Check if current route is auth page
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup';
@@ -127,7 +71,9 @@ function AppContent() {
 function App() {
   return (
     <Router>
-      <AppContent />
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </Router>
   );
 }
