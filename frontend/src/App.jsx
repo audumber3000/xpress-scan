@@ -18,12 +18,17 @@ function ProtectedRoute({ children }) {
   const location = useLocation();
 
   useEffect(() => {
-    const currentSession = supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (error) {
+        console.error("Supabase getSession error:", error);
+      }
       setSession(data.session);
       setLoading(false);
+      console.log("[ProtectedRoute] Session:", data.session);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      console.log("[ProtectedRoute] Auth state changed. Session:", session);
     });
     return () => {
       listener.subscription.unsubscribe();
@@ -58,12 +63,17 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    const currentSession = supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (error) {
+        console.error("Supabase getSession error:", error);
+      }
       setSession(data.session);
       setLoading(false);
+      console.log("[AppContent] Session:", data.session);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      console.log("[AppContent] Auth state changed. Session:", session);
     });
     return () => {
       listener.subscription.unsubscribe();
