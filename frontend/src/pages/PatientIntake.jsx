@@ -30,8 +30,9 @@ const PatientIntake = () => {
     setError("");
 
     try {
+      const API_URL = import.meta.env.VITE_API_URL;
       // 1. Save patient to database
-      const patientResponse = await fetch("http://localhost:8000/patients/", {
+      const patientResponse = await fetch(`${API_URL}/patients/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -44,7 +45,7 @@ const PatientIntake = () => {
       }
 
       // 2. Generate Google Doc report
-      const reportResponse = await fetch("http://localhost:8000/reports/create-doc", {
+      const reportResponse = await fetch(`${API_URL}/reports/create-doc`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

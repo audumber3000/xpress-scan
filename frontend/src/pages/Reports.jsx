@@ -12,11 +12,12 @@ const Reports = () => {
   const [filterStatus, setFilterStatus] = useState("all");
   const [page, setPage] = useState(1);
 
+  const API_URL = import.meta.env.VITE_API_URL;
 
   const fetchReports = async () => {
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:8000/reports/");
+      const response = await fetch(`${API_URL}/reports/`);
       if (response.ok) {
         const data = await response.json();
         setReports(data);
@@ -87,7 +88,7 @@ const Reports = () => {
 
   const handleRegenerateReport = async (report) => {
     try {
-      const response = await fetch("http://localhost:8000/reports/create-doc", {
+      const response = await fetch(`${API_URL}/reports/create-doc`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

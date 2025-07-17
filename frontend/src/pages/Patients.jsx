@@ -18,11 +18,13 @@ const Patients = () => {
   const [deleteLoading, setDeleteLoading] = useState(null);
   const navigate = useNavigate();
 
+  const API_URL = import.meta.env.VITE_API_URL;
+
   useEffect(() => {
     const fetchPatients = async () => {
       setLoading(true);
       try {
-        const res = await fetch("http://localhost:8000/patients/");
+        const res = await fetch(`${API_URL}/patients/`);
         if (!res.ok) throw new Error("Failed to fetch patients");
         const data = await res.json();
         setPatients(Array.isArray(data) ? data : []);
@@ -101,7 +103,7 @@ const Patients = () => {
     try {
       // Remove profile_image_url before sending to backend
       const { profile_image_url, ...dataToSend } = editFormData;
-      const response = await fetch(`http://localhost:8000/patients/${editingPatient.id}`, {
+      const response = await fetch(`${API_URL}/patients/${editingPatient.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(dataToSend)
@@ -132,7 +134,7 @@ const Patients = () => {
     if (!window.confirm(`Are you sure you want to delete ${patient.name}?`)) return;
     setDeleteLoading(patient.id);
     try {
-      const response = await fetch(`http://localhost:8000/patients/${patient.id}`, { method: "DELETE" });
+      const response = await fetch(`${API_URL}/patients/${patient.id}`, { method: "DELETE" });
       if (response.ok) {
         setPatients(patients.filter(p => p.id !== patient.id));
       } else {

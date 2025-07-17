@@ -15,7 +15,9 @@ origins = [
     "http://localhost:5174",
     "http://127.0.0.1:5173",
     "http://127.0.0.1:5174",
-    "*"  # Allow all origins for development
+    "https://xpress-scan.onrender.com",  # Backend URL (optional, for self-calls)
+     "https://xpress-scan.vercel.app"  # Vercel frontend (replace with actual)
+    # Add more deployed frontend URLs as needed
 ]
 app.add_middleware(
     CORSMiddleware,

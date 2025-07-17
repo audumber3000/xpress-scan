@@ -231,7 +231,8 @@ const VoiceReporting = () => {
     const fetchPatients = async () => {
       setLoadingPatients(true);
       try {
-        const response = await fetch("http://localhost:8000/patients/");
+        const API_URL = import.meta.env.VITE_API_URL;
+        const response = await fetch(`${API_URL}/patients/`);
         if (response.ok) {
           const data = await response.json();
           setPatients(data);
@@ -304,7 +305,8 @@ const VoiceReporting = () => {
       // Get HTML content from TipTap
       const htmlContent = editor ? editor.getHTML() : "";
       // Example: POST to backend (adjust endpoint as needed)
-      const response = await fetch("http://localhost:8000/reports/voice-doc", {
+      const API_URL = import.meta.env.VITE_API_URL;
+      const response = await fetch(`${API_URL}/reports/voice-doc`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
