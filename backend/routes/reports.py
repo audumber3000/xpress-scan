@@ -417,7 +417,7 @@ def create_voice_doc(transcript_data: dict, db: Session = Depends(get_db)):
             'referred_by': patient.referred_by,
             'village': patient.village,
             'phone': patient.phone,
-            'transcript': transcript
+            'report': transcript  # Map transcript to 'report' to match {{report}} template placeholder
         }
         
         # Create Google Doc from template with patient data + transcript

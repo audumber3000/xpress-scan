@@ -376,7 +376,7 @@ const VoiceReporting = () => {
   };
 
   return (
-    <div className="w-full h-full bg-white p-6 flex flex-col items-center justify-start">
+    <div className="w-full h-full bg-white p-6 flex flex-col items-center justify-start overflow-y-auto">
       <div className="w-full max-w-none mx-auto">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Voice Reporting</h1>
         <p className="text-gray-600 mb-6">Speak into the mic and see your report transcribed in real time. You can edit and format the text below.</p>
@@ -420,47 +420,72 @@ const VoiceReporting = () => {
 
         {/* Selected Patient Details */}
         {selectedPatient && (
-          <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">Selected Patient Details</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="font-medium text-gray-700">Name:</span>
-                  <span className="text-gray-900">{selectedPatient.name}</span>
+          <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 shadow-sm">
+            <div className="p-4">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="bg-blue-100 p-1.5 rounded-lg">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
                 </div>
-                <div className="flex justify-between">
-                  <span className="font-medium text-gray-700">Age:</span>
-                  <span className="text-gray-900">{selectedPatient.age} years</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium text-gray-700">Gender:</span>
-                  <span className="text-gray-900">{selectedPatient.gender}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium text-gray-700">Scan Type:</span>
-                  <span className="text-gray-900">{selectedPatient.scan_type}</span>
-                </div>
+                <h3 className="text-lg font-bold text-gray-900">Selected Patient Details</h3>
               </div>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="font-medium text-gray-700">Village:</span>
-                  <span className="text-gray-900">{selectedPatient.village}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium text-gray-700">Phone:</span>
-                  <span className="text-gray-900">{selectedPatient.phone}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium text-gray-700">Referred By:</span>
-                  <span className="text-gray-900">{selectedPatient.referred_by}</span>
-                </div>
-                {selectedPatient.notes && (
-                  <div className="flex justify-between">
-                    <span className="font-medium text-gray-700">Notes:</span>
-                    <span className="text-gray-900">{selectedPatient.notes}</span>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Personal Information */}
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-2">Personal Information</h4>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500 font-medium">Name:</span>
+                      <span className="text-sm font-semibold text-gray-900">{selectedPatient.name}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500 font-medium">Age:</span>
+                      <span className="text-sm font-semibold text-gray-900">{selectedPatient.age} years</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500 font-medium">Gender:</span>
+                      <span className="text-sm font-semibold text-gray-900">{selectedPatient.gender}</span>
+                    </div>
                   </div>
-                )}
+                </div>
+                
+                {/* Medical Information */}
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-2">Medical Information</h4>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500 font-medium">Scan Type:</span>
+                      <span className="text-sm font-semibold text-gray-900">{selectedPatient.scan_type}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500 font-medium">Village:</span>
+                      <span className="text-sm font-semibold text-gray-900">{selectedPatient.village}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500 font-medium">Phone:</span>
+                      <span className="text-sm font-semibold text-gray-900">{selectedPatient.phone}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500 font-medium">Referred By:</span>
+                      <span className="text-sm font-semibold text-gray-900">{selectedPatient.referred_by}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
+              
+              {selectedPatient.notes && (
+                <div className="mt-3 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                  <div className="flex items-center gap-2 mb-1">
+                    <svg className="w-3 h-3 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span className="text-xs font-semibold text-yellow-800">Notes</span>
+                  </div>
+                  <p className="text-xs text-yellow-700">{selectedPatient.notes}</p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -490,8 +515,8 @@ const VoiceReporting = () => {
             <button onClick={() => setAlignment('justify')} className={`p-1 text-xs rounded border ${editor && editor.isActive({ textAlign: 'justify' }) ? 'bg-gray-200' : 'bg-white'}`} type="button" title="Justify"><FaAlignJustify /></button>
           </div>
           <div
-            className="border-2 border-green-500 rounded-lg bg-white w-full min-h-[20rem] max-h-[60vh] overflow-y-auto shadow-sm outline-none"
-            style={{ resize: 'vertical', padding: '0.5rem 1rem', width: '100%' }}
+            className="border-2 border-green-500 rounded-lg bg-white w-full h-96 overflow-y-auto shadow-sm outline-none"
+            style={{ padding: '0.5rem 1rem', width: '100%' }}
             tabIndex={-1}
           >
             <EditorContent editor={editor} className="outline-none" />

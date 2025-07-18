@@ -74,3 +74,12 @@ def update_patient(patient_id: int, patient: PatientCreate, db: Session = Depend
     db.commit()
     db.refresh(db_patient)
     return db_patient 
+
+@router.delete("/{patient_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_patient(patient_id: int, db: Session = Depends(get_db)):
+    db_patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    if not db_patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    db.delete(db_patient)
+    db.commit()
+    return {"message": "Patient deleted successfully"} 
