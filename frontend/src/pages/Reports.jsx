@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import { toast } from 'react-toastify';
-import { FaFilePdf, FaEye } from 'react-icons/fa';
+import { FaFilePdf, FaEye, FaTrash } from 'react-icons/fa';
+import { MoreVertical } from 'lucide-react';
 
 const REPORTS_PER_PAGE = 7;
 
@@ -11,6 +12,18 @@ const Reports = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [page, setPage] = useState(1);
+  const [openDropdown, setOpenDropdown] = useState(null);
+  // Dropdown close on outside click
+  React.useEffect(() => {
+    const handleClick = (e) => {
+      if (!e.target.closest('.dropdown-menu') && !e.target.closest('.dropdown-trigger')) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+  const toggleDropdown = id => setOpenDropdown(openDropdown === id ? null : id);
 
   const API_URL = import.meta.env.VITE_API_URL;
 
@@ -113,6 +126,23 @@ const Reports = () => {
     } catch (error) {
       console.error("Error regenerating report:", error);
       alert("Error regenerating report");
+    }
+  };
+
+  const handleDeleteReport = async (report) => {
+    if (!window.confirm(`Are you sure you want to delete the report for ${report.patient_name}?`)) return;
+    try {
+      const response = await fetch(`${API_URL}/reports/${report.id}`, {
+        method: "DELETE",
+      });
+      if (response.ok) {
+        toast.success("Report deleted successfully");
+        fetchReports();
+      } else {
+        toast.error("Failed to delete report");
+      }
+    } catch (error) {
+      toast.error("Error deleting report");
     }
   };
 
@@ -249,13 +279,33 @@ const Reports = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {formatDate(report.created_at)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button
-                      onClick={() => handleViewReport(report)}
-                      className="flex items-center gap-2 px-4 py-2 rounded-full bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100 transition border border-blue-200 shadow-sm"
-                    >
-                      <FaEye className="text-blue-500" /> View
-                    </button>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium relative">
+                    <div className="relative inline-block text-left">
+                      <button
+                        onClick={() => toggleDropdown(report.id)}
+                        className="p-1 rounded hover:bg-gray-100 dropdown-trigger"
+                      >
+                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="6" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="12" cy="18" r="1" /></svg>
+                      </button>
+                      {openDropdown === report.id && (
+                        <div className="absolute right-0 mt-2 w-40 bg-white rounded-md shadow-lg z-10 border border-gray-200 dropdown-menu">
+                          <div className="py-1">
+                            <button
+                              onClick={e => { e.stopPropagation(); handleViewReport(report); setOpenDropdown(null); }}
+                              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                            >
+                              <FaEye className="w-4 h-4 mr-2 text-blue-500" /> View
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); handleDeleteReport(report); setOpenDropdown(null); }}
+                              className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                            >
+                              <FaTrash className="w-4 h-4 mr-2 text-red-500" /> Delete
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))

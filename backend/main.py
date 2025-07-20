@@ -2,6 +2,8 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes import patients, reports
+from routes import scan_types
+from routes import referring_doctors
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -30,6 +32,8 @@ app.add_middleware(
 
 app.include_router(patients.router, prefix="/patients", tags=["patients"])
 app.include_router(reports.router, prefix="/reports", tags=["reports"])
+app.include_router(scan_types.router, prefix="/scan-types", tags=["scan_types"])
+app.include_router(referring_doctors.router, prefix="/referring-doctors", tags=["referring_doctors"])
 
 @app.get("/")
 def root():

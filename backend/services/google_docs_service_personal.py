@@ -5,6 +5,7 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from datetime import datetime
 import pickle
+from bs4 import BeautifulSoup
 
 SCOPES = [
     'https://www.googleapis.com/auth/drive',
@@ -65,6 +66,11 @@ def copy_template_and_fill(patient_data):
         # 2. Replace placeholders in the new doc
         requests = []
         for key, value in patient_data.items():
+            # If the field is 'transcript' or 'report', clean HTML to plain text with newlines
+            if key in ("transcript", "report"):
+                soup = BeautifulSoup(str(value), "html.parser")
+                cleaned = soup.get_text(separator="\n")
+                value = cleaned
             requests.append({
                 "replaceAllText": {
                     "containsText": {"text": f"{{{{{key}}}}}", "matchCase": True},

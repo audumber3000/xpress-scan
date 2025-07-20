@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel
 from services.google_docs_service_personal import copy_template_and_fill, list_reports_from_folder, get_credentials
 from services.google_docs_pdf_service import GoogleDocsPDFService
@@ -44,29 +44,45 @@ class ReportResponse(BaseModel):
 def get_all_reports(db: Session = Depends(get_db)):
     """Get all reports with patient information from database and Google Drive"""
     try:
-        # Get reports from database
-        db_reports = db.query(Report).join(Patient).all()
+        db_patients = db.query(Patient).all()
+        db_reports = db.query(Report).all()
         report_list = []
-        
-        for report in db_reports:
-            patient = db.query(Patient).filter(Patient.id == report.patient_id).first()
-            if patient:
-                report_list.append(ReportResponse(
-                    id=report.id,
-                    patient_name=patient.name,
-                    patient_age=patient.age,
-                    patient_gender=patient.gender,
-                    scan_type=patient.scan_type,
-                    referred_by=patient.referred_by,
-                    docx_url=report.docx_url,
-                    pdf_url=report.pdf_url,
-                    status=report.status,
-                    created_at=report.created_at
-                ))
-        
+        for patient in db_patients:
+            try:
+                report = next((r for r in db_reports if r.patient_id == patient.id), None)
+                if report:
+                    report_list.append(ReportResponse(
+                        id=report.id,
+                        patient_name=patient.name,
+                        patient_age=patient.age,
+                        patient_gender=patient.gender,
+                        scan_type=patient.scan_type,
+                        referred_by=patient.referred_by,
+                        docx_url=report.docx_url,
+                        pdf_url=report.pdf_url,
+                        status=report.status,
+                        created_at=report.created_at if report.created_at else patient.created_at
+                    ))
+                else:
+                    report_list.append(ReportResponse(
+                        id=None,
+                        patient_name=patient.name,
+                        patient_age=patient.age,
+                        patient_gender=patient.gender,
+                        scan_type=patient.scan_type,
+                        referred_by=patient.referred_by,
+                        docx_url=None,
+                        pdf_url=None,
+                        status="Not generated",
+                        created_at=patient.created_at if patient.created_at else datetime.utcnow()
+                    ))
+            except Exception as entry_error:
+                print(f"[REPORTS API] Skipped patient id={getattr(patient, 'id', None)} due to error: {entry_error}")
+                continue
         return report_list
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"[REPORTS API] Fatal error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch reports. Please check server logs for details.")
 
 @router.get("/from-drive")
 def get_reports_from_drive():
@@ -236,44 +252,23 @@ def get_report(report_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_report(report_id: int, db: Session = Depends(get_db)):
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    db.delete(report)
+    db.commit()
+    return {"message": "Report deleted successfully"}
+
 @router.post("/generate")
 def generate_report():
     return {"message": "Generate report endpoint (to be implemented)"}
 
 @router.post("/create-doc")
 def create_doc(patient: PatientInfo, db: Session = Depends(get_db)):
-    try:
-        # Generate the Google Doc
-        edit_url = copy_template_and_fill(patient.dict())
-        
-        # Save to database (create a new patient and report)
-        new_patient = Patient(
-            name=patient.name,
-            age=patient.age,
-            gender=patient.gender,
-            village="",  # Default value
-            phone="",    # Default value
-            referred_by=patient.referred_by,
-            scan_type=patient.scan_type,
-            notes=""
-        )
-        db.add(new_patient)
-        db.commit()
-        db.refresh(new_patient)
-        
-        # Create report record
-        new_report = Report(
-            patient_id=new_patient.id,
-            docx_url=edit_url,
-            status="draft"
-        )
-        db.add(new_report)
-        db.commit()
-        
-        return {"edit_url": edit_url, "report_id": new_report.id}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+    # Remove patient creation logic from here. Only allow report creation from voice reporting.
+    raise HTTPException(status_code=403, detail="Report creation is only allowed from Voice Reporting.")
 
 @router.post("/upload")
 def upload_report():

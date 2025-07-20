@@ -41,13 +41,12 @@ def get_patients(skip: int = 0, limit: int = 100, db: Session = Depends(get_db))
 
 @router.post("/", response_model=PatientOut, status_code=status.HTTP_201_CREATED)
 def create_patient(patient: PatientCreate, db: Session = Depends(get_db)):
-    """Create a new patient (only save to database, no Google Doc generation)"""
+    """Create a new patient (only save to database, no report generation)"""
     try:
         db_patient = Patient(**patient.dict())
         db.add(db_patient)
         db.commit()
         db.refresh(db_patient)
-        
         return PatientOut(
             id=db_patient.id,
             name=db_patient.name,
@@ -58,11 +57,12 @@ def create_patient(patient: PatientCreate, db: Session = Depends(get_db)):
             referred_by=db_patient.referred_by,
             scan_type=db_patient.scan_type,
             notes=db_patient.notes,
+            payment_type=db_patient.payment_type,
             created_at=db_patient.created_at
         )
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/{patient_id}", response_model=PatientOut)
 def update_patient(patient_id: int, patient: PatientCreate, db: Session = Depends(get_db)):
@@ -73,7 +73,7 @@ def update_patient(patient_id: int, patient: PatientCreate, db: Session = Depend
         setattr(db_patient, field, value)
     db.commit()
     db.refresh(db_patient)
-    return db_patient 
+    return db_patient
 
 @router.delete("/{patient_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_patient(patient_id: int, db: Session = Depends(get_db)):

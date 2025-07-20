@@ -37,7 +37,6 @@ const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const [profileOpen, setProfileOpen] = useState(false);
 
   const linkClass = (path) =>
     `flex items-center gap-3 py-2 px-4 rounded-lg transition font-medium text-gray-700 whitespace-nowrap ${location.pathname === path ? "bg-green-100 text-green-700 border border-green-500" : "hover:bg-green-50"}`;
@@ -87,7 +86,7 @@ const Sidebar = () => {
       </nav>
       {/* User Profile & Sign Out */}
       <div className="mt-auto flex flex-col gap-2">
-        <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 cursor-pointer hover:bg-green-50 transition" onClick={() => setProfileOpen(true)}>
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 cursor-pointer hover:bg-green-50 transition" onClick={() => navigate("/doctor-profile")}>
           <img src={userAvatar} alt="User" className="w-10 h-10 rounded-full" />
           <div>
             <div className="font-semibold text-gray-900 text-sm">{userName}</div>
@@ -96,20 +95,6 @@ const Sidebar = () => {
         </div>
         <button onClick={handleSignOut} className="w-full py-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg font-semibold transition text-sm">Sign Out</button>
       </div>
-      {/* Profile Modal */}
-      {profileOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-          <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-xs flex flex-col items-center relative">
-            <button className="absolute top-2 right-2 text-gray-400 hover:text-gray-600" onClick={() => setProfileOpen(false)}>
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-            <img src={userAvatar} alt="User" className="w-20 h-20 rounded-full border-4 border-green-200 mb-4" />
-            <div className="text-xl font-bold text-gray-900 mb-1">{userName}</div>
-            <div className="text-gray-500 text-sm mb-2">{userEmail}</div>
-            {/* Add more profile details here if available */}
-          </div>
-        </div>
-      )}
     </aside>
   );
 };

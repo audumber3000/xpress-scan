@@ -1,5 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 const PatientIntake = () => {
   const navigate = useNavigate();
@@ -11,10 +13,42 @@ const PatientIntake = () => {
     phone: "",
     referred_by: "",
     scan_type: "",
-    notes: ""
+    notes: "",
+    payment_type: "Cash"
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [scanTypes, setScanTypes] = useState([]);
+  const [selectedPrice, setSelectedPrice] = useState("");
+  const [referringDoctors, setReferringDoctors] = useState([]);
+  const [showOtherDoctor, setShowOtherDoctor] = useState(false);
+
+  useEffect(() => {
+    // Fetch scan types from backend
+    const fetchScanTypes = async () => {
+      try {
+        const res = await fetch(`${API_URL}/scan-types/`);
+        if (!res.ok) throw new Error("Failed to fetch scan types");
+        const data = await res.json();
+        setScanTypes(data);
+      } catch (e) {
+        setScanTypes([]);
+      }
+    };
+    fetchScanTypes();
+    // Fetch referring doctors from backend
+    const fetchDoctors = async () => {
+      try {
+        const res = await fetch(`${API_URL}/referring-doctors/`);
+        if (!res.ok) throw new Error("Failed to fetch referring doctors");
+        const data = await res.json();
+        setReferringDoctors(data);
+      } catch (e) {
+        setReferringDoctors([]);
+      }
+    };
+    fetchDoctors();
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -22,6 +56,13 @@ const PatientIntake = () => {
       ...prev,
       [name]: value
     }));
+    if (name === "scan_type") {
+      const found = scanTypes.find(s => s.id.toString() === value);
+      setSelectedPrice(found ? found.price : "");
+    }
+    if (name === "referred_by") {
+      setShowOtherDoctor(value === "__other__");
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -30,43 +71,47 @@ const PatientIntake = () => {
     setError("");
 
     try {
-      const API_URL = import.meta.env.VITE_API_URL;
+      // Find scan type name for backend
+      const scanTypeObj = scanTypes.find(s => s.id.toString() === formData.scan_type);
+      const scanTypeName = scanTypeObj ? scanTypeObj.name : "";
+      const patientPayload = { ...formData, scan_type: scanTypeName };
       // 1. Save patient to database
       const patientResponse = await fetch(`${API_URL}/patients/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(patientPayload),
       });
 
       if (!patientResponse.ok) {
         throw new Error("Failed to save patient data");
       }
 
+      // REMOVE: Do not call /reports/create-doc here
       // 2. Generate Google Doc report
-      const reportResponse = await fetch(`${API_URL}/reports/create-doc`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: formData.name,
-          age: parseInt(formData.age),
-          gender: formData.gender,
-          scan_type: formData.scan_type,
-          referred_by: formData.referred_by,
-        }),
-      });
+      // const reportResponse = await fetch(`${API_URL}/reports/create-doc`, {
+      //   method: "POST",
+      //   headers: {
+      //     "Content-Type": "application/json",
+      //   },
+      //   body: JSON.stringify({
+      //     name: formData.name,
+      //     age: parseInt(formData.age),
+      //     gender: formData.gender,
+      //     scan_type: scanTypeName,
+      //     referred_by: formData.referred_by,
+      //   }),
+      // });
 
-      if (!reportResponse.ok) {
-        throw new Error("Failed to generate report");
-      }
+      // if (!reportResponse.ok) {
+      //   throw new Error("Failed to generate report");
+      // }
 
-      const reportData = await reportResponse.json();
+      // const reportData = await reportResponse.json();
       
       // 3. Show success and redirect
-      alert(`Patient registered successfully! Report generated: ${reportData.edit_url}`);
+      alert(`Patient registered successfully!`);
       navigate("/patients");
       
     } catch (error) {
@@ -181,15 +226,30 @@ const PatientIntake = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Referred By *
                 </label>
-                <input
-                  type="text"
+                <select
                   name="referred_by"
-                  value={formData.referred_by}
+                  value={showOtherDoctor ? "__other__" : formData.referred_by}
                   onChange={handleChange}
-                  required
-                  placeholder="Dr. Name or Hospital"
+                  required={!showOtherDoctor}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
+                >
+                  <option value="">Select Referring Doctor</option>
+                  {referringDoctors.map(doc => (
+                    <option key={doc.id} value={doc.name}>{doc.name}{doc.hospital ? ` (${doc.hospital})` : ""}</option>
+                  ))}
+                  <option value="__other__">Other</option>
+                </select>
+                {showOtherDoctor && (
+                  <input
+                    type="text"
+                    name="referred_by"
+                    value={formData.referred_by}
+                    onChange={handleChange}
+                    required
+                    placeholder="Enter referring doctor name"
+                    className="w-full mt-2 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                )}
               </div>
               
               <div>
@@ -204,29 +264,32 @@ const PatientIntake = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
                   <option value="">Select Scan Type</option>
-                  <option value="CT Scan">CT Scan</option>
-                  <option value="MRI">MRI</option>
-                  <option value="X-Ray">X-Ray</option>
-                  <option value="Ultrasound">Ultrasound</option>
-                  <option value="PET Scan">PET Scan</option>
-                  <option value="Mammography">Mammography</option>
-                  <option value="Other">Other</option>
+                  {scanTypes.map(scan => (
+                    <option key={scan.id} value={scan.id}>{scan.name}</option>
+                  ))}
                 </select>
               </div>
             </div>
-            
+            {/* Auto-display price */}
+            {selectedPrice && (
+              <div className="mt-2 text-green-700 font-semibold">Price: ₹{selectedPrice}</div>
+            )}
+            {/* Payment Type */}
             <div className="mt-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Clinical Notes
+                Payment Type
               </label>
-              <textarea
-                name="notes"
-                value={formData.notes}
+              <select
+                name="payment_type"
+                value={formData.payment_type}
                 onChange={handleChange}
-                rows="3"
-                placeholder="Enter any clinical notes or observations..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-              />
+              >
+                <option value="Cash">Cash</option>
+                <option value="Card">Card</option>
+                <option value="UPI">UPI</option>
+                <option value="Other">Other</option>
+              </select>
             </div>
           </div>
 
@@ -237,7 +300,7 @@ const PatientIntake = () => {
               disabled={loading}
               className="flex-1 bg-green-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-green-700 transition-colors disabled:opacity-50"
             >
-              {loading ? "Processing..." : "Register Patient & Generate Report"}
+              {loading ? "Processing..." : "Register Patient"}
             </button>
             <button
               type="button"
