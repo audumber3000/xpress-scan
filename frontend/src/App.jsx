@@ -1,32 +1,44 @@
+import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import Dashboard from "./pages/Dashboard";
-import Patients from "./pages/Patients";
-import PatientIntake from "./pages/PatientIntake";
-import Sidebar from "./components/Sidebar";
-import Reports from "./pages/Reports";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
-import VoiceReporting from "./pages/VoiceReporting";
-import DoctorProfile from "./pages/DoctorProfile";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-function ProtectedRoute({ children }) {
-  const { session, loading } = useAuth();
-  const location = useLocation();
+// Pages
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import Dashboard from "./pages/Dashboard";
+import Patients from "./pages/Patients";
+import PatientIntake from "./pages/PatientIntake";
+import Reports from "./pages/Reports";
+import VoiceReporting from "./pages/VoiceReporting";
+import DoctorProfile from "./pages/DoctorProfile";
+import ClinicOnboarding from "./pages/ClinicOnboarding";
+import AuthCallback from "./pages/AuthCallback";
 
-  if (loading) return <div>Loading...</div>;
-  if (!session) return <Navigate to="/login" state={{ from: location }} replace />;
+// Components
+import Sidebar from "./components/Sidebar";
+
+function ProtectedRoute({ children }) {
+  const { user, loading } = useAuth();
+  
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+  
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  
   return children;
 }
 
 function AppContent() {
-  const { session, loading } = useAuth();
+  const { user, loading } = useAuth();
   const location = useLocation();
 
   // Check if current route is auth page
-  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup';
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/onboarding' || location.pathname === '/auth/callback';
 
   if (loading) return <div>Loading...</div>;
 
@@ -36,6 +48,8 @@ function AppContent() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/onboarding" element={<ClinicOnboarding />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
       </Routes>
     );
   }

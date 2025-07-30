@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+import { api } from "../utils/api";
 
 const PatientIntake = () => {
   const navigate = useNavigate();
@@ -27,9 +26,7 @@ const PatientIntake = () => {
     // Fetch scan types from backend
     const fetchScanTypes = async () => {
       try {
-        const res = await fetch(`${API_URL}/scan-types/`);
-        if (!res.ok) throw new Error("Failed to fetch scan types");
-        const data = await res.json();
+        const data = await api.get("/scan-types/");
         setScanTypes(data);
       } catch (e) {
         setScanTypes([]);
@@ -39,9 +36,7 @@ const PatientIntake = () => {
     // Fetch referring doctors from backend
     const fetchDoctors = async () => {
       try {
-        const res = await fetch(`${API_URL}/referring-doctors/`);
-        if (!res.ok) throw new Error("Failed to fetch referring doctors");
-        const data = await res.json();
+        const data = await api.get("/referring-doctors/");
         setReferringDoctors(data);
       } catch (e) {
         setReferringDoctors([]);
@@ -74,42 +69,17 @@ const PatientIntake = () => {
       // Find scan type name for backend
       const scanTypeObj = scanTypes.find(s => s.id.toString() === formData.scan_type);
       const scanTypeName = scanTypeObj ? scanTypeObj.name : "";
-      const patientPayload = { ...formData, scan_type: scanTypeName };
-      // 1. Save patient to database
-      const patientResponse = await fetch(`${API_URL}/patients/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(patientPayload),
-      });
-
-      if (!patientResponse.ok) {
-        throw new Error("Failed to save patient data");
-      }
-
-      // REMOVE: Do not call /reports/create-doc here
-      // 2. Generate Google Doc report
-      // const reportResponse = await fetch(`${API_URL}/reports/create-doc`, {
-      //   method: "POST",
-      //   headers: {
-      //     "Content-Type": "application/json",
-      //   },
-      //   body: JSON.stringify({
-      //     name: formData.name,
-      //     age: parseInt(formData.age),
-      //     gender: formData.gender,
-      //     scan_type: scanTypeName,
-      //     referred_by: formData.referred_by,
-      //   }),
-      // });
-
-      // if (!reportResponse.ok) {
-      //   throw new Error("Failed to generate report");
-      // }
-
-      // const reportData = await reportResponse.json();
       
+      // Convert age to integer and prepare payload
+      const patientPayload = { 
+        ...formData, 
+        scan_type: scanTypeName,
+        age: parseInt(formData.age, 10) // Convert age to integer
+      };
+      
+      // 1. Save patient to database
+      await api.post("/patients/", patientPayload);
+
       // 3. Show success and redirect
       alert(`Patient registered successfully!`);
       navigate("/patients");

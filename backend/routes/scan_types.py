@@ -4,16 +4,22 @@ from typing import List
 from database import get_db
 from models import ScanType
 from schemas import ScanTypeCreate, ScanTypeUpdate, ScanTypeOut
+from auth import get_current_user
 
 router = APIRouter()
 
 @router.get("/", response_model=List[ScanTypeOut])
-def list_scan_types(db: Session = Depends(get_db)):
-    return db.query(ScanType).all()
+def list_scan_types(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    """Get all scan types for current clinic"""
+    return db.query(ScanType).filter(ScanType.clinic_id == current_user.clinic_id).all()
 
 @router.post("/", response_model=ScanTypeOut, status_code=status.HTTP_201_CREATED)
-def create_scan_type(scan_type: ScanTypeCreate, db: Session = Depends(get_db)):
-    db_scan_type = ScanType(name=scan_type.name, price=scan_type.price)
+def create_scan_type(scan_type: ScanTypeCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    """Create a new scan type for current clinic"""
+    scan_type_data = scan_type.dict()
+    scan_type_data['clinic_id'] = current_user.clinic_id
+    
+    db_scan_type = ScanType(**scan_type_data)
     db.add(db_scan_type)
     try:
         db.commit()
@@ -24,10 +30,16 @@ def create_scan_type(scan_type: ScanTypeCreate, db: Session = Depends(get_db)):
     return db_scan_type
 
 @router.put("/{scan_type_id}", response_model=ScanTypeOut)
-def update_scan_type(scan_type_id: int, scan_type: ScanTypeUpdate, db: Session = Depends(get_db)):
-    db_scan_type = db.query(ScanType).filter(ScanType.id == scan_type_id).first()
+def update_scan_type(scan_type_id: int, scan_type: ScanTypeUpdate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    """Update scan type - scoped by clinic"""
+    db_scan_type = db.query(ScanType).filter(
+        ScanType.id == scan_type_id,
+        ScanType.clinic_id == current_user.clinic_id
+    ).first()
+    
     if not db_scan_type:
         raise HTTPException(status_code=404, detail="Scan type not found")
+    
     if scan_type.name is not None:
         db_scan_type.name = scan_type.name
     if scan_type.price is not None:
@@ -37,10 +49,16 @@ def update_scan_type(scan_type_id: int, scan_type: ScanTypeUpdate, db: Session =
     return db_scan_type
 
 @router.delete("/{scan_type_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_scan_type(scan_type_id: int, db: Session = Depends(get_db)):
-    db_scan_type = db.query(ScanType).filter(ScanType.id == scan_type_id).first()
+def delete_scan_type(scan_type_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    """Delete scan type - scoped by clinic"""
+    db_scan_type = db.query(ScanType).filter(
+        ScanType.id == scan_type_id,
+        ScanType.clinic_id == current_user.clinic_id
+    ).first()
+    
     if not db_scan_type:
         raise HTTPException(status_code=404, detail="Scan type not found")
+    
     db.delete(db_scan_type)
     db.commit()
     return None 

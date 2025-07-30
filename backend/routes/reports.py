@@ -11,6 +11,7 @@ from typing import List, Optional
 from datetime import datetime
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from auth import get_current_user
 
 router = APIRouter()
 
@@ -41,11 +42,13 @@ class ReportResponse(BaseModel):
         from_attributes = True
 
 @router.get("/", response_model=List[ReportResponse])
-def get_all_reports(db: Session = Depends(get_db)):
-    """Get all reports with patient information from database and Google Drive"""
+def get_all_reports(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    """Get all reports with patient information from database and Google Drive - scoped by clinic"""
     try:
-        db_patients = db.query(Patient).all()
-        db_reports = db.query(Report).all()
+        # Get patients and reports for current clinic only
+        db_patients = db.query(Patient).filter(Patient.clinic_id == current_user.clinic_id).all()
+        db_reports = db.query(Report).join(Patient).filter(Patient.clinic_id == current_user.clinic_id).all()
+        
         report_list = []
         for patient in db_patients:
             try:
@@ -224,10 +227,15 @@ def test_google_docs_service():
         }
 
 @router.get("/{report_id}", response_model=ReportResponse)
-def get_report(report_id: int, db: Session = Depends(get_db)):
-    """Get a specific report by ID"""
+def get_report(report_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    """Get a specific report by ID - scoped by clinic"""
     try:
-        report = db.query(Report).filter(Report.id == report_id).first()
+        # Get report that belongs to current clinic
+        report = db.query(Report).join(Patient).filter(
+            Report.id == report_id,
+            Patient.clinic_id == current_user.clinic_id
+        ).first()
+        
         if not report:
             raise HTTPException(status_code=404, detail="Report not found")
         
@@ -253,10 +261,17 @@ def get_report(report_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_report(report_id: int, db: Session = Depends(get_db)):
-    report = db.query(Report).filter(Report.id == report_id).first()
+def delete_report(report_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    """Delete report - scoped by clinic"""
+    # Get report that belongs to current clinic
+    report = db.query(Report).join(Patient).filter(
+        Report.id == report_id,
+        Patient.clinic_id == current_user.clinic_id
+    ).first()
+    
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
+    
     db.delete(report)
     db.commit()
     return {"message": "Report deleted successfully"}
@@ -387,8 +402,8 @@ def test_pdf_generation():
         return {"error": str(e)}
 
 @router.post("/voice-doc")
-def create_voice_doc(transcript_data: dict, db: Session = Depends(get_db)):
-    """Create a Google Doc from voice transcript and upload exported PDF to Supabase"""
+def create_voice_doc(transcript_data: dict, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    """Create a Google Doc from voice transcript and upload exported PDF to Supabase - scoped by clinic"""
     try:
         transcript = transcript_data.get("transcript", "")
         patient_id = transcript_data.get("patient_id")
@@ -398,8 +413,12 @@ def create_voice_doc(transcript_data: dict, db: Session = Depends(get_db)):
         if not patient_id:
             raise HTTPException(status_code=400, detail="Patient ID is required")
         
-        # Get patient data from database
-        patient = db.query(Patient).filter(Patient.id == patient_id).first()
+        # Get patient data from database - scoped by clinic
+        patient = db.query(Patient).filter(
+            Patient.id == patient_id,
+            Patient.clinic_id == current_user.clinic_id
+        ).first()
+        
         if not patient:
             raise HTTPException(status_code=404, detail="Patient not found")
         

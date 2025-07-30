@@ -4,6 +4,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from routes import patients, reports
 from routes import scan_types
 from routes import referring_doctors
+from routes import clinic_users
+from routes import clinics
+from routes import users
+from routes import auth
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -23,17 +27,21 @@ origins = [
 ]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # DEVELOPMENT ONLY: allow all origins
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"]
 )
 
+app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(patients.router, prefix="/patients", tags=["patients"])
 app.include_router(reports.router, prefix="/reports", tags=["reports"])
 app.include_router(scan_types.router, prefix="/scan-types", tags=["scan_types"])
 app.include_router(referring_doctors.router, prefix="/referring-doctors", tags=["referring_doctors"])
+app.include_router(clinic_users.router, prefix="/clinic-users", tags=["clinic_users"])
+app.include_router(clinics.router, prefix="/clinics", tags=["clinics"])
+app.include_router(users.router, prefix="/users", tags=["users"])
 
 @app.get("/")
 def root():

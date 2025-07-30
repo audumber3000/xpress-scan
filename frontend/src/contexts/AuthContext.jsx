@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../supabaseClient';
 
 const AuthContext = createContext({});
 
@@ -12,21 +11,44 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
+    // Get initial session from localStorage
     const getInitialSession = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error) {
-          console.error('Error getting session:', error);
-        } else {
-          setSession(session);
-          setUser(session?.user ?? null);
-          console.log('[AuthContext] Initial session:', session);
+        const storedToken = localStorage.getItem('auth_token');
+        const storedUser = localStorage.getItem('user');
+        
+        if (storedToken && storedUser) {
+          setToken(storedToken);
+          setUser(JSON.parse(storedUser));
+          
+          // Verify token is still valid by calling /auth/me
+          try {
+            const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/auth/me`, {
+              headers: {
+                'Authorization': `Bearer ${storedToken}`
+              }
+            });
+            
+            if (!response.ok) {
+              // Token is invalid, clear storage
+              localStorage.removeItem('auth_token');
+              localStorage.removeItem('user');
+              setToken(null);
+              setUser(null);
+            }
+          } catch (error) {
+            console.error('Error verifying token:', error);
+            // Clear storage on error
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user');
+            setToken(null);
+            setUser(null);
+          }
         }
       } catch (error) {
         console.error('Error in getInitialSession:', error);
@@ -36,38 +58,37 @@ export const AuthProvider = ({ children }) => {
     };
 
     getInitialSession();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('[AuthContext] Auth state changed:', event, session);
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-      }
-    );
-
-    return () => {
-      subscription?.unsubscribe();
-    };
   }, []);
 
   const signOut = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Error signing out:', error);
+      // Call backend logout endpoint
+      if (token) {
+        await fetch(`${import.meta.env.VITE_BACKEND_URL}/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
       }
     } catch (error) {
-      console.error('Error in signOut:', error);
+      console.error('Error signing out:', error);
+    } finally {
+      // Clear local storage
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user');
+      setToken(null);
+      setUser(null);
     }
   };
 
   const value = {
-    session,
     user,
+    token,
     loading,
     signOut,
+    setUser,
+    setToken
   };
 
   return (

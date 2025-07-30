@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { api } from "../utils/api";
 
 const PATIENTS_PER_PAGE = 9;
 
@@ -18,15 +19,11 @@ const Patients = () => {
   const [deleteLoading, setDeleteLoading] = useState(null);
   const navigate = useNavigate();
 
-  const API_URL = import.meta.env.VITE_API_URL;
-
   useEffect(() => {
     const fetchPatients = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`${API_URL}/patients/`);
-        if (!res.ok) throw new Error("Failed to fetch patients");
-        const data = await res.json();
+        const data = await api.get("/patients/");
         setPatients(Array.isArray(data) ? data : []);
       } catch (e) {
         setPatients([]);
@@ -103,20 +100,11 @@ const Patients = () => {
     try {
       // Remove profile_image_url before sending to backend
       const { profile_image_url, ...dataToSend } = editFormData;
-      const response = await fetch(`${API_URL}/patients/${editingPatient.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(dataToSend)
-      });
-      if (response.ok) {
-        const updated = await response.json();
-        setPatients(patients.map(p => p.id === editingPatient.id ? updated : p));
-        setEditModalOpen(false);
-        setEditingPatient(null);
-        setEditFormData({});
-      } else {
-        alert("Failed to update patient");
-      }
+      const updated = await api.put(`/patients/${editingPatient.id}`, dataToSend);
+      setPatients(patients.map(p => p.id === editingPatient.id ? updated : p));
+      setEditModalOpen(false);
+      setEditingPatient(null);
+      setEditFormData({});
     } catch (err) {
       alert("Error updating patient");
     } finally {
@@ -134,12 +122,8 @@ const Patients = () => {
     if (!window.confirm(`Are you sure you want to delete ${patient.name}?`)) return;
     setDeleteLoading(patient.id);
     try {
-      const response = await fetch(`${API_URL}/patients/${patient.id}`, { method: "DELETE" });
-      if (response.ok) {
-        setPatients(patients.filter(p => p.id !== patient.id));
-      } else {
-        alert("Failed to delete patient");
-      }
+      await api.delete(`/patients/${patient.id}`);
+      setPatients(patients.filter(p => p.id !== patient.id));
     } catch {
       alert("Error deleting patient");
     } finally {

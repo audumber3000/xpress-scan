@@ -3,6 +3,7 @@ import { supabase } from "../supabaseClient";
 import { toast } from 'react-toastify';
 import { FaFilePdf, FaEye, FaTrash } from 'react-icons/fa';
 import { MoreVertical } from 'lucide-react';
+import { api } from "../utils/api";
 
 const REPORTS_PER_PAGE = 7;
 
@@ -25,20 +26,14 @@ const Reports = () => {
   }, []);
   const toggleDropdown = id => setOpenDropdown(openDropdown === id ? null : id);
 
-  const API_URL = import.meta.env.VITE_API_URL;
-
   const fetchReports = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/reports/`);
-      if (response.ok) {
-        const data = await response.json();
-        setReports(data);
-      } else {
-        console.error("Failed to fetch reports");
-      }
+      const data = await api.get("/reports/");
+      setReports(data);
     } catch (error) {
       console.error("Error fetching reports:", error);
+      toast.error("Failed to fetch reports");
     } finally {
       setLoading(false);
     }
@@ -101,46 +96,29 @@ const Reports = () => {
 
   const handleRegenerateReport = async (report) => {
     try {
-      const response = await fetch(`${API_URL}/reports/create-doc`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: report.patient_name,
-          age: report.patient_age,
-          gender: report.patient_gender,
-          scan_type: report.scan_type,
-          referred_by: report.referred_by,
-        }),
+      const data = await api.post("/reports/create-doc", {
+        name: report.patient_name,
+        age: report.patient_age,
+        gender: report.patient_gender,
+        scan_type: report.scan_type,
+        referred_by: report.referred_by,
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        window.open(data.edit_url, "_blank");
-        // Refresh the reports list
-        fetchReports();
-      } else {
-        alert("Failed to regenerate report");
-      }
+      
+      window.open(data.edit_url, "_blank");
+      // Refresh the reports list
+      fetchReports();
     } catch (error) {
       console.error("Error regenerating report:", error);
-      alert("Error regenerating report");
+      toast.error("Error regenerating report");
     }
   };
 
   const handleDeleteReport = async (report) => {
     if (!window.confirm(`Are you sure you want to delete the report for ${report.patient_name}?`)) return;
     try {
-      const response = await fetch(`${API_URL}/reports/${report.id}`, {
-        method: "DELETE",
-      });
-      if (response.ok) {
-        toast.success("Report deleted successfully");
-        fetchReports();
-      } else {
-        toast.error("Failed to delete report");
-      }
+      await api.delete(`/reports/${report.id}`);
+      toast.success("Report deleted successfully");
+      fetchReports();
     } catch (error) {
       toast.error("Error deleting report");
     }

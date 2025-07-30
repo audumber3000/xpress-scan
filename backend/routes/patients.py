@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Path
+from fastapi import APIRouter, Depends, HTTPException, status, Path, Request
 from sqlalchemy.orm import Session
 from database import SessionLocal
 from models import Patient
 from schemas import PatientCreate, PatientOut
 from typing import List
 from schemas import PatientResponse
+from auth import get_current_user, get_current_clinic, require_patients_view, require_patients_edit, require_patients_delete
 
 router = APIRouter()
 
@@ -21,12 +22,21 @@ def get_db():
         db.close()
 
 @router.get("/", response_model=List[PatientResponse])
-def get_patients(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Get all patients for dropdown selection"""
-    patients = db.query(Patient).offset(skip).limit(limit).all()
+def get_patients(
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(get_db),
+    current_user = Depends(require_patients_view)
+):
+    """Get all patients for current clinic"""
+    patients = db.query(Patient).filter(
+        Patient.clinic_id == current_user.clinic_id
+    ).offset(skip).limit(limit).all()
+    
     return [
         PatientResponse(
             id=patient.id,
+            clinic_id=patient.clinic_id,
             name=patient.name,
             age=patient.age,
             gender=patient.gender,
@@ -40,15 +50,29 @@ def get_patients(skip: int = 0, limit: int = 100, db: Session = Depends(get_db))
     ]
 
 @router.post("/", response_model=PatientOut, status_code=status.HTTP_201_CREATED)
-def create_patient(patient: PatientCreate, db: Session = Depends(get_db)):
-    """Create a new patient (only save to database, no report generation)"""
+def create_patient(
+    patient: PatientCreate, 
+    db: Session = Depends(get_db),
+    current_user = Depends(require_patients_edit)
+):
+    """Create a new patient for current clinic"""
     try:
-        db_patient = Patient(**patient.dict())
+        print(f"Creating patient with data: {patient.dict()}")
+        
+        # Set clinic_id from current user
+        patient_data = patient.dict()
+        patient_data['clinic_id'] = current_user.clinic_id
+        
+        print(f"Final patient data: {patient_data}")
+        
+        db_patient = Patient(**patient_data)
         db.add(db_patient)
         db.commit()
         db.refresh(db_patient)
+        
         return PatientOut(
             id=db_patient.id,
+            clinic_id=db_patient.clinic_id,
             name=db_patient.name,
             age=db_patient.age,
             gender=db_patient.gender,
@@ -62,24 +86,48 @@ def create_patient(patient: PatientCreate, db: Session = Depends(get_db)):
         )
     except Exception as e:
         db.rollback()
+        print(f"Error creating patient: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/{patient_id}", response_model=PatientOut)
-def update_patient(patient_id: int, patient: PatientCreate, db: Session = Depends(get_db)):
-    db_patient = db.query(Patient).filter(Patient.id == patient_id).first()
+def update_patient(
+    patient_id: int, 
+    patient: PatientCreate, 
+    db: Session = Depends(get_db),
+    current_user = Depends(require_patients_edit)
+):
+    """Update patient (only if belongs to current clinic)"""
+    db_patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.clinic_id == current_user.clinic_id
+    ).first()
+    
     if not db_patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+    
     for field, value in patient.dict().items():
-        setattr(db_patient, field, value)
+        if field != 'clinic_id':  # Don't allow changing clinic_id
+            setattr(db_patient, field, value)
+    
     db.commit()
     db.refresh(db_patient)
     return db_patient
 
 @router.delete("/{patient_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_patient(patient_id: int, db: Session = Depends(get_db)):
-    db_patient = db.query(Patient).filter(Patient.id == patient_id).first()
+def delete_patient(
+    patient_id: int, 
+    db: Session = Depends(get_db),
+    current_user = Depends(require_patients_delete)
+):
+    """Delete patient (only if belongs to current clinic)"""
+    db_patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.clinic_id == current_user.clinic_id
+    ).first()
+    
     if not db_patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+    
     db.delete(db_patient)
     db.commit()
     return {"message": "Patient deleted successfully"} 
