@@ -15,21 +15,23 @@ load_dotenv()
 
 app = FastAPI()
 
-# CORS setup
+# CORS setup - Explicit origins for production
 origins = [
     "http://localhost:5173",
-    "http://localhost:5174",
+    "http://localhost:5174", 
     "http://127.0.0.1:5173",
     "http://127.0.0.1:5174",
-    "https://xpress-scan.onrender.com",  # Backend URL (optional, for self-calls)
-     "https://xpress-scan.vercel.app"  # Vercel frontend (replace with actual)
-    # Add more deployed frontend URLs as needed
+    "https://xpress-scan.vercel.app",  # Vercel frontend
+    "https://xpress-scan.onrender.com",  # Backend URL
+    "https://xpress-scan-frontend.vercel.app",  # Alternative Vercel URL
+    "https://xpress-scan-frontend.onrender.com",  # Alternative Render URL
 ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # DEVELOPMENT ONLY: allow all origins
+    allow_origins=origins,  # Use explicit origins instead of "*"
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["*"]
 )
