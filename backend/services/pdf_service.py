@@ -12,7 +12,7 @@ from datetime import datetime
 
 def html_template_to_pdf(html_content: str, patient_info=None):
     """
-    Convert HTML template to PDF using proper HTML rendering
+    Convert HTML template to PDF using WeasyPrint for proper HTML rendering
     
     Args:
         html_content: Complete HTML content with styling
@@ -22,72 +22,46 @@ def html_template_to_pdf(html_content: str, patient_info=None):
         Path to generated PDF file
     """
     try:
-        # Use proper HTML-to-PDF conversion
-        return html_to_pdf_proper(html_content, patient_info)
+        # Use WeasyPrint for HTML-to-PDF conversion
+        return html_to_pdf_weasyprint(html_content, patient_info)
         
     except Exception as e:
         print(f"Error generating PDF from HTML template: {e}")
         # Fallback to basic PDF generation
         return html_to_pdf_fallback(html_content, patient_info)
 
-def html_to_pdf_proper(html_content, patient_info=None):
+def html_to_pdf_weasyprint(html_content, patient_info=None):
     """
-    Convert HTML content to PDF using playwright for exact HTML rendering
+    Convert HTML content to PDF using WeasyPrint for exact HTML rendering
     """
     try:
-        from playwright.sync_api import sync_playwright
+        from weasyprint import HTML, CSS
+        from weasyprint.text.fonts import FontConfiguration
         
         # Create a temporary file for the PDF
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
             pdf_path = tmp_file.name
         
-        # Use playwright to render HTML exactly as it appears in a browser
-        with sync_playwright() as p:
-            # Launch browser with specific arguments for cloud deployment
-            browser = p.chromium.launch(
-                headless=True,
-                args=[
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-accelerated-2d-canvas',
-                    '--no-first-run',
-                    '--no-zygote',
-                    '--disable-gpu'
-                ]
-            )
-            page = browser.new_page()
-            
-            # Set content and wait for it to load
-            page.set_content(html_content)
-            
-            # Generate PDF with proper settings
-            page.pdf(
-                path=pdf_path,
-                format='A4',
-                margin={
-                    'top': '0.75in',
-                    'right': '0.75in',
-                    'bottom': '0.75in',
-                    'left': '0.75in'
-                },
-                print_background=True
-            )
-            
-            browser.close()
+        # Configure fonts
+        font_config = FontConfiguration()
+        
+        # Create HTML object from content
+        html_doc = HTML(string=html_content)
+        
+        # Generate PDF with proper settings
+        html_doc.write_pdf(
+            pdf_path,
+            font_config=font_config,
+            presentational_hints=True
+        )
         
         return pdf_path
         
     except ImportError:
-        print("playwright not available, falling back to basic PDF generation")
+        print("WeasyPrint not available, falling back to basic PDF generation")
         return html_to_pdf_fallback(html_content, patient_info)
     except Exception as e:
-        print(f"Error with playwright: {e}")
-        # Try to provide more specific error information
-        if "Executable doesn't exist" in str(e):
-            print("Playwright browser executable not found. Please ensure browsers are installed.")
-        elif "Failed to launch" in str(e):
-            print("Failed to launch browser. This might be due to missing system dependencies.")
+        print(f"Error with WeasyPrint: {e}")
         return html_to_pdf_fallback(html_content, patient_info)
 
 def html_to_pdf_fallback(html_content, patient_info=None):
