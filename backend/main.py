@@ -17,8 +17,10 @@ app = FastAPI()
 
 # CORS setup - Explicit origins for production
 origins = [
+    "http://localhost:3000",  # Docker frontend
     "http://localhost:5173",
     "http://localhost:5174", 
+    "http://127.0.0.1:3000",  # Docker frontend alternative
     "http://127.0.0.1:5173",
     "http://127.0.0.1:5174",
     "https://xpress-scan.vercel.app",  # Vercel frontend
@@ -47,4 +49,6 @@ app.include_router(users.router, prefix="/users", tags=["users"])
 
 @app.get("/")
 def root():
-    return {"message": "Radiology Clinic Backend is running"} 
+    return {"message": "Radiology Clinic Backend is running"}
+
+ 
