@@ -43,8 +43,19 @@ def html_to_pdf_proper(html_content, patient_info=None):
         
         # Use playwright to render HTML exactly as it appears in a browser
         with sync_playwright() as p:
-            # Launch browser
-            browser = p.chromium.launch()
+            # Launch browser with specific arguments for cloud deployment
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-accelerated-2d-canvas',
+                    '--no-first-run',
+                    '--no-zygote',
+                    '--disable-gpu'
+                ]
+            )
             page = browser.new_page()
             
             # Set content and wait for it to load
@@ -72,6 +83,11 @@ def html_to_pdf_proper(html_content, patient_info=None):
         return html_to_pdf_fallback(html_content, patient_info)
     except Exception as e:
         print(f"Error with playwright: {e}")
+        # Try to provide more specific error information
+        if "Executable doesn't exist" in str(e):
+            print("Playwright browser executable not found. Please ensure browsers are installed.")
+        elif "Failed to launch" in str(e):
+            print("Failed to launch browser. This might be due to missing system dependencies.")
         return html_to_pdf_fallback(html_content, patient_info)
 
 def html_to_pdf_fallback(html_content, patient_info=None):
