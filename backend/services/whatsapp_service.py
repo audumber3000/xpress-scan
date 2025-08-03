@@ -2,9 +2,19 @@ import requests
 import os
 from typing import Optional
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 class WhatsAppService:
     def __init__(self):
         self.api_key = os.getenv("RAPIWHA_API_KEY", "your-rapiwha-api-key")
+        # Clean up the API key (remove any trailing characters)
+        if self.api_key and self.api_key != "your-rapiwha-api-key":
+            self.api_key = self.api_key.strip().rstrip('%')
         self.base_url = "https://panel.rapiwha.com/send_message.php"
     
     def send_pdf_link(self, phone_number: str, pdf_url: str, message: str = None) -> dict:
@@ -24,39 +34,63 @@ class WhatsAppService:
             phone_number = str(phone_number)
             if not phone_number.startswith('91'):
                 phone_number = '91' + phone_number.lstrip('+')
-            # Prepare the message
-            if message:
-                full_message = f"{message}\n\nYour report is ready: {pdf_url}"
-            else:
-                full_message = f"Your radiology report is ready!\n\nView your report: {pdf_url}"
             
-            # Prepare the request
-            params = {
+            # Clean up the PDF URL (remove trailing '?' from Supabase URLs)
+            clean_pdf_url = pdf_url.rstrip('?') if pdf_url else pdf_url
+            
+            # Send patient details message first
+            patient_message = message if message else "Your radiology report is ready!"
+            
+            patient_params = {
                 'apikey': self.api_key,
                 'number': phone_number,
-                'text': full_message
+                'text': patient_message
             }
             
-            # Send the request
-            response = requests.get(self.base_url, params=params)
+            patient_response = requests.get(self.base_url, params=patient_params)
             
-            if response.status_code == 200:
+            if patient_response.status_code != 200:
+                return {
+                    "success": False,
+                    "message": f"Failed to send patient details message. Status: {patient_response.status_code}",
+                    "response": patient_response.text
+                }
+            
+            # Wait a moment before sending the PDF link
+            import time
+            time.sleep(2)
+            
+            # Send PDF link in separate message (URL only)
+            pdf_message = clean_pdf_url
+            
+            pdf_params = {
+                'apikey': self.api_key,
+                'number': phone_number,
+                'text': pdf_message
+            }
+            
+            pdf_response = requests.get(self.base_url, params=pdf_params)
+            
+            if pdf_response.status_code == 200:
                 return {
                     "success": True,
-                    "message": "WhatsApp message sent successfully",
-                    "response": response.text
+                    "message": "Report sent to patient successfully",
+                    "response": {
+                        "patient_message": patient_response.text,
+                        "pdf_message": pdf_response.text
+                    }
                 }
             else:
                 return {
                     "success": False,
-                    "message": f"Failed to send WhatsApp message. Status: {response.status_code}",
-                    "response": response.text
+                    "message": f"Failed to send report to patient. Status: {pdf_response.status_code}",
+                    "response": pdf_response.text
                 }
                 
         except Exception as e:
             return {
                 "success": False,
-                "message": f"Error sending WhatsApp message: {str(e)}",
+                "message": f"Error sending WhatsApp messages: {str(e)}",
                 "response": None
             }
     

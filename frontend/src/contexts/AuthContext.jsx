@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { api } from '../utils/api';
 
 const AuthContext = createContext({});
 
@@ -28,22 +29,9 @@ export const AuthProvider = ({ children }) => {
           
           // Verify token is still valid by calling /auth/me
           try {
-            const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/auth/me`, {
-              headers: {
-                'Authorization': `Bearer ${storedToken}`
-              }
-            });
-            
-            if (!response.ok) {
-              // Token is invalid, clear storage
-              localStorage.removeItem('auth_token');
-              localStorage.removeItem('user');
-              setToken(null);
-              setUser(null);
-            }
+            await api.get('/auth/me');
           } catch (error) {
-            console.error('Error verifying token:', error);
-            // Clear storage on error
+            // Token is invalid, clear storage
             localStorage.removeItem('auth_token');
             localStorage.removeItem('user');
             setToken(null);
@@ -64,12 +52,7 @@ export const AuthProvider = ({ children }) => {
     try {
       // Call backend logout endpoint
       if (token) {
-        await fetch(`${import.meta.env.VITE_BACKEND_URL}/auth/logout`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+        await api.post('/auth/logout');
       }
     } catch (error) {
       console.error('Error signing out:', error);

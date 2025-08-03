@@ -1,9 +1,24 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../utils/api";
+import { useAuth } from "../contexts/AuthContext";
 
 const PatientIntake = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
+  
+  // Check if user has permission to create patients
+  useEffect(() => {
+    if (user && user.role !== "clinic_owner") {
+      const permissions = user.permissions || {};
+      const patientsPermissions = permissions.patients || {};
+      if (!patientsPermissions.edit) {
+        navigate("/patients");
+        return;
+      }
+    }
+  }, [user, navigate]);
+  
   const [formData, setFormData] = useState({
     name: "",
     age: "",

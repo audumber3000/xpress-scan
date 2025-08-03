@@ -1,19 +1,24 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import { toast } from 'react-toastify';
-import { FaFilePdf, FaEye, FaTrash } from 'react-icons/fa';
+import { FaFilePdf, FaEye, FaTrash, FaWhatsapp, FaSync } from 'react-icons/fa';
 import { MoreVertical } from 'lucide-react';
 import { api } from "../utils/api";
+import LoadingButton from "../components/LoadingButton";
+import { useAuth } from "../contexts/AuthContext";
 
 const REPORTS_PER_PAGE = 7;
 
 const Reports = () => {
+  const { user } = useAuth();
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [page, setPage] = useState(1);
   const [openDropdown, setOpenDropdown] = useState(null);
+  const [deletingReports, setDeletingReports] = useState(new Set());
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(new Set());
   // Dropdown close on outside click
   React.useEffect(() => {
     const handleClick = (e) => {
@@ -55,16 +60,45 @@ const Reports = () => {
 
   const getStatusColor = (status) => {
     switch (status.toLowerCase()) {
-      case "completed":
-        return "bg-green-100 text-green-800";
+      case "final":
+        return "bg-blue-100 text-blue-800";
       case "draft":
         return "bg-yellow-100 text-yellow-800";
-      case "pending":
-        return "bg-blue-100 text-blue-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
   };
+
+  const getWhatsAppStatus = (report) => {
+    console.log("Report WhatsApp count:", report.whatsapp_sent_count, typeof report.whatsapp_sent_count);
+    if (report.whatsapp_sent_count && report.whatsapp_sent_count > 0) {
+      return (
+        <div className="flex items-center gap-1 bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap">
+          <FaWhatsapp className="w-3 h-3 flex-shrink-0" />
+          <span>Sent ({report.whatsapp_sent_count})</span>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // Helper function to check if user has permission
+  const hasPermission = (permission) => {
+    if (!user || !user.permissions) return false;
+    if (user.role === "clinic_owner") return true;
+    
+    // Parse permission string (e.g., "reports:delete" -> ["reports", "delete"])
+    const [section, action] = permission.split(":");
+    
+    // Check nested permission structure
+    if (user.permissions[section] && user.permissions[section][action]) {
+      return user.permissions[section][action] === true;
+    }
+    
+    return false;
+  };
+
+
 
   // Filtered and paginated reports
   const filteredReports = reports.filter((report) => {
@@ -87,10 +121,12 @@ const Reports = () => {
   }, [searchTerm, filterStatus, reports]);
 
   const handleViewReport = (report) => {
-    if (report.docx_url) {
+    if (report.pdf_url) {
+      window.open(report.pdf_url, "_blank");
+    } else if (report.docx_url) {
       window.open(report.docx_url, "_blank");
     } else {
-      alert("Report document not available yet.");
+      toast.error("Report document not available yet.");
     }
   };
 
@@ -116,24 +152,57 @@ const Reports = () => {
   const handleDeleteReport = async (report) => {
     if (!window.confirm(`Are you sure you want to delete the report for ${report.patient_name}?`)) return;
     try {
+      setDeletingReports(prev => new Set(prev).add(report.id));
       await api.delete(`/reports/${report.id}`);
       toast.success("Report deleted successfully");
       fetchReports();
     } catch (error) {
       toast.error("Error deleting report");
+    } finally {
+      setDeletingReports(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(report.id);
+        return newSet;
+      });
     }
   };
 
-  if (loading) {
-    return (
-      <div className="w-full h-full flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading reports...</p>
-        </div>
-      </div>
-    );
-  }
+  const handleSendWhatsApp = async (report) => {
+    try {
+      setSendingWhatsApp(prev => new Set(prev).add(report.id));
+      toast.info("Sending report to patient...");
+      const response = await api.post(`/reports/send-whatsapp/${report.id}`);
+      
+      if (response.success) {
+        toast.success("✅ Report sent to patient successfully!");
+      } else {
+        toast.error("Failed to send report to patient");
+      }
+    } catch (error) {
+      console.error("Error sending report to patient:", error);
+      toast.error("Error sending report to patient");
+    } finally {
+      setSendingWhatsApp(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(report.id);
+        return newSet;
+      });
+    }
+  };
+
+  const handleEditReport = (report) => {
+    // Navigate to Voice Reporting page with the report data
+    // Store the report data in localStorage for the VoiceReporting page to access
+    const reportData = {
+      reportId: report.id,
+      isEditing: true,
+      patientId: report.patient_id
+    };
+    localStorage.setItem('editingDraftReport', JSON.stringify(reportData));
+    
+    // Navigate to voice reporting page
+    window.location.href = '/voice-reporting';
+  };
 
   return (
     <div className="w-full h-full bg-white">
@@ -141,14 +210,24 @@ const Reports = () => {
       <div className="px-6 py-4 border-b border-gray-200">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
+              <button
+                onClick={fetchReports}
+                disabled={loading}
+                className="p-1 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
+                title="Refresh reports"
+              >
+                <FaSync className={`w-4 h-4 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
             <p className="text-gray-600 mt-1">
               Manage and view all patient reports
             </p>
           </div>
           <div className="flex items-center space-x-4">
             <span className="text-sm text-gray-500">
-              {filteredReports.length} of {reports.length} reports
+              {loading ? "Loading..." : `${filteredReports.length} of ${reports.length} reports`}
             </span>
           </div>
         </div>
@@ -176,8 +255,7 @@ const Reports = () => {
             >
               <option value="all">All Status</option>
               <option value="draft">Draft</option>
-              <option value="completed">Completed</option>
-              <option value="pending">Pending</option>
+              <option value="final">Final</option>
             </select>
           </div>
         </div>
@@ -210,7 +288,16 @@ const Reports = () => {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {paginatedReports.length === 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                    <p className="mt-2 text-sm text-gray-600">Loading reports...</p>
+                  </div>
+                </td>
+              </tr>
+            ) : paginatedReports.length === 0 ? (
               <tr>
                 <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
                   {reports.length === 0 ? (
@@ -250,9 +337,12 @@ const Reports = () => {
                     {report.referred_by}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(report.status)}`}>
-                      {report.status}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(report.status)}`}>
+                        {report.status}
+                      </span>
+                      {getWhatsAppStatus(report)}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {formatDate(report.created_at)}
@@ -268,18 +358,73 @@ const Reports = () => {
                       {openDropdown === report.id && (
                         <div className="absolute right-0 mt-2 w-40 bg-white rounded-md shadow-lg z-10 border border-gray-200 dropdown-menu">
                           <div className="py-1">
-                            <button
-                              onClick={e => { e.stopPropagation(); handleViewReport(report); setOpenDropdown(null); }}
-                              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            >
-                              <FaEye className="w-4 h-4 mr-2 text-blue-500" /> View
-                            </button>
-                            <button
-                              onClick={e => { e.stopPropagation(); handleDeleteReport(report); setOpenDropdown(null); }}
-                              className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                            >
-                              <FaTrash className="w-4 h-4 mr-2 text-red-500" /> Delete
-                            </button>
+                            {report.status === "final" ? (
+                              <>
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleViewReport(report); setOpenDropdown(null); }}
+                                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                >
+                                  <FaEye className="w-4 h-4 mr-2 text-blue-500" /> View
+                                </button>
+                                {hasPermission("reports:edit") && (
+                                  <LoadingButton
+                                    onClick={e => { e.stopPropagation(); handleSendWhatsApp(report); setOpenDropdown(null); }}
+                                    loading={sendingWhatsApp.has(report.id)}
+                                    className="w-full px-4 py-2 text-sm text-green-600 hover:bg-green-50"
+                                  >
+                                    <FaWhatsapp className="w-4 h-4 mr-2 text-green-500" /> Send WhatsApp
+                                  </LoadingButton>
+                                )}
+                                {hasPermission("reports:delete") && (
+                                  <LoadingButton
+                                    onClick={e => { e.stopPropagation(); handleDeleteReport(report); setOpenDropdown(null); }}
+                                    loading={deletingReports.has(report.id)}
+                                    className="w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                                  >
+                                    <FaTrash className="w-4 h-4 mr-2 text-red-500" /> Delete
+                                  </LoadingButton>
+                                )}
+                              </>
+                            ) : report.status === "draft" ? (
+                              <>
+                                {hasPermission("reports:edit") && (
+                                  <button
+                                    onClick={e => { e.stopPropagation(); handleEditReport(report); setOpenDropdown(null); }}
+                                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                  >
+                                    <svg className="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 11l6 6M3 21v-6.586a2 2 0 01.586-1.414l9-9a2 2 0 012.828 0l3.172 3.172a2 2 0 010 2.828l-9 9A2 2 0 019.586 21H3z" /></svg>
+                                    Edit
+                                  </button>
+                                )}
+                                {hasPermission("reports:delete") && (
+                                  <LoadingButton
+                                    onClick={e => { e.stopPropagation(); handleDeleteReport(report); setOpenDropdown(null); }}
+                                    loading={deletingReports.has(report.id)}
+                                    className="w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                                  >
+                                    <FaTrash className="w-4 h-4 mr-2 text-red-500" /> Delete
+                                  </LoadingButton>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleViewReport(report); setOpenDropdown(null); }}
+                                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                >
+                                  <FaEye className="w-4 h-4 mr-2 text-blue-500" /> View
+                                </button>
+                                {hasPermission("reports:delete") && (
+                                  <LoadingButton
+                                    onClick={e => { e.stopPropagation(); handleDeleteReport(report); setOpenDropdown(null); }}
+                                    loading={deletingReports.has(report.id)}
+                                    className="w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                                  >
+                                    <FaTrash className="w-4 h-4 mr-2 text-red-500" /> Delete
+                                  </LoadingButton>
+                                )}
+                              </>
+                            )}
                           </div>
                         </div>
                       )}
@@ -297,29 +442,29 @@ const Reports = () => {
             -{Math.min(page * REPORTS_PER_PAGE, filteredReports.length)} of {filteredReports.length} entries
           </div>
           <div className="flex gap-1">
-            <button
+            <LoadingButton
               className="w-8 h-8 rounded border border-gray-200 bg-white hover:bg-green-50"
               onClick={() => setPage(page - 1)}
               disabled={page === 1}
             >
               &lt;
-            </button>
+            </LoadingButton>
             {Array.from({ length: totalPages }, (_, i) => (
-              <button
+              <LoadingButton
                 key={i + 1}
                 className={`w-8 h-8 rounded border border-gray-200 bg-white hover:bg-green-50 ${page === i + 1 ? 'bg-green-100 border-green-600 font-bold' : ''}`}
                 onClick={() => setPage(i + 1)}
               >
                 {i + 1}
-              </button>
+              </LoadingButton>
             ))}
-            <button
+            <LoadingButton
               className="w-8 h-8 rounded border border-gray-200 bg-white hover:bg-green-50"
               onClick={() => setPage(page + 1)}
               disabled={page === totalPages}
             >
               &gt;
-            </button>
+            </LoadingButton>
           </div>
         </div>
       </div>

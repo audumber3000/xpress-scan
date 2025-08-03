@@ -8,11 +8,7 @@ pdfkit
 reportlab
 requests 
 psycopg2-binary 
-google-api-python-client
-google-auth
-google-auth-httplib2
-google-auth-oauthlib
 html2text
-google-auth-oauthlib
-google-auth-httplib2 
-beautifulsoup4 
+beautifulsoup4
+weasyprint
+playwright 

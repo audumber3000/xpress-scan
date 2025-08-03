@@ -11,4 +11,7 @@ SUPABASE_STORAGE_ACCESS_ID = os.getenv("SUPABASE_STORAGE_ACCESS_ID", "22c2043bad
 SUPABASE_STORAGE_SECRET_KEY = os.getenv("SUPABASE_STORAGE_SECRET_KEY", "ece7a85824401fb440040d73e1d77694627478735629aff97325d5f0117c9227")
 
 # Use anon key for OAuth verification
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY) 
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+# Use service key for storage operations
+supabase_storage: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY) 

@@ -16,6 +16,8 @@ class ClinicUserIn(BaseModel):
     permissions: Optional[dict] = {}
 
 class ClinicUserUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
     role: Optional[str] = None
     permissions: Optional[dict] = None
 
@@ -35,6 +37,13 @@ class ClinicUserOut(BaseModel):
 @router.get("/", response_model=List[ClinicUserOut])
 def get_clinic_users(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Get all clinic users for current clinic"""
+    # Check if user has permission to view users
+    if current_user.role != "clinic_owner":
+        permissions = current_user.permissions or {}
+        users_permissions = permissions.get("users", {})
+        if not users_permissions.get("view", False):
+            raise HTTPException(status_code=403, detail="You don't have permission to view users")
+    
     try:
         users = db.query(User).filter(
             User.clinic_id == current_user.clinic_id
@@ -47,6 +56,13 @@ def get_clinic_users(db: Session = Depends(get_db), current_user = Depends(get_c
 @router.post("/", response_model=ClinicUserOut, status_code=status.HTTP_201_CREATED)
 def add_clinic_user(user_in: ClinicUserIn, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Add a new clinic user for current clinic"""
+    # Check if user has permission to edit users
+    if current_user.role != "clinic_owner":
+        permissions = current_user.permissions or {}
+        users_permissions = permissions.get("users", {})
+        if not users_permissions.get("edit", False):
+            raise HTTPException(status_code=403, detail="You don't have permission to edit users")
+    
     existing = db.query(User).filter(User.email == user_in.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="User already exists")
@@ -67,6 +83,13 @@ def add_clinic_user(user_in: ClinicUserIn, db: Session = Depends(get_db), curren
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_clinic_user(user_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Delete clinic user - scoped by clinic"""
+    # Check if user has permission to delete users
+    if current_user.role != "clinic_owner":
+        permissions = current_user.permissions or {}
+        users_permissions = permissions.get("users", {})
+        if not users_permissions.get("delete", False):
+            raise HTTPException(status_code=403, detail="You don't have permission to delete users")
+    
     user = db.query(User).filter(
         User.id == user_id,
         User.clinic_id == current_user.clinic_id
@@ -82,6 +105,13 @@ def delete_clinic_user(user_id: int, db: Session = Depends(get_db), current_user
 @router.put("/{user_id}", response_model=ClinicUserOut)
 def update_clinic_user(user_id: int, user_update: ClinicUserUpdate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Update clinic user - scoped by clinic"""
+    # Check if user has permission to edit users
+    if current_user.role != "clinic_owner":
+        permissions = current_user.permissions or {}
+        users_permissions = permissions.get("users", {})
+        if not users_permissions.get("edit", False):
+            raise HTTPException(status_code=403, detail="You don't have permission to edit users")
+    
     print(f"Updating user {user_id} with data: {user_update}")
     
     user = db.query(User).filter(
@@ -93,6 +123,12 @@ def update_clinic_user(user_id: int, user_update: ClinicUserUpdate, db: Session 
         raise HTTPException(status_code=404, detail="User not found")
     
     # Update fields
+    if user_update.name is not None:
+        user.name = user_update.name
+        print(f"Updated name to: {user_update.name}")
+    if user_update.email is not None:
+        user.email = user_update.email
+        print(f"Updated email to: {user_update.email}")
     if user_update.role is not None:
         user.role = user_update.role
         print(f"Updated role to: {user_update.role}")

@@ -96,4 +96,64 @@ def get_my_clinic(db: Session = Depends(get_db), current_user = Depends(get_curr
     if not clinic:
         raise HTTPException(status_code=404, detail="Clinic not found")
     
-    return clinic 
+    return clinic
+
+@router.delete("/{clinic_id}/delete-all", status_code=status.HTTP_204_NO_CONTENT)
+def delete_clinic_and_all_data(clinic_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    """Permanently delete clinic and all associated data - only clinic owners can do this"""
+    # Only allow clinic owners to delete the clinic
+    if current_user.role != "clinic_owner":
+        raise HTTPException(status_code=403, detail="Only clinic owners can delete the clinic")
+    
+    # Only allow access to user's own clinic
+    if current_user.clinic_id != clinic_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clinic not found")
+    
+    try:
+        # Import all models needed for deletion
+        from models import Patient, Report, ScanType, ReferringDoctor, User
+        
+        # Delete all patients
+        patients_deleted = db.query(Patient).filter(Patient.clinic_id == clinic_id).delete()
+        print(f"Deleted {patients_deleted} patients")
+        
+        # Delete all reports
+        reports_deleted = db.query(Report).filter(Report.clinic_id == clinic_id).delete()
+        print(f"Deleted {reports_deleted} reports")
+        
+        # Delete all scan types
+        scan_types_deleted = db.query(ScanType).filter(ScanType.clinic_id == clinic_id).delete()
+        print(f"Deleted {scan_types_deleted} scan types")
+        
+        # Delete all referring doctors
+        referring_doctors_deleted = db.query(ReferringDoctor).filter(ReferringDoctor.clinic_id == clinic_id).delete()
+        print(f"Deleted {referring_doctors_deleted} referring doctors")
+        
+        # Delete all users associated with this clinic
+        users_deleted = db.query(User).filter(User.clinic_id == clinic_id).delete()
+        print(f"Deleted {users_deleted} users")
+        
+        # Finally, delete the clinic itself
+        db.delete(clinic)
+        
+        db.commit()
+        
+        return {
+            "message": "Clinic and all associated data deleted successfully",
+            "deleted_items": {
+                "patients": patients_deleted,
+                "reports": reports_deleted,
+                "scan_types": scan_types_deleted,
+                "referring_doctors": referring_doctors_deleted,
+                "users": users_deleted
+            }
+        }
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Error deleting clinic: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete clinic: {str(e)}") 

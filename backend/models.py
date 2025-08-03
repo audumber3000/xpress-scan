@@ -59,7 +59,9 @@ class Report(Base):
     patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False)
     docx_url = Column(String)
     pdf_url = Column(String)
+    content = Column(Text)  # Store the actual report content for drafts
     status = Column(String, default='draft')
+    whatsapp_sent_count = Column(Integer, default=0)  # Track how many times WhatsApp was sent
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     clinic = relationship("Clinic")
     patient = relationship("Patient")

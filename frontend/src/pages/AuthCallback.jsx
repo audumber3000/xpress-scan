@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { api } from '../utils/api';
 
 const AuthCallback = () => {
-  const navigate = useNavigate();
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleAuthCallback = async () => {
@@ -24,26 +25,14 @@ const AuthCallback = () => {
           console.log('Session found:', session);
           
           // Send session data to backend
-          const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/auth/oauth`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              access_token: session.access_token,
-              user_data: {
-                email: session.user.email,
-                id: session.user.id,
-                user_metadata: session.user.user_metadata
-              }
-            }),
+          const data = await api.post('/auth/oauth', { 
+            access_token: session.access_token,
+            user_data: {
+              email: session.user.email,
+              id: session.user.id,
+              user_metadata: session.user.user_metadata
+            }
           });
-
-          const data = await response.json();
-          
-          if (!response.ok) {
-            setError(data.detail || 'Authentication failed');
-            setLoading(false);
-            return;
-          }
 
           // Store auth data
           localStorage.setItem('auth_token', data.token);

@@ -15,6 +15,13 @@ def get_users(
     current_user: User = Depends(get_current_user)
 ):
     """Get all users for current clinic"""
+    # Check if user has permission to view users
+    if current_user.role != "clinic_owner":
+        permissions = current_user.permissions or {}
+        users_permissions = permissions.get("users", {})
+        if not users_permissions.get("view", False):
+            raise HTTPException(status_code=403, detail="You don't have permission to view users")
+    
     try:
         users = db.query(User).filter(User.clinic_id == current_user.clinic_id).all()
         return users
@@ -29,6 +36,12 @@ def create_user(
     current_user: User = Depends(require_doctor_or_owner)
 ):
     """Create a new user for current clinic (only clinic owners and doctors can create users)"""
+    # Check if user has permission to edit users
+    if current_user.role != "clinic_owner":
+        permissions = current_user.permissions or {}
+        users_permissions = permissions.get("users", {})
+        if not users_permissions.get("edit", False):
+            raise HTTPException(status_code=403, detail="You don't have permission to edit users")
     try:
         # Check if user already exists
         existing = db.query(User).filter(User.email == user_in.email).first()
@@ -77,6 +90,12 @@ def update_user(
     current_user: User = Depends(require_doctor_or_owner)
 ):
     """Update user (only clinic owners and doctors can update users)"""
+    # Check if user has permission to edit users
+    if current_user.role != "clinic_owner":
+        permissions = current_user.permissions or {}
+        users_permissions = permissions.get("users", {})
+        if not users_permissions.get("edit", False):
+            raise HTTPException(status_code=403, detail="You don't have permission to edit users")
     user = db.query(User).filter(
         User.id == user_id,
         User.clinic_id == current_user.clinic_id
@@ -105,6 +124,12 @@ def delete_user(
     current_user: User = Depends(require_clinic_owner)
 ):
     """Delete user (only clinic owners can delete users)"""
+    # Check if user has permission to delete users
+    if current_user.role != "clinic_owner":
+        permissions = current_user.permissions or {}
+        users_permissions = permissions.get("users", {})
+        if not users_permissions.get("delete", False):
+            raise HTTPException(status_code=403, detail="You don't have permission to delete users")
     user = db.query(User).filter(
         User.id == user_id,
         User.clinic_id == current_user.clinic_id
@@ -133,6 +158,12 @@ def update_user_permissions(
     current_user: User = Depends(require_clinic_owner)
 ):
     """Update user permissions (only clinic owners can update permissions)"""
+    # Check if user has permission to edit users
+    if current_user.role != "clinic_owner":
+        permissions_check = current_user.permissions or {}
+        users_permissions = permissions_check.get("users", {})
+        if not users_permissions.get("edit", False):
+            raise HTTPException(status_code=403, detail="You don't have permission to edit users")
     user = db.query(User).filter(
         User.id == user_id,
         User.clinic_id == current_user.clinic_id

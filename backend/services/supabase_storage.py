@@ -1,6 +1,6 @@
 import os
 import requests
-from supabase_client import supabase, SUPABASE_STORAGE_ACCESS_ID, SUPABASE_STORAGE_SECRET_KEY
+from supabase_client import supabase_storage, SUPABASE_STORAGE_ACCESS_ID, SUPABASE_STORAGE_SECRET_KEY
 from typing import Optional
 
 def upload_pdf_to_supabase(file_path: str, filename: str, bucket_name: str = "xpress-scan-bucket") -> Optional[str]:
@@ -21,12 +21,12 @@ def upload_pdf_to_supabase(file_path: str, filename: str, bucket_name: str = "xp
             file_data = file.read()
         
         print(f"Attempting to upload {filename} to Supabase storage...")
-        print(f"Supabase URL: {supabase.supabase_url}")
+        print(f"Supabase URL: {supabase_storage.supabase_url}")
         print(f"Bucket: {bucket_name}")
         
         # Try Supabase storage first
         try:
-            response = supabase.storage.from_(bucket_name).upload(
+            response = supabase_storage.storage.from_(bucket_name).upload(
                 path=filename,
                 file=file_data,
                 file_options={"content-type": "application/pdf"}
@@ -36,7 +36,7 @@ def upload_pdf_to_supabase(file_path: str, filename: str, bucket_name: str = "xp
             
             if response:
                 # Get the public URL
-                public_url = supabase.storage.from_(bucket_name).get_public_url(filename)
+                public_url = supabase_storage.storage.from_(bucket_name).get_public_url(filename)
                 print(f"Public URL: {public_url}")
                 return public_url
         except Exception as e:
@@ -64,7 +64,7 @@ def delete_file_from_supabase(filename: str, bucket_name: str = "xpress-scan-buc
         True if deletion was successful, False otherwise
     """
     try:
-        response = supabase.storage.from_(bucket_name).remove([filename])
+        response = supabase_storage.storage.from_(bucket_name).remove([filename])
         return True
     except Exception as e:
         print(f"Error deleting from storage: {e}")
@@ -81,7 +81,7 @@ def list_files_in_bucket(bucket_name: str = "xpress-scan-bucket") -> list:
         List of file objects
     """
     try:
-        response = supabase.storage.from_(bucket_name).list()
+        response = supabase_storage.storage.from_(bucket_name).list()
         return response
     except Exception as e:
         print(f"Error listing files from storage: {e}")
@@ -99,12 +99,12 @@ def create_bucket_if_not_exists(bucket_name: str = "xpress-scan-bucket") -> bool
     """
     try:
         # Try to list files to check if bucket exists
-        supabase.storage.from_(bucket_name).list()
+        supabase_storage.storage.from_(bucket_name).list()
         return True
     except Exception:
         try:
             # If bucket doesn't exist, create it
-            supabase.storage.create_bucket(bucket_name, {"public": True})
+            supabase_storage.storage.create_bucket(bucket_name, {"public": True})
             return True
         except Exception as e:
             print(f"Error creating bucket: {e}")

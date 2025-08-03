@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from 'react-toastify';
-
-const API_URL = import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:8000";
+import { api } from '../utils/api';
 
 const ClinicOnboarding = () => {
   const navigate = useNavigate();
@@ -75,26 +74,7 @@ const ClinicOnboarding = () => {
     setLoading(true);
     
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        throw new Error("No authentication token found");
-      }
-
-      const response = await fetch(`${API_URL}/auth/onboarding`, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "Onboarding failed");
-      }
-
-      const result = await response.json();
+      const result = await api.post('/auth/onboarding', formData);
       
       // Update user data in localStorage
       localStorage.setItem('user', JSON.stringify(result.user));

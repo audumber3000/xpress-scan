@@ -10,9 +10,73 @@ import html2text
 import re
 from datetime import datetime
 
-def html_to_pdf(html_content, patient_info=None):
+def html_template_to_pdf(html_content: str, patient_info=None):
     """
-    Convert HTML content to PDF with patient information header
+    Convert HTML template to PDF using proper HTML rendering
+    
+    Args:
+        html_content: Complete HTML content with styling
+        patient_info: Optional patient info for filename
+        
+    Returns:
+        Path to generated PDF file
+    """
+    try:
+        # Use proper HTML-to-PDF conversion
+        return html_to_pdf_proper(html_content, patient_info)
+        
+    except Exception as e:
+        print(f"Error generating PDF from HTML template: {e}")
+        # Fallback to basic PDF generation
+        return html_to_pdf_fallback(html_content, patient_info)
+
+def html_to_pdf_proper(html_content, patient_info=None):
+    """
+    Convert HTML content to PDF using playwright for exact HTML rendering
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+        
+        # Create a temporary file for the PDF
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+            pdf_path = tmp_file.name
+        
+        # Use playwright to render HTML exactly as it appears in a browser
+        with sync_playwright() as p:
+            # Launch browser
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            
+            # Set content and wait for it to load
+            page.set_content(html_content)
+            
+            # Generate PDF with proper settings
+            page.pdf(
+                path=pdf_path,
+                format='A4',
+                margin={
+                    'top': '0.75in',
+                    'right': '0.75in',
+                    'bottom': '0.75in',
+                    'left': '0.75in'
+                },
+                print_background=True
+            )
+            
+            browser.close()
+        
+        return pdf_path
+        
+    except ImportError:
+        print("playwright not available, falling back to basic PDF generation")
+        return html_to_pdf_fallback(html_content, patient_info)
+    except Exception as e:
+        print(f"Error with playwright: {e}")
+        return html_to_pdf_fallback(html_content, patient_info)
+
+def html_to_pdf_fallback(html_content, patient_info=None):
+    """
+    Fallback PDF generation using basic formatting
     """
     # Create a temporary file for the PDF
     with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
@@ -137,6 +201,11 @@ def generate_pdf_filename(patient_name, scan_type):
     # Clean the patient name and scan type for filename
     clean_name = re.sub(r'[^\w\s-]', '', patient_name).strip()
     clean_scan = re.sub(r'[^\w\s-]', '', scan_type).strip()
+    
+    # Replace spaces with underscores to avoid URL encoding
+    clean_name = clean_name.replace(' ', '_')
+    clean_scan = clean_scan.replace(' ', '_')
+    
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     
     return f"{clean_name}_{clean_scan}_{timestamp}.pdf" 
