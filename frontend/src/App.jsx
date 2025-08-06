@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ToastContainer } from 'react-toastify';
@@ -37,6 +37,8 @@ function ProtectedRoute({ children }) {
 function AppContent() {
   const { user, loading } = useAuth();
   const location = useLocation();
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Check if current route is auth page
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/onboarding' || location.pathname === '/auth/callback';
@@ -58,8 +60,23 @@ function AppContent() {
   // For authenticated pages, render with sidebar
   return (
     <div className="flex w-full h-screen">
-      <Sidebar />
-      <main className="flex-1 w-full h-full">
+      <Sidebar 
+        isMobileOpen={isMobileSidebarOpen} 
+        onMobileClose={() => setIsMobileSidebarOpen(false)}
+        isCollapsed={isSidebarCollapsed}
+        onCollapseChange={setIsSidebarCollapsed}
+      />
+      <main className={`flex-1 w-full h-full relative transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'ml-0' : ''}`}>
+        {/* Mobile menu button */}
+        <button
+          onClick={() => setIsMobileSidebarOpen(true)}
+          className="md:hidden fixed top-4 left-4 z-30 p-2 bg-white border border-gray-200 rounded-lg shadow-md hover:shadow-lg transition-shadow"
+        >
+          <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        
         <Routes>
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/patients" element={<ProtectedRoute><Patients /></ProtectedRoute>} />

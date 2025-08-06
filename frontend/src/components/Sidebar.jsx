@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -52,13 +52,33 @@ const navItems = [
   },
 ];
 
-const Sidebar = () => {
+const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const [isMobile, setIsMobile] = useState(false);
 
-  const linkClass = (path) =>
-    `flex items-center gap-3 py-2 px-4 rounded-lg transition font-medium text-gray-700 whitespace-nowrap ${location.pathname === path ? "bg-green-100 text-green-700 border border-green-500" : "hover:bg-green-50"}`;
+  // Use external state if provided, otherwise use internal state
+  const [internalCollapsed, setInternalCollapsed] = useState(false);
+  const collapsed = isCollapsed !== undefined ? isCollapsed : internalCollapsed;
+  const setCollapsed = onCollapseChange || setInternalCollapsed;
+
+  // Check if we're on mobile
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  const linkClass = (path) => {
+    const baseClasses = "flex items-center gap-3 py-2 px-4 rounded-lg transition font-medium text-gray-700 whitespace-nowrap";
+    const activeClasses = location.pathname === path ? "bg-green-100 text-green-700 border border-green-500" : "hover:bg-green-50";
+    return `${baseClasses} ${activeClasses}`;
+  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -128,48 +148,139 @@ const Sidebar = () => {
   const userRole = user?.role || "staff";
   const roleInfo = getRoleInfo(userRole);
 
+  // Mobile sidebar classes
+  const mobileClasses = isMobile 
+    ? `fixed top-0 left-0 z-50 h-full transform transition-transform duration-300 ease-in-out ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'}`
+    : '';
+
+  // Desktop sidebar classes
+  const desktopClasses = !isMobile 
+    ? `flex flex-col h-screen bg-white border-r border-gray-200 transition-all duration-300 ease-in-out ${collapsed ? 'w-16' : 'w-72'} ${collapsed ? 'p-2' : 'p-4'}`
+    : 'flex flex-col h-full w-72 bg-white p-4';
+
   return (
-    <aside className="flex flex-col h-screen w-72 bg-white border-r border-gray-200 p-4">
-      {/* Branding */}
-      <div className="flex items-center gap-3 h-16 mb-4">
-        <span className="bg-green-100 text-green-600 rounded-full p-2">
-          <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /></svg>
-        </span>
-        <div className="flex flex-col">
-          <span className="text-3xl font-extrabold text-black tracking-tight" style={{ fontFamily: 'serif', letterSpacing: '-0.03em' }}>
-            Dhanvantri
+    <>
+      {/* Mobile overlay */}
+      {isMobile && isMobileOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-40"
+          onClick={onMobileClose}
+        />
+      )}
+      
+      <aside className={`${mobileClasses} ${desktopClasses}`}>
+
+
+        {/* Mobile close button */}
+        {isMobile && (
+          <button
+            onClick={onMobileClose}
+            className="absolute top-4 right-4 p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
+          >
+            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+
+        {/* Branding */}
+        <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'} h-16 mb-4`}>
+          <span className="bg-green-100 text-green-600 rounded-full p-2 flex-shrink-0">
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /></svg>
           </span>
-          <span className="text-sm font-medium text-gray-600 tracking-wide">
-            Radiology Center
-          </span>
-        </div>
-      </div>
-      {/* Main Nav */}
-      <nav className="flex flex-col gap-1 mb-6">
-        {navItems.map((item) => (
-          <Link key={item.name} to={item.path} className={linkClass(item.path)}>
-            {item.icon}
-            {item.name}
-          </Link>
-        ))}
-      </nav>
-      {/* User Profile & Sign Out */}
-      <div className="mt-auto flex flex-col gap-2">
-        <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 cursor-pointer hover:bg-green-50 transition" onClick={() => navigate("/doctor-profile")}>
-          <img src={userAvatar} alt="User" className="w-10 h-10 rounded-full" />
-          <div className="flex-1 min-w-0">
-            <div className="font-semibold text-gray-900 text-sm">{userName}</div>
-            <div className="text-xs text-gray-500 truncate max-w-[140px]" title={userEmail}>{userEmail}</div>
-            <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border ${roleInfo.color} mt-1`}>
-              <span className="text-gray-600">Role:</span>
-              {roleInfo.icon}
-              {roleInfo.label}
+          {!collapsed && (
+            <div className="flex flex-col min-w-0 flex-1">
+              <span className="text-3xl font-extrabold text-black tracking-tight" style={{ fontFamily: 'serif', letterSpacing: '-0.03em' }}>
+                Dhanvantri
+              </span>
+              <span className="text-sm font-medium text-gray-600 tracking-wide">
+                Radiology Center
+              </span>
             </div>
-          </div>
+          )}
+          {/* Collapse/Expand button - positioned next to branding */}
+          {!isMobile && !collapsed && (
+            <button
+              onClick={() => setCollapsed(!collapsed)}
+              className="bg-gray-100 hover:bg-gray-200 rounded-lg p-2 transition-colors flex-shrink-0"
+              title="Hide navigation"
+            >
+              <svg 
+                className="w-4 h-4 text-gray-600" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+          )}
+          {/* Expand button when collapsed */}
+          {!isMobile && collapsed && (
+            <button
+              onClick={() => setCollapsed(!collapsed)}
+              className="bg-gray-100 hover:bg-gray-200 rounded-lg p-2 transition-colors"
+              title="Show navigation"
+            >
+              <svg 
+                className="w-4 h-4 text-gray-600 rotate-180" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+          )}
         </div>
-        <button onClick={handleSignOut} className="w-full py-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg font-semibold transition text-sm">Sign Out</button>
-      </div>
-    </aside>
+
+        {/* Main Nav */}
+        <nav className="flex flex-col gap-1 mb-6">
+          {navItems.map((item) => (
+            <Link 
+              key={item.name} 
+              to={item.path} 
+              className={`${linkClass(item.path)} ${collapsed ? 'justify-center px-2' : ''}`}
+              title={collapsed ? item.name : ''}
+            >
+              <div className={collapsed ? 'w-8 h-8' : 'w-5 h-5'}>
+                {item.icon}
+              </div>
+              {!collapsed && item.name}
+            </Link>
+          ))}
+        </nav>
+
+        {/* User Profile & Sign Out */}
+        <div className="mt-auto flex flex-col gap-2">
+          <div 
+            className={`flex items-center gap-3 p-3 rounded-lg bg-gray-50 cursor-pointer hover:bg-green-50 transition ${collapsed ? 'justify-center' : ''}`} 
+            onClick={() => navigate("/doctor-profile")}
+            title={collapsed ? `${userName} - ${userEmail}` : ''}
+          >
+            <img src={userAvatar} alt="User" className="w-10 h-10 rounded-full flex-shrink-0" />
+            {!collapsed && (
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-gray-900 text-sm">{userName}</div>
+                <div className="text-xs text-gray-500 truncate max-w-[140px]" title={userEmail}>{userEmail}</div>
+                <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border ${roleInfo.color} mt-1`}>
+                  <span className="text-gray-600">Role:</span>
+                  {roleInfo.icon}
+                  {roleInfo.label}
+                </div>
+              </div>
+            )}
+          </div>
+          {!collapsed && (
+            <button onClick={handleSignOut} className="w-full py-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg font-semibold transition text-sm">
+              Sign Out
+            </button>
+          )}
+        </div>
+      </aside>
+    </>
   );
 };
 
