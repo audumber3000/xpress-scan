@@ -12,6 +12,7 @@ import Patients from "./pages/Patients";
 import PatientIntake from "./pages/PatientIntake";
 import Reports from "./pages/Reports";
 import VoiceReporting from "./pages/VoiceReporting";
+import Payments from "./pages/Payments";
 import DoctorProfile from "./pages/DoctorProfile";
 import Settings from "./pages/Settings";
 import ClinicOnboarding from "./pages/ClinicOnboarding";
@@ -83,6 +84,7 @@ function AppContent() {
           <Route path="/patient-intake" element={<ProtectedRoute><PatientIntake /></ProtectedRoute>} />
           <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
           <Route path="/voice-reporting" element={<ProtectedRoute><VoiceReporting /></ProtectedRoute>} />
+          <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
           <Route path="/user-management" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           <Route path="/doctor-profile" element={<ProtectedRoute><DoctorProfile /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

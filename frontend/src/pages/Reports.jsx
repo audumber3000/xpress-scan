@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import { toast } from 'react-toastify';
-import { FaFilePdf, FaEye, FaTrash, FaWhatsapp, FaSync } from 'react-icons/fa';
-import { MoreVertical } from 'lucide-react';
+import { FaFilePdf, FaEye, FaTrash, FaWhatsapp, FaSync, FaEdit } from 'react-icons/fa';
 import { api } from "../utils/api";
 import LoadingButton from "../components/LoadingButton";
 import { useAuth } from "../contexts/AuthContext";
@@ -16,20 +15,8 @@ const Reports = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [page, setPage] = useState(1);
-  const [openDropdown, setOpenDropdown] = useState(null);
   const [deletingReports, setDeletingReports] = useState(new Set());
   const [sendingWhatsApp, setSendingWhatsApp] = useState(new Set());
-  // Dropdown close on outside click
-  React.useEffect(() => {
-    const handleClick = (e) => {
-      if (!e.target.closest('.dropdown-menu') && !e.target.closest('.dropdown-trigger')) {
-        setOpenDropdown(null);
-      }
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-  const toggleDropdown = id => setOpenDropdown(openDropdown === id ? null : id);
 
   const fetchReports = async () => {
     try {
@@ -58,19 +45,24 @@ const Reports = () => {
     });
   };
 
-  const getStatusColor = (status) => {
-    switch (status.toLowerCase()) {
-      case "final":
-        return "bg-blue-100 text-blue-800";
-      case "draft":
-        return "bg-yellow-100 text-yellow-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
+  const getStatusBadge = (status) => {
+    const statusConfig = {
+      final: { color: "bg-blue-100 text-blue-800 border-blue-200", dot: "bg-blue-500" },
+      draft: { color: "bg-yellow-100 text-yellow-800 border-yellow-200", dot: "bg-yellow-500" },
+      pending: { color: "bg-orange-100 text-orange-800 border-orange-200", dot: "bg-orange-500" }
+    };
+
+    const config = statusConfig[status.toLowerCase()] || statusConfig.draft;
+
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${config.color}`}>
+        <span className={`w-2 h-2 rounded-full ${config.dot}`}></span>
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </span>
+    );
   };
 
   const getWhatsAppStatus = (report) => {
-    console.log("Report WhatsApp count:", report.whatsapp_sent_count, typeof report.whatsapp_sent_count);
     if (report.whatsapp_sent_count && report.whatsapp_sent_count > 0) {
       return (
         <div className="flex items-center gap-1 bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap">
@@ -87,18 +79,14 @@ const Reports = () => {
     if (!user || !user.permissions) return false;
     if (user.role === "clinic_owner") return true;
     
-    // Parse permission string (e.g., "reports:delete" -> ["reports", "delete"])
     const [section, action] = permission.split(":");
     
-    // Check nested permission structure
     if (user.permissions[section] && user.permissions[section][action]) {
       return user.permissions[section][action] === true;
     }
     
     return false;
   };
-
-
 
   // Filtered and paginated reports
   const filteredReports = reports.filter((report) => {
@@ -141,7 +129,6 @@ const Reports = () => {
       });
       
       window.open(data.edit_url, "_blank");
-      // Refresh the reports list
       fetchReports();
     } catch (error) {
       console.error("Error regenerating report:", error);
@@ -191,23 +178,19 @@ const Reports = () => {
   };
 
   const handleEditReport = (report) => {
-    // Navigate to Voice Reporting page with the report data
-    // Store the report data in localStorage for the VoiceReporting page to access
     const reportData = {
       reportId: report.id,
       isEditing: true,
       patientId: report.patient_id
     };
     localStorage.setItem('editingDraftReport', JSON.stringify(reportData));
-    
-    // Navigate to voice reporting page
     window.location.href = '/voice-reporting';
   };
 
   return (
-    <div className="w-full h-full bg-white">
+    <div className="p-6">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-200">
+      <div className="mb-6">
         <div className="flex justify-between items-center">
           <div>
             <div className="flex items-center gap-2">
@@ -221,26 +204,18 @@ const Reports = () => {
                 <FaSync className={`w-4 h-4 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
               </button>
             </div>
-            <p className="text-gray-600 mt-1">
-              Manage and view all patient reports
-            </p>
-          </div>
-          <div className="flex items-center space-x-4">
-            <span className="text-sm text-gray-500">
-              {loading ? "Loading..." : `${filteredReports.length} of ${reports.length} reports`}
-            </span>
+            <p className="text-gray-600 mt-1">Manage and track all radiology reports</p>
           </div>
         </div>
       </div>
 
-      {/* Filters and Search */}
+      {/* Search and Filters */}
       <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
         <div className="flex flex-col sm:flex-row gap-4">
-          {/* Search */}
           <div className="flex-1">
             <input
               type="text"
-              placeholder="Search by patient name, scan type, or doctor..."
+              placeholder="Search reports..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -266,6 +241,7 @@ const Reports = () => {
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">ID</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12"></th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Patient
@@ -290,7 +266,7 @@ const Reports = () => {
           <tbody className="bg-white divide-y divide-gray-200">
             {loading ? (
               <tr>
-                <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
+                <td colSpan="8" className="px-6 py-12 text-center text-gray-500">
                   <div className="text-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
                     <p className="mt-2 text-sm text-gray-600">Loading reports...</p>
@@ -299,7 +275,7 @@ const Reports = () => {
               </tr>
             ) : paginatedReports.length === 0 ? (
               <tr>
-                <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
+                <td colSpan="8" className="px-6 py-12 text-center text-gray-500">
                   {reports.length === 0 ? (
                     <div>
                       <p className="text-lg font-medium">No reports found</p>
@@ -315,7 +291,13 @@ const Reports = () => {
               </tr>
             ) : (
               paginatedReports.map((report) => (
-                <tr key={report.id} className="hover:bg-gray-50">
+                <tr key={report.id} className="hover:bg-gray-50 transition-colors duration-150">
+                  {/* Report ID */}
+                  <td className="px-4 py-4 whitespace-nowrap text-center">
+                    <span className="text-gray-900 font-medium text-sm">
+                      #{report.id}
+                    </span>
+                  </td>
                   {/* PDF Icon */}
                   <td className="px-4 py-4 whitespace-nowrap text-red-600 text-xl">
                     <FaFilePdf />
@@ -337,96 +319,51 @@ const Reports = () => {
                     {report.referred_by}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(report.status)}`}>
-                        {report.status}
-                      </span>
+                    <div className="flex flex-col gap-1">
+                      {getStatusBadge(report.status)}
                       {getWhatsAppStatus(report)}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {formatDate(report.created_at)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium relative">
-                    <div className="relative inline-block text-left">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div className="flex items-center gap-2">
                       <button
-                        onClick={() => toggleDropdown(report.id)}
-                        className="p-1 rounded hover:bg-gray-100 dropdown-trigger"
+                        onClick={() => handleViewReport(report)}
+                        className="text-gray-400 hover:text-gray-600 transition-colors duration-150"
+                        title="View Report"
                       >
-                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="6" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="12" cy="18" r="1" /></svg>
+                        <FaEye className="w-4 h-4" />
                       </button>
-                      {openDropdown === report.id && (
-                        <div className="absolute right-0 mt-2 w-40 bg-white rounded-md shadow-lg z-10 border border-gray-200 dropdown-menu">
-                          <div className="py-1">
-                            {report.status === "final" ? (
-                              <>
-                                <button
-                                  onClick={e => { e.stopPropagation(); handleViewReport(report); setOpenDropdown(null); }}
-                                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                >
-                                  <FaEye className="w-4 h-4 mr-2 text-blue-500" /> View
-                                </button>
-                                {hasPermission("reports:edit") && (
-                                  <LoadingButton
-                                    onClick={e => { e.stopPropagation(); handleSendWhatsApp(report); setOpenDropdown(null); }}
-                                    loading={sendingWhatsApp.has(report.id)}
-                                    className="w-full px-4 py-2 text-sm text-green-600 hover:bg-green-50"
-                                  >
-                                    <FaWhatsapp className="w-4 h-4 mr-2 text-green-500" /> Send WhatsApp
-                                  </LoadingButton>
-                                )}
-                                {hasPermission("reports:delete") && (
-                                  <LoadingButton
-                                    onClick={e => { e.stopPropagation(); handleDeleteReport(report); setOpenDropdown(null); }}
-                                    loading={deletingReports.has(report.id)}
-                                    className="w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                                  >
-                                    <FaTrash className="w-4 h-4 mr-2 text-red-500" /> Delete
-                                  </LoadingButton>
-                                )}
-                              </>
-                            ) : report.status === "draft" ? (
-                              <>
-                                {hasPermission("reports:edit") && (
-                                  <button
-                                    onClick={e => { e.stopPropagation(); handleEditReport(report); setOpenDropdown(null); }}
-                                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                  >
-                                    <svg className="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 11l6 6M3 21v-6.586a2 2 0 01.586-1.414l9-9a2 2 0 012.828 0l3.172 3.172a2 2 0 010 2.828l-9 9A2 2 0 019.586 21H3z" /></svg>
-                                    Edit
-                                  </button>
-                                )}
-                                {hasPermission("reports:delete") && (
-                                  <LoadingButton
-                                    onClick={e => { e.stopPropagation(); handleDeleteReport(report); setOpenDropdown(null); }}
-                                    loading={deletingReports.has(report.id)}
-                                    className="w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                                  >
-                                    <FaTrash className="w-4 h-4 mr-2 text-red-500" /> Delete
-                                  </LoadingButton>
-                                )}
-                              </>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={e => { e.stopPropagation(); handleViewReport(report); setOpenDropdown(null); }}
-                                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                >
-                                  <FaEye className="w-4 h-4 mr-2 text-blue-500" /> View
-                                </button>
-                                {hasPermission("reports:delete") && (
-                                  <LoadingButton
-                                    onClick={e => { e.stopPropagation(); handleDeleteReport(report); setOpenDropdown(null); }}
-                                    loading={deletingReports.has(report.id)}
-                                    className="w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                                  >
-                                    <FaTrash className="w-4 h-4 mr-2 text-red-500" /> Delete
-                                  </LoadingButton>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </div>
+                      {report.status === "draft" && hasPermission("reports:edit") && (
+                        <button
+                          onClick={() => handleEditReport(report)}
+                          className="text-gray-400 hover:text-blue-600 transition-colors duration-150"
+                          title="Edit Report"
+                        >
+                          <FaEdit className="w-4 h-4" />
+                        </button>
+                      )}
+                      {report.status === "final" && hasPermission("reports:edit") && (
+                        <button
+                          onClick={() => handleSendWhatsApp(report)}
+                          disabled={sendingWhatsApp.has(report.id)}
+                          className="text-gray-400 hover:text-green-600 transition-colors duration-150 disabled:opacity-50"
+                          title="Send WhatsApp"
+                        >
+                          <FaWhatsapp className="w-4 h-4" />
+                        </button>
+                      )}
+                      {hasPermission("reports:delete") && (
+                        <button
+                          onClick={() => handleDeleteReport(report)}
+                          disabled={deletingReports.has(report.id)}
+                          className="text-gray-400 hover:text-red-600 transition-colors duration-150 disabled:opacity-50"
+                          title="Delete Report"
+                        >
+                          <FaTrash className="w-4 h-4" />
+                        </button>
                       )}
                     </div>
                   </td>
@@ -435,46 +372,77 @@ const Reports = () => {
             )}
           </tbody>
         </table>
-        {/* Pagination Controls */}
-        <div className="flex items-center justify-between mt-4 text-xs text-gray-500 px-6 pb-6">
-          <div>
-            Showing {filteredReports.length === 0 ? 0 : (page - 1) * REPORTS_PER_PAGE + 1}
-            -{Math.min(page * REPORTS_PER_PAGE, filteredReports.length)} of {filteredReports.length} entries
-          </div>
-          <div className="flex gap-1">
-            <LoadingButton
-              className="w-8 h-8 rounded border border-gray-200 bg-white hover:bg-green-50"
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+          <div className="flex-1 flex justify-between sm:hidden">
+            <button
               onClick={() => setPage(page - 1)}
               disabled={page === 1}
+              className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              &lt;
-            </LoadingButton>
-            {Array.from({ length: totalPages }, (_, i) => (
-              <LoadingButton
-                key={i + 1}
-                className={`w-8 h-8 rounded border border-gray-200 bg-white hover:bg-green-50 ${page === i + 1 ? 'bg-green-100 border-green-600 font-bold' : ''}`}
-                onClick={() => setPage(i + 1)}
-              >
-                {i + 1}
-              </LoadingButton>
-            ))}
-            <LoadingButton
-              className="w-8 h-8 rounded border border-gray-200 bg-white hover:bg-green-50"
+              Previous
+            </button>
+            <button
               onClick={() => setPage(page + 1)}
               disabled={page === totalPages}
+              className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              &gt;
-            </LoadingButton>
+              Next
+            </button>
+          </div>
+          <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm text-gray-700">
+                Showing <span className="font-medium">{(page - 1) * REPORTS_PER_PAGE + 1}</span> to{' '}
+                <span className="font-medium">{Math.min(page * REPORTS_PER_PAGE, filteredReports.length)}</span> of{' '}
+                <span className="font-medium">{filteredReports.length}</span> results
+              </p>
+            </div>
+            <div>
+              <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                <button
+                  onClick={() => setPage(page - 1)}
+                  disabled={page === 1}
+                  className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="sr-only">Previous</span>
+                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                </button>
+                
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                  <button
+                    key={pageNum}
+                    onClick={() => setPage(pageNum)}
+                    className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                      page === pageNum
+                        ? 'z-10 bg-green-50 border-green-500 text-green-600'
+                        : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                ))}
+                
+                <button
+                  onClick={() => setPage(page + 1)}
+                  disabled={page === totalPages}
+                  className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="sr-only">Next</span>
+                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </nav>
+            </div>
           </div>
         </div>
-      </div>
-      {/* Add a button to trigger a notification for demo */}
-      <button
-        onClick={() => toast.success('This is a test notification!')}
-        className="bg-blue-500 text-white px-4 py-2 rounded mb-4"
-      >
-        Show Notification
-      </button>
+      )}
     </div>
   );
 };

@@ -52,4 +52,8 @@ app.include_router(users.router, prefix="/users", tags=["users"])
 def root():
     return {"message": "Radiology Clinic Backend is running"}
 
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
  

@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../utils/api";
 import { toast } from 'react-toastify';
-import { FaEye, FaFilePdf, FaSync } from 'react-icons/fa';
+import { FaEye, FaFilePdf, FaSync, FaEdit, FaTrash, FaUser } from 'react-icons/fa';
 import LoadingButton from "../components/LoadingButton";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -12,11 +12,10 @@ const defaultProfile = name => `https://ui-avatars.com/api/?name=${encodeURIComp
 
 const Patients = () => {
   const { user } = useAuth();
-  const [search, setSearch] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(1);
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [openDropdown, setOpenDropdown] = useState(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState(null);
   const [editFormData, setEditFormData] = useState({});
@@ -30,10 +29,8 @@ const Patients = () => {
     if (!user || !user.permissions) return false;
     if (user.role === "clinic_owner") return true;
     
-    // Parse permission string (e.g., "patients:delete" -> ["patients", "delete"])
     const [section, action] = permission.split(":");
     
-    // Check nested permission structure
     if (user.permissions[section] && user.permissions[section][action]) {
       return user.permissions[section][action] === true;
     }
@@ -72,8 +69,8 @@ const Patients = () => {
   // Filter and paginate
   const filteredPatients = useMemo(() => {
     let filtered = patients;
-    if (search.trim()) {
-      const s = search.toLowerCase();
+    if (searchTerm.trim()) {
+      const s = searchTerm.toLowerCase();
       filtered = filtered.filter(
         p =>
           p.name.toLowerCase().includes(s) ||
@@ -83,7 +80,7 @@ const Patients = () => {
       );
     }
     return filtered;
-  }, [patients, search]);
+  }, [patients, searchTerm]);
 
   const totalPages = Math.ceil(filteredPatients.length / PATIENTS_PER_PAGE) || 1;
   const paginatedPatients = filteredPatients.slice(
@@ -91,25 +88,9 @@ const Patients = () => {
     page * PATIENTS_PER_PAGE
   );
 
-  useEffect(() => { setPage(1); }, [search]);
+  useEffect(() => { setPage(1); }, [searchTerm]);
 
-  // Dropdown close on outside click
-  useEffect(() => {
-    const handleClick = (e) => {
-      // Only close if click is outside any dropdown menu
-      if (!e.target.closest('.dropdown-menu') && !e.target.closest('.dropdown-trigger')) {
-        setOpenDropdown(null);
-      }
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  // Dropdown logic
-  const toggleDropdown = id => setOpenDropdown(openDropdown === id ? null : id);
-
-  // Edit logic
-  const handleEditPatient = patient => {
+  const handleEditPatient = (patient) => {
     setEditingPatient(patient);
     setEditFormData({
       name: patient.name || "",
@@ -119,59 +100,61 @@ const Patients = () => {
       phone: patient.phone || "",
       referred_by: patient.referred_by || "",
       scan_type: patient.scan_type || "",
-      notes: patient.notes || "",
-      profile_image_url: patient.profile_image_url || ""
+      profile_image_url: patient.profile_image_url || "",
+      notes: patient.notes || ""
     });
     setEditModalOpen(true);
-    setOpenDropdown(null);
   };
-  const handleEditFormChange = e => {
+
+  const handleEditFormChange = (e) => {
     const { name, value } = e.target;
-    setEditFormData(prev => ({ ...prev, [name]: value }));
+    setEditFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
-  const handleEditSubmit = async e => {
+
+  const handleEditSubmit = async (e) => {
     e.preventDefault();
     setEditLoading(true);
     try {
-      // Remove profile_image_url before sending to backend
-      const { profile_image_url, ...dataToSend } = editFormData;
-      const updated = await api.put(`/patients/${editingPatient.id}`, dataToSend);
-      setPatients(patients.map(p => p.id === editingPatient.id ? updated : p));
-      setEditModalOpen(false);
-      setEditingPatient(null);
-      setEditFormData({});
-    } catch (err) {
-      alert("Error updating patient");
+      await api.put(`/patients/${editingPatient.id}`, editFormData);
+      toast.success("Patient updated successfully");
+      closeEditModal();
+      fetchPatients();
+    } catch (error) {
+      console.error("Error updating patient:", error);
+      toast.error("Error updating patient");
     } finally {
       setEditLoading(false);
     }
   };
+
   const closeEditModal = () => {
     setEditModalOpen(false);
     setEditingPatient(null);
     setEditFormData({});
   };
 
-  // Delete logic
-  const handleDeletePatient = async patient => {
+  const handleDeletePatient = async (patient) => {
     if (!window.confirm(`Are you sure you want to delete ${patient.name}?`)) return;
+    
     setDeleteLoading(patient.id);
     try {
       await api.delete(`/patients/${patient.id}`);
-      setPatients(patients.filter(p => p.id !== patient.id));
-    } catch {
-      alert("Error deleting patient");
+      toast.success("Patient deleted successfully");
+      fetchPatients();
+    } catch (error) {
+      console.error("Error deleting patient:", error);
+      toast.error("Error deleting patient");
     } finally {
       setDeleteLoading(null);
-      setOpenDropdown(null);
     }
   };
 
-  // View patient reports
   const handleViewPatientReports = async (patient) => {
     try {
-      // Get reports for this patient
-      const reports = await api.get(`/reports/`);
+      const reports = await api.get("/reports/");
       const patientReports = reports.filter(report => 
         report.patient_name === patient.name
       );
@@ -181,19 +164,8 @@ const Patients = () => {
         return;
       }
       
-      // Show the most recent final report, or the most recent draft
-      const finalReports = patientReports.filter(r => r.status === "final");
-      const draftReports = patientReports.filter(r => r.status === "draft");
-      
-      let reportToShow = null;
-      if (finalReports.length > 0) {
-        reportToShow = finalReports[0]; // Most recent final report
-      } else if (draftReports.length > 0) {
-        reportToShow = draftReports[0]; // Most recent draft report
-      } else {
-        reportToShow = patientReports[0]; // Most recent report of any status
-      }
-      
+      // Show the most recent report
+      const reportToShow = patientReports[0];
       if (reportToShow.pdf_url) {
         window.open(reportToShow.pdf_url, "_blank");
       } else if (reportToShow.docx_url) {
@@ -208,9 +180,9 @@ const Patients = () => {
   };
 
   return (
-    <div className="w-full h-full bg-white">
+    <div className="p-6">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-200">
+      <div className="mb-6">
         <div className="flex justify-between items-center">
           <div>
             <div className="flex items-center gap-2">
@@ -224,7 +196,7 @@ const Patients = () => {
                 <FaSync className={`w-4 h-4 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
               </button>
             </div>
-            <p className="text-gray-600 mt-1">Manage and view all patients</p>
+            <p className="text-gray-600 mt-1">Manage and track all patient records</p>
           </div>
           <div className="flex items-center space-x-4">
             {hasPermission("patients:edit") && (
@@ -238,20 +210,22 @@ const Patients = () => {
           </div>
         </div>
       </div>
-      {/* Filters and Search */}
+
+      {/* Search */}
       <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
             <input
               type="text"
-              placeholder="Search by name, phone, village, or referred by..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
+              placeholder="Search patients..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
             />
           </div>
         </div>
       </div>
+
       {/* Patients Table */}
       <div className="overflow-x-auto">
         {loading ? (
@@ -273,7 +247,7 @@ const Patients = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Referred By</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Age</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gender</th>
-                <th className="px-6 py-3"></th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -290,10 +264,10 @@ const Patients = () => {
                 paginatedPatients.map((p) => {
                   const profileImg = p.profile_image_url || defaultProfile(p.name);
                   return (
-                    <tr key={p.id} className="hover:bg-gray-50">
+                    <tr key={p.id} className="hover:bg-gray-50 transition-colors duration-150">
                       <td className="px-4 py-4 whitespace-nowrap text-center">
                         <span className="text-gray-900 font-medium text-sm">
-                          {p.id}
+                          #{p.id}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap font-semibold text-gray-900">{p.name}</td>
@@ -303,38 +277,33 @@ const Patients = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-gray-900">{p.referred_by}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-900">{p.age}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-900">{p.gender}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <div className="dropdown-container relative">
-                          <button 
-                            onClick={() => toggleDropdown(p.id)}
-                            className="p-1 rounded hover:bg-gray-100 dropdown-trigger"
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleViewPatientReports(p)}
+                            className="text-gray-400 hover:text-gray-600 transition-colors duration-150"
+                            title="View Reports"
                           >
-                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="6" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="12" cy="18" r="1" /></svg>
+                            <FaEye className="w-4 h-4" />
                           </button>
-                          {openDropdown === p.id && (
-                            <div className="absolute right-0 mt-2 w-40 bg-white rounded-md shadow-lg z-10 border border-gray-200 dropdown-menu">
-                              <div className="py-1">
-                                {hasPermission("patients:edit") && (
-                                  <button
-                                    onClick={e => { e.stopPropagation(); handleEditPatient(p); }}
-                                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                  >
-                                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 11l6 6M3 21v-6.586a2 2 0 01.586-1.414l9-9a2 2 0 012.828 0l3.172 3.172a2 2 0 010 2.828l-9 9A2 2 0 019.586 21H3z" /></svg>
-                                    Edit
-                                  </button>
-                                )}
-                                {hasPermission("patients:delete") && (
-                                  <button
-                                    onClick={e => { e.stopPropagation(); handleDeletePatient(p); }}
-                                    disabled={deleteLoading === p.id}
-                                    className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
-                                  >
-                                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0016.138 5H7.862a2 2 0 00-1.995 1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
-                                    {deleteLoading === p.id ? 'Deleting...' : 'Delete'}
-                                  </button>
-                                )}
-                              </div>
-                            </div>
+                          {hasPermission("patients:edit") && (
+                            <button
+                              onClick={() => handleEditPatient(p)}
+                              className="text-gray-400 hover:text-blue-600 transition-colors duration-150"
+                              title="Edit Patient"
+                            >
+                              <FaEdit className="w-4 h-4" />
+                            </button>
+                          )}
+                          {hasPermission("patients:delete") && (
+                            <button
+                              onClick={() => handleDeletePatient(p)}
+                              disabled={deleteLoading === p.id}
+                              className="text-gray-400 hover:text-red-600 transition-colors duration-150 disabled:opacity-50"
+                              title="Delete Patient"
+                            >
+                              <FaTrash className="w-4 h-4" />
+                            </button>
                           )}
                         </div>
                       </td>
@@ -346,38 +315,76 @@ const Patients = () => {
           </table>
         )}
       </div>
+
       {/* Pagination */}
-      <div className="flex items-center justify-between mt-4 text-xs text-gray-500 px-6 pb-6">
-        <div>
-          Showing {filteredPatients.length === 0 ? 0 : (page - 1) * PATIENTS_PER_PAGE + 1}
-          -{Math.min(page * PATIENTS_PER_PAGE, filteredPatients.length)} of {filteredPatients.length} entries
-        </div>
-        <div className="flex gap-1">
-          <button
-            className="w-8 h-8 rounded border border-gray-200 bg-white hover:bg-green-50"
-            onClick={() => setPage(page - 1)}
-            disabled={page === 1}
-          >
-            &lt;
-          </button>
-          {Array.from({ length: totalPages }, (_, i) => (
-            <LoadingButton
-              key={i + 1}
-              className={`w-8 h-8 rounded border border-gray-200 bg-white hover:bg-green-50 ${page === i + 1 ? 'bg-green-100 border-green-600 font-bold' : ''}`}
-              onClick={() => setPage(i + 1)}
+      {totalPages > 1 && (
+        <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+          <div className="flex-1 flex justify-between sm:hidden">
+            <button
+              onClick={() => setPage(page - 1)}
+              disabled={page === 1}
+              className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {i + 1}
-            </LoadingButton>
-          ))}
-          <LoadingButton
-            className="w-8 h-8 rounded border border-gray-200 bg-white hover:bg-green-50"
-            onClick={() => setPage(page + 1)}
-            disabled={page === totalPages}
-          >
-            &gt;
-          </LoadingButton>
+              Previous
+            </button>
+            <button
+              onClick={() => setPage(page + 1)}
+              disabled={page === totalPages}
+              className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+          <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm text-gray-700">
+                Showing <span className="font-medium">{(page - 1) * PATIENTS_PER_PAGE + 1}</span> to{' '}
+                <span className="font-medium">{Math.min(page * PATIENTS_PER_PAGE, filteredPatients.length)}</span> of{' '}
+                <span className="font-medium">{filteredPatients.length}</span> results
+              </p>
+            </div>
+            <div>
+              <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                <button
+                  onClick={() => setPage(page - 1)}
+                  disabled={page === 1}
+                  className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="sr-only">Previous</span>
+                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                </button>
+                
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                  <button
+                    key={pageNum}
+                    onClick={() => setPage(pageNum)}
+                    className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                      page === pageNum
+                        ? 'z-10 bg-green-50 border-green-500 text-green-600'
+                        : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                ))}
+                
+                <button
+                  onClick={() => setPage(page + 1)}
+                  disabled={page === totalPages}
+                  className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="sr-only">Next</span>
+                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </nav>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
       {/* Edit Modal */}
       {editModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
