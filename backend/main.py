@@ -28,6 +28,8 @@ origins = [
     "https://xpress-scan.onrender.com",  # Backend URL
     "https://xpress-scan-frontend.vercel.app",  # Alternative Vercel URL
     "https://xpress-scan-frontend.onrender.com",  # Alternative Render URL
+    "https://www.betterclinic.app",  # New production domain
+    "https://betterclinic.app",  # Alternative without www
 ]
 
 app.add_middleware(
