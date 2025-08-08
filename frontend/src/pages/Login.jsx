@@ -138,6 +138,13 @@ const Login = () => {
             Sign up
           </Link>
         </p>
+        
+        {/* Branding */}
+        <div className="text-center pt-4 border-t border-gray-200">
+          <p className="text-xs text-gray-400">
+            Powered by <span className="text-green-600 font-medium">BetterClinic</span>
+          </p>
+        </div>
       </div>
     </div>
   );
