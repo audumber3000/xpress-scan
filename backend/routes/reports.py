@@ -28,6 +28,7 @@ class PatientInfo(BaseModel):
 
 class ReportResponse(BaseModel):
     id: int
+    display_id: Optional[str] = None  # Report Number (RAD)
     patient_name: str
     patient_age: int
     patient_gender: str
@@ -64,6 +65,7 @@ def get_all_reports(db: Session = Depends(get_db), current_user = Depends(get_cu
                 patient = report.patient
                 report_list.append(ReportResponse(
                     id=report.id,
+                    display_id=report.display_id,  # Report Number (RAD)
                     patient_name=patient.name,
                     patient_age=patient.age,
                     patient_gender=patient.gender,

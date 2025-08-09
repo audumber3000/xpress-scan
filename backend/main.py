@@ -13,6 +13,7 @@ from routes import clinic_users
 from routes import clinics
 from routes import users
 from routes import auth
+from routes import payments
 
 app = FastAPI()
 
@@ -49,6 +50,7 @@ app.include_router(referring_doctors.router, prefix="/referring-doctors", tags=[
 app.include_router(clinic_users.router, prefix="/clinic-users", tags=["clinic_users"])
 app.include_router(clinics.router, prefix="/clinics", tags=["clinics"])
 app.include_router(users.router, prefix="/users", tags=["users"])
+app.include_router(payments.router, prefix="/payments", tags=["payments"])
 
 @app.get("/")
 def root():

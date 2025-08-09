@@ -1,181 +1,36 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { FaSync } from "react-icons/fa";
+import { api } from "../utils/api";
+
+const PAYMENTS_PER_PAGE = 8;
 
 const Payments = () => {
   const { user } = useAuth();
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(8);
+  const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
+  const [error, setError] = useState("");
 
-  // Mock data - in real app, this would come from your API
-  const mockPayments = [
-    {
-      id: "852120",
-      user: {
-        name: "Jerome Bell",
-        avatar: "https://randomuser.me/api/portraits/men/32.jpg",
-        email: "jeromebell12@gmail.com",
-        phone: "(307) 555-0133"
-      },
-      amount: 2522.00,
-      status: "success",
-      paymentMethod: "Card",
-      date: "30/06/2025"
-    },
-    {
-      id: "825525",
-      user: {
-        name: "Bessie Cooper",
-        avatar: "https://randomuser.me/api/portraits/women/33.jpg",
-        email: "bessie33@gmail.com",
-        phone: "(219) 555-0114"
-      },
-      amount: 3205.00,
-      status: "pending",
-      paymentMethod: "PayPal",
-      date: "30/06/2025"
-    },
-    {
-      id: "805252",
-      user: {
-        name: "Dianne Russell",
-        avatar: "https://randomuser.me/api/portraits/women/34.jpg",
-        email: "russelld00@gmail.com",
-        phone: "(629) 555-0129"
-      },
-      amount: 5102.00,
-      status: "failed",
-      paymentMethod: "PayPal",
-      date: "29/06/2025"
-    },
-    {
-      id: "852323",
-      user: {
-        name: "Esther Howard",
-        avatar: "https://randomuser.me/api/portraits/women/35.jpg",
-        email: "estherhawk@gmail.com",
-        phone: "(808) 555-0111"
-      },
-      amount: 8235.00,
-      status: "refunded",
-      paymentMethod: "Net Banking",
-      date: "29/06/2025"
-    },
-    {
-      id: "821085",
-      user: {
-        name: "Annette Black",
-        avatar: "https://randomuser.me/api/portraits/women/36.jpg",
-        email: "annetteblack@gmail.com",
-        phone: "(316) 555-0116"
-      },
-      amount: 6150.00,
-      status: "refunded",
-      paymentMethod: "Card",
-      date: "29/06/2025"
-    },
-    {
-      id: "832136",
-      user: {
-        name: "Robert Fox",
-        avatar: "https://randomuser.me/api/portraits/men/37.jpg",
-        email: "robertfox22@gmail.com",
-        phone: "(207) 555-0119"
-      },
-      amount: 5890.00,
-      status: "pending",
-      paymentMethod: "Net Banking",
-      date: "28/06/2025"
-    },
-    {
-      id: "845678",
-      user: {
-        name: "Sarah Johnson",
-        avatar: "https://randomuser.me/api/portraits/women/38.jpg",
-        email: "sarah.johnson@gmail.com",
-        phone: "(555) 123-4567"
-      },
-      amount: 4200.00,
-      status: "success",
-      paymentMethod: "Card",
-      date: "28/06/2025"
-    },
-    {
-      id: "856789",
-      user: {
-        name: "Michael Brown",
-        avatar: "https://randomuser.me/api/portraits/men/39.jpg",
-        email: "michael.brown@gmail.com",
-        phone: "(555) 234-5678"
-      },
-      amount: 7800.00,
-      status: "success",
-      paymentMethod: "PayPal",
-      date: "27/06/2025"
-    },
-    {
-      id: "867890",
-      user: {
-        name: "Emily Davis",
-        avatar: "https://randomuser.me/api/portraits/women/40.jpg",
-        email: "emily.davis@gmail.com",
-        phone: "(555) 345-6789"
-      },
-      amount: 3200.00,
-      status: "pending",
-      paymentMethod: "Net Banking",
-      date: "27/06/2025"
-    },
-    {
-      id: "878901",
-      user: {
-        name: "David Wilson",
-        avatar: "https://randomuser.me/api/portraits/men/41.jpg",
-        email: "david.wilson@gmail.com",
-        phone: "(555) 456-7890"
-      },
-      amount: 9500.00,
-      status: "success",
-      paymentMethod: "Card",
-      date: "26/06/2025"
-    },
-    {
-      id: "889012",
-      user: {
-        name: "Lisa Anderson",
-        avatar: "https://randomuser.me/api/portraits/women/42.jpg",
-        email: "lisa.anderson@gmail.com",
-        phone: "(555) 567-8901"
-      },
-      amount: 5400.00,
-      status: "failed",
-      paymentMethod: "PayPal",
-      date: "26/06/2025"
-    },
-    {
-      id: "890123",
-      user: {
-        name: "James Taylor",
-        avatar: "https://randomuser.me/api/portraits/men/43.jpg",
-        email: "james.taylor@gmail.com",
-        phone: "(555) 678-9012"
-      },
-      amount: 6800.00,
-      status: "success",
-      paymentMethod: "Net Banking",
-      date: "25/06/2025"
+  // Fetch payments from API
+  const fetchPayments = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const paymentsData = await api.get('/payments');
+      setPayments(paymentsData || []);
+    } catch (err) {
+      console.error('Error fetching payments:', err);
+      setError(err.message || 'Failed to fetch payments');
+      setPayments([]);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
   useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      setPayments(mockPayments);
-      setLoading(false);
-    }, 1000);
+    fetchPayments();
   }, []);
 
   const getStatusBadge = (status) => {
@@ -203,32 +58,58 @@ const Payments = () => {
     }).format(amount);
   };
 
-  // Filter payments based on search term
-  const filteredPayments = payments.filter(payment =>
-    payment.user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    payment.user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    payment.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    payment.paymentMethod.toLowerCase().includes(searchTerm.toLowerCase())
+  // Filtered and paginated payments
+  const filteredPayments = payments.filter((payment) => {
+    const matchesSearch = 
+      (payment.patient_name && payment.patient_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (payment.patient_phone && payment.patient_phone.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (payment.display_id && payment.display_id.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (payment.id && payment.id.toString().toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (payment.payment_method && payment.payment_method.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (payment.paid_by && payment.paid_by.toLowerCase().includes(searchTerm.toLowerCase()));
+    return matchesSearch;
+  });
+
+  const totalPages = Math.ceil(filteredPayments.length / PAYMENTS_PER_PAGE) || 1;
+  const currentPayments = filteredPayments.slice(
+    (page - 1) * PAYMENTS_PER_PAGE,
+    page * PAYMENTS_PER_PAGE
   );
 
-  // Calculate pagination
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentPayments = filteredPayments.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredPayments.length / itemsPerPage);
-
-  const handlePageChange = (pageNumber) => {
-    setCurrentPage(pageNumber);
-  };
-
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm]);
+    setPage(1);
+  }, [searchTerm, payments]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">Error loading payments</h3>
+              <p className="mt-1 text-sm text-red-700">{error}</p>
+              <button 
+                onClick={fetchPayments}
+                className="mt-2 text-sm bg-red-100 hover:bg-red-200 text-red-800 px-3 py-1 rounded"
+              >
+                Try Again
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -242,11 +123,7 @@ const Payments = () => {
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold text-gray-900">Payments</h1>
               <button
-                onClick={() => {
-                  // Mock refresh for payments
-                  setLoading(true);
-                  setTimeout(() => setLoading(false), 1000);
-                }}
+                onClick={fetchPayments}
                 disabled={loading}
                 className="p-1 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
                 title="Refresh payments"
@@ -260,7 +137,7 @@ const Payments = () => {
       </div>
 
       {/* Search */}
-      <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+      <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex-shrink-0">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
             <input
@@ -274,98 +151,81 @@ const Payments = () => {
         </div>
       </div>
 
-      {/* Table Container with Scrollbars */}
-      <div className="overflow-x-auto">
-        <table className="w-full">
-                      <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Method</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-                          {currentPayments.length === 0 ? (
+      {/* Payments Table Container */}
+      <div className="flex-1 overflow-hidden">
+        <div className="h-full overflow-auto">
+          {loading ? (
+            <div className="w-full flex items-center justify-center py-16">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                <p className="mt-2 text-sm text-gray-600">Loading payments...</p>
+              </div>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr>
-                  <td colSpan="8" className="px-6 py-12 text-center text-gray-500">
-                    <div>
-                      <p className="text-lg font-medium">No payments found</p>
-                      <p className="text-sm mt-1">Payments will appear here once transactions are made</p>
-                    </div>
-                  </td>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">Invoice</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Method</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                 </tr>
-              ) : (
-                currentPayments.map((payment) => (
-                  <tr key={payment.id} className="hover:bg-gray-50 transition-colors duration-150">
-                    <td className="px-4 py-4 whitespace-nowrap text-center">
-                      <span className="text-gray-900 font-medium text-sm">
-                        #{payment.id}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <img className="h-8 w-8 rounded-full" src={payment.user.avatar} alt={payment.user.name} />
-                        <div className="ml-3">
-                          <div className="text-sm font-medium text-gray-900">{payment.user.name}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {payment.user.phone}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {formatAmount(payment.amount)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(payment.status)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {payment.paymentMethod}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {payment.date}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex items-center gap-2">
-                        <button className="text-gray-400 hover:text-gray-600 transition-colors duration-150" title="View Details">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                        </button>
-                        <button className="text-gray-400 hover:text-red-600 transition-colors duration-150" title="Delete">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0016.138 5H7.862a2 2 0 00-1.995 1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
-                          </svg>
-                        </button>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {currentPayments.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                      <div>
+                        <p className="text-lg font-medium">No payments found</p>
+                        <p className="text-sm mt-1">Payments will appear here once transactions are made</p>
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
-          </tbody>
-        </table>
+                ) : (
+                  currentPayments.map((payment) => (
+                    <tr key={payment.id} className="hover:bg-gray-50 transition-colors duration-150">
+                      <td className="px-4 py-4 whitespace-nowrap text-center">
+                        <span className="text-gray-900 font-medium text-sm">
+                          {payment.display_id || `#${payment.id}`}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div>
+                          <div className="font-semibold text-gray-900">{payment.patient_name || payment.paid_by || 'Unknown Patient'}</div>
+                          <div className="text-sm text-gray-500">Patient</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-900">{payment.patient_phone || 'N/A'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-900">{formatAmount(payment.amount)}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(payment.status)}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-900">{payment.payment_method}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-900">{payment.created_at ? new Date(payment.created_at).toLocaleDateString() : 'N/A'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
-      {/* Pagination */}
+      {/* Sticky Pagination at Bottom */}
       {totalPages > 1 && (
-        <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+        <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 flex-shrink-0 sticky bottom-0 z-20 shadow-lg">
           <div className="flex-1 flex justify-between sm:hidden">
             <button
-              onClick={() => handlePageChange(currentPage - 1)}
-              disabled={currentPage === 1}
+              onClick={() => setPage(page - 1)}
+              disabled={page === 1}
               className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Previous
             </button>
             <button
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={currentPage === totalPages}
+              onClick={() => setPage(page + 1)}
+              disabled={page === totalPages}
               className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Next
@@ -374,16 +234,16 @@ const Payments = () => {
           <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
             <div>
               <p className="text-sm text-gray-700">
-                Showing <span className="font-medium">{indexOfFirstItem + 1}</span> to{' '}
-                <span className="font-medium">{Math.min(indexOfLastItem, filteredPayments.length)}</span> of{' '}
+                Showing <span className="font-medium">{(page - 1) * PAYMENTS_PER_PAGE + 1}</span> to{' '}
+                <span className="font-medium">{Math.min(page * PAYMENTS_PER_PAGE, filteredPayments.length)}</span> of{' '}
                 <span className="font-medium">{filteredPayments.length}</span> results
               </p>
             </div>
             <div>
               <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
                 <button
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1}
+                  onClick={() => setPage(page - 1)}
+                  disabled={page === 1}
                   className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span className="sr-only">Previous</span>
@@ -392,23 +252,23 @@ const Payments = () => {
                   </svg>
                 </button>
                 
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
                   <button
-                    key={page}
-                    onClick={() => handlePageChange(page)}
+                    key={pageNum}
+                    onClick={() => setPage(pageNum)}
                     className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                      currentPage === page
+                      page === pageNum
                         ? 'z-10 bg-green-50 border-green-500 text-green-600'
                         : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
                     }`}
                   >
-                    {page}
+                    {pageNum}
                   </button>
                 ))}
                 
                 <button
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === totalPages}
+                  onClick={() => setPage(page + 1)}
+                  disabled={page === totalPages}
                   className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span className="sr-only">Next</span>

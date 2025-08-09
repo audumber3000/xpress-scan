@@ -40,6 +40,7 @@ class Patient(Base):
     __tablename__ = 'patients'
     id = Column(Integer, primary_key=True, index=True)
     clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
+    display_id = Column(String(20), unique=True, nullable=True)  # Medical Record Number: MRN-2024-00001
     name = Column(String, nullable=False)
     age = Column(Integer, nullable=False)
     gender = Column(String, nullable=False)
@@ -57,6 +58,7 @@ class Report(Base):
     id = Column(Integer, primary_key=True, index=True)
     clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
     patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False)
+    display_id = Column(String(20), unique=True, nullable=True)  # Report Number: RAD-2024-00001
     docx_url = Column(String)
     pdf_url = Column(String)
     content = Column(Text)  # Store the actual report content for drafts
@@ -83,6 +85,31 @@ class ReferringDoctor(Base):
     hospital = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     clinic = relationship("Clinic")
+
+class Payment(Base):
+    __tablename__ = 'payments'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
+    patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False)
+    display_id = Column(String(20), unique=True, nullable=True)  # Invoice Number: INV-2024-00001
+    report_id = Column(Integer, ForeignKey('reports.id'), nullable=True)  # Link to report if payment is for a report
+    scan_type_id = Column(Integer, ForeignKey('scan_types.id'), nullable=True)  # Link to scan type for pricing
+    amount = Column(Float, nullable=False)
+    payment_method = Column(String, nullable=False)  # Cash, Card, PayPal, Net Banking, UPI, etc.
+    status = Column(String, nullable=False, default='pending')  # pending, success, failed, refunded
+    transaction_id = Column(String, nullable=True)  # External transaction ID if applicable
+    notes = Column(Text, nullable=True)
+    paid_by = Column(String, nullable=True)  # Who made the payment (if different from patient)
+    received_by = Column(Integer, ForeignKey('users.id'), nullable=True)  # Staff member who received payment
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    
+    # Relationships
+    clinic = relationship("Clinic")
+    patient = relationship("Patient")
+    report = relationship("Report")
+    scan_type = relationship("ScanType")
+    received_by_user = relationship("User", foreign_keys=[received_by])
 
 # Update relationships
 Clinic.users = relationship("User", back_populates="clinic")

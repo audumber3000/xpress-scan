@@ -195,7 +195,52 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
         {/* Branding */}
         <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'} h-16 mb-4`}>
           <span className="bg-green-100 text-green-600 rounded-full p-2 flex-shrink-0">
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /></svg>
+            <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+              <style>
+                {`
+                  .scan-line { animation: scan-sweep 4.5s ease-in-out infinite; }
+                  
+                  @keyframes scan-sweep {
+                    0% { transform: translateY(10px); opacity: 0; }
+                    15% { opacity: 1; }
+                    35% { transform: translateY(-10px); opacity: 1; }
+                    50% { transform: translateY(-10px); opacity: 1; }
+                    65% { transform: translateY(10px); opacity: 1; }
+                    85% { opacity: 1; }
+                    100% { transform: translateY(10px); opacity: 0; }
+                  }
+                `}
+              </style>
+              
+              {/* Simple skeleton - bigger size */}
+              {/* Head */}
+              <circle cx="12" cy="5" r="2.5" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              
+              {/* Spine */}
+              <line x1="12" y1="7.5" x2="12" y2="19" stroke="currentColor" strokeWidth="1.5"/>
+              
+              {/* Ribs - simple curved lines */}
+              <path d="M12 9c-2.5 0-4 1.5-4 1.5" stroke="currentColor" strokeWidth="1" fill="none"/>
+              <path d="M12 9c2.5 0 4 1.5 4 1.5" stroke="currentColor" strokeWidth="1" fill="none"/>
+              <path d="M12 11c-3 0-4.5 1.5-4.5 1.5" stroke="currentColor" strokeWidth="1" fill="none"/>
+              <path d="M12 11c3 0 4.5 1.5 4.5 1.5" stroke="currentColor" strokeWidth="1" fill="none"/>
+              <path d="M12 13c-3 0-4.5 1.5-4.5 1.5" stroke="currentColor" strokeWidth="1" fill="none"/>
+              <path d="M12 13c3 0 4.5 1.5 4.5 1.5" stroke="currentColor" strokeWidth="1" fill="none"/>
+              <path d="M12 15c-2.5 0-4 1.5-4 1.5" stroke="currentColor" strokeWidth="1" fill="none"/>
+              <path d="M12 15c2.5 0 4 1.5 4 1.5" stroke="currentColor" strokeWidth="1" fill="none"/>
+              
+              {/* Arms */}
+              <line x1="12" y1="10" x2="7" y2="13" stroke="currentColor" strokeWidth="1.5"/>
+              <line x1="12" y1="10" x2="17" y2="13" stroke="currentColor" strokeWidth="1.5"/>
+              
+              {/* Legs */}
+              <line x1="12" y1="19" x2="9" y2="22" stroke="currentColor" strokeWidth="1.5"/>
+              <line x1="12" y1="19" x2="15" y2="22" stroke="currentColor" strokeWidth="1.5"/>
+              
+              {/* Scanning line - moves up and down */}
+              <line x1="6" y1="12" x2="18" y2="12" 
+                    stroke="currentColor" strokeWidth="2" opacity="0.8" className="scan-line"/>
+            </svg>
           </span>
           {!collapsed && (
             <div className="flex flex-col min-w-0 flex-1">

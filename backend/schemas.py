@@ -68,16 +68,18 @@ class PatientCreate(PatientBase):
 class PatientOut(PatientBase):
     id: int
     clinic_id: int
+    display_id: Optional[str] = None  # Medical Record Number (MRN)
     created_at: datetime
-
+    
     class Config:
         from_attributes = True
 
 class PatientResponse(PatientBase):
     id: int
     clinic_id: int
+    display_id: Optional[str] = None  # Medical Record Number (MRN)
     created_at: datetime
-
+    
     class Config:
         from_attributes = True 
 
@@ -122,6 +124,52 @@ class ReferringDoctorOut(ReferringDoctorBase):
     
     class Config:
         from_attributes = True 
+
+# Payment Schemas
+class PaymentBase(BaseModel):
+    patient_id: int
+    report_id: Optional[int] = None
+    scan_type_id: Optional[int] = None
+    amount: float
+    payment_method: str
+    status: str = "pending"
+    transaction_id: Optional[str] = None
+    notes: Optional[str] = None
+    paid_by: Optional[str] = None
+    received_by: Optional[int] = None
+
+class PaymentCreate(PaymentBase):
+    clinic_id: Optional[int] = None
+
+class PaymentUpdate(BaseModel):
+    amount: Optional[float] = None
+    payment_method: Optional[str] = None
+    status: Optional[str] = None
+    transaction_id: Optional[str] = None
+    notes: Optional[str] = None
+    paid_by: Optional[str] = None
+    received_by: Optional[int] = None
+
+class PaymentOut(PaymentBase):
+    id: int
+    clinic_id: int
+    display_id: Optional[str] = None  # Invoice Number (INV)
+    created_at: datetime
+    updated_at: datetime
+    
+    # Nested patient info for frontend display
+    patient_name: Optional[str] = None
+    patient_phone: Optional[str] = None
+    patient_email: Optional[str] = None
+    
+    # Nested scan type info
+    scan_type_name: Optional[str] = None
+    
+    # Nested received by user info  
+    received_by_name: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
 
 # Report Schemas
 class ReportResponse(BaseModel):

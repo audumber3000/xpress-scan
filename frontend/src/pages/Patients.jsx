@@ -6,7 +6,7 @@ import { FaEye, FaFilePdf, FaSync, FaEdit, FaTrash, FaUser } from 'react-icons/f
 import LoadingButton from "../components/LoadingButton";
 import { useAuth } from "../contexts/AuthContext";
 
-const PATIENTS_PER_PAGE = 9;
+const PATIENTS_PER_PAGE = 8;
 
 const defaultProfile = name => `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=E5E7EB&color=374151&size=80&rounded=true`;
 
@@ -66,21 +66,17 @@ const Patients = () => {
     fetchPatients();
   }, []);
 
-  // Filter and paginate
-  const filteredPatients = useMemo(() => {
-    let filtered = patients;
-    if (searchTerm.trim()) {
-      const s = searchTerm.toLowerCase();
-      filtered = filtered.filter(
-        p =>
-          p.name.toLowerCase().includes(s) ||
-          (p.phone && p.phone.toLowerCase().includes(s)) ||
-          (p.village && p.village.toLowerCase().includes(s)) ||
-          (p.referred_by && p.referred_by.toLowerCase().includes(s))
-      );
-    }
-    return filtered;
-  }, [patients, searchTerm]);
+  // Filtered and paginated patients
+  const filteredPatients = patients.filter((patient) => {
+    const matchesSearch = 
+      patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      patient.phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      patient.village.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      patient.scan_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      patient.referred_by.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (patient.display_id && patient.display_id.toLowerCase().includes(searchTerm.toLowerCase()));
+    return matchesSearch;
+  });
 
   const totalPages = Math.ceil(filteredPatients.length / PATIENTS_PER_PAGE) || 1;
   const paginatedPatients = filteredPatients.slice(
@@ -88,7 +84,9 @@ const Patients = () => {
     page * PATIENTS_PER_PAGE
   );
 
-  useEffect(() => { setPage(1); }, [searchTerm]);
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, patients]);
 
   const handleEditPatient = (patient) => {
     setEditingPatient(patient);
@@ -180,9 +178,9 @@ const Patients = () => {
   };
 
   return (
-    <div className="p-6">
+    <div className="flex flex-col h-screen">
       {/* Header */}
-      <div className="mb-6">
+      <div className="p-6 pb-4 flex-shrink-0">
         <div className="flex justify-between items-center">
           <div>
             <div className="flex items-center gap-2">
@@ -212,7 +210,7 @@ const Patients = () => {
       </div>
 
       {/* Search */}
-      <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+      <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex-shrink-0">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
             <input
@@ -226,99 +224,102 @@ const Patients = () => {
         </div>
       </div>
 
-      {/* Patients Table */}
-      <div className="overflow-x-auto">
-        {loading ? (
-          <div className="w-full flex items-center justify-center py-16">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
-              <p className="mt-2 text-sm text-gray-600">Loading patients...</p>
+      {/* Patients Table Container */}
+      <div className="flex-1 overflow-hidden">
+        <div className="h-full overflow-auto">
+          {loading ? (
+            <div className="w-full flex items-center justify-center py-16">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                <p className="mt-2 text-sm text-gray-600">Loading patients...</p>
+              </div>
             </div>
-          </div>
-        ) : (
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Village/City</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Scan Type</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Referred By</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Age</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gender</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {paginatedPatients.length === 0 ? (
+          ) : (
+            <table className="w-full">
+              <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr>
-                  <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
-                    <div>
-                      <p className="text-lg font-medium">No patients found</p>
-                      <p className="text-sm mt-1">Patients will appear here once registered</p>
-                    </div>
-                  </td>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">MRN</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Village/City</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Scan Type</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Referred By</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
-              ) : (
-                paginatedPatients.map((p) => {
-                  const profileImg = p.profile_image_url || defaultProfile(p.name);
-                  return (
-                    <tr key={p.id} className="hover:bg-gray-50 transition-colors duration-150">
-                      <td className="px-4 py-4 whitespace-nowrap text-center">
-                        <span className="text-gray-900 font-medium text-sm">
-                          #{p.id}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap font-semibold text-gray-900">{p.name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-900">{p.phone}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-900">{p.village}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-900">{p.scan_type}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-900">{p.referred_by}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-900">{p.age}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-900">{p.gender}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleViewPatientReports(p)}
-                            className="text-gray-400 hover:text-gray-600 transition-colors duration-150"
-                            title="View Reports"
-                          >
-                            <FaEye className="w-4 h-4" />
-                          </button>
-                          {hasPermission("patients:edit") && (
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {paginatedPatients.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                      <div>
+                        <p className="text-lg font-medium">No patients found</p>
+                        <p className="text-sm mt-1">Patients will appear here once registered</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedPatients.map((p) => {
+                    const profileImg = p.profile_image_url || defaultProfile(p.name);
+                    return (
+                      <tr key={p.id} className="hover:bg-gray-50 transition-colors duration-150">
+                        <td className="px-4 py-4 whitespace-nowrap text-center">
+                          <span className="text-gray-900 font-medium text-sm">
+                            {p.display_id || `#${p.id}`}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div>
+                            <div className="font-semibold text-gray-900">{p.name}</div>
+                            <div className="text-sm text-gray-500">{p.age} years • {p.gender}</div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{p.phone}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{p.village}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{p.scan_type}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{p.referred_by}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex items-center gap-2">
                             <button
-                              onClick={() => handleEditPatient(p)}
-                              className="text-gray-400 hover:text-blue-600 transition-colors duration-150"
-                              title="Edit Patient"
+                              onClick={() => handleViewPatientReports(p)}
+                              className="text-gray-400 hover:text-gray-600 transition-colors duration-150"
+                              title="View Reports"
                             >
-                              <FaEdit className="w-4 h-4" />
+                              <FaEye className="w-4 h-4" />
                             </button>
-                          )}
-                          {hasPermission("patients:delete") && (
-                            <button
-                              onClick={() => handleDeletePatient(p)}
-                              disabled={deleteLoading === p.id}
-                              className="text-gray-400 hover:text-red-600 transition-colors duration-150 disabled:opacity-50"
-                              title="Delete Patient"
-                            >
-                              <FaTrash className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        )}
+                            {hasPermission("patients:edit") && (
+                              <button
+                                onClick={() => handleEditPatient(p)}
+                                className="text-gray-400 hover:text-blue-600 transition-colors duration-150"
+                                title="Edit Patient"
+                              >
+                                <FaEdit className="w-4 h-4" />
+                              </button>
+                            )}
+                            {hasPermission("patients:delete") && (
+                              <button
+                                onClick={() => handleDeletePatient(p)}
+                                disabled={deleteLoading === p.id}
+                                className="text-gray-400 hover:text-red-600 transition-colors duration-150 disabled:opacity-50"
+                                title="Delete Patient"
+                              >
+                                <FaTrash className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
-      {/* Pagination */}
+      {/* Sticky Pagination at Bottom */}
       {totalPages > 1 && (
-        <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+        <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 flex-shrink-0 sticky bottom-0 z-20 shadow-lg">
           <div className="flex-1 flex justify-between sm:hidden">
             <button
               onClick={() => setPage(page - 1)}
