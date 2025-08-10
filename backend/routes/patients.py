@@ -69,8 +69,15 @@ def create_patient(
         print(f"Final patient data: {patient_data}")
         
         # Generate Medical Record Number (MRN) for the patient
-        patient_mrn = get_next_patient_mrn(db)
-        patient_data['display_id'] = patient_mrn
+        try:
+            patient_mrn = get_next_patient_mrn(db)
+            patient_data['display_id'] = patient_mrn
+        except Exception as e:
+            print(f"Error generating MRN: {e}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed to generate unique Medical Record Number: {str(e)}"
+            )
         
         # Create patient first
         db_patient = Patient(**patient_data)
@@ -87,7 +94,16 @@ def create_patient(
         amount = scan_type.price if scan_type else 1000.0  # Default amount if scan type not found
         
         # Generate Invoice Number for the payment
-        invoice_number = get_next_invoice_number(db)
+        try:
+            invoice_number = get_next_invoice_number(db)
+        except Exception as e:
+            print(f"Error generating invoice number: {e}")
+            # Rollback patient creation if we can't generate invoice
+            db.rollback()
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed to generate unique Invoice Number: {str(e)}"
+            )
         
         # Create payment record automatically
         payment_record = Payment(
@@ -126,10 +142,21 @@ def create_patient(
             payment_type=db_patient.payment_type,
             created_at=db_patient.created_at
         )
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
         db.rollback()
         print(f"Error creating patient and payment: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        
+        # Check if it's a unique constraint violation
+        if "duplicate key value violates unique constraint" in str(e):
+            raise HTTPException(
+                status_code=409, 
+                detail="A patient with this information already exists. Please check the details and try again."
+            )
+        
+        raise HTTPException(status_code=500, detail=f"Failed to create patient: {str(e)}")
 
 @router.put("/{patient_id}", response_model=PatientOut)
 def update_patient(
