@@ -63,7 +63,7 @@ const Payments = () => {
     const matchesSearch = 
       (payment.patient_name && payment.patient_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (payment.patient_phone && payment.patient_phone.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (payment.display_id && payment.display_id.toLowerCase().includes(searchTerm.toLowerCase())) ||
+
       (payment.id && payment.id.toString().toLowerCase().includes(searchTerm.toLowerCase())) ||
       (payment.payment_method && payment.payment_method.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (payment.paid_by && payment.paid_by.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -189,7 +189,7 @@ const Payments = () => {
                     <tr key={payment.id} className="hover:bg-gray-50 transition-colors duration-150">
                       <td className="px-4 py-4 whitespace-nowrap text-center">
                         <span className="text-gray-900 font-medium text-sm">
-                          {payment.display_id || `#${payment.id}`}
+                          #{payment.id}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

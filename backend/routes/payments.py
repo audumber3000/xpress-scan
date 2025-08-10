@@ -290,7 +290,7 @@ def get_enriched_payment(db: Session, payment: Payment) -> PaymentOut:
         "id": payment.id,
         "clinic_id": payment.clinic_id,
         "patient_id": payment.patient_id,
-        "display_id": payment.display_id,  # Invoice Number
+
         "report_id": payment.report_id,
         "scan_type_id": payment.scan_type_id,
         "amount": payment.amount,

@@ -68,7 +68,6 @@ class PatientCreate(PatientBase):
 class PatientOut(PatientBase):
     id: int
     clinic_id: int
-    display_id: Optional[str] = None  # Medical Record Number (MRN)
     created_at: datetime
     
     class Config:
@@ -77,7 +76,6 @@ class PatientOut(PatientBase):
 class PatientResponse(PatientBase):
     id: int
     clinic_id: int
-    display_id: Optional[str] = None  # Medical Record Number (MRN)
     created_at: datetime
     
     class Config:
@@ -153,7 +151,6 @@ class PaymentUpdate(BaseModel):
 class PaymentOut(PaymentBase):
     id: int
     clinic_id: int
-    display_id: Optional[str] = None  # Invoice Number (INV)
     created_at: datetime
     updated_at: datetime
     

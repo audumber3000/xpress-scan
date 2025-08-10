@@ -7,7 +7,7 @@ from typing import List
 from schemas import PatientResponse
 from auth import get_current_user, get_current_clinic, require_patients_view, require_patients_edit, require_patients_delete
 from datetime import datetime
-from utils.id_generator import get_next_patient_mrn, get_next_invoice_number
+
 
 router = APIRouter()
 
@@ -39,7 +39,6 @@ def get_patients(
         PatientResponse(
             id=patient.id,
             clinic_id=patient.clinic_id,
-            display_id=patient.display_id,  # Medical Record Number
             name=patient.name,
             age=patient.age,
             gender=patient.gender,
@@ -68,16 +67,7 @@ def create_patient(
         
         print(f"Final patient data: {patient_data}")
         
-        # Generate Medical Record Number (MRN) for the patient
-        try:
-            patient_mrn = get_next_patient_mrn(db)
-            patient_data['display_id'] = patient_mrn
-        except Exception as e:
-            print(f"Error generating MRN: {e}")
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Failed to generate unique Medical Record Number: {str(e)}"
-            )
+
         
         # Create patient first
         db_patient = Patient(**patient_data)
@@ -93,23 +83,10 @@ def create_patient(
         # Calculate amount (use scan type price if found, otherwise default)
         amount = scan_type.price if scan_type else 1000.0  # Default amount if scan type not found
         
-        # Generate Invoice Number for the payment
-        try:
-            invoice_number = get_next_invoice_number(db)
-        except Exception as e:
-            print(f"Error generating invoice number: {e}")
-            # Rollback patient creation if we can't generate invoice
-            db.rollback()
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Failed to generate unique Invoice Number: {str(e)}"
-            )
-        
         # Create payment record automatically
         payment_record = Payment(
             clinic_id=current_user.clinic_id,
             patient_id=db_patient.id,
-            display_id=invoice_number,
             scan_type_id=scan_type.id if scan_type else None,
             amount=amount,
             payment_method=patient.payment_type,  # Use the payment_type from patient form
@@ -125,12 +102,11 @@ def create_patient(
         db.commit()
         db.refresh(db_patient)
         
-        print(f"✅ Created patient {db_patient.name} (MRN: {patient_mrn}) with automatic payment record (Invoice: {invoice_number}, Amount: ${amount})")
+        print(f"✅ Created patient {db_patient.name} with automatic payment record (Amount: ${amount})")
         
         return PatientOut(
             id=db_patient.id,
             clinic_id=db_patient.clinic_id,
-            display_id=db_patient.display_id,  # Medical Record Number
             name=db_patient.name,
             age=db_patient.age,
             gender=db_patient.gender,

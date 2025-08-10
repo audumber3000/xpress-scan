@@ -275,7 +275,7 @@ const Reports = () => {
                     <tr key={report.id} className="hover:bg-gray-50 transition-colors duration-150">
                       <td className="px-4 py-4 whitespace-nowrap text-center">
                         <span className="text-gray-900 font-medium text-sm">
-                          {report.display_id || `#${report.id}`}
+                          #{report.id}
                         </span>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-red-600 text-xl">

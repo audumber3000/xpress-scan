@@ -67,14 +67,13 @@ const Patients = () => {
   }, []);
 
   // Filtered and paginated patients
-  const filteredPatients = patients.filter((patient) => {
+    const filteredPatients = patients.filter((patient) => {
     const matchesSearch = 
       patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       patient.phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
       patient.village.toLowerCase().includes(searchTerm.toLowerCase()) ||
       patient.scan_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.referred_by.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (patient.display_id && patient.display_id.toLowerCase().includes(searchTerm.toLowerCase()));
+      patient.referred_by.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesSearch;
   });
 
@@ -264,7 +263,7 @@ const Patients = () => {
                       <tr key={p.id} className="hover:bg-gray-50 transition-colors duration-150">
                         <td className="px-4 py-4 whitespace-nowrap text-center">
                           <span className="text-gray-900 font-medium text-sm">
-                            {p.display_id || `#${p.id}`}
+                            #{p.id}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">

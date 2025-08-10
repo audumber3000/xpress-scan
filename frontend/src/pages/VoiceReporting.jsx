@@ -1328,7 +1328,7 @@ const VoiceReporting = () => {
                         <h3 className="font-semibold text-gray-900 text-sm mb-1">
                           DHANVANTRI TEMPLATE
                         </h3>
-                        <p className="text-xs text-gray-500 mb-2">Template ID: RAD-001</p>
+                        <p className="text-xs text-gray-500 mb-2">Template ID: RAD-C3-001</p>
                         
                         {/* Click to View Text */}
                         <div className="text-xs text-blue-600 font-medium group-hover:text-blue-700 transition-colors flex items-center justify-center gap-1">

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Float, Boolean, JSON
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, JSON, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 import datetime
@@ -18,6 +18,9 @@ class Clinic(Base):
     logo_url = Column(String)
     primary_color = Column(String, default='#10B981')  # Green default
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    # Relationships
+    users = relationship("User", back_populates="clinic")
 
 class User(Base):
     __tablename__ = 'users'
@@ -40,7 +43,6 @@ class Patient(Base):
     __tablename__ = 'patients'
     id = Column(Integer, primary_key=True, index=True)
     clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
-    display_id = Column(String(20), unique=True, nullable=True)  # Medical Record Number: MRN-2024-00001
     name = Column(String, nullable=False)
     age = Column(Integer, nullable=False)
     gender = Column(String, nullable=False)
@@ -58,7 +60,6 @@ class Report(Base):
     id = Column(Integer, primary_key=True, index=True)
     clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
     patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False)
-    display_id = Column(String(20), unique=True, nullable=True)  # Report Number: RAD-2024-00001
     docx_url = Column(String)
     pdf_url = Column(String)
     content = Column(Text)  # Store the actual report content for drafts
@@ -91,7 +92,6 @@ class Payment(Base):
     id = Column(Integer, primary_key=True, index=True)
     clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
     patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False)
-    display_id = Column(String(20), unique=True, nullable=True)  # Invoice Number: INV-2024-00001
     report_id = Column(Integer, ForeignKey('reports.id'), nullable=True)  # Link to report if payment is for a report
     scan_type_id = Column(Integer, ForeignKey('scan_types.id'), nullable=True)  # Link to scan type for pricing
     amount = Column(Float, nullable=False)
