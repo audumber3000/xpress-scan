@@ -6,6 +6,7 @@ load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from routes import patients, reports
 from routes import scan_types
 from routes import referring_doctors
@@ -14,6 +15,7 @@ from routes import clinics
 from routes import users
 from routes import auth
 from routes import payments
+from services.template_service import TemplateService
 
 app = FastAPI()
 
@@ -42,6 +44,9 @@ app.add_middleware(
     expose_headers=["*"]
 )
 
+# Mount static files for template assets
+app.mount("/public/templates/assets", StaticFiles(directory="templates/assets"), name="template-assets")
+
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(patients.router, prefix="/patients", tags=["patients"])
 app.include_router(reports.router, prefix="/reports", tags=["reports"])
@@ -55,6 +60,37 @@ app.include_router(payments.router, prefix="/payments", tags=["payments"])
 @app.get("/")
 def root():
     return {"message": "Radiology Clinic Backend is running"}
+
+# Public template endpoints - no authentication required
+@app.get("/public/templates")
+def list_public_templates():
+    """List all available report templates - Public endpoint with no authentication"""
+    try:
+        template_service = TemplateService()
+        templates = template_service.list_templates()
+        
+        return {
+            "templates": templates,
+            "total": len(templates)
+        }
+    except Exception as e:
+        return {"error": str(e), "templates": [], "total": 0}
+
+@app.get("/public/templates/{template_name}")
+def get_public_template(template_name: str):
+    """Get a specific template content - Public endpoint with no authentication"""
+    try:
+        template_service = TemplateService()
+        template_content = template_service.load_template(template_name)
+        
+        return {
+            "template_name": template_name,
+            "content": template_content
+        }
+    except FileNotFoundError:
+        return {"error": "Template not found", "template_name": template_name}
+    except Exception as e:
+        return {"error": str(e), "template_name": template_name}
 
 if __name__ == "__main__":
     import uvicorn

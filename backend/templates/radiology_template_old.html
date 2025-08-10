@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dhanvantri Radiology Center Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .report-container {
+            background-color: #ffffff;
+            max-width: 100%;
+            margin: 0;
+            padding: 0;
+            border: none;
+            box-shadow: none;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding-bottom: 15px;
+        }
+        .header .logo-section {
+            display: flex;
+            align-items: center;
+        }
+        .header .logo {
+            width: 70px;
+            height: auto;
+            margin-right: 15px;
+        }
+        .header .title-section {
+            display: flex;
+            flex-direction: column;
+        }
+        .header h1 {
+            color: #1a3a6b;
+            font-size: 36px;
+            margin: 0;
+            font-weight: bold;
+        }
+        .header .subtitle {
+             color: #1e5799;
+             font-size: 20px;
+             margin: 0;
+        }
+        .header .services {
+            margin-top: 10px;
+            color: #333;
+            font-size: 14px;
+        }
+        .header .contact-info {
+            text-align: right;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #1e5799;
+            font-weight: bold;
+        }
+        .divider {
+            border: 0;
+            height: 3px;
+            background-color: #1e5799;
+            margin: 0;
+        }
+        .patient-info {
+            display: flex;
+            justify-content: space-between;
+            padding: 20px 0;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+        .patient-info strong {
+            color: #333;
+        }
+        .transcript-section {
+            padding: 20px 0;
+            min-height: 400px; /* Adjust as needed for the empty space */
+            font-size: 14px;
+            color: #555;
+        }
+        .footer {
+            padding-top: 50px;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+        .footer .signature-line {
+             width: 200px;
+             height: 1px;
+             background-color: #000;
+             margin-top: 25px;
+             margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="report-container">
+        <!-- Header Section -->
+        <div class="header">
+            <div class="logo-section">
+                <img src="https://awdlcycjawoawdotzxpe.supabase.co/storage/v1/object/public/xpress-scan-bucket/Screenshot%202025-08-03%20at%2010.57%20Background%20Removed.56%20AM.png" alt="Clinic Logo" class="logo" style="width: 70px; height: auto; object-fit: contain;">
+                <div class="title-section">
+                    <h1 style="color: #1a3a6b;">Dhanvantri</h1>
+                    <span class="subtitle">Radiology Center</span>
+                     <p class="services">MRI | X-Ray | CT - SCan | USG</p>
+                </div>
+            </div>
+            <div class="contact-info">
+                +91 9420332003<br>
+                prashantchaudhari@gmail.com<br>
+                At post kada , tal ashti ,<br>
+                disti beed , maharashatra,<br>
+                India, 414202
+            </div>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Patient Info Section -->
+        <div class="patient-info">
+            <div>
+                <strong>Patient Name:</strong> {{name}}<br>
+                <strong>Sex:</strong> {{gender}}<br>
+                <strong>Exam:</strong> {{scan_type}}
+            </div>
+            <div>
+                <strong>Exam Date:</strong> {{todays_date}}<br>
+                <strong>Age:</strong> {{age}}<br>
+                <strong>PID:</strong> {{patient_id}}
+            </div>
+        </div>
+
+        <hr style="border-top: 1px solid #ccc; border-bottom: none;">
+
+        <!-- Transcript Section -->
+        <div class="transcript-section">
+            <p>{{transcript}}</p>
+        </div>
+
+        <!-- Footer Section -->
+        <div class="footer">
+            <strong>Radiologist:</strong><br>
+            Dr. Prashant Chaudhari<br>
+            Reg. No: 123123412341<br>
+            <strong>Signature</strong>
+            <div class="signature-line"></div>
+        </div>
+        
+        <hr class="divider" style="margin-top: 20px;">
+    </div>
+
+</body>
+</html> 

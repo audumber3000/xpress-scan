@@ -4,7 +4,9 @@ from datetime import datetime
 
 class TemplateService:
     def __init__(self):
-        self.templates_dir = "templates"
+        # Use absolute path to templates directory
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        self.templates_dir = os.path.join(current_dir, "..", "templates")
     
     def load_template(self, template_name: str) -> str:
         """
@@ -72,7 +74,13 @@ class TemplateService:
             'todays_date': datetime.now().strftime('%B %d, %Y'),
             'doctor_name': patient_data.get('doctor_name', 'Dr. Radiologist'),
             'patient_id': patient_data.get('id', 'N/A'),
-            'transcript': report_content  # Use transcript as the main content
+            'transcript': report_content,  # Use transcript as the main content
+            
+            # Add the fields that the template actually expects
+            'age_and_sex': f"{patient_data.get('age', 'N/A')}/{patient_data.get('gender', 'N/A')}",
+            'refered_doctor': patient_data.get('referred_by', 'N/A'),
+            'patient_phone': patient_data.get('phone', 'N/A'),
+            'current_date_and_time': datetime.now().strftime('%B %d, %Y at %I:%M %p')
         }
         
         # Fill template

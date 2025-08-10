@@ -3,46 +3,39 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dhanvantari Sonography Center</title>
+<title>Test Template - Dhanvantari Sonography Center</title>
 <!-- Font Awesome for icons -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 <style>
-    /* Override WeasyPrint default margins */
-    @page {
-        margin: 0;
-        padding: 0;
-        size: A4;
-    }
-    
-    /* Reset all margins and padding */
-    * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-    }
-    
     body {
         font-family: 'Arial', sans-serif;
-        margin: 15px; /* Added 10px margin to entire page from all sides */
+        margin: 0;
         padding: 0;
-       
+        background-color: #f4f4f4;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
     }
     .letterhead {
+        width: 210mm; /* A4 width */
+        min-height: 297mm; /* A4 height */
         background-color: #ffffff;
-        max-width: 100%;
-        margin: 0;
-        padding: 15px; /* Reverted back to original */
+        padding: 25px 40px;
+        box-shadow: 0 0 15px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
         box-sizing: border-box;
     }
     .header {
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
-        padding-bottom: 15px; /* Reverted back to original */
+        padding-bottom: 15px;
     }
     .logo {
         flex: 0 0 100px;
-        margin-right: 15px; /* Reverted back to original */
+        margin-right: 20px;
     }
     .logo img {
         width: 100%;
@@ -55,7 +48,7 @@
         font-weight: bold;
         color: #5E2A84;
         line-height: 1;
-        margin-bottom: 3px; /* Reverted back to original */
+        margin-bottom: 5px;
     }
     .clinic-subtitle {
         font-size: 28px;
@@ -63,7 +56,7 @@
         color: #5E2A84;
         margin-top: 0;
         line-height: 1;
-        margin-bottom: 8px; /* Reverted back to original */
+        margin-bottom: 10px;
     }
     .clinic-services {
         font-size: 14px;
@@ -84,122 +77,65 @@
         margin-right: 8px;
         color: #5E2A84;
     }
-    
-    .contact-info-header {
-        font-weight: bold; /* Make contact info bolder */
-    }
     .separator {
         border: 0;
-        height: 4px; /* Increased from 2px to make it thicker */
+        height: 2px;
         background-color: #5E2A84;
-        margin: 0;
+        margin: 5px 0 15px 0;
     }
-    /* Updated Patient Details Section */
     .patient-details {
-        padding: 30px 20px; /* Added left and right padding for better spacing */
+        padding: 0 30px 15px 30px;
         display: flex;
         justify-content: space-between;
-        font-size: 15px; /* Increased from 13px for better readability */
+        font-size: 13px;
         line-height: 1.6;
     }
     .patient-col-1, .patient-col-2 {
-        width: 48%; /* Slightly increased width for better balance */
-    }
-    .patient-col-1 {
-        text-align: left;
-    }
-    .patient-col-2 {
-        text-align: left; /* Align labels to the left for consistency */
-        padding-left: 20px; /* Increased padding to move content more to the right */
+        width: 46%;
     }
     .patient-details b {
         display: inline-block;
-        width: 100px; /* Increased width for better alignment */
+        width: 90px;
         text-align: left;
-        font-weight: bold;
     }
     .main-content {
-        padding: 30px 20px; /* Added left and right padding for better spacing */
-        font-size: 16px; /* Increased from 14px for better readability */
-        min-height: 300px;
-        /* Better handling for longer content */
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-        line-height: 1.6;
-        /* Ensure content flows properly */
-        page-break-inside: auto;
-        orphans: 3;
-        widows: 3;
-    }
-    
-    /* Handle long content better */
-    .main-content h1, .main-content h2, .main-content h3, 
-    .main-content h4, .main-content h5, .main-content h6 {
-        page-break-after: avoid;
-        page-break-inside: avoid;
-        margin-top: 20px;
-        margin-bottom: 10px;
-    }
-    
-    .main-content p {
-        margin-bottom: 12px;
-        page-break-inside: avoid;
-    }
-    
-    .main-content ul, .main-content ol {
-        margin-bottom: 15px;
-        page-break-inside: avoid;
-    }
-    
-    .main-content li {
-        margin-bottom: 5px;
-        page-break-inside: avoid;
+        flex-grow: 1;
+        padding: 20px 0;
+        font-size: 14px;
     }
     .footer {
-        padding: 15px 20px 0 20px; /* Reduced top padding from 40px to 15px */
+        padding-top: 20px;
         display: flex;
         flex-direction: column;
-        gap: 12px; /* Reverted back to original */
+        gap: 15px;
     }
     .signature-section {
         height: 140px;
-        margin-bottom: 20px; /* Increased from 15px for better spacing */
-        display: flex;
-        justify-content: flex-start;
-        margin-left: -80px; /* Moved signature more to the left */
+        margin-bottom: 20px;
     }
     .signature-section img {
-        height: 200px;
+        height: 120px;
         width: auto;
         object-fit: contain;
         display: block;
-        margin-left: 0;
-    }
-    .signature-line {
-        width: 200px;
-        height: 1px;
-        background-color: #000;
-        margin-top: 25px; /* Reverted back to original */
-        margin-bottom: 5px;
     }
     .doctor-footer-info {
         color: #333;
-        margin-top: 10px; /* Reverted back to original */
     }
     .doctor-footer-info .doctor-name {
         font-size: 14px;
         color: #000;
     }
     .reg-no, .current-time {
-        font-size: 14px;
+        font-size: 12px;
         color: #555;
-        margin-top: 5px; /* Reverted back to original */
+        margin-top: 5px;
     }
     .footer-separator {
         border: 0;
         height: 2px;
         background-color: #5E2A84;
-        margin-top: 20px; /* Reverted back to original */
+        margin-top: 20px;
     }
 </style>
 </head>
@@ -209,7 +145,7 @@
     <!-- Header Section -->
     <div class="header">
         <div class="logo">
-            <img src="https://awdlcycjawoawdotzxpe.supabase.co/storage/v1/object/public/xpress-scan-bucket/fetus.png" alt="Dhanvantari Logo">
+            <img src="assets/fetus.png" alt="Dhanvantari Logo">
         </div>
         <div class="clinic-info">
             <div class="clinic-name">Dhanvantari</div>
@@ -236,14 +172,14 @@
     <!-- Patient Details Section -->
     <div class="patient-details">
         <div class="patient-col-1">
-            <b>Name:</b> {{name}}<br>
-            <b>Age & Sex:</b> {{age_and_sex}}<br>
-            <b>Exam:</b> {{scan_type}}
+            <b>Name:</b> John Doe<br>
+            <b>Age & Sex:</b> 35/M<br>
+            <b>Exam:</b> Ultrasound
         </div>
         <div class="patient-col-2">
-            <b>Exam Date:</b> {{todays_date}}<br>
-            <b>Physician:</b> {{refered_doctor}}<br>
-            <b>Mobile:</b> {{patient_phone}}
+            <b>Exam Date:</b> 2025-01-27<br>
+            <b>Physician:</b> Dr. Smith<br>
+            <b>Mobile:</b> +91 9876543210
         </div>
     </div>
 
@@ -252,13 +188,15 @@
 
     <!-- Main Content for Transcript -->
     <div class="main-content">
-        {{transcript}}
+        <p>This is a sample transcript content to test the template. The patient underwent a routine ultrasound examination.</p>
+        <p>Findings: Normal study. No abnormalities detected.</p>
+        <p>Impression: Normal ultrasound examination.</p>
     </div>
 
     <!-- Footer Section -->
     <div class="footer">
         <div class="signature-section">
-            <img src="https://awdlcycjawoawdotzxpe.supabase.co/storage/v1/object/public/xpress-scan-bucket/WhatsApp_Image_2025-08-10_at_16.09.53-removebg-preview.png" alt="Doctor's Signature">
+            <img src="assets/WhatsApp_Image_2025-08-10_at_16.09.53-removebg-preview.png" alt="Doctor's Signature">
         </div>
         <div class="doctor-footer-info">
             <div class="doctor-name"><b>Dr. Chaudhary Prashant Ramdas</b></div>
@@ -266,11 +204,13 @@
             <div><b>Consultant Radiologist</b></div>
             <div class="reg-no">Reg.No. 2020/05/3653</div>
         </div>
-        <div class="current-time">{{current_date_and_time}}</div>
+        <div class="current-time">2025-01-27 15:30:00</div>
     </div>
+
+    <hr class="footer-separator">
     
     <!-- Additional purple line at the bottom -->
-    <hr style="border: 0; height: 6px; background-color: #5E2A84; margin: 20px 0 0 0;">
+    <hr style="border: 0; height: 3px; background-color: #5E2A84; margin: 20px 0 0 0;">
 </div>
 
 </body>

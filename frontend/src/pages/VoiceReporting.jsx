@@ -53,7 +53,6 @@ const VoiceReporting = () => {
   const [activeTab, setActiveTab] = useState("voice");
   
   // Template management
-  const [templates, setTemplates] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState("radiology_template.html");
   const [templateContent, setTemplateContent] = useState("");
   const [isEditingTemplate, setIsEditingTemplate] = useState(false);
@@ -563,23 +562,21 @@ const VoiceReporting = () => {
     if (editor) editor.chain().focus().setTextAlign(value).run();
   };
 
-  // Template management functions
-  const fetchTemplates = async () => {
-    try {
-      const response = await api.get("/reports/templates");
-      setTemplates(response.templates || []);
-    } catch (error) {
-      console.error("Failed to fetch templates:", error);
-      // Fallback to single template if API fails
-      setTemplates(['radiology_template.html']);
-      toast.warning("Using fallback template - server connection issue");
-    }
-  };
+  // Simple template list - no API calls needed
+  const templates = ["radiology_template.html", "radiology_template_old.html"];
 
   const handleTemplateClick = async (templateName) => {
     try {
-      const response = await api.get(`/reports/templates/${templateName}`);
-      const templateContent = response.content;
+      // Use direct fetch for public templates (no authentication required)
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8001";
+      const response = await fetch(`${backendUrl}/public/templates/${templateName}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      const templateContent = result.content;
       
       // Create a new window with the template HTML
       const newWindow = window.open('', '_blank');
@@ -746,10 +743,7 @@ const VoiceReporting = () => {
     }
   };
 
-  // Load templates on component mount
-  useEffect(() => {
-    fetchTemplates();
-  }, []);
+
 
   return (
     <div className="w-full h-full bg-gray-50 p-6 flex flex-col items-center justify-start overflow-y-auto">
@@ -877,64 +871,53 @@ const VoiceReporting = () => {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-bold text-gray-900">Selected Patient Details</h3>
+                    <h3 className="text-lg font-bold text-gray-900">Patient Details (Report Fields)</h3>
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Personal Information */}
+                    {/* Left Column - Matching Report Template */}
                     <div className="space-y-2">
-                      <h4 className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-2">Personal Information</h4>
+                      <h4 className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-2">Left Column</h4>
                       <div className="space-y-1.5">
                         <div className="flex justify-between items-center">
                           <span className="text-xs text-gray-500 font-medium">Name:</span>
                           <span className="text-sm font-semibold text-gray-900">{selectedPatient.name}</span>
                         </div>
                         <div className="flex justify-between items-center">
-                          <span className="text-xs text-gray-500 font-medium">Age:</span>
-                          <span className="text-sm font-semibold text-gray-900">{selectedPatient.age} years</span>
+                          <span className="text-xs text-gray-500 font-medium">Age & Sex:</span>
+                          <span className="text-sm font-semibold text-gray-900">{selectedPatient.age} years, {selectedPatient.gender}</span>
                         </div>
                         <div className="flex justify-between items-center">
-                          <span className="text-xs text-gray-500 font-medium">Gender:</span>
-                          <span className="text-sm font-semibold text-gray-900">{selectedPatient.gender}</span>
+                          <span className="text-xs text-gray-500 font-medium">Exam:</span>
+                          <span className="text-sm font-semibold text-gray-900">{selectedPatient.scan_type}</span>
                         </div>
                       </div>
                     </div>
                     
-                    {/* Medical Information */}
+                    {/* Right Column - Matching Report Template */}
                     <div className="space-y-2">
-                      <h4 className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-2">Medical Information</h4>
+                      <h4 className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-2">Right Column</h4>
                       <div className="space-y-1.5">
                         <div className="flex justify-between items-center">
-                          <span className="text-xs text-gray-500 font-medium">Scan Type:</span>
-                          <span className="text-sm font-semibold text-gray-900">{selectedPatient.scan_type}</span>
+                          <span className="text-xs text-gray-500 font-medium">Exam Date:</span>
+                          <span className="text-sm font-semibold text-gray-900">{new Date().toLocaleDateString('en-US', { 
+                            year: 'numeric', 
+                            month: 'long', 
+                            day: 'numeric' 
+                          })}</span>
                         </div>
                         <div className="flex justify-between items-center">
-                          <span className="text-xs text-gray-500 font-medium">Village:</span>
-                          <span className="text-sm font-semibold text-gray-900">{selectedPatient.village}</span>
+                          <span className="text-xs text-gray-500 font-medium">Physician:</span>
+                          <span className="text-sm font-semibold text-gray-900">{selectedPatient.referred_by || 'N/A'}</span>
                         </div>
                         <div className="flex justify-between items-center">
-                          <span className="text-xs text-gray-500 font-medium">Phone:</span>
+                          <span className="text-xs text-gray-500 font-medium">Mobile:</span>
                           <span className="text-sm font-semibold text-gray-900">{selectedPatient.phone}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs text-gray-500 font-medium">Referred By:</span>
-                          <span className="text-sm font-semibold text-gray-900">{selectedPatient.referred_by}</span>
                         </div>
                       </div>
                     </div>
                   </div>
                   
-                  {selectedPatient.notes && (
-                    <div className="mt-3 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                      <div className="flex items-center gap-2 mb-1">
-                        <svg className="w-3 h-3 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        <span className="text-xs font-semibold text-yellow-800">Notes</span>
-                      </div>
-                      <p className="text-xs text-yellow-700">{selectedPatient.notes}</p>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
@@ -1220,138 +1203,238 @@ const VoiceReporting = () => {
             {/* Template Management Content */}
             <div className="mb-6">
               <h2 className="text-xl font-bold text-gray-900 mb-4">Available Templates</h2>
-              <p className="text-gray-600 mb-6">Choose from our professionally designed templates for your radiology reports.</p>
+              <p className="text-gray-600 mb-6">Choose from our professionally designed templates for your radiology reports. Both templates are fully functional and ready to use.</p>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {/* Template Preview Cards */}
-                {templates.length > 0 ? (
-                  templates.map((template, index) => (
-                    <div
-                      key={template}
-                      className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm hover:shadow-lg transition-all cursor-pointer group"
-                      onClick={() => handleTemplateClick(template)}
-                      title="Click to view template in new tab"
-                    >
-                                              {/* Template Preview */}
-                        <div className="relative mb-4">
-                          <div className="w-full h-48 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200 overflow-hidden shadow-sm">
-                            {/* Template Preview Content */}
-                            <div className="p-4 h-full flex flex-col">
-                              {/* Header */}
-                              <div className="flex items-center gap-2 mb-2">
-                                <div className="w-4 h-4 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
-                                  <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                  </svg>
-                                </div>
-                                <div>
-                                  <div className="text-xs font-bold text-blue-700">Dhanvantri</div>
-                                  <div className="text-xs text-gray-600">Radiology Center</div>
-                                </div>
-                              </div>
-                              
-                              {/* Separator */}
-                              <div className="h-px bg-gradient-to-r from-blue-200 to-transparent mb-2"></div>
-                              
-                              {/* Template Preview Content */}
-                              <div className="flex-1 bg-white rounded border border-gray-100 p-2">
-                                {/* Mini Header */}
-                                <div className="flex items-center gap-1 mb-1">
-                                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                                  <div className="text-xs font-bold text-blue-600">Dhanvantri</div>
-                                </div>
-                                <div className="text-xs text-gray-500 mb-1">Radiology Center</div>
-                                
-                                {/* Mini Separator */}
-                                <div className="h-px bg-blue-300 mb-2"></div>
-                                
-                                {/* Mini Patient Info */}
-                                <div className="grid grid-cols-2 gap-1 mb-2">
-                                  <div className="text-xs">
-                                    <span className="font-semibold text-gray-600">Name:</span>
-                                    <span className="text-gray-400 ml-1">John Doe</span>
-                                  </div>
-                                  <div className="text-xs">
-                                    <span className="font-semibold text-gray-600">Age:</span>
-                                    <span className="text-gray-400 ml-1">35</span>
-                                  </div>
-                                  <div className="text-xs">
-                                    <span className="font-semibold text-gray-600">Exam:</span>
-                                    <span className="text-gray-400 ml-1">X-Ray</span>
-                                  </div>
-                                  <div className="text-xs">
-                                    <span className="font-semibold text-gray-600">Date:</span>
-                                    <span className="text-gray-400 ml-1">Dec 15</span>
-                                  </div>
-                                </div>
-                                
-                                {/* Mini Report Area */}
-                                <div className="bg-gray-50 rounded p-1 mb-1">
-                                  <div className="text-xs font-semibold text-gray-600 mb-1">Findings</div>
-                                  <div className="text-xs text-gray-400 leading-tight">
-                                    Sample findings content...
-                                  </div>
-                                </div>
-                                
-                                {/* Mini Footer */}
-                                <div className="text-xs text-gray-500 text-center">
-                                  Dr. Prashant Chaudhari
-                                </div>
-                              </div>
-                              
-                              {/* Footer */}
-                              <div className="mt-3 text-xs text-gray-500 text-center">
-                                Dr. Prashant Chaudhari
-                              </div>
-                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Template 1: New Template */}
+                <div
+                  className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm hover:shadow-lg transition-all cursor-pointer group"
+                  onClick={() => handleTemplateClick("radiology_template.html")}
+                  title="Click to view template in new tab"
+                >
+                  {/* Template Preview */}
+                  <div className="relative mb-4">
+                    <div className="w-full h-48 rounded-lg border overflow-hidden shadow-sm bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-200">
+                      {/* Template Preview Content */}
+                      <div className="p-4 h-full flex flex-col">
+                        {/* Header */}
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-4 h-4 rounded-full flex items-center justify-center bg-gradient-to-r from-purple-500 to-indigo-600">
+                            <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
                           </div>
-                          
-                          {/* Status Badge */}
-                          <div className="absolute top-3 right-3">
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
-                              Active
-                            </span>
-                          </div>
-                          
-                          {/* Click Indicator */}
-                          <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <div className="bg-blue-500 text-white p-1.5 rounded-full shadow-lg">
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                              </svg>
-                            </div>
+                          <div>
+                            <div className="text-xs font-bold text-purple-700">Dhanvantari</div>
+                            <div className="text-xs text-gray-600">Radiology Center</div>
                           </div>
                         </div>
-                      
-                      {/* Template Info */}
-                      <div className="text-center">
-                        <h3 className="font-semibold text-gray-900 text-sm mb-1">
-                          DHANVANTRI TEMPLATE
-                        </h3>
-                        <p className="text-xs text-gray-500 mb-2">Template ID: RAD-C3-001</p>
                         
-                        {/* Click to View Text */}
-                        <div className="text-xs text-blue-600 font-medium group-hover:text-blue-700 transition-colors flex items-center justify-center gap-1">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                          </svg>
-                          View template
+                        {/* Separator */}
+                        <div className="h-px bg-gradient-to-r from-purple-200 to-transparent mb-2"></div>
+                        
+                        {/* Template Preview Content */}
+                        <div className="flex-1 bg-white rounded border border-gray-100 p-2">
+                          {/* Mini Header */}
+                          <div className="flex items-center gap-1 mb-1">
+                            <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                            <div className="text-xs font-bold text-purple-600">Dhanvantari</div>
+                          </div>
+                          <div className="text-xs text-gray-500 mb-1">Radiology Center</div>
+                          
+                          {/* Mini Separator */}
+                          <div className="h-px bg-purple-300 mb-2"></div>
+                          
+                          {/* Mini Patient Info */}
+                          <div className="grid grid-cols-2 gap-1 mb-2">
+                            <div className="text-xs">
+                              <span className="font-semibold text-gray-600">Name:</span>
+                              <span className="text-gray-400 ml-1">John Doe</span>
+                            </div>
+                            <div className="text-xs">
+                              <span className="font-semibold text-gray-600">Age:</span>
+                              <span className="text-gray-400 ml-1">35</span>
+                            </div>
+                            <div className="text-xs">
+                              <span className="font-semibold text-gray-600">Exam:</span>
+                              <span className="text-gray-400 ml-1">X-Ray</span>
+                            </div>
+                            <div className="text-xs">
+                              <span className="font-semibold text-gray-600">Date:</span>
+                              <span className="text-gray-400 ml-1">Dec 15</span>
+                            </div>
+                          </div>
+                          
+                          {/* Mini Report Area */}
+                          <div className="bg-gray-50 rounded p-1 mb-1">
+                            <div className="text-xs font-semibold text-gray-600 mb-1">Findings</div>
+                            <div className="text-xs text-gray-400 leading-tight">
+                              Sample findings content...
+                            </div>
+                          </div>
+                          
+                          {/* Mini Footer */}
+                          <div className="text-xs text-gray-500 text-center">
+                            Dr. Prashant Chaudhari
+                          </div>
                         </div>
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <div className="col-span-full text-center py-8">
-                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
+                    
+                    {/* Status Badge */}
+                    <div className="absolute top-3 right-3">
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border bg-purple-100 text-purple-800 border-purple-200">
+                        NEW
+                      </span>
                     </div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Templates Available</h3>
-                    <p className="text-gray-500">Professional templates will be available here.</p>
+                    
+                    {/* Click Indicator */}
+                    <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="bg-blue-500 text-white p-1.5 rounded-full shadow-lg">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </div>
+                    </div>
                   </div>
-                )}
+                
+                  {/* Template Info */}
+                  <div className="text-center">
+                    <h3 className="font-semibold text-gray-900 text-sm mb-1">
+                      DHANVANTARI TEMPLATE (NEW)
+                    </h3>
+                    <p className="text-xs text-gray-500 mb-2">
+                      Template ID: DHANVANTARI-NEW
+                    </p>
+                    <p className="text-xs text-gray-400 mb-2">
+                      Professional Dhanvantari branding with purple theme
+                    </p>
+                    
+                    {/* Click to View Text */}
+                    <div className="text-xs text-blue-600 font-medium group-hover:text-blue-700 transition-colors flex items-center justify-center gap-1">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                      </svg>
+                      View template
+                    </div>
+                  </div>
+                </div>
+
+                {/* Template 2: Old Template */}
+                <div
+                  className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm hover:shadow-lg transition-all cursor-pointer group"
+                  onClick={() => handleTemplateClick("radiology_template_old.html")}
+                  title="Click to view template in new tab"
+                >
+                  {/* Template Preview */}
+                  <div className="relative mb-4">
+                    <div className="w-full h-48 rounded-lg border overflow-hidden shadow-sm bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
+                      {/* Template Preview Content */}
+                      <div className="p-4 h-full flex flex-col">
+                        {/* Header */}
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-4 h-4 rounded-full flex items-center justify-center bg-gradient-to-r from-blue-500 to-indigo-600">
+                            <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-blue-700">Dhanvantri</div>
+                            <div className="text-xs text-gray-600">Radiology Center</div>
+                          </div>
+                        </div>
+                        
+                        {/* Separator */}
+                        <div className="h-px bg-gradient-to-r from-blue-200 to-transparent mb-2"></div>
+                        
+                        {/* Template Preview Content */}
+                        <div className="flex-1 bg-white rounded border border-gray-100 p-2">
+                          {/* Mini Header */}
+                          <div className="flex items-center gap-1 mb-1">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                            <div className="text-xs font-bold text-blue-600">Dhanvantri</div>
+                          </div>
+                          <div className="text-xs text-gray-500 mb-1">Radiology Center</div>
+                          
+                          {/* Mini Separator */}
+                          <div className="h-px bg-blue-300 mb-2"></div>
+                          
+                          {/* Mini Patient Info */}
+                          <div className="grid grid-cols-2 gap-1 mb-2">
+                            <div className="text-xs">
+                              <span className="font-semibold text-gray-600">Name:</span>
+                              <span className="text-gray-400 ml-1">John Doe</span>
+                            </div>
+                            <div className="text-xs">
+                              <span className="font-semibold text-gray-600">Age:</span>
+                              <span className="text-gray-400 ml-1">35</span>
+                            </div>
+                            <div className="text-xs">
+                              <span className="font-semibold text-gray-600">Exam:</span>
+                              <span className="text-gray-500 ml-1">X-Ray</span>
+                            </div>
+                            <div className="text-xs">
+                              <span className="font-semibold text-gray-600">Date:</span>
+                              <span className="text-gray-400 ml-1">Dec 15</span>
+                            </div>
+                          </div>
+                          
+                          {/* Mini Report Area */}
+                          <div className="bg-gray-50 rounded p-1 mb-1">
+                            <div className="text-xs font-semibold text-gray-600 mb-1">Findings</div>
+                            <div className="text-xs text-gray-400 leading-tight">
+                              Sample findings content...
+                            </div>
+                          </div>
+                          
+                          {/* Mini Footer */}
+                          <div className="text-xs text-gray-500 text-center">
+                            Dr. Prashant Chaudhari
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Status Badge */}
+                    <div className="absolute top-3 right-3">
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border bg-green-100 text-green-800 border-green-200">
+                        CLASSIC
+                      </span>
+                    </div>
+                    
+                    {/* Click Indicator */}
+                    <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="bg-blue-500 text-white p-1.5 rounded-full shadow-lg">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+                
+                  {/* Template Info */}
+                  <div className="text-center">
+                    <h3 className="font-semibold text-gray-900 text-sm mb-1">
+                      DHANVANTRI TEMPLATE (CLASSIC)
+                    </h3>
+                    <p className="text-xs text-gray-500 mb-2">
+                      Template ID: DHANVANTRI-CLASSIC
+                    </p>
+                    <p className="text-xs text-gray-400 mb-2">
+                      Original Dhanvantri template design
+                    </p>
+                    
+                    {/* Click to View Text */}
+                    <div className="text-xs text-blue-600 font-medium group-hover:text-blue-700 transition-colors flex items-center justify-center gap-1">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                      </svg>
+                      View template
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1366,10 +1449,10 @@ const VoiceReporting = () => {
                 <div>
                   <h3 className="font-semibold text-blue-900 mb-2">Professional Templates</h3>
                   <p className="text-blue-700 text-sm">
-                    Our templates are professionally designed to match medical report standards. 
-                    Each template includes proper formatting, branding, and all necessary sections 
-                    for comprehensive radiology reports. The system automatically selects the 
-                    appropriate template based on the report type.
+                    We offer multiple professionally designed templates to match medical report standards. 
+                    Choose between our classic Dhanvantri template or the new Dhanvantari template with 
+                    modern purple branding. Each template includes proper formatting, branding, and all 
+                    necessary sections for comprehensive radiology reports. Click on any template to preview it.
                   </p>
                 </div>
               </div>

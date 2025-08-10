@@ -36,6 +36,9 @@ const PatientIntake = () => {
   const [selectedPrice, setSelectedPrice] = useState("");
   const [referringDoctors, setReferringDoctors] = useState([]);
   const [showOtherDoctor, setShowOtherDoctor] = useState(false);
+  const [villages, setVillages] = useState([]);
+  const [showVillageDropdown, setShowVillageDropdown] = useState(false);
+  const [filteredVillages, setFilteredVillages] = useState([]);
 
   useEffect(() => {
     // Fetch scan types from backend
@@ -58,6 +61,16 @@ const PatientIntake = () => {
       }
     };
     fetchDoctors();
+    // Fetch villages from backend
+    const fetchVillages = async () => {
+      try {
+        const data = await api.get("/patients/villages/");
+        setVillages(data.villages || []);
+      } catch (e) {
+        setVillages([]);
+      }
+    };
+    fetchVillages();
   }, []);
 
   const handleChange = (e) => {
@@ -73,6 +86,27 @@ const PatientIntake = () => {
     if (name === "referred_by") {
       setShowOtherDoctor(value === "__other__");
     }
+    if (name === "village") {
+      // Filter villages based on input
+      if (value.trim()) {
+        const filtered = villages.filter(village => 
+          village.toLowerCase().includes(value.toLowerCase())
+        );
+        setFilteredVillages(filtered);
+        setShowVillageDropdown(filtered.length > 0);
+      } else {
+        setFilteredVillages([]);
+        setShowVillageDropdown(false);
+      }
+    }
+  };
+
+  const handleVillageSelect = (village) => {
+    setFormData(prev => ({
+      ...prev,
+      village: village
+    }));
+    setShowVillageDropdown(false);
   };
 
   const handleSubmit = async (e) => {
@@ -136,8 +170,10 @@ const PatientIntake = () => {
                   name="name"
                   value={formData.name}
                   onChange={handleChange}
+                  autoComplete="off"
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="Enter patient's full name"
                 />
               </div>
               
@@ -179,13 +215,38 @@ const PatientIntake = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Village/City
                 </label>
-                <input
-                  type="text"
-                  name="village"
-                  value={formData.village}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    name="village"
+                    value={formData.village}
+                    onChange={handleChange}
+                    onFocus={() => {
+                      if (formData.village.trim() && filteredVillages.length > 0) {
+                        setShowVillageDropdown(true);
+                      }
+                    }}
+                    onBlur={() => {
+                      setTimeout(() => setShowVillageDropdown(false), 150);
+                    }}
+                    autoComplete="off"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="Type to search or enter new village"
+                  />
+                  {showVillageDropdown && filteredVillages.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-xl max-h-40 overflow-y-auto">
+                      {filteredVillages.map((village, index) => (
+                        <div
+                          key={index}
+                          className="px-3 py-2 hover:bg-green-50 cursor-pointer border-b border-gray-100 last:border-b-0 text-sm"
+                          onClick={() => handleVillageSelect(village)}
+                        >
+                          {village}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
               
               <div>
@@ -197,6 +258,7 @@ const PatientIntake = () => {
                   name="phone"
                   value={formData.phone}
                   onChange={handleChange}
+                  autoComplete="off"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                 />
               </div>

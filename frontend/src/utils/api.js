@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8001";
 
 // Helper function to get auth headers
 const getAuthHeaders = () => {
@@ -16,7 +16,12 @@ export const authenticatedFetch = async (url, options = {}) => {
     ...options.headers
   };
 
-  const response = await fetch(`${API_URL}${url}`, {
+  const fullUrl = `${API_URL}${url}`;
+  console.log("API Debug - Full URL:", fullUrl);
+  console.log("API Debug - API_URL:", API_URL);
+  console.log("API Debug - url param:", url);
+
+  const response = await fetch(fullUrl, {
     ...options,
     headers
   });

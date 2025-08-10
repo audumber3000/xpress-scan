@@ -176,3 +176,20 @@ def delete_patient(
     db.delete(db_patient)
     db.commit()
     return {"message": "Patient deleted successfully"} 
+
+@router.get("/villages/")
+def get_unique_villages(
+    db: Session = Depends(get_db),
+    current_user = Depends(require_patients_view)
+):
+    """Get unique villages from existing patients for autocomplete"""
+    villages = db.query(Patient.village).filter(
+        Patient.clinic_id == current_user.clinic_id,
+        Patient.village.isnot(None),
+        Patient.village != ""
+    ).distinct().all()
+    
+    # Extract village names from the query result
+    village_list = [village[0] for village in villages if village[0]]
+    
+    return {"villages": village_list} 
