@@ -17,6 +17,7 @@ import DoctorProfile from "./pages/DoctorProfile";
 import Settings from "./pages/Settings";
 import ClinicOnboarding from "./pages/ClinicOnboarding";
 import AuthCallback from "./pages/AuthCallback";
+import LoadingTest from "./pages/LoadingTest";
 
 // Components
 import Sidebar from "./components/Sidebar";
@@ -87,6 +88,7 @@ function AppContent() {
           <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
           <Route path="/user-management" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           <Route path="/doctor-profile" element={<ProtectedRoute><DoctorProfile /></ProtectedRoute>} />
+          <Route path="/loading-test" element={<LoadingTest />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </main>

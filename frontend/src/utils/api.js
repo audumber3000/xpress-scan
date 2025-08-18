@@ -74,4 +74,31 @@ export const api = {
     });
     return result.data;
   }
+};
+
+// WhatsApp Configuration API methods
+export const whatsappApi = {
+  getMyConfig: async () => {
+    return await api.get('/whatsapp-config/my-config');
+  },
+  
+  createConfig: async (configData) => {
+    return await api.post('/whatsapp-config/', configData);
+  },
+  
+  updateConfig: async (configId, configData) => {
+    return await api.put(`/whatsapp-config/${configId}`, configData);
+  },
+  
+  deleteConfig: async (configId) => {
+    return await api.delete(`/whatsapp-config/${configId}`);
+  },
+  
+  testConnection: async () => {
+    return await api.post('/whatsapp-config/test-connection');
+  },
+  
+  getCredit: async () => {
+    return await api.get('/whatsapp-config/credit');
+  }
 }; 

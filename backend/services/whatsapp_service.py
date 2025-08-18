@@ -10,8 +10,13 @@ except ImportError:
     pass
 
 class WhatsAppService:
-    def __init__(self):
-        self.api_key = os.getenv("RAPIWHA_API_KEY", "your-rapiwha-api-key")
+    def __init__(self, api_key: Optional[str] = None):
+        # Allow custom API key to be passed in, otherwise use environment variable
+        if api_key:
+            self.api_key = api_key
+        else:
+            self.api_key = os.getenv("RAPIWHA_API_KEY", "your-rapiwha-api-key")
+        
         # Clean up the API key (remove any trailing characters)
         if self.api_key and self.api_key != "your-rapiwha-api-key":
             self.api_key = self.api_key.strip().rstrip('%')
@@ -114,12 +119,98 @@ class WhatsAppService:
                 "success": response.status_code == 200,
                 "status_code": response.status_code,
                 "response": response.text,
-                "api_key_configured": bool(self.api_key and self.api_key != "your-rapiwha-api-key")
+                "api_key_configured": bool(self.api_key and self.api_key != "your-rapiwha-api-key"),
+                "api_key_source": "user_config" if hasattr(self, '_user_config') else "env_default"
             }
             
         except Exception as e:
             return {
                 "success": False,
                 "error": str(e),
-                "api_key_configured": bool(self.api_key and self.api_key != "your-rapiwha-api-key")
+                "api_key_configured": bool(self.api_key and self.api_key != "your-rapiwha-api-key"),
+                "api_key_source": "user_config" if hasattr(self, '_user_config') else "env_default"
+            }
+    
+    def get_credit(self) -> dict:
+        """
+        Get WhatsApp API credit balance
+        
+        Returns:
+            Credit information as dictionary
+        """
+        try:
+            credit_url = "https://panel.rapiwha.com/get_credit.php"
+            
+            params = {
+                'apikey': self.api_key
+            }
+            
+            response = requests.get(credit_url, params=params)
+            
+            if response.status_code == 200:
+                try:
+                    credit_data = response.json()
+                    credit_amount = credit_data.get('credit', 0)
+                    
+                    # Calculate messages (1 credit = 1 message)
+                    messages_remaining = int(credit_amount)
+                    
+                    # Convert to INR only (1 credit = $0.0023, 1 USD = 83 INR)
+                    inr_amount = credit_amount * 0.0023 * 83
+                    
+                    return {
+                        "success": True,
+                        "credit": credit_amount,
+                        "messages_remaining": messages_remaining,
+                        "inr_value": round(inr_amount, 2),
+                        "message": f"Credit balance: {credit_amount} credits",
+                        "api_key_source": "user_config" if hasattr(self, '_user_config') else "env_default"
+                    }
+                except ValueError:
+                    # If response is not JSON, try to extract credit from text
+                    response_text = response.text
+                    if 'credit' in response_text.lower():
+                        # Try to find credit number in response
+                        import re
+                        credit_match = re.search(r'credit["\']?\s*:\s*(\d+\.?\d*)', response_text, re.IGNORECASE)
+                        if credit_match:
+                            credit_amount = float(credit_match.group(1))
+                            messages_remaining = int(credit_amount)
+                            inr_amount = credit_amount * 0.0023 * 83
+                            
+                            return {
+                                "success": True,
+                                "credit": credit_amount,
+                                "messages_remaining": messages_remaining,
+                                "inr_value": round(inr_amount, 2),
+                                "message": f"Credit balance: {credit_amount} credits",
+                                "api_key_source": "user_config" if hasattr(self, '_user_config') else "env_default"
+                            }
+                    
+                    return {
+                        "success": False,
+                        "credit": 0,
+                        "messages_remaining": 0,
+                        "inr_value": 0,
+                        "message": f"Could not parse credit response: {response_text}",
+                        "api_key_source": "user_config" if hasattr(self, '_user_config') else "env_default"
+                    }
+            else:
+                return {
+                    "success": False,
+                    "credit": 0,
+                    "messages_remaining": 0,
+                    "inr_value": 0,
+                    "message": f"Failed to get credit. Status: {response.status_code}",
+                    "api_key_source": "user_config" if hasattr(self, '_user_config') else "env_default"
+                }
+                
+        except Exception as e:
+            return {
+                "success": False,
+                "credit": 0,
+                "messages_remaining": 0,
+                "inr_value": 0,
+                "message": f"Error getting credit: {str(e)}",
+                "api_key_source": "user_config" if hasattr(self, '_user_config') else "env_default"
             } 

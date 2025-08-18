@@ -111,5 +111,20 @@ class Payment(Base):
     scan_type = relationship("ScanType")
     received_by_user = relationship("User", foreign_keys=[received_by])
 
+class WhatsAppConfiguration(Base):
+    __tablename__ = 'whatsapp_configurations'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, unique=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
+    api_key = Column(String, nullable=False)  # Rapiwha API key
+    phone_number = Column(String, nullable=True)  # Optional: user's WhatsApp number
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User")
+    clinic = relationship("Clinic")
+
 # Update relationships
 Clinic.users = relationship("User", back_populates="clinic")

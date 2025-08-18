@@ -15,6 +15,7 @@ from routes import clinics
 from routes import users
 from routes import auth
 from routes import payments
+from routes import whatsapp_config
 from services.template_service import TemplateService
 
 app = FastAPI()
@@ -56,6 +57,7 @@ app.include_router(clinic_users.router, prefix="/clinic-users", tags=["clinic_us
 app.include_router(clinics.router, prefix="/clinics", tags=["clinics"])
 app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(payments.router, prefix="/payments", tags=["payments"])
+app.include_router(whatsapp_config.router, prefix="/whatsapp-config", tags=["whatsapp_config"])
 
 @app.get("/")
 def root():

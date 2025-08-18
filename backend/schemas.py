@@ -184,3 +184,27 @@ class ReportResponse(BaseModel):
 
     class Config:
         from_attributes = True 
+
+# WhatsApp Configuration Schemas
+class WhatsAppConfigBase(BaseModel):
+    api_key: str
+    phone_number: Optional[str] = None
+    is_active: bool = True
+
+class WhatsAppConfigCreate(WhatsAppConfigBase):
+    pass
+
+class WhatsAppConfigUpdate(BaseModel):
+    api_key: Optional[str] = None
+    phone_number: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class WhatsAppConfigResponse(WhatsAppConfigBase):
+    id: int
+    user_id: int
+    clinic_id: int
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True 
