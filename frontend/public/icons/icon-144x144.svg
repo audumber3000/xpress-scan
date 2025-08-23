@@ -1,0 +1,22 @@
+<svg width="144" height="144" viewBox="0 0 144 144" xmlns="http://www.w3.org/2000/svg">
+  <rect width="144" height="144" fill="#ffffff"/>
+  <g transform="translate(14, 14)">
+    <!-- Medical briefcase body -->
+    <rect x="11.600000000000001" y="34.8" width="92.80000000000001" height="69.6" 
+          rx="5.800000000000001" fill="#22c55e" stroke="#000000" stroke-width="2.32"/>
+    
+    <!-- Briefcase lid -->
+    <rect x="5.800000000000001" y="29" width="104.4" height="17.4" 
+          rx="5.800000000000001" fill="#22c55e" stroke="#000000" stroke-width="2.32"/>
+    
+    <!-- Plus sign in body -->
+    <line x1="46.400000000000006" y1="58" x2="69.6" y2="58" 
+          stroke="#000000" stroke-width="9.28" stroke-linecap="round"/>
+    <line x1="58" y1="46.400000000000006" x2="58" y2="69.6" 
+          stroke="#000000" stroke-width="9.28" stroke-linecap="round"/>
+    
+    <!-- Minus sign in lid -->
+    <line x1="46.400000000000006" y1="37.7" x2="69.6" y2="37.7" 
+          stroke="#000000" stroke-width="9.28" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -76,29 +76,38 @@ export const api = {
   }
 };
 
-// WhatsApp Configuration API methods
+// WhatsApp API methods
 export const whatsappApi = {
   getMyConfig: async () => {
-    return await api.get('/whatsapp-config/my-config');
+    const result = await authenticatedFetch('/whatsapp/config');
+    return result.data;
   },
-  
-  createConfig: async (configData) => {
-    return await api.post('/whatsapp-config/', configData);
+  createConfig: async (data) => {
+    const result = await authenticatedFetch('/whatsapp/config', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+    return result.data;
   },
-  
-  updateConfig: async (configId, configData) => {
-    return await api.put(`/whatsapp-config/${configId}`, configData);
+  updateConfig: async (id, data) => {
+    const result = await authenticatedFetch(`/whatsapp/config/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+    return result.data;
   },
-  
-  deleteConfig: async (configId) => {
-    return await api.delete(`/whatsapp-config/${configId}`);
+  deleteConfig: async (id) => {
+    const result = await authenticatedFetch(`/whatsapp/config/${id}`, {
+      method: 'DELETE'
+    });
+    return result.data;
   },
-  
   testConnection: async () => {
-    return await api.post('/whatsapp-config/test-connection');
+    const result = await authenticatedFetch('/whatsapp/test-connection');
+    return result.data;
   },
-  
   getCredit: async () => {
-    return await api.get('/whatsapp-config/credit');
+    const result = await authenticatedFetch('/whatsapp/credit');
+    return result.data;
   }
 }; 

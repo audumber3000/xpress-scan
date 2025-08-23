@@ -21,6 +21,7 @@ import LoadingTest from "./pages/LoadingTest";
 
 // Components
 import Sidebar from "./components/Sidebar";
+import PWAInstall from "./components/PWAInstall";
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -103,6 +104,7 @@ function AppContent() {
         draggable
         pauseOnHover
       />
+      <PWAInstall />
     </div>
   );
 }
