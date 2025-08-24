@@ -7,6 +7,8 @@ const Calendar = () => {
   const [activeView, setActiveView] = useState("month");
   const [revenueData, setRevenueData] = useState({});
   const [loading, setLoading] = useState(true);
+  
+
 
   const views = [
     { id: "week", label: "Week", icon: "📅" },
@@ -54,18 +56,22 @@ const Calendar = () => {
       try {
         setLoading(true);
         // Fetch payments data for the current period
-        const response = await api.get('/payments/calendar-data', {
-          params: {
-            year: currentYear,
-            month: activeView === "month" ? currentMonth + 1 : undefined,
-            view: activeView
-          }
-        });
+        const params = {
+          year: currentYear,
+          view: activeView
+        };
+        
+        // Only add month parameter for month view
+        if (activeView === "month") {
+          params.month = currentMonth + 1;
+        }
+        
+        const response = await api.post('/payments/calendar-data', params);
         setRevenueData(response || {});
       } catch (error) {
         console.error('Error fetching revenue data:', error);
-        // Use mock data for now
-        setRevenueData(generateMockRevenueData());
+        // Don't use mock data - show empty state
+        setRevenueData({});
       } finally {
         setLoading(false);
       }
@@ -74,26 +80,7 @@ const Calendar = () => {
     fetchRevenueData();
   }, [currentDate, activeView, currentYear, currentMonth]);
 
-  // Generate mock data for development
-  const generateMockRevenueData = () => {
-    const mockData = {};
-    const today = new Date();
-    
-    if (activeView === "month") {
-      const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-      for (let day = 1; day <= daysInMonth; day++) {
-        const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        mockData[dateKey] = Math.floor(Math.random() * 5000) + 1000; // Random revenue between 1000-6000
-      }
-    } else if (activeView === "year") {
-      for (let month = 1; month <= 12; month++) {
-        const monthKey = `${currentYear}-${String(month).padStart(2, '0')}`;
-        mockData[monthKey] = Math.floor(Math.random() * 150000) + 50000; // Random monthly revenue
-      }
-    }
-    
-    return mockData;
-  };
+
 
   // Format currency
   const formatCurrency = (amount) => {
@@ -103,6 +90,14 @@ const Calendar = () => {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(amount);
+  };
+
+  // Format time for display
+  const formatTime = (timeString) => {
+    const [hour, minute] = timeString.split(':').map(Number);
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+    return `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
   };
 
   // Get week dates
@@ -116,6 +111,7 @@ const Calendar = () => {
       date.setDate(startOfWeek.getDate() + i);
       dates.push(date);
     }
+    
     return dates;
   };
 
@@ -138,16 +134,21 @@ const Calendar = () => {
   // Render Week View
   const renderWeekView = () => {
     const weekDates = getWeekDates();
-    const hours = Array.from({ length: 24 }, (_, i) => i);
+    
+    // Debug: Log the overall revenue data structure
+    console.log('🔍 Week View Debug:');
+    console.log('  Revenue Data:', revenueData);
+    console.log('  Week Dates:', weekDates.map(d => d.toISOString().split('T')[0]));
+    console.log('  Revenue Data Keys:', Object.keys(revenueData));
 
     return (
       <div className="overflow-x-auto">
         <div className="min-w-[800px]">
           {/* Header */}
-          <div className="grid grid-cols-8 gap-1 mb-2">
-            <div className="p-2"></div> {/* Time column header */}
+          <div className="grid grid-cols-8 gap-1 mb-2 bg-gray-50 rounded-t-lg">
+            <div className="p-3 text-center font-semibold text-gray-700">Time</div>
             {weekDates.map((date, index) => (
-              <div key={index} className="p-2 text-center">
+              <div key={index} className="p-3 text-center border-l border-gray-200">
                 <div className="text-sm font-medium text-gray-600">
                   {date.toLocaleDateString('en-US', { weekday: 'short' })}
                 </div>
@@ -162,39 +163,72 @@ const Calendar = () => {
             ))}
           </div>
 
-          {/* All-day row */}
-          <div className="grid grid-cols-8 gap-1 mb-2">
-            <div className="p-2 text-sm font-medium text-gray-600">All-day</div>
+          {/* All-day row - Revenue Summary */}
+          <div className="grid grid-cols-8 gap-1 mb-2 bg-green-50 border-b-2 border-green-200">
+            <div className="p-3 text-sm font-semibold text-green-700 bg-green-100 rounded-l">Revenue</div>
             {weekDates.map((date, index) => {
+              // Use UTC date to match backend
               const dateKey = date.toISOString().split('T')[0];
-              const revenue = revenueData[dateKey] || 0;
+              const dayData = revenueData[dateKey];
+              
+              // Handle both new format (with revenue/patients) and old format (just amount)
+              let revenue = 0;
+              if (dayData) {
+                if (typeof dayData === 'object' && dayData.revenue !== undefined) {
+                  // New format: {revenue: 3000, patients: [...]}
+                  revenue = dayData.revenue;
+                } else if (typeof dayData === 'number') {
+                  // Old format: just the amount
+                  revenue = dayData;
+                }
+              }
+              
               return (
-                <div key={index} className="p-2 border border-gray-200 rounded min-h-[60px]">
-                  {revenue > 0 && (
+                <div key={index} className="p-3 border-l border-green-200 min-h-[60px] flex items-center justify-center">
+                  {revenue > 0 ? (
                     <div className="text-center">
-                      <div className="text-lg font-bold text-green-600">
+                      <div className="text-lg font-bold text-green-700">
                         {formatCurrency(revenue)}
                       </div>
                     </div>
+                  ) : (
+                    <div className="text-gray-400 text-sm">-</div>
                   )}
                 </div>
               );
             })}
           </div>
+          
 
-          {/* Hourly slots */}
-          {hours.map((hour) => (
-            <div key={hour} className="grid grid-cols-8 gap-1 border-b border-gray-100">
-              <div className="p-2 text-sm text-gray-500 text-right">
-                {hour === 0 ? '12 AM' : hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`}
-              </div>
-              {weekDates.map((date, index) => (
-                <div key={index} className="p-2 border-r border-gray-100 min-h-[60px]">
-                  {/* Hourly content can be added here */}
+          
+
+
+                    {/* Simple patient dots display */}
+          <div className="grid grid-cols-8 gap-1 border-b border-gray-100 bg-gray-50">
+            <div className="p-3 text-sm font-semibold text-gray-700 text-center">Patients</div>
+            {weekDates.map((date, index) => {
+              const dateKey = date.toISOString().split('T')[0];
+              const dayData = revenueData[dateKey];
+              const patients = dayData?.patients || [];
+              
+              return (
+                <div key={index} className="p-3 border-l border-gray-200 min-h-[60px] flex flex-wrap items-start justify-center gap-1">
+                  {patients.map((patient, patientIndex) => (
+                    <div 
+                      key={patientIndex}
+                      className="w-3 h-3 bg-blue-500 rounded-full cursor-pointer hover:bg-blue-600 transition-colors shadow-sm"
+                      title={`${patient.name} - ${patient.scan_type} - ${formatCurrency(patient.amount)} - ${patient.time}`}
+                    />
+                  ))}
+                  
+                  {/* Show patient count if no dots */}
+                  {patients.length === 0 && (
+                    <div className="text-gray-400 text-sm">-</div>
+                  )}
                 </div>
-              ))}
-            </div>
-          ))}
+              );
+            })}
+          </div>
         </div>
       </div>
     );
@@ -340,6 +374,8 @@ const Calendar = () => {
           >
             Today
           </button>
+          
+
         </div>
 
         {/* Calendar Content */}

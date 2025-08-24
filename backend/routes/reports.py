@@ -95,89 +95,7 @@ def get_reports_from_drive():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/test-storage-config")
-def test_storage_config():
-    """Test endpoint to check storage configuration"""
-    try:
-        # This functionality was removed from the original file, so this endpoint is now a placeholder.
-        # If you need to test storage, you'll need to re-implement the Supabase storage service.
-        return {"message": "Storage configuration test (Supabase)", "supabase_url": supabase.supabase_url if hasattr(supabase, 'supabase_url') else "Not configured"}
-    except Exception as e:
-        return {"error": str(e)}
 
-@router.get("/test-supabase-connection")
-def test_supabase_connection():
-    """Test if Supabase connection is working"""
-    try:
-        # Try to list files from the bucket
-        files = supabase.storage.from_("xpress-scan-bucket").list()
-        return {
-            "message": "Supabase connection successful",
-            "bucket": "xpress-scan-bucket",
-            "files_count": len(files) if files else 0,
-            "supabase_url": supabase.supabase_url
-        }
-    except Exception as e:
-        return {
-            "message": "Supabase connection failed",
-            "error": str(e),
-            "error_type": type(e).__name__,
-            "supabase_url": supabase.supabase_url
-        }
-
-@router.post("/create-public-bucket")
-def create_public_bucket():
-    """Test endpoint to create a public bucket for PDF storage"""
-    try:
-        # This functionality was removed from the original file, so this endpoint is now a placeholder.
-        # If you need to create a public bucket, you'll need to re-implement the Google Docs PDF service.
-        return {"message": "Public bucket creation test (Supabase)", "supabase_url": supabase.supabase_url if hasattr(supabase, 'supabase_url') else "Not configured"}
-    except Exception as e:
-        return {
-            "success": False,
-            "message": "Error creating public bucket"
-        }
-
-@router.post("/test-public-upload")
-def test_public_upload():
-    """Test endpoint for uploading a file to a public bucket and getting a public URL"""
-    try:
-        # This functionality was removed from the original file, so this endpoint is now a placeholder.
-        # If you need to test public upload, you'll need to re-implement the Google Docs PDF service.
-        return {"message": "Public upload test (Supabase)", "supabase_url": supabase.supabase_url if hasattr(supabase, 'supabase_url') else "Not configured"}
-    except Exception as e:
-        return {
-            "success": False,
-            "message": "Error testing public upload"
-        }
-
-@router.get("/test-whatsapp-connection")
-def test_whatsapp_connection():
-    """Test WhatsApp API connection"""
-    try:
-        whatsapp_service = WhatsAppService()
-        result = whatsapp_service.test_connection()
-        return result
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "WhatsApp service test failed"
-        }
-
-@router.post("/test-google-docs-service")
-def test_google_docs_service():
-    """Test Google Docs service connection"""
-    try:
-        # This functionality was removed from the original file, so this endpoint is now a placeholder.
-        # If you need to test Google Docs, you'll need to re-implement the Google Docs PDF service.
-        return {"message": "Google Docs service test (placeholder)", "supabase_url": supabase.supabase_url if hasattr(supabase, 'supabase_url') else "Not configured"}
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "Google Docs service test failed"
-        }
 
 @router.get("/{report_id}", response_model=ReportResponse)
 def get_report(report_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
@@ -348,54 +266,7 @@ def send_whatsapp_report(report_id: int, db: Session = Depends(get_db), current_
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error sending WhatsApp message: {str(e)}")
 
-@router.post("/test-pdf")
-def test_pdf_generation():
-    """Test endpoint for PDF generation"""
-    try:
-        # Test HTML content
-        test_html = """
-        <h1>Test Report</h1>
-        <p>This is a <strong>test paragraph</strong> with some <em>formatted text</em>.</p>
-        <ul>
-            <li>Bullet point 1</li>
-            <li>Bullet point 2</li>
-        </ul>
-        """
-        
-        # Test patient data
-        test_patient = {
-            'name': 'Test Patient',
-            'age': 35,
-            'gender': 'Male',
-            'scan_type': 'CT Scan',
-            'referred_by': 'Dr. Smith',
-            'village': 'Test Village',
-            'phone': '1234567890'
-        }
-        
-        # Generate PDF
-        pdf_path = html_template_to_pdf(test_html, test_patient)
-        
-        # Generate filename
-        pdf_filename = generate_pdf_filename(test_patient['name'], test_patient['scan_type'])
-        
-        # Ensure bucket exists
-        create_bucket_if_not_exists("xpress-scan-bucket")
-        
-        # Upload to Supabase
-        pdf_url = upload_pdf_to_supabase(pdf_path, pdf_filename, "xpress-scan-bucket")
-        
-        # Clean up
-        cleanup_temp_file(pdf_path)
-        
-        return {
-            "message": "PDF generation test successful",
-            "pdf_url": pdf_url,
-            "filename": pdf_filename
-        }
-        
-    except Exception as e:
-        return {"error": str(e)}
+
 
 @router.post("/voice-doc")
 def create_voice_doc(transcript_data: dict, db: Session = Depends(get_db), current_user = Depends(get_current_user)):

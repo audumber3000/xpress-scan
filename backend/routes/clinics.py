@@ -119,23 +119,18 @@ def delete_clinic_and_all_data(clinic_id: int, db: Session = Depends(get_db), cu
         
         # Delete all patients
         patients_deleted = db.query(Patient).filter(Patient.clinic_id == clinic_id).delete()
-        print(f"Deleted {patients_deleted} patients")
         
         # Delete all reports
         reports_deleted = db.query(Report).filter(Report.clinic_id == clinic_id).delete()
-        print(f"Deleted {reports_deleted} reports")
         
         # Delete all scan types
         scan_types_deleted = db.query(ScanType).filter(ScanType.clinic_id == clinic_id).delete()
-        print(f"Deleted {scan_types_deleted} scan types")
         
         # Delete all referring doctors
         referring_doctors_deleted = db.query(ReferringDoctor).filter(ReferringDoctor.clinic_id == clinic_id).delete()
-        print(f"Deleted {referring_doctors_deleted} referring doctors")
         
         # Delete all users associated with this clinic
         users_deleted = db.query(User).filter(User.clinic_id == clinic_id).delete()
-        print(f"Deleted {users_deleted} users")
         
         # Finally, delete the clinic itself
         db.delete(clinic)
@@ -155,5 +150,5 @@ def delete_clinic_and_all_data(clinic_id: int, db: Session = Depends(get_db), cu
         
     except Exception as e:
         db.rollback()
-        print(f"Error deleting clinic: {e}")
+
         raise HTTPException(status_code=500, detail=f"Failed to delete clinic: {str(e)}") 

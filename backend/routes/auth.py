@@ -46,7 +46,6 @@ async def signup(
             if auth_response.user is None:
                 raise HTTPException(status_code=400, detail="Failed to create Supabase auth user")
         except Exception as e:
-            print(f"Supabase auth error: {e}")
             # For now, skip Supabase auth and just create in custom table
             # TODO: Fix Supabase configuration
             auth_response = type('obj', (object,), {'user': type('obj', (object,), {'id': 'temp_id'})()})()
@@ -137,7 +136,6 @@ async def login(
             if auth_response.user is None:
                 raise HTTPException(status_code=401, detail="Invalid credentials")
         except Exception as e:
-            print(f"Supabase auth error: {e}")
             # For now, skip Supabase auth and just check custom table
             # TODO: Fix Supabase configuration
             auth_response = type('obj', (object,), {'user': type('obj', (object,), {'id': 'temp_id'})()})()

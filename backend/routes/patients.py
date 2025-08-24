@@ -59,13 +59,9 @@ def create_patient(
 ):
     """Create a new patient for current clinic and automatically create payment record"""
     try:
-        print(f"Creating patient with data: {patient.dict()}")
-        
         # Set clinic_id from current user
         patient_data = patient.dict()
         patient_data['clinic_id'] = current_user.clinic_id
-        
-        print(f"Final patient data: {patient_data}")
         
 
         
@@ -81,19 +77,21 @@ def create_patient(
         ).first()
         
         # Calculate amount (use scan type price if found, otherwise default)
-        amount = scan_type.price if scan_type else 1000.0  # Default amount if scan type not found
+        # All amounts are in INR (Indian Rupees)
+        amount = scan_type.price if scan_type else 2000.0  # Default amount in INR if scan type not found
         
-        # Create payment record automatically
+        # Create payment record automatically with success status
         payment_record = Payment(
             clinic_id=current_user.clinic_id,
             patient_id=db_patient.id,
             scan_type_id=scan_type.id if scan_type else None,
             amount=amount,
             payment_method=patient.payment_type,  # Use the payment_type from patient form
-            status="pending",  # Start as pending, staff can update when payment received
+            status="success",  # Automatically set as successful since patient is created
+            transaction_id=f"PAT-{db_patient.id}-{int(datetime.utcnow().timestamp())}",  # Unique transaction ID
+            notes=f"Payment for {patient.scan_type} - Auto-created with patient",
             paid_by=patient.name,
             received_by=current_user.id,
-            notes=f"Payment for {patient.scan_type}",
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
@@ -102,7 +100,7 @@ def create_patient(
         db.commit()
         db.refresh(db_patient)
         
-        print(f"✅ Created patient {db_patient.name} with automatic payment record (Amount: ${amount})")
+
         
         return PatientOut(
             id=db_patient.id,
@@ -123,7 +121,7 @@ def create_patient(
         raise
     except Exception as e:
         db.rollback()
-        print(f"Error creating patient and payment: {e}")
+
         
         # Check if it's a unique constraint violation
         if "duplicate key value violates unique constraint" in str(e):

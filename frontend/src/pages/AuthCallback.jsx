@@ -22,7 +22,7 @@ const AuthCallback = () => {
         }
 
         if (session) {
-          console.log('Session found:', session);
+  
           
           // Send session data to backend
           const data = await api.post('/auth/oauth', { 

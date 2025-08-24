@@ -4,7 +4,7 @@ import PatientForm from "../components/PatientForm";
 const AddPatient = () => {
   const handleSubmit = (data) => {
     // TODO: Replace with API call
-    console.log("Patient Data:", data);
+
   };
 
   return (

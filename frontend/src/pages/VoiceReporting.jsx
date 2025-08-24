@@ -458,7 +458,7 @@ const VoiceReporting = () => {
           });
           
           toast.success("✅ Draft report updated successfully!");
-          console.log("Draft report updated:", data);
+  
         } else if (type === "final") {
           // Finalize the existing draft report
           toast.info("Finalizing draft report...");
@@ -474,7 +474,7 @@ const VoiceReporting = () => {
           setEditingReportId(null);
           setEditingReportData(null);
           
-          console.log("Report finalized:", finalData);
+  
         }
       } else {
         // Create new report
@@ -494,7 +494,7 @@ const VoiceReporting = () => {
             toast.success("📝 You can edit this report later and finalize it from the Reports section.");
           }, 1000);
           
-          console.log("Report saved as draft:", data);
+  
         } else if (type === "final") {
           // Save as final report
           toast.info("Saving report as final...");
@@ -517,7 +517,7 @@ const VoiceReporting = () => {
             toast.success("📄 PDF report generated and uploaded to cloud storage.");
           }, 1000);
           
-          console.log("Report saved as final:", finalData);
+  
         }
       }
       
@@ -568,7 +568,7 @@ const VoiceReporting = () => {
   const handleTemplateClick = async (templateName) => {
     try {
       // Use direct fetch for public templates (no authentication required)
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8001";
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
       const response = await fetch(`${backendUrl}/public/templates/${templateName}`);
       
       if (!response.ok) {

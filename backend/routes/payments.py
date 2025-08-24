@@ -45,13 +45,13 @@ async def create_payment(
             scan_type_id=payment_data.scan_type_id,
             amount=payment_data.amount,
             payment_method=payment_data.payment_method,
-            status=payment_data.status,
-            transaction_id=payment_data.transaction_id,
-            notes=payment_data.notes,
+            status=payment_data.status or "success",  # Default to success if not provided
+            transaction_id=payment_data.transaction_id or f"PAY-{int(datetime.now().timestamp())}",  # Generate if not provided
+            notes=payment_data.notes or f"Payment for {patient.name}",
             paid_by=payment_data.paid_by or patient.name,
             received_by=payment_data.received_by or current_user.id,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            created_at=datetime.now(),
+            updated_at=datetime.now()
         )
         
         db.add(db_payment)
@@ -117,6 +117,8 @@ async def get_payments(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching payments: {str(e)}")
+
+
 
 @router.get("/{payment_id}", response_model=PaymentOut)
 async def get_payment(
@@ -311,76 +313,122 @@ def get_enriched_payment(db: Session, payment: Payment) -> PaymentOut:
     
     return PaymentOut(**payment_dict)
 
-@router.get("/calendar-data")
+
+
+@router.post("/calendar-data")
 async def get_calendar_data(
-    year: int = Query(..., description="Year to fetch data for"),
-    month: Optional[int] = Query(None, description="Month to fetch data for (1-12)"),
-    view: str = Query(..., description="View type: week, month, or year"),
+    request_data: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get revenue data for calendar views"""
+    # Extract parameters from request body
+    year = request_data.get('year')
+    month = request_data.get('month')
+    view = request_data.get('view')
+    
     try:
-        # Base query for payments in the user's clinic
-        base_query = db.query(Payment).filter(Payment.clinic_id == current_user.clinic_id)
+        # Debug: Log what we received
+        print(f"🔍 API CALL RECEIVED:")
+        print(f"   year: {year} (type: {type(year)})")
+        print(f"   month: {month} (type: {type(month)})")
+        print(f"   view: {view} (type: {type(view)})")
+        print(f"   current_user.clinic_id: {current_user.clinic_id}")
+        print(f"   Full request body: {request_data}")
         
-        if view == "month" and month:
-            # Get daily revenue for a specific month
-            start_date = datetime(year, month, 1)
-            if month == 12:
-                end_date = datetime(year + 1, 1, 1)
-            else:
-                end_date = datetime(year, month + 1, 1)
-            
-            payments = base_query.filter(
-                and_(
-                    Payment.created_at >= start_date,
-                    Payment.created_at < end_date,
-                    Payment.status == 'success'
-                )
-            ).all()
-            
-            # Group by day
+        # Get all payments for the user's clinic
+        payments = db.query(Payment).filter(Payment.clinic_id == current_user.clinic_id).all()
+        
+        if view == "month":
+            print(f"📅 Processing MONTH view for {year}-{month}")
+            # Filter payments for specific month
             daily_revenue = {}
             for payment in payments:
-                day_key = payment.created_at.strftime("%Y-%m-%d")
-                if day_key not in daily_revenue:
-                    daily_revenue[day_key] = 0
-                daily_revenue[day_key] += payment.amount
+                if payment.created_at and payment.status == 'success':
+                    payment_date = payment.created_at
+                    # Frontend sends month as 1-12, Python datetime.month is 1-12, so this should work
+                    if payment_date.year == year and payment_date.month == month:
+                        day_key = payment_date.strftime("%Y-%m-%d")
+                        if day_key not in daily_revenue:
+                            daily_revenue[day_key] = 0
+                        daily_revenue[day_key] += payment.amount
             
             return daily_revenue
             
         elif view == "year":
-            # Get monthly revenue for a year
-            start_date = datetime(year, 1, 1)
-            end_date = datetime(year + 1, 1, 1)
-            
-            payments = base_query.filter(
-                and_(
-                    Payment.created_at >= start_date,
-                    Payment.created_at < end_date,
-                    Payment.status == 'success'
-                )
-            ).all()
-            
-            # Group by month
+            print(f"📊 Processing YEAR view for {year}")
+            # Filter payments for specific year
             monthly_revenue = {}
             for payment in payments:
-                month_key = payment.created_at.strftime("%Y-%m")
-                if month_key not in monthly_revenue:
-                    monthly_revenue[month_key] = 0
-                monthly_revenue[month_key] += payment.amount
+                if payment.created_at and payment.status == 'success':
+                    payment_date = payment.created_at
+                    if payment_date.year == year:
+                        month_key = payment_date.strftime("%Y-%m")
+                        if month_key not in monthly_revenue:
+                            monthly_revenue[month_key] = 0
+                        monthly_revenue[month_key] += payment.amount
             
             return monthly_revenue
             
         elif view == "week":
-            # Get daily revenue for the current week
-            # This would need to be calculated based on the current date
-            # For now, return empty data
-            return {}
+            # Filter payments for the current week of the current date
+            # Use the current date, not the year parameter
+            today = datetime.now()  # Use current date (August 24, 2025)
+            start_of_week = today - timedelta(days=today.weekday())
+            end_of_week = start_of_week + timedelta(days=7)
+            
+            print(f"🔍 WEEK VIEW SELECTED - view parameter: {view}")
+            print(f"   Today (hardcoded): {today}")
+            print(f"   Start of week: {start_of_week}")
+            print(f"   End of week: {end_of_week}")
+            print(f"   Total payments found: {len(payments)}")
+            
+            weekly_data = {}
+            for payment in payments:
+                if payment.created_at and payment.status == 'success':
+                    payment_date = payment.created_at
+                    if start_of_week <= payment_date < end_of_week:
+                        day_key = payment_date.strftime("%Y-%m-%d")
+                        time_key = payment_date.strftime("%H:%M")
+                        
+                        print(f"🔍 Processing payment {payment.id}:")
+                        print(f"   Date: {day_key}, Time: {time_key}")
+                        print(f"   Amount: {payment.amount}")
+                        
+                        if day_key not in weekly_data:
+                            weekly_data[day_key] = {
+                                "revenue": 0,
+                                "patients": []
+                            }
+                        
+                        # Add revenue
+                        weekly_data[day_key]["revenue"] += payment.amount
+                        
+                        # Add patient info for scheduling using payment creation time
+                        print(f"   Looking for patient with ID: {payment.patient_id}")
+                        patient = db.query(Patient).filter(Patient.id == payment.patient_id).first()
+                        if patient:
+                            print(f"   ✅ Patient found: {patient.name}, Scan: {patient.scan_type}")
+                            weekly_data[day_key]["patients"].append({
+                                "id": patient.id,
+                                "name": patient.name,
+                                "scan_type": patient.scan_type,
+                                "time": time_key,  # This is payment.created_at time
+                                "amount": payment.amount,
+                                "payment_method": payment.payment_method
+                            })
+                        else:
+                            print(f"   ❌ Patient not found for payment {payment.id}")
+                            print(f"   Available patients: {[p.id for p in db.query(Patient).all()]}")
+            
+            print(f"🔍 Final weekly_data structure:")
+            print(f"   Keys: {list(weekly_data.keys())}")
+            for key, value in weekly_data.items():
+                print(f"   {key}: revenue={value['revenue']}, patients={len(value['patients'])}")
+            
+            return weekly_data
             
         else:
-            raise HTTPException(status_code=400, detail="Invalid view parameter")
+            return {"error": "Invalid view parameter"}
             
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching calendar data: {str(e)}")
+        return {"error": str(e)}

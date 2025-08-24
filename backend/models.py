@@ -74,7 +74,7 @@ class ScanType(Base):
     id = Column(Integer, primary_key=True, index=True)
     clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
     name = Column(String, nullable=False)
-    price = Column(Float, nullable=False)
+    price = Column(Float, nullable=False)  # Price in INR (Indian Rupees)
     is_active = Column(Boolean, default=True)
     clinic = relationship("Clinic")
 
@@ -94,9 +94,9 @@ class Payment(Base):
     patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False)
     report_id = Column(Integer, ForeignKey('reports.id'), nullable=True)  # Link to report if payment is for a report
     scan_type_id = Column(Integer, ForeignKey('scan_types.id'), nullable=True)  # Link to scan type for pricing
-    amount = Column(Float, nullable=False)
+    amount = Column(Float, nullable=False)  # Amount in INR (Indian Rupees)
     payment_method = Column(String, nullable=False)  # Cash, Card, PayPal, Net Banking, UPI, etc.
-    status = Column(String, nullable=False, default='pending')  # pending, success, failed, refunded
+    status = Column(String, nullable=False, default='success')  # success, pending, failed, refunded
     transaction_id = Column(String, nullable=True)  # External transaction ID if applicable
     notes = Column(Text, nullable=True)
     paid_by = Column(String, nullable=True)  # Who made the payment (if different from patient)

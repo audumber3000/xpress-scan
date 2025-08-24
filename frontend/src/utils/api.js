@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8001";
+const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
 
 // Helper function to get auth headers
 const getAuthHeaders = () => {
@@ -16,10 +16,23 @@ export const authenticatedFetch = async (url, options = {}) => {
     ...options.headers
   };
 
-  const fullUrl = `${API_URL}${url}`;
-  console.log("API Debug - Full URL:", fullUrl);
-  console.log("API Debug - API_URL:", API_URL);
-  console.log("API Debug - url param:", url);
+  let fullUrl = `${API_URL}${url}`;
+  
+  // Handle query parameters
+  if (options.params) {
+    const searchParams = new URLSearchParams();
+    Object.entries(options.params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        searchParams.append(key, value);
+      }
+    });
+    const queryString = searchParams.toString();
+    if (queryString) {
+      fullUrl += `?${queryString}`;
+    }
+  }
+  
+
 
   const response = await fetch(fullUrl, {
     ...options,
@@ -50,14 +63,15 @@ export const authenticatedFetch = async (url, options = {}) => {
 
 // Common API methods
 export const api = {
-  get: async (url) => {
-    const result = await authenticatedFetch(url);
+  get: async (url, options = {}) => {
+    const result = await authenticatedFetch(url, options);
     return result.data;
   },
-  post: async (url, data) => {
+  post: async (url, data, options = {}) => {
     const result = await authenticatedFetch(url, {
       method: 'POST',
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
+      ...options
     });
     return result.data;
   },

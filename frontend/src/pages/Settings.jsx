@@ -134,7 +134,7 @@ const Settings = () => {
     try {
       setLoading(true);
       const data = await api.get("/clinic-users/");
-      console.log("Fetched users with permissions:", data);
+      
         setUsers(data);
     } catch (error) {
       console.error("Error fetching users:", error);
@@ -209,7 +209,7 @@ const Settings = () => {
     try {
       setLoadingCredit(true);
       const creditData = await whatsappApi.getCredit();
-      console.log("Credit data received:", creditData); // Debug log
+      
       setCreditInfo(creditData);
     } catch (error) {
       console.error("Error fetching credit info:", error);
@@ -407,7 +407,7 @@ const Settings = () => {
     
     if (window.confirm("Are you sure you want to delete this user?")) {
       try {
-        console.log("Deleting user with ID:", userId);
+
         await api.delete(`/clinic-users/${userId}`);
           toast.success("User deleted successfully");
           fetchUsers();
@@ -421,7 +421,7 @@ const Settings = () => {
   const handleDeleteScan = async (id) => {
     if (window.confirm("Are you sure you want to delete this scan type?")) {
       try {
-        console.log("Deleting scan type with ID:", id);
+
         await api.delete(`/scan-types/${id}`);
           toast.success("Scan type deleted successfully");
           fetchScanTypes();
@@ -435,7 +435,7 @@ const Settings = () => {
   const handleDeleteDoctor = async (id) => {
     if (window.confirm("Are you sure you want to delete this referring doctor?")) {
       try {
-        console.log("Deleting referring doctor with ID:", id);
+
         await api.delete(`/referring-doctors/${id}`);
           toast.success("Referring doctor deleted successfully");
           fetchReferringDoctors();
@@ -528,7 +528,7 @@ const Settings = () => {
 
   const handleUpdatePermissions = async (userId, updateData) => {
     try {
-      console.log("Updating user permissions:", { userId, updateData });
+      
       
       // Use the same endpoint as DoctorProfile - clinic-users
       await api.put(`/clinic-users/${userId}`, updateData);

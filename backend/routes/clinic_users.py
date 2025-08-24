@@ -50,7 +50,7 @@ def get_clinic_users(db: Session = Depends(get_db), current_user = Depends(get_c
         ).all()
         return users
     except Exception as e:
-        print(f"[clinic-users GET] Error: {e}")
+
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/", response_model=ClinicUserOut, status_code=status.HTTP_201_CREATED)
@@ -112,8 +112,6 @@ def update_clinic_user(user_id: int, user_update: ClinicUserUpdate, db: Session 
         if not users_permissions.get("edit", False):
             raise HTTPException(status_code=403, detail="You don't have permission to edit users")
     
-    print(f"Updating user {user_id} with data: {user_update}")
-    
     user = db.query(User).filter(
         User.id == user_id,
         User.clinic_id == current_user.clinic_id
@@ -125,16 +123,12 @@ def update_clinic_user(user_id: int, user_update: ClinicUserUpdate, db: Session 
     # Update fields
     if user_update.name is not None:
         user.name = user_update.name
-        print(f"Updated name to: {user_update.name}")
     if user_update.email is not None:
         user.email = user_update.email
-        print(f"Updated email to: {user_update.email}")
     if user_update.role is not None:
         user.role = user_update.role
-        print(f"Updated role to: {user_update.role}")
     if user_update.permissions is not None:
         user.permissions = user_update.permissions
-        print(f"Updated permissions to: {user_update.permissions}")
     
     db.commit()
     db.refresh(user)

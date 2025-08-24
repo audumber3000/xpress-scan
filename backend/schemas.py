@@ -130,7 +130,7 @@ class PaymentBase(BaseModel):
     scan_type_id: Optional[int] = None
     amount: float
     payment_method: str
-    status: str = "pending"
+    status: str = "success"  # Default to success for new payments
     transaction_id: Optional[str] = None
     notes: Optional[str] = None
     paid_by: Optional[str] = None
