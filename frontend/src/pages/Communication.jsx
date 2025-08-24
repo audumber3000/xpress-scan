@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import Card from "../components/Card";
 
 const Communication = () => {
   const [activeTab, setActiveTab] = useState("whatsapp");
@@ -17,51 +16,58 @@ const Communication = () => {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg mb-6">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-all duration-200 ${
-              activeTab === tab.id
-                ? "bg-white text-green-600 shadow-sm"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <span className="text-lg">{tab.icon}</span>
-            <span className="font-medium">{tab.label}</span>
-          </button>
-        ))}
+      <div className="mb-6">
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === tab.id
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                {tab.icon} {tab.label}
+              </button>
+            ))}
+          </nav>
+        </div>
       </div>
 
       {/* Tab Content */}
-      <div className="space-y-6">
+      <div>
         {activeTab === "whatsapp" && (
-          <Card>
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">💬</div>
-              <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                WhatsApp Integration
-              </h3>
-              <p className="text-gray-500">
-                WhatsApp communication features will be implemented here.
-              </p>
+          <div>
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200 shadow-sm p-6">
+              <div className="text-center">
+                <div className="text-6xl mb-4">💬</div>
+                <h3 className="text-xl font-semibold text-gray-700 mb-2">
+                  WhatsApp Integration
+                </h3>
+                <p className="text-gray-500">
+                  WhatsApp communication features will be implemented here.
+                </p>
+              </div>
             </div>
-          </Card>
+          </div>
         )}
 
         {activeTab === "sms" && (
-          <Card>
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">📱</div>
-              <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                SMS Integration
-              </h3>
-              <p className="text-gray-500">
-                SMS communication features will be implemented here.
-              </p>
+          <div>
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 shadow-sm p-6">
+              <div className="text-center">
+                <div className="text-6xl mb-4">📱</div>
+                <h3 className="text-xl font-semibold text-gray-700 mb-2">
+                  SMS Integration
+                </h3>
+                <p className="text-gray-500">
+                  SMS communication features will be implemented here.
+                </p>
+              </div>
             </div>
-          </Card>
+          </div>
         )}
       </div>
     </div>
