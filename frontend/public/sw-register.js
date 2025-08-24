@@ -52,3 +52,4 @@ function installPWA() {
 
 // Make installPWA available globally
 window.installPWA = installPWA;
+

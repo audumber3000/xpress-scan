@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, desc
-from typing import List, Optional
+from sqlalchemy import and_, desc, func, extract
+from typing import List, Optional, Dict
 from datetime import datetime, timedelta
 
 from database import SessionLocal
@@ -310,3 +310,77 @@ def get_enriched_payment(db: Session, payment: Payment) -> PaymentOut:
     }
     
     return PaymentOut(**payment_dict)
+
+@router.get("/calendar-data")
+async def get_calendar_data(
+    year: int = Query(..., description="Year to fetch data for"),
+    month: Optional[int] = Query(None, description="Month to fetch data for (1-12)"),
+    view: str = Query(..., description="View type: week, month, or year"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get revenue data for calendar views"""
+    try:
+        # Base query for payments in the user's clinic
+        base_query = db.query(Payment).filter(Payment.clinic_id == current_user.clinic_id)
+        
+        if view == "month" and month:
+            # Get daily revenue for a specific month
+            start_date = datetime(year, month, 1)
+            if month == 12:
+                end_date = datetime(year + 1, 1, 1)
+            else:
+                end_date = datetime(year, month + 1, 1)
+            
+            payments = base_query.filter(
+                and_(
+                    Payment.created_at >= start_date,
+                    Payment.created_at < end_date,
+                    Payment.status == 'success'
+                )
+            ).all()
+            
+            # Group by day
+            daily_revenue = {}
+            for payment in payments:
+                day_key = payment.created_at.strftime("%Y-%m-%d")
+                if day_key not in daily_revenue:
+                    daily_revenue[day_key] = 0
+                daily_revenue[day_key] += payment.amount
+            
+            return daily_revenue
+            
+        elif view == "year":
+            # Get monthly revenue for a year
+            start_date = datetime(year, 1, 1)
+            end_date = datetime(year + 1, 1, 1)
+            
+            payments = base_query.filter(
+                and_(
+                    Payment.created_at >= start_date,
+                    Payment.created_at < end_date,
+                    Payment.status == 'success'
+                )
+            ).all()
+            
+            # Group by month
+            monthly_revenue = {}
+            for payment in payments:
+                month_key = payment.created_at.strftime("%Y-%m")
+                if month_key not in monthly_revenue:
+                    monthly_revenue[month_key] = 0
+                monthly_revenue[month_key] += payment.amount
+            
+            return monthly_revenue
+            
+        elif view == "week":
+            # Get daily revenue for the current week
+            # This would need to be calculated based on the current date
+            # For now, return empty data
+            return {}
+            
+        else:
+            raise HTTPException(status_code=400, detail="Invalid view parameter")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching calendar data: {str(e)}")

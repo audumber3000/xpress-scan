@@ -315,21 +315,8 @@ def send_whatsapp_report(report_id: int, db: Session = Depends(get_db), current_
         if not patient:
             raise HTTPException(status_code=404, detail="Patient not found")
         
-        # Get user's WhatsApp configuration
-        from models import WhatsAppConfiguration
-        whatsapp_config = db.query(WhatsAppConfiguration).filter(
-            WhatsAppConfiguration.user_id == current_user.id,
-            WhatsAppConfiguration.is_active == True
-        ).first()
-        
-        # Initialize WhatsApp service with user's API key or default from .env
-        if whatsapp_config:
-            whatsapp_service = WhatsAppService(api_key=whatsapp_config.api_key)
-            api_key_source = "user_config"
-        else:
-            # Use default API key from .env file
-            whatsapp_service = WhatsAppService()
-            api_key_source = "env_default"
+        # Initialize WhatsApp service
+        whatsapp_service = WhatsAppService()
         
         # Prepare message
         message = f"Hello {patient.name},\n\nYour {patient.scan_type} report is ready!\n\nPatient Details:\n- Name: {patient.name}\n- Age: {patient.age} years\n- Gender: {patient.gender}\n- Scan Type: {patient.scan_type}\n- Referred By: {patient.referred_by}\n\nPlease click the link below to view your report:"
@@ -351,8 +338,7 @@ def send_whatsapp_report(report_id: int, db: Session = Depends(get_db), current_
                 "message": "Report sent to patient successfully",
                 "patient_name": patient.name,
                 "phone_number": patient.phone,
-                "whatsapp_sent_count": report.whatsapp_sent_count,
-                "api_key_source": api_key_source
+                "whatsapp_sent_count": report.whatsapp_sent_count
             }
         else:
             raise HTTPException(status_code=500, detail=f"Failed to send report to patient: {result['message']}")

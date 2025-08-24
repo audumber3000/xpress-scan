@@ -18,6 +18,8 @@ import Settings from "./pages/Settings";
 import ClinicOnboarding from "./pages/ClinicOnboarding";
 import AuthCallback from "./pages/AuthCallback";
 import LoadingTest from "./pages/LoadingTest";
+import Communication from "./pages/Communication";
+import Calendar from "./pages/Calendar";
 
 // Components
 import Sidebar from "./components/Sidebar";
@@ -87,6 +89,8 @@ function AppContent() {
           <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
           <Route path="/voice-reporting" element={<ProtectedRoute><VoiceReporting /></ProtectedRoute>} />
           <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
+          <Route path="/communication" element={<ProtectedRoute><Communication /></ProtectedRoute>} />
+          <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
           <Route path="/user-management" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           <Route path="/doctor-profile" element={<ProtectedRoute><DoctorProfile /></ProtectedRoute>} />
           <Route path="/loading-test" element={<LoadingTest />} />
