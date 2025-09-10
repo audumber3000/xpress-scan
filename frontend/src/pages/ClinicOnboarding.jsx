@@ -137,7 +137,7 @@ const ClinicOnboarding = () => {
       <div className="max-w-2xl w-full space-y-8">
         <div className="text-center">
           <h2 className="text-3xl font-bold text-gray-900">Welcome, {user.name}!</h2>
-          <p className="mt-2 text-gray-600">Let's set up your radiology clinic</p>
+          <p className="mt-2 text-gray-600">Let's set up your clinic</p>
         </div>
 
         <div className="bg-white shadow rounded-lg p-8">

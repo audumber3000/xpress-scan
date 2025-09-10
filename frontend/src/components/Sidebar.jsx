@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { api } from "../utils/api";
 
 const navItems = [
   {
@@ -84,6 +85,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const [isMobile, setIsMobile] = useState(false);
+  const [clinicData, setClinicData] = useState(null);
 
   // Use external state if provided, otherwise use internal state
   const [internalCollapsed, setInternalCollapsed] = useState(false);
@@ -101,10 +103,44 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // Fetch clinic data
+  useEffect(() => {
+    const fetchClinicData = async () => {
+      try {
+        const response = await api.get("/auth/me");
+        setClinicData(response.clinic);
+      } catch (error) {
+        console.error("Error fetching clinic data:", error);
+      }
+    };
+    
+    if (user) {
+      fetchClinicData();
+    }
+  }, [user]);
+
   const linkClass = (path) => {
     const baseClasses = "flex items-center gap-3 py-2 px-4 rounded-lg transition font-medium text-gray-700 whitespace-nowrap";
     const activeClasses = location.pathname === path ? "bg-green-100 text-green-700 border border-green-500" : "hover:bg-green-50";
     return `${baseClasses} ${activeClasses}`;
+  };
+
+  // Format clinic name for display
+  const formatClinicName = (clinicName) => {
+    if (!clinicName) return { first: "Clinic", rest: "Name" };
+    
+    const words = clinicName.trim().split(/\s+/);
+    if (words.length === 1) {
+      return { first: words[0], rest: "" };
+    }
+    
+    const firstWord = words[0];
+    const restWords = words.slice(1).join(" ");
+    
+    // Truncate if too long (more than 20 characters for the rest part)
+    const truncatedRest = restWords.length > 20 ? restWords.substring(0, 17) + "..." : restWords;
+    
+    return { first: firstWord, rest: truncatedRest };
   };
 
   const handleSignOut = async () => {
@@ -263,10 +299,10 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
           {!collapsed && (
             <div className="flex flex-col min-w-0 flex-1">
               <span className="text-3xl font-extrabold text-black tracking-tight" style={{ fontFamily: 'serif', letterSpacing: '-0.03em' }}>
-                Dhanvantri
+                {formatClinicName(clinicData?.name).first}
               </span>
               <span className="text-sm font-medium text-gray-600 tracking-wide">
-                Radiology Center
+                {formatClinicName(clinicData?.name).rest}
               </span>
             </div>
           )}
