@@ -26,7 +26,7 @@ const PatientIntake = () => {
     village: "",
     phone: "",
     referred_by: "",
-    scan_type: "",
+    treatment_type: "",
     notes: "",
     payment_type: "Cash"
   });
@@ -79,7 +79,7 @@ const PatientIntake = () => {
       ...prev,
       [name]: value
     }));
-    if (name === "scan_type") {
+    if (name === "treatment_type") {
       const found = scanTypes.find(s => s.id.toString() === value);
       setSelectedPrice(found ? found.price : "");
     }
@@ -115,14 +115,14 @@ const PatientIntake = () => {
     setError("");
 
     try {
-      // Find scan type name for backend
-      const scanTypeObj = scanTypes.find(s => s.id.toString() === formData.scan_type);
-      const scanTypeName = scanTypeObj ? scanTypeObj.name : "";
+      // Find treatment type name for backend
+      const treatmentTypeObj = scanTypes.find(s => s.id.toString() === formData.treatment_type);
+      const treatmentTypeName = treatmentTypeObj ? treatmentTypeObj.name : "";
       
       // Convert age to integer and prepare payload
       const patientPayload = { 
         ...formData, 
-        scan_type: scanTypeName,
+        scan_type: treatmentTypeName, // Backend still expects scan_type field
         age: parseInt(formData.age, 10) // Convert age to integer
       };
       
@@ -146,7 +146,7 @@ const PatientIntake = () => {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Patient Intake Form</h1>
           <p className="text-gray-600 mt-1">
-            Fill out patient details and automatically generate a radiology report
+            Fill out the patient details
           </p>
         </div>
 
@@ -301,16 +301,16 @@ const PatientIntake = () => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Scan Type *
+                  Treatment Type *
                 </label>
                 <select
-                  name="scan_type"
-                  value={formData.scan_type}
+                  name="treatment_type"
+                  value={formData.treatment_type}
                   onChange={handleChange}
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
-                  <option value="">Select Scan Type</option>
+                    <option value="">Select Treatment Type</option>
                   {scanTypes.map(scan => (
                     <option key={scan.id} value={scan.id}>{scan.name}</option>
                   ))}
@@ -337,6 +337,21 @@ const PatientIntake = () => {
                 <option value="UPI">UPI</option>
                 <option value="Other">Other</option>
               </select>
+            </div>
+
+            {/* Medical Notes */}
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Medical Notes
+              </label>
+              <textarea
+                name="notes"
+                value={formData.notes}
+                onChange={handleChange}
+                rows={4}
+                placeholder="Enter any medical notes, observations, or additional information..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 resize-vertical"
+              />
             </div>
           </div>
 

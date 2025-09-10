@@ -241,7 +241,7 @@ const Patients = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Village/City</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Scan Type</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Treatment Type</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Referred By</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -432,9 +432,9 @@ const Patients = () => {
                   <input type="text" name="referred_by" value={editFormData.referred_by} onChange={handleEditFormChange} required placeholder="Dr. Name or Hospital" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Scan Type *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Treatment Type *</label>
                   <select name="scan_type" value={editFormData.scan_type} onChange={handleEditFormChange} required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
-                    <option value="">Select Scan Type</option>
+                    <option value="">Select Treatment Type</option>
                     <option value="CT Scan">CT Scan</option>
                     <option value="MRI">MRI</option>
                     <option value="X-Ray">X-Ray</option>

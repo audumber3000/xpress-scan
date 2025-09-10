@@ -788,7 +788,7 @@ const Settings = () => {
       <div>
           {activeTab === "billing" && (
             <div>
-              <h3 className="text-lg font-semibold mb-4">Scan Types & Pricing</h3>
+              <h3 className="text-lg font-semibold mb-4">Treatment Types and Pricing</h3>
               {scanTypesError && <div className="text-red-500 mb-2">{scanTypesError}</div>}
               {!hasPermission("billing:view") ? (
                 <div className="text-center py-8">
@@ -804,7 +804,7 @@ const Settings = () => {
               ) : (
                 <div>
                   <div className="flex justify-between items-center mb-4">
-                    <h4 className="text-md font-medium text-gray-900">Current Scan Types</h4>
+                    <h4 className="text-md font-medium text-gray-900">Current Treatment Types</h4>
                     {hasPermission("billing:edit") && (
                     <button
                       onClick={() => setShowAddScanModal(true)}
