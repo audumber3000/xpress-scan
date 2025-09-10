@@ -12,7 +12,7 @@ const ClinicOnboarding = () => {
     clinic_address: "",
     clinic_phone: "",
     clinic_email: "",
-    specialization: "radiology",
+    specialization: "radiologist",
     subscription_plan: "free",
     scan_types: [
       { name: "X-Ray Chest", price: 500 },
@@ -40,10 +40,48 @@ const ClinicOnboarding = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    
+    if (name === 'specialization') {
+      // Update treatment types based on specialization
+      const treatmentTypes = getDefaultTreatmentTypes(value);
+      setFormData(prev => ({
+        ...prev,
+        [name]: value,
+        scan_types: treatmentTypes
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
+  };
+
+  const getDefaultTreatmentTypes = (specialization) => {
+    const treatmentTypes = {
+      'dentist': [
+        { name: 'Dental Cleaning', price: 1500 },
+        { name: 'Tooth Extraction', price: 2000 },
+        { name: 'Root Canal Treatment', price: 8000 },
+        { name: 'Dental Crown', price: 12000 },
+        { name: 'Teeth Whitening', price: 5000 }
+      ],
+      'physiotherapist': [
+        { name: 'Physiotherapy Session', price: 800 },
+        { name: 'Massage Therapy', price: 1000 },
+        { name: 'Exercise Therapy', price: 600 },
+        { name: 'Electrotherapy', price: 500 },
+        { name: 'Manual Therapy', price: 1200 }
+      ],
+      'radiologist': [
+        { name: 'X-Ray Chest', price: 500 },
+        { name: 'X-Ray Spine', price: 600 },
+        { name: 'Ultrasound Abdomen', price: 1200 },
+        { name: 'CT Scan Head', price: 2500 },
+        { name: 'MRI Brain', price: 5000 }
+      ]
+    };
+    return treatmentTypes[specialization] || treatmentTypes['radiologist'];
   };
 
   const handleScanTypeChange = (index, field, value) => {
@@ -125,8 +163,12 @@ const ClinicOnboarding = () => {
                   value={formData.clinic_name}
                   onChange={handleInputChange}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+                  placeholder="e.g., Sharma's Medical Clinic"
                   required
                 />
+                <p className="mt-1 text-xs text-gray-500">
+                  Keep it to 3 words maximum (e.g., "Sharma's Medical Clinic")
+                </p>
               </div>
 
               <div>
@@ -172,11 +214,9 @@ const ClinicOnboarding = () => {
                     onChange={handleInputChange}
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
                   >
-                    <option value="radiology">Radiology</option>
-                    <option value="cardiology">Cardiology</option>
-                    <option value="pathology">Pathology</option>
-                    <option value="dental">Dental</option>
-                    <option value="general">General Medicine</option>
+                    <option value="radiologist">Radiologist</option>
+                    <option value="dentist">Dentist</option>
+                    <option value="physiotherapist">Physiotherapist</option>
                   </select>
                 </div>
                 <div>
@@ -195,10 +235,10 @@ const ClinicOnboarding = () => {
               </div>
             </div>
 
-            {/* Scan Types */}
+            {/* Treatment Types */}
             <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900">Default Scan Types</h3>
-              <p className="text-sm text-gray-600">Set up your default scan types and pricing</p>
+              <h3 className="text-lg font-medium text-gray-900">Default Treatment Types</h3>
+              <p className="text-sm text-gray-600">Set up your default treatment types and pricing</p>
               
               <div className="space-y-3">
                 {formData.scan_types.map((scan, index) => (
@@ -207,7 +247,7 @@ const ClinicOnboarding = () => {
                       type="text"
                       value={scan.name}
                       onChange={(e) => handleScanTypeChange(index, 'name', e.target.value)}
-                      placeholder="Scan name"
+                      placeholder="Treatment name"
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500"
                     />
                     <input
@@ -233,7 +273,7 @@ const ClinicOnboarding = () => {
                 onClick={addScanType}
                 className="w-full py-2 border-2 border-dashed border-gray-300 rounded-md text-gray-600 hover:border-green-500 hover:text-green-600 focus:outline-none focus:ring-2 focus:ring-green-500"
               >
-                + Add Scan Type
+                + Add Treatment Type
               </button>
             </div>
 

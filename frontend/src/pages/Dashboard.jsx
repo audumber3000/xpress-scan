@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Card from "../components/Card";
+import { useAuth } from "../contexts/AuthContext";
+import { api } from "../utils/api";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid, ReferenceLine, Label } from "recharts";
 
 const COLORS = ["#1d8a99", "#6ee7b7", "#d1fae5"];
@@ -91,15 +93,33 @@ const MetricCard = ({ title, value, change, changeType, sub, weekData }) => {
 };
 
 const Dashboard = () => {
+  const { user } = useAuth();
   const [timeRange, setTimeRange] = useState("months");
   const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [clinicData, setClinicData] = useState(null);
+  const [userData, setUserData] = useState(null);
   
   const metrics = [
     { title: "Total Patients", value: 9459, change: "+16.8%", changeType: "up", sub: "vs last week", weekData },
     { title: "Total Reports", value: 8847, change: "-12.5%", changeType: "down", sub: "vs last week", weekData },
     { title: "Pending Reports", value: 4368, change: "+18.6%", changeType: "up", sub: "vs last week", weekData },
   ];
+
+  // Fetch clinic and user data
+  useEffect(() => {
+    const fetchClinicData = async () => {
+      try {
+        const response = await api.get("/auth/me");
+        setUserData(response);
+        setClinicData(response.clinic);
+      } catch (error) {
+        console.error("Error fetching clinic data:", error);
+      }
+    };
+    
+    fetchClinicData();
+  }, []);
 
   // Fetch weather data
   useEffect(() => {
@@ -164,6 +184,16 @@ const Dashboard = () => {
     return iconMap[iconCode] || '☀️';
   };
 
+  // Get clinic type description based on specialization
+  const getClinicTypeDescription = (specialization) => {
+    const descriptions = {
+      'radiologist': 'radiology clinic',
+      'dentist': 'dental clinic',
+      'physiotherapist': 'physiotherapy clinic'
+    };
+    return descriptions[specialization] || 'medical clinic';
+  };
+
   let patientStatsData = patientStatsDataByMonth;
   let xKey = "month";
   if (timeRange === "week") {
@@ -185,8 +215,12 @@ const Dashboard = () => {
       <div className="mb-6">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <div className="text-sm text-gray-600 mt-1">Overview and analytics of your radiology clinic</div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {clinicData?.name ? `${clinicData.name} Dashboard` : 'Dashboard'}
+            </h1>
+            <div className="text-sm text-gray-600 mt-1">
+              Overview and analytics of your {getClinicTypeDescription(clinicData?.specialization)}
+            </div>
           </div>
           <div className="text-right">
             <div className="text-sm font-medium text-gray-900">{getTodayString()}</div>
