@@ -2,9 +2,9 @@ import React, { useState, useEffect } from "react";
 import Card from "../components/Card";
 import { useAuth } from "../contexts/AuthContext";
 import { api } from "../utils/api";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid, ReferenceLine, Label } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid, ReferenceLine, Label, LineChart, Line, Area, AreaChart, RadialBarChart, RadialBar } from "recharts";
 
-const COLORS = ["#1d8a99", "#6ee7b7", "#d1fae5"];
+const COLORS = ["#1d8a99", "#6ee7b7", "#d1fae5", "#f59e0b", "#ef4444", "#8b5cf6"];
 
 // Week-wise data for metrics cards
 const weekData = [
@@ -55,6 +55,34 @@ const venueVisitorData = [
   { name: "Others", value: 10943, color: COLORS[2] },
 ];
 const totalVisitors = venueVisitorData.reduce((sum, d) => sum + d.value, 0);
+
+// Revenue Analytics Data
+const revenueData = [
+  { day: "Mon", revenue: 45000, target: 50000 },
+  { day: "Tue", revenue: 52000, target: 50000 },
+  { day: "Wed", revenue: 48000, target: 50000 },
+  { day: "Thu", revenue: 61000, target: 50000 },
+  { day: "Fri", revenue: 58000, target: 50000 },
+  { day: "Sat", revenue: 42000, target: 40000 },
+  { day: "Sun", revenue: 35000, target: 35000 },
+];
+
+// Appointment Booking Trends Data
+const appointmentData = [
+  { time: "9 AM", bookings: 12, capacity: 15 },
+  { time: "10 AM", bookings: 18, capacity: 20 },
+  { time: "11 AM", bookings: 15, capacity: 18 },
+  { time: "12 PM", bookings: 8, capacity: 12 },
+  { time: "2 PM", bookings: 20, capacity: 22 },
+  { time: "3 PM", bookings: 16, capacity: 18 },
+  { time: "4 PM", bookings: 14, capacity: 16 },
+  { time: "5 PM", bookings: 10, capacity: 15 },
+];
+
+// Clinic Capacity Utilization Data
+const capacityData = [
+  { name: "Utilization", value: 78, fill: "#1d8a99" }
+];
 
 function getTodayString() {
   const today = new Date();
@@ -246,8 +274,8 @@ const Dashboard = () => {
           <MetricCard key={m.title} {...m} />
         ))}
       </div>
-      {/* Two charts below metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* First row of charts */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
         {/* Patient Statistics Bar Chart (2/3 width) */}
         <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col md:col-span-2">
           <div className="flex items-center justify-between mb-2">
@@ -317,6 +345,111 @@ const Dashboard = () => {
                 <span className="text-gray-700 font-medium">{item.name}</span>
               </span>
             ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Second row of charts */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        {/* Revenue Analytics Line Chart */}
+        <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-semibold text-gray-800">Revenue Analytics</span>
+            <button className="flex items-center gap-1 text-xs border rounded px-2 py-1">
+              This Week
+              <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" /></svg>
+            </button>
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={revenueData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" vertical={false} />
+              <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} domain={[0, 'dataMax + 10000']} />
+              <Tooltip 
+                contentStyle={{ borderRadius: 8, background: '#222', color: '#fff', fontSize: 13 }} 
+                formatter={(value, name) => [
+                  `₹${(value/1000).toFixed(1)}K`, 
+                  name === 'revenue' ? 'Revenue' : 'Target'
+                ]} 
+              />
+              <Line 
+                type="monotone" 
+                dataKey="target" 
+                stroke="#e5e7eb" 
+                strokeWidth={2} 
+                strokeDasharray="5 5"
+                dot={false}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="revenue" 
+                stroke="#1d8a99" 
+                strokeWidth={3} 
+                dot={{ fill: '#1d8a99', strokeWidth: 2, r: 4 }}
+                activeDot={{ r: 6, stroke: '#1d8a99', strokeWidth: 2 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Appointment Booking Trends Bar Chart */}
+        <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-semibold text-gray-800">Appointment Trends</span>
+            <button className="flex items-center gap-1 text-xs border rounded px-2 py-1">
+              Today
+              <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" /></svg>
+            </button>
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={appointmentData} barGap={4}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" vertical={false} />
+              <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} domain={[0, 'dataMax + 5']} />
+              <Tooltip 
+                contentStyle={{ borderRadius: 8, background: '#222', color: '#fff', fontSize: 13 }} 
+                formatter={(value, name) => [
+                  value, 
+                  name === 'bookings' ? 'Bookings' : 'Capacity'
+                ]} 
+              />
+              <Bar dataKey="capacity" fill="#e5e7eb" radius={2} />
+              <Bar dataKey="bookings" fill="#6ee7b7" radius={2} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Clinic Capacity Utilization Radial Chart */}
+        <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col items-center justify-center relative">
+          <div className="flex items-center justify-between w-full mb-2">
+            <span className="font-semibold text-gray-800">Clinic Capacity</span>
+            <button className="flex items-center gap-1 text-xs border rounded px-2 py-1">
+              Live
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            </button>
+          </div>
+          <div className="relative flex items-center justify-center" style={{ width: 180, height: 140 }}>
+            <ResponsiveContainer width={140} height={140}>
+              <RadialBarChart cx="50%" cy="50%" innerRadius="60%" outerRadius="90%" data={capacityData} startAngle={180} endAngle={0}>
+                <RadialBar dataKey="value" cornerRadius={10} fill="#1d8a99" />
+              </RadialBarChart>
+            </ResponsiveContainer>
+            {/* Center label */}
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+              <div className="text-xs text-gray-400">Utilization</div>
+              <div className="text-2xl font-bold text-gray-900">78%</div>
+              <div className="text-xs text-gray-500">of capacity</div>
+            </div>
+          </div>
+          <div className="flex gap-4 mt-4 text-sm">
+            <span className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full bg-green-100"></span>
+              <span className="text-gray-700 font-medium">Available</span>
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full" style={{ background: '#1d8a99' }}></span>
+              <span className="text-gray-700 font-medium">Occupied</span>
+            </span>
           </div>
         </div>
       </div>

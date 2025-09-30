@@ -1,103 +1,220 @@
 import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import Card from "../components/Card";
 import { api } from "../utils/api";
+import { useAuth } from "../contexts/AuthContext";
+import { 
+  ChevronLeft, 
+  ChevronRight, 
+  Plus, 
+  Clock, 
+  User, 
+  Phone, 
+  Mail, 
+  ExternalLink,
+  X
+} from "lucide-react";
 
 const Calendar = () => {
+  const { user } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [activeView, setActiveView] = useState("month");
-  const [revenueData, setRevenueData] = useState({});
+  const [selectedAppointment, setSelectedAppointment] = useState(null);
+  const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [clinicData, setClinicData] = useState(null);
+  const [newAppointment, setNewAppointment] = useState({
+    patientName: '',
+    patientEmail: '',
+    patientPhone: '',
+    treatment: '',
+    time: '',
+    duration: '1',
+    date: new Date().toISOString().split('T')[0], // Today's date as default
+    status: 'confirmed'
+  });
 
+  // Get current week dates for mock data
+  const getCurrentWeekDates = () => {
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay());
+    
+    const weekDates = [];
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(startOfWeek);
+      date.setDate(startOfWeek.getDate() + i);
+      weekDates.push(date.toISOString().split('T')[0]);
+    }
+    return weekDates;
+  };
 
-  const views = [
-    { id: "week", label: "Week", icon: "📅" },
-    { id: "month", label: "Month", icon: "📆" },
-    { id: "year", label: "Year", icon: "📊" }
+  // Mock appointment data - replace with real API calls
+  const mockAppointments = [
+    // Sunday appointments
+    {
+      id: 1,
+      patientName: "Courtney Henry",
+      patientEmail: "courtney@email.com",
+      patientPhone: "+1234567890",
+      patientAvatar: "CH",
+      treatment: "Root Canal",
+      doctor: "Dr. Sarah Wilson",
+      startTime: "09:00",
+      endTime: "10:30",
+      date: getCurrentWeekDates()[0], // Sunday
+      status: "confirmed",
+      color: "bg-blue-100 border-blue-200 text-blue-800"
+    },
+    {
+      id: 2,
+      patientName: "Jerome Bell",
+      patientEmail: "jerome@email.com",
+      patientPhone: "+1234567891",
+      patientAvatar: "JB",
+      treatment: "Implants",
+      doctor: "Dr. Wade Warren",
+      startTime: "14:00",
+      endTime: "15:30",
+      date: getCurrentWeekDates()[0], // Sunday
+      status: "confirmed",
+      color: "bg-purple-100 border-purple-200 text-purple-800"
+    },
+    // Monday appointments
+    {
+      id: 3,
+      patientName: "Jenny Wilson",
+      patientEmail: "jenny@email.com",
+      patientPhone: "+1234567892",
+      patientAvatar: "JW",
+      treatment: "Whitening",
+      doctor: "Dr. Sarah Wilson",
+      startTime: "10:00",
+      endTime: "12:00",
+      date: getCurrentWeekDates()[1], // Monday
+      status: "confirmed",
+      color: "bg-green-100 border-green-200 text-green-800"
+    },
+    {
+      id: 4,
+      patientName: "Leslie Alexander",
+      patientEmail: "leslie@email.com",
+      patientPhone: "+1234567893",
+      patientAvatar: "LA",
+      treatment: "Dentures",
+      doctor: "Dr. Wade Warren",
+      startTime: "11:00",
+      endTime: "12:30",
+      date: getCurrentWeekDates()[1], // Monday
+      status: "confirmed",
+      color: "bg-yellow-100 border-yellow-200 text-yellow-800"
+    },
+    // Tuesday appointments
+    {
+      id: 5,
+      patientName: "Marvin McKinney",
+      patientEmail: "marvin@email.com",
+      patientPhone: "+1234567894",
+      patientAvatar: "MM",
+      treatment: "Checkup",
+      doctor: "Dr. Sarah Wilson",
+      startTime: "09:30",
+      endTime: "10:30",
+      date: getCurrentWeekDates()[2], // Tuesday
+      status: "confirmed",
+      color: "bg-pink-100 border-pink-200 text-pink-800"
+    },
+    {
+      id: 6,
+      patientName: "Guy Hawkins",
+      patientEmail: "guy@email.com",
+      patientPhone: "+1234567895",
+      patientAvatar: "GH",
+      treatment: "Cleaning",
+      doctor: "Dr. Wade Warren",
+      startTime: "14:30",
+      endTime: "16:00",
+      date: getCurrentWeekDates()[2], // Tuesday
+      status: "confirmed",
+      color: "bg-indigo-100 border-indigo-200 text-indigo-800"
+    },
+    // Wednesday appointments
+    {
+      id: 7,
+      patientName: "Alice Johnson",
+      patientEmail: "alice@email.com",
+      patientPhone: "+1234567896",
+      patientAvatar: "AJ",
+      treatment: "Filling",
+      doctor: "Dr. Sarah Wilson",
+      startTime: "10:30",
+      endTime: "11:30",
+      date: getCurrentWeekDates()[3], // Wednesday
+      status: "confirmed",
+      color: "bg-orange-100 border-orange-200 text-orange-800"
+    },
+    // Thursday appointments
+    {
+      id: 8,
+      patientName: "Bob Smith",
+      patientEmail: "bob@email.com",
+      patientPhone: "+1234567897",
+      patientAvatar: "BS",
+      treatment: "Extraction",
+      doctor: "Dr. Wade Warren",
+      startTime: "15:00",
+      endTime: "16:00",
+      date: getCurrentWeekDates()[4], // Thursday
+      status: "confirmed",
+      color: "bg-red-100 border-red-200 text-red-800"
+    },
+    // Friday appointments
+    {
+      id: 9,
+      patientName: "Carol Davis",
+      patientEmail: "carol@email.com",
+      patientPhone: "+1234567898",
+      patientAvatar: "CD",
+      treatment: "Consultation",
+      doctor: "Dr. Sarah Wilson",
+      startTime: "11:00",
+      endTime: "12:00",
+      date: getCurrentWeekDates()[5], // Friday
+      status: "confirmed",
+      color: "bg-teal-100 border-teal-200 text-teal-800"
+    },
+    // Saturday appointments
+    {
+      id: 10,
+      patientName: "David Brown",
+      patientEmail: "david@email.com",
+      patientPhone: "+1234567899",
+      patientAvatar: "DB",
+      treatment: "Follow-up",
+      doctor: "Dr. Wade Warren",
+      startTime: "13:00",
+      endTime: "14:00",
+      date: getCurrentWeekDates()[6], // Saturday
+      status: "confirmed",
+      color: "bg-cyan-100 border-cyan-200 text-cyan-800"
+    }
   ];
-
-  // Get current date info
-  const currentYear = currentDate.getFullYear();
-  const currentMonth = currentDate.getMonth();
-  const currentDay = currentDate.getDate();
 
   // Navigation functions
   const goToPrevious = () => {
     const newDate = new Date(currentDate);
-    if (activeView === "week") {
       newDate.setDate(newDate.getDate() - 7);
-    } else if (activeView === "month") {
-      newDate.setMonth(newDate.getMonth() - 1);
-    } else if (activeView === "year") {
-      newDate.setFullYear(newDate.getFullYear() - 1);
-    }
     setCurrentDate(newDate);
   };
 
   const goToNext = () => {
     const newDate = new Date(currentDate);
-    if (activeView === "week") {
       newDate.setDate(newDate.getDate() + 7);
-    } else if (activeView === "month") {
-      newDate.setMonth(newDate.getMonth() + 1);
-    } else if (activeView === "year") {
-      newDate.setFullYear(newDate.getFullYear() + 1);
-    }
     setCurrentDate(newDate);
   };
 
   const goToToday = () => {
     setCurrentDate(new Date());
-  };
-
-  // Fetch revenue data
-  useEffect(() => {
-    const fetchRevenueData = async () => {
-      try {
-        setLoading(true);
-        // Fetch payments data for the current period
-        const params = {
-          year: currentYear,
-          view: activeView
-        };
-        
-        // Only add month parameter for month view
-        if (activeView === "month") {
-          params.month = currentMonth + 1;
-        }
-        
-        const response = await api.post('/payments/calendar-data', params);
-        setRevenueData(response || {});
-      } catch (error) {
-        console.error('Error fetching revenue data:', error);
-        // Don't use mock data - show empty state
-        setRevenueData({});
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchRevenueData();
-  }, [currentDate, activeView, currentYear, currentMonth]);
-
-
-
-  // Format currency
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
-  };
-
-  // Format time for display
-  const formatTime = (timeString) => {
-    const [hour, minute] = timeString.split(':').map(Number);
-    const period = hour >= 12 ? 'PM' : 'AM';
-    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-    return `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
   };
 
   // Get week dates
@@ -115,283 +232,636 @@ const Calendar = () => {
     return dates;
   };
 
-  // Get month dates
-  const getMonthDates = () => {
-    const dates = [];
-    const firstDay = new Date(currentYear, currentMonth, 1);
-    const lastDay = new Date(currentYear, currentMonth + 1, 0);
-    const startDate = new Date(firstDay);
-    startDate.setDate(startDate.getDate() - firstDay.getDay());
-    
-    for (let i = 0; i < 42; i++) {
-      const date = new Date(startDate);
-      date.setDate(startDate.getDate() + i);
-      dates.push(date);
+  // Get time slots (8 AM to 8 PM)
+  const getTimeSlots = () => {
+    const slots = [];
+    for (let hour = 8; hour <= 20; hour++) {
+      const time = `${hour.toString().padStart(2, '0')}:00`;
+      const displayTime = hour === 12 ? '12:00 PM' : 
+                        hour > 12 ? `${hour - 12}:00 PM` : 
+                        `${hour}:00 AM`;
+      slots.push({ time, displayTime, hour });
     }
-    return dates;
+    return slots;
   };
 
-  // Render Week View
-  const renderWeekView = () => {
-    const weekDates = getWeekDates();
+  // Get appointments for a specific date
+  const getAppointmentsForDate = (date) => {
+    const dateStr = date.toISOString().split('T')[0];
+    return appointments.filter(apt => apt.date === dateStr);
+  };
+
+  // Calculate appointment position and height
+  const getAppointmentStyle = (appointment) => {
+    const startHour = parseInt(appointment.startTime.split(':')[0]);
+    const startMinute = parseInt(appointment.startTime.split(':')[1]);
+    const endHour = parseInt(appointment.endTime.split(':')[0]);
+    const endMinute = parseInt(appointment.endTime.split(':')[1]);
     
-    // Debug: Log the overall revenue data structure
-    console.log('🔍 Week View Debug:');
-    console.log('  Revenue Data:', revenueData);
-    console.log('  Week Dates:', weekDates.map(d => d.toISOString().split('T')[0]));
-    console.log('  Revenue Data Keys:', Object.keys(revenueData));
-
-    return (
-      <div className="overflow-x-auto">
-        <div className="min-w-[800px]">
-          {/* Header */}
-          <div className="grid grid-cols-8 gap-1 mb-2 bg-gray-50 rounded-t-lg">
-            <div className="p-3 text-center font-semibold text-gray-700">Time</div>
-            {weekDates.map((date, index) => (
-              <div key={index} className="p-3 text-center border-l border-gray-200">
-                <div className="text-sm font-medium text-gray-600">
-                  {date.toLocaleDateString('en-US', { weekday: 'short' })}
-                </div>
-                <div className={`text-lg font-bold ${
-                  date.toDateString() === new Date().toDateString() 
-                    ? 'text-red-600' 
-                    : 'text-gray-900'
-                }`}>
-                  {date.getDate()}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* All-day row - Revenue Summary */}
-          <div className="grid grid-cols-8 gap-1 mb-2 bg-green-50 border-b-2 border-green-200">
-            <div className="p-3 text-sm font-semibold text-green-700 bg-green-100 rounded-l">Revenue</div>
-            {weekDates.map((date, index) => {
-              // Use UTC date to match backend
-              const dateKey = date.toISOString().split('T')[0];
-              const dayData = revenueData[dateKey];
-              
-              // Handle both new format (with revenue/patients) and old format (just amount)
-              let revenue = 0;
-              if (dayData) {
-                if (typeof dayData === 'object' && dayData.revenue !== undefined) {
-                  // New format: {revenue: 3000, patients: [...]}
-                  revenue = dayData.revenue;
-                } else if (typeof dayData === 'number') {
-                  // Old format: just the amount
-                  revenue = dayData;
-                }
-              }
-              
-              return (
-                <div key={index} className="p-3 border-l border-green-200 min-h-[60px] flex items-center justify-center">
-                  {revenue > 0 ? (
-                    <div className="text-center">
-                      <div className="text-lg font-bold text-green-700">
-                        {formatCurrency(revenue)}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-gray-400 text-sm">-</div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          
-
-          
-
-
-                    {/* Simple patient dots display */}
-          <div className="grid grid-cols-8 gap-1 border-b border-gray-100 bg-gray-50">
-            <div className="p-3 text-sm font-semibold text-gray-700 text-center">Patients</div>
-            {weekDates.map((date, index) => {
-              const dateKey = date.toISOString().split('T')[0];
-              const dayData = revenueData[dateKey];
-              const patients = dayData?.patients || [];
-              
-              return (
-                <div key={index} className="p-3 border-l border-gray-200 min-h-[60px] flex flex-wrap items-start justify-center gap-1">
-                  {patients.map((patient, patientIndex) => (
-                    <div 
-                      key={patientIndex}
-                      className="w-3 h-3 bg-blue-500 rounded-full cursor-pointer hover:bg-blue-600 transition-colors shadow-sm"
-                      title={`${patient.name} - ${patient.scan_type} - ${formatCurrency(patient.amount)} - ${patient.time}`}
-                    />
-                  ))}
-                  
-                  {/* Show patient count if no dots */}
-                  {patients.length === 0 && (
-                    <div className="text-gray-400 text-sm">-</div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    );
+    const startTimeInMinutes = startHour * 60 + startMinute;
+    const endTimeInMinutes = endHour * 60 + endMinute;
+    const duration = endTimeInMinutes - startTimeInMinutes;
+    
+    // Position from top (8 AM = 0 minutes) - each hour is 80px
+    // Since overlay has top: 60px, we need to account for that offset
+    const topPosition = (startTimeInMinutes - 8 * 60) * (80 / 60); // 80px per hour = 1.33px per minute
+    const height = duration * (80 / 60); // 80px per hour = 1.33px per minute
+    
+    console.log(`Appointment ${appointment.patientName}:`, {
+      startTime: appointment.startTime,
+      startTimeInMinutes,
+      topPosition,
+      height,
+      calculation: `(${startTimeInMinutes} - ${8 * 60}) * (80/60) = ${topPosition}`
+    });
+    
+    return {
+      top: `${topPosition}px`,
+      height: `${height}px`,
+      width: '12%',
+      left: '7.5%',
+      minHeight: '20px',
+      zIndex: 10
+    };
   };
 
-  // Render Month View
-  const renderMonthView = () => {
-    const monthDates = getMonthDates();
-    const monthName = currentDate.toLocaleDateString('en-US', { month: 'long' });
-
-    return (
-      <div>
-        <div className="grid grid-cols-7 gap-1">
-          {/* Day headers */}
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-            <div key={day} className="p-3 text-center font-medium text-gray-600 bg-gray-50">
-              {day}
-            </div>
-          ))}
-
-          {/* Date grid */}
-          {monthDates.map((date, index) => {
-            const isCurrentMonth = date.getMonth() === currentMonth;
-            const isToday = date.toDateString() === new Date().toDateString();
-            const dateKey = date.toISOString().split('T')[0];
-            const revenue = revenueData[dateKey] || 0;
-
-            return (
-              <div
-                key={index}
-                className={`p-3 border border-gray-200 min-h-[100px] ${
-                  !isCurrentMonth ? 'bg-gray-50' : 'bg-white'
-                }`}
-              >
-                <div className={`text-sm ${
-                  !isCurrentMonth ? 'text-gray-400' : 'text-gray-600'
-                }`}>
-                  {date.getDate()}
-                </div>
-                {revenue > 0 && (
-                  <div className="mt-2 text-center">
-                    <div className="text-lg font-bold text-green-600">
-                      {formatCurrency(revenue)}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
+  // Format time for display
+  const formatTime = (timeString) => {
+    const [hour, minute] = timeString.split(':').map(Number);
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+    return `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
   };
 
-  // Render Year View
-  const renderYearView = () => {
-    const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
+  // Get current time for indicator
+  const getCurrentTime = () => {
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentTimeInMinutes = currentHour * 60 + currentMinute;
+    
+    // Position from top (8 AM = 0 minutes) - each hour is 80px
+    const topPosition = (currentTimeInMinutes - 8 * 60) * (80 / 60); // 80px per hour = 1.33px per minute
+    
+    return {
+      top: `${topPosition}px`,
+      time: now.toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit',
+        hour12: false 
+      })
+    };
+  };
+
+  // Get client's timezone
+  const getClientTimezone = () => {
+    const now = new Date();
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const offset = now.getTimezoneOffset();
+    const offsetHours = Math.abs(offset) / 60;
+    const offsetMinutes = Math.abs(offset) % 60;
+    const sign = offset <= 0 ? '+' : '-';
+    
+    return {
+      timezone,
+      offset: `${sign}${offsetHours.toString().padStart(2, '0')}:${offsetMinutes.toString().padStart(2, '0')}`
+    };
+  };
+
+  // Fetch clinic data
+  useEffect(() => {
+    const fetchClinicData = async () => {
+      try {
+        const response = await api.get("/auth/me");
+        console.log("API Response:", response);
+        console.log("Clinic Data:", response.clinic);
+        setClinicData(response.clinic);
+      } catch (error) {
+        console.error("Error fetching clinic data:", error);
+      }
+    };
+    
+    if (user) {
+      fetchClinicData();
+    }
+  }, [user]);
+
+  useEffect(() => {
+    // Simulate API call
+    setLoading(true);
+    setTimeout(() => {
+      setAppointments(mockAppointments);
+      setLoading(false);
+    }, 1000);
+  }, [currentDate]);
+
+  // Handle form input changes
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setNewAppointment(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  // Handle form submission
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    // Calculate start and end times from time and duration
+    const [startHour, startMinute] = newAppointment.time.split(':').map(Number);
+    const durationHours = parseFloat(newAppointment.duration);
+    const endTimeInMinutes = (startHour * 60 + startMinute) + (durationHours * 60);
+    const endHour = Math.floor(endTimeInMinutes / 60);
+    const endMinute = endTimeInMinutes % 60;
+    
+    const startTime = `${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}`;
+    const endTime = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
+    
+    // Generate patient avatar from name
+    const nameParts = newAppointment.patientName.split(' ');
+    const avatar = nameParts.map(part => part.charAt(0)).join('').toUpperCase();
+    
+    // Generate random color for appointment
+    const colors = [
+      'bg-blue-100 border-blue-200 text-blue-800',
+      'bg-purple-100 border-purple-200 text-purple-800',
+      'bg-green-100 border-green-200 text-green-800',
+      'bg-yellow-100 border-yellow-200 text-yellow-800',
+      'bg-pink-100 border-pink-200 text-pink-800',
+      'bg-indigo-100 border-indigo-200 text-indigo-800'
     ];
-
-    return (
-      <div className="grid grid-cols-4 gap-6">
-        {months.map((month, index) => {
-          const monthKey = `${currentYear}-${String(index + 1).padStart(2, '0')}`;
-          const revenue = revenueData[monthKey] || 0;
-          const isCurrentMonth = index === new Date().getMonth() && currentYear === new Date().getFullYear();
-
-          return (
-            <div key={month} className="text-center">
-              <div className={`text-lg font-semibold mb-2 ${
-                isCurrentMonth ? 'text-red-600' : 'text-gray-700'
-              }`}>
-                {month}
-              </div>
-              <div className="text-2xl font-bold text-green-600">
-                {formatCurrency(revenue)}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
+    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+    
+    // Create new appointment
+    const appointment = {
+      id: Date.now(),
+      patientName: newAppointment.patientName,
+      patientEmail: newAppointment.patientEmail,
+      patientPhone: newAppointment.patientPhone,
+      patientAvatar: avatar,
+      treatment: newAppointment.treatment,
+      doctor: 'Dr. Sarah Wilson', // Default doctor since field is removed
+      startTime: startTime,
+      endTime: endTime,
+      date: newAppointment.date,
+      status: newAppointment.status,
+      color: randomColor
+    };
+    
+    // Add to appointments list
+    setAppointments(prev => [...prev, appointment]);
+    
+    // Reset form
+    setNewAppointment({
+      patientName: '',
+      patientEmail: '',
+      patientPhone: '',
+      treatment: '',
+      time: '',
+      duration: '1',
+      date: new Date().toISOString().split('T')[0], // Reset to today's date
+      status: 'confirmed'
+    });
+    
+    // Close form
+    setShowAddForm(false);
   };
+
+  // Generate doctor-specific booking URL
+  const getBookingUrl = () => {
+    const userName = user?.user_metadata?.full_name || 
+                    user?.user_metadata?.name || 
+                    user?.name || 
+                    user?.email?.split("@")[0] || 
+                    "Dr. User";
+    const userId = user?.id || "default";
+    const clinicName = clinicData?.name || user?.user_metadata?.clinic_name || "Medical Center";
+    const clinicAddress = clinicData?.address || "123 Medical Street, Health City";
+    const clinicPhone = clinicData?.phone || "+1 (555) 123-4567";
+    const clinicHours = clinicData?.hours || "Mon-Fri: 8:00 AM - 8:00 PM, Sat: 9:00 AM - 5:00 PM, Sun: Closed";
+    
+    console.log("Generating booking URL with:");
+    console.log("clinicData:", clinicData);
+    console.log("clinicName:", clinicName);
+    console.log("clinicAddress:", clinicAddress);
+    console.log("clinicPhone:", clinicPhone);
+    
+    const params = new URLSearchParams({
+      doctor: userId,
+      name: userName,
+      clinic: clinicName,
+      address: clinicAddress,
+      phone: clinicPhone,
+      hours: clinicHours
+    });
+    
+    const url = `/booking?${params.toString()}`;
+    console.log("Generated URL:", url);
+    return url;
+  };
+
+  const weekDates = getWeekDates();
+  const timeSlots = getTimeSlots();
+  const currentTimeIndicator = getCurrentTime();
+  const clientTimezone = getClientTimezone();
 
   return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Calendar</h1>
-        <p className="text-gray-600">View revenue calendar and patient appointments</p>
-      </div>
+    <div className="p-6 bg-gray-50 min-h-screen">
 
-      {/* View Tabs */}
-      <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg mb-6">
-        {views.map((view) => (
-          <button
-            key={view.id}
-            onClick={() => setActiveView(view.id)}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-all duration-200 ${
-              activeView === view.id
-                ? "bg-white text-green-600 shadow-sm"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <span className="text-lg">{view.icon}</span>
-            <span className="font-medium">{view.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Navigation Bar */}
+      {/* Calendar Container */}
       <Card>
+        {/* Navigation Bar */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-4">
             <button
               onClick={goToPrevious}
               className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
+              <ChevronLeft className="w-5 h-5" />
             </button>
             
             <div className="text-2xl font-bold text-gray-900">
-              {activeView === "week" && `Week of ${getWeekDates()[0].toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}`
-               || activeView === "month" && `${currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`
-               || activeView === "year" && currentYear}
+              {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
             </div>
             
             <button
               onClick={goToNext}
               className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
+              <ChevronRight className="w-5 h-5" />
             </button>
           </div>
 
-          <button
-            onClick={goToToday}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-          >
-            Today
-          </button>
-          
-
+          <div className="flex items-center gap-3">
+            <Link
+              to={getBookingUrl()}
+              target="_blank"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              Public Booking
+            </Link>
+            <button
+              onClick={goToToday}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              Today
+            </button>
+            <button 
+              onClick={() => setShowAddForm(true)}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Add new Appointment
+            </button>
+          </div>
         </div>
 
         {/* Calendar Content */}
         {loading ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading calendar data...</p>
+            <p className="mt-4 text-gray-600">Loading appointments...</p>
           </div>
         ) : (
-          <div>
-            {activeView === "week" && renderWeekView()}
-            {activeView === "month" && renderMonthView()}
-            {activeView === "year" && renderYearView()}
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            {/* Calendar Grid Container with Scroll */}
+            <div className="max-h-[600px] overflow-y-auto relative">
+              <div className="grid grid-cols-8 min-h-[800px] relative">
+                {/* Time column header */}
+                <div className="p-3 text-center font-semibold text-gray-700 bg-gray-50 sticky top-0 z-20">
+                  {clientTimezone.offset}
+                </div>
+                
+                {/* Day headers */}
+                {weekDates.map((date, index) => (
+                  <div key={index} className="p-3 text-center bg-gray-50 border-l border-gray-100 sticky top-0 z-20">
+                    <div className="text-sm font-medium text-gray-600">
+                      {date.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()}
+                    </div>
+                    <div className={`text-lg font-bold ${
+                      date.toDateString() === new Date().toDateString() 
+                        ? 'text-white bg-blue-600 rounded-full w-8 h-8 flex items-center justify-center mx-auto' 
+                        : 'text-gray-900'
+                    }`}>
+                      {date.getDate()}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Time slots and appointments */}
+                {timeSlots.map((slot, slotIndex) => (
+                  <React.Fragment key={slot.time}>
+                    {/* Time label */}
+                    <div className="p-3 text-sm font-medium text-gray-600 bg-white border-t border-gray-100">
+                      {slot.displayTime}
+                    </div>
+                    
+                    {/* Appointment slots for each day */}
+                    {weekDates.map((date, dayIndex) => {
+                      const dayAppointments = getAppointmentsForDate(date);
+                      const isCurrentTime = new Date().getHours() === slot.hour;
+                      
+                      return (
+                        <div 
+                          key={`${slot.time}-${dayIndex}`} 
+                          className="min-h-[80px] bg-white border-t border-l border-gray-100 relative"
+                        >
+                          {/* Current time indicator */}
+                          {isCurrentTime && (
+                            <div 
+                              className="absolute left-0 right-0 h-0.5 bg-blue-500 z-10"
+                              style={{ top: currentTimeIndicator.top }}
+                            >
+                              <div className="absolute left-0 top-0 w-2 h-2 bg-blue-500 rounded-full -translate-y-1"></div>
+                              <div className="absolute left-0 -top-6 text-xs text-blue-600 font-medium">
+                                {currentTimeIndicator.time}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </React.Fragment>
+                ))}
+
+                {/* Appointments Overlay - positioned relative to the grid */}
+                <div className="absolute inset-0 pointer-events-none" style={{ top: '60px' }}>
+                  {weekDates.map((date, dayIndex) => {
+                    const dayAppointments = getAppointmentsForDate(date);
+                    console.log(`Day ${dayIndex} (${date.toISOString().split('T')[0]}):`, dayAppointments);
+                    return dayAppointments.map((appointment) => {
+                      const style = getAppointmentStyle(appointment);
+                      return (
+                        <div
+                          key={appointment.id}
+                          className={`absolute pointer-events-auto cursor-pointer hover:shadow-md transition-shadow rounded border-l-4 ${appointment.color}`}
+                          style={{
+                            left: `${(dayIndex + 1) * 12.5}%`, // Position in day column
+                            top: style.top,
+                            height: style.height,
+                            width: style.width,
+                            minHeight: style.minHeight,
+                            zIndex: style.zIndex
+                          }}
+                          onClick={() => setSelectedAppointment(appointment)}
+                        >
+                          <div className="p-2 h-full flex flex-col justify-center">
+                            <div className="text-sm font-medium truncate">
+                              {appointment.patientName}
+                            </div>
+                            <div className="text-xs opacity-75 truncate">
+                              {appointment.treatment}
+                            </div>
+                            <div className="text-xs opacity-75">
+                              {formatTime(appointment.startTime)} - {formatTime(appointment.endTime)}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </Card>
+
+      {/* Appointment Detail Modal */}
+      {selectedAppointment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Appointment Details</h3>
+                <button 
+                  onClick={() => setSelectedAppointment(null)}
+                  className="p-1 hover:bg-gray-100 rounded"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Patient Info */}
+            <div className="p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-xl font-semibold text-green-800">
+                  {selectedAppointment.patientAvatar}
+                </div>
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900">
+                    {selectedAppointment.patientName}
+                  </h4>
+                  <div className="flex items-center gap-4 text-sm text-gray-600">
+                    <div className="flex items-center gap-1">
+                      <Phone className="w-3 h-3" />
+                      {selectedAppointment.patientPhone}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Mail className="w-3 h-3" />
+                      {selectedAppointment.patientEmail}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Appointment Details */}
+              <div className="space-y-3 mb-6">
+                <div>
+                  <span className="text-sm font-medium text-gray-600">Type Treatments:</span>
+                  <span className="ml-2 text-sm text-gray-900">{selectedAppointment.treatment}</span>
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-gray-600">Doctor:</span>
+                  <span className="ml-2 text-sm text-gray-900">{selectedAppointment.doctor}</span>
+                </div>
+              </div>
+
+              {/* Action Button */}
+              <button className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+                <span>See Patient Details</span>
+                <ExternalLink className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Appointment Form Modal */}
+      {showAddForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Add New Appointment</h3>
+                <button 
+                  onClick={() => setShowAddForm(false)}
+                  className="p-1 hover:bg-gray-100 rounded"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              {/* Patient Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Patient Name *
+                </label>
+                <input
+                  type="text"
+                  name="patientName"
+                  value={newAppointment.patientName}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="Enter patient name"
+                />
+              </div>
+
+              {/* Patient Email */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Patient Email *
+                </label>
+                <input
+                  type="email"
+                  name="patientEmail"
+                  value={newAppointment.patientEmail}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="Enter patient email"
+                />
+              </div>
+
+              {/* Patient Phone */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Patient Phone *
+                </label>
+                <input
+                  type="tel"
+                  name="patientPhone"
+                  value={newAppointment.patientPhone}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="Enter patient phone"
+                />
+              </div>
+
+              {/* Treatment */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Treatment *
+                </label>
+                <select
+                  name="treatment"
+                  value={newAppointment.treatment}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                >
+                  <option value="">Select treatment</option>
+                  <option value="Root Canal">Root Canal</option>
+                  <option value="Implants">Implants</option>
+                  <option value="Whitening">Whitening</option>
+                  <option value="Dentures">Dentures</option>
+                  <option value="Checkup">Checkup</option>
+                  <option value="Cleaning">Cleaning</option>
+                  <option value="Filling">Filling</option>
+                  <option value="Extraction">Extraction</option>
+                </select>
+              </div>
+
+              {/* Date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Date *
+                </label>
+                <input
+                  type="date"
+                  name="date"
+                  value={newAppointment.date}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Time */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Time *
+                </label>
+                <input
+                  type="time"
+                  name="time"
+                  value={newAppointment.time}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Duration */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Duration *
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { value: '0.5', label: '30 min' },
+                    { value: '1', label: '1 hour' },
+                    { value: '1.5', label: '1.5 hours' },
+                    { value: '2', label: '2 hours' }
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setNewAppointment(prev => ({ ...prev, duration: option.value }))}
+                      className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                        newAppointment.duration === option.value
+                          ? 'bg-green-600 text-white border-green-600'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Add Appointment
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

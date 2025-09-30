@@ -5,6 +5,7 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 // Pages
+import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
@@ -20,6 +21,9 @@ import AuthCallback from "./pages/AuthCallback";
 import LoadingTest from "./pages/LoadingTest";
 import Communication from "./pages/Communication";
 import Calendar from "./pages/Calendar";
+import BookingPage from "./pages/BookingPage";
+import PatientFiles from "./pages/PatientFiles";
+import PatientProfile from "./pages/PatientProfile";
 
 // Components
 import Sidebar from "./components/Sidebar";
@@ -45,20 +49,37 @@ function AppContent() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
-  // Check if current route is auth page
+  // Check if current route is auth page, landing page, or booking page
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/onboarding' || location.pathname === '/auth/callback';
+  const isLandingPage = location.pathname === '/';
+  const isBookingPage = location.pathname === '/booking';
 
   if (loading) return <div>Loading...</div>;
 
-  // For auth pages, render without sidebar
-  if (isAuthPage) {
+  // For auth pages, landing page, and booking page, render without sidebar
+  if (isAuthPage || isLandingPage || isBookingPage) {
     return (
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/onboarding" element={<ClinicOnboarding />} />
-        <Route path="/auth/callback" element={<AuthCallback />} />
-      </Routes>
+      <>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/onboarding" element={<ClinicOnboarding />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/booking" element={<BookingPage />} />
+        </Routes>
+        <ToastContainer
+          position="top-right"
+          autoClose={8000}
+          hideProgressBar={false}
+          newestOnTop
+          closeOnClick
+          rtl={false}
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+        />
+      </>
     );
   }
 
@@ -85,6 +106,8 @@ function AppContent() {
         <Routes>
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/patients" element={<ProtectedRoute><Patients /></ProtectedRoute>} />
+          <Route path="/patient-files" element={<ProtectedRoute><PatientFiles /></ProtectedRoute>} />
+          <Route path="/patient-profile/:patientId" element={<ProtectedRoute><PatientProfile /></ProtectedRoute>} />
           <Route path="/patient-intake" element={<ProtectedRoute><PatientIntake /></ProtectedRoute>} />
           <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
           <Route path="/voice-reporting" element={<ProtectedRoute><VoiceReporting /></ProtectedRoute>} />
