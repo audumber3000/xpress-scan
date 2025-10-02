@@ -20,6 +20,13 @@ import {
   MapPin,
   ChevronDown
 } from 'lucide-react';
+import betterClinicLogo from '../assets/betterclinic-logo.png';
+import dashboardPreview from '../assets/main dashboard.png';
+import appointmentsImg from '../assets/appointments.png';
+import patientFilesImg from '../assets/patients-files.png';
+import reportsImg from '../assets/reports.png';
+import voiceReportingImg from '../assets/voice-reporting.png';
+import paymentsImg from '../assets/payments.png';
 
 const LandingPage = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -103,12 +110,17 @@ const LandingPage = () => {
           <div className="flex justify-between items-center h-16">
             {/* Logo */}
             <div className="flex items-center">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">+</span>
-                </div>
-                <span className="text-2xl font-bold text-gray-900">Better Clinic</span>
-              </div>
+              <Link to="/" className="flex items-center overflow-hidden" style={{ height: '50px' }}>
+                <img 
+                  src={betterClinicLogo} 
+                  alt="Better Clinic Logo" 
+                  className="h-22 w-auto"
+                  style={{ 
+                    objectFit: 'cover',
+                    objectPosition: 'top center'
+                  }}
+                />
+              </Link>
             </div>
 
             {/* Desktop Navigation */}
@@ -203,7 +215,7 @@ const LandingPage = () => {
               </button>
             </div>
 
-            {/* Dashboard Preview Image Placeholder */}
+            {/* Dashboard Preview */}
             <div className="mt-16 max-w-5xl mx-auto">
               <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
                 <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
@@ -214,14 +226,12 @@ const LandingPage = () => {
                     <span className="ml-4 text-sm text-gray-500">Better Clinic Dashboard</span>
                   </div>
                 </div>
-                <div className="p-8 bg-gradient-to-br from-green-50 to-blue-50 min-h-[400px] flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <BarChart3 className="w-12 h-12 text-green-600" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-gray-700 mb-2">Dashboard Preview</h3>
-                    <p className="text-gray-500">Replace this placeholder with your actual dashboard screenshot</p>
-                  </div>
+                <div className="overflow-hidden">
+                  <img 
+                    src={dashboardPreview} 
+                    alt="Better Clinic Dashboard Preview" 
+                    className="w-full h-auto object-cover"
+                  />
                 </div>
               </div>
             </div>
@@ -244,82 +254,72 @@ const LandingPage = () => {
           {/* App Screenshots Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {/* Patient Management Screenshot */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+            <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-shadow">
               <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Patient Management</h3>
+                <h3 className="text-lg font-semibold text-gray-900">Patient Files</h3>
               </div>
-              <div className="p-6 bg-gradient-to-br from-green-50 to-blue-50 min-h-[300px] flex items-center justify-center">
-                <div className="text-center">
-                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Users className="w-8 h-8 text-green-600" />
-                  </div>
-                  <h4 className="text-lg font-semibold text-gray-700 mb-2">Patient Management</h4>
-                  <p className="text-gray-500 text-sm">Replace with actual patient management screenshot</p>
-                </div>
+              <div className="overflow-hidden">
+                <img 
+                  src={patientFilesImg} 
+                  alt="Patient Files Management" 
+                  className="w-full h-auto object-cover"
+                />
               </div>
             </div>
 
-            {/* WhatsApp Notifications Screenshot */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+            {/* Appointments Screenshot */}
+            <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-shadow">
               <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">WhatsApp Notifications</h3>
+                <h3 className="text-lg font-semibold text-gray-900">Appointments</h3>
               </div>
-              <div className="p-6 bg-gradient-to-br from-green-50 to-blue-50 min-h-[300px] flex items-center justify-center">
-                <div className="text-center">
-                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Phone className="w-8 h-8 text-green-600" />
-                  </div>
-                  <h4 className="text-lg font-semibold text-gray-700 mb-2">WhatsApp Integration</h4>
-                  <p className="text-gray-500 text-sm">Replace with actual WhatsApp notification screenshot</p>
-                </div>
+              <div className="overflow-hidden">
+                <img 
+                  src={appointmentsImg} 
+                  alt="Appointment Management" 
+                  className="w-full h-auto object-cover"
+                />
               </div>
             </div>
 
-            {/* Analytics Dashboard Screenshot */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+            {/* Payments Screenshot */}
+            <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-shadow">
               <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Analytics Dashboard</h3>
+                <h3 className="text-lg font-semibold text-gray-900">Payments</h3>
               </div>
-              <div className="p-6 bg-gradient-to-br from-green-50 to-blue-50 min-h-[300px] flex items-center justify-center">
-                <div className="text-center">
-                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <BarChart3 className="w-8 h-8 text-green-600" />
-                  </div>
-                  <h4 className="text-lg font-semibold text-gray-700 mb-2">Revenue Analytics</h4>
-                  <p className="text-gray-500 text-sm">Replace with actual analytics dashboard screenshot</p>
-                </div>
+              <div className="overflow-hidden">
+                <img 
+                  src={paymentsImg} 
+                  alt="Payments Management" 
+                  className="w-full h-auto object-cover"
+                />
               </div>
             </div>
 
-            {/* Staff Management Screenshot */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+            {/* Reports Screenshot */}
+            <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-shadow">
               <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Staff Management</h3>
+                <h3 className="text-lg font-semibold text-gray-900">Reports</h3>
               </div>
-              <div className="p-6 bg-gradient-to-br from-green-50 to-blue-50 min-h-[300px] flex items-center justify-center">
-                <div className="text-center">
-                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Users className="w-8 h-8 text-green-600" />
-                  </div>
-                  <h4 className="text-lg font-semibold text-gray-700 mb-2">Staff Management</h4>
-                  <p className="text-gray-500 text-sm">Replace with actual staff management screenshot</p>
-                </div>
+              <div className="overflow-hidden">
+                <img 
+                  src={reportsImg} 
+                  alt="Reports Management" 
+                  className="w-full h-auto object-cover"
+                />
               </div>
             </div>
 
-            {/* Audio Reporting Screenshot */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+            {/* Voice Reporting Screenshot */}
+            <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-shadow">
               <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Audio Reporting</h3>
+                <h3 className="text-lg font-semibold text-gray-900">Voice Reporting</h3>
               </div>
-              <div className="p-6 bg-gradient-to-br from-green-50 to-blue-50 min-h-[300px] flex items-center justify-center">
-                <div className="text-center">
-                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Play className="w-8 h-8 text-green-600" />
-                  </div>
-                  <h4 className="text-lg font-semibold text-gray-700 mb-2">Voice Reporting</h4>
-                  <p className="text-gray-500 text-sm">Replace with actual audio reporting screenshot</p>
-                </div>
+              <div className="overflow-hidden">
+                <img 
+                  src={voiceReportingImg} 
+                  alt="Voice Reporting" 
+                  className="w-full h-auto object-cover"
+                />
               </div>
             </div>
 
@@ -546,7 +546,7 @@ const LandingPage = () => {
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">Email Us</h3>
-                  <p className="text-gray-600">support@betterclinic.in</p>
+                  <p className="text-gray-600">support@betterclinic.app</p>
                 </div>
               </div>
 
@@ -556,7 +556,7 @@ const LandingPage = () => {
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">Call Us</h3>
-                  <p className="text-gray-600">+91 98765 43210</p>
+                  <p className="text-gray-600">+91 8766742410</p>
                 </div>
               </div>
 
@@ -566,7 +566,7 @@ const LandingPage = () => {
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">Visit Us</h3>
-                  <p className="text-gray-600">123 Healthcare Street, Medical District, Mumbai 400001</p>
+                  <p className="text-gray-600">Sky Loft, opposite Golf Course, Shastrinagar, Yerawada, Pune, Maharashtra 411006, India</p>
                 </div>
               </div>
             </div>
@@ -647,11 +647,12 @@ const LandingPage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div className="col-span-1 md:col-span-2">
-              <div className="flex items-center space-x-2 mb-4">
-                <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">+</span>
-                </div>
-                <span className="text-2xl font-bold">Better Clinic</span>
+              <div className="mb-4">
+                <img 
+                  src={betterClinicLogo} 
+                  alt="Better Clinic Logo" 
+                  className="h-16 w-auto object-contain"
+                />
               </div>
               <p className="text-gray-400 mb-6 max-w-md">
                 Making doctors' lives easier and smarter with the simplest platform to use. 

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { api } from '../utils/api';
 import LoadingButton from '../components/LoadingButton';
+import betterClinicLogo from '../assets/betterclinic-logo.png';
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -72,6 +73,19 @@ const Login = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="bg-white p-8 rounded shadow-md w-full max-w-md space-y-4">
+        {/* Better Clinic Logo */}
+        <div className="flex justify-center mb-6 overflow-hidden">
+          <img 
+            src={betterClinicLogo} 
+            alt="Better Clinic Logo" 
+            className="w-full h-32"
+            style={{ 
+              transform: 'scale(1.1)',
+              objectFit: 'contain'
+            }}
+          />
+        </div>
+        
         <h2 className="text-2xl font-bold mb-4 text-center">Login</h2>
         {error && <div className="text-red-600 text-center">{error}</div>}
         
