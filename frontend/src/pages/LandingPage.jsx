@@ -27,6 +27,7 @@ import patientFilesImg from '../assets/patients-files.png';
 import reportsImg from '../assets/reports.png';
 import voiceReportingImg from '../assets/voice-reporting.png';
 import paymentsImg from '../assets/payments.png';
+import whatsappSmsImg from '../assets/whatsapp and sms .png';
 
 const LandingPage = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -323,19 +324,17 @@ const LandingPage = () => {
               </div>
             </div>
 
-            {/* Treatment Management Screenshot */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+            {/* WhatsApp & SMS Communication Screenshot */}
+            <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-shadow">
               <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Treatment Management</h3>
+                <h3 className="text-lg font-semibold text-gray-900">WhatsApp & SMS</h3>
               </div>
-              <div className="p-6 bg-gradient-to-br from-green-50 to-blue-50 min-h-[300px] flex items-center justify-center">
-                <div className="text-center">
-                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <FileText className="w-8 h-8 text-green-600" />
-                  </div>
-                  <h4 className="text-lg font-semibold text-gray-700 mb-2">Treatment Plans</h4>
-                  <p className="text-gray-500 text-sm">Replace with actual treatment management screenshot</p>
-                </div>
+              <div className="overflow-hidden">
+                <img 
+                  src={whatsappSmsImg} 
+                  alt="WhatsApp and SMS Communication" 
+                  className="w-full h-auto object-cover"
+                />
               </div>
             </div>
           </div>
