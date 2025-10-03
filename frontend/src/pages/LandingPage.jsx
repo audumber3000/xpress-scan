@@ -20,6 +20,7 @@ import {
   MapPin,
   ChevronDown
 } from 'lucide-react';
+import SEO from '../components/SEO';
 import betterClinicLogo from '../assets/betterclinic-logo.png';
 import dashboardPreview from '../assets/main dashboard.png';
 import appointmentsImg from '../assets/appointments.png';
@@ -32,6 +33,54 @@ import whatsappSmsImg from '../assets/whatsapp and sms .png';
 const LandingPage = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPricingAnnual, setIsPricingAnnual] = useState(false);
+
+  // Structured Data for SEO
+  const faqStructuredData = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Is Better Clinic secure for patient data?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, Better Clinic follows Indian data protection standards with enterprise-grade security measures, encrypted data storage, and regular security audits to protect patient information."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How does WhatsApp integration work?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Better Clinic seamlessly integrates with WhatsApp to send appointment reminders, test results, and important updates directly to your patients' WhatsApp numbers."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What kind of support do you provide?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "We offer 24/7 customer support via chat, email, and phone. Our Pro plan includes dedicated account management and priority support in Hindi and English."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does Better Clinic work on mobile devices?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, Better Clinic is fully responsive and works perfectly on tablets and smartphones. You can manage your clinic from anywhere, anytime."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How does audio reporting work?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Our voice-to-text technology allows you to record patient consultations and automatically generate reports, saving you time on documentation."
+        }
+      }
+    ]
+  };
 
   const features = [
     {
@@ -105,6 +154,13 @@ const LandingPage = () => {
 
   return (
     <div className="min-h-screen bg-white">
+      <SEO 
+        title="BetterClinic - Best Clinic Management Software for Doctors, Dentists & Radiologists"
+        description="Transform your medical practice with Better Clinic - India's leading clinic management software. Features patient management, WhatsApp integration, voice reporting, appointment scheduling, revenue analytics & more. Trusted by 250+ clinics. Start free trial!"
+        keywords="better clinic, better clinic software, clinic management software, medical clinic software, healthcare management system, patient management system, doctor appointment software, radiology clinic software, dental clinic software, physiotherapy clinic software, clinic EHR software India, medical practice management, clinic scheduling software, patient records software, hospital management software India, clinic automation software, best clinic software, medical billing software India, clinic reporting software, WhatsApp clinic notifications, voice to text medical reporting"
+        url="https://betterclinic.app/"
+        structuredData={faqStructuredData}
+      />
       {/* Navigation */}
       <nav className="fixed top-0 w-full bg-white/95 backdrop-blur-sm border-b border-gray-100 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -126,8 +182,9 @@ const LandingPage = () => {
 
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center space-x-8">
-              <a href="#features" className="text-gray-600 hover:text-green-600 transition-colors">Features</a>
+              <Link to="/features" className="text-gray-600 hover:text-green-600 transition-colors">Features</Link>
               <a href="#pricing" className="text-gray-600 hover:text-green-600 transition-colors">Pricing</a>
+              <Link to="/about" className="text-gray-600 hover:text-green-600 transition-colors">About</Link>
               <a href="#faq" className="text-gray-600 hover:text-green-600 transition-colors">FAQ</a>
               <a href="#contact" className="text-gray-600 hover:text-green-600 transition-colors">Contact</a>
             </div>
@@ -160,8 +217,9 @@ const LandingPage = () => {
         {isMenuOpen && (
           <div className="md:hidden bg-white border-t border-gray-100">
             <div className="px-4 py-4 space-y-4">
-              <a href="#features" className="block text-gray-600 hover:text-green-600 transition-colors">Features</a>
+              <Link to="/features" className="block text-gray-600 hover:text-green-600 transition-colors">Features</Link>
               <a href="#pricing" className="block text-gray-600 hover:text-green-600 transition-colors">Pricing</a>
+              <Link to="/about" className="block text-gray-600 hover:text-green-600 transition-colors">About</Link>
               <a href="#faq" className="block text-gray-600 hover:text-green-600 transition-colors">FAQ</a>
               <a href="#contact" className="block text-gray-600 hover:text-green-600 transition-colors">Contact</a>
               <div className="pt-4 border-t border-gray-100 space-y-2">
@@ -192,13 +250,15 @@ const LandingPage = () => {
 
             {/* Main Headline */}
             <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
-              One Click, No Headache
-              <span className="text-green-600 block">Clinic Made Simple</span>
+              <span className="block">Better Clinic Software</span>
+              <span className="text-green-600 block">Best Clinic Management Solution</span>
             </h1>
 
             {/* Sub-headline */}
             <p className="text-xl text-gray-600 mb-8 max-w-4xl mx-auto">
-              One platform, endless possibilities. We simplify clinics for Doctors, Dentists, Physios, and Radiologists, with powerful tools customized to each specialist's way of working.
+              India's #1 clinic management software for Doctors, Dentists, Radiologists, and Physiotherapists. 
+              Streamline patient management, appointments, payments, WhatsApp notifications, and voice reporting 
+              with our comprehensive medical practice management system. Trusted by 250+ healthcare professionals.
             </p>
 
             {/* CTA Buttons */}
@@ -662,26 +722,26 @@ const LandingPage = () => {
             <div>
               <h3 className="text-lg font-semibold mb-4">Product</h3>
               <ul className="space-y-2 text-gray-400">
-                <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
+                <li><Link to="/features" className="hover:text-white transition-colors">Features</Link></li>
                 <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Security</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Integrations</a></li>
+                <li><Link to="/about" className="hover:text-white transition-colors">About Us</Link></li>
+                <li><a href="#faq" className="hover:text-white transition-colors">FAQ</a></li>
               </ul>
             </div>
 
             <div>
               <h3 className="text-lg font-semibold mb-4">Support</h3>
               <ul className="space-y-2 text-gray-400">
-                <li><a href="#" className="hover:text-white transition-colors">Help Center</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Documentation</a></li>
                 <li><a href="#contact" className="hover:text-white transition-colors">Contact Us</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Status</a></li>
+                <li><Link to="/login" className="hover:text-white transition-colors">Login</Link></li>
+                <li><Link to="/signup" className="hover:text-white transition-colors">Sign Up</Link></li>
+                <li><Link to="/booking" className="hover:text-white transition-colors">Book Appointment</Link></li>
               </ul>
             </div>
           </div>
 
           <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
-            <p>&copy; 2024 Better Clinic. All rights reserved.</p>
+            <p>&copy; 2025 Better Clinic. All rights reserved. | Better Clinic Software - Best Clinic Management System in India</p>
           </div>
         </div>
       </footer>

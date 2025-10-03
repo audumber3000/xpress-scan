@@ -1,7 +1,7 @@
 {
-  "name": "BetterClinic - Radiology Clinic Management",
+  "name": "BetterClinic - Best Clinic Management Software for Healthcare Professionals",
   "short_name": "BetterClinic",
-  "description": "Professional radiology clinic management system for patient care and reporting",
+  "description": "India's leading clinic management software for doctors, dentists, radiologists & physiotherapists. Features patient management, WhatsApp integration, voice reporting, payments & analytics. Better clinic software for better healthcare.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

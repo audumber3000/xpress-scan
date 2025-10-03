@@ -24,6 +24,8 @@ import Calendar from "./pages/Calendar";
 import BookingPage from "./pages/BookingPage";
 import PatientFiles from "./pages/PatientFiles";
 import PatientProfile from "./pages/PatientProfile";
+import About from "./pages/About";
+import Features from "./pages/Features";
 
 // Components
 import Sidebar from "./components/Sidebar";
@@ -53,11 +55,12 @@ function AppContent() {
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/onboarding' || location.pathname === '/auth/callback';
   const isLandingPage = location.pathname === '/';
   const isBookingPage = location.pathname === '/booking';
+  const isPublicPage = location.pathname === '/about' || location.pathname === '/features';
 
   if (loading) return <div>Loading...</div>;
 
   // For auth pages, landing page, and booking page, render without sidebar
-  if (isAuthPage || isLandingPage || isBookingPage) {
+  if (isAuthPage || isLandingPage || isBookingPage || isPublicPage) {
     return (
       <>
         <Routes>
@@ -67,6 +70,8 @@ function AppContent() {
           <Route path="/onboarding" element={<ClinicOnboarding />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/booking" element={<BookingPage />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/features" element={<Features />} />
         </Routes>
         <ToastContainer
           position="top-right"
