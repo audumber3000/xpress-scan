@@ -17,34 +17,39 @@ from routes import auth
 from routes import payments
 from routes import whatsapp_config
 from services.template_service import TemplateService
+import logging
 
 app = FastAPI()
 
 # CORS setup - Explicit origins for production
+# Correct origins: only scheme + host (no paths)
 origins = [
-    # "http://localhost:3000",  # Docker frontend
-    # "http://localhost:5173",
-    # "http://localhost:5174", 
-    # "http://127.0.0.1:3000",  # Docker frontend alternative
-    # "http://127.0.0.1:5173",
-    # "http://127.0.0.1:5174",
-    "https://xpress-scan.vercel.app",  # Vercel frontend
-    "https://xpress-scan.onrender.com",  # Backend URL
-    "https://xpress-scan-frontend.vercel.app",  # Alternative Vercel URL
-    "https://xpress-scan-frontend.onrender.com",  # Alternative Render URL
-    "https://www.betterclinic.app",  # New production domain
-    "https://betterclinic.app",  # Alternative without www
-    "https://xpress-scan.onrender.com/auth/oauth"
+    "https://xpress-scan.vercel.app",
+    "https://xpress-scan-frontend.vercel.app",
+    "https://xpress-scan.onrender.com",
+    "https://xpress-scan-frontend.onrender.com",
+    "https://www.betterclinic.app",
+    "https://betterclinic.app",
+    "http://localhost:5173",   # dev
+    "http://127.0.0.1:5173",   # dev alternative
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # Use explicit origins instead of "*"
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["*"]
 )
+
+# tiny debug middleware to log preflight attempts
+@app.middleware("http")
+async def log_options_requests(request: Request, call_next):
+    if request.method == "OPTIONS":
+        origin = request.headers.get("origin", "<no-origin>")
+        logger.info(f"OPTIONS preflight received for path={request.url.path} origin={origin}")
+    return await call_next(request)
 
 # Mount static files for template assets
 app.mount("/public/templates/assets", StaticFiles(directory="templates/assets"), name="template-assets")
