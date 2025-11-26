@@ -34,6 +34,7 @@ origins = [
     "https://xpress-scan-frontend.onrender.com",  # Alternative Render URL
     "https://www.betterclinic.app",  # New production domain
     "https://betterclinic.app",  # Alternative without www
+    "https://xpress-scan.onrender.com/auth/oauth",
 ]
 
 app.add_middleware(
