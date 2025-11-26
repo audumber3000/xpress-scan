@@ -43,13 +43,7 @@ app.add_middleware(
     expose_headers=["*"]
 )
 
-# tiny debug middleware to log preflight attempts
-@app.middleware("http")
-async def log_options_requests(request: Request, call_next):
-    if request.method == "OPTIONS":
-        origin = request.headers.get("origin", "<no-origin>")
-        logger.info(f"OPTIONS preflight received for path={request.url.path} origin={origin}")
-    return await call_next(request)
+
 
 # Mount static files for template assets
 app.mount("/public/templates/assets", StaticFiles(directory="templates/assets"), name="template-assets")
