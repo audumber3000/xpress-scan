@@ -34,12 +34,12 @@ origins = [
     "https://xpress-scan-frontend.onrender.com",  # Alternative Render URL
     "https://www.betterclinic.app",  # New production domain
     "https://betterclinic.app",  # Alternative without www
-    "https://xpress-scan.onrender.com/auth/oauth",
+    "https://xpress-scan.onrender.com/auth/oauth"
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins='https://xpress-scan.vercel.app',  # Use explicit origins instead of "*"
+    allow_origins=origins,  # Use explicit origins instead of "*"
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
