@@ -257,54 +257,21 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
 
         {/* Branding */}
         <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'} h-16 mb-4`}>
-          <span className="bg-green-100 text-green-600 rounded-full p-2 flex-shrink-0">
-            <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
-              <style>
-                {`
-                  .scan-line { animation: scan-sweep 4.5s ease-in-out infinite; }
-                  
-                  @keyframes scan-sweep {
-                    0% { transform: translateY(10px); opacity: 0; }
-                    15% { opacity: 1; }
-                    35% { transform: translateY(-10px); opacity: 1; }
-                    50% { transform: translateY(-10px); opacity: 1; }
-                    65% { transform: translateY(10px); opacity: 1; }
-                    85% { opacity: 1; }
-                    100% { transform: translateY(10px); opacity: 0; }
-                  }
-                `}
-              </style>
-              
-              {/* Simple skeleton - bigger size */}
-              {/* Head */}
-              <circle cx="12" cy="5" r="2.5" fill="none" stroke="currentColor" strokeWidth="1.5"/>
-              
-              {/* Spine */}
-              <line x1="12" y1="7.5" x2="12" y2="19" stroke="currentColor" strokeWidth="1.5"/>
-              
-              {/* Ribs - simple curved lines */}
-              <path d="M12 9c-2.5 0-4 1.5-4 1.5" stroke="currentColor" strokeWidth="1" fill="none"/>
-              <path d="M12 9c2.5 0 4 1.5 4 1.5" stroke="currentColor" strokeWidth="1" fill="none"/>
-              <path d="M12 11c-3 0-4.5 1.5-4.5 1.5" stroke="currentColor" strokeWidth="1" fill="none"/>
-              <path d="M12 11c3 0 4.5 1.5 4.5 1.5" stroke="currentColor" strokeWidth="1" fill="none"/>
-              <path d="M12 13c-3 0-4.5 1.5-4.5 1.5" stroke="currentColor" strokeWidth="1" fill="none"/>
-              <path d="M12 13c3 0 4.5 1.5 4.5 1.5" stroke="currentColor" strokeWidth="1" fill="none"/>
-              <path d="M12 15c-2.5 0-4 1.5-4 1.5" stroke="currentColor" strokeWidth="1" fill="none"/>
-              <path d="M12 15c2.5 0 4 1.5 4 1.5" stroke="currentColor" strokeWidth="1" fill="none"/>
-              
-              {/* Arms */}
-              <line x1="12" y1="10" x2="7" y2="13" stroke="currentColor" strokeWidth="1.5"/>
-              <line x1="12" y1="10" x2="17" y2="13" stroke="currentColor" strokeWidth="1.5"/>
-              
-              {/* Legs */}
-              <line x1="12" y1="19" x2="9" y2="22" stroke="currentColor" strokeWidth="1.5"/>
-              <line x1="12" y1="19" x2="15" y2="22" stroke="currentColor" strokeWidth="1.5"/>
-              
-              {/* Scanning line - moves up and down */}
-              <line x1="6" y1="12" x2="18" y2="12" 
-                    stroke="currentColor" strokeWidth="2" opacity="0.8" className="scan-line"/>
-            </svg>
-          </span>
+          {/* Logo: Show clinic logo if available, otherwise tooth icon */}
+          {clinicData?.logo ? (
+            <img 
+              src={clinicData.logo} 
+              alt={clinicData.name || "Clinic Logo"} 
+              className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+            />
+          ) : (
+            <span className="bg-green-100 text-green-600 rounded-full p-2 flex-shrink-0">
+              {/* Simple Tooth Icon - Fallback */}
+              <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C10.34 2 9 3.34 9 5C9 5.87 9.32 6.67 9.84 7.28C8.78 8.13 8 9.46 8 11C8 11.7 8.13 12.36 8.37 12.97C7.55 13.23 6.87 13.77 6.42 14.47C5.97 15.17 5.76 16 5.76 16.84C5.76 18.58 7.18 20 8.92 20C10.2 20 11.3 19.23 11.78 18.13C11.92 18.21 12.07 18.26 12.22 18.26C12.37 18.26 12.52 18.21 12.66 18.13C13.14 19.23 14.24 20 15.52 20C17.26 20 18.68 18.58 18.68 16.84C18.68 16 18.47 15.17 18.02 14.47C17.57 13.77 16.89 13.23 16.07 12.97C16.31 12.36 16.44 11.7 16.44 11C16.44 9.46 15.66 8.13 14.6 7.28C15.12 6.67 15.44 5.87 15.44 5C15.44 3.34 14.1 2 12.44 2H12Z"/>
+              </svg>
+            </span>
+          )}
           {!collapsed && (
             <div className="flex flex-col min-w-0 flex-1">
               <span className="text-3xl font-extrabold text-black tracking-tight" style={{ fontFamily: 'serif', letterSpacing: '-0.03em' }}>
@@ -353,8 +320,8 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
           )}
         </div>
 
-        {/* Main Nav */}
-        <nav className="flex flex-col gap-1 mb-6">
+        {/* Main Nav with Scroll - More space */}
+        <nav className="flex-1 overflow-y-auto flex flex-col gap-1 mb-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
           {navItems.map((item) => (
             <Link 
               key={item.name} 
@@ -370,30 +337,95 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
           ))}
         </nav>
 
-        {/* User Profile & Sign Out */}
-        <div className="mt-auto flex flex-col gap-2">
-          <div 
-            className={`flex items-center gap-3 p-3 rounded-lg bg-gray-50 cursor-pointer hover:bg-green-50 transition ${collapsed ? 'justify-center' : ''}`} 
-            onClick={() => navigate("/doctor-profile")}
-            title={collapsed ? `${userName} - ${userEmail}` : ''}
-          >
-            <img src={userAvatar} alt="User" className="w-10 h-10 rounded-full flex-shrink-0" />
-            {!collapsed && (
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-gray-900 text-sm">{userName}</div>
-                <div className="text-xs text-gray-500 truncate max-w-[140px]" title={userEmail}>{userEmail}</div>
-                <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border ${roleInfo.color} mt-1`}>
-                  <span className="text-gray-600">Role:</span>
-                  {roleInfo.icon}
-                  {roleInfo.label}
+        {/* Combined Upgrade & User Profile - No extra card wrapper */}
+        <div className="flex flex-col pt-3 border-t border-gray-200">
+          {/* Collapsed view - Simple icon button */}
+          {collapsed && (
+            <>
+              <button
+                onClick={() => navigate("/subscription")}
+                className="relative bg-orange-500 hover:bg-orange-600 rounded-lg p-3 transition-all mb-2"
+                title="Upgrade - Trial ends in 7 days"
+              >
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>
+              </button>
+              <div 
+                className="flex items-center justify-center p-2 rounded-lg bg-gray-50 cursor-pointer hover:bg-green-50 transition" 
+                onClick={() => navigate("/doctor-profile")}
+                title={`${userName} - ${userEmail}`}
+              >
+                <img src={userAvatar} alt="User" className="w-10 h-10 rounded-full flex-shrink-0" />
+              </div>
+            </>
+          )}
+
+          {/* Expanded sections - Cleaner design */}
+          {!collapsed && (
+            <>
+              {/* Subscription Section */}
+              <div className="px-3 py-2.5 bg-gray-50 rounded-lg mb-2">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                    <span className="text-sm font-semibold text-gray-800">Subscription</span>
+                  </div>
+                  <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-200">Free (current)</span>
+                </div>
+
+                {/* Tutorial Link */}
+                <button
+                  onClick={() => window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ', '_blank')}
+                  className="w-full flex items-center gap-2 text-sm text-gray-700 hover:text-orange-600 transition group mb-3"
+                >
+                  <div className="w-7 h-7 bg-red-100 rounded-lg flex items-center justify-center group-hover:bg-red-200 transition flex-shrink-0">
+                    <svg className="w-3.5 h-3.5 text-red-600" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
+                  </div>
+                  <span className="text-xs font-medium">Watch tutorial</span>
+                </button>
+
+                {/* Upgrade Button */}
+                <button 
+                  onClick={() => navigate("/subscription")}
+                  className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm shadow-sm"
+                >
+                  Upgrade to Pro
+                </button>
+
+                {/* Trial notification - Only show if on trial */}
+                {/* TODO: Replace this condition with actual subscription status check */}
+                {true && (
+                  <p className="text-xs text-amber-700 text-center mt-2">
+                    Trial ends in 7 days
+                  </p>
+                )}
+              </div>
+
+              {/* User Profile Section */}
+              <div 
+                className="px-3 py-2.5 bg-gray-50 rounded-lg cursor-pointer hover:bg-green-50 transition"
+                onClick={() => navigate("/doctor-profile")}
+                title="Click to view profile & sign out"
+              >
+                <div className="flex items-center gap-2.5">
+                  <img src={userAvatar} alt="User" className="w-9 h-9 rounded-full flex-shrink-0 border-2 border-gray-200" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-gray-900 text-sm truncate">{userName}</div>
+                    <div className="text-xs text-gray-500 truncate" title={userEmail}>{userEmail}</div>
+                    <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium border ${roleInfo.color} mt-0.5`}>
+                      {roleInfo.icon}
+                      <span>{roleInfo.label}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-            )}
-          </div>
-          {!collapsed && (
-            <button onClick={handleSignOut} className="w-full py-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg font-semibold transition text-sm">
-              Sign Out
-            </button>
+            </>
           )}
         </div>
       </aside>

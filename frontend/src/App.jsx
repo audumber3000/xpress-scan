@@ -26,6 +26,7 @@ import PatientFiles from "./pages/PatientFiles";
 import PatientProfile from "./pages/PatientProfile";
 import About from "./pages/About";
 import Features from "./pages/Features";
+import DentalChartDemo from "./pages/DentalChartDemo";
 
 // Components
 import Sidebar from "./components/Sidebar";
@@ -72,6 +73,7 @@ function AppContent() {
           <Route path="/booking" element={<BookingPage />} />
           <Route path="/about" element={<About />} />
           <Route path="/features" element={<Features />} />
+          <Route path="/dental-demo" element={<DentalChartDemo />} />
         </Routes>
         <ToastContainer
           position="top-right"

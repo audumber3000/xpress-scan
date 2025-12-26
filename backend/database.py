@@ -1,9 +1,25 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-# Replace with your actual Supabase DB URL
-SQLALCHEMY_DATABASE_URL = "postgresql://postgres.awdlcycjawoawdotzxpe:Wcz5SUoCECFLJYLQ@aws-0-ap-south-1.pooler.supabase.com:6543/postgres"
+# Check if running in desktop/offline mode or cloud mode
+# Desktop mode uses local PostgreSQL, cloud mode uses Supabase
+USE_LOCAL_DB = os.environ.get("USE_LOCAL_DB", "false").lower() == "true"
 
+if USE_LOCAL_DB:
+    # Local PostgreSQL for desktop app (offline mode)
+    LOCAL_DB_HOST = os.environ.get("LOCAL_DB_HOST", "localhost")
+    LOCAL_DB_PORT = os.environ.get("LOCAL_DB_PORT", "5432")
+    LOCAL_DB_NAME = os.environ.get("LOCAL_DB_NAME", "bdent")
+    LOCAL_DB_USER = os.environ.get("LOCAL_DB_USER", "postgres")
+    LOCAL_DB_PASSWORD = os.environ.get("LOCAL_DB_PASSWORD", "postgres")
+    SQLALCHEMY_DATABASE_URL = f"postgresql://{LOCAL_DB_USER}:{LOCAL_DB_PASSWORD}@{LOCAL_DB_HOST}:{LOCAL_DB_PORT}/{LOCAL_DB_NAME}"
+else:
+    # Supabase cloud database (online mode)
+    SQLALCHEMY_DATABASE_URL = os.environ.get(
+        "DATABASE_URL",
+        "postgresql://postgres.awdlcycjawoawdotzxpe:Wcz5SUoCECFLJYLQ@aws-0-ap-south-1.pooler.supabase.com:6543/postgres"
+    )
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

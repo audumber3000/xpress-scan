@@ -1,24 +1,27 @@
-from supabase import create_client, Client
 import os
 
-# Try to get from environment variables first, then use provided credentials
+# Check if we're in offline/desktop mode (no Supabase)
+OFFLINE_MODE = os.getenv("OFFLINE_MODE", "false").lower() == "true"
+
+# Try to get from environment variables
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
-
-# Storage credentials provided by user
 SUPABASE_STORAGE_ACCESS_ID = os.getenv("SUPABASE_STORAGE_ACCESS_ID")
 SUPABASE_STORAGE_SECRET_KEY = os.getenv("SUPABASE_STORAGE_SECRET_KEY")
 
-# Validate required environment variables
-if not SUPABASE_URL or not SUPABASE_ANON_KEY or not SUPABASE_SERVICE_KEY:
-    raise ValueError("Missing required Supabase environment variables: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_KEY")
+# Only initialize Supabase if not in offline mode and credentials are available
+supabase = None
+supabase_storage = None
 
-if not SUPABASE_STORAGE_ACCESS_ID or not SUPABASE_STORAGE_SECRET_KEY:
-    raise ValueError("Missing required Supabase storage environment variables: SUPABASE_STORAGE_ACCESS_ID, SUPABASE_STORAGE_SECRET_KEY")
-
-# Use anon key for OAuth verification
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-
-# Use service key for storage operations
-supabase_storage: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY) 
+if not OFFLINE_MODE and SUPABASE_URL and SUPABASE_ANON_KEY and SUPABASE_SERVICE_KEY:
+    try:
+        from supabase import create_client, Client
+        supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+        supabase_storage = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    except Exception as e:
+        print(f"Warning: Could not initialize Supabase: {e}")
+        OFFLINE_MODE = True
+else:
+    OFFLINE_MODE = True
+    print("Running in OFFLINE MODE - Supabase disabled") 

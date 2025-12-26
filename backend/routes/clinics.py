@@ -40,16 +40,25 @@ def update_clinic(clinic_id: int, clinic: ClinicCreate, db: Session = Depends(ge
     # Only allow access to user's own clinic
     if current_user.clinic_id != clinic_id:
         raise HTTPException(status_code=403, detail="Access denied")
-    
+
     db_clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
     if not db_clinic:
         raise HTTPException(status_code=404, detail="Clinic not found")
-    
+
+    print(f"🔄 Updating clinic {clinic_id}")
+    print(f"📤 Received data: {clinic.dict()}")
+
+    # Update fields
     for field, value in clinic.dict().items():
+        print(f"📝 Setting {field} = {value}")
         setattr(db_clinic, field, value)
-    
+
     db.commit()
     db.refresh(db_clinic)
+
+    print(f"✅ Clinic updated. New timings: {db_clinic.timings}")
+    print(f"✅ Full updated clinic: {db_clinic.__dict__}")
+
     return db_clinic
 
 @router.delete("/{clinic_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -91,11 +100,30 @@ def get_my_clinic(db: Session = Depends(get_db), current_user = Depends(get_curr
     """Get current user's clinic information"""
     if not current_user.clinic_id:
         raise HTTPException(status_code=404, detail="User not associated with any clinic")
-    
+
     clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
     if not clinic:
         raise HTTPException(status_code=404, detail="Clinic not found")
-    
+
+    print(f"🏥 Fetching clinic {current_user.clinic_id}")
+    print(f"📊 Current timings in DB: {clinic.timings}")
+
+    # Ensure timings has a default value if null
+    if not clinic.timings:
+        print("⚠️ No timings found, setting defaults")
+        clinic.timings = {
+            'monday': {'open': '08:00', 'close': '20:00', 'closed': False},
+            'tuesday': {'open': '08:00', 'close': '20:00', 'closed': False},
+            'wednesday': {'open': '08:00', 'close': '20:00', 'closed': False},
+            'thursday': {'open': '08:00', 'close': '20:00', 'closed': False},
+            'friday': {'open': '08:00', 'close': '20:00', 'closed': False},
+            'saturday': {'open': '08:00', 'close': '20:00', 'closed': False},
+            'sunday': {'open': '08:00', 'close': '20:00', 'closed': True}
+        }
+    else:
+        print("✅ Using existing timings from DB")
+
+    print(f"📤 Returning timings: {clinic.timings}")
     return clinic
 
 @router.delete("/{clinic_id}/delete-all", status_code=status.HTTP_204_NO_CONTENT)
@@ -115,7 +143,7 @@ def delete_clinic_and_all_data(clinic_id: int, db: Session = Depends(get_db), cu
     
     try:
         # Import all models needed for deletion
-        from models import Patient, Report, ScanType, ReferringDoctor, User
+        from models import Patient, Report, TreatmentType, ReferringDoctor, User
         
         # Delete all patients
         patients_deleted = db.query(Patient).filter(Patient.clinic_id == clinic_id).delete()
@@ -123,8 +151,8 @@ def delete_clinic_and_all_data(clinic_id: int, db: Session = Depends(get_db), cu
         # Delete all reports
         reports_deleted = db.query(Report).filter(Report.clinic_id == clinic_id).delete()
         
-        # Delete all scan types
-        scan_types_deleted = db.query(ScanType).filter(ScanType.clinic_id == clinic_id).delete()
+        # Delete all treatment types
+        treatment_types_deleted = db.query(TreatmentType).filter(TreatmentType.clinic_id == clinic_id).delete()
         
         # Delete all referring doctors
         referring_doctors_deleted = db.query(ReferringDoctor).filter(ReferringDoctor.clinic_id == clinic_id).delete()

@@ -10,47 +10,146 @@ const AuthCallback = () => {
 
   useEffect(() => {
     const handleAuthCallback = async () => {
+      console.log('Auth callback URL:', window.location.href);
+      console.log('URL hash:', window.location.hash);
+      
+      // Set a timeout to prevent getting stuck
+      const timeout = setTimeout(() => {
+        console.log('Auth callback timeout - redirecting to login');
+        setLoading(false);
+        setError('Authentication timed out. Please try again.');
+      }, 10000); // 10 second timeout
+
       try {
-        // Get the session from the URL hash/fragment
-        const { data: { session }, error } = await supabase.auth.getSession();
+        console.log('Starting auth callback...');
         
-        if (error) {
-          console.error('Auth callback error:', error);
-          setError('Authentication failed');
-          setLoading(false);
-          return;
-        }
-
-        if (session) {
-  
+        // Check if we have hash parameters from OAuth
+        const hash = window.location.hash;
+        if (hash && hash.includes('access_token')) {
+          console.log('OAuth redirect detected, parsing hash...');
           
-          // Send session data to backend
-          const data = await api.post('/auth/oauth', { 
-            access_token: session.access_token,
-            user_data: {
-              email: session.user.email,
-              id: session.user.id,
-              user_metadata: session.user.user_metadata
+          const hashParams = new URLSearchParams(hash.substring(1));
+          const accessToken = hashParams.get('access_token');
+          const refreshToken = hashParams.get('refresh_token');
+          const error = hashParams.get('error');
+          const errorDescription = hashParams.get('error_description');
+          
+          console.log('Hash params:', { accessToken: accessToken ? 'found' : 'missing', refreshToken: refreshToken ? 'found' : 'missing', error });
+          
+          if (error) {
+            clearTimeout(timeout);
+            console.error('OAuth error:', error, errorDescription);
+            setError(`OAuth Error: ${errorDescription || error}`);
+            setLoading(false);
+            return;
+          }
+          
+          if (accessToken) {
+            console.log('Setting session with access token...');
+            try {
+              const { data: { session }, error: sessionError } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken || ''
+              });
+              
+              if (sessionError) {
+                clearTimeout(timeout);
+                console.error('Session setting error:', sessionError);
+                setError(`Session error: ${sessionError.message}`);
+                setLoading(false);
+                return;
+              }
+              
+              if (session) {
+                console.log('Session established, sending to backend...');
+                
+                try {
+                  const data = await api.post('/auth/oauth', { 
+                    access_token: session.access_token,
+                    user_data: {
+                      email: session.user.email,
+                      id: session.user.id,
+                      user_metadata: session.user.user_metadata
+                    }
+                  });
+
+                  console.log('Backend response:', data);
+                  clearTimeout(timeout);
+
+                  // Store auth data
+                  localStorage.setItem('auth_token', data.token);
+                  localStorage.setItem('user', JSON.stringify(data.user));
+                  
+                  // Clear the hash to prevent re-processing
+                  window.location.hash = '';
+                  
+                  // Redirect based on user state
+                  if (!data.user.clinic_id) {
+                    console.log('Redirecting to onboarding...');
+                    navigate('/onboarding');
+                  } else {
+                    console.log('Redirecting to dashboard...');
+                    navigate('/dashboard');
+                  }
+                } catch (backendError) {
+                  clearTimeout(timeout);
+                  console.error('Backend error:', backendError);
+                  setError(`Backend error: ${backendError.message || 'Failed to authenticate with backend'}`);
+                  setLoading(false);
+                }
+              } else {
+                clearTimeout(timeout);
+                setError('Failed to establish session');
+                setLoading(false);
+              }
+            } catch (sessionError) {
+              clearTimeout(timeout);
+              console.error('Session creation error:', sessionError);
+              setError(`Session creation failed: ${sessionError.message}`);
+              setLoading(false);
             }
-          });
-
-          // Store auth data
-          localStorage.setItem('auth_token', data.token);
-          localStorage.setItem('user', JSON.stringify(data.user));
-          
-          // Redirect based on user state
-          if (!data.user.clinic_id) {
-            navigate('/onboarding');
           } else {
-            navigate('/dashboard');
+            clearTimeout(timeout);
+            setError('No access token found in OAuth callback');
+            setLoading(false);
           }
         } else {
-          setError('No session found');
-          setLoading(false);
+          // Try to get existing session
+          console.log('No OAuth hash, checking existing session...');
+          const { data: { session }, error } = await supabase.auth.getSession();
+          
+          clearTimeout(timeout);
+          
+          if (error) {
+            console.error('Session error:', error);
+            setError(`Authentication failed: ${error.message}`);
+            setLoading(false);
+            return;
+          }
+
+          if (session) {
+            console.log('Existing session found, redirecting...');
+            // User is already logged in, redirect to appropriate page
+            const userStr = localStorage.getItem('user');
+            if (userStr) {
+              const user = JSON.parse(userStr);
+              if (!user.clinic_id) {
+                navigate('/onboarding');
+              } else {
+                navigate('/dashboard');
+              }
+            } else {
+              navigate('/dashboard');
+            }
+          } else {
+            setError('No authentication session found');
+            setLoading(false);
+          }
         }
       } catch (error) {
+        clearTimeout(timeout);
         console.error('Auth callback error:', error);
-        setError('Authentication failed');
+        setError(`Authentication failed: ${error.message || 'Unknown error'}`);
         setLoading(false);
       }
     };

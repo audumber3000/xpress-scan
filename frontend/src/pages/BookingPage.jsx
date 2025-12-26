@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { 
-  Calendar, 
-  Clock, 
-  User, 
-  Phone, 
-  Mail, 
+import {
+  Calendar,
+  Clock,
+  User,
+  Phone,
+  Mail,
   MapPin,
   CheckCircle,
-  ArrowLeft
+  ArrowLeft,
+  Info
 } from "lucide-react";
 
 const BookingPage = () => {
@@ -21,6 +22,23 @@ const BookingPage = () => {
     phone: '+1 (555) 123-4567',
     hours: 'Mon-Fri: 8:00 AM - 8:00 PM, Sat: 9:00 AM - 5:00 PM, Sun: Closed'
   });
+
+  // Clinic timings for validation
+  const [clinicTimings, setClinicTimings] = useState({
+    monday: { open: '08:00', close: '20:00', closed: false },
+    tuesday: { open: '08:00', close: '20:00', closed: false },
+    wednesday: { open: '08:00', close: '20:00', closed: false },
+    thursday: { open: '08:00', close: '20:00', closed: false },
+    friday: { open: '08:00', close: '20:00', closed: false },
+    saturday: { open: '09:00', close: '17:00', closed: false },
+    sunday: { open: '00:00', close: '00:00', closed: true }
+  });
+
+  // Existing appointments for conflict checking
+  const [existingAppointments, setExistingAppointments] = useState([]);
+  const [loadingAppointments, setLoadingAppointments] = useState(false);
+  const [nextAvailableSlot, setNextAvailableSlot] = useState(null);
+  const [loadingNextSlot, setLoadingNextSlot] = useState(false);
   const [formData, setFormData] = useState({
     patientName: '',
     patientEmail: '',
@@ -36,39 +54,197 @@ const BookingPage = () => {
     doctorName: ''
   });
 
+  // Parse clinic hours string into structured format
+  const parseClinicHours = (hoursString) => {
+    const timings = {
+      monday: { open: '08:00', close: '20:00', closed: false },
+      tuesday: { open: '08:00', close: '20:00', closed: false },
+      wednesday: { open: '08:00', close: '20:00', closed: false },
+      thursday: { open: '08:00', close: '20:00', closed: false },
+      friday: { open: '08:00', close: '20:00', closed: false },
+      saturday: { open: '09:00', close: '17:00', closed: false },
+      sunday: { open: '00:00', close: '00:00', closed: true }
+    };
+
+    if (!hoursString) return timings;
+
+    // Parse hours string like "Mon-Fri: 8:00 AM - 8:00 PM, Sat: 9:00 AM - 5:00 PM, Sun: Closed"
+    const parts = hoursString.split(',').map(p => p.trim());
+
+    for (const part of parts) {
+      if (part.includes('Closed') || part.includes('closed')) {
+        // Handle closed days
+        if (part.includes('Sun')) {
+          timings.sunday.closed = true;
+        } else if (part.includes('Sat')) {
+          timings.saturday.closed = true;
+        }
+      } else {
+        // Parse time ranges
+        const [days, timeRange] = part.split(':').map(p => p.trim());
+        if (timeRange && timeRange.includes('-')) {
+          const [open, close] = timeRange.split('-').map(t => t.trim());
+
+          // Convert to 24-hour format
+          const convertTo24Hour = (timeStr) => {
+            const clean = timeStr.replace(/AM|PM/gi, '').trim();
+            const [hours, minutes] = clean.split(':').map(Number);
+            const isPM = timeStr.toUpperCase().includes('PM');
+
+            let hour24 = hours;
+            if (isPM && hours !== 12) hour24 += 12;
+            if (!isPM && hours === 12) hour24 = 0;
+
+            return `${hour24.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0') || '00'}`;
+          };
+
+          const open24 = convertTo24Hour(open);
+          const close24 = convertTo24Hour(close);
+
+          if (days.includes('Mon-Fri')) {
+            ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'].forEach(day => {
+              timings[day].open = open24;
+              timings[day].close = close24;
+            });
+          } else if (days.includes('Sat')) {
+            timings.saturday.open = open24;
+            timings.saturday.close = close24;
+          }
+        }
+      }
+    }
+
+    return timings;
+  };
+
+  // Check if selected time is within clinic operating hours
+  const isTimeWithinOperatingHours = (date, time) => {
+    const dateObj = new Date(date);
+    const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+    const dayTimings = clinicTimings[dayName];
+
+    // If clinic is closed on this day
+    if (!dayTimings || dayTimings.closed) {
+      return { valid: false, message: `Clinic is closed on ${dayName.charAt(0).toUpperCase() + dayName.slice(1)}.` };
+    }
+
+    const [selectedHour, selectedMinute] = time.split(':').map(Number);
+    const selectedTimeInMinutes = selectedHour * 60 + selectedMinute;
+
+    const [openHour, openMinute] = dayTimings.open.split(':').map(Number);
+    const [closeHour, closeMinute] = dayTimings.close.split(':').map(Number);
+    const openTimeInMinutes = openHour * 60 + openMinute;
+    const closeTimeInMinutes = closeHour * 60 + closeMinute;
+
+    if (selectedTimeInMinutes < openTimeInMinutes) {
+      return {
+        valid: false,
+        message: `Clinic opens at ${dayTimings.open}. Selected time ${time} is too early.`
+      };
+    }
+
+    if (selectedTimeInMinutes >= closeTimeInMinutes) {
+      return {
+        valid: false,
+        message: `Clinic closes at ${dayTimings.close}. Selected time ${time} is too late.`
+      };
+    }
+
+    return { valid: true };
+  };
+
+  // Get next available slot from backend API
+  const getNextAvailableSlot = async (date, durationHours = 1) => {
+    const clinicId = searchParams.get('clinic');
+    if (!clinicId || !date) return null;
+
+    try {
+      console.log(`🎯 Getting next available slot for ${date}, duration: ${durationHours} hours, clinic: ${clinicId}`);
+      const response = await fetch(
+        `http://localhost:8000/appointments/public/next-slot?clinic_id=${clinicId}&date=${date}&duration=${durationHours * 60}`,
+        {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+
+      if (!response.ok) {
+        console.error('Failed to get next slot:', response.statusText);
+        return null;
+      }
+
+      const result = await response.json();
+      console.log('✅ Next slot result:', result);
+
+      if (result.next_slot) {
+        return result.next_slot;
+      } else {
+        console.log(`❌ No available slots: ${result.message}`);
+        return null;
+      }
+    } catch (error) {
+      console.error('❌ Error getting next slot:', error);
+      return null;
+    }
+  };
+
   useEffect(() => {
-    // Get doctor and clinic information from URL parameters
-    const doctorId = searchParams.get('doctor');
-    const doctorName = searchParams.get('name');
-    const clinicName = searchParams.get('clinic');
+    // Get clinic information from URL parameters
+    const clinicId = searchParams.get('clinic');
+    const clinicName = searchParams.get('name');
     const clinicAddress = searchParams.get('address');
     const clinicPhone = searchParams.get('phone');
     const clinicHours = searchParams.get('hours');
-    
+
     console.log("BookingPage URL Parameters:");
-    console.log("doctorId:", doctorId);
-    console.log("doctorName:", doctorName);
+    console.log("clinicId:", clinicId);
     console.log("clinicName:", clinicName);
     console.log("clinicAddress:", clinicAddress);
     console.log("clinicPhone:", clinicPhone);
     console.log("clinicHours:", clinicHours);
-    
-    if (doctorId && doctorName) {
+
+    if (clinicId && clinicName) {
       setDoctorInfo(prev => ({
         ...prev,
-        name: doctorName,
-        clinicName: clinicName || prev.clinicName,
+        name: 'Clinic Staff', // Default since we're booking by clinic
+        clinicName: clinicName,
         address: clinicAddress || prev.address,
         phone: clinicPhone || prev.phone,
         hours: clinicHours || prev.hours
       }));
+
+      // Parse clinic hours into structured format
+      if (clinicHours) {
+        const parsedTimings = parseClinicHours(clinicHours);
+        setClinicTimings(parsedTimings);
+        console.log("Parsed clinic timings:", parsedTimings);
+      }
+
       setFormData(prev => ({
         ...prev,
-        doctorId: doctorId,
-        doctorName: doctorName
+        clinicId: clinicId,
+        doctorId: '', // No specific doctor for clinic booking
+        doctorName: 'Clinic Staff'
       }));
     }
   }, [searchParams]);
+
+  // Fetch appointments and next slot when date changes
+  useEffect(() => {
+    const clinicId = searchParams.get('clinic');
+    if (formData.date && clinicId) {
+      fetchExistingAppointments(formData.date);
+      fetchNextAvailableSlot(formData.date, parseFloat(formData.duration));
+    }
+  }, [formData.date, formData.duration, searchParams]);
+
+  // Function to fetch next available slot
+  const fetchNextAvailableSlot = async (date, duration) => {
+    setLoadingNextSlot(true);
+    const slot = await getNextAvailableSlot(date, duration);
+    setNextAvailableSlot(slot);
+    setLoadingNextSlot(false);
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -78,11 +254,82 @@ const BookingPage = () => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Here you would typically send the data to your backend
-    console.log('Booking submitted:', formData);
-    setCurrentStep(3); // Show success page
+
+    const selectedDate = formData.date;
+    const selectedTime = formData.time;
+    const durationMinutes = parseFloat(formData.duration) * 60;
+
+    // 1. Validate against clinic operating hours
+    const { valid: clinicHoursValid, message: clinicHoursMessage } = isTimeWithinOperatingHours(selectedDate, selectedTime);
+    if (!clinicHoursValid) {
+      alert(`⚠️ INVALID TIME: ${clinicHoursMessage}`);
+      return;
+    }
+
+    let finalStartTime = selectedTime;
+
+    if (!finalStartTime) {
+      // Auto-assign next available slot if time is not provided
+      const nextSlot = await getNextAvailableSlot(selectedDate, parseFloat(formData.duration));
+      if (nextSlot) {
+        const confirmAuto = window.confirm(`No time selected. Auto-assigning next available slot: ${nextSlot}. Continue?`);
+        if (!confirmAuto) return;
+        finalStartTime = nextSlot;
+        setFormData(prev => ({ ...prev, time: finalStartTime })); // Update the form
+      } else {
+        alert('No available time slots for the selected date and duration within clinic hours.');
+        return;
+      }
+    }
+
+    // Calculate end time based on finalStartTime and duration
+    const [startHour, startMinute] = finalStartTime.split(':').map(Number);
+    const endTimeInMinutes = (startHour * 60 + startMinute) + durationMinutes;
+    const endHour = Math.floor(endTimeInMinutes / 60);
+    const endMinute = endTimeInMinutes % 60;
+    const finalEndTime = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
+
+    // Create appointment via public API
+    try {
+      const appointmentData = {
+        patient_name: formData.patientName,
+        patient_email: formData.patientEmail,
+        patient_phone: formData.patientPhone,
+        treatment: formData.treatment,
+        appointment_date: selectedDate,
+        start_time: finalStartTime,
+        end_time: finalEndTime,
+        duration: parseInt(durationMinutes),
+        status: 'confirmed',
+        clinic_id: parseInt(formData.clinicId)
+      };
+
+      console.log('📤 Creating appointment:', appointmentData);
+
+      const response = await fetch('http://localhost:8000/appointments/public', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(appointmentData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+        throw new Error(errorData.detail || `Failed to create appointment: ${response.statusText}`);
+      }
+
+      const createdAppointment = await response.json();
+      console.log('✅ Appointment created:', createdAppointment);
+
+      alert('🎉 Appointment booked successfully!');
+      setCurrentStep(3); // Show success page
+    } catch (error) {
+      console.error('❌ Error creating appointment:', error);
+      alert(`Failed to book appointment: ${error.message}`);
+    }
   };
 
   const durationOptions = [
@@ -104,6 +351,125 @@ const BookingPage = () => {
     'Consultation',
     'Follow-up'
   ];
+
+  // Fetch existing appointments for the clinic and date (public endpoint)
+  const fetchExistingAppointments = async (date) => {
+    const clinicId = searchParams.get('clinic');
+    if (!clinicId || !date) {
+      console.log('Missing clinicId or date:', { clinicId, date });
+      return;
+    }
+
+    try {
+      setLoadingAppointments(true);
+      console.log('🔄 Fetching appointments for date:', date, 'clinic:', clinicId);
+
+      // Use public endpoint (no authentication required) - now by clinic instead of doctor
+      const response = await fetch(`http://localhost:8000/appointments/public?date_from=${date}&date_to=${date}&clinic_id=${clinicId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        console.error('❌ Failed to fetch appointments:', response.status, response.statusText);
+        setExistingAppointments([]);
+        return;
+      }
+
+      const appointments = await response.json();
+      console.log('✅ Fetched appointments:', appointments);
+      console.log('📊 Total appointments for this clinic/date:', appointments.length);
+      setExistingAppointments(appointments || []);
+    } catch (error) {
+      console.error('❌ Error fetching appointments:', error);
+      setExistingAppointments([]);
+    } finally {
+      setLoadingAppointments(false);
+    }
+  };
+
+  // Check if a time slot conflicts with existing appointments
+  const checkTimeConflict = (date, startTime, endTime, excludeAppointmentId = null) => {
+    const targetDate = new Date(date).toISOString().split('T')[0];
+    console.log(`🔍 Checking conflicts for ${targetDate} ${startTime}-${endTime}`);
+    console.log(`📅 Existing appointments:`, existingAppointments.length);
+
+    const conflict = existingAppointments.find(apt => {
+      // Skip the appointment being edited
+      if (excludeAppointmentId && apt.id === excludeAppointmentId) return false;
+
+      // Only check appointments on the same date
+      const aptDate = new Date(apt.appointment_date).toISOString().split('T')[0];
+      if (aptDate !== targetDate) {
+        console.log(`📅 Skipping appointment ${apt.id}: different date (${aptDate} vs ${targetDate})`);
+        return false;
+      }
+
+      const aptStart = apt.start_time;
+      const aptEnd = apt.end_time;
+
+      console.log(`🔍 Checking appointment ${apt.id}: ${aptStart}-${aptEnd} vs ${startTime}-${endTime}`);
+
+      // Check for overlap
+      const hasOverlap = (
+        (startTime >= aptStart && startTime < aptEnd) ||
+        (endTime > aptStart && endTime <= aptEnd) ||
+        (startTime <= aptStart && endTime >= aptEnd)
+      );
+
+      if (hasOverlap) {
+        console.log(`⚠️ CONFLICT FOUND with appointment ${apt.id}: ${aptStart}-${aptEnd}`);
+      }
+
+      return hasOverlap;
+    });
+
+    console.log(`✅ Conflict result:`, conflict ? `Yes (appointment ${conflict.id})` : 'No');
+    return conflict;
+  };
+
+  // Generate available time slots based on clinic hours and existing appointments
+  const getTimeSlots = (date) => {
+    const slots = [];
+    const dateObj = new Date(date);
+    const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+    const dayTimings = clinicTimings[dayName];
+
+    if (!dayTimings || dayTimings.closed) {
+      return [];
+    }
+
+    const [openHour, openMinute] = dayTimings.open.split(':').map(Number);
+    const [closeHour, closeMinute] = dayTimings.close.split(':').map(Number);
+    const openTimeInMinutes = openHour * 60 + openMinute;
+    const closeTimeInMinutes = closeHour * 60 + closeMinute;
+
+    // Generate 30-minute intervals
+    for (let time = openTimeInMinutes; time < closeTimeInMinutes; time += 30) {
+      const hour = Math.floor(time / 60);
+      const minute = time % 60;
+      const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+
+      // Check if this slot conflicts with existing appointments
+      const durationMinutes = parseFloat(formData.duration) * 60;
+      const endTimeInMinutes = time + durationMinutes;
+      const endHour = Math.floor(endTimeInMinutes / 60);
+      const endMinute = endTimeInMinutes % 60;
+      const endTimeString = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
+
+      const conflict = checkTimeConflict(date, timeString, endTimeString);
+      if (!conflict) {
+        slots.push({
+          value: timeString,
+          label: timeString
+        });
+      }
+    }
+
+    return slots;
+  };
 
   if (currentStep === 3) {
     return (
@@ -350,21 +716,6 @@ const BookingPage = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <Clock className="w-4 h-4 inline mr-1" />
-                  Preferred Time *
-                </label>
-                <input
-                  type="time"
-                  name="time"
-                  value={formData.time}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors"
-                />
-              </div>
-
-              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
                   Appointment Duration *
                 </label>
@@ -385,8 +736,90 @@ const BookingPage = () => {
                   ))}
                 </div>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <Clock className="w-4 h-4 inline mr-1" />
+                  Available Time Slots
+                </label>
+                <select
+                  name="time"
+                  value={formData.time}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors"
+                >
+                  <option value="">Select preferred time</option>
+                  {formData.date && getTimeSlots(formData.date).map((slot) => (
+                    <option key={slot.value} value={slot.value}>
+                      {slot.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Only available times within clinic hours are shown</p>
+
+                {/* Simple Clinic Hours Line */}
+                <div className="mt-2 text-sm text-gray-600">
+                  <span className="font-medium">Clinic Hours:</span> {doctorInfo.hours}
+                </div>
+
+                {/* Next Available Slot Suggestion */}
+                {!formData.time && formData.date && (
+                  <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center text-sm text-green-800 mb-1">
+                      <Clock className="w-4 h-4 mr-1" />
+                      <span className="font-medium">Next Available Slot</span>
+                    </div>
+                    {loadingNextSlot ? (
+                      <div className="text-xs text-gray-600">Checking availability...</div>
+                    ) : nextAvailableSlot ? (
+                      <div className="text-xs text-green-700">
+                        <p>Suggested time: <span className="font-semibold">{nextAvailableSlot}</span></p>
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, time: nextAvailableSlot }))}
+                          className="mt-1 px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors"
+                        >
+                          Use this time
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-red-700">No available slots for the selected date and duration.</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Time Validation Feedback */}
+                {formData.time && formData.date && (() => {
+                  const { valid, message } = isTimeWithinOperatingHours(formData.date, formData.time);
+                  return !valid ? (
+                    <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <div className="flex items-center text-sm text-red-800">
+                        <Info className="w-4 h-4 mr-1" />
+                        <span className="font-medium">Time Warning</span>
+                      </div>
+                      <p className="text-xs text-red-700 mt-1">{message}</p>
+                    </div>
+                  ) : (
+                    <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex items-center text-sm text-green-800">
+                        <CheckCircle className="w-4 h-4 mr-1" />
+                        <span className="font-medium">Time Available</span>
+                      </div>
+                      <p className="text-xs text-green-700 mt-1">Selected time is within clinic operating hours.</p>
+                    </div>
+                  );
+                })()}
+              </div>
+
             </div>
 
+            {/* Confirmation Note */}
+            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center text-sm text-blue-800">
+                <Info className="w-4 h-4 mr-2 flex-shrink-0" />
+                <span className="font-medium">For confirmation, it's always good to call the clinic.</span>
+              </div>
+            </div>
 
             <button
               type="submit"

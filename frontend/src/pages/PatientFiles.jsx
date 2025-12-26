@@ -11,113 +11,45 @@ const PatientFiles = () => {
   const [filteredFiles, setFilteredFiles] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Sample data - replace with actual API calls
-  const sampleFiles = [
-    {
-      id: 1,
-      name: "John Doe",
-      type: "folder",
-      date: "13 Aug 2025 at 11:26 AM",
-      starred: true,
-      patientId: "P001"
-    },
-    {
-      id: 2,
-      name: "Sarah Wilson",
-      type: "folder",
-      date: "6 Aug 2025 at 4:59 PM",
-      starred: false,
-      patientId: "P002"
-    },
-    {
-      id: 3,
-      name: "Mike Johnson",
-      type: "folder",
-      date: "1 Oct 2024 at 1:44 PM",
-      starred: true,
-      patientId: "P003"
-    },
-    {
-      id: 4,
-      name: "Emily Davis",
-      type: "folder",
-      date: "15 Sep 2024 at 9:30 AM",
-      starred: false,
-      patientId: "P004"
-    },
-    {
-      id: 5,
-      name: "David Brown",
-      type: "folder",
-      date: "22 Aug 2024 at 2:15 PM",
-      starred: true,
-      patientId: "P005"
-    },
-    {
-      id: 6,
-      name: "Lisa Garcia",
-      type: "folder",
-      date: "10 Jul 2024 at 5:45 PM",
-      starred: false,
-      patientId: "P006"
-    },
-    {
-      id: 7,
-      name: "Robert Lee",
-      type: "folder",
-      date: "5 Jul 2024 at 8:20 AM",
-      starred: true,
-      patientId: "P007"
-    },
-    {
-      id: 8,
-      name: "Maria Rodriguez",
-      type: "folder",
-      date: "28 Jun 2024 at 3:10 PM",
-      starred: false,
-      patientId: "P008"
-    },
-    {
-      id: 9,
-      name: "James Taylor",
-      type: "folder",
-      date: "20 Jun 2024 at 11:55 AM",
-      starred: true,
-      patientId: "P009"
-    },
-    {
-      id: 10,
-      name: "Jennifer White",
-      type: "folder",
-      date: "15 Jun 2024 at 4:30 PM",
-      starred: false,
-      patientId: "P010"
-    },
-    {
-      id: 11,
-      name: "Michael Chen",
-      type: "folder",
-      date: "8 Jun 2024 at 1:25 PM",
-      starred: true,
-      patientId: "P011"
-    },
-    {
-      id: 12,
-      name: "Amanda Clark",
-      type: "folder",
-      date: "2 Jun 2024 at 7:40 AM",
-      starred: false,
-      patientId: "P012"
-    }
-  ];
-
+  // Fetch actual patient data from API
   useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      setFiles(sampleFiles);
-      setFilteredFiles(sampleFiles);
-      setLoading(false);
-    }, 1000);
+    const fetchPatients = async () => {
+      try {
+        setLoading(true);
+        const response = await api.get("/patients/");
+        
+        // Transform patients into file format
+        const patientFiles = response.map(patient => ({
+          id: patient.id,
+          name: patient.name,
+          type: "folder",
+          date: new Date(patient.created_at).toLocaleString('en-US', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+          }),
+          starred: false, // You can add a favorites feature later
+          patientId: `P${String(patient.id).padStart(3, '0')}`,
+          age: patient.age,
+          gender: patient.gender,
+          phone: patient.phone
+        }));
+        
+        setFiles(patientFiles);
+        setFilteredFiles(patientFiles);
+      } catch (error) {
+        console.error("Error fetching patients:", error);
+        setFiles([]);
+        setFilteredFiles([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPatients();
   }, []);
 
   useEffect(() => {

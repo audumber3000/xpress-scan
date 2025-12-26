@@ -3,6 +3,7 @@ import { toast } from 'react-toastify';
 import { api, whatsappApi } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
 
+// Settings page with Security tab for password management
 const Settings = () => {
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
@@ -34,15 +35,16 @@ const Settings = () => {
   };
 
   // Tab management
-  const [activeTab, setActiveTab] = useState("billing");
+  const [activeTab, setActiveTab] = useState("profile");
+  const [profileSubTab, setProfileSubTab] = useState("users"); // 'users' or 'clinic'
 
   // Billing state
-  const [scanTypes, setScanTypes] = useState([]);
-  const [loadingScanTypes, setLoadingScanTypes] = useState(false);
-  const [showAddScanModal, setShowAddScanModal] = useState(false);
-  const [showEditScanModal, setShowEditScanModal] = useState(false);
-  const [editingScan, setEditingScan] = useState(null);
-  const [scanFormData, setScanFormData] = useState({
+  const [treatmentTypes, setTreatmentTypes] = useState([]);
+  const [loadingTreatmentTypes, setLoadingTreatmentTypes] = useState(false);
+  const [showAddTreatmentModal, setShowAddTreatmentModal] = useState(false);
+  const [showEditTreatmentModal, setShowEditTreatmentModal] = useState(false);
+  const [editingTreatment, setEditingTreatment] = useState(null);
+  const [treatmentFormData, setTreatmentFormData] = useState({
     name: "",
     price: ""
   });
@@ -60,7 +62,7 @@ const Settings = () => {
 
   // Users state
   const [error, setError] = useState("");
-  const [scanTypesError, setScanTypesError] = useState("");
+  const [treatmentTypesError, setTreatmentTypesError] = useState("");
   const [referringDoctorsError, setReferringDoctorsError] = useState("");
   
   // Permission editing state
@@ -78,6 +80,35 @@ const Settings = () => {
   const [testingConnection, setTestingConnection] = useState(false);
   const [creditInfo, setCreditInfo] = useState(null);
   const [loadingCredit, setLoadingCredit] = useState(false);
+
+  // Password Management state
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [passwordLoading, setPasswordLoading] = useState(false);
+
+  // Clinic Profile state
+  const [clinicData, setClinicData] = useState({
+    name: '',
+    address: '',
+    phone: '',
+    email: '',
+    gst_number: '',
+    timings: {
+      monday: { open: '08:00', close: '20:00', closed: false },
+      tuesday: { open: '08:00', close: '20:00', closed: false },
+      wednesday: { open: '08:00', close: '20:00', closed: false },
+      thursday: { open: '08:00', close: '20:00', closed: false },
+      friday: { open: '08:00', close: '20:00', closed: false },
+      saturday: { open: '08:00', close: '20:00', closed: false },
+      sunday: { open: '08:00', close: '20:00', closed: true }
+    }
+  });
+  const [loadingClinicData, setLoadingClinicData] = useState(false);
+  const [savingClinicData, setSavingClinicData] = useState(false);
 
 
   // Default permissions for each role
@@ -119,7 +150,7 @@ const Settings = () => {
 
   useEffect(() => {
     if (activeTab === "billing") {
-      fetchScanTypes();
+      fetchTreatmentTypes();
     } else if (activeTab === "referred") {
       fetchReferringDoctors();
     } else if (activeTab === "users") {
@@ -127,8 +158,123 @@ const Settings = () => {
       fetchAvailableRoles();
     } else if (activeTab === "whatsapp") {
       fetchWhatsappConfig();
+    } else if (activeTab === "profile" && profileSubTab === "users") {
+      fetchUsers();
+      fetchAvailableRoles();
+    } else if (activeTab === "profile" && profileSubTab === "clinic") {
+      fetchClinicData();
     }
-  }, [activeTab]);
+  }, [activeTab, profileSubTab]);
+
+  // Fetch clinic data
+  const fetchClinicData = async () => {
+    try {
+      setLoadingClinicData(true);
+      console.log('🔄 Fetching clinic data...');
+      console.log('👤 User data:', { id: user?.id, clinic_id: user?.clinic_id, role: user?.role });
+
+      // Check if user has clinic access
+      if (!user?.clinic_id) {
+        console.warn('⚠️ User has no clinic_id');
+        toast.error('You are not associated with any clinic. Please contact support.');
+        return;
+      }
+
+      const data = await api.get("/auth/me");
+      console.log('✅ Auth data received:', data);
+
+      if (data.clinic) {
+        console.log('🏥 Clinic data found:', data.clinic);
+        console.log('⏰ Clinic timings:', data.clinic.timings);
+        const newClinicData = {
+          name: data.clinic.name || '',
+          address: data.clinic.address || '',
+          phone: data.clinic.phone || '',
+          email: data.clinic.email || '',
+          gst_number: data.clinic.gst_number || '',
+          timings: data.clinic.timings || {
+            monday: { open: '08:00', close: '20:00', closed: false },
+            tuesday: { open: '08:00', close: '20:00', closed: false },
+            wednesday: { open: '08:00', close: '20:00', closed: false },
+            thursday: { open: '08:00', close: '20:00', closed: false },
+            friday: { open: '08:00', close: '20:00', closed: false },
+            saturday: { open: '08:00', close: '20:00', closed: false },
+            sunday: { open: '08:00', close: '20:00', closed: true }
+          }
+        };
+        console.log('📝 Setting clinic data to:', newClinicData);
+        setClinicData(newClinicData);
+        console.log('✅ Clinic data set successfully');
+      } else {
+        console.warn('⚠️ No clinic data in response');
+        toast.error('No clinic information found for your account. Please contact support.');
+      }
+    } catch (error) {
+      console.error('❌ Error fetching clinic data:', error);
+      console.error('❌ Error response:', error.response?.data);
+      console.error('❌ Error status:', error.response?.status);
+
+      const errorMessage = error.response?.data?.detail ||
+                          error.response?.data?.message ||
+                          error.message ||
+                          'Unknown error';
+
+      toast.error(`Failed to load clinic data: ${errorMessage}`);
+    } finally {
+      setLoadingClinicData(false);
+    }
+  };
+
+  // Save clinic data
+  const saveClinicData = async () => {
+    try {
+      setSavingClinicData(true);
+      console.log('🔄 Saving clinic data for clinic ID:', user?.clinic_id);
+      console.log('📤 Current clinicData state:', clinicData);
+      console.log('👤 User info:', { id: user?.id, clinic_id: user?.clinic_id, role: user?.role });
+
+      if (!user?.clinic_id) {
+        console.error('❌ No clinic_id found for user');
+        toast.error('You are not associated with a clinic. Please contact support.');
+        return;
+      }
+
+      // Ensure timings is properly formatted
+      const dataToSend = {
+        ...clinicData,
+        timings: clinicData.timings || {}
+      };
+
+      console.log('📤 Final data being sent:', JSON.stringify(dataToSend, null, 2));
+
+      const response = await api.put(`/clinics/${user.clinic_id}`, dataToSend);
+      console.log('✅ Save response:', response);
+      console.log('✅ Response data:', JSON.stringify(response, null, 2));
+
+      console.log('✅ Clinic data saved successfully!');
+      toast.success('Clinic information updated successfully!');
+
+      // Wait a moment then refresh clinic data
+      console.log('🔄 Refreshing clinic data...');
+      setTimeout(async () => {
+        await fetchClinicData();
+        console.log('✅ Clinic data refreshed');
+      }, 500);
+    } catch (error) {
+      console.error('❌ Error saving clinic data:', error);
+      console.error('❌ Error response:', error?.response?.data);
+      console.error('❌ Error status:', error?.response?.status);
+      console.error('❌ Full error:', error);
+
+      const errorMessage = error?.response?.data?.detail ||
+                          error?.response?.data?.message ||
+                          error?.message ||
+                          'Unknown error';
+      toast.error(`Failed to save clinic data: ${errorMessage}`);
+    } finally {
+      setSavingClinicData(false);
+    }
+  };
 
   const fetchUsers = async () => {
     try {
@@ -153,17 +299,17 @@ const Settings = () => {
     }
   };
 
-  const fetchScanTypes = async () => {
+  const fetchTreatmentTypes = async () => {
     try {
-      setLoadingScanTypes(true);
-      setScanTypesError(""); // Clear previous error
-      const data = await api.get("/scan-types/");
-        setScanTypes(data);
+      setLoadingTreatmentTypes(true);
+      setTreatmentTypesError(""); // Clear previous error
+      const data = await api.get("/treatment-types/");
+        setTreatmentTypes(data);
     } catch (error) {
-      console.error("Error fetching scan types:", error);
-      setScanTypesError("Error fetching scan types");
+      console.error("Error fetching treatment types:", error);
+      setTreatmentTypesError("Error fetching treatment types");
     } finally {
-      setLoadingScanTypes(false);
+      setLoadingTreatmentTypes(false);
     }
   };
 
@@ -246,9 +392,9 @@ const Settings = () => {
     }));
   };
 
-  const handleScanInputChange = (e) => {
+  const handleTreatmentInputChange = (e) => {
     const { name, value } = e.target;
-    setScanFormData(prev => ({
+    setTreatmentFormData(prev => ({
       ...prev,
       [name]: value
     }));
@@ -284,20 +430,20 @@ const Settings = () => {
     }
   };
 
-  const handleAddScan = async (e) => {
+  const handleAddTreatment = async (e) => {
     e.preventDefault();
     try {
-      await api.post("/scan-types/", {
-        name: scanFormData.name,
-        price: parseFloat(scanFormData.price)
+      await api.post("/treatment-types/", {
+        name: treatmentFormData.name,
+        price: parseFloat(treatmentFormData.price)
       });
-        toast.success("Scan type added successfully");
-        setShowAddScanModal(false);
-        setScanFormData({ name: "", price: "" });
-        fetchScanTypes();
+        toast.success("Treatment type added successfully");
+        setShowAddTreatmentModal(false);
+        setTreatmentFormData({ name: "", price: "" });
+        fetchTreatmentTypes();
     } catch (error) {
-      console.error("Error adding scan type:", error);
-      toast.error(error.message || "Error adding scan type");
+      console.error("Error adding treatment type:", error);
+      toast.error(error.message || "Error adding treatment type");
     }
   };
 
@@ -325,13 +471,13 @@ const Settings = () => {
     setShowEditModal(true);
   };
 
-  const handleEditScan = (scan) => {
-    setEditingScan(scan);
-    setScanFormData({
-      name: scan.name,
-      price: scan.price.toString()
+  const handleEditTreatment = (treatment) => {
+    setEditingTreatment(treatment);
+    setTreatmentFormData({
+      name: treatment.name,
+      price: treatment.price.toString()
     });
-    setShowEditScanModal(true);
+    setShowEditTreatmentModal(true);
   };
 
   const handleEditDoctor = (doctor) => {
@@ -363,21 +509,21 @@ const Settings = () => {
     }
   };
 
-  const handleUpdateScan = async (e) => {
+  const handleUpdateTreatment = async (e) => {
     e.preventDefault();
     try {
-      await api.put(`/scan-types/${editingScan.id}`, {
-        name: scanFormData.name,
-        price: parseFloat(scanFormData.price)
+      await api.put(`/treatment-types/${editingTreatment.id}`, {
+        name: treatmentFormData.name,
+        price: parseFloat(treatmentFormData.price)
       });
-        toast.success("Scan type updated successfully");
-        setShowEditScanModal(false);
-        setEditingScan(null);
-        setScanFormData({ name: "", price: "" });
-        fetchScanTypes();
+        toast.success("Treatment type updated successfully");
+        setShowEditTreatmentModal(false);
+        setEditingTreatment(null);
+        setTreatmentFormData({ name: "", price: "" });
+        fetchTreatmentTypes();
     } catch (error) {
-      console.error("Error updating scan type:", error);
-      toast.error(error.message || "Error updating scan type");
+      console.error("Error updating treatment type:", error);
+      toast.error(error.message || "Error updating treatment type");
     }
   };
 
@@ -418,16 +564,16 @@ const Settings = () => {
     }
   };
 
-  const handleDeleteScan = async (id) => {
-    if (window.confirm("Are you sure you want to delete this scan type?")) {
+  const handleDeleteTreatment = async (id) => {
+    if (window.confirm("Are you sure you want to delete this treatment type?")) {
       try {
 
-        await api.delete(`/scan-types/${id}`);
-          toast.success("Scan type deleted successfully");
-          fetchScanTypes();
+        await api.delete(`/treatment-types/${id}`);
+          toast.success("Treatment type deleted successfully");
+          fetchTreatmentTypes();
       } catch (error) {
-        console.error("Error deleting scan type:", error);
-        toast.error(error.message || "Error deleting scan type");
+        console.error("Error deleting treatment type:", error);
+        toast.error(error.message || "Error deleting treatment type");
       }
     }
   };
@@ -520,6 +666,59 @@ const Settings = () => {
     await fetchCreditInfo();
   };
 
+  // Password management functions
+  const handlePasswordInputChange = (e) => {
+    const { name, value } = e.target;
+    setPasswordForm(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleSetPassword = async (e) => {
+    e.preventDefault();
+    
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error("Passwords don't match");
+      return;
+    }
+    
+    if (passwordForm.newPassword.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    
+    setPasswordLoading(true);
+    try {
+      // Check if user has a password already
+      const hasPassword = user.supabase_user_id && !user.supabase_user_id.startsWith('local_');
+      const endpoint = hasPassword ? '/auth/change-password' : '/auth/set-password';
+      
+      const payload = hasPassword 
+        ? {
+            current_password: passwordForm.currentPassword,
+            new_password: passwordForm.newPassword
+          }
+        : {
+            password: passwordForm.newPassword
+          };
+      
+      await api.post(endpoint, payload);
+      toast.success("Password updated successfully! You can now login on desktop with your email and password.");
+      setShowPasswordModal(false);
+      setPasswordForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+    } catch (error) {
+      console.error("Error updating password:", error);
+      toast.error(error.message || "Error updating password");
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
   // Permission editing functions
   const handleEditPermissions = (user) => {
     setSelectedUserForPermissions(user);
@@ -543,7 +742,7 @@ const Settings = () => {
     }
   };
 
-  // Permission editing modal component
+  // Permission editing modal component - Right side drawer
   const EditPermissionsModal = ({ user, onClose, onSave }) => {
     const [permissions, setPermissions] = useState({});
     const [selectedRole, setSelectedRole] = useState("");
@@ -597,12 +796,35 @@ const Settings = () => {
     };
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6 min-w-[700px] max-w-[95vw] max-h-[90vh] overflow-y-auto">
-          <h4 className="text-lg font-semibold mb-4">Manage User: {user?.email}</h4>
-          
-          {/* Role Selection */}
-          <div className="mb-6">
+      <div className="fixed inset-0 z-50">
+        {/* Backdrop with blur */}
+        <div 
+          className="absolute inset-0 backdrop-blur-sm bg-black/20"
+          onClick={onClose}
+        ></div>
+        
+        {/* Right side drawer */}
+        <div className="absolute right-0 top-0 h-full w-full max-w-2xl bg-white shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
+          {/* Header */}
+          <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white sticky top-0 z-10">
+            <div>
+              <h4 className="text-xl font-semibold text-gray-900">Edit Permissions</h4>
+              <p className="text-sm text-gray-600 mt-1">{user?.email}</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-full transition"
+            >
+              <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-6">
+            {/* Role Selection */}
+            <div className="mb-6">
             <label className="block text-sm font-medium mb-2">Role</label>
             <select
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -734,9 +956,24 @@ const Settings = () => {
             </div>
           </div>
 
-          <div className="flex justify-end gap-2">
-            <button className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400" onClick={onClose}>Cancel</button>
-            <button className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700" onClick={handleSave}>Save Changes</button>
+          </div>
+
+          {/* Footer */}
+          <div className="p-6 border-t border-gray-200 bg-white sticky bottom-0">
+            <div className="flex justify-end gap-3">
+              <button 
+                className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium" 
+                onClick={onClose}
+              >
+                Cancel
+              </button>
+              <button 
+                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium" 
+                onClick={handleSave}
+              >
+                Save Changes
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -752,53 +989,353 @@ const Settings = () => {
 
       {/* Tabbed Section */}
       <div className="border-b border-gray-200 mb-6">
-        <div className="flex">
+        <div className="flex overflow-x-auto">
           <button
-            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 ${activeTab === "billing" ? "border-blue-600 text-blue-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
+            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "profile" ? "border-green-600 text-green-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
+            onClick={() => setActiveTab("profile")}
+          >
+            👤 Profile
+          </button>
+          <button
+            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "security" ? "border-green-600 text-green-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
+            onClick={() => setActiveTab("security")}
+          >
+            🔐 Security
+          </button>
+          <button
+            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "billing" ? "border-blue-600 text-blue-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
             onClick={() => setActiveTab("billing")}
           >
             Billing
           </button>
           <button
-            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 ${activeTab === "referred" ? "border-blue-600 text-blue-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
+            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "referred" ? "border-blue-600 text-blue-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
             onClick={() => setActiveTab("referred")}
           >
             Referred By
           </button>
           <button
-            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 ${activeTab === "users" ? "border-blue-600 text-blue-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
-            onClick={() => setActiveTab("users")}
-          >
-            Users
-          </button>
-          <button
-            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 ${activeTab === "whatsapp" ? "border-blue-600 text-blue-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
+            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "whatsapp" ? "border-blue-600 text-blue-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
             onClick={() => setActiveTab("whatsapp")}
           >
             WhatsApp Config
           </button>
           <button
-            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 ${activeTab === "other" ? "border-blue-600 text-blue-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
+            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "other" ? "border-blue-600 text-blue-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
             onClick={() => setActiveTab("other")}
           >
             Other
           </button>
         </div>
       </div>
-      <div>
+      <div className="max-h-[calc(100vh-250px)] overflow-y-auto">
+          {activeTab === "profile" && (
+            <div>
+              <h3 className="text-lg font-semibold mb-4">Profile Settings</h3>
+              
+              {/* Sub-tabs for Users and Clinic */}
+              <div className="flex border-b border-gray-200 mb-6">
+                <button
+                  className={`px-4 py-2 font-medium text-sm focus:outline-none transition border-b-2 ${profileSubTab === "users" ? "border-green-600 text-green-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
+                  onClick={() => setProfileSubTab("users")}
+                >
+                  👥 Users (Staff)
+                </button>
+                <button
+                  className={`px-4 py-2 font-medium text-sm focus:outline-none transition border-b-2 ${profileSubTab === "clinic" ? "border-green-600 text-green-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
+                  onClick={() => setProfileSubTab("clinic")}
+                >
+                  🏥 Clinic
+                </button>
+              </div>
+
+              {/* User Profile Sub-tab */}
+              {profileSubTab === "users" && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Staff Management</h3>
+                  {!hasPermission("users:view") ? (
+                    <div className="text-center py-8">
+                      <p className="text-gray-500">You don't have permission to view users.</p>
+                    </div>
+                  ) : loading ? (
+                    <div className="w-full flex items-center justify-center py-16">
+                      <div className="text-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                        <p className="mt-2 text-sm text-gray-600">Loading users...</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      {error && <div className="text-red-500 mb-2">{error}</div>}
+                      
+                      {hasPermission("users:edit") && (
+                        <button
+                          onClick={() => setShowAddModal(true)}
+                          className="mb-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                          Add Staff
+                        </button>
+                      )}
+
+                      <div className="overflow-x-auto bg-white border border-gray-200 rounded-lg">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {users.map((u) => (
+                              <tr key={u.id}>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{u.name}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{u.email}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">{u.role}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2">
+                                  {hasPermission("users:edit") && (
+                                    <>
+                                      <button
+                                        onClick={() => {
+                                          setEditingUser(u);
+                                          setFormData({ name: u.name, email: u.email, role: u.role });
+                                          setShowEditModal(true);
+                                        }}
+                                        className="text-blue-600 hover:text-blue-800"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setSelectedUserForPermissions(u);
+                                          setShowPermissionsModal(true);
+                                        }}
+                                        className="text-purple-600 hover:text-purple-800"
+                                      >
+                                        Permissions
+                                      </button>
+                                    </>
+                                  )}
+                                  {hasPermission("users:delete") && u.id !== user?.id && (
+                                    <button
+                                      onClick={() => handleDeleteUser(u.id)}
+                                      className="text-red-600 hover:text-red-800"
+                                    >
+                                      Delete
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Clinic Profile Sub-tab */}
+              {profileSubTab === "clinic" && (
+                <div>
+                  <h4 className="text-md font-semibold text-gray-900 mb-4">Clinic Information</h4>
+
+                  {loadingClinicData ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                      <p className="mt-2 text-sm text-gray-600">Loading clinic data...</p>
+                    </div>
+                  ) : !user?.clinic_id ? (
+                    <div className="text-center py-8 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <div className="text-yellow-600 mb-2">
+                        <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-lg font-semibold text-yellow-800 mb-2">Clinic Access Required</h3>
+                      <p className="text-yellow-700">You are not associated with any clinic. Please contact your administrator or support team to get clinic access.</p>
+                      <div className="mt-4 text-sm text-yellow-600">
+                        <p><strong>User ID:</strong> {user?.id}</p>
+                        <p><strong>Role:</strong> {user?.role}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                      <div className="space-y-6">
+                        {/* Basic Information */}
+                        <div>
+                          <h5 className="text-sm font-semibold text-gray-700 mb-3">Basic Information</h5>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Clinic Name */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Clinic Name *</label>
+                              <input
+                                type="text"
+                                value={clinicData.name}
+                                onChange={(e) => setClinicData({ ...clinicData, name: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                placeholder="Enter clinic name"
+                              />
+                            </div>
+
+                            {/* GST Number */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">GST Number</label>
+                              <input
+                                type="text"
+                                value={clinicData.gst_number}
+                                onChange={(e) => setClinicData({ ...clinicData, gst_number: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                placeholder="Enter GST number (optional)"
+                              />
+                            </div>
+
+                            {/* Address */}
+                            <div className="md:col-span-2">
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Address *</label>
+                              <input
+                                type="text"
+                                value={clinicData.address}
+                                onChange={(e) => setClinicData({ ...clinicData, address: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                placeholder="Enter clinic address"
+                              />
+                            </div>
+
+                            {/* Phone */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Phone *</label>
+                              <input
+                                type="tel"
+                                value={clinicData.phone}
+                                onChange={(e) => setClinicData({ ...clinicData, phone: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                placeholder="Enter phone number"
+                              />
+                            </div>
+
+                            {/* Email */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+                              <input
+                                type="email"
+                                value={clinicData.email}
+                                onChange={(e) => setClinicData({ ...clinicData, email: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                placeholder="Enter clinic email"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Operating Hours */}
+                        <div>
+                          <h5 className="text-sm font-semibold text-gray-700 mb-3">Operating Hours</h5>
+                          <p className="text-xs text-gray-500 mb-4">Default: 8:00 AM - 8:00 PM</p>
+                          <div className="space-y-3">
+                            {Object.entries(clinicData.timings).map(([day, timing]) => (
+                              <div key={day} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                                <div className="w-24">
+                                  <span className="text-sm font-medium text-gray-700 capitalize">{day}</span>
+                                </div>
+                                
+                                <div className="flex items-center gap-2 flex-1">
+                                  <input
+                                    type="time"
+                                    value={timing.open}
+                                    onChange={(e) => setClinicData({
+                                      ...clinicData,
+                                      timings: {
+                                        ...clinicData.timings,
+                                        [day]: { ...timing, open: e.target.value }
+                                      }
+                                    })}
+                                    disabled={timing.closed}
+                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-200 disabled:text-gray-500"
+                                  />
+                                  <span className="text-gray-500">to</span>
+                                  <input
+                                    type="time"
+                                    value={timing.close}
+                                    onChange={(e) => setClinicData({
+                                      ...clinicData,
+                                      timings: {
+                                        ...clinicData.timings,
+                                        [day]: { ...timing, close: e.target.value }
+                                      }
+                                    })}
+                                    disabled={timing.closed}
+                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-200 disabled:text-gray-500"
+                                  />
+                                </div>
+
+                                <label className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={timing.closed}
+                                    onChange={(e) => setClinicData({
+                                      ...clinicData,
+                                      timings: {
+                                        ...clinicData.timings,
+                                        [day]: { ...timing, closed: e.target.checked }
+                                      }
+                                    })}
+                                    className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                                  />
+                                  <span className="text-sm text-gray-600">Closed</span>
+                                </label>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Save Button */}
+                        <div className="flex justify-end pt-4 border-t border-gray-200">
+                          <button
+                            onClick={saveClinicData}
+                            disabled={savingClinicData}
+                            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+                          >
+                            {savingClinicData ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Save Changes
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === "billing" && (
             <div>
               <h3 className="text-lg font-semibold mb-4">Treatment Types and Pricing</h3>
-              {scanTypesError && <div className="text-red-500 mb-2">{scanTypesError}</div>}
+              {treatmentTypesError && <div className="text-red-500 mb-2">{treatmentTypesError}</div>}
               {!hasPermission("billing:view") ? (
                 <div className="text-center py-8">
                   <p className="text-gray-500">You don't have permission to view billing information.</p>
                 </div>
-              ) : loadingScanTypes ? (
+              ) : loadingTreatmentTypes ? (
                 <div className="w-full flex items-center justify-center py-16">
                   <div className="text-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
-                    <p className="mt-2 text-sm text-gray-600">Loading scan types...</p>
+                    <p className="mt-2 text-sm text-gray-600">Loading treatment types...</p>
                   </div>
                 </div>
               ) : (
@@ -807,33 +1344,33 @@ const Settings = () => {
                     <h4 className="text-md font-medium text-gray-900">Current Treatment Types</h4>
                     {hasPermission("billing:edit") && (
                     <button
-                      onClick={() => setShowAddScanModal(true)}
+                      onClick={() => setShowAddTreatmentModal(true)}
                       className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
                     >
-                      Add Scan Type
+                      Add Treatment Type
                     </button>
                     )}
                   </div>
                   <div className="space-y-3">
-                    {scanTypes.length === 0 ? (
-                      <p className="text-gray-500 text-center py-4">No scan types configured</p>
+                    {treatmentTypes.length === 0 ? (
+                      <p className="text-gray-500 text-center py-4">No treatment types configured</p>
                     ) : (
-                      scanTypes.map((scan) => (
-                        <div key={scan.id} className="flex justify-between items-center p-4 border border-gray-200 rounded-lg">
+                      treatmentTypes.map((treatment) => (
+                        <div key={treatment.id} className="flex justify-between items-center p-4 border border-gray-200 rounded-lg">
                             <div>
-                              <span className="font-medium text-gray-900">{scan.name}</span>
-                              <span className="ml-4 text-gray-600">₹{scan.price}</span>
+                              <span className="font-medium text-gray-900">{treatment.name}</span>
+                              <span className="ml-4 text-gray-600">₹{treatment.price}</span>
                             </div>
                             {hasPermission("billing:edit") && (
                             <div className="flex gap-2">
                               <button
-                                onClick={() => handleEditScan(scan)}
+                                onClick={() => handleEditTreatment(treatment)}
                                 className="text-blue-600 hover:text-blue-800 text-sm"
                               >
                                 Edit
                               </button>
                               <button
-                                onClick={() => handleDeleteScan(scan.id)}
+                                onClick={() => handleDeleteTreatment(treatment.id)}
                                 className="text-red-600 hover:text-red-800 text-sm"
                               >
                                 Delete
@@ -1309,6 +1846,52 @@ const Settings = () => {
             </div>
           )}
 
+          {activeTab === "security" && (
+            <div>
+              <h3 className="text-lg font-semibold mb-4">Security Settings</h3>
+              <div className="bg-white border border-gray-200 rounded-lg p-6 max-w-2xl">
+                <div className="mb-6">
+                  <h4 className="text-md font-medium text-gray-900 mb-2">Password Management</h4>
+                  <p className="text-sm text-gray-600 mb-4">
+                    {user?.supabase_user_id && !user.supabase_user_id.startsWith('local_')
+                      ? "Set a password to enable login on the desktop app with your email and password."
+                      : "Change your account password."}
+                  </p>
+                  <button
+                    onClick={() => setShowPasswordModal(true)}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
+                  >
+                    {user?.supabase_user_id && !user.supabase_user_id.startsWith('local_')
+                      ? "Set Password for Desktop Access"
+                      : "Change Password"}
+                  </button>
+                </div>
+                
+                <div className="border-t border-gray-200 pt-6">
+                  <h4 className="text-md font-medium text-gray-900 mb-2">Account Information</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Email:</span>
+                      <span className="font-medium text-gray-900">{user?.email}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Role:</span>
+                      <span className="font-medium text-gray-900">{user?.role}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Login Method:</span>
+                      <span className="font-medium text-gray-900">
+                        {user?.supabase_user_id && !user.supabase_user_id.startsWith('local_')
+                          ? "Google OAuth"
+                          : "Email/Password"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === "other" && (
             <div>
               <h3 className="text-lg font-semibold mb-4">Other Settings</h3>
@@ -1319,10 +1902,19 @@ const Settings = () => {
 
       {/* Add User Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96">
-            <h3 className="text-lg font-semibold mb-4">Add User</h3>
-            <form onSubmit={handleAddUser}>
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={() => setShowAddModal(false)}></div>
+          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-xl font-semibold text-gray-900">Add User</h3>
+              <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-gray-100 rounded-full transition">
+                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+            <form id="add-user-form" onSubmit={handleAddUser}>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
                 <input
@@ -1360,32 +1952,45 @@ const Settings = () => {
                   ))}
                 </select>
               </div>
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition"
-                >
-                  Add User
-                </button>
+            </form>
+            </div>
+            <div className="p-6 border-t border-gray-200">
+              <div className="flex justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition"
+                  className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium"
                 >
                   Cancel
                 </button>
+                <button
+                  type="submit"
+                  form="add-user-form"
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium"
+                >
+                  Add User
+                </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
 
       {/* Edit User Modal */}
       {showEditModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96">
-            <h3 className="text-lg font-semibold mb-4">Edit User</h3>
-            <form onSubmit={handleUpdateUser}>
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={() => setShowEditModal(false)}></div>
+          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-xl font-semibold text-gray-900">Edit User</h3>
+              <button onClick={() => setShowEditModal(false)} className="p-2 hover:bg-gray-100 rounded-full transition">
+                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+            <form id="edit-user-form" onSubmit={handleUpdateUser}>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
                 <input
@@ -1423,39 +2028,52 @@ const Settings = () => {
                   ))}
                 </select>
               </div>
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition"
-                >
-                  Update User
-                </button>
+            </form>
+            </div>
+            <div className="p-6 border-t border-gray-200">
+              <div className="flex justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setShowEditModal(false)}
-                  className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition"
+                  className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium"
                 >
                   Cancel
                 </button>
+                <button
+                  type="submit"
+                  form="edit-user-form"
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium"
+                >
+                  Update User
+                </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Add Scan Type Modal */}
-      {showAddScanModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96">
-            <h3 className="text-lg font-semibold mb-4">Add Scan Type</h3>
-            <form onSubmit={handleAddScan}>
+      {/* Add Treatment Type Modal */}
+      {showAddTreatmentModal && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={() => setShowAddTreatmentModal(false)}></div>
+          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-xl font-semibold text-gray-900">Add Treatment Type</h3>
+              <button onClick={() => setShowAddTreatmentModal(false)} className="p-2 hover:bg-gray-100 rounded-full transition">
+                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+            <form id="add-treatment-form" onSubmit={handleAddTreatment}>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
                 <input
                   type="text"
                   name="name"
-                  value={scanFormData.name}
-                  onChange={handleScanInputChange}
+                  value={treatmentFormData.name}
+                  onChange={handleTreatmentInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                   required
                 />
@@ -1465,45 +2083,58 @@ const Settings = () => {
                 <input
                   type="number"
                   name="price"
-                  value={scanFormData.price}
-                  onChange={handleScanInputChange}
+                  value={treatmentFormData.price}
+                  onChange={handleTreatmentInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                   required
                 />
               </div>
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition"
-                >
-                  Add Scan Type
-                </button>
+            </form>
+            </div>
+            <div className="p-6 border-t border-gray-200">
+              <div className="flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowAddScanModal(false)}
-                  className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition"
+                  onClick={() => setShowAddTreatmentModal(false)}
+                  className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium"
                 >
                   Cancel
                 </button>
+                <button
+                  type="submit"
+                  form="add-treatment-form"
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium"
+                >
+                  Add Treatment Type
+                </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Edit Scan Type Modal */}
-      {showEditScanModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96">
-            <h3 className="text-lg font-semibold mb-4">Edit Scan Type</h3>
-            <form onSubmit={handleUpdateScan}>
+      {/* Edit Treatment Type Modal */}
+      {showEditTreatmentModal && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={() => setShowEditTreatmentModal(false)}></div>
+          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-xl font-semibold text-gray-900">Edit Treatment Type</h3>
+              <button onClick={() => setShowEditTreatmentModal(false)} className="p-2 hover:bg-gray-100 rounded-full transition">
+                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+            <form id="edit-treatment-form" onSubmit={handleUpdateTreatment}>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
                 <input
                   type="text"
                   name="name"
-                  value={scanFormData.name}
-                  onChange={handleScanInputChange}
+                  value={treatmentFormData.name}
+                  onChange={handleTreatmentInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                   required
                 />
@@ -1513,38 +2144,51 @@ const Settings = () => {
                 <input
                   type="number"
                   name="price"
-                  value={scanFormData.price}
-                  onChange={handleScanInputChange}
+                  value={treatmentFormData.price}
+                  onChange={handleTreatmentInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                   required
                 />
               </div>
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition"
-                >
-                  Update Scan Type
-                </button>
+            </form>
+            </div>
+            <div className="p-6 border-t border-gray-200">
+              <div className="flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowEditScanModal(false)}
-                  className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition"
+                  onClick={() => setShowEditTreatmentModal(false)}
+                  className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium"
                 >
                   Cancel
                 </button>
+                <button
+                  type="submit"
+                  form="edit-treatment-form"
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium"
+                >
+                  Update Treatment Type
+                </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
 
       {/* Add Doctor Modal */}
       {showAddDoctorModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96">
-            <h3 className="text-lg font-semibold mb-4">Add Referring Doctor</h3>
-            <form onSubmit={handleAddDoctor}>
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={() => setShowAddDoctorModal(false)}></div>
+          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-xl font-semibold text-gray-900">Add Referring Doctor</h3>
+              <button onClick={() => setShowAddDoctorModal(false)} className="p-2 hover:bg-gray-100 rounded-full transition">
+                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+            <form id="add-doctor-form" onSubmit={handleAddDoctor}>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
                 <input
@@ -1567,32 +2211,33 @@ const Settings = () => {
                   required
                 />
               </div>
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition"
-                >
-                  Add Doctor
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowAddDoctorModal(false)}
-                  className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition"
-                >
-                  Cancel
-                </button>
-              </div>
             </form>
+            </div>
+            <div className="p-6 border-t border-gray-200">
+              <div className="flex justify-end gap-3">
+                <button type="button" onClick={() => setShowAddDoctorModal(false)} className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium">Cancel</button>
+                <button type="submit" form="add-doctor-form" className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium">Add Doctor</button>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       {/* Edit Doctor Modal */}
       {showEditDoctorModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96">
-            <h3 className="text-lg font-semibold mb-4">Edit Referring Doctor</h3>
-            <form onSubmit={handleUpdateDoctor}>
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={() => setShowEditDoctorModal(false)}></div>
+          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-xl font-semibold text-gray-900">Edit Referring Doctor</h3>
+              <button onClick={() => setShowEditDoctorModal(false)} className="p-2 hover:bg-gray-100 rounded-full transition">
+                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+            <form id="edit-doctor-form" onSubmit={handleUpdateDoctor}>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
                 <input
@@ -1615,34 +2260,33 @@ const Settings = () => {
                   required
                 />
               </div>
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition"
-                >
-                  Update Doctor
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowEditDoctorModal(false)}
-                  className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition"
-                >
-                  Cancel
-                </button>
-              </div>
             </form>
+            </div>
+            <div className="p-6 border-t border-gray-200">
+              <div className="flex justify-end gap-3">
+                <button type="button" onClick={() => setShowEditDoctorModal(false)} className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium">Cancel</button>
+                <button type="submit" form="edit-doctor-form" className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium">Update Doctor</button>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       {/* WhatsApp Configuration Modal */}
       {showWhatsappModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96">
-            <h3 className="text-lg font-semibold mb-4">
-              {whatsappConfig ? 'Edit WhatsApp Configuration' : 'Add WhatsApp Configuration'}
-            </h3>
-            <form onSubmit={whatsappConfig ? handleUpdateWhatsappConfig : handleAddWhatsappConfig}>
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={() => { setShowWhatsappModal(false); setWhatsappFormData({ api_key: "", phone_number: "" }); }}></div>
+          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-xl font-semibold text-gray-900">{whatsappConfig ? 'Edit WhatsApp Configuration' : 'Add WhatsApp Configuration'}</h3>
+              <button onClick={() => { setShowWhatsappModal(false); setWhatsappFormData({ api_key: "", phone_number: "" }); }} className="p-2 hover:bg-gray-100 rounded-full transition">
+                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+            <form id="whatsapp-config-form" onSubmit={whatsappConfig ? handleUpdateWhatsappConfig : handleAddWhatsappConfig}>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Rapiwha API Key *</label>
                 <input
@@ -1668,25 +2312,14 @@ const Settings = () => {
                 />
                 <p className="text-xs text-gray-500 mt-1">This is for reference only - messages will be sent from your WhatsApp account</p>
               </div>
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition"
-                >
-                  {whatsappConfig ? 'Update Config' : 'Add Config'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowWhatsappModal(false);
-                    setWhatsappFormData({ api_key: "", phone_number: "" });
-                  }}
-                  className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition"
-                >
-                  Cancel
-                </button>
-              </div>
             </form>
+            </div>
+            <div className="p-6 border-t border-gray-200">
+              <div className="flex justify-end gap-3">
+                <button type="button" onClick={() => { setShowWhatsappModal(false); setWhatsappFormData({ api_key: "", phone_number: "" }); }} className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium">Cancel</button>
+                <button type="submit" form="whatsapp-config-form" className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium">{whatsappConfig ? 'Update Config' : 'Add Config'}</button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1701,6 +2334,77 @@ const Settings = () => {
           }}
           onSave={handleUpdatePermissions}
         />
+      )}
+
+      {/* Password Management Modal */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={() => { setShowPasswordModal(false); setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' }); }}></div>
+          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-xl font-semibold text-gray-900">{user?.supabase_user_id && !user.supabase_user_id.startsWith('local_') ? "Set Password for Desktop Access" : "Change Password"}</h3>
+              <button onClick={() => { setShowPasswordModal(false); setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' }); }} className="p-2 hover:bg-gray-100 rounded-full transition">
+                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+            <form id="password-form" onSubmit={handleSetPassword}>
+              {user?.supabase_user_id && user.supabase_user_id.startsWith('local_') && (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
+                  <input
+                    type="password"
+                    name="currentPassword"
+                    value={passwordForm.currentPassword}
+                    onChange={handlePasswordInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    required
+                  />
+                </div>
+              )}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
+                <input
+                  type="password"
+                  name="newPassword"
+                  value={passwordForm.newPassword}
+                  onChange={handlePasswordInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="At least 8 characters"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  value={passwordForm.confirmPassword}
+                  onChange={handlePasswordInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="Re-enter your password"
+                  required
+                />
+              </div>
+              {user?.supabase_user_id && !user.supabase_user_id.startsWith('local_') && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    <strong>Note:</strong> After setting a password, you'll be able to login on the desktop app using your email and this password.
+                  </p>
+                </div>
+              )}
+            </form>
+            </div>
+            <div className="p-6 border-t border-gray-200">
+              <div className="flex justify-end gap-3">
+                <button type="button" onClick={() => { setShowPasswordModal(false); setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' }); }} className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium">Cancel</button>
+                <button type="submit" form="password-form" disabled={passwordLoading} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium disabled:opacity-50">{passwordLoading ? "Updating..." : "Update Password"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

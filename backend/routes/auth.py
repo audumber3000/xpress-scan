@@ -3,10 +3,19 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import User, Clinic
 from schemas import UserCreate, UserOut
-from supabase_client import supabase
+from supabase_client import supabase, OFFLINE_MODE
 import jwt
 import os
+import hashlib
 from typing import Optional
+
+def hash_password(password: str) -> str:
+    """Simple password hashing for offline mode"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_password(password: str, hashed: str) -> bool:
+    """Verify password against hash"""
+    return hash_password(password) == hashed
 
 router = APIRouter()
 
@@ -29,26 +38,35 @@ async def signup(
     first_name = data.get("first_name")
     last_name = data.get("last_name")
     role = data.get("role", "receptionist")
-    """Sign up a new user - creates Supabase auth user and custom User record"""
+    """Sign up a new user - creates user in local database (offline mode) or Supabase"""
     try:
         # Check if user already exists in custom User table
         existing_user = db.query(User).filter(User.email == email).first()
         if existing_user:
             raise HTTPException(status_code=400, detail="User already exists")
         
-        # Create user in Supabase auth
-        try:
-            auth_response = supabase.auth.sign_up({
-                "email": email,
-                "password": password
-            })
-            
-            if auth_response.user is None:
-                raise HTTPException(status_code=400, detail="Failed to create Supabase auth user")
-        except Exception as e:
-            # For now, skip Supabase auth and just create in custom table
-            # TODO: Fix Supabase configuration
-            auth_response = type('obj', (object,), {'user': type('obj', (object,), {'id': 'temp_id'})()})()
+        supabase_user_id = None
+        password_hash = None
+        
+        if OFFLINE_MODE:
+            # Offline mode: store password hash locally
+            password_hash = hash_password(password)
+            supabase_user_id = f"local_{email}"
+        else:
+            # Online mode: Create user in Supabase auth
+            try:
+                auth_response = supabase.auth.sign_up({
+                    "email": email,
+                    "password": password
+                })
+                
+                if auth_response.user is None:
+                    raise HTTPException(status_code=400, detail="Failed to create Supabase auth user")
+                supabase_user_id = auth_response.user.id
+            except Exception as e:
+                # Fallback to offline mode
+                password_hash = hash_password(password)
+                supabase_user_id = f"local_{email}"
         
         # Create user in custom User table
         user_data = {
@@ -58,7 +76,7 @@ async def signup(
             "name": f"{first_name} {last_name}",  # Set full name
             "role": role,
             "is_active": True,
-            "supabase_user_id": auth_response.user.id,  # Link to Supabase user
+            "supabase_user_id": supabase_user_id,
             "clinic_id": None  # Will be set during clinic onboarding
         }
         
@@ -124,26 +142,34 @@ async def login(
     data = await request.json()
     email = data.get("email")
     password = data.get("password")
-    """Login user - authenticates with Supabase and returns JWT token"""
+    """Login user - authenticates locally (offline mode) or with Supabase"""
     try:
-        # Authenticate with Supabase
-        try:
-            auth_response = supabase.auth.sign_in_with_password({
-                "email": email,
-                "password": password
-            })
-            
-            if auth_response.user is None:
-                raise HTTPException(status_code=401, detail="Invalid credentials")
-        except Exception as e:
-            # For now, skip Supabase auth and just check custom table
-            # TODO: Fix Supabase configuration
-            auth_response = type('obj', (object,), {'user': type('obj', (object,), {'id': 'temp_id'})()})()
-        
         # Get user from custom User table
         user = db.query(User).filter(User.email == email).first()
         if not user or not user.is_active:
-            raise HTTPException(status_code=401, detail="User not found or inactive")
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        
+        # Check if user has a password_hash (local user or OAuth user who set password)
+        if user.password_hash:
+            # Verify password against stored hash
+            if not verify_password(password, user.password_hash):
+                raise HTTPException(status_code=401, detail="Invalid credentials")
+        elif OFFLINE_MODE:
+            # Offline mode: allow login if user exists (simplified for demo)
+            pass
+        else:
+            # Online mode: Try Supabase authentication for users without password_hash
+            try:
+                if supabase:
+                    auth_response = supabase.auth.sign_in_with_password({
+                        "email": email,
+                        "password": password
+                    })
+                    
+                    if auth_response.user is None:
+                        raise HTTPException(status_code=401, detail="Invalid credentials")
+            except Exception as e:
+                raise HTTPException(status_code=401, detail="Invalid credentials")
         
         # Create JWT token for backend authentication
         token = create_jwt_token(user.id)
@@ -161,12 +187,13 @@ async def login(
 
 @router.post("/logout")
 async def logout():
-    """Logout user from Supabase"""
+    """Logout user"""
     try:
-        supabase.auth.sign_out()
+        if not OFFLINE_MODE and supabase:
+            supabase.auth.sign_out()
         return {"message": "Logged out successfully"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"message": "Logged out successfully"}
 
 @router.post("/oauth")
 async def oauth_login(request: Request, db: Session = Depends(get_db)):
@@ -336,14 +363,14 @@ async def complete_onboarding(
         scan_types = data.get("scan_types", [])
         for scan_type_data in scan_types:
             if scan_type_data.get("name") and scan_type_data.get("price"):
-                from models import ScanType
-                scan_type = ScanType(
+                from models import TreatmentType
+                treatment_type = TreatmentType(
                     clinic_id=clinic.id,
                     name=scan_type_data["name"],
                     price=float(scan_type_data["price"]),
                     is_active=True
                 )
-                db.add(scan_type)
+                db.add(treatment_type)
         
         db.commit()
         
@@ -364,4 +391,65 @@ async def complete_onboarding(
     except Exception as e:
         db.rollback()
         print(f"Onboarding error: {e}")
-        raise HTTPException(status_code=500, detail=f"Onboarding failed: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Onboarding failed: {str(e)}")
+
+@router.post("/set-password")
+async def set_password(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Allow OAuth users to set a password for desktop app access.
+    This enables users who signed up with Google to login on desktop with email/password.
+    """
+    from auth import get_current_user
+    
+    user = get_current_user(request, db)
+    data = await request.json()
+    password = data.get("password")
+    
+    if not password:
+        raise HTTPException(status_code=400, detail="Password is required")
+    
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    
+    # Hash and store password
+    user.password_hash = hash_password(password)
+    db.commit()
+    
+    return {"message": "Password set successfully. You can now login on desktop with your email and password."}
+
+@router.post("/change-password")
+async def change_password(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Allow users to change their existing password
+    """
+    from auth import get_current_user
+    
+    user = get_current_user(request, db)
+    data = await request.json()
+    current_password = data.get("current_password")
+    new_password = data.get("new_password")
+    
+    if not new_password:
+        raise HTTPException(status_code=400, detail="New password is required")
+    
+    if len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    
+    # If user has a password, verify current password
+    if user.password_hash:
+        if not current_password:
+            raise HTTPException(status_code=400, detail="Current password is required")
+        if not verify_password(current_password, user.password_hash):
+            raise HTTPException(status_code=401, detail="Current password is incorrect")
+    
+    # Update password
+    user.password_hash = hash_password(new_password)
+    db.commit()
+    
+    return {"message": "Password changed successfully"} 

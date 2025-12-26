@@ -8,11 +8,21 @@ class ClinicBase(BaseModel):
     address: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
-    specialization: str = "radiology"
+    gst_number: Optional[str] = None
+    specialization: str = "dental"
     subscription_plan: str = "free"
     status: str = "active"
     logo_url: Optional[str] = None
     primary_color: str = "#10B981"
+    timings: Optional[Dict[str, Any]] = {
+        'monday': {'open': '08:00', 'close': '20:00', 'closed': False},
+        'tuesday': {'open': '08:00', 'close': '20:00', 'closed': False},
+        'wednesday': {'open': '08:00', 'close': '20:00', 'closed': False},
+        'thursday': {'open': '08:00', 'close': '20:00', 'closed': False},
+        'friday': {'open': '08:00', 'close': '20:00', 'closed': False},
+        'saturday': {'open': '08:00', 'close': '20:00', 'closed': False},
+        'sunday': {'open': '08:00', 'close': '20:00', 'closed': True}
+    }
 
 class ClinicCreate(ClinicBase):
     pass
@@ -57,8 +67,8 @@ class PatientBase(BaseModel):
     gender: str
     village: str
     phone: str
-    referred_by: str
-    scan_type: str
+    referred_by: Optional[str] = None
+    treatment_type: str
     notes: Optional[str] = None
     payment_type: str = "Cash"
 
@@ -81,21 +91,21 @@ class PatientResponse(PatientBase):
     class Config:
         from_attributes = True 
 
-# Scan Type Schemas
-class ScanTypeBase(BaseModel):
+# Treatment Type Schemas
+class TreatmentTypeBase(BaseModel):
     name: str
     price: float
     is_active: bool = True
 
-class ScanTypeCreate(ScanTypeBase):
+class TreatmentTypeCreate(TreatmentTypeBase):
     clinic_id: Optional[int] = None
 
-class ScanTypeUpdate(BaseModel):
+class TreatmentTypeUpdate(BaseModel):
     name: Optional[str] = None
     price: Optional[float] = None
     is_active: Optional[bool] = None
 
-class ScanTypeOut(ScanTypeBase):
+class TreatmentTypeOut(TreatmentTypeBase):
     id: int
     clinic_id: int
 
@@ -127,7 +137,7 @@ class ReferringDoctorOut(ReferringDoctorBase):
 class PaymentBase(BaseModel):
     patient_id: int
     report_id: Optional[int] = None
-    scan_type_id: Optional[int] = None
+    treatment_type_id: Optional[int] = None
     amount: float
     payment_method: str
     status: str = "success"  # Default to success for new payments
@@ -159,8 +169,8 @@ class PaymentOut(PaymentBase):
     patient_phone: Optional[str] = None
     patient_email: Optional[str] = None
     
-    # Nested scan type info
-    scan_type_name: Optional[str] = None
+    # Nested treatment type info
+    treatment_type_name: Optional[str] = None
     
     # Nested received by user info  
     received_by_name: Optional[str] = None
@@ -175,7 +185,7 @@ class ReportResponse(BaseModel):
     patient_name: str
     patient_age: int
     patient_gender: str
-    scan_type: str
+    treatment_type: str
     referred_by: str
     docx_url: Optional[str] = None
     pdf_url: Optional[str] = None

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Path, Request
 from sqlalchemy.orm import Session
 from database import SessionLocal
-from models import Patient, Payment, ScanType
+from models import Patient, Payment, TreatmentType
 from schemas import PatientCreate, PatientOut
 from typing import List
 from schemas import PatientResponse
@@ -45,7 +45,7 @@ def get_patients(
             village=patient.village,
             phone=patient.phone,
             referred_by=patient.referred_by,
-            scan_type=patient.scan_type,
+            treatment_type=patient.treatment_type,
             notes=patient.notes,
             created_at=patient.created_at
         ) for patient in patients
@@ -70,26 +70,26 @@ def create_patient(
         db.add(db_patient)
         db.flush()  # Flush to get the patient ID without committing
         
-        # Find scan type to get price
-        scan_type = db.query(ScanType).filter(
-            ScanType.clinic_id == current_user.clinic_id,
-            ScanType.name == patient.scan_type
+        # Find treatment type to get price
+        treatment_type = db.query(TreatmentType).filter(
+            TreatmentType.clinic_id == current_user.clinic_id,
+            TreatmentType.name == patient.treatment_type
         ).first()
         
-        # Calculate amount (use scan type price if found, otherwise default)
+        # Calculate amount (use treatment type price if found, otherwise default)
         # All amounts are in INR (Indian Rupees)
-        amount = scan_type.price if scan_type else 2000.0  # Default amount in INR if scan type not found
+        amount = treatment_type.price if treatment_type else 2000.0  # Default amount in INR if treatment type not found
         
         # Create payment record automatically with success status
         payment_record = Payment(
             clinic_id=current_user.clinic_id,
             patient_id=db_patient.id,
-            scan_type_id=scan_type.id if scan_type else None,
+            treatment_type_id=treatment_type.id if treatment_type else None,
             amount=amount,
             payment_method=patient.payment_type,  # Use the payment_type from patient form
             status="success",  # Automatically set as successful since patient is created
             transaction_id=f"PAT-{db_patient.id}-{int(datetime.utcnow().timestamp())}",  # Unique transaction ID
-            notes=f"Payment for {patient.scan_type} - Auto-created with patient",
+            notes=f"Payment for {patient.treatment_type} - Auto-created with patient",
             paid_by=patient.name,
             received_by=current_user.id,
             created_at=datetime.utcnow(),
@@ -111,7 +111,7 @@ def create_patient(
             village=db_patient.village,
             phone=db_patient.phone,
             referred_by=db_patient.referred_by,
-            scan_type=db_patient.scan_type,
+            treatment_type=db_patient.treatment_type,
             notes=db_patient.notes,
             payment_type=db_patient.payment_type,
             created_at=db_patient.created_at

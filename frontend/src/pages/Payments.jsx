@@ -3,7 +3,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { FaSync } from "react-icons/fa";
 import { api } from "../utils/api";
 
-const PAYMENTS_PER_PAGE = 8;
+const PAYMENTS_PER_PAGE = 10;
 
 const Payments = () => {
   const { user } = useAuth();
@@ -11,15 +11,49 @@ const Payments = () => {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [error, setError] = useState("");
+  const [totalCount, setTotalCount] = useState(0);
 
-  // Fetch payments from API
+  // Debounce search term to avoid too many API calls
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setPage(1); // Reset to first page on search
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Fetch payments from API with pagination and search
   const fetchPayments = async () => {
     try {
       setLoading(true);
       setError("");
-      const paymentsData = await api.get('/payments');
+      
+      const skip = (page - 1) * PAYMENTS_PER_PAGE;
+      
+      // Build query params
+      const params = {
+        skip: skip,
+        limit: PAYMENTS_PER_PAGE
+      };
+      
+      // Add search filter if exists
+      if (debouncedSearch.trim()) {
+        params.patient_name = debouncedSearch;
+      }
+      
+      const paymentsData = await api.get('/payments', { params });
       setPayments(paymentsData || []);
+      
+      // For total count, we'll use a rough estimate based on the number of results
+      // In a production app, the backend should return total count
+      if (paymentsData && paymentsData.length === PAYMENTS_PER_PAGE) {
+        setTotalCount((page) * PAYMENTS_PER_PAGE + 1); // At least one more page
+      } else {
+        setTotalCount((page - 1) * PAYMENTS_PER_PAGE + (paymentsData?.length || 0));
+      }
     } catch (err) {
       console.error('Error fetching payments:', err);
       setError(err.message || 'Failed to fetch payments');
@@ -31,7 +65,8 @@ const Payments = () => {
 
   useEffect(() => {
     fetchPayments();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, debouncedSearch]);
 
   const getStatusBadge = (status) => {
     const statusConfig = {
@@ -58,27 +93,9 @@ const Payments = () => {
     }).format(amount);
   };
 
-  // Filtered and paginated payments
-  const filteredPayments = payments.filter((payment) => {
-    const matchesSearch = 
-      (payment.patient_name && payment.patient_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (payment.patient_phone && payment.patient_phone.toLowerCase().includes(searchTerm.toLowerCase())) ||
-
-      (payment.id && payment.id.toString().toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (payment.payment_method && payment.payment_method.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (payment.paid_by && payment.paid_by.toLowerCase().includes(searchTerm.toLowerCase()));
-    return matchesSearch;
-  });
-
-  const totalPages = Math.ceil(filteredPayments.length / PAYMENTS_PER_PAGE) || 1;
-  const currentPayments = filteredPayments.slice(
-    (page - 1) * PAYMENTS_PER_PAGE,
-    page * PAYMENTS_PER_PAGE
-  );
-
-  useEffect(() => {
-    setPage(1);
-  }, [searchTerm, payments]);
+  // Since we're using backend pagination, we use the current payments directly
+  const totalPages = Math.ceil(totalCount / PAYMENTS_PER_PAGE) || 1;
+  const currentPayments = payments;
 
   if (loading) {
     return (
@@ -153,8 +170,8 @@ const Payments = () => {
 
       {/* Payments Table Container */}
       <div className="flex-1 overflow-hidden">
-        <div className="h-full overflow-auto">
-          {loading ? (
+        <div className="h-full overflow-auto relative">
+          {loading && payments.length === 0 ? (
             <div className="w-full flex items-center justify-center py-16">
               <div className="text-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
@@ -162,7 +179,8 @@ const Payments = () => {
               </div>
             </div>
           ) : (
-            <table className="w-full">
+            <>
+              <table className="w-full">
               <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">Invoice</th>
@@ -208,6 +226,17 @@ const Payments = () => {
                 )}
               </tbody>
             </table>
+            
+            {/* Loading overlay during pagination */}
+            {loading && payments.length > 0 && (
+              <div className="absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center">
+                <div className="flex flex-col items-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+                  <p className="text-sm text-gray-600 mt-2">Loading...</p>
+                </div>
+              </div>
+            )}
+          </>
           )}
         </div>
       </div>

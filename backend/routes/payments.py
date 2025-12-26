@@ -5,7 +5,7 @@ from typing import List, Optional, Dict
 from datetime import datetime, timedelta
 
 from database import SessionLocal
-from models import Payment, Patient, ScanType, User, Clinic
+from models import Payment, Patient, TreatmentType, User, Clinic
 from schemas import PaymentCreate, PaymentUpdate, PaymentOut
 from auth import get_current_user
 
@@ -277,10 +277,10 @@ def get_enriched_payment(db: Session, payment: Payment) -> PaymentOut:
     # Get patient info
     patient = db.query(Patient).filter(Patient.id == payment.patient_id).first()
     
-    # Get scan type info
-    scan_type = None
-    if payment.scan_type_id:
-        scan_type = db.query(ScanType).filter(ScanType.id == payment.scan_type_id).first()
+    # Get treatment type info
+    treatment_type = None
+    if payment.treatment_type_id:
+        treatment_type = db.query(TreatmentType).filter(TreatmentType.id == payment.treatment_type_id).first()
     
     # Get received by user info
     received_by_user = None
@@ -307,7 +307,7 @@ def get_enriched_payment(db: Session, payment: Payment) -> PaymentOut:
         "patient_name": patient.name if patient else None,
         "patient_phone": patient.phone if patient else None,
         "patient_email": getattr(patient, 'email', None) if patient else None,
-        "scan_type_name": scan_type.name if scan_type else None,
+        "treatment_type_name": treatment_type.name if treatment_type else None,
         "received_by_name": received_by_user.name if received_by_user else None
     }
     

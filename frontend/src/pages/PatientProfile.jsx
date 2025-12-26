@@ -1,330 +1,610 @@
 import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import RealisticDentalChart, { CONDITION_LABELS, TOOTH_NAMES } from "../components/RealisticDentalChart";
 
 const PatientProfile = () => {
   const { patientId } = useParams();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("profile");
+  const [activeTab, setActiveTab] = useState("chart");
 
   const tabs = [
-    { id: "profile", name: "Patient Profile" },
-    { id: "medications", name: "Medications" },
-    { id: "goals", name: "Mini Goals" },
-    { id: "lab", name: "Lab Results" },
-    { id: "bgl", name: "BGL Analysis" }
+    { id: "chart", name: "Dental Chart" },
+    { id: "timeline", name: "Timeline" },
+    { id: "billing", name: "Billing" },
+    { id: "profile", name: "Patient Info" },
+    { id: "prescriptions", name: "Prescriptions" }
   ];
 
   // Sample patient data
   const patientData = {
-    name: "Ahmed Ali Hussain",
-    age: 38,
-    gender: "Male",
-    location: "Elshiekh zayed, Giza",
-    occupation: "Accountant",
-    dob: "12 Dec 1992",
-    phone: "+20 123 456 7890",
-    email: "ahmed.ali@email.com",
-    profileImage: "https://randomuser.me/api/portraits/men/32.jpg",
-    bmi: 22.4,
-    weight: 92,
-    height: 175,
-    bloodPressure: "124/80",
-    alcohol: false,
-    smoker: false,
-    diagnosis: ["Obesity", "Uncontrolled Type 2"],
-    healthBarriers: ["Fear of medication", "Fear of insulin"]
+    name: "Sarah Johnson",
+    age: 39,
+    gender: "Female",
+    location: "123 Main St, New York, NY 10001",
+    occupation: "Marketing Manager",
+    dob: "15 Mar 1985",
+    phone: "+1 (555) 123-4567",
+    email: "sarah.j@email.com",
+    profileImage: "https://randomuser.me/api/portraits/women/44.jpg",
+    insurance: "Delta Dental PPO",
+    allergies: ["Penicillin", "Latex"],
+    medicalConditions: ["Hypertension"],
+    emergencyContact: "John Johnson - +1 (555) 987-6543",
+    lastVisit: "01 Dec 2024",
+    nextAppointment: "15 Dec 2024"
   };
 
-  const timelineData = [
-    { date: "Dec 2022", event: "Pre-diabetic", a1c: "10.4" },
-    { date: "Jan 2022", event: "Type 2", a1c: "10.4" },
-    { date: "Jul 2021", event: "Chronic thyroid disorder", a1c: "10.4" },
-    { date: "Jul 2021", event: "Angina Pectoris", a1c: "10.4" },
-    { date: "Jul 2021", event: "Stroke", a1c: "10.4" }
-  ];
+  // Dental chart state
+  const [teethData, setTeethData] = useState({
+    16: { status: 'present', surfaces: { O: 'filling_amalgam', M: 'filling_amalgam' } },
+    26: { status: 'present', surfaces: { O: 'cavity', D: 'cavity' } },
+    36: { status: 'present', surfaces: { O: 'crown', M: 'crown', D: 'crown', B: 'crown', L: 'crown' } },
+    46: { status: 'rootCanal', surfaces: { O: 'filling_composite' } },
+    38: { status: 'missing', surfaces: {} },
+    18: { status: 'implant', surfaces: {} },
+  });
+  const [selectedTooth, setSelectedTooth] = useState(null);
+  const [toothNotes, setToothNotes] = useState({
+    16: 'Amalgam filling placed on 2024-06-15 (MO surfaces)',
+    26: 'Cavity detected on OD surfaces, treatment scheduled',
+    36: 'Full porcelain crown placed on 2024-01-20',
+    46: 'Root canal completed on 2023-11-10, composite restoration',
+    38: 'Extracted due to impaction on 2024-12-01',
+    18: 'Implant placed on 2023-06-15',
+  });
 
-  const medicalHistory = {
-    chronic: ["IHD", "Obesity", "Chronic thyroid disorder"],
-    emergencies: ["Diabetic Ketoacidosis"],
-    surgery: ["Liposuction"],
-    family: ["Obesity (Father)"],
-    complications: ["Nephropathy", "Neuropathy", "Retinopathy", "Diabetic foot", "Sexual dysfunction"]
+  // Treatment timeline
+  const [treatmentHistory, setTreatmentHistory] = useState([
+    {
+      id: 1,
+      date: '2024-12-01',
+      procedure: 'Tooth Extraction',
+      tooth: 38,
+      dentist: 'Dr. Smith',
+      notes: 'Lower left wisdom tooth extracted due to impaction.',
+      cost: 350,
+      status: 'completed'
+    },
+    {
+      id: 2,
+      date: '2024-06-15',
+      procedure: 'Filling - Amalgam',
+      tooth: 16,
+      dentist: 'Dr. Smith',
+      notes: 'Amalgam filling on upper right first molar (MO surfaces).',
+      cost: 180,
+      status: 'completed'
+    },
+    {
+      id: 3,
+      date: '2024-01-20',
+      procedure: 'Crown - Porcelain',
+      tooth: 36,
+      dentist: 'Dr. Johnson',
+      notes: 'Full porcelain crown placement.',
+      cost: 1200,
+      status: 'completed'
+    },
+  ]);
+
+  // Upcoming appointments
+  const [appointments, setAppointments] = useState([
+    {
+      id: 1,
+      date: '2024-12-15',
+      time: '10:00 AM',
+      procedure: 'Cavity Treatment',
+      tooth: 26,
+      status: 'scheduled',
+      estimatedCost: 200
+    },
+    {
+      id: 2,
+      date: '2025-01-10',
+      time: '2:30 PM',
+      procedure: 'Regular Checkup & Cleaning',
+      tooth: null,
+      status: 'scheduled',
+      estimatedCost: 150
+    },
+  ]);
+
+  // Prescriptions
+  const [prescriptions, setPrescriptions] = useState([
+    {
+      id: 1,
+      medication: 'Amoxicillin 500mg',
+      dosage: '1 capsule 3 times daily',
+      duration: '7 days',
+      date: '2024-12-01',
+      status: 'active',
+      notes: 'Take with food. For post-extraction infection prevention.',
+    },
+    {
+      id: 2,
+      medication: 'Ibuprofen 400mg',
+      dosage: '1 tablet every 6 hours as needed',
+      duration: '5 days',
+      date: '2024-12-01',
+      status: 'active',
+      notes: 'For pain management after procedure.',
+    },
+  ]);
+
+  const handleToothSelect = (toothNum) => {
+    setSelectedTooth(toothNum === selectedTooth ? null : toothNum);
+  };
+
+  const handleSurfaceConditionChange = (toothNum, surface, condition) => {
+    setTeethData(prev => {
+      const toothData = prev[toothNum] || { status: 'present', surfaces: {} };
+      const newSurfaces = { ...toothData.surfaces };
+      if (condition === 'none') {
+        delete newSurfaces[surface];
+      } else {
+        newSurfaces[surface] = condition;
+      }
+      return {
+        ...prev,
+        [toothNum]: {
+          ...toothData,
+          surfaces: newSurfaces,
+        },
+      };
+    });
+  };
+
+  const handleToothStatusChange = (toothNum, status) => {
+    setTeethData(prev => {
+      const toothData = prev[toothNum] || { status: 'present', surfaces: {} };
+      return {
+        ...prev,
+        [toothNum]: {
+          ...toothData,
+          status: status,
+        },
+      };
+    });
+  };
+
+  const addProcedure = (toothNum, procedureType) => {
+    const newProcedure = {
+      id: Date.now(),
+      date: new Date().toISOString().split('T')[0],
+      procedure: procedureType,
+      tooth: toothNum,
+      dentist: 'Dr. Smith',
+      notes: `${procedureType} for tooth #${toothNum}`,
+      cost: 0,
+      status: 'completed'
+    };
+    setTreatmentHistory(prev => [newProcedure, ...prev]);
   };
 
   return (
-    <div className="w-full h-full bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <button
-            onClick={() => navigate("/patient-files")}
-            className="flex items-center text-gray-600 hover:text-gray-900 mb-4"
-          >
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
-            </svg>
-            Back to Patient Files
-          </button>
-          <h1 className="text-3xl font-bold text-gray-900">{patientData.name}</h1>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="mb-8">
-          <div className="border-b border-gray-200">
-            <nav className="-mb-px flex space-x-8">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === tab.id
-                      ? "border-green-500 text-green-600"
-                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                  }`}
-                >
-                  {tab.name}
-                </button>
-              ))}
-            </nav>
+    <div className="w-full h-full flex flex-col bg-gray-50 overflow-hidden">
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="mb-6">
+            <button
+              onClick={() => navigate("/patient-files")}
+              className="flex items-center text-gray-600 hover:text-gray-900 mb-4"
+            >
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+              </svg>
+              Back to Patient Files
+            </button>
+            <h1 className="text-3xl font-bold text-gray-900">{patientData.name}</h1>
           </div>
-        </div>
 
-        {/* Profile Tab Content */}
-        {activeTab === "profile" && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Patient Demographics Card */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="flex items-start space-x-4">
-                <div className="flex-shrink-0">
-                  <img
-                    src={patientData.profileImage}
-                    alt={patientData.name}
-                    className="w-20 h-20 rounded-full object-cover"
-                  />
-                  <div className="flex justify-center mt-2 space-x-2">
-                    {!patientData.alcohol && (
-                      <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center">
-                        <svg className="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-                        </svg>
-                      </div>
-                    )}
-                    {!patientData.smoker && (
-                      <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center">
-                        <svg className="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-                        </svg>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <h2 className="text-xl font-semibold text-gray-900">{patientData.name}</h2>
-                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                    </svg>
-                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                  </div>
-                  <div className="space-y-1 text-sm text-gray-600">
-                    <p>{patientData.gender}</p>
-                    <p>{patientData.location}</p>
-                    <p>{patientData.occupation}</p>
-                    <p>{patientData.dob} ({patientData.age} years)</p>
-                  </div>
-                </div>
-              </div>
+          {/* Tab Navigation */}
+          <div className="mb-8">
+            <div className="border-b border-gray-200">
+              <nav className="-mb-px flex space-x-8">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                      activeTab === tab.id
+                        ? "border-green-500 text-green-600"
+                        : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                    }`}
+                  >
+                    {tab.name}
+                  </button>
+                ))}
+              </nav>
+            </div>
+          </div>
 
-              {/* Key Metrics */}
-              <div className="mt-6 grid grid-cols-2 gap-4">
-                <div className="text-center">
-                  <div className="flex items-center justify-center space-x-1">
-                    <span className="text-lg font-semibold text-gray-900">{patientData.bmi}</span>
-                    <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                    </svg>
-                    <span className="text-xs text-green-600">10</span>
+          {/* Dental Chart Tab */}
+          {activeTab === "chart" && (
+            <div className="space-y-6 pb-6">
+              <div className="bg-white rounded-lg shadow-sm p-6">
+              <RealisticDentalChart
+                teethData={teethData}
+                selectedTooth={selectedTooth}
+                onToothSelect={handleToothSelect}
+                onSurfaceConditionChange={handleSurfaceConditionChange}
+                onToothStatusChange={handleToothStatusChange}
+                editable={true}
+              />
+
+              {/* Tooth Notes */}
+              {selectedTooth && (
+                <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-semibold text-gray-900">
+                      Tooth #{selectedTooth} - {TOOTH_NAMES[selectedTooth]}
+                    </h4>
                   </div>
-                  <p className="text-xs text-gray-500">BMI</p>
+                  <p className="text-sm text-gray-700">
+                    {toothNotes[selectedTooth] || 'No notes for this tooth yet.'}
+                  </p>
                 </div>
-                <div className="text-center">
-                  <div className="flex items-center justify-center space-x-1">
-                    <span className="text-lg font-semibold text-gray-900">{patientData.weight} kg</span>
-                    <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                    </svg>
-                    <span className="text-xs text-green-600">10 kg</span>
-                  </div>
-                  <p className="text-xs text-gray-500">Weight</p>
-                </div>
-                <div className="text-center">
-                  <span className="text-lg font-semibold text-gray-900">{patientData.height} Cm</span>
-                  <p className="text-xs text-gray-500">Height</p>
-                </div>
-                <div className="text-center">
-                  <div className="flex items-center justify-center space-x-1">
-                    <span className="text-lg font-semibold text-gray-900">{patientData.bloodPressure}</span>
-                    <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
-                    </svg>
-                    <span className="text-xs text-red-600">10</span>
-                  </div>
-                  <p className="text-xs text-gray-500">Blood pressure</p>
+              )}
+
+              {/* Teeth with Conditions Summary */}
+              <div className="mt-6">
+                <h4 className="font-semibold text-gray-900 mb-3">Teeth with Conditions</h4>
+                <div className="space-y-2">
+                  {Object.entries(teethData)
+                    .filter(([_, data]) => 
+                      data.status !== 'present' || Object.keys(data.surfaces || {}).length > 0
+                    )
+                    .map(([tooth, data]) => (
+                      <button
+                        key={tooth}
+                        onClick={() => handleToothSelect(parseInt(tooth))}
+                        className="w-full p-3 bg-gray-50 hover:bg-gray-100 rounded-lg text-left transition-colors"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="font-semibold text-gray-900">Tooth #{tooth}</span>
+                            <span className="text-sm text-gray-600 ml-2">{TOOTH_NAMES[tooth]}</span>
+                            {data.status !== 'present' && (
+                              <span className="ml-2 text-xs px-2 py-1 bg-orange-100 text-orange-800 rounded">
+                                {data.status}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex gap-1">
+                            {Object.entries(data.surfaces || {}).map(([surface, condition]) => (
+                              <span key={surface} className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded">
+                                {surface}: {CONDITION_LABELS[condition]}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  {Object.keys(teethData).length === 0 && (
+                    <p className="text-gray-500 text-center py-4">No conditions recorded yet. Click on teeth to add.</p>
+                  )}
                 </div>
               </div>
             </div>
+          </div>
+        )}
 
-            {/* Diagnosis and Health Barriers Card */}
+        {/* Timeline Tab - Improved UI with Patient Journey */}
+        {activeTab === "timeline" && (
+          <div className="space-y-6">
+            {/* Upcoming Appointments */}
             <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Diagnosis & Health Barriers</h3>
-                <button className="text-green-600 hover:text-green-700 text-sm font-medium">
-                  Edit
-                </button>
+              <div className="flex items-center gap-2 mb-4">
+                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <h3 className="text-lg font-semibold text-gray-900">Upcoming Appointments</h3>
               </div>
-              <div className="space-y-4">
-                <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Own diagnosis</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {patientData.diagnosis.map((item, index) => (
-                      <span key={index} className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Health barriers</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {patientData.healthBarriers.map((item, index) => (
-                      <span key={index} className="px-3 py-1 bg-orange-100 text-orange-800 text-sm rounded-full">
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Timeline Card */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Timeline</h3>
-                <button className="text-green-600 hover:text-green-700 text-sm font-medium">
-                  Edit
-                </button>
-              </div>
-              <div className="space-y-3">
-                {timelineData.map((item, index) => (
-                  <div key={index} className="flex items-center space-x-3">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-gray-900">{item.event}</span>
-                        <span className="text-xs text-gray-500">A1c: {item.a1c}</span>
+              
+              {appointments.length > 0 ? (
+                <div className="space-y-3">
+                  {appointments.map((apt) => (
+                    <div key={apt.id} className="p-4 border-l-4 border-green-500 bg-green-50 rounded-r-lg hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-900">{apt.procedure}</p>
+                            <p className="text-sm text-green-700 font-medium mt-1">{apt.date} at {apt.time}</p>
+                            {apt.tooth && (
+                              <p className="text-sm text-gray-600 mt-1">Tooth #{apt.tooth} - {TOOTH_NAMES[apt.tooth]}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-sm font-medium text-green-700 bg-green-100 px-3 py-1 rounded-full">
+                            ${apt.estimatedCost}
+                          </span>
+                        </div>
                       </div>
-                      <p className="text-xs text-gray-500">{item.date}</p>
                     </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-4">No upcoming appointments</p>
+              )}
+            </div>
+
+            {/* Treatment History Timeline */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="flex items-center gap-2 mb-6">
+                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                <h3 className="text-lg font-semibold text-gray-900">Treatment Journey</h3>
+              </div>
+              
+              {/* Timeline with vertical line */}
+              <div className="relative">
+                {/* Vertical line */}
+                <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-gray-200"></div>
+                
+                <div className="space-y-6">
+                  {treatmentHistory.map((treatment, index) => (
+                    <div key={treatment.id} className="relative pl-12">
+                      {/* Timeline dot with icon */}
+                      <div className={`absolute left-0 w-10 h-10 rounded-full flex items-center justify-center ${
+                        treatment.status === 'completed' ? 'bg-blue-100' : 'bg-gray-100'
+                      }`}>
+                        {treatment.procedure.toLowerCase().includes('extraction') ? (
+                          <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        ) : treatment.procedure.toLowerCase().includes('crown') ? (
+                          <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2L4 5v6.5c0 5.25 3.5 10.15 8 11.5 4.5-1.35 8-6.25 8-11.5V5l-8-3z"/>
+                          </svg>
+                        ) : treatment.procedure.toLowerCase().includes('filling') ? (
+                          <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C10.34 2 9 3.34 9 5C9 5.87 9.32 6.67 9.84 7.28C8.78 8.13 8 9.46 8 11C8 11.7 8.13 12.36 8.37 12.97C7.55 13.23 6.87 13.77 6.42 14.47C5.97 15.17 5.76 16 5.76 16.84C5.76 18.58 7.18 20 8.92 20C10.2 20 11.3 19.23 11.78 18.13C11.92 18.21 12.07 18.26 12.22 18.26C12.37 18.26 12.52 18.21 12.66 18.13C13.14 19.23 14.24 20 15.52 20C17.26 20 18.68 18.58 18.68 16.84C18.68 16 18.47 15.17 18.02 14.47C17.57 13.77 16.89 13.23 16.07 12.97C16.31 12.36 16.44 11.7 16.44 11C16.44 9.46 15.66 8.13 14.6 7.28C15.12 6.67 15.44 5.87 15.44 5C15.44 3.34 14.1 2 12.44 2H12Z"/>
+                          </svg>
+                        ) : (
+                          <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+
+                      {/* Treatment Card */}
+                      <div className="bg-gray-50 rounded-lg p-4 hover:shadow-md transition-shadow border border-gray-200">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <h4 className="font-semibold text-gray-900 text-base">{treatment.procedure}</h4>
+                            <p className="text-sm text-gray-500 mt-1">{new Date(treatment.date).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric'
+                            })}</p>
+                          </div>
+                          <span className="text-base font-semibold text-gray-900 bg-white px-3 py-1 rounded-lg border border-gray-300">
+                            ${treatment.cost}
+                          </span>
+                        </div>
+                        
+                        <div className="space-y-2 mt-3">
+                          <div className="flex items-center gap-2 text-sm text-gray-700">
+                            <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12 2C10.34 2 9 3.34 9 5C9 5.87 9.32 6.67 9.84 7.28C8.78 8.13 8 9.46 8 11C8 11.7 8.13 12.36 8.37 12.97C7.55 13.23 6.87 13.77 6.42 14.47C5.97 15.17 5.76 16 5.76 16.84C5.76 18.58 7.18 20 8.92 20C10.2 20 11.3 19.23 11.78 18.13C11.92 18.21 12.07 18.26 12.22 18.26C12.37 18.26 12.52 18.21 12.66 18.13C13.14 19.23 14.24 20 15.52 20C17.26 20 18.68 18.58 18.68 16.84C18.68 16 18.47 15.17 18.02 14.47C17.57 13.77 16.89 13.23 16.07 12.97C16.31 12.36 16.44 11.7 16.44 11C16.44 9.46 15.66 8.13 14.6 7.28C15.12 6.67 15.44 5.87 15.44 5C15.44 3.34 14.1 2 12.44 2H12Z"/>
+                            </svg>
+                            <span>Tooth #{treatment.tooth} - {TOOTH_NAMES[treatment.tooth]}</span>
+                          </div>
+                          
+                          <div className="flex items-center gap-2 text-sm text-gray-700">
+                            <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            <span>By {treatment.dentist}</span>
+                          </div>
+
+                          {treatment.notes && (
+                            <div className="mt-2 pt-2 border-t border-gray-200">
+                              <p className="text-sm text-gray-600">{treatment.notes}</p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Status badge */}
+                        <div className="mt-3">
+                          <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${
+                            treatment.status === 'completed' 
+                              ? 'bg-green-100 text-green-800 border border-green-200' 
+                              : 'bg-yellow-100 text-yellow-800 border border-yellow-200'
+                          }`}>
+                            {treatment.status === 'completed' ? (
+                              <>
+                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                </svg>
+                                Completed
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                                </svg>
+                                In Progress
+                              </>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Billing Tab */}
+        {activeTab === "billing" && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Billing Summary</h3>
+              
+              {/* Total Balance */}
+              <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-700">Total Paid</span>
+                  <span className="text-2xl font-bold text-green-600">
+                    ${treatmentHistory.reduce((sum, t) => sum + t.cost, 0)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-gray-700">Upcoming Procedures</span>
+                  <span className="text-xl font-semibold text-gray-900">
+                    ${appointments.reduce((sum, a) => sum + a.estimatedCost, 0)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Billing History */}
+              <h4 className="font-semibold text-gray-900 mb-3">Payment History</h4>
+              <div className="space-y-2">
+                {treatmentHistory.map((treatment) => (
+                  <div key={treatment.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="font-medium text-gray-900">{treatment.procedure}</p>
+                      <p className="text-sm text-gray-500">{treatment.date} - Tooth #{treatment.tooth}</p>
+                    </div>
+                    <span className="font-semibold text-gray-900">${treatment.cost}</span>
                   </div>
                 ))}
               </div>
             </div>
+          </div>
+        )}
 
-            {/* Medical History Card */}
+        {/* Prescriptions Tab */}
+        {activeTab === "prescriptions" && (
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Current Prescriptions</h3>
+            <div className="space-y-4">
+              {prescriptions.map((rx) => (
+                <div key={rx.id} className="p-4 border border-gray-200 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-2">
+                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      <h4 className="font-semibold text-gray-900">{rx.medication}</h4>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      rx.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {rx.status}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-700 mb-1"><strong>Dosage:</strong> {rx.dosage}</p>
+                  <p className="text-sm text-gray-700 mb-1"><strong>Duration:</strong> {rx.duration}</p>
+                  <p className="text-sm text-gray-500 mb-2">Prescribed: {rx.date}</p>
+                  {rx.notes && (
+                    <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded">{rx.notes}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Patient Info Tab */}
+        {activeTab === "profile" && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Personal Information */}
             <div className="bg-white rounded-lg shadow-sm p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Medical history</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Personal Information</h3>
+              <div className="space-y-3">
+                <div className="flex items-center space-x-3">
+                  <img
+                    src={patientData.profileImage}
+                    alt={patientData.name}
+                    className="w-16 h-16 rounded-full object-cover"
+                  />
+                  <div>
+                    <p className="font-semibold text-gray-900">{patientData.name}</p>
+                    <p className="text-sm text-gray-600">{patientData.gender}, {patientData.age} years</p>
+                  </div>
+                </div>
+                <div className="pt-3 space-y-2">
+                  <div className="flex items-center space-x-2 text-sm">
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span className="text-gray-600">DOB: {patientData.dob}</span>
+                  </div>
+                  <div className="flex items-center space-x-2 text-sm">
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                    </svg>
+                    <span className="text-gray-600">{patientData.phone}</span>
+                  </div>
+                  <div className="flex items-center space-x-2 text-sm">
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <span className="text-gray-600">{patientData.email}</span>
+                  </div>
+                  <div className="flex items-center space-x-2 text-sm">
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span className="text-gray-600">{patientData.location}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Medical Information */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Medical Information</h3>
               <div className="space-y-4">
                 <div>
-                  <div className="flex items-center space-x-2 mb-2">
-                    <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                    </svg>
-                    <h4 className="text-sm font-medium text-gray-700">Chronic disease</h4>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {medicalHistory.chronic.map((item, index) => (
-                      <span key={index} className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
-                        {item}
+                  <p className="text-sm font-medium text-gray-700 mb-1">Insurance</p>
+                  <p className="text-sm text-gray-900">{patientData.insurance}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-2">Allergies</p>
+                  <div className="flex flex-wrap gap-2">
+                    {patientData.allergies.map((allergy, idx) => (
+                      <span key={idx} className="px-3 py-1 bg-red-100 text-red-800 text-sm rounded-full flex items-center space-x-1">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                        </svg>
+                        <span>{allergy}</span>
                       </span>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <div className="flex items-center space-x-2 mb-2">
-                    <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                    </svg>
-                    <h4 className="text-sm font-medium text-gray-700">Diabetes Emergencies</h4>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {medicalHistory.emergencies.map((item, index) => (
-                      <span key={index} className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
-                        {item}
+                  <p className="text-sm font-medium text-gray-700 mb-2">Medical Conditions</p>
+                  <div className="flex flex-wrap gap-2">
+                    {patientData.medicalConditions.map((condition, idx) => (
+                      <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
+                        {condition}
                       </span>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <div className="flex items-center space-x-2 mb-2">
-                    <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M19 7h-8v6h8V7zm-2 4h-4V9h4v2zm4.5-9H2.5C1.67 2 1 2.67 1 3.5v17C1 21.33 1.67 22 2.5 22h19c.83 0 1.5-.67 1.5-1.5v-17C23 2.67 22.33 2 21.5 2z"/>
-                    </svg>
-                    <h4 className="text-sm font-medium text-gray-700">Surgery</h4>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {medicalHistory.surgery.map((item, index) => (
-                      <span key={index} className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <div className="flex items-center space-x-2 mb-2">
-                    <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M16 4c0-1.11.89-2 2-2s2 .89 2 2-.89 2-2 2-2-.89-2-2zm4 18v-6h2.5l-2.54-7.63A1.5 1.5 0 0 0 18.54 8H16c-.8 0-1.54.37-2.01.99L12 11l-1.99-2.01A2.5 2.5 0 0 0 8 8H5.46c-.8 0-1.54.37-2.01.99L1 15.5V22h2v-6h2.5l2.54-7.63A1.5 1.5 0 0 1 9.46 8H12c.8 0 1.54.37 2.01.99L16 11l1.99-2.01A2.5 2.5 0 0 1 20 8h2.54c.8 0 1.54.37 2.01.99L27 15.5V22h-7z"/>
-                    </svg>
-                    <h4 className="text-sm font-medium text-gray-700">Family disease</h4>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {medicalHistory.family.map((item, index) => (
-                      <span key={index} className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <div className="flex items-center space-x-2 mb-2">
-                    <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                    </svg>
-                    <h4 className="text-sm font-medium text-gray-700">Diabetes related complication</h4>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {medicalHistory.complications.map((item, index) => (
-                      <span key={index} className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
-                        {item}
-                      </span>
-                    ))}
-                  </div>
+                  <p className="text-sm font-medium text-gray-700 mb-1">Emergency Contact</p>
+                  <p className="text-sm text-gray-900">{patientData.emergencyContact}</p>
                 </div>
               </div>
             </div>
           </div>
         )}
-
-        {/* Other tabs content will go here */}
-        {activeTab !== "profile" && (
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              {tabs.find(tab => tab.id === activeTab)?.name}
-            </h2>
-            <p className="text-gray-600">Content for {activeTab} tab will be implemented here.</p>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );

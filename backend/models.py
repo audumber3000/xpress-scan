@@ -12,13 +12,23 @@ class Clinic(Base):
     address = Column(String)
     phone = Column(String)
     email = Column(String)
-    specialization = Column(String, default='radiology')  # radiology, cardiology, pathology, etc.
+    gst_number = Column(String)
+    specialization = Column(String, default='dental')  # dental, cardiology, pathology, etc.
     subscription_plan = Column(String, default='free')  # free, professional, enterprise
     status = Column(String, default='active')  # active, suspended, cancelled
     logo_url = Column(String)
     primary_color = Column(String, default='#10B981')  # Green default
+    timings = Column(JSON, default=lambda: {
+        'monday': {'open': '08:00', 'close': '20:00', 'closed': False},
+        'tuesday': {'open': '08:00', 'close': '20:00', 'closed': False},
+        'wednesday': {'open': '08:00', 'close': '20:00', 'closed': False},
+        'thursday': {'open': '08:00', 'close': '20:00', 'closed': False},
+        'friday': {'open': '08:00', 'close': '20:00', 'closed': False},
+        'saturday': {'open': '08:00', 'close': '20:00', 'closed': False},
+        'sunday': {'open': '08:00', 'close': '20:00', 'closed': True}
+    })  # Operating hours for each day
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    
+
     # Relationships
     users = relationship("User", back_populates="clinic")
 
@@ -34,6 +44,7 @@ class User(Base):
     permissions = Column(JSON, default=dict)
     is_active = Column(Boolean, default=True)
     supabase_user_id = Column(String, nullable=True)  # Link to Supabase auth user
+    password_hash = Column(String, nullable=True)  # Password hash for OAuth users who want desktop access
     created_by = Column(Integer, ForeignKey('users.id'), nullable=True)  # Who created this user
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     clinic = relationship("Clinic", back_populates="users")
@@ -49,7 +60,7 @@ class Patient(Base):
     village = Column(String, nullable=False)
     phone = Column(String, nullable=False)
     referred_by = Column(String, nullable=False)
-    scan_type = Column(String, nullable=False)
+    treatment_type = Column(String, nullable=False)
     notes = Column(Text)
     payment_type = Column(String, nullable=False, default="Cash")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -69,8 +80,8 @@ class Report(Base):
     clinic = relationship("Clinic")
     patient = relationship("Patient")
 
-class ScanType(Base):
-    __tablename__ = 'scan_types'
+class TreatmentType(Base):
+    __tablename__ = 'treatment_types'
     id = Column(Integer, primary_key=True, index=True)
     clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
     name = Column(String, nullable=False)
@@ -93,7 +104,7 @@ class Payment(Base):
     clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
     patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False)
     report_id = Column(Integer, ForeignKey('reports.id'), nullable=True)  # Link to report if payment is for a report
-    scan_type_id = Column(Integer, ForeignKey('scan_types.id'), nullable=True)  # Link to scan type for pricing
+    treatment_type_id = Column(Integer, ForeignKey('treatment_types.id'), nullable=True)  # Link to treatment type for pricing
     amount = Column(Float, nullable=False)  # Amount in INR (Indian Rupees)
     payment_method = Column(String, nullable=False)  # Cash, Card, PayPal, Net Banking, UPI, etc.
     status = Column(String, nullable=False, default='success')  # success, pending, failed, refunded
@@ -108,7 +119,7 @@ class Payment(Base):
     clinic = relationship("Clinic")
     patient = relationship("Patient")
     report = relationship("Report")
-    scan_type = relationship("ScanType")
+    treatment_type = relationship("TreatmentType")
     received_by_user = relationship("User", foreign_keys=[received_by])
 
 class WhatsAppConfiguration(Base):
@@ -125,6 +136,32 @@ class WhatsAppConfiguration(Base):
     # Relationships
     user = relationship("User")
     clinic = relationship("Clinic")
+
+class Appointment(Base):
+    __tablename__ = 'appointments'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
+    patient_id = Column(Integer, ForeignKey('patients.id'), nullable=True)  # Can be null for walk-ins
+    patient_name = Column(String, nullable=False)  # Store name directly for quick access
+    patient_email = Column(String, nullable=True)
+    patient_phone = Column(String, nullable=True)
+    doctor_id = Column(Integer, ForeignKey('users.id'), nullable=True)  # Assigned doctor
+    treatment = Column(String, nullable=False)  # Treatment type or description
+    appointment_date = Column(DateTime, nullable=False)  # Date and start time combined
+    start_time = Column(String, nullable=False)  # e.g., "09:00"
+    end_time = Column(String, nullable=False)  # e.g., "10:30"
+    duration = Column(Integer, nullable=False, default=60)  # Duration in minutes
+    status = Column(String, default='confirmed')  # confirmed, completed, cancelled, no-show
+    notes = Column(Text, nullable=True)  # Additional notes
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    
+    # Relationships
+    clinic = relationship("Clinic")
+    patient = relationship("Patient")
+    doctor = relationship("User", foreign_keys=[doctor_id])
+    creator = relationship("User", foreign_keys=[created_by])
 
 # Update relationships
 Clinic.users = relationship("User", back_populates="clinic")
