@@ -37,7 +37,7 @@ const Features = () => {
 
   const features = [
     {
-      icon: <Users className="w-12 h-12 text-green-600" />,
+      icon: <Users className="w-12 h-12 text-[#6C4CF3]" />,
       title: "Patient Management System",
       description: "Comprehensive patient management with digital records, medical history tracking, and profile management. Store all patient information securely in one centralized system.",
       benefits: [
@@ -49,7 +49,7 @@ const Features = () => {
       ]
     },
     {
-      icon: <Calendar className="w-12 h-12 text-green-600" />,
+      icon: <Calendar className="w-12 h-12 text-[#6C4CF3]" />,
       title: "Appointment Scheduling",
       description: "Smart appointment scheduling system that helps manage your clinic calendar efficiently. Book, reschedule, and track appointments with ease.",
       benefits: [
@@ -61,7 +61,7 @@ const Features = () => {
       ]
     },
     {
-      icon: <MessageSquare className="w-12 h-12 text-green-600" />,
+      icon: <MessageSquare className="w-12 h-12 text-[#6C4CF3]" />,
       title: "WhatsApp Integration",
       description: "Send automated WhatsApp notifications for appointments, test results, and important updates directly to your patients' phones.",
       benefits: [
@@ -73,7 +73,7 @@ const Features = () => {
       ]
     },
     {
-      icon: <Mic className="w-12 h-12 text-green-600" />,
+      icon: <Mic className="w-12 h-12 text-[#6C4CF3]" />,
       title: "Voice Reporting & Transcription",
       description: "Revolutionary voice-to-text technology for medical reporting. Record consultations and generate reports automatically, saving hours of documentation time.",
       benefits: [
@@ -85,7 +85,7 @@ const Features = () => {
       ]
     },
     {
-      icon: <DollarSign className="w-12 h-12 text-green-600" />,
+      icon: <DollarSign className="w-12 h-12 text-[#6C4CF3]" />,
       title: "Payment & Billing Management",
       description: "Complete billing solution with invoice generation, payment tracking, and revenue management. Support for multiple payment methods including UPI, cards, and cash.",
       benefits: [
@@ -97,7 +97,7 @@ const Features = () => {
       ]
     },
     {
-      icon: <BarChart3 className="w-12 h-12 text-green-600" />,
+      icon: <BarChart3 className="w-12 h-12 text-[#6C4CF3]" />,
       title: "Analytics & Reporting",
       description: "Powerful analytics dashboard with insights into patient flow, revenue trends, appointment patterns, and clinic performance metrics.",
       benefits: [
@@ -109,7 +109,7 @@ const Features = () => {
       ]
     },
     {
-      icon: <FileText className="w-12 h-12 text-green-600" />,
+      icon: <FileText className="w-12 h-12 text-[#6C4CF3]" />,
       title: "Treatment & Prescription Management",
       description: "Manage patient treatments, prescriptions, and follow-ups efficiently. Create treatment plans and track patient progress over time.",
       benefits: [
@@ -121,7 +121,7 @@ const Features = () => {
       ]
     },
     {
-      icon: <Shield className="w-12 h-12 text-green-600" />,
+      icon: <Shield className="w-12 h-12 text-[#6C4CF3]" />,
       title: "Security & Compliance",
       description: "Enterprise-grade security with encrypted data storage, role-based access control, and compliance with Indian data protection standards.",
       benefits: [
@@ -133,7 +133,7 @@ const Features = () => {
       ]
     },
     {
-      icon: <Clock className="w-12 h-12 text-green-600" />,
+      icon: <Clock className="w-12 h-12 text-[#6C4CF3]" />,
       title: "Staff Management",
       description: "Manage your clinic staff, assign roles, track performance, and maintain team schedules all in one place.",
       benefits: [
@@ -145,7 +145,7 @@ const Features = () => {
       ]
     },
     {
-      icon: <Zap className="w-12 h-12 text-green-600" />,
+      icon: <Zap className="w-12 h-12 text-[#6C4CF3]" />,
       title: "Quick & Easy Setup",
       description: "Get started in under 24 hours with our simple onboarding process. No technical knowledge required - we handle everything for you.",
       benefits: [
@@ -182,15 +182,15 @@ const Features = () => {
               </Link>
             </div>
             <div className="flex items-center space-x-6">
-              <Link to="/" className="text-gray-600 hover:text-green-600 transition-colors">
+              <Link to="/" className="text-gray-600 hover:text-[#6C4CF3] transition-colors">
                 Home
               </Link>
-              <Link to="/about" className="text-gray-600 hover:text-green-600 transition-colors">
+              <Link to="/about" className="text-gray-600 hover:text-[#6C4CF3] transition-colors">
                 About
               </Link>
               <Link 
                 to="/signup" 
-                className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                className="bg-[#6C4CF3] text-white px-6 py-2 rounded-lg hover:bg-[#5b3dd9] transition-colors"
               >
                 Get Started
               </Link>
@@ -200,18 +200,18 @@ const Features = () => {
       </nav>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-16 bg-gradient-to-br from-green-50 via-blue-50 to-green-100">
+      <section className="pt-32 pb-16 bg-gradient-to-br from-[#9B8CFF]/10 via-blue-50 to-[#9B8CFF]/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-4xl mx-auto">
             <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
-              Powerful Features for <span className="text-green-600">Better Clinic Management</span>
+              Powerful Features for <span className="text-[#6C4CF3]">Better Clinic Management</span>
             </h1>
             <p className="text-xl text-gray-600 mb-8">
               Everything you need to run your clinic efficiently - all in one comprehensive platform
             </p>
             <Link 
               to="/signup" 
-              className="inline-flex items-center space-x-2 bg-green-600 text-white px-8 py-4 rounded-lg hover:bg-green-700 transition-colors text-lg font-medium"
+              className="inline-flex items-center space-x-2 bg-[#6C4CF3] text-white px-8 py-4 rounded-lg hover:bg-[#5b3dd9] transition-colors text-lg font-medium"
             >
               <span>Start Free Trial</span>
               <ArrowRight className="w-5 h-5" />
@@ -244,13 +244,13 @@ const Features = () => {
                   <div className="space-y-3">
                     {feature.benefits.map((benefit, idx) => (
                       <div key={idx} className="flex items-start space-x-3">
-                        <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />
+                        <CheckCircle className="w-5 h-5 text-[#6C4CF3] flex-shrink-0 mt-1" />
                         <span className="text-gray-700">{benefit}</span>
                       </div>
                     ))}
                   </div>
                 </div>
-                <div className={`bg-gradient-to-br from-green-50 to-blue-50 rounded-2xl p-12 ${
+                <div className={`bg-gradient-to-br from-[#9B8CFF]/10 to-blue-50 rounded-2xl p-12 ${
                   index % 2 === 1 ? 'lg:order-1' : ''
                 }`}>
                   <div className="flex items-center justify-center h-64">
@@ -279,11 +279,11 @@ const Features = () => {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="bg-white rounded-xl p-8 shadow-sm border border-gray-100 text-center">
-              <div className="text-4xl font-bold text-green-600 mb-2">70%</div>
+              <div className="text-4xl font-bold text-[#6C4CF3] mb-2">70%</div>
               <p className="text-gray-600">Reduction in administrative time</p>
             </div>
             <div className="bg-white rounded-xl p-8 shadow-sm border border-gray-100 text-center">
-              <div className="text-4xl font-bold text-blue-600 mb-2">3x</div>
+              <div className="text-4xl font-bold text-[#9B8CFF] mb-2">3x</div>
               <p className="text-gray-600">Faster patient check-ins</p>
             </div>
             <div className="bg-white rounded-xl p-8 shadow-sm border border-gray-100 text-center">
@@ -295,25 +295,25 @@ const Features = () => {
       </section>
 
       {/* CTA Section */}
-      <section className="py-16 bg-gradient-to-br from-green-600 to-green-700">
+      <section className="py-16 bg-gradient-to-br from-[#6C4CF3] to-[#5b3dd9]">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-4xl font-bold text-white mb-6">
             Ready to Experience Better Clinic Management?
           </h2>
-          <p className="text-xl text-green-50 mb-8">
+          <p className="text-xl text-white mb-8">
             Join hundreds of healthcare professionals using BetterClinic to streamline their practice
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link 
               to="/signup" 
-              className="inline-flex items-center justify-center space-x-2 bg-white text-green-600 px-8 py-4 rounded-lg hover:bg-gray-50 transition-colors text-lg font-medium"
+              className="inline-flex items-center justify-center space-x-2 bg-white text-[#6C4CF3] px-8 py-4 rounded-lg hover:bg-gray-50 transition-colors text-lg font-medium"
             >
               <span>Start Free Trial</span>
               <ArrowRight className="w-5 h-5" />
             </Link>
             <Link 
               to="/#contact" 
-              className="inline-flex items-center justify-center space-x-2 border-2 border-white text-white px-8 py-4 rounded-lg hover:bg-white hover:text-green-600 transition-colors text-lg font-medium"
+              className="inline-flex items-center justify-center space-x-2 border-2 border-white text-white px-8 py-4 rounded-lg hover:bg-white hover:text-[#6C4CF3] transition-colors text-lg font-medium"
             >
               <span>Contact Sales</span>
             </Link>

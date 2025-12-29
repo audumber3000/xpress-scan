@@ -132,6 +132,36 @@ def create_patient(
         
         raise HTTPException(status_code=500, detail=f"Failed to create patient: {str(e)}")
 
+@router.get("/{patient_id}", response_model=PatientOut)
+def get_patient(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_patients_view)
+):
+    """Get a single patient by ID (only if belongs to current clinic)"""
+    db_patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.clinic_id == current_user.clinic_id
+    ).first()
+    
+    if not db_patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    
+    return PatientOut(
+        id=db_patient.id,
+        clinic_id=db_patient.clinic_id,
+        name=db_patient.name,
+        age=db_patient.age,
+        gender=db_patient.gender,
+        village=db_patient.village,
+        phone=db_patient.phone,
+        referred_by=db_patient.referred_by,
+        treatment_type=db_patient.treatment_type,
+        notes=db_patient.notes,
+        payment_type=db_patient.payment_type,
+        created_at=db_patient.created_at
+    )
+
 @router.put("/{patient_id}", response_model=PatientOut)
 def update_patient(
     patient_id: int, 

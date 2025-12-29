@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import GearLoader from '../components/GearLoader';
 import { supabase } from '../supabaseClient';
 import { api } from '../utils/api';
 
@@ -9,152 +10,254 @@ const AuthCallback = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    let timeout;
+    let authStateSubscription;
+    let processed = false; // Prevent double processing
+
     const handleAuthCallback = async () => {
       console.log('Auth callback URL:', window.location.href);
       console.log('URL hash:', window.location.hash);
+      console.log('Hash length:', window.location.hash?.length);
+      
+      // Check hash - Supabase OAuth puts tokens in the hash
+      const hash = window.location.hash || '';
+      console.log('Full URL:', window.location.href);
+      console.log('Hash:', hash);
+      console.log('Hash length:', hash.length);
+      
+      // Always check for session first (Supabase processes hash automatically)
+      // This handles both cases: hash present or already processed
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (session && !sessionError) {
+          console.log('Found Supabase session, processing...');
+          console.log('Session user:', session.user?.email);
+          processed = true;
+          clearTimeout(timeout);
+          
+          try {
+            console.log('Calling backend /auth/oauth...');
+            console.log('API URL:', import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000');
+            
+            const requestData = { 
+              access_token: session.access_token,
+              user_data: {
+                email: session.user.email,
+                id: session.user.id,
+                user_metadata: session.user.user_metadata
+              }
+            };
+            console.log('Request data:', { ...requestData, access_token: '***' });
+            
+            const data = await Promise.race([
+              api.post('/auth/oauth', requestData),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000)
+              )
+            ]);
+
+            console.log('Backend response received:', data);
+            console.log('Storing auth data...');
+            
+            localStorage.setItem('auth_token', data.token);
+            localStorage.setItem('user', JSON.stringify(data.user));
+            window.location.hash = '';
+            
+            console.log('Redirecting...', data.user.clinic_id ? 'dashboard' : 'onboarding');
+            
+            // Use window.location for more reliable redirect
+            if (!data.user.clinic_id) {
+              window.location.href = '/onboarding';
+            } else {
+              window.location.href = '/dashboard';
+            }
+            return;
+          } catch (backendError) {
+            console.error('Backend error details:', backendError);
+            console.error('Backend error name:', backendError.name);
+            console.error('Backend error message:', backendError.message);
+            console.error('Backend error stack:', backendError.stack);
+            
+            // Check if it's a network error
+            if (backendError.message.includes('timeout') || backendError.message.includes('Failed to fetch')) {
+              setError('Backend server is not responding. Please check if the backend is running on port 8000.');
+            } else {
+              setError(`Backend error: ${backendError.message || 'Failed to authenticate with backend'}`);
+            }
+            
+            setLoading(false);
+            setTimeout(() => navigate('/login', { replace: true }), 5000);
+            return;
+          }
+        } else if (sessionError) {
+          console.error('Session error:', sessionError);
+        }
+      } catch (e) {
+        console.error('Error checking session:', e);
+      }
+      
+      // If hash is empty and no session, check for existing local auth
+      if (hash.length <= 1) {
+        console.log('Empty hash and no Supabase session, checking local storage...');
+        const existingToken = localStorage.getItem('auth_token');
+        const existingUser = localStorage.getItem('user');
+        
+        if (existingToken && existingUser) {
+          try {
+            const user = JSON.parse(existingUser);
+            console.log('Existing login found, redirecting...');
+            if (!user.clinic_id) {
+              navigate('/onboarding', { replace: true });
+            } else {
+              navigate('/dashboard', { replace: true });
+            }
+            return;
+          } catch (e) {
+            console.error('Error parsing user:', e);
+          }
+        }
+        
+        // No session found, redirect to login
+        console.log('No session and no existing login, redirecting to login...');
+        setLoading(false);
+        navigate('/login', { replace: true });
+        return;
+      }
+      
+      // Hash exists, wait for Supabase to process it via onAuthStateChange
+      console.log('Hash found, waiting for Supabase to process...');
       
       // Set a timeout to prevent getting stuck
-      const timeout = setTimeout(() => {
+      timeout = setTimeout(() => {
         console.log('Auth callback timeout - redirecting to login');
+        if (authStateSubscription) {
+          authStateSubscription.data.subscription.unsubscribe();
+        }
         setLoading(false);
-        setError('Authentication timed out. Please try again.');
+        setError('Authentication timed out. Please try logging in again.');
+        setTimeout(() => navigate('/login', { replace: true }), 3000);
       }, 10000); // 10 second timeout
 
       try {
-        console.log('Starting auth callback...');
-        
-        // Check if we have hash parameters from OAuth
-        const hash = window.location.hash;
-        if (hash && hash.includes('access_token')) {
-          console.log('OAuth redirect detected, parsing hash...');
+        // Listen for auth state changes (Supabase processes the hash asynchronously)
+        authStateSubscription = supabase.auth.onAuthStateChange(async (event, session) => {
+          console.log('Auth state changed:', event, session ? 'has session' : 'no session');
           
-          const hashParams = new URLSearchParams(hash.substring(1));
-          const accessToken = hashParams.get('access_token');
-          const refreshToken = hashParams.get('refresh_token');
-          const error = hashParams.get('error');
-          const errorDescription = hashParams.get('error_description');
-          
-          console.log('Hash params:', { accessToken: accessToken ? 'found' : 'missing', refreshToken: refreshToken ? 'found' : 'missing', error });
-          
-          if (error) {
+          if (event === 'SIGNED_IN' && session && !processed) {
+            processed = true;
             clearTimeout(timeout);
-            console.error('OAuth error:', error, errorDescription);
-            setError(`OAuth Error: ${errorDescription || error}`);
-            setLoading(false);
-            return;
+            console.log('Session established, sending to backend...');
+            
+            try {
+              const data = await api.post('/auth/oauth', { 
+                access_token: session.access_token,
+                user_data: {
+                  email: session.user.email,
+                  id: session.user.id,
+                  user_metadata: session.user.user_metadata
+                }
+              });
+
+              console.log('Backend response:', data);
+
+              // Store auth data
+              localStorage.setItem('auth_token', data.token);
+              localStorage.setItem('user', JSON.stringify(data.user));
+              
+              // Clear the hash to prevent re-processing
+              window.location.hash = '';
+              
+              // Unsubscribe from auth state changes
+              if (authStateSubscription) {
+                authStateSubscription.data.subscription.unsubscribe();
+              }
+              
+              // Redirect based on user state
+              if (!data.user.clinic_id) {
+                console.log('Redirecting to onboarding...');
+                navigate('/onboarding', { replace: true });
+              } else {
+                console.log('Redirecting to dashboard...');
+                navigate('/dashboard', { replace: true });
+              }
+            } catch (backendError) {
+              console.error('Backend error:', backendError);
+              setError(`Backend error: ${backendError.message || 'Failed to authenticate with backend'}`);
+              setLoading(false);
+              if (authStateSubscription) {
+                authStateSubscription.data.subscription.unsubscribe();
+              }
+              setTimeout(() => navigate('/login', { replace: true }), 3000);
+            }
+          }
+        });
+
+        // Also check for existing session immediately (in case hash was processed already)
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.error('Session error:', sessionError);
+          // Don't immediately fail - wait for onAuthStateChange to fire
+          console.log('Session error, but waiting for auth state change...');
+        } else if (session && !processed) {
+          // Session already exists, process it
+          processed = true;
+          clearTimeout(timeout);
+          if (authStateSubscription) {
+            authStateSubscription.data.subscription.unsubscribe();
           }
           
-          if (accessToken) {
-            console.log('Setting session with access token...');
-            try {
-              const { data: { session }, error: sessionError } = await supabase.auth.setSession({
-                access_token: accessToken,
-                refresh_token: refreshToken || ''
-              });
-              
-              if (sessionError) {
-                clearTimeout(timeout);
-                console.error('Session setting error:', sessionError);
-                setError(`Session error: ${sessionError.message}`);
-                setLoading(false);
-                return;
+          try {
+            const data = await api.post('/auth/oauth', { 
+              access_token: session.access_token,
+              user_data: {
+                email: session.user.email,
+                id: session.user.id,
+                user_metadata: session.user.user_metadata
               }
-              
-              if (session) {
-                console.log('Session established, sending to backend...');
-                
-                try {
-                  const data = await api.post('/auth/oauth', { 
-                    access_token: session.access_token,
-                    user_data: {
-                      email: session.user.email,
-                      id: session.user.id,
-                      user_metadata: session.user.user_metadata
-                    }
-                  });
+            });
 
-                  console.log('Backend response:', data);
-                  clearTimeout(timeout);
-
-                  // Store auth data
-                  localStorage.setItem('auth_token', data.token);
-                  localStorage.setItem('user', JSON.stringify(data.user));
-                  
-                  // Clear the hash to prevent re-processing
-                  window.location.hash = '';
-                  
-                  // Redirect based on user state
-                  if (!data.user.clinic_id) {
-                    console.log('Redirecting to onboarding...');
-                    navigate('/onboarding');
-                  } else {
-                    console.log('Redirecting to dashboard...');
-                    navigate('/dashboard');
-                  }
-                } catch (backendError) {
-                  clearTimeout(timeout);
-                  console.error('Backend error:', backendError);
-                  setError(`Backend error: ${backendError.message || 'Failed to authenticate with backend'}`);
-                  setLoading(false);
-                }
-              } else {
-                clearTimeout(timeout);
-                setError('Failed to establish session');
-                setLoading(false);
-              }
-            } catch (sessionError) {
-              clearTimeout(timeout);
-              console.error('Session creation error:', sessionError);
-              setError(`Session creation failed: ${sessionError.message}`);
-              setLoading(false);
+            localStorage.setItem('auth_token', data.token);
+            localStorage.setItem('user', JSON.stringify(data.user));
+            window.location.hash = '';
+            
+            if (!data.user.clinic_id) {
+              navigate('/onboarding', { replace: true });
+            } else {
+              navigate('/dashboard', { replace: true });
             }
-          } else {
-            clearTimeout(timeout);
-            setError('No access token found in OAuth callback');
+          } catch (backendError) {
+            console.error('Backend error:', backendError);
+            setError(`Backend error: ${backendError.message || 'Failed to authenticate with backend'}`);
             setLoading(false);
+            setTimeout(() => navigate('/login', { replace: true }), 3000);
           }
         } else {
-          // Try to get existing session
-          console.log('No OAuth hash, checking existing session...');
-          const { data: { session }, error } = await supabase.auth.getSession();
-          
-          clearTimeout(timeout);
-          
-          if (error) {
-            console.error('Session error:', error);
-            setError(`Authentication failed: ${error.message}`);
-            setLoading(false);
-            return;
-          }
-
-          if (session) {
-            console.log('Existing session found, redirecting...');
-            // User is already logged in, redirect to appropriate page
-            const userStr = localStorage.getItem('user');
-            if (userStr) {
-              const user = JSON.parse(userStr);
-              if (!user.clinic_id) {
-                navigate('/onboarding');
-              } else {
-                navigate('/dashboard');
-              }
-            } else {
-              navigate('/dashboard');
-            }
-          } else {
-            setError('No authentication session found');
-            setLoading(false);
-          }
+          // No session yet, wait for onAuthStateChange (but with timeout)
+          console.log('No session found yet, waiting for auth state change (max 10s)...');
         }
       } catch (error) {
         clearTimeout(timeout);
+        if (authStateSubscription) {
+          authStateSubscription.data.subscription.unsubscribe();
+        }
         console.error('Auth callback error:', error);
         setError(`Authentication failed: ${error.message || 'Unknown error'}`);
         setLoading(false);
+        setTimeout(() => navigate('/login', { replace: true }), 2000);
       }
     };
 
     handleAuthCallback();
+    
+    // Cleanup
+    return () => {
+      if (timeout) clearTimeout(timeout);
+      if (authStateSubscription) {
+        authStateSubscription.data.subscription.unsubscribe();
+      }
+    };
   }, [navigate]);
 
   if (loading) {
@@ -370,7 +473,7 @@ const AuthCallback = () => {
         </div>
         
         {/* Loading Spinner */}
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+        <GearLoader size="w-12 h-12" className="mx-auto mb-4" />
         
         {/* Loading Text */}
         <p className="text-gray-600 text-lg font-medium">Opening your clinic...</p>
@@ -411,7 +514,7 @@ const AuthCallback = () => {
                 }, []);
                 
                 return (
-                  <div className="text-green-600 font-medium text-left">
+                  <div className="text-[#6C4CF3] font-medium text-left">
                     {actions.map((action, index) => (
                       <div
                         key={index}
@@ -538,7 +641,7 @@ const AuthCallback = () => {
         </div>
         
         {/* CSS Animations */}
-        <style jsx>{`
+        <style>{`
           @keyframes draw {
             to {
               stroke-dasharray: 0 0;
@@ -582,7 +685,7 @@ const AuthCallback = () => {
           <p className="text-gray-600 mb-4">{error}</p>
           <button
             onClick={() => navigate('/login')}
-            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+            className="bg-[#6C4CF3] text-white px-4 py-2 rounded hover:bg-[#5b3dd9]"
           >
             Back to Login
           </button>

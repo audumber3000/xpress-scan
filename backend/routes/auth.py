@@ -154,22 +154,24 @@ async def login(
             # Verify password against stored hash
             if not verify_password(password, user.password_hash):
                 raise HTTPException(status_code=401, detail="Invalid credentials")
-        elif OFFLINE_MODE:
-            # Offline mode: allow login if user exists (simplified for demo)
-            pass
         else:
-            # Online mode: Try Supabase authentication for users without password_hash
-            try:
-                if supabase:
-                    auth_response = supabase.auth.sign_in_with_password({
-                        "email": email,
-                        "password": password
-                    })
-                    
-                    if auth_response.user is None:
-                        raise HTTPException(status_code=401, detail="Invalid credentials")
-            except Exception as e:
-                raise HTTPException(status_code=401, detail="Invalid credentials")
+            # User doesn't have a password hash - try Supabase authentication
+            if OFFLINE_MODE:
+                # In offline mode, users without passwords cannot login
+                raise HTTPException(status_code=401, detail="Password required. Please set a password first.")
+            else:
+                # Online mode: Try Supabase authentication for users without password_hash
+                try:
+                    if supabase:
+                        auth_response = supabase.auth.sign_in_with_password({
+                            "email": email,
+                            "password": password
+                        })
+
+                        if auth_response.user is None:
+                            raise HTTPException(status_code=401, detail="Invalid credentials")
+                except Exception as e:
+                    raise HTTPException(status_code=401, detail="Invalid credentials")
         
         # Create JWT token for backend authentication
         token = create_jwt_token(user.id)
@@ -373,6 +375,19 @@ async def complete_onboarding(
                 db.add(treatment_type)
         
         db.commit()
+        
+        # Send welcome email to clinic owner
+        try:
+            from services.email_service import EmailService
+            email_service = EmailService()
+            email_service.send_clinic_signup_email(
+                to_email=user.email,
+                owner_name=user.name,
+                clinic_name=clinic.name
+            )
+        except Exception as email_error:
+            # Log error but don't fail onboarding
+            print(f"Failed to send clinic signup email: {email_error}")
         
         return {
             "message": "Onboarding completed successfully",

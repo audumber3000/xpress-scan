@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Card from "../components/Card";
+import GearLoader from "../components/GearLoader";
 import { api } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
 import { 
@@ -17,6 +18,7 @@ import {
 
 const Calendar = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [appointments, setAppointments] = useState([]);
@@ -76,9 +78,9 @@ const Calendar = () => {
         const transformedAppointments = response.map(apt => {
           // Generate color based on status or treatment
           const colors = [
-            "bg-blue-100 border-blue-200 text-blue-800",
+            "bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#6C4CF3]",
             "bg-purple-100 border-purple-200 text-purple-800",
-            "bg-green-100 border-green-200 text-green-800",
+            "bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#6C4CF3]",
             "bg-pink-100 border-pink-200 text-pink-800",
             "bg-yellow-100 border-yellow-200 text-yellow-800"
           ];
@@ -86,6 +88,7 @@ const Calendar = () => {
           
           return {
             id: apt.id,
+            patientId: apt.patient_id || null,
             patientName: apt.patient_name,
             patientEmail: apt.patient_email || '',
             patientPhone: apt.patient_phone || '',
@@ -115,17 +118,70 @@ const Calendar = () => {
     fetchAppointments();
   }, [currentDate]);
 
+  // Get relative date label (Today, Yesterday, Tomorrow)
+  const getRelativeDateLabel = (date) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const targetDate = new Date(date);
+    targetDate.setHours(0, 0, 0, 0);
+    
+    const diffTime = targetDate - today;
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Today';
+    if (diffDays === -1) return 'Yesterday';
+    if (diffDays === 1) return 'Tomorrow';
+    
+    // If not within the 3-day range, return formatted date
+    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  };
+
   // Navigation functions
   const goToPrevious = () => {
-    const newDate = new Date(currentDate);
+    if (viewMode === 'today') {
+      // In today's view, only allow navigating to yesterday
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const current = new Date(currentDate);
+      current.setHours(0, 0, 0, 0);
+      const diffDays = Math.round((current - today) / (1000 * 60 * 60 * 24));
+      
+      if (diffDays > -1) {
+        // Can go back to yesterday
+        const newDate = new Date(currentDate);
+        newDate.setDate(newDate.getDate() - 1);
+        setCurrentDate(newDate);
+      }
+    } else {
+      // Week view: go back 7 days
+      const newDate = new Date(currentDate);
       newDate.setDate(newDate.getDate() - 7);
-    setCurrentDate(newDate);
+      setCurrentDate(newDate);
+    }
   };
 
   const goToNext = () => {
-    const newDate = new Date(currentDate);
+    if (viewMode === 'today') {
+      // In today's view, only allow navigating to tomorrow
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const current = new Date(currentDate);
+      current.setHours(0, 0, 0, 0);
+      const diffDays = Math.round((current - today) / (1000 * 60 * 60 * 24));
+      
+      if (diffDays < 1) {
+        // Can go forward to tomorrow
+        const newDate = new Date(currentDate);
+        newDate.setDate(newDate.getDate() + 1);
+        setCurrentDate(newDate);
+      }
+    } else {
+      // Week view: go forward 7 days
+      const newDate = new Date(currentDate);
       newDate.setDate(newDate.getDate() + 7);
-    setCurrentDate(newDate);
+      setCurrentDate(newDate);
+    }
   };
 
   const goToToday = () => {
@@ -293,6 +349,47 @@ const Calendar = () => {
       fetchClinicData();
     }
   }, [user]);
+
+  // Fetch full appointment details when selectedAppointment changes to ensure we have latest patient_id
+  useEffect(() => {
+    const fetchFullAppointmentDetails = async () => {
+      if (!selectedAppointment || !selectedAppointment.id) return;
+      
+      try {
+        const fullAppointment = await api.get(`/appointments/${selectedAppointment.id}`);
+        const newPatientId = fullAppointment.patient_id || null;
+        const newStatus = fullAppointment.status;
+        
+        // Only update if patient_id or status has changed to avoid unnecessary re-renders
+        if (selectedAppointment.patientId !== newPatientId || selectedAppointment.status !== newStatus) {
+          const transformedAppointment = {
+            id: fullAppointment.id,
+            patientId: newPatientId,
+            patientName: fullAppointment.patient_name,
+            patientEmail: fullAppointment.patient_email || '',
+            patientPhone: fullAppointment.patient_phone || '',
+            patientAvatar: fullAppointment.patient_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+            treatment: fullAppointment.treatment,
+            doctor: fullAppointment.doctor_name || 'Unassigned',
+            startTime: fullAppointment.start_time,
+            endTime: fullAppointment.end_time,
+            date: fullAppointment.appointment_date,
+            status: newStatus,
+            color: selectedAppointment.color, // Keep the color from the existing appointment
+            notes: fullAppointment.notes || ''
+          };
+          console.log('🔄 Updated appointment details:', transformedAppointment);
+          console.log('🆔 Patient ID:', transformedAppointment.patientId);
+          setSelectedAppointment(transformedAppointment);
+        }
+      } catch (error) {
+        console.error('Error fetching full appointment details:', error);
+        // Don't update if there's an error - keep existing selectedAppointment
+      }
+    };
+
+    fetchFullAppointmentDetails();
+  }, [selectedAppointment?.id]); // Only fetch when the appointment ID changes
 
   // Handle form input changes
   const handleInputChange = (e) => {
@@ -561,6 +658,14 @@ const Calendar = () => {
         return;
       }
     
+      // Get clinic_id from clinicData or user
+      const clinicId = clinicData?.id || user?.clinic_id;
+      
+      if (!clinicId) {
+        alert('Clinic information not available. Please refresh the page and try again.');
+        return;
+      }
+      
       // Create appointment via API
       const appointmentData = {
         patient_name: newAppointment.patientName,
@@ -571,16 +676,17 @@ const Calendar = () => {
         start_time: startTime,
         end_time: endTime,
         duration: parseInt(durationMinutes),
-        status: newAppointment.status
+        status: newAppointment.status,
+        clinic_id: clinicId // Required by backend schema (even though it uses current_user.clinic_id internally)
       };
       
       const response = await api.post('/appointments', appointmentData);
       
       // Generate color for display
     const colors = [
-      'bg-blue-100 border-blue-200 text-blue-800',
+      'bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#6C4CF3]',
       'bg-purple-100 border-purple-200 text-purple-800',
-      'bg-green-100 border-green-200 text-green-800',
+      'bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#6C4CF3]',
       'bg-yellow-100 border-yellow-200 text-yellow-800',
       'bg-pink-100 border-pink-200 text-pink-800',
       'bg-indigo-100 border-indigo-200 text-indigo-800'
@@ -590,6 +696,7 @@ const Calendar = () => {
       // Add to local state with transformed format
       const newApt = {
         id: response.id,
+        patientId: response.patient_id || null,
         patientName: response.patient_name,
         patientEmail: response.patient_email || '',
         patientPhone: response.patient_phone || '',
@@ -622,7 +729,8 @@ const Calendar = () => {
     alert('✅ Appointment created successfully!');
     } catch (error) {
       console.error('Error creating appointment:', error);
-      alert('Failed to create appointment. Please try again.');
+      const errorMessage = error.response?.data?.detail || error.message || 'Unknown error';
+      alert(`Failed to create appointment: ${errorMessage}`);
     }
   };
 
@@ -640,7 +748,12 @@ const Calendar = () => {
           : apt
       ));
       
-      setSelectedAppointment({ ...selectedAppointment, status: 'accepted' });
+      // Update selected appointment with new status and patient_id if available
+      setSelectedAppointment({ 
+        ...selectedAppointment, 
+        status: 'accepted',
+        patientId: response.patient_id || selectedAppointment.patientId || null
+      });
       
       // Prefill patient form with appointment data
       setPatientFormData({
@@ -669,9 +782,13 @@ const Calendar = () => {
       return;
     }
     
+    // Prompt for rejection reason (optional custom message for email)
+    const rejectionReason = prompt('Please provide a reason for rejection (optional - this will be included in the email to the patient):') || null;
+    
     try {
       const response = await api.put(`/appointments/${selectedAppointment.id}`, {
-        status: 'rejected'
+        status: 'rejected',
+        rejection_reason: rejectionReason
       });
       
       // Update local state
@@ -719,24 +836,27 @@ const Calendar = () => {
         patient_id: patientResponse.id
       });
       
-      alert('Patient registered successfully!');
-      setShowPatientForm(false);
-      setSelectedAppointment(null);
+      // Update selected appointment with patient_id and refresh appointments list
+      const updatedAppointment = { 
+        ...selectedAppointment, 
+        patientId: patientResponse.id,
+        status: 'accepted'
+      };
       
-      // Refresh appointments
+      // Refresh appointments list to get updated data
       const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
       const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
       const dateFrom = firstDay.toISOString().split('T')[0];
       const dateTo = lastDay.toISOString().split('T')[0];
-      const response = await api.get('/appointments', {
+      const appointmentsResponse = await api.get('/appointments', {
         params: { date_from: dateFrom, date_to: dateTo }
       });
       
-      const transformedAppointments = response.map(apt => {
+      const transformedAppointments = appointmentsResponse.map(apt => {
         const colors = [
-          "bg-blue-100 border-blue-200 text-blue-800",
+          "bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#6C4CF3]",
           "bg-purple-100 border-purple-200 text-purple-800",
-          "bg-green-100 border-green-200 text-green-800",
+          "bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#6C4CF3]",
           "bg-pink-100 border-pink-200 text-pink-800",
           "bg-yellow-100 border-yellow-200 text-yellow-800"
         ];
@@ -744,6 +864,7 @@ const Calendar = () => {
         
         return {
           id: apt.id,
+          patientId: apt.patient_id || null,
           patientName: apt.patient_name,
           patientEmail: apt.patient_email || '',
           patientPhone: apt.patient_phone || '',
@@ -760,6 +881,59 @@ const Calendar = () => {
       });
       
       setAppointments(transformedAppointments);
+      
+      // Fetch the full appointment details to ensure we have the latest patient_id
+      try {
+        const fullAppointment = await api.get(`/appointments/${selectedAppointment.id}`);
+        const transformedAppointment = {
+          id: fullAppointment.id,
+          patientId: fullAppointment.patient_id || null,
+          patientName: fullAppointment.patient_name,
+          patientEmail: fullAppointment.patient_email || '',
+          patientPhone: fullAppointment.patient_phone || '',
+          patientAvatar: fullAppointment.patient_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+          treatment: fullAppointment.treatment,
+          doctor: fullAppointment.doctor_name || 'Unassigned',
+          startTime: fullAppointment.start_time,
+          endTime: fullAppointment.end_time,
+          date: fullAppointment.appointment_date,
+          status: fullAppointment.status,
+          color: selectedAppointment.color, // Keep the color from the existing appointment
+          notes: fullAppointment.notes || ''
+        };
+        console.log('✅ Patient registration complete - Updated appointment:', transformedAppointment);
+        console.log('🆔 Patient ID after registration:', transformedAppointment.patientId);
+        setSelectedAppointment(transformedAppointment);
+      } catch (error) {
+        console.error('Error fetching updated appointment:', error);
+        // Fallback to updated appointment from refresh
+        const refreshedAppointment = transformedAppointments.find(apt => apt.id === selectedAppointment.id);
+        if (refreshedAppointment) {
+          setSelectedAppointment(refreshedAppointment);
+        } else {
+          setSelectedAppointment(updatedAppointment);
+        }
+      }
+      
+      // Show success message
+      alert('Patient registered successfully!');
+      
+      // Close the patient registration form
+      setShowPatientForm(false);
+      
+      // Reset form data
+      setPatientFormData({
+        name: '',
+        age: '',
+        gender: '',
+        village: '',
+        phone: '',
+        referred_by: 'Walk-in',
+        treatment_type: '',
+        notes: '',
+        payment_type: 'Cash'
+      });
+      
     } catch (error) {
       console.error('❌ Error registering patient:', error);
       console.error('❌ Error response:', error.response?.data);
@@ -801,7 +975,20 @@ const Calendar = () => {
   };
 
   const weekDates = getWeekDates();
-  const timeSlots = getTimeSlots(currentDate); // Pass current date for dynamic timings
+  // For week view calendar structure, use hardcoded 8 AM to 8 PM (same as desktop app)
+  // This ensures time slots are always visible in the grid
+  const getWeekViewTimeSlots = () => {
+    const slots = [];
+    for (let hour = 8; hour <= 20; hour++) {
+      const time = `${hour.toString().padStart(2, '0')}:00`;
+      const displayTime = hour === 12 ? '12:00 PM' : 
+                        hour > 12 ? `${hour - 12}:00 PM` : 
+                        `${hour}:00 AM`;
+      slots.push({ time, displayTime, hour });
+    }
+    return slots;
+  };
+  const timeSlots = getWeekViewTimeSlots();
   const currentTimeIndicator = getCurrentTime();
   const clientTimezone = getClientTimezone();
 
@@ -815,18 +1002,34 @@ const Calendar = () => {
           <div className="flex items-center space-x-4">
             <button
               onClick={goToPrevious}
-              className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={viewMode === 'today' && (() => {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const current = new Date(currentDate);
+                current.setHours(0, 0, 0, 0);
+                const diffDays = Math.round((current - today) / (1000 * 60 * 60 * 24));
+                return diffDays <= -1; // Disable if already at yesterday
+              })()}
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
             
             <div className="text-2xl font-bold text-gray-900">
-              {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              {viewMode === 'today' ? getRelativeDateLabel(currentDate) : currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
             </div>
             
             <button
               onClick={goToNext}
-              className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={viewMode === 'today' && (() => {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const current = new Date(currentDate);
+                current.setHours(0, 0, 0, 0);
+                const diffDays = Math.round((current - today) / (1000 * 60 * 60 * 24));
+                return diffDays >= 1; // Disable if already at tomorrow
+              })()}
             >
               <ChevronRight className="w-5 h-5" />
             </button>
@@ -845,7 +1048,7 @@ const Calendar = () => {
             </Link>
             <button 
               onClick={() => setShowAddForm(true)}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+              className="bg-[#6C4CF3] text-white px-4 py-2 rounded-lg hover:bg-[#5b3dd9] transition-colors flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
               Add new Appointment
@@ -884,7 +1087,7 @@ const Calendar = () => {
         {/* Calendar Content */}
         {loading ? (
           <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
+            <GearLoader size="w-12 h-12" className="mx-auto" />
             <p className="mt-4 text-gray-600">Loading appointments...</p>
           </div>
         ) : viewMode === 'today' ? (
@@ -893,16 +1096,19 @@ const Calendar = () => {
             {/* Header */}
             <div className="mb-4">
               <h2 className="text-xl font-bold text-gray-900">
-                Today's Appointments - {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                {(() => {
+                  const label = getRelativeDateLabel(currentDate);
+                  const possessive = label === "Today" ? "Today's" : label === "Yesterday" ? "Yesterday's" : "Tomorrow's";
+                  return `${possessive} Appointments - ${currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`;
+                })()}
               </h2>
             </div>
 
             {(() => {
-              const today = new Date();
-              const todayStr = today.toISOString().split('T')[0];
+              const targetDateStr = currentDate.toISOString().split('T')[0];
               const todaysAppointments = appointments.filter(apt => {
                 const aptDate = apt.date ? new Date(apt.date).toISOString().split('T')[0] : apt.date;
-                return aptDate === todayStr;
+                return aptDate === targetDateStr;
               }).sort((a, b) => {
                 const timeA = a.startTime.split(':').map(Number);
                 const timeB = b.startTime.split(':').map(Number);
@@ -926,7 +1132,36 @@ const Calendar = () => {
                   {todaysAppointments.map((apt, index) => (
                     <div
                       key={apt.id}
-                      onClick={() => setSelectedAppointment(apt)}
+                      onClick={async () => {
+                        console.log('Selected appointment from today view:', apt);
+                        console.log('Patient ID:', apt.patientId);
+                        // Fetch full appointment data to ensure we have latest patient_id
+                        try {
+                          const fullAppointment = await api.get(`/appointments/${apt.id}`);
+                          const transformedAppointment = {
+                            id: fullAppointment.id,
+                            patientId: fullAppointment.patient_id || null,
+                            patientName: fullAppointment.patient_name,
+                            patientEmail: fullAppointment.patient_email || '',
+                            patientPhone: fullAppointment.patient_phone || '',
+                            patientAvatar: fullAppointment.patient_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+                            treatment: fullAppointment.treatment,
+                            doctor: fullAppointment.doctor_name || 'Unassigned',
+                            startTime: fullAppointment.start_time,
+                            endTime: fullAppointment.end_time,
+                            date: fullAppointment.appointment_date,
+                            status: fullAppointment.status,
+                            color: apt.color, // Keep the color from the list
+                            notes: fullAppointment.notes || ''
+                          };
+                          console.log('Fetched full appointment:', transformedAppointment);
+                          setSelectedAppointment(transformedAppointment);
+                        } catch (error) {
+                          console.error('Error fetching appointment details:', error);
+                          // Fallback to using the appointment from the list
+                          setSelectedAppointment(apt);
+                        }
+                      }}
                       className={`bg-white rounded-lg shadow-md hover:shadow-lg transition-all cursor-pointer border-l-4 ${apt.color} p-6`}
                     >
                       <div className="flex items-center justify-between">
@@ -942,7 +1177,7 @@ const Calendar = () => {
                           {/* Patient Info */}
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-2">
-                              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-lg font-semibold text-green-800">
+                              <div className="w-12 h-12 bg-[#9B8CFF]/20 rounded-full flex items-center justify-center text-lg font-semibold text-[#6C4CF3]">
                                 {apt.patientAvatar}
                               </div>
                               <div>
@@ -975,7 +1210,7 @@ const Calendar = () => {
                         {/* Right: Status Badge */}
                         <div className="flex flex-col items-end gap-2">
                           {apt.status === 'accepted' && (
-                            <div className="flex items-center gap-2 px-3 py-2 bg-green-100 text-green-800 rounded-full">
+                            <div className="flex items-center gap-2 px-3 py-2 bg-[#9B8CFF]/20 text-[#6C4CF3] rounded-full">
                               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                               </svg>
@@ -998,7 +1233,7 @@ const Calendar = () => {
                               <span className="text-sm font-semibold">Pending</span>
                             </div>
                           )}
-                          <button className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1">
+                          <button className="text-[#9B8CFF] hover:text-[#6C4CF3] text-sm font-medium flex items-center gap-1">
                             View Details
                             <ChevronRight className="w-4 h-4" />
                           </button>
@@ -1057,11 +1292,11 @@ const Calendar = () => {
                           {/* Current time indicator */}
                           {isCurrentTime && (
                             <div 
-                              className="absolute left-0 right-0 h-0.5 bg-blue-500 z-10"
+                              className="absolute left-0 right-0 h-0.5 bg-[#9B8CFF]/100 z-10"
                               style={{ top: currentTimeIndicator.top }}
                             >
-                              <div className="absolute left-0 top-0 w-2 h-2 bg-blue-500 rounded-full -translate-y-1"></div>
-                              <div className="absolute left-0 -top-6 text-xs text-blue-600 font-medium">
+                              <div className="absolute left-0 top-0 w-2 h-2 bg-[#9B8CFF]/100 rounded-full -translate-y-1"></div>
+                              <div className="absolute left-0 -top-6 text-xs text-[#9B8CFF] font-medium">
                                 {currentTimeIndicator.time}
                               </div>
                             </div>
@@ -1091,19 +1326,48 @@ const Calendar = () => {
                             minHeight: style.minHeight,
                             zIndex: style.zIndex
                           }}
-                          onClick={() => setSelectedAppointment(appointment)}
+                          onClick={async () => {
+                            console.log('Selected appointment:', appointment);
+                            console.log('Patient ID:', appointment.patientId);
+                            // Fetch full appointment data to ensure we have latest patient_id
+                            try {
+                              const fullAppointment = await api.get(`/appointments/${appointment.id}`);
+                              const transformedAppointment = {
+                                id: fullAppointment.id,
+                                patientId: fullAppointment.patient_id || null,
+                                patientName: fullAppointment.patient_name,
+                                patientEmail: fullAppointment.patient_email || '',
+                                patientPhone: fullAppointment.patient_phone || '',
+                                patientAvatar: fullAppointment.patient_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+                                treatment: fullAppointment.treatment,
+                                doctor: fullAppointment.doctor_name || 'Unassigned',
+                                startTime: fullAppointment.start_time,
+                                endTime: fullAppointment.end_time,
+                                date: fullAppointment.appointment_date,
+                                status: fullAppointment.status,
+                                color: appointment.color, // Keep the color from the list
+                                notes: fullAppointment.notes || ''
+                              };
+                              console.log('Fetched full appointment:', transformedAppointment);
+                              setSelectedAppointment(transformedAppointment);
+                            } catch (error) {
+                              console.error('Error fetching appointment details:', error);
+                              // Fallback to using the appointment from the list
+                              setSelectedAppointment(appointment);
+                            }
+                          }}
                         >
                           <div className="p-2 h-full flex flex-col justify-center relative">
                             {/* Status indicator badge */}
                             {appointment.status === 'accepted' && (
-                              <div className="absolute top-1 right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                              <div className="absolute top-1 right-1 w-5 h-5 bg-[#6C4CF3] rounded-full flex items-center justify-center z-10">
                                 <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                 </svg>
                               </div>
                             )}
                             {appointment.status === 'rejected' && (
-                              <div className="absolute top-1 right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+                              <div className="absolute top-1 right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center z-10">
                                 <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                                   <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                                 </svg>
@@ -1145,7 +1409,7 @@ const Calendar = () => {
             </div>
             <div className="flex-1 overflow-y-auto p-6">
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-xl font-semibold text-green-800">
+                <div className="w-16 h-16 bg-[#9B8CFF]/20 rounded-full flex items-center justify-center text-xl font-semibold text-[#6C4CF3]">
                   {selectedAppointment.patientAvatar}
                 </div>
                 <div>
@@ -1178,7 +1442,7 @@ const Calendar = () => {
                 <div>
                   <span className="text-sm font-medium text-gray-600">Status:</span>
                   <span className={`ml-2 text-sm font-semibold ${
-                    selectedAppointment.status === 'accepted' ? 'text-green-600' :
+                    selectedAppointment.status === 'accepted' ? 'text-[#6C4CF3]' :
                     selectedAppointment.status === 'rejected' ? 'text-red-600' :
                     'text-yellow-600'
                   }`}>
@@ -1192,14 +1456,14 @@ const Calendar = () => {
 
               {/* Status Message */}
               {selectedAppointment.status === 'accepted' && (
-                <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <div className="flex items-center gap-2 text-green-800">
+                <div className="mb-6 p-4 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
+                  <div className="flex items-center gap-2 text-[#6C4CF3]">
                     <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
                     <span className="font-medium">Appointment Accepted</span>
             </div>
-                  <p className="text-sm text-green-700 mt-1">Patient registration completed.</p>
+                  <p className="text-sm text-[#6C4CF3] mt-1">Patient registration completed.</p>
                 </div>
               )}
 
@@ -1241,11 +1505,29 @@ const Calendar = () => {
                 </div>
               )}
               
-              {/* See Patient Details button */}
-              <button className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
-                <span>See Patient Details</span>
-                <ExternalLink className="w-4 h-4" />
-              </button>
+              {/* See Patient Details button - only show for accepted appointments with patient_id */}
+              {(() => {
+                const isAccepted = selectedAppointment.status === 'accepted';
+                const hasPatientId = selectedAppointment.patientId !== null && selectedAppointment.patientId !== undefined;
+                console.log('🔍 Button visibility check:', {
+                  isAccepted,
+                  hasPatientId,
+                  patientId: selectedAppointment.patientId,
+                  status: selectedAppointment.status
+                });
+                return isAccepted && hasPatientId;
+              })() && (
+                <button 
+                  onClick={() => {
+                    navigate(`/patient-profile/${selectedAppointment.patientId}`);
+                    setSelectedAppointment(null); // Close modal
+                  }}
+                  className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <span>See Patient Details</span>
+                  <ExternalLink className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1276,7 +1558,7 @@ const Calendar = () => {
                     value={patientFormData.name}
                     onChange={(e) => setPatientFormData({ ...patientFormData, name: e.target.value })}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-gray-50"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent bg-gray-50"
                     readOnly
                   />
                 </div>
@@ -1293,7 +1575,7 @@ const Calendar = () => {
                     required
                     min="1"
                     max="150"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                     placeholder="Enter age"
                   />
                 </div>
@@ -1307,7 +1589,7 @@ const Calendar = () => {
                     value={patientFormData.gender}
                     onChange={(e) => setPatientFormData({ ...patientFormData, gender: e.target.value })}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                   >
                     <option value="">Select gender</option>
                     <option value="Male">Male</option>
@@ -1326,7 +1608,7 @@ const Calendar = () => {
                     value={patientFormData.village}
                     onChange={(e) => setPatientFormData({ ...patientFormData, village: e.target.value })}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                     placeholder="Enter village or city"
                   />
                 </div>
@@ -1341,7 +1623,7 @@ const Calendar = () => {
                     value={patientFormData.phone}
                     onChange={(e) => setPatientFormData({ ...patientFormData, phone: e.target.value })}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                     placeholder="Enter phone number"
                   />
                 </div>
@@ -1355,7 +1637,7 @@ const Calendar = () => {
                     type="text"
                     value={patientFormData.referred_by}
                     onChange={(e) => setPatientFormData({ ...patientFormData, referred_by: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                     placeholder="Enter referral source (optional)"
                   />
                 </div>
@@ -1370,7 +1652,7 @@ const Calendar = () => {
                     value={patientFormData.treatment_type}
                     onChange={(e) => setPatientFormData({ ...patientFormData, treatment_type: e.target.value })}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-gray-50"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent bg-gray-50"
                     placeholder="Treatment type"
                   />
                 </div>
@@ -1384,7 +1666,7 @@ const Calendar = () => {
                     value={patientFormData.payment_type}
                     onChange={(e) => setPatientFormData({ ...patientFormData, payment_type: e.target.value })}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                   >
                     <option value="Cash">Cash</option>
                     <option value="Credit Card">Credit Card</option>
@@ -1402,7 +1684,7 @@ const Calendar = () => {
                     value={patientFormData.notes}
                     onChange={(e) => setPatientFormData({ ...patientFormData, notes: e.target.value })}
                     rows="3"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                     placeholder="Additional notes (optional)"
                   />
                 </div>
@@ -1412,7 +1694,7 @@ const Calendar = () => {
               <button 
                 type="submit" 
                 form="patient-registration-form"
-                className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors font-medium"
+                className="w-full bg-[#6C4CF3] text-white py-3 rounded-lg hover:bg-[#5b3dd9] transition-colors font-medium"
               >
                 Complete Registration
               </button>
@@ -1447,7 +1729,7 @@ const Calendar = () => {
                   value={newAppointment.patientName}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                   placeholder="Enter patient name"
                 />
               </div>
@@ -1463,7 +1745,7 @@ const Calendar = () => {
                   value={newAppointment.patientEmail}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                   placeholder="Enter patient email"
                 />
               </div>
@@ -1479,7 +1761,7 @@ const Calendar = () => {
                   value={newAppointment.patientPhone}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                   placeholder="Enter patient phone"
                 />
               </div>
@@ -1494,7 +1776,7 @@ const Calendar = () => {
                   value={newAppointment.treatment}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                 >
                   <option value="">Select treatment</option>
                   <option value="Root Canal">Root Canal</option>
@@ -1519,7 +1801,7 @@ const Calendar = () => {
                   value={newAppointment.date}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                 />
               </div>
 
@@ -1533,7 +1815,7 @@ const Calendar = () => {
                   name="time"
                   value={newAppointment.time}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                   placeholder="Leave empty to auto-assign"
                 />
                 {newAppointment.date && (() => {
@@ -1545,8 +1827,8 @@ const Calendar = () => {
                   return (
                     <div className="mt-2 space-y-2">
                       {/* Operating Hours Info */}
-                      <div className="p-2 bg-green-50 border border-green-200 rounded-lg">
-                        <p className="text-xs text-green-700 flex items-center gap-2">
+                      <div className="p-2 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
+                        <p className="text-xs text-[#6C4CF3] flex items-center gap-2">
                           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
                           </svg>
@@ -1561,7 +1843,7 @@ const Calendar = () => {
                       </div>
 
                       {/* Next Available Slot */}
-                      <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="p-2 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
                         <p className="text-xs text-blue-700 flex items-center gap-2">
                           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 000 16zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
@@ -1597,7 +1879,7 @@ const Calendar = () => {
                       onClick={() => setNewAppointment(prev => ({ ...prev, duration: option.value }))}
                       className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
                         newAppointment.duration === option.value
-                          ? 'bg-green-600 text-white border-green-600'
+                          ? 'bg-[#6C4CF3] text-white border-[#6C4CF3]'
                           : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                       }`}
                     >
@@ -1621,7 +1903,7 @@ const Calendar = () => {
                 <button
                   type="submit"
                   form="add-appointment-form"
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium"
+                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium"
                 >
                   Add Appointment
                 </button>

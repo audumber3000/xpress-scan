@@ -1,11 +1,12 @@
 from fastapi import APIRouter, HTTPException, Depends, status, Request
 from sqlalchemy.orm import Session
 from database import get_db
-from models import User
+from models import User, Clinic
 from typing import List, Optional
 from pydantic import BaseModel
 import datetime
 from auth import get_current_user
+from services.email_service import EmailService
 
 router = APIRouter()
 
@@ -78,6 +79,23 @@ def add_clinic_user(user_in: ClinicUserIn, db: Session = Depends(get_db), curren
     db.add(user)
     db.commit()
     db.refresh(user)
+    
+    # Send invitation email to staff member
+    try:
+        clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+        if clinic:
+            email_service = EmailService()
+            email_service.send_staff_invitation_email(
+                to_email=user_in.email,
+                staff_name=user_in.name,
+                clinic_name=clinic.name,
+                role=user_in.role,
+                inviter_name=current_user.name
+            )
+    except Exception as email_error:
+        # Log error but don't fail user creation
+        print(f"Failed to send staff invitation email: {email_error}")
+    
     return user
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)

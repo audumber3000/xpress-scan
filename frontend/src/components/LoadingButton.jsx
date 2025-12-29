@@ -1,4 +1,5 @@
 import React from 'react';
+import GearLoader from './GearLoader';
 
 const LoadingButton = ({ 
   children, 
@@ -22,7 +23,7 @@ const LoadingButton = ({
       {...props}
     >
       {loading && (
-        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+        <GearLoader size="w-4 h-4" />
       )}
       {children}
     </button>

@@ -69,6 +69,15 @@ const navItems = [
     ),
   },
   {
+    name: "Inbox",
+    path: "/inbox",
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+      </svg>
+    ),
+  },
+  {
     name: "Communication",
     path: "/communication",
     icon: (
@@ -92,7 +101,7 @@ const navItems = [
 const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const [isMobile, setIsMobile] = useState(false);
   const [clinicData, setClinicData] = useState(null);
 
@@ -129,8 +138,18 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
   }, [user]);
 
   const linkClass = (path) => {
-    const baseClasses = "flex items-center gap-3 py-2 px-4 rounded-lg transition font-medium text-gray-700 whitespace-nowrap";
-    const activeClasses = location.pathname === path ? "bg-green-100 text-green-700 border border-green-500" : "hover:bg-green-50";
+    const isActive = location.pathname === path;
+    const baseClasses = collapsed 
+      ? "flex items-center justify-center py-3 px-3 rounded-xl transition-all font-medium whitespace-nowrap relative"
+      : "flex items-center gap-3 py-2 px-4 rounded-lg transition font-medium whitespace-nowrap";
+    // Light, faded background for active tab - no button feel, just subtle highlight
+    const activeClasses = isActive 
+      ? collapsed
+        ? "bg-white/8 text-white"
+        : "bg-white/8 text-white"
+      : collapsed
+        ? "text-[#9B8CFF] hover:bg-white/5 hover:text-white"
+        : "text-white/70 hover:bg-white/5 hover:text-white";
     return `${baseClasses} ${activeClasses}`;
   };
 
@@ -152,83 +171,17 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
     return { first: firstWord, rest: truncatedRest };
   };
 
-  const handleSignOut = async () => {
-    await signOut();
-    navigate("/login");
-  };
-
-  // Improved user info extraction for Google OAuth
-  const userName =
-    user?.user_metadata?.full_name ||
-    user?.user_metadata?.name ||
-    user?.name ||
-    user?.email?.split("@")[0] ||
-    "User";
-
-  const userEmail = user?.email || "";
-  const userAvatar =
-    user?.user_metadata?.avatar_url ||
-    user?.user_metadata?.picture ||
-    "https://randomuser.me/api/portraits/men/32.jpg";
-
-  // Get role icon and color
-  const getRoleInfo = (role) => {
-    switch (role) {
-      case "clinic_owner":
-        return {
-          icon: (
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          ),
-          color: "bg-purple-100 text-purple-700 border-purple-200",
-          label: "Clinic Owner"
-        };
-      case "doctor":
-        return {
-          icon: (
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-          ),
-          color: "bg-blue-100 text-blue-700 border-blue-200",
-          label: "Doctor"
-        };
-      case "receptionist":
-        return {
-          icon: (
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-          ),
-          color: "bg-green-100 text-green-700 border-green-200",
-          label: "Receptionist"
-        };
-      default:
-        return {
-          icon: (
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-          ),
-          color: "bg-gray-100 text-gray-700 border-gray-200",
-          label: userName || "Staff"
-        };
-    }
-  };
-
-  const userRole = user?.role || "staff";
-  const roleInfo = getRoleInfo(userRole);
 
   // Mobile sidebar classes
   const mobileClasses = isMobile 
     ? `fixed top-0 left-0 z-50 h-full transform transition-transform duration-300 ease-in-out ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'}`
     : '';
 
-  // Desktop sidebar classes
+  // Desktop sidebar classes - Deep Indigo Blue background (#0E0B2D)
+  // When collapsed, add curved right edge and better spacing
   const desktopClasses = !isMobile 
-    ? `flex flex-col h-screen bg-white border-r border-gray-200 transition-all duration-300 ease-in-out ${collapsed ? 'w-16' : 'w-72'} ${collapsed ? 'p-2' : 'p-4'}`
-    : 'flex flex-col h-full w-72 bg-white p-4';
+    ? `flex flex-col h-screen bg-[#0E0B2D] transition-all duration-300 ease-in-out ${collapsed ? 'w-20' : 'w-64'} ${collapsed ? 'p-3' : 'p-4'} ${collapsed ? 'rounded-r-2xl' : ''} relative`
+    : 'flex flex-col h-full w-64 bg-[#0E0B2D] p-4';
 
   return (
     <>
@@ -240,57 +193,64 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
         />
       )}
       
-      <aside className={`${mobileClasses} ${desktopClasses}`}>
+      <aside className={`${mobileClasses} ${desktopClasses} ${collapsed && !isMobile ? 'shadow-2xl' : ''} ${collapsed && !isMobile ? 'overflow-visible' : ''}`}>
+        {/* Curved right edge effect when collapsed */}
+        {collapsed && !isMobile && (
+          <div 
+            className="absolute right-0 top-0 bottom-0 w-6 pointer-events-none"
+            style={{
+              background: 'radial-gradient(ellipse at right center, transparent 0%, transparent 40%, #0E0B2D 60%)'
+            }}
+          ></div>
+        )}
 
 
         {/* Mobile close button */}
         {isMobile && (
           <button
             onClick={onMobileClose}
-            className="absolute top-4 right-4 p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
+            className="absolute top-4 right-4 p-2 rounded-lg bg-[#1A1640] hover:bg-[#2A2550] transition-colors"
           >
-            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         )}
 
         {/* Branding */}
-        <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'} h-16 mb-4`}>
+        <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'} h-16 mb-4 ${collapsed ? 'px-2' : ''} relative`}>
           {/* Logo: Show clinic logo if available, otherwise tooth icon */}
           {clinicData?.logo ? (
             <img 
               src={clinicData.logo} 
               alt={clinicData.name || "Clinic Logo"} 
-              className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+              className={`${collapsed ? 'w-10 h-10' : 'w-12 h-12'} rounded-full object-cover flex-shrink-0 border-2 border-white/20 transition-all`}
             />
           ) : (
-            <span className="bg-green-100 text-green-600 rounded-full p-2 flex-shrink-0">
-              {/* Simple Tooth Icon - Fallback */}
-              <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2C10.34 2 9 3.34 9 5C9 5.87 9.32 6.67 9.84 7.28C8.78 8.13 8 9.46 8 11C8 11.7 8.13 12.36 8.37 12.97C7.55 13.23 6.87 13.77 6.42 14.47C5.97 15.17 5.76 16 5.76 16.84C5.76 18.58 7.18 20 8.92 20C10.2 20 11.3 19.23 11.78 18.13C11.92 18.21 12.07 18.26 12.22 18.26C12.37 18.26 12.52 18.21 12.66 18.13C13.14 19.23 14.24 20 15.52 20C17.26 20 18.68 18.58 18.68 16.84C18.68 16 18.47 15.17 18.02 14.47C17.57 13.77 16.89 13.23 16.07 12.97C16.31 12.36 16.44 11.7 16.44 11C16.44 9.46 15.66 8.13 14.6 7.28C15.12 6.67 15.44 5.87 15.44 5C15.44 3.34 14.1 2 12.44 2H12Z"/>
-              </svg>
-            </span>
+            <div className={`${collapsed ? 'w-10 h-10' : 'w-16 h-16'} flex items-center justify-center bg-[#1A1640] text-[#9B8CFF] rounded-full flex-shrink-0 border-2 border-[rgba(155,140,255,0.2)] transition-all`}>
+              {/* Line Awesome Tooth Icon - Same as Dashboard */}
+              <i className={`las la-tooth ${collapsed ? 'text-2xl' : 'text-4xl'}`}></i>
+            </div>
           )}
           {!collapsed && (
             <div className="flex flex-col min-w-0 flex-1">
-              <span className="text-3xl font-extrabold text-black tracking-tight" style={{ fontFamily: 'serif', letterSpacing: '-0.03em' }}>
+              <span className="text-3xl font-extrabold text-white tracking-tight" style={{ fontFamily: 'serif', letterSpacing: '-0.03em' }}>
                 {formatClinicName(clinicData?.name).first}
               </span>
-              <span className="text-sm font-medium text-gray-600 tracking-wide">
+              <span className="text-sm font-medium text-white/80 tracking-wide">
                 {formatClinicName(clinicData?.name).rest}
               </span>
             </div>
           )}
-          {/* Collapse/Expand button - positioned next to branding */}
+          {/* Collapse button when expanded */}
           {!isMobile && !collapsed && (
             <button
               onClick={() => setCollapsed(!collapsed)}
-              className="bg-gray-100 hover:bg-gray-200 rounded-lg p-2 transition-colors flex-shrink-0"
+              className="bg-[#1A1640] hover:bg-[#2A2550] rounded-lg p-2 transition-colors flex-shrink-0"
               title="Hide navigation"
             >
               <svg 
-                className="w-4 h-4 text-gray-600" 
+                className="w-4 h-4 text-white" 
                 fill="none" 
                 stroke="currentColor" 
                 strokeWidth="2" 
@@ -300,134 +260,121 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
               </svg>
             </button>
           )}
-          {/* Expand button when collapsed */}
+          {/* Expand button when collapsed - pops out from right edge */}
           {!isMobile && collapsed && (
             <button
               onClick={() => setCollapsed(!collapsed)}
-              className="bg-gray-100 hover:bg-gray-200 rounded-lg p-2 transition-colors"
+              className="absolute right-0 top-4 translate-x-[70%] flex items-center justify-center w-7 h-7 bg-[#0E0B2D] text-white hover:bg-[#1A1640] transition-colors cursor-pointer z-40 rounded-l-lg rounded-r-lg"
               title="Show navigation"
+              style={{
+                boxShadow: '-4px 0 8px rgba(0, 0, 0, 0.1)'
+              }}
             >
               <svg 
-                className="w-4 h-4 text-gray-600 rotate-180" 
+                className="w-4 h-4" 
                 fill="none" 
                 stroke="currentColor" 
-                strokeWidth="2" 
+                strokeWidth="2.5" 
+                strokeLinecap="round"
+                strokeLinejoin="round"
                 viewBox="0 0 24 24"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                <path d="M9 18l6-6-6-6" />
               </svg>
             </button>
           )}
         </div>
 
         {/* Main Nav with Scroll - More space */}
-        <nav className="flex-1 overflow-y-auto flex flex-col gap-1 mb-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
-          {navItems.map((item) => (
-            <Link 
-              key={item.name} 
-              to={item.path} 
-              className={`${linkClass(item.path)} ${collapsed ? 'justify-center px-2' : ''}`}
-              title={collapsed ? item.name : ''}
-            >
-              <div className={collapsed ? 'w-8 h-8' : 'w-5 h-5'}>
-                {item.icon}
-              </div>
-              {!collapsed && item.name}
-            </Link>
-          ))}
+        <nav className="flex-1 overflow-y-auto flex flex-col gap-2 mb-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+          {navItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <Link 
+                key={item.name} 
+                to={item.path} 
+                className={`${linkClass(item.path)} ${collapsed ? 'group' : ''}`}
+                title={collapsed ? item.name : ''}
+              >
+                <div className={`${collapsed ? 'w-6 h-6' : 'w-5 h-5'} flex items-center justify-center transition-all ${isActive ? 'text-white' : 'text-[#9B8CFF]'} ${collapsed && isActive ? 'scale-110' : ''}`}>
+                  {item.icon}
+                </div>
+                {!collapsed && item.name}
+                {/* Tooltip for collapsed state */}
+                {collapsed && (
+                  <span className="absolute left-full ml-2 px-2 py-1 bg-[#1A1640] text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 border border-[rgba(155,140,255,0.2)]">
+                    {item.name}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
         </nav>
 
-        {/* Combined Upgrade & User Profile - No extra card wrapper */}
-        <div className="flex flex-col pt-3 border-t border-gray-200">
-          {/* Collapsed view - Simple icon button */}
-          {collapsed && (
-            <>
+        {/* Subscription Section - Only when expanded */}
+        {!collapsed && (
+          <div className="flex flex-col pt-3 border-t border-[rgba(155,140,255,0.2)]">
+            <div className="px-3 py-2.5 bg-[#1A1640] rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                  <span className="text-sm font-semibold text-white">Subscription</span>
+                </div>
+                <span className="text-xs font-medium text-white bg-[#6C4CF3] px-2 py-0.5 rounded-full border border-[#9B8CFF]">Free (current)</span>
+              </div>
+
+              {/* Tutorial Link */}
               <button
-                onClick={() => navigate("/subscription")}
-                className="relative bg-orange-500 hover:bg-orange-600 rounded-lg p-3 transition-all mb-2"
-                title="Upgrade - Trial ends in 7 days"
+                onClick={() => window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ', '_blank')}
+                className="w-full flex items-center gap-2 text-sm text-white/80 hover:text-white transition group mb-3"
               >
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>
+                <div className="w-7 h-7 bg-red-500/50 rounded-lg flex items-center justify-center group-hover:bg-red-500 transition flex-shrink-0">
+                  <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                </div>
+                <span className="text-xs font-medium">Watch tutorial</span>
               </button>
-              <div 
-                className="flex items-center justify-center p-2 rounded-lg bg-gray-50 cursor-pointer hover:bg-green-50 transition" 
-                onClick={() => navigate("/doctor-profile")}
-                title={`${userName} - ${userEmail}`}
+
+              {/* Upgrade Button */}
+              <button 
+                onClick={() => navigate("/subscription")}
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm shadow-sm"
               >
-                <img src={userAvatar} alt="User" className="w-10 h-10 rounded-full flex-shrink-0" />
-              </div>
-            </>
-          )}
+                Upgrade to Pro
+              </button>
 
-          {/* Expanded sections - Cleaner design */}
-          {!collapsed && (
-            <>
-              {/* Subscription Section */}
-              <div className="px-3 py-2.5 bg-gray-50 rounded-lg mb-2">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                    </svg>
-                    <span className="text-sm font-semibold text-gray-800">Subscription</span>
-                  </div>
-                  <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-200">Free (current)</span>
-                </div>
+              {/* Trial notification */}
+              {true && (
+                <p className="text-xs text-amber-300 text-center mt-2">
+                  Trial ends in 7 days
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
-                {/* Tutorial Link */}
-                <button
-                  onClick={() => window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ', '_blank')}
-                  className="w-full flex items-center gap-2 text-sm text-gray-700 hover:text-orange-600 transition group mb-3"
-                >
-                  <div className="w-7 h-7 bg-red-100 rounded-lg flex items-center justify-center group-hover:bg-red-200 transition flex-shrink-0">
-                    <svg className="w-3.5 h-3.5 text-red-600" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z"/>
-                    </svg>
-                  </div>
-                  <span className="text-xs font-medium">Watch tutorial</span>
-                </button>
-
-                {/* Upgrade Button */}
-                <button 
-                  onClick={() => navigate("/subscription")}
-                  className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm shadow-sm"
-                >
-                  Upgrade to Pro
-                </button>
-
-                {/* Trial notification - Only show if on trial */}
-                {/* TODO: Replace this condition with actual subscription status check */}
-                {true && (
-                  <p className="text-xs text-amber-700 text-center mt-2">
-                    Trial ends in 7 days
-                  </p>
-                )}
-              </div>
-
-              {/* User Profile Section */}
-              <div 
-                className="px-3 py-2.5 bg-gray-50 rounded-lg cursor-pointer hover:bg-green-50 transition"
-                onClick={() => navigate("/doctor-profile")}
-                title="Click to view profile & sign out"
-              >
-                <div className="flex items-center gap-2.5">
-                  <img src={userAvatar} alt="User" className="w-9 h-9 rounded-full flex-shrink-0 border-2 border-gray-200" />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-gray-900 text-sm truncate">{userName}</div>
-                    <div className="text-xs text-gray-500 truncate" title={userEmail}>{userEmail}</div>
-                    <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium border ${roleInfo.color} mt-0.5`}>
-                      {roleInfo.icon}
-                      <span>{roleInfo.label}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
+        {/* Upgrade button when collapsed */}
+        {collapsed && (
+          <div className="flex flex-col pt-3 border-t border-[rgba(155,140,255,0.2)]">
+            <button
+              onClick={() => navigate("/subscription")}
+              className="relative bg-orange-500 hover:bg-orange-600 rounded-xl p-3 transition-all group w-full"
+              title="Upgrade - Trial ends in 7 days"
+            >
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#0E0B2D]"></span>
+              {/* Tooltip */}
+              <span className="absolute left-full ml-2 px-2 py-1 bg-[#1A1640] text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 border border-[rgba(155,140,255,0.2)]">
+                Upgrade
+              </span>
+            </button>
+          </div>
+        )}
       </aside>
     </>
   );

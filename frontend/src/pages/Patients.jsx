@@ -4,6 +4,7 @@ import { api } from "../utils/api";
 import { toast } from 'react-toastify';
 import { FaEye, FaFilePdf, FaSync, FaEdit, FaTrash, FaUser } from 'react-icons/fa';
 import LoadingButton from "../components/LoadingButton";
+import GearLoader from "../components/GearLoader";
 import { useAuth } from "../contexts/AuthContext";
 
 const PATIENTS_PER_PAGE = 8;
@@ -199,7 +200,7 @@ const Patients = () => {
             {hasPermission("patients:edit") && (
               <button 
                 onClick={() => navigate("/patient-intake")}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold text-sm hover:bg-green-700 transition"
+                className="px-4 py-2 bg-[#6C4CF3] text-white rounded-lg font-semibold text-sm hover:bg-[#5b3dd9] transition"
               >
                 + New Patient
               </button>
@@ -217,7 +218,7 @@ const Patients = () => {
               placeholder="Search patients..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
             />
           </div>
         </div>
@@ -229,7 +230,7 @@ const Patients = () => {
           {loading ? (
             <div className="w-full flex items-center justify-center py-16">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                <GearLoader size="w-8 h-8" className="mx-auto" />
                 <p className="mt-2 text-sm text-gray-600">Loading patients...</p>
               </div>
             </div>
@@ -288,7 +289,7 @@ const Patients = () => {
                             {hasPermission("patients:edit") && (
                               <button
                                 onClick={() => handleEditPatient(p)}
-                                className="text-gray-400 hover:text-blue-600 transition-colors duration-150"
+                                className="text-gray-400 hover:text-[#9B8CFF] transition-colors duration-150"
                                 title="Edit Patient"
                               >
                                 <FaEdit className="w-4 h-4" />
@@ -362,7 +363,7 @@ const Patients = () => {
                     onClick={() => setPage(pageNum)}
                     className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
                       page === pageNum
-                        ? 'z-10 bg-green-50 border-green-500 text-green-600'
+                        ? 'z-10 bg-[#9B8CFF]/10 border-[#6C4CF3] text-[#6C4CF3]'
                         : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
                     }`}
                   >
@@ -403,15 +404,15 @@ const Patients = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
-                  <input type="text" name="name" value={editFormData.name} onChange={handleEditFormChange} required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  <input type="text" name="name" value={editFormData.name} onChange={handleEditFormChange} required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Age *</label>
-                  <input type="number" name="age" value={editFormData.age} onChange={handleEditFormChange} required min="0" max="150" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  <input type="number" name="age" value={editFormData.age} onChange={handleEditFormChange} required min="0" max="150" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Gender *</label>
-                  <select name="gender" value={editFormData.gender} onChange={handleEditFormChange} required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                  <select name="gender" value={editFormData.gender} onChange={handleEditFormChange} required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]">
                     <option value="">Select Gender</option>
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
@@ -420,19 +421,19 @@ const Patients = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Village/City *</label>
-                  <input type="text" name="village" value={editFormData.village} onChange={handleEditFormChange} required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  <input type="text" name="village" value={editFormData.village} onChange={handleEditFormChange} required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
-                  <input type="tel" name="phone" value={editFormData.phone} onChange={handleEditFormChange} required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  <input type="tel" name="phone" value={editFormData.phone} onChange={handleEditFormChange} required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Referred By *</label>
-                  <input type="text" name="referred_by" value={editFormData.referred_by} onChange={handleEditFormChange} required placeholder="Dr. Name or Hospital" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  <input type="text" name="referred_by" value={editFormData.referred_by} onChange={handleEditFormChange} required placeholder="Dr. Name or Hospital" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Treatment Type *</label>
-                  <select name="scan_type" value={editFormData.scan_type} onChange={handleEditFormChange} required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                  <select name="scan_type" value={editFormData.scan_type} onChange={handleEditFormChange} required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]">
                     <option value="">Select Treatment Type</option>
                     <option value="CT Scan">CT Scan</option>
                     <option value="MRI">MRI</option>
@@ -445,11 +446,11 @@ const Patients = () => {
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Profile Image URL</label>
-                  <input type="url" name="profile_image_url" value={editFormData.profile_image_url} onChange={handleEditFormChange} placeholder="https://example.com/image.jpg" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  <input type="url" name="profile_image_url" value={editFormData.profile_image_url} onChange={handleEditFormChange} placeholder="https://example.com/image.jpg" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]" />
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                  <textarea name="notes" value={editFormData.notes} onChange={handleEditFormChange} rows="3" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="Additional notes about the patient..." />
+                  <textarea name="notes" value={editFormData.notes} onChange={handleEditFormChange} rows="3" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]" placeholder="Additional notes about the patient..." />
                 </div>
               </div>
             </form>
@@ -457,7 +458,7 @@ const Patients = () => {
             <div className="p-6 border-t border-gray-200">
               <div className="flex justify-end gap-3">
                 <LoadingButton type="button" onClick={closeEditModal} className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium">Cancel</LoadingButton>
-                <LoadingButton type="submit" form="edit-patient-form" loading={editLoading} disabled={editLoading} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium">Save Changes</LoadingButton>
+                <LoadingButton type="submit" form="edit-patient-form" loading={editLoading} disabled={editLoading} className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium">Save Changes</LoadingButton>
               </div>
             </div>
           </div>

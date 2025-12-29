@@ -207,3 +207,5 @@ Doctor/staff can click "Today" to:
 
 **Everything is ready! Click the "Today" button to see your appointments for today in a beautiful list view! 🎉**
 
+
+

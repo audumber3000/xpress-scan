@@ -659,6 +659,74 @@ def get_treatment_statistics(
         "treatments": sorted(treatments, key=lambda x: x['count'], reverse=True)
     }
 
+@router.get("/appointments/trends")
+def get_appointment_trends(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Get appointment trends by time slots for today"""
+    clinic_id = current_user.clinic_id
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = today_start + timedelta(days=1)
+    
+    # Get all appointments for today
+    appointments = db.query(Appointment).filter(
+        and_(
+            Appointment.clinic_id == clinic_id,
+            Appointment.appointment_date >= today_start,
+            Appointment.appointment_date < today_end
+        )
+    ).all()
+    
+    # Define time slots (hourly from 9 AM to 5 PM)
+    time_slots = [
+        ("9 AM", 9), ("10 AM", 10), ("11 AM", 11), ("12 PM", 12),
+        ("1 PM", 13), ("2 PM", 14), ("3 PM", 15), ("4 PM", 16), ("5 PM", 17)
+    ]
+    
+    # Initialize data structure
+    trends_data = []
+    
+    for slot_label, hour in time_slots:
+        # Count bookings in this hour
+        bookings = 0
+        for apt in appointments:
+            # Parse start_time string (e.g., "09:00" or "14:30") to get hour
+            try:
+                if apt.start_time:
+                    # Parse time string like "09:00" or "14:30"
+                    time_parts = apt.start_time.split(":")
+                    if len(time_parts) >= 1:
+                        apt_hour = int(time_parts[0])
+                        if apt_hour == hour:
+                            bookings += 1
+            except (ValueError, AttributeError):
+                # Fallback to appointment_date hour if start_time parsing fails
+                try:
+                    apt_hour = apt.appointment_date.hour
+                    if apt_hour == hour:
+                        bookings += 1
+                except:
+                    pass
+        
+        # Estimate capacity (can be made configurable)
+        # For now, assume varying capacity based on time of day
+        if hour >= 9 and hour <= 11:  # Morning slots
+            capacity = 20
+        elif hour == 12:  # Lunch time
+            capacity = 12
+        else:  # Afternoon slots
+            capacity = 18
+        
+        trends_data.append({
+            "time": slot_label,
+            "bookings": bookings,
+            "capacity": capacity
+        })
+    
+    return trends_data
+
 @router.get("/appointments/quality")
 def get_appointment_quality(
     db: Session = Depends(get_db),

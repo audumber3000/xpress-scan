@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { toast } from 'react-toastify';
+import GearLoader from "../components/GearLoader";
 import { api, whatsappApi } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -89,6 +90,11 @@ const Settings = () => {
     confirmPassword: ''
   });
   const [passwordLoading, setPasswordLoading] = useState(false);
+
+  // Test Email state
+  const [testEmailAddress, setTestEmailAddress] = useState('');
+  const [testEmailLoading, setTestEmailLoading] = useState(false);
+  const [testEmailError, setTestEmailError] = useState('');
 
   // Clinic Profile state
   const [clinicData, setClinicData] = useState({
@@ -461,6 +467,33 @@ const Settings = () => {
     }
   };
 
+  const handleSendTestEmail = async (e) => {
+    e.preventDefault();
+    if (!testEmailAddress || !testEmailAddress.trim()) {
+      setTestEmailError("Please enter an email address");
+      toast.error("Please enter an email address");
+      return;
+    }
+    
+    setTestEmailError('');
+    setTestEmailLoading(true);
+    try {
+      const response = await api.post("/notifications/test-email", {
+        to_email: testEmailAddress.trim()
+      });
+      toast.success(response.message || "Test email sent successfully!");
+      setTestEmailAddress("");
+      setTestEmailError('');
+    } catch (error) {
+      console.error("Error sending test email:", error);
+      const errorMessage = error?.message || error?.detail || "Failed to send test email. Please check your email configuration.";
+      setTestEmailError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setTestEmailLoading(false);
+    }
+  };
+
   const handleEditUser = (user) => {
     setEditingUser(user);
     setFormData({
@@ -827,7 +860,7 @@ const Settings = () => {
             <div className="mb-6">
             <label className="block text-sm font-medium mb-2">Role</label>
             <select
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
               value={selectedRole}
               onChange={(e) => handleRoleChange(e.target.value)}
             >
@@ -845,7 +878,7 @@ const Settings = () => {
                 onClick={() => handlePresetChange("receptionist")}
                 className={`px-3 py-1 rounded text-sm ${
                   selectedRole === "receptionist" && !customMode 
-                    ? "bg-green-600 text-white" 
+                    ? "bg-[#6C4CF3] text-white" 
                     : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                 }`}
               >
@@ -855,7 +888,7 @@ const Settings = () => {
                 onClick={() => handlePresetChange("doctor")}
                 className={`px-3 py-1 rounded text-sm ${
                   selectedRole === "doctor" && !customMode 
-                    ? "bg-green-600 text-white" 
+                    ? "bg-[#6C4CF3] text-white" 
                     : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                 }`}
               >
@@ -865,7 +898,7 @@ const Settings = () => {
                 onClick={() => handlePresetChange("clinic_owner")}
                 className={`px-3 py-1 rounded text-sm ${
                   selectedRole === "clinic_owner" && !customMode 
-                    ? "bg-green-600 text-white" 
+                    ? "bg-[#6C4CF3] text-white" 
                     : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                 }`}
               >
@@ -875,7 +908,7 @@ const Settings = () => {
                 onClick={() => handlePresetChange("custom")}
                 className={`px-3 py-1 rounded text-sm ${
                   customMode 
-                    ? "bg-blue-600 text-white" 
+                    ? "bg-[#6C4CF3] text-white" 
                     : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                 }`}
               >
@@ -907,7 +940,7 @@ const Settings = () => {
                             type="checkbox"
                             checked={!!permissions[section.key]?.[permission]}
                             onChange={() => handleCheckbox(section.key, permission)}
-                            className="accent-green-600 w-4 h-4"
+                            className="accent-[#6C4CF3] w-4 h-4"
                             disabled={!customMode && selectedRole !== "clinic_owner"}
                           />
                         </td>
@@ -968,7 +1001,7 @@ const Settings = () => {
                 Cancel
               </button>
               <button 
-                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium" 
+                className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium" 
                 onClick={handleSave}
               >
                 Save Changes
@@ -991,13 +1024,13 @@ const Settings = () => {
       <div className="border-b border-gray-200 mb-6">
         <div className="flex overflow-x-auto">
           <button
-            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "profile" ? "border-green-600 text-green-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
+            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "profile" ? "border-[#6C4CF3] text-[#6C4CF3]" : "border-transparent text-gray-600 hover:text-gray-900"}`}
             onClick={() => setActiveTab("profile")}
           >
             👤 Profile
           </button>
           <button
-            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "security" ? "border-green-600 text-green-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
+            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "security" ? "border-[#6C4CF3] text-[#6C4CF3]" : "border-transparent text-gray-600 hover:text-gray-900"}`}
             onClick={() => setActiveTab("security")}
           >
             🔐 Security
@@ -1036,13 +1069,13 @@ const Settings = () => {
               {/* Sub-tabs for Users and Clinic */}
               <div className="flex border-b border-gray-200 mb-6">
                 <button
-                  className={`px-4 py-2 font-medium text-sm focus:outline-none transition border-b-2 ${profileSubTab === "users" ? "border-green-600 text-green-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
+                  className={`px-4 py-2 font-medium text-sm focus:outline-none transition border-b-2 ${profileSubTab === "users" ? "border-[#6C4CF3] text-[#6C4CF3]" : "border-transparent text-gray-600 hover:text-gray-900"}`}
                   onClick={() => setProfileSubTab("users")}
                 >
                   👥 Users (Staff)
                 </button>
                 <button
-                  className={`px-4 py-2 font-medium text-sm focus:outline-none transition border-b-2 ${profileSubTab === "clinic" ? "border-green-600 text-green-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
+                  className={`px-4 py-2 font-medium text-sm focus:outline-none transition border-b-2 ${profileSubTab === "clinic" ? "border-[#6C4CF3] text-[#6C4CF3]" : "border-transparent text-gray-600 hover:text-gray-900"}`}
                   onClick={() => setProfileSubTab("clinic")}
                 >
                   🏥 Clinic
@@ -1060,7 +1093,7 @@ const Settings = () => {
                   ) : loading ? (
                     <div className="w-full flex items-center justify-center py-16">
                       <div className="text-center">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                        <GearLoader size="w-8 h-8" className="mx-auto" />
                         <p className="mt-2 text-sm text-gray-600">Loading users...</p>
                       </div>
                     </div>
@@ -1071,7 +1104,7 @@ const Settings = () => {
                       {hasPermission("users:edit") && (
                         <button
                           onClick={() => setShowAddModal(true)}
-                          className="mb-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center gap-2"
+                          className="mb-4 bg-[#6C4CF3] text-white px-4 py-2 rounded hover:bg-[#5b3dd9] flex items-center gap-2"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -1105,7 +1138,7 @@ const Settings = () => {
                                           setFormData({ name: u.name, email: u.email, role: u.role });
                                           setShowEditModal(true);
                                         }}
-                                        className="text-blue-600 hover:text-blue-800"
+                                        className="text-[#9B8CFF] hover:text-[#6C4CF3]"
                                       >
                                         Edit
                                       </button>
@@ -1146,7 +1179,7 @@ const Settings = () => {
 
                   {loadingClinicData ? (
                     <div className="text-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                      <GearLoader size="w-8 h-8" className="mx-auto" />
                       <p className="mt-2 text-sm text-gray-600">Loading clinic data...</p>
                     </div>
                   ) : !user?.clinic_id ? (
@@ -1177,7 +1210,7 @@ const Settings = () => {
                                 type="text"
                                 value={clinicData.name}
                                 onChange={(e) => setClinicData({ ...clinicData, name: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                                 placeholder="Enter clinic name"
                               />
                             </div>
@@ -1189,7 +1222,7 @@ const Settings = () => {
                                 type="text"
                                 value={clinicData.gst_number}
                                 onChange={(e) => setClinicData({ ...clinicData, gst_number: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                                 placeholder="Enter GST number (optional)"
                               />
                             </div>
@@ -1201,7 +1234,7 @@ const Settings = () => {
                                 type="text"
                                 value={clinicData.address}
                                 onChange={(e) => setClinicData({ ...clinicData, address: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                                 placeholder="Enter clinic address"
                               />
                             </div>
@@ -1213,7 +1246,7 @@ const Settings = () => {
                                 type="tel"
                                 value={clinicData.phone}
                                 onChange={(e) => setClinicData({ ...clinicData, phone: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                                 placeholder="Enter phone number"
                               />
                             </div>
@@ -1225,7 +1258,7 @@ const Settings = () => {
                                 type="email"
                                 value={clinicData.email}
                                 onChange={(e) => setClinicData({ ...clinicData, email: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                                 placeholder="Enter clinic email"
                               />
                             </div>
@@ -1255,7 +1288,7 @@ const Settings = () => {
                                       }
                                     })}
                                     disabled={timing.closed}
-                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-200 disabled:text-gray-500"
+                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent disabled:bg-gray-200 disabled:text-gray-500"
                                   />
                                   <span className="text-gray-500">to</span>
                                   <input
@@ -1269,7 +1302,7 @@ const Settings = () => {
                                       }
                                     })}
                                     disabled={timing.closed}
-                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-200 disabled:text-gray-500"
+                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent disabled:bg-gray-200 disabled:text-gray-500"
                                   />
                                 </div>
 
@@ -1284,7 +1317,7 @@ const Settings = () => {
                                         [day]: { ...timing, closed: e.target.checked }
                                       }
                                     })}
-                                    className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                                    className="w-4 h-4 text-[#6C4CF3] border-gray-300 rounded focus:ring-[#6C4CF3]"
                                   />
                                   <span className="text-sm text-gray-600">Closed</span>
                                 </label>
@@ -1298,11 +1331,11 @@ const Settings = () => {
                           <button
                             onClick={saveClinicData}
                             disabled={savingClinicData}
-                            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+                            className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
                           >
                             {savingClinicData ? (
                               <>
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                <GearLoader size="w-4 h-4" className="text-white" />
                                 Saving...
                               </>
                             ) : (
@@ -1334,7 +1367,7 @@ const Settings = () => {
               ) : loadingTreatmentTypes ? (
                 <div className="w-full flex items-center justify-center py-16">
                   <div className="text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                    <GearLoader size="w-8 h-8" className="mx-auto" />
                     <p className="mt-2 text-sm text-gray-600">Loading treatment types...</p>
                   </div>
                 </div>
@@ -1345,7 +1378,7 @@ const Settings = () => {
                     {hasPermission("billing:edit") && (
                     <button
                       onClick={() => setShowAddTreatmentModal(true)}
-                      className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
+                      className="bg-[#6C4CF3] text-white px-4 py-2 rounded-lg hover:bg-[#5b3dd9] transition"
                     >
                       Add Treatment Type
                     </button>
@@ -1365,7 +1398,7 @@ const Settings = () => {
                             <div className="flex gap-2">
                               <button
                                 onClick={() => handleEditTreatment(treatment)}
-                                className="text-blue-600 hover:text-blue-800 text-sm"
+                                className="text-[#9B8CFF] hover:text-[#6C4CF3] text-sm"
                               >
                                 Edit
                               </button>
@@ -1393,7 +1426,7 @@ const Settings = () => {
               {loadingDoctors ? (
                 <div className="w-full flex items-center justify-center py-16">
                   <div className="text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                    <GearLoader size="w-8 h-8" className="mx-auto" />
                     <p className="mt-2 text-sm text-gray-600">Loading referring doctors...</p>
                   </div>
                 </div>
@@ -1403,7 +1436,7 @@ const Settings = () => {
                     <h4 className="text-md font-medium text-gray-900">Current Referring Doctors</h4>
                     <button
                       onClick={() => setShowAddDoctorModal(true)}
-                      className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
+                      className="bg-[#6C4CF3] text-white px-4 py-2 rounded-lg hover:bg-[#5b3dd9] transition"
                     >
                       Add Doctor
                     </button>
@@ -1421,7 +1454,7 @@ const Settings = () => {
                             <div className="flex gap-2">
                               <button
                                 onClick={() => handleEditDoctor(doctor)}
-                                className="text-blue-600 hover:text-blue-800 text-sm"
+                                className="text-[#9B8CFF] hover:text-[#6C4CF3] text-sm"
                               >
                                 Edit
                               </button>
@@ -1451,7 +1484,7 @@ const Settings = () => {
               ) : loading ? (
                 <div className="w-full flex items-center justify-center py-16">
                   <div className="text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                    <GearLoader size="w-8 h-8" className="mx-auto" />
                     <p className="mt-2 text-sm text-gray-600">Loading users...</p>
                   </div>
                 </div>
@@ -1462,7 +1495,7 @@ const Settings = () => {
                     {hasPermission("users:edit") && (
                     <button
                       onClick={() => setShowAddModal(true)}
-                      className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
+                      className="bg-[#6C4CF3] text-white px-4 py-2 rounded-lg hover:bg-[#5b3dd9] transition"
                     >
                       Add User
                     </button>
@@ -1486,13 +1519,13 @@ const Settings = () => {
                             <div className="flex gap-2">
                                 <button
                                   onClick={() => handleEditPermissions(user)}
-                                  className="text-green-600 hover:text-green-800 text-sm"
+                                  className="text-[#6C4CF3] hover:text-[#6C4CF3] text-sm"
                                 >
                                   Permissions
                                 </button>
                               <button
                                 onClick={() => handleEditUser(user)}
-                                className="text-blue-600 hover:text-blue-800 text-sm"
+                                className="text-[#9B8CFF] hover:text-[#6C4CF3] text-sm"
                               >
                                 Edit
                               </button>
@@ -1524,7 +1557,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.patients?.view 
-                                          ? 'bg-green-100 text-green-800' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1533,7 +1566,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.patients?.edit 
-                                          ? 'bg-green-100 text-green-800' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1542,7 +1575,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.patients?.delete 
-                                          ? 'bg-green-100 text-green-800' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1556,7 +1589,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.reports?.view 
-                                          ? 'bg-green-100 text-green-800' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1565,7 +1598,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.reports?.edit 
-                                          ? 'bg-green-100 text-green-800' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1574,7 +1607,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.reports?.delete 
-                                          ? 'bg-green-100 text-green-800' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1588,7 +1621,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.billing?.view 
-                                          ? 'bg-green-100 text-green-800' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1597,7 +1630,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.billing?.edit 
-                                          ? 'bg-green-100 text-green-800' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1611,7 +1644,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.users?.view 
-                                          ? 'bg-green-100 text-green-800' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1620,7 +1653,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.users?.edit 
-                                          ? 'bg-green-100 text-green-800' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1629,7 +1662,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.users?.delete 
-                                          ? 'bg-green-100 text-green-800' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1657,7 +1690,7 @@ const Settings = () => {
               {loadingWhatsapp ? (
                 <div className="w-full flex items-center justify-center py-16">
                   <div className="text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                    <GearLoader size="w-8 h-8" className="mx-auto" />
                     <p className="mt-2 text-sm text-gray-600">Loading WhatsApp configuration...</p>
                   </div>
                 </div>
@@ -1674,7 +1707,7 @@ const Settings = () => {
                       <p className="text-gray-500 mb-4">You haven't configured your WhatsApp API key yet. Add one to start sending messages from your own number.</p>
                       <button
                         onClick={() => setShowWhatsappModal(true)}
-                        className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
+                        className="bg-[#6C4CF3] text-white px-4 py-2 rounded-lg hover:bg-[#5b3dd9] transition"
                       >
                         Add WhatsApp Config
                       </button>
@@ -1698,7 +1731,7 @@ const Settings = () => {
                               )}
                               <p className="text-base text-gray-700">
                                 <span className="font-medium">Status:</span> 
-                                <span className={`ml-2 px-3 py-1 rounded-full text-sm font-medium ${whatsappConfig.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                <span className={`ml-2 px-3 py-1 rounded-full text-sm font-medium ${whatsappConfig.is_active ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' : 'bg-red-100 text-red-800'}`}>
                                   {whatsappConfig.is_active ? 'Active' : 'Inactive'}
                                 </span>
                               </p>
@@ -1709,7 +1742,7 @@ const Settings = () => {
                           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 min-w-[300px]">
                             {/* Top Section - Icon and Title */}
                             <div className="flex items-center mb-4">
-                              <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center mr-3">
+                              <div className="w-10 h-10 bg-[#6C4CF3] rounded-full flex items-center justify-center mr-3">
                                 <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
                                   <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/>
                                 </svg>
@@ -1723,7 +1756,7 @@ const Settings = () => {
                             <div className="mb-4">
                               {loadingCredit ? (
                                 <div className="text-center py-4">
-                                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto"></div>
+                                  <GearLoader size="w-8 h-8" className="mx-auto" />
                                   <p className="text-sm text-gray-600 mt-2">Loading credits...</p>
                                 </div>
                               ) : creditInfo ? (
@@ -1740,10 +1773,10 @@ const Settings = () => {
                                       {/* Add Credit Button */}
                                       <button
                                         onClick={() => window.open('https://panel.rapiwha.com/page_cart.php', '_blank')}
-                                        className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center hover:bg-green-200 transition-colors"
+                                        className="w-8 h-8 bg-[#9B8CFF]/20 rounded-full flex items-center justify-center hover:bg-[#9B8CFF]/30 transition-colors"
                                         title="Add more credits"
                                       >
-                                        <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg className="w-4 h-4 text-[#6C4CF3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                                         </svg>
                                       </button>
@@ -1764,12 +1797,12 @@ const Settings = () => {
                                   
                                   {/* Progress Bar */}
                                   <div className="w-full bg-gray-200 rounded-full h-2">
-                                    <div className="bg-green-500 h-2 rounded-full" style={{ width: '85%' }}></div>
+                                    <div className="bg-[#6C4CF3] h-2 rounded-full" style={{ width: '85%' }}></div>
                                   </div>
                                   
                                   {/* Message Count */}
                                   <div className="mt-3 text-center">
-                                    <div className="text-lg font-semibold text-green-600">
+                                    <div className="text-lg font-semibold text-[#6C4CF3]">
                                       {(() => {
                                         const values = calculateCreditValues(creditInfo.credit);
                                         return `${values.messages} messages`;
@@ -1783,7 +1816,7 @@ const Settings = () => {
                                   <p className="text-sm text-gray-600">Unable to fetch credits</p>
                                   <button
                                     onClick={handleRefreshCredit}
-                                    className="text-sm text-green-600 hover:text-green-700 underline mt-1"
+                                    className="text-sm text-[#6C4CF3] hover:text-[#6C4CF3] underline mt-1"
                                   >
                                     Try again
                                   </button>
@@ -1799,7 +1832,7 @@ const Settings = () => {
                               </div>
                               <button
                                 onClick={() => window.open('https://panel.rapiwha.com', '_blank')}
-                                className="text-sm text-green-600 hover:text-green-700 underline font-medium"
+                                className="text-sm text-[#6C4CF3] hover:text-[#6C4CF3] underline font-medium"
                               >
                                 Go to Rapiwha
                               </button>
@@ -1811,13 +1844,13 @@ const Settings = () => {
                           <button
                             onClick={handleTestWhatsappConnection}
                             disabled={testingConnection}
-                            className="text-blue-600 hover:text-blue-800 text-sm px-3 py-1 border border-blue-600 rounded hover:bg-blue-50"
+                            className="text-[#9B8CFF] hover:text-[#6C4CF3] text-sm px-3 py-1 border border-blue-600 rounded hover:bg-[#9B8CFF]/10"
                           >
                             {testingConnection ? 'Testing...' : 'Test Connection'}
                           </button>
                           <button
                             onClick={() => handleEditWhatsappConfig(whatsappConfig)}
-                            className="text-green-600 hover:text-green-800 text-sm px-3 py-1 border border-green-600 rounded hover:bg-green-50"
+                            className="text-[#6C4CF3] hover:text-[#6C4CF3] text-sm px-3 py-1 border border-[#6C4CF3] rounded hover:bg-[#9B8CFF]/10"
                           >
                             Edit
                           </button>
@@ -1835,7 +1868,7 @@ const Settings = () => {
                             <li>• Your API key is used to send WhatsApp messages from your own number</li>
                             <li>• Messages will appear to come from your configured WhatsApp account</li>
                             <li>• Each user can have their own configuration</li>
-                            <li>• Get your API key from <a href="https://panel.rapiwha.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Rapiwha Panel</a></li>
+                            <li>• Get your API key from <a href="https://panel.rapiwha.com" target="_blank" rel="noopener noreferrer" className="text-[#9B8CFF] hover:underline">Rapiwha Panel</a></li>
                           </ul>
                         </div>
                       </div>
@@ -1859,7 +1892,7 @@ const Settings = () => {
                   </p>
                   <button
                     onClick={() => setShowPasswordModal(true)}
-                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
+                    className="bg-[#6C4CF3] text-white px-4 py-2 rounded-lg hover:bg-[#5b3dd9] transition"
                   >
                     {user?.supabase_user_id && !user.supabase_user_id.startsWith('local_')
                       ? "Set Password for Desktop Access"
@@ -1895,7 +1928,66 @@ const Settings = () => {
           {activeTab === "other" && (
             <div>
               <h3 className="text-lg font-semibold mb-4">Other Settings</h3>
-              <p className="text-gray-600">Additional settings and configurations will be available here.</p>
+              
+              {/* Email Notification Testing */}
+              <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+                <h4 className="text-md font-semibold text-gray-900 mb-2">📧 Test Email Service</h4>
+                <p className="text-sm text-gray-600 mb-4">
+                  Send a test email to verify that your email notification service is configured correctly.
+                </p>
+                <form onSubmit={handleSendTestEmail} className="space-y-3">
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <input
+                        type="email"
+                        value={testEmailAddress}
+                        onChange={(e) => {
+                          setTestEmailAddress(e.target.value);
+                          setTestEmailError(''); // Clear error when user types
+                        }}
+                        placeholder="Enter email address to send test email"
+                        className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
+                          testEmailError 
+                            ? 'border-red-500 focus:ring-red-500' 
+                            : 'border-gray-300 focus:ring-[#6C4CF3]'
+                        }`}
+                        required
+                        disabled={testEmailLoading}
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={testEmailLoading}
+                      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
+                    >
+                      {testEmailLoading ? (
+                        <>
+                          <GearLoader size="w-4 h-4" className="text-white" />
+                          <span>Sending...</span>
+                        </>
+                      ) : (
+                        "Send Test Email"
+                      )}
+                    </button>
+                  </div>
+                  {testEmailError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <div className="flex items-start gap-2">
+                        <svg className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-red-800">Error</p>
+                          <p className="text-sm text-red-700 mt-1">{testEmailError}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500">
+                    Make sure your Zoho email credentials are configured in the backend environment variables.
+                  </p>
+                </form>
+              </div>
             </div>
           )}
       </div>
@@ -1922,7 +2014,7 @@ const Settings = () => {
                   name="name"
                   value={formData.name}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                   required
                 />
               </div>
@@ -1933,7 +2025,7 @@ const Settings = () => {
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                   required
                 />
               </div>
@@ -1943,7 +2035,7 @@ const Settings = () => {
                   name="role"
                   value={formData.role}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                 >
                   {availableRoles.map((role) => (
                     <option key={role.value || role} value={role.value || role}>
@@ -1966,7 +2058,7 @@ const Settings = () => {
                 <button
                   type="submit"
                   form="add-user-form"
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium"
+                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium"
                 >
                   Add User
                 </button>
@@ -1998,7 +2090,7 @@ const Settings = () => {
                   name="name"
                   value={formData.name}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                   required
                 />
               </div>
@@ -2009,7 +2101,7 @@ const Settings = () => {
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                   required
                 />
               </div>
@@ -2019,7 +2111,7 @@ const Settings = () => {
                   name="role"
                   value={formData.role}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                 >
                   {availableRoles.map((role) => (
                     <option key={role.value || role} value={role.value || role}>
@@ -2042,7 +2134,7 @@ const Settings = () => {
                 <button
                   type="submit"
                   form="edit-user-form"
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium"
+                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium"
                 >
                   Update User
                 </button>
@@ -2074,7 +2166,7 @@ const Settings = () => {
                   name="name"
                   value={treatmentFormData.name}
                   onChange={handleTreatmentInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                   required
                 />
               </div>
@@ -2085,7 +2177,7 @@ const Settings = () => {
                   name="price"
                   value={treatmentFormData.price}
                   onChange={handleTreatmentInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                   required
                 />
               </div>
@@ -2103,7 +2195,7 @@ const Settings = () => {
                 <button
                   type="submit"
                   form="add-treatment-form"
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium"
+                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium"
                 >
                   Add Treatment Type
                 </button>
@@ -2135,7 +2227,7 @@ const Settings = () => {
                   name="name"
                   value={treatmentFormData.name}
                   onChange={handleTreatmentInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                   required
                 />
               </div>
@@ -2146,7 +2238,7 @@ const Settings = () => {
                   name="price"
                   value={treatmentFormData.price}
                   onChange={handleTreatmentInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                   required
                 />
               </div>
@@ -2164,7 +2256,7 @@ const Settings = () => {
                 <button
                   type="submit"
                   form="edit-treatment-form"
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium"
+                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium"
                 >
                   Update Treatment Type
                 </button>
@@ -2196,7 +2288,7 @@ const Settings = () => {
                   name="name"
                   value={doctorFormData.name}
                   onChange={handleDoctorInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                   required
                 />
               </div>
@@ -2207,7 +2299,7 @@ const Settings = () => {
                   name="hospital"
                   value={doctorFormData.hospital}
                   onChange={handleDoctorInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                   required
                 />
               </div>
@@ -2216,7 +2308,7 @@ const Settings = () => {
             <div className="p-6 border-t border-gray-200">
               <div className="flex justify-end gap-3">
                 <button type="button" onClick={() => setShowAddDoctorModal(false)} className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium">Cancel</button>
-                <button type="submit" form="add-doctor-form" className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium">Add Doctor</button>
+                <button type="submit" form="add-doctor-form" className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium">Add Doctor</button>
               </div>
             </div>
           </div>
@@ -2245,7 +2337,7 @@ const Settings = () => {
                   name="name"
                   value={doctorFormData.name}
                   onChange={handleDoctorInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                   required
                 />
               </div>
@@ -2256,7 +2348,7 @@ const Settings = () => {
                   name="hospital"
                   value={doctorFormData.hospital}
                   onChange={handleDoctorInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                   required
                 />
               </div>
@@ -2265,7 +2357,7 @@ const Settings = () => {
             <div className="p-6 border-t border-gray-200">
               <div className="flex justify-end gap-3">
                 <button type="button" onClick={() => setShowEditDoctorModal(false)} className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium">Cancel</button>
-                <button type="submit" form="edit-doctor-form" className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium">Update Doctor</button>
+                <button type="submit" form="edit-doctor-form" className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium">Update Doctor</button>
               </div>
             </div>
           </div>
@@ -2294,11 +2386,11 @@ const Settings = () => {
                   name="api_key"
                   value={whatsappFormData.api_key}
                   onChange={handleWhatsappInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                   placeholder="Enter your Rapiwha API key"
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1">Get your API key from <a href="https://panel.rapiwha.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Rapiwha Panel</a></p>
+                <p className="text-xs text-gray-500 mt-1">Get your API key from <a href="https://panel.rapiwha.com" target="_blank" rel="noopener noreferrer" className="text-[#9B8CFF] hover:underline">Rapiwha Panel</a></p>
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Your Phone Number (Optional)</label>
@@ -2307,7 +2399,7 @@ const Settings = () => {
                   name="phone_number"
                   value={whatsappFormData.phone_number}
                   onChange={handleWhatsappInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                   placeholder="+91 98765 43210"
                 />
                 <p className="text-xs text-gray-500 mt-1">This is for reference only - messages will be sent from your WhatsApp account</p>
@@ -2317,7 +2409,7 @@ const Settings = () => {
             <div className="p-6 border-t border-gray-200">
               <div className="flex justify-end gap-3">
                 <button type="button" onClick={() => { setShowWhatsappModal(false); setWhatsappFormData({ api_key: "", phone_number: "" }); }} className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium">Cancel</button>
-                <button type="submit" form="whatsapp-config-form" className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium">{whatsappConfig ? 'Update Config' : 'Add Config'}</button>
+                <button type="submit" form="whatsapp-config-form" className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium">{whatsappConfig ? 'Update Config' : 'Add Config'}</button>
               </div>
             </div>
           </div>
@@ -2359,7 +2451,7 @@ const Settings = () => {
                     name="currentPassword"
                     value={passwordForm.currentPassword}
                     onChange={handlePasswordInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                     required
                   />
                 </div>
@@ -2371,7 +2463,7 @@ const Settings = () => {
                   name="newPassword"
                   value={passwordForm.newPassword}
                   onChange={handlePasswordInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                   placeholder="At least 8 characters"
                   required
                 />
@@ -2383,14 +2475,14 @@ const Settings = () => {
                   name="confirmPassword"
                   value={passwordForm.confirmPassword}
                   onChange={handlePasswordInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                   placeholder="Re-enter your password"
                   required
                 />
               </div>
               {user?.supabase_user_id && !user.supabase_user_id.startsWith('local_') && (
-                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm text-blue-800">
+                <div className="mb-4 p-3 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
+                  <p className="text-sm text-[#6C4CF3]">
                     <strong>Note:</strong> After setting a password, you'll be able to login on the desktop app using your email and this password.
                   </p>
                 </div>
@@ -2400,7 +2492,7 @@ const Settings = () => {
             <div className="p-6 border-t border-gray-200">
               <div className="flex justify-end gap-3">
                 <button type="button" onClick={() => { setShowPasswordModal(false); setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' }); }} className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium">Cancel</button>
-                <button type="submit" form="password-form" disabled={passwordLoading} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium disabled:opacity-50">{passwordLoading ? "Updating..." : "Update Password"}</button>
+                <button type="submit" form="password-form" disabled={passwordLoading} className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium disabled:opacity-50">{passwordLoading ? "Updating..." : "Update Password"}</button>
               </div>
             </div>
           </div>

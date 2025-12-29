@@ -140,3 +140,5 @@ const getToothType = (fdiNumber) => {
 
 ✅ **This numbering system is now implemented in the Ultra-Realistic Dental Chart component!**
 
+
+

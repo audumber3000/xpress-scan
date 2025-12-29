@@ -41,7 +41,7 @@ const PWAInstall = () => {
     <div className="fixed bottom-4 right-4 z-50">
       <button
         onClick={onClick}
-        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 transition-colors duration-200"
+        className="bg-[#6C4CF3] hover:bg-[#5b3dd9] text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 transition-colors duration-200"
         title="Install BetterClinic App"
       >
         <svg 

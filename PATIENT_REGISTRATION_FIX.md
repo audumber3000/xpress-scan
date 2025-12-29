@@ -80,3 +80,5 @@ ALTER TABLE patients ALTER COLUMN referred_by DROP NOT NULL;
 
 But this is not necessary as the current solution works perfectly.
 
+
+

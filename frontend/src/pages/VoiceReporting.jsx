@@ -10,6 +10,7 @@ import BulletList from "@tiptap/extension-bullet-list";
 import ListItem from "@tiptap/extension-list-item";
 import { FaBold, FaItalic, FaUnderline, FaStrikethrough, FaListUl, FaListOl, FaUndo, FaRedo, FaHeading, FaAlignLeft, FaAlignCenter, FaAlignRight, FaAlignJustify, FaMicrophone, FaMicrophoneSlash, FaSave, FaFileAlt, FaCheck, FaTimes } from "react-icons/fa";
 import { toast } from 'react-toastify';
+import GearLoader from "../components/GearLoader";
 import { api } from "../utils/api";
 import LoadingButton from "../components/LoadingButton";
 
@@ -753,13 +754,13 @@ const VoiceReporting = () => {
         
         {/* Draft Editing Indicator */}
         {loadingDraftData && (
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="mb-6 p-4 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                <GearLoader size="w-5 h-5" />
               </div>
               <div className="ml-3">
-                <h3 className="text-sm font-medium text-blue-800">
+                <h3 className="text-sm font-medium text-[#6C4CF3]">
                   Loading Draft Report...
                 </h3>
                 <p className="mt-1 text-sm text-blue-700">
@@ -800,7 +801,7 @@ const VoiceReporting = () => {
                 onClick={() => setActiveTab("voice")}
                 className={`py-2 px-1 border-b-2 font-medium text-sm ${
                   activeTab === "voice"
-                    ? "border-blue-500 text-blue-600"
+                    ? "border-blue-500 text-[#9B8CFF]"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                 }`}
               >
@@ -810,7 +811,7 @@ const VoiceReporting = () => {
                 onClick={() => setActiveTab("templates")}
                 className={`py-2 px-1 border-b-2 font-medium text-sm ${
                   activeTab === "templates"
-                    ? "border-blue-500 text-blue-600"
+                    ? "border-blue-500 text-[#9B8CFF]"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                 }`}
               >
@@ -863,11 +864,11 @@ const VoiceReporting = () => {
 
             {/* Selected Patient Details */}
             {selectedPatient && (
-              <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 shadow-sm">
+              <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-[#9B8CFF] shadow-sm">
                 <div className="p-4">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="bg-blue-100 p-1.5 rounded-lg">
-                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="bg-[#9B8CFF]/20 p-1.5 rounded-lg">
+                      <svg className="w-5 h-5 text-[#9B8CFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
                     </div>
@@ -931,7 +932,7 @@ const VoiceReporting = () => {
                     <FaFileAlt className="text-gray-600" />
                     <h2 className="text-lg font-semibold text-gray-900">Report Editor</h2>
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <div className="w-2 h-2 bg-[#6C4CF3] rounded-full"></div>
                       <span className="text-sm text-gray-600">Auto-save enabled</span>
                     </div>
                   </div>
@@ -949,28 +950,28 @@ const VoiceReporting = () => {
                   <div className="flex items-center gap-1">
                     <button 
                       onClick={() => editor && editor.chain().focus().toggleBold().run()} 
-                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive('bold') ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
+                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive('bold') ? 'bg-[#9B8CFF]/20 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
                       title="Bold"
                     >
                       <FaBold size={14} />
                     </button>
                     <button 
                       onClick={() => editor && editor.chain().focus().toggleItalic().run()} 
-                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive('italic') ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
+                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive('italic') ? 'bg-[#9B8CFF]/20 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
                       title="Italic"
                     >
                       <FaItalic size={14} />
                     </button>
                     <button 
                       onClick={() => editor && editor.chain().focus().toggleUnderline().run()} 
-                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive('underline') ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
+                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive('underline') ? 'bg-[#9B8CFF]/20 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
                       title="Underline"
                     >
                       <FaUnderline size={14} />
                     </button>
                     <button 
                       onClick={() => editor && editor.chain().focus().toggleStrike().run()} 
-                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive('strike') ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
+                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive('strike') ? 'bg-[#9B8CFF]/20 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
                       title="Strikethrough"
                     >
                       <FaStrikethrough size={14} />
@@ -983,21 +984,21 @@ const VoiceReporting = () => {
                   <div className="flex items-center gap-1">
                     <button 
                       onClick={() => editor && editor.chain().focus().toggleHeading({ level: 1 }).run()} 
-                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive('heading', { level: 1 }) ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
+                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive('heading', { level: 1 }) ? 'bg-[#9B8CFF]/20 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
                       title="Heading 1"
                     >
                       <FaHeading size={14} />
                     </button>
                     <button 
                       onClick={() => editor && editor.chain().focus().toggleBulletList().run()} 
-                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive('bulletList') ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
+                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive('bulletList') ? 'bg-[#9B8CFF]/20 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
                       title="Bullet List"
                     >
                       <FaListUl size={14} />
                     </button>
                     <button 
                       onClick={() => editor && editor.chain().focus().toggleOrderedList().run()} 
-                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive('orderedList') ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
+                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive('orderedList') ? 'bg-[#9B8CFF]/20 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
                       title="Numbered List"
                     >
                       <FaListOl size={14} />
@@ -1052,28 +1053,28 @@ const VoiceReporting = () => {
                   <div className="flex items-center gap-1">
                     <button 
                       onClick={() => setAlignment('left')} 
-                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive({ textAlign: 'left' }) ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
+                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive({ textAlign: 'left' }) ? 'bg-[#9B8CFF]/20 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
                       title="Align Left"
                     >
                       <FaAlignLeft size={14} />
                     </button>
                     <button 
                       onClick={() => setAlignment('center')} 
-                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive({ textAlign: 'center' }) ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
+                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive({ textAlign: 'center' }) ? 'bg-[#9B8CFF]/20 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
                       title="Align Center"
                     >
                       <FaAlignCenter size={14} />
                     </button>
                     <button 
                       onClick={() => setAlignment('right')} 
-                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive({ textAlign: 'right' }) ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
+                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive({ textAlign: 'right' }) ? 'bg-[#9B8CFF]/20 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
                       title="Align Right"
                     >
                       <FaAlignRight size={14} />
                     </button>
                     <button 
                       onClick={() => setAlignment('justify')} 
-                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive({ textAlign: 'justify' }) ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
+                      className={`p-2 rounded-md transition-colors ${editor && editor.isActive({ textAlign: 'justify' }) ? 'bg-[#9B8CFF]/20 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`} 
                       title="Justify"
                     >
                       <FaAlignJustify size={14} />
@@ -1093,10 +1094,10 @@ const VoiceReporting = () => {
                 
                 {/* Live Transcript Display */}
                 {isRecording && liveTranscript && (
-                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="mt-4 p-3 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
                     <div className="flex items-center gap-2 mb-2">
-                      <FaMicrophone className="text-blue-600 animate-pulse" />
-                      <span className="text-sm font-medium text-blue-800">Live Transcript</span>
+                      <FaMicrophone className="text-[#9B8CFF] animate-pulse" />
+                      <span className="text-sm font-medium text-[#6C4CF3]">Live Transcript</span>
                     </div>
                     <p className="text-sm text-blue-700 italic">{liveTranscript}</p>
                   </div>
@@ -1110,7 +1111,7 @@ const VoiceReporting = () => {
                 <LoadingButton
                   onClick={handleStartRecording}
                   loading={false}
-                  className="bg-green-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-green-700 transition-colors shadow-sm"
+                  className="bg-[#6C4CF3] text-white py-3 px-6 rounded-lg font-semibold hover:bg-[#5b3dd9] transition-colors shadow-sm"
                 >
                   <FaMicrophone />
                   Start Recording
@@ -1130,7 +1131,7 @@ const VoiceReporting = () => {
                 <LoadingButton
                   onClick={handleResume}
                   loading={false}
-                  className="bg-green-500 text-white py-3 px-6 rounded-lg font-semibold hover:bg-green-600 transition-colors shadow-sm"
+                  className="bg-[#6C4CF3] text-white py-3 px-6 rounded-lg font-semibold hover:bg-[#6C4CF3] transition-colors shadow-sm"
                 >
                   <FaMicrophone />
                   Resume
@@ -1170,7 +1171,7 @@ const VoiceReporting = () => {
                     onClick={() => handleSaveReport("final")}
                     loading={isSaving}
                     disabled={isSaving}
-                    className="bg-green-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-green-700 transition-colors shadow-sm"
+                    className="bg-[#6C4CF3] text-white py-3 px-6 rounded-lg font-semibold hover:bg-[#5b3dd9] transition-colors shadow-sm"
                     title="Save as final - Generates PDF and marks report as complete"
                   >
                     <FaCheck />
@@ -1184,11 +1185,11 @@ const VoiceReporting = () => {
                 <div className="mt-2 text-xs text-gray-600">
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      <div className="w-2 h-2 bg-[#9B8CFF]/100 rounded-full"></div>
                       <span><strong>Draft:</strong> Save for later editing</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <div className="w-2 h-2 bg-[#6C4CF3] rounded-full"></div>
                       <span><strong>Final:</strong> Generate PDF and complete report</span>
                     </div>
                   </div>
@@ -1290,7 +1291,7 @@ const VoiceReporting = () => {
                     
                     {/* Click Indicator */}
                     <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="bg-blue-500 text-white p-1.5 rounded-full shadow-lg">
+                      <div className="bg-[#9B8CFF]/100 text-white p-1.5 rounded-full shadow-lg">
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                         </svg>
@@ -1311,7 +1312,7 @@ const VoiceReporting = () => {
                     </p>
                     
                     {/* Click to View Text */}
-                    <div className="text-xs text-blue-600 font-medium group-hover:text-blue-700 transition-colors flex items-center justify-center gap-1">
+                    <div className="text-xs text-[#9B8CFF] font-medium group-hover:text-blue-700 transition-colors flex items-center justify-center gap-1">
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
@@ -1329,7 +1330,7 @@ const VoiceReporting = () => {
                 >
                   {/* Template Preview */}
                   <div className="relative mb-4">
-                    <div className="w-full h-48 rounded-lg border overflow-hidden shadow-sm bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
+                    <div className="w-full h-48 rounded-lg border overflow-hidden shadow-sm bg-gradient-to-br from-blue-50 to-indigo-50 border-[#9B8CFF]">
                       {/* Template Preview Content */}
                       <div className="p-4 h-full flex flex-col">
                         {/* Header */}
@@ -1352,8 +1353,8 @@ const VoiceReporting = () => {
                         <div className="flex-1 bg-white rounded border border-gray-100 p-2">
                           {/* Mini Header */}
                           <div className="flex items-center gap-1 mb-1">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                            <div className="text-xs font-bold text-blue-600">Dhanvantri</div>
+                            <div className="w-2 h-2 bg-[#9B8CFF]/100 rounded-full"></div>
+                            <div className="text-xs font-bold text-[#9B8CFF]">Dhanvantri</div>
                           </div>
                           <div className="text-xs text-gray-500 mb-1">Radiology Center</div>
                           
@@ -1398,14 +1399,14 @@ const VoiceReporting = () => {
                     
                     {/* Status Badge */}
                     <div className="absolute top-3 right-3">
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border bg-green-100 text-green-800 border-green-200">
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border bg-[#9B8CFF]/20 text-[#6C4CF3] border-[#9B8CFF]">
                         CLASSIC
                       </span>
                     </div>
                     
                     {/* Click Indicator */}
                     <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="bg-blue-500 text-white p-1.5 rounded-full shadow-lg">
+                      <div className="bg-[#9B8CFF]/100 text-white p-1.5 rounded-full shadow-lg">
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                         </svg>
@@ -1426,7 +1427,7 @@ const VoiceReporting = () => {
                     </p>
                     
                     {/* Click to View Text */}
-                    <div className="text-xs text-blue-600 font-medium group-hover:text-blue-700 transition-colors flex items-center justify-center gap-1">
+                    <div className="text-xs text-[#9B8CFF] font-medium group-hover:text-blue-700 transition-colors flex items-center justify-center gap-1">
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
@@ -1439,10 +1440,10 @@ const VoiceReporting = () => {
             </div>
 
             {/* Template Information */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-[#9B8CFF] rounded-lg p-6">
               <div className="flex items-start gap-3">
-                <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-6 h-6 bg-[#9B8CFF]/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <svg className="w-4 h-4 text-[#9B8CFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>

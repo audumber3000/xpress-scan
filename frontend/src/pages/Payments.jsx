@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { FaSync } from "react-icons/fa";
+import GearLoader from "../components/GearLoader";
 import { api } from "../utils/api";
 
 const PAYMENTS_PER_PAGE = 10;
@@ -70,7 +71,7 @@ const Payments = () => {
 
   const getStatusBadge = (status) => {
     const statusConfig = {
-      success: { color: "bg-green-100 text-green-800 border-green-200", dot: "bg-green-500" },
+      success: { color: "bg-[#9B8CFF]/20 text-[#6C4CF3] border-[#9B8CFF]", dot: "bg-[#6C4CF3]" },
       pending: { color: "bg-orange-100 text-orange-800 border-orange-200", dot: "bg-orange-500" },
       failed: { color: "bg-red-100 text-red-800 border-red-200", dot: "bg-red-500" },
       refunded: { color: "bg-gray-100 text-gray-800 border-gray-200", dot: "bg-gray-500" }
@@ -100,7 +101,7 @@ const Payments = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+        <GearLoader size="w-8 h-8" />
       </div>
     );
   }
@@ -162,7 +163,7 @@ const Payments = () => {
               placeholder="Search payments..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
             />
           </div>
         </div>
@@ -174,7 +175,7 @@ const Payments = () => {
           {loading && payments.length === 0 ? (
             <div className="w-full flex items-center justify-center py-16">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                <GearLoader size="w-8 h-8" className="mx-auto" />
                 <p className="mt-2 text-sm text-gray-600">Loading payments...</p>
               </div>
             </div>
@@ -231,7 +232,7 @@ const Payments = () => {
             {loading && payments.length > 0 && (
               <div className="absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center">
                 <div className="flex flex-col items-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+                  <GearLoader size="w-8 h-8" />
                   <p className="text-sm text-gray-600 mt-2">Loading...</p>
                 </div>
               </div>
@@ -287,7 +288,7 @@ const Payments = () => {
                     onClick={() => setPage(pageNum)}
                     className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
                       page === pageNum
-                        ? 'z-10 bg-green-50 border-green-500 text-green-600'
+                        ? 'z-10 bg-[#9B8CFF]/10 border-[#6C4CF3] text-[#6C4CF3]'
                         : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
                     }`}
                   >

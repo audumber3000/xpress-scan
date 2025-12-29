@@ -126,7 +126,7 @@ const Login = () => {
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
             required
           />
           <input
@@ -134,13 +134,13 @@ const Login = () => {
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
             required
           />
           <button 
             type="submit" 
             disabled={loading}
-            className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50"
+            className="w-full bg-[#6C4CF3] text-white py-2 px-4 rounded-lg hover:bg-[#5b3dd9] focus:outline-none focus:ring-2 focus:ring-[#6C4CF3] focus:ring-offset-2 disabled:opacity-50"
           >
             {loading ? "Signing in..." : "Log In"}
           </button>
@@ -148,7 +148,7 @@ const Login = () => {
         
         <p className="text-center text-sm text-gray-600">
           Don't have an account?{" "}
-          <Link to="/signup" className="text-green-600 hover:text-green-500">
+          <Link to="/signup" className="text-[#6C4CF3] hover:text-[#5b3dd9]">
             Sign up
           </Link>
         </p>
@@ -156,7 +156,7 @@ const Login = () => {
         {/* Branding */}
         <div className="text-center pt-4 border-t border-gray-200">
           <p className="text-xs text-gray-400">
-            Powered by <span className="text-green-600 font-medium">BetterClinic</span>
+            Powered by <span className="text-[#6C4CF3] font-medium">BetterClinic</span>
           </p>
         </div>
       </div>

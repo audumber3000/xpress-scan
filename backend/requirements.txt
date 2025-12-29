@@ -10,4 +10,7 @@ requests
 psycopg2-binary 
 html2text
 beautifulsoup4
-weasyprint 
+weasyprint
+qrcode[pil]
+Pillow
+playwright 

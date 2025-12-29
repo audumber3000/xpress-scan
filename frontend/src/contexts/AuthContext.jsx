@@ -24,19 +24,23 @@ export const AuthProvider = ({ children }) => {
         const storedUser = localStorage.getItem('user');
         
         if (storedToken && storedUser) {
-          setToken(storedToken);
-          setUser(JSON.parse(storedUser));
-          
-          // Verify token is still valid by calling /auth/me
+          // Verify token is still valid by calling /auth/me BEFORE setting state
           try {
             await api.get('/auth/me');
+            // Token is valid, now set the state
+            setToken(storedToken);
+            setUser(JSON.parse(storedUser));
           } catch (error) {
-            // Token is invalid, clear storage
+            // Token is invalid, clear storage and don't set user state
             localStorage.removeItem('auth_token');
             localStorage.removeItem('user');
             setToken(null);
             setUser(null);
           }
+        } else {
+          // No stored session, user is not authenticated
+          setUser(null);
+          setToken(null);
         }
       } catch (error) {
         console.error('Error in getInitialSession:', error);

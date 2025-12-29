@@ -172,7 +172,7 @@ const PatientIntake = () => {
                   onChange={handleChange}
                   autoComplete="off"
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                   placeholder="Enter patient's full name"
                 />
               </div>
@@ -189,7 +189,7 @@ const PatientIntake = () => {
                   required
                   min="0"
                   max="150"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                 />
               </div>
               
@@ -202,7 +202,7 @@ const PatientIntake = () => {
                   value={formData.gender}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                 >
                   <option value="">Select Gender</option>
                   <option value="Male">Male</option>
@@ -230,7 +230,7 @@ const PatientIntake = () => {
                       setTimeout(() => setShowVillageDropdown(false), 150);
                     }}
                     autoComplete="off"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                     placeholder="Type to search or enter new village"
                   />
                   {showVillageDropdown && filteredVillages.length > 0 && (
@@ -238,7 +238,7 @@ const PatientIntake = () => {
                       {filteredVillages.map((village, index) => (
                         <div
                           key={index}
-                          className="px-3 py-2 hover:bg-green-50 cursor-pointer border-b border-gray-100 last:border-b-0 text-sm"
+                          className="px-3 py-2 hover:bg-[#9B8CFF]/10 cursor-pointer border-b border-gray-100 last:border-b-0 text-sm"
                           onClick={() => handleVillageSelect(village)}
                         >
                           {village}
@@ -259,7 +259,7 @@ const PatientIntake = () => {
                   value={formData.phone}
                   onChange={handleChange}
                   autoComplete="off"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                 />
               </div>
             </div>
@@ -278,7 +278,7 @@ const PatientIntake = () => {
                   value={showOtherDoctor ? "__other__" : formData.referred_by}
                   onChange={handleChange}
                   required={!showOtherDoctor}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                 >
                   <option value="">Select Referring Doctor</option>
                   {referringDoctors.map(doc => (
@@ -294,7 +294,7 @@ const PatientIntake = () => {
                     onChange={handleChange}
                     required
                     placeholder="Enter referring doctor name"
-                    className="w-full mt-2 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    className="w-full mt-2 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                   />
                 )}
               </div>
@@ -308,7 +308,7 @@ const PatientIntake = () => {
                   value={formData.treatment_type}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
                 >
                     <option value="">Select Treatment Type</option>
                   {treatmentTypes.map(treatment => (
@@ -319,7 +319,7 @@ const PatientIntake = () => {
             </div>
             {/* Auto-display price */}
             {selectedPrice && (
-              <div className="mt-2 text-green-700 font-semibold">Price: ₹{selectedPrice}</div>
+              <div className="mt-2 text-[#6C4CF3] font-semibold">Price: ₹{selectedPrice}</div>
             )}
             {/* Payment Type */}
             <div className="mt-4">
@@ -330,7 +330,7 @@ const PatientIntake = () => {
                 name="payment_type"
                 value={formData.payment_type}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
               >
                 <option value="Cash">Cash</option>
                 <option value="Card">Card</option>
@@ -350,7 +350,7 @@ const PatientIntake = () => {
                 onChange={handleChange}
                 rows={4}
                 placeholder="Enter any medical notes, observations, or additional information..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 resize-vertical"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3] resize-vertical"
               />
             </div>
           </div>
@@ -360,7 +360,7 @@ const PatientIntake = () => {
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 bg-green-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-green-700 transition-colors disabled:opacity-50"
+              className="flex-1 bg-[#6C4CF3] text-white py-3 px-6 rounded-lg font-semibold hover:bg-[#5b3dd9] transition-colors disabled:opacity-50"
             >
               {loading ? "Processing..." : "Register Patient"}
             </button>

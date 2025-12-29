@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import GearLoader from "../components/GearLoader";
 import { api } from "../utils/api";
 
 const PatientFiles = () => {
@@ -104,7 +105,7 @@ const PatientFiles = () => {
       <div className="w-full h-full bg-white p-6">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+            <GearLoader size="w-12 h-12" />
           </div>
         </div>
       </div>
@@ -133,7 +134,7 @@ const PatientFiles = () => {
               placeholder="Search patient files..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
             />
           </div>
         </div>

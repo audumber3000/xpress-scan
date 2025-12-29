@@ -6,6 +6,7 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 from auth import get_current_user
+from services.email_service import EmailService
 
 router = APIRouter()
 
@@ -33,6 +34,7 @@ class AppointmentCreate(BaseModel):
     notes: Optional[str] = None
 
 class AppointmentUpdate(BaseModel):
+    patient_id: Optional[int] = None
     patient_name: Optional[str] = None
     patient_email: Optional[str] = None
     patient_phone: Optional[str] = None
@@ -44,6 +46,7 @@ class AppointmentUpdate(BaseModel):
     duration: Optional[int] = None
     status: Optional[str] = None
     notes: Optional[str] = None
+    rejection_reason: Optional[str] = None  # Custom message for rejection emails
 
 class AppointmentOut(BaseModel):
     id: int
@@ -108,6 +111,40 @@ async def create_appointment(
             doctor = db.query(User).filter(User.id == db_appointment.doctor_id).first()
             if doctor:
                 doctor_name = doctor.name
+        
+        # Get clinic information for email
+        clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+        
+        # Send email notification for appointment scheduled
+        if db_appointment.patient_email and clinic:
+            try:
+                email_service = EmailService()
+                appointment_date_str = db_appointment.appointment_date.strftime("%B %d, %Y")
+                appointment_time_str = db_appointment.start_time
+                # Format time from 24-hour to 12-hour format
+                try:
+                    hour, minute = appointment_time_str.split(':')
+                    hour_int = int(hour)
+                    am_pm = 'AM' if hour_int < 12 else 'PM'
+                    display_hour = hour_int if hour_int <= 12 else hour_int - 12
+                    if display_hour == 0:
+                        display_hour = 12
+                    appointment_time_formatted = f"{display_hour}:{minute} {am_pm}"
+                except:
+                    appointment_time_formatted = appointment_time_str
+                
+                email_service.send_appointment_scheduled_email(
+                    to_email=db_appointment.patient_email,
+                    patient_name=db_appointment.patient_name,
+                    clinic_name=clinic.name,
+                    appointment_date=appointment_date_str,
+                    appointment_time=appointment_time_formatted,
+                    treatment=db_appointment.treatment,
+                    clinic_phone=clinic.phone
+                )
+            except Exception as email_error:
+                # Log error but don't fail the appointment creation
+                print(f"Failed to send appointment scheduled email: {email_error}")
         
         return AppointmentOut(
             id=db_appointment.id,
@@ -525,6 +562,13 @@ async def update_appointment(
         if appointment_update.end_time:
             appointment.end_time = appointment_update.end_time
         
+        # Track if status changed for email notifications
+        status_changed = False
+        old_status = appointment.status
+        if appointment_update.status and appointment_update.status != appointment.status:
+            status_changed = True
+            appointment.status = appointment_update.status
+        
         db.commit()
         db.refresh(appointment)
         
@@ -533,6 +577,56 @@ async def update_appointment(
             doctor = db.query(User).filter(User.id == appointment.doctor_id).first()
             if doctor:
                 doctor_name = doctor.name
+        
+        # Get clinic information for email
+        clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+        
+        # Send email notifications if status changed and patient email exists
+        if status_changed and appointment.patient_email and clinic:
+            try:
+                email_service = EmailService()
+                appointment_date_str = appointment.appointment_date.strftime("%B %d, %Y")
+                appointment_time_str = appointment.start_time
+                # Format time from 24-hour to 12-hour format
+                try:
+                    hour, minute = appointment_time_str.split(':')
+                    hour_int = int(hour)
+                    am_pm = 'AM' if hour_int < 12 else 'PM'
+                    display_hour = hour_int if hour_int <= 12 else hour_int - 12
+                    if display_hour == 0:
+                        display_hour = 12
+                    appointment_time_formatted = f"{display_hour}:{minute} {am_pm}"
+                except:
+                    appointment_time_formatted = appointment_time_str
+                
+                if appointment.status == 'accepted':
+                    # Send appointment accepted email
+                    email_service.send_appointment_accepted_email(
+                        to_email=appointment.patient_email,
+                        patient_name=appointment.patient_name,
+                        clinic_name=clinic.name,
+                        appointment_date=appointment_date_str,
+                        appointment_time=appointment_time_formatted,
+                        treatment=appointment.treatment,
+                        doctor_name=doctor_name,
+                        clinic_phone=clinic.phone
+                    )
+                elif appointment.status == 'rejected':
+                    # Send appointment rejected email with custom reason if provided
+                    rejection_reason = appointment_update.rejection_reason
+                    email_service.send_appointment_rejected_email(
+                        to_email=appointment.patient_email,
+                        patient_name=appointment.patient_name,
+                        clinic_name=clinic.name,
+                        appointment_date=appointment_date_str,
+                        appointment_time=appointment_time_formatted,
+                        treatment=appointment.treatment,
+                        rejection_reason=rejection_reason,
+                        clinic_phone=clinic.phone
+                    )
+            except Exception as email_error:
+                # Log error but don't fail the appointment update
+                print(f"Failed to send appointment status email: {email_error}")
         
         return AppointmentOut(
             id=appointment.id,

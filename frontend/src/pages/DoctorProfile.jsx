@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import GearLoader from "../components/GearLoader";
 import { api } from "../utils/api";
 import { toast } from 'react-toastify';
 
@@ -102,7 +103,7 @@ const DoctorProfile = () => {
         {loadingUserData ? (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+              <GearLoader size="w-8 h-8" />
               <span className="ml-3 text-gray-600">Loading profile data...</span>
             </div>
           </div>
@@ -142,7 +143,7 @@ const DoctorProfile = () => {
         {loadingUserData ? (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+              <GearLoader size="w-8 h-8" />
               <span className="ml-3 text-gray-600">Loading clinic data...</span>
             </div>
           </div>

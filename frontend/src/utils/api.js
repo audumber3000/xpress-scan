@@ -34,30 +34,45 @@ export const authenticatedFetch = async (url, options = {}) => {
   
 
 
-  const response = await fetch(fullUrl, {
-    ...options,
-    headers
-  });
+  // Add timeout to fetch requests (30 seconds)
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  
+  try {
+    const response = await fetch(fullUrl, {
+      ...options,
+      headers,
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
 
   if (!response.ok) {
     if (response.status === 401) {
-      // Token might be expired, redirect to login
+      // Token might be expired, clear storage but don't redirect here
+      // Let React router handle navigation through AuthContext
       localStorage.removeItem('auth_token');
       localStorage.removeItem('user');
-      window.location.href = '/login';
       throw new Error('Authentication failed');
     }
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
   }
 
-  // Try to parse JSON response
-  try {
-    const data = await response.json();
-    return { data, response };
-  } catch {
-    // If not JSON, return the response as is
-    return { data: response, response };
+    // Try to parse JSON response
+    try {
+      const data = await response.json();
+      return { data, response };
+    } catch {
+      // If not JSON, return the response as is
+      return { data: response, response };
+    }
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('Request timeout - server took too long to respond');
+    }
+    throw error;
   }
 };
 

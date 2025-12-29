@@ -84,42 +84,42 @@ const LandingPage = () => {
 
   const features = [
     {
-      icon: <Users className="w-8 h-8 text-green-600" />,
+      icon: <Users className="w-8 h-8 text-[#6C4CF3]" />,
       title: "Patient Management",
       description: "Complete patient registration, medical history tracking, and profile management in one simple interface."
     },
     {
-      icon: <Users className="w-8 h-8 text-green-600" />,
+      icon: <Users className="w-8 h-8 text-[#6C4CF3]" />,
       title: "Staff Management",
       description: "Manage your clinic staff, assign roles, track performance, and maintain team schedules effortlessly."
     },
     {
-      icon: <Phone className="w-8 h-8 text-green-600" />,
+      icon: <Phone className="w-8 h-8 text-[#6C4CF3]" />,
       title: "WhatsApp Notifications",
       description: "Send appointment reminders, test results, and important updates directly through WhatsApp to your patients."
     },
     {
-      icon: <Play className="w-8 h-8 text-green-600" />,
+      icon: <Play className="w-8 h-8 text-[#6C4CF3]" />,
       title: "Audio Reporting",
       description: "Record patient consultations and generate reports using voice-to-text technology for faster documentation."
     },
     {
-      icon: <Mail className="w-8 h-8 text-green-600" />,
+      icon: <Mail className="w-8 h-8 text-[#6C4CF3]" />,
       title: "WhatsApp & SMS Marketing",
       description: "Reach out to patients with health tips, promotional offers, and important clinic updates via WhatsApp and SMS."
     },
     {
-      icon: <BarChart3 className="w-8 h-8 text-green-600" />,
+      icon: <BarChart3 className="w-8 h-8 text-[#6C4CF3]" />,
       title: "Revenue Analytics",
       description: "Track your clinic's financial performance with detailed analytics on payments, collections, and revenue trends."
     },
     {
-      icon: <BarChart3 className="w-8 h-8 text-green-600" />,
+      icon: <BarChart3 className="w-8 h-8 text-[#6C4CF3]" />,
       title: "Analytics Dashboard",
       description: "Get real-time insights into patient flow, appointment patterns, and clinic performance with visual dashboards."
     },
     {
-      icon: <FileText className="w-8 h-8 text-green-600" />,
+      icon: <FileText className="w-8 h-8 text-[#6C4CF3]" />,
       title: "Treatment Management",
       description: "Manage patient treatments, prescriptions, follow-ups, and treatment plans with our comprehensive system."
     }
@@ -182,21 +182,21 @@ const LandingPage = () => {
 
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center space-x-8">
-              <Link to="/features" className="text-gray-600 hover:text-green-600 transition-colors">Features</Link>
-              <a href="#pricing" className="text-gray-600 hover:text-green-600 transition-colors">Pricing</a>
-              <Link to="/about" className="text-gray-600 hover:text-green-600 transition-colors">About</Link>
-              <a href="#faq" className="text-gray-600 hover:text-green-600 transition-colors">FAQ</a>
-              <a href="#contact" className="text-gray-600 hover:text-green-600 transition-colors">Contact</a>
+              <Link to="/features" className="text-gray-600 hover:text-[#6C4CF3] transition-colors">Features</Link>
+              <a href="#pricing" className="text-gray-600 hover:text-[#6C4CF3] transition-colors">Pricing</a>
+              <Link to="/about" className="text-gray-600 hover:text-[#6C4CF3] transition-colors">About</Link>
+              <a href="#faq" className="text-gray-600 hover:text-[#6C4CF3] transition-colors">FAQ</a>
+              <a href="#contact" className="text-gray-600 hover:text-[#6C4CF3] transition-colors">Contact</a>
             </div>
 
             {/* CTA Buttons */}
             <div className="hidden md:flex items-center space-x-4">
-              <Link to="/login" className="text-gray-600 hover:text-green-600 transition-colors">
+              <Link to="/login" className="text-gray-600 hover:text-[#6C4CF3] transition-colors">
                 Login
               </Link>
               <Link 
                 to="/signup" 
-                className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+                className="bg-[#6C4CF3] text-white px-6 py-2 rounded-lg hover:bg-[#5b3dd9] transition-colors flex items-center space-x-2"
               >
                 <span>Get Started</span>
                 <ArrowRight className="w-4 h-4" />
@@ -217,18 +217,18 @@ const LandingPage = () => {
         {isMenuOpen && (
           <div className="md:hidden bg-white border-t border-gray-100">
             <div className="px-4 py-4 space-y-4">
-              <Link to="/features" className="block text-gray-600 hover:text-green-600 transition-colors">Features</Link>
-              <a href="#pricing" className="block text-gray-600 hover:text-green-600 transition-colors">Pricing</a>
-              <Link to="/about" className="block text-gray-600 hover:text-green-600 transition-colors">About</Link>
-              <a href="#faq" className="block text-gray-600 hover:text-green-600 transition-colors">FAQ</a>
-              <a href="#contact" className="block text-gray-600 hover:text-green-600 transition-colors">Contact</a>
+              <Link to="/features" className="block text-gray-600 hover:text-[#6C4CF3] transition-colors">Features</Link>
+              <a href="#pricing" className="block text-gray-600 hover:text-[#6C4CF3] transition-colors">Pricing</a>
+              <Link to="/about" className="block text-gray-600 hover:text-[#6C4CF3] transition-colors">About</Link>
+              <a href="#faq" className="block text-gray-600 hover:text-[#6C4CF3] transition-colors">FAQ</a>
+              <a href="#contact" className="block text-gray-600 hover:text-[#6C4CF3] transition-colors">Contact</a>
               <div className="pt-4 border-t border-gray-100 space-y-2">
-                <Link to="/login" className="block text-gray-600 hover:text-green-600 transition-colors">
+                <Link to="/login" className="block text-gray-600 hover:text-[#6C4CF3] transition-colors">
                   Login
                 </Link>
                 <Link 
                   to="/signup" 
-                  className="block bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors text-center"
+                  className="block bg-[#6C4CF3] text-white px-6 py-2 rounded-lg hover:bg-[#5b3dd9] transition-colors text-center"
                 >
                   Get Started
                 </Link>
@@ -239,11 +239,11 @@ const LandingPage = () => {
       </nav>
 
       {/* Hero Section */}
-      <section className="pt-20 pb-16 bg-gradient-to-br from-green-50 via-blue-50 to-green-100">
+      <section className="pt-20 pb-16 bg-gradient-to-br from-[#9B8CFF]/10 via-blue-50 to-[#9B8CFF]/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
             {/* News Banner */}
-            <div className="inline-flex items-center space-x-2 bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-medium mb-8">
+            <div className="inline-flex items-center space-x-2 bg-[#9B8CFF]/20 text-[#6C4CF3] px-4 py-2 rounded-full text-sm font-medium mb-8">
               <Star className="w-4 h-4" />
               <span>NEWS: Introducing our new AI Features</span>
             </div>
@@ -251,7 +251,7 @@ const LandingPage = () => {
             {/* Main Headline */}
             <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
               <span className="block">Better Clinic Software</span>
-              <span className="text-green-600 block">Best Clinic Management Solution</span>
+              <span className="text-[#6C4CF3] block">Best Clinic Management Solution</span>
             </h1>
 
             {/* Sub-headline */}
@@ -265,12 +265,12 @@ const LandingPage = () => {
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <Link 
                 to="/signup" 
-                className="bg-green-600 text-white px-8 py-4 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2 text-lg font-medium"
+                className="bg-[#6C4CF3] text-white px-8 py-4 rounded-lg hover:bg-[#5b3dd9] transition-colors flex items-center space-x-2 text-lg font-medium"
               >
                 <span>Get Started Free</span>
                 <ArrowRight className="w-5 h-5" />
               </Link>
-              <button className="flex items-center space-x-2 text-gray-600 hover:text-green-600 transition-colors">
+              <button className="flex items-center space-x-2 text-gray-600 hover:text-[#6C4CF3] transition-colors">
                 <Play className="w-5 h-5" />
                 <span>Watch Demo</span>
               </button>
@@ -283,7 +283,7 @@ const LandingPage = () => {
                   <div className="flex items-center space-x-2">
                     <div className="w-3 h-3 bg-red-500 rounded-full"></div>
                     <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                    <div className="w-3 h-3 bg-[#6C4CF3] rounded-full"></div>
                     <span className="ml-4 text-sm text-gray-500">Better Clinic Dashboard</span>
                   </div>
                 </div>
@@ -480,23 +480,23 @@ const LandingPage = () => {
               
               <ul className="space-y-4 mb-8">
                 <li className="flex items-center space-x-3">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <CheckCircle className="w-5 h-5 text-[#6C4CF3]" />
                   <span className="text-gray-600">Patient Management</span>
                 </li>
                 <li className="flex items-center space-x-3">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <CheckCircle className="w-5 h-5 text-[#6C4CF3]" />
                   <span className="text-gray-600">Basic WhatsApp Notifications</span>
                 </li>
                 <li className="flex items-center space-x-3">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <CheckCircle className="w-5 h-5 text-[#6C4CF3]" />
                   <span className="text-gray-600">Basic Analytics Dashboard</span>
                 </li>
                 <li className="flex items-center space-x-3">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <CheckCircle className="w-5 h-5 text-[#6C4CF3]" />
                   <span className="text-gray-600">Treatment Management</span>
                 </li>
                 <li className="flex items-center space-x-3">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <CheckCircle className="w-5 h-5 text-[#6C4CF3]" />
                   <span className="text-gray-600">Email Support</span>
                 </li>
               </ul>
@@ -507,9 +507,9 @@ const LandingPage = () => {
             </div>
 
             {/* Pro Plan */}
-            <div className="bg-white rounded-xl border-2 border-green-600 p-8 relative">
+            <div className="bg-white rounded-xl border-2 border-[#6C4CF3] p-8 relative">
               <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                <span className="bg-green-600 text-white px-4 py-1 rounded-full text-sm font-medium">
+                <span className="bg-[#6C4CF3] text-white px-4 py-1 rounded-full text-sm font-medium">
                   Most Popular
                 </span>
               </div>
@@ -524,32 +524,32 @@ const LandingPage = () => {
               
               <ul className="space-y-4 mb-8">
                 <li className="flex items-center space-x-3">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <CheckCircle className="w-5 h-5 text-[#6C4CF3]" />
                   <span className="text-gray-600">Everything in Basic</span>
                 </li>
                 <li className="flex items-center space-x-3">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <CheckCircle className="w-5 h-5 text-[#6C4CF3]" />
                   <span className="text-gray-600">Staff Management</span>
                 </li>
                 <li className="flex items-center space-x-3">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <CheckCircle className="w-5 h-5 text-[#6C4CF3]" />
                   <span className="text-gray-600">Audio Reporting (Voice-to-Text)</span>
                 </li>
                 <li className="flex items-center space-x-3">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <CheckCircle className="w-5 h-5 text-[#6C4CF3]" />
                   <span className="text-gray-600">WhatsApp & SMS Marketing</span>
                 </li>
                 <li className="flex items-center space-x-3">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <CheckCircle className="w-5 h-5 text-[#6C4CF3]" />
                   <span className="text-gray-600">Advanced Revenue Analytics</span>
                 </li>
                 <li className="flex items-center space-x-3">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <CheckCircle className="w-5 h-5 text-[#6C4CF3]" />
                   <span className="text-gray-600">24/7 Support</span>
                 </li>
               </ul>
 
-              <button className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors">
+              <button className="w-full bg-[#6C4CF3] text-white py-3 rounded-lg hover:bg-[#5b3dd9] transition-colors">
                 Get Started with Pro
               </button>
             </div>
@@ -600,8 +600,8 @@ const LandingPage = () => {
             {/* Contact Info */}
             <div className="space-y-8">
               <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <Mail className="w-6 h-6 text-green-600" />
+                <div className="w-12 h-12 bg-[#9B8CFF]/20 rounded-lg flex items-center justify-center">
+                  <Mail className="w-6 h-6 text-[#6C4CF3]" />
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">Email Us</h3>
@@ -610,8 +610,8 @@ const LandingPage = () => {
               </div>
 
               <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <Phone className="w-6 h-6 text-green-600" />
+                <div className="w-12 h-12 bg-[#9B8CFF]/20 rounded-lg flex items-center justify-center">
+                  <Phone className="w-6 h-6 text-[#6C4CF3]" />
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">Call Us</h3>
@@ -620,8 +620,8 @@ const LandingPage = () => {
               </div>
 
               <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <MapPin className="w-6 h-6 text-green-600" />
+                <div className="w-12 h-12 bg-[#9B8CFF]/20 rounded-lg flex items-center justify-center">
+                  <MapPin className="w-6 h-6 text-[#6C4CF3]" />
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">Visit Us</h3>
@@ -640,7 +640,7 @@ const LandingPage = () => {
                     </label>
                     <input
                       type="text"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                       placeholder="John"
                     />
                   </div>
@@ -650,7 +650,7 @@ const LandingPage = () => {
                     </label>
                     <input
                       type="text"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                       placeholder="Doe"
                     />
                   </div>
@@ -662,7 +662,7 @@ const LandingPage = () => {
                   </label>
                   <input
                     type="email"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                     placeholder="john@example.com"
                   />
                 </div>
@@ -673,7 +673,7 @@ const LandingPage = () => {
                   </label>
                   <input
                     type="text"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                     placeholder="Your Practice Name"
                   />
                 </div>
@@ -684,14 +684,14 @@ const LandingPage = () => {
                   </label>
                   <textarea
                     rows={4}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
                     placeholder="Tell us about your practice and how we can help..."
                   ></textarea>
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors font-medium"
+                  className="w-full bg-[#6C4CF3] text-white py-3 rounded-lg hover:bg-[#5b3dd9] transition-colors font-medium"
                 >
                   Send Message
                 </button>
