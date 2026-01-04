@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { InboxProvider } from "./contexts/InboxContext";
+import { HeaderProvider } from "./contexts/HeaderContext";
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -12,16 +13,15 @@ import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import Patients from "./pages/Patients";
 import PatientIntake from "./pages/PatientIntake";
-import Reports from "./pages/Reports";
-import VoiceReporting from "./pages/VoiceReporting";
+import Xray from "./pages/Xray";
 import Payments from "./pages/Payments";
 import DoctorProfile from "./pages/DoctorProfile";
 import Settings from "./pages/Settings";
 import ClinicOnboarding from "./pages/ClinicOnboarding";
 import AuthCallback from "./pages/AuthCallback";
 import LoadingTest from "./pages/LoadingTest";
-import Communication from "./pages/Communication";
 import Inbox from "./pages/Inbox";
+import Attendance from "./pages/Attendance";
 import Calendar from "./pages/Calendar";
 import BookingPage from "./pages/BookingPage";
 import PatientFiles from "./pages/PatientFiles";
@@ -30,6 +30,7 @@ import About from "./pages/About";
 import Features from "./pages/Features";
 import DentalChartDemo from "./pages/DentalChartDemo";
 import WhatsAppTest from "./pages/WhatsAppTest";
+import Subscription from "./pages/Subscription";
 
 // Components
 import Sidebar from "./components/Sidebar";
@@ -39,14 +40,24 @@ import PWAInstall from "./components/PWAInstall";
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   
+  console.log('🛡️ [PROTECTED ROUTE] Checking access...', {
+    loading,
+    hasUser: !!user,
+    userId: user?.id,
+    path: window.location.pathname
+  });
+  
   if (loading) {
+    console.log('🛡️ [PROTECTED ROUTE] Still loading, showing loading screen');
     return <div>Loading...</div>;
   }
   
   if (!user) {
+    console.log('🛡️ [PROTECTED ROUTE] ❌ No user, redirecting to /login');
     return <Navigate to="/login" replace />;
   }
   
+  console.log('🛡️ [PROTECTED ROUTE] ✅ User authenticated, allowing access');
   return children;
 }
 
@@ -59,7 +70,15 @@ function AppContent() {
 
   // Redirect to dashboard if already authenticated and on login page
   useEffect(() => {
+    console.log('🔄 [APP] Location changed:', {
+      pathname: location.pathname,
+      loading,
+      hasUser: !!user,
+      userId: user?.id
+    });
+    
     if (location.pathname === '/login' && !loading && user) {
+      console.log('🔄 [APP] User already logged in, redirecting to /dashboard');
       // User is already logged in, redirect to dashboard
       navigate('/dashboard', { replace: true });
     }
@@ -71,7 +90,8 @@ function AppContent() {
   const isBookingPage = location.pathname === '/booking';
   const isPublicPage = location.pathname === '/about' || location.pathname === '/features';
 
-  if (loading) return <div>Loading...</div>;
+  // Don't block rendering while loading - let ProtectedRoute handle it
+  // if (loading) return <div>Loading...</div>;
 
   // For auth pages, landing page, and booking page, render without sidebar
   if (isAuthPage || isLandingPage || isBookingPage || isPublicPage) {
@@ -134,15 +154,15 @@ function AppContent() {
           <Route path="/patient-files" element={<ProtectedRoute><PatientFiles /></ProtectedRoute>} />
           <Route path="/patient-profile/:patientId" element={<ProtectedRoute><PatientProfile /></ProtectedRoute>} />
           <Route path="/patient-intake" element={<ProtectedRoute><PatientIntake /></ProtectedRoute>} />
-          <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
-          <Route path="/voice-reporting" element={<ProtectedRoute><VoiceReporting /></ProtectedRoute>} />
+          <Route path="/xray" element={<ProtectedRoute><Xray /></ProtectedRoute>} />
           <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
           <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
           <Route path="/whatsapp-test" element={<ProtectedRoute><WhatsAppTest /></ProtectedRoute>} />
-          <Route path="/communication" element={<ProtectedRoute><Communication /></ProtectedRoute>} />
           <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
+          <Route path="/admin/attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
           <Route path="/user-management" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           <Route path="/doctor-profile" element={<ProtectedRoute><DoctorProfile /></ProtectedRoute>} />
+          <Route path="/subscription" element={<ProtectedRoute><Subscription /></ProtectedRoute>} />
             <Route path="/loading-test" element={<LoadingTest />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
@@ -168,9 +188,11 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <InboxProvider>
-          <AppContent />
-        </InboxProvider>
+        <HeaderProvider>
+          <InboxProvider>
+            <AppContent />
+          </InboxProvider>
+        </HeaderProvider>
       </AuthProvider>
     </Router>
   );

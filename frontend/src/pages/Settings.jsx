@@ -1,12 +1,19 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { toast } from 'react-toastify';
 import GearLoader from "../components/GearLoader";
-import { api, whatsappApi } from "../utils/api";
+import { api } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
+import { useHeader } from "../contexts/HeaderContext";
+import StaffTable from "../components/settings/StaffTable";
+import StaffTableHeader from "../components/settings/StaffTableHeader";
+import UserDetailsPanel from "../components/settings/UserDetailsPanel";
+import EditUserTab from "../components/settings/EditUserTab";
+import PermissionsTab from "../components/settings/PermissionsTab";
 
 // Settings page with Security tab for password management
 const Settings = () => {
   const { user } = useAuth();
+  const { setTitle } = useHeader();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -16,8 +23,18 @@ const Settings = () => {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
-    role: "receptionist"
+    role: "receptionist",
+    password: ""
   });
+  const [addingUser, setAddingUser] = useState(false);
+  const [updatingUser, setUpdatingUser] = useState(false);
+  const [showStaffPasswordModal, setShowStaffPasswordModal] = useState(false);
+  const [selectedUserForPassword, setSelectedUserForPassword] = useState(null);
+  const [staffPassword, setStaffPassword] = useState("");
+  const [staffPasswordConfirm, setStaffPasswordConfirm] = useState("");
+  const [staffPasswordLoading, setStaffPasswordLoading] = useState(false);
+  const [showPasswordAfterSet, setShowPasswordAfterSet] = useState(false);
+  const [lastSetPassword, setLastSetPassword] = useState("");
 
   // Helper function to check if user has permission
   const hasPermission = (permission) => {
@@ -37,7 +54,21 @@ const Settings = () => {
 
   // Tab management
   const [activeTab, setActiveTab] = useState("profile");
-  const [profileSubTab, setProfileSubTab] = useState("users"); // 'users' or 'clinic'
+  const [profileSubTab, setProfileSubTab] = useState("users"); // 'users', 'clinic', or 'devices'
+  
+  // Device management state
+  const [userDevices, setUserDevices] = useState({}); // { userId: [devices] }
+  const [loadingUserDevices, setLoadingUserDevices] = useState({});
+  const [expandedUserDevices, setExpandedUserDevices] = useState(new Set());
+  
+  // Right panel state
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [showUserPanel, setShowUserPanel] = useState(false);
+  const [userPanelTab, setUserPanelTab] = useState("accounts"); // "accounts", "devices", "activity", "edit", "permissions"
+  
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
 
   // Billing state
   const [treatmentTypes, setTreatmentTypes] = useState([]);
@@ -49,6 +80,8 @@ const Settings = () => {
     name: "",
     price: ""
   });
+  const [addingTreatment, setAddingTreatment] = useState(false);
+  const [updatingTreatment, setUpdatingTreatment] = useState(false);
 
   // Referred By state
   const [referringDoctors, setReferringDoctors] = useState([]);
@@ -60,6 +93,21 @@ const Settings = () => {
     name: "",
     hospital: ""
   });
+  const [addingDoctor, setAddingDoctor] = useState(false);
+  const [updatingDoctor, setUpdatingDoctor] = useState(false);
+  const [savingEditUser, setSavingEditUser] = useState(false);
+  const [savingPermissions, setSavingPermissions] = useState(false);
+
+  // Message Templates state
+  const [messageTemplates, setMessageTemplates] = useState([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [showEditTemplateModal, setShowEditTemplateModal] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [templateFormData, setTemplateFormData] = useState({
+    title: "",
+    content: "",
+    is_active: true
+  });
 
   // Users state
   const [error, setError] = useState("");
@@ -70,17 +118,6 @@ const Settings = () => {
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
   const [selectedUserForPermissions, setSelectedUserForPermissions] = useState(null);
 
-  // WhatsApp Configuration state
-  const [whatsappConfig, setWhatsappConfig] = useState(null);
-  const [loadingWhatsapp, setLoadingWhatsapp] = useState(false);
-  const [showWhatsappModal, setShowWhatsappModal] = useState(false);
-  const [whatsappFormData, setWhatsappFormData] = useState({
-    api_key: "",
-    phone_number: ""
-  });
-  const [testingConnection, setTestingConnection] = useState(false);
-  const [creditInfo, setCreditInfo] = useState(null);
-  const [loadingCredit, setLoadingCredit] = useState(false);
 
   // Password Management state
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -155,20 +192,24 @@ const Settings = () => {
   ];
 
   useEffect(() => {
+    setTitle('Settings');
+  }, [setTitle]);
+
+  useEffect(() => {
     if (activeTab === "billing") {
       fetchTreatmentTypes();
-    } else if (activeTab === "referred") {
-      fetchReferringDoctors();
+    } else if (activeTab === "templates") {
+      fetchMessageTemplates();
     } else if (activeTab === "users") {
       fetchUsers();
       fetchAvailableRoles();
-    } else if (activeTab === "whatsapp") {
-      fetchWhatsappConfig();
-    } else if (activeTab === "profile" && profileSubTab === "users") {
-      fetchUsers();
-      fetchAvailableRoles();
-    } else if (activeTab === "profile" && profileSubTab === "clinic") {
-      fetchClinicData();
+    } else if (activeTab === "profile") {
+      if (profileSubTab === "users") {
+        fetchUsers();
+        fetchAvailableRoles();
+      } else if (profileSubTab === "clinic") {
+        fetchClinicData();
+      }
     }
   }, [activeTab, profileSubTab]);
 
@@ -333,62 +374,207 @@ const Settings = () => {
     }
   };
 
-  const fetchWhatsappConfig = async () => {
+  const fetchMessageTemplates = async () => {
     try {
-      setLoadingWhatsapp(true);
-      const config = await whatsappApi.getMyConfig();
-      setWhatsappConfig(config);
-      
-      // If config exists, fetch credit info
-      if (config) {
-        fetchCreditInfo();
-      }
+      setLoadingTemplates(true);
+      const data = await api.get("/message-templates/");
+      setMessageTemplates(data);
     } catch (error) {
-      if (error.message.includes("404")) {
-        // No config found, this is normal
-        setWhatsappConfig(null);
-        setCreditInfo(null);
-      } else {
-        console.error("Error fetching WhatsApp config:", error);
-        toast.error("Error fetching WhatsApp configuration");
-      }
+      console.error("Error fetching message templates:", error);
+      toast.error("Error fetching message templates");
     } finally {
-      setLoadingWhatsapp(false);
+      setLoadingTemplates(false);
     }
   };
 
-  const fetchCreditInfo = async () => {
+  const handleEditTemplate = (template) => {
+    setEditingTemplate(template);
+    setTemplateFormData({
+      title: template.title,
+      content: template.content,
+      is_active: template.is_active
+    });
+    setShowEditTemplateModal(true);
+  };
+
+  const handleUpdateTemplate = async (e) => {
+    e.preventDefault();
     try {
-      setLoadingCredit(true);
-      const creditData = await whatsappApi.getCredit();
-      
-      setCreditInfo(creditData);
+      await api.put(`/message-templates/${editingTemplate.id}`, templateFormData);
+      toast.success("Template updated successfully");
+      setShowEditTemplateModal(false);
+      setEditingTemplate(null);
+      setTemplateFormData({ title: "", content: "", is_active: true });
+      fetchMessageTemplates();
     } catch (error) {
-      console.error("Error fetching credit info:", error);
-      setCreditInfo(null);
-    } finally {
-      setLoadingCredit(false);
+      console.error("Error updating template:", error);
+      toast.error(error.message || "Error updating template");
     }
   };
 
-  // Calculate credit values directly in frontend
-  const calculateCreditValues = (credits) => {
-    if (!credits) return { inr: 0, messages: 0 };
-    
-    // Credits ARE dollars (4.8296 credits = $4.8296)
-    const usdValue = credits;
-    
-    // Convert USD to INR (1 USD = 87.32 INR)
-    const inrValue = usdValue * 87.32;
-    
-    // Calculate messages (1 message = $0.0023)
-    const messages = Math.floor(usdValue / 0.0023);
-    
-    return {
-      inr: inrValue.toFixed(2),
-      messages: messages
-    };
+  const fetchUserDevices = async (userId) => {
+    try {
+      setLoadingUserDevices(prev => ({ ...prev, [userId]: true }));
+      const data = await api.get(`/devices/?user_id=${userId}`);
+      setUserDevices(prev => ({ ...prev, [userId]: data }));
+    } catch (error) {
+      console.error("Error fetching user devices:", error);
+      setUserDevices(prev => ({ ...prev, [userId]: [] }));
+    } finally {
+      setLoadingUserDevices(prev => ({ ...prev, [userId]: false }));
+    }
   };
+
+  const toggleUserDevices = (userId) => {
+    const newExpanded = new Set(expandedUserDevices);
+    if (newExpanded.has(userId)) {
+      newExpanded.delete(userId);
+    } else {
+      newExpanded.add(userId);
+      // Fetch devices if not already loaded
+      if (!userDevices[userId]) {
+        fetchUserDevices(userId);
+      }
+    }
+    setExpandedUserDevices(newExpanded);
+  };
+
+  const handleUserClick = (user) => {
+    setSelectedUser(user);
+    setShowUserPanel(true);
+    setUserPanelTab("accounts");
+    // Fetch devices if not already loaded
+    if (!userDevices[user.id]) {
+      fetchUserDevices(user.id);
+    }
+  };
+
+  const closeUserPanel = () => {
+    setShowUserPanel(false);
+    setSelectedUser(null);
+    setUserPanelTab("accounts");
+  };
+
+  const handleEditUserFromPanel = (user) => {
+    setSelectedUser(user);
+    setShowUserPanel(true);
+    setUserPanelTab("edit");
+    setFormData({ name: user.name, email: user.email, role: user.role, password: "" });
+  };
+
+  const handleManagePermissionsFromPanel = (user) => {
+    setSelectedUser(user);
+    setShowUserPanel(true);
+    setUserPanelTab("permissions");
+  };
+
+  const handleSaveEditUser = async (e) => {
+    e.preventDefault();
+    setSavingEditUser(true);
+    try {
+      const updateData = {
+        name: formData.name,
+        email: formData.email,
+        role: formData.role
+      };
+      if (formData.password && formData.password.trim()) {
+        updateData.password = formData.password;
+      }
+      await api.put(`/clinic-users/${selectedUser.id}`, updateData);
+      toast.success("User updated successfully");
+      setUserPanelTab("accounts");
+      setFormData({ name: "", email: "", role: "receptionist", password: "" });
+      fetchUsers();
+      // Refresh selected user
+      const updatedUsers = await api.get("/clinic-users/");
+      const updatedUser = updatedUsers.find(u => u.id === selectedUser.id);
+      if (updatedUser) {
+        setSelectedUser(updatedUser);
+      }
+    } catch (error) {
+      console.error("Error updating user:", error);
+      toast.error(error.message || "Error updating user");
+    } finally {
+      setSavingEditUser(false);
+    }
+  };
+
+  const handleSavePermissions = async (userId, updateData) => {
+    setSavingPermissions(true);
+    try {
+      await api.put(`/clinic-users/${userId}`, updateData);
+      toast.success("User permissions updated successfully");
+      setUserPanelTab("accounts");
+      fetchUsers();
+      // Refresh selected user
+      const updatedUsers = await api.get("/clinic-users/");
+      const updatedUser = updatedUsers.find(u => u.id === selectedUser.id);
+      if (updatedUser) {
+        setSelectedUser(updatedUser);
+      }
+    } catch (error) {
+      console.error("Error updating permissions:", error);
+      toast.error(error.message || "Error updating permissions");
+    } finally {
+      setSavingPermissions(false);
+    }
+  };
+
+  // Filter users based on search query
+  const filteredUsers = useMemo(() => {
+    if (!searchQuery.trim()) return users;
+    const query = searchQuery.toLowerCase();
+    return users.filter(u => 
+      u.name.toLowerCase().includes(query) ||
+      u.email.toLowerCase().includes(query) ||
+      u.role.toLowerCase().includes(query)
+    );
+  }, [users, searchQuery]);
+
+  const formatDate = (dateString) => {
+    if (!dateString) return "N/A";
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const getUserInitials = (name) => {
+    if (!name) return "?";
+    const parts = name.split(" ");
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  const getDeviceIcon = (deviceType, devicePlatform) => {
+    if (deviceType === 'mobile') {
+      return '📱';
+    } else if (deviceType === 'desktop') {
+      if (devicePlatform === 'Windows') return '🪟';
+      if (devicePlatform === 'macOS') return '🍎';
+      if (devicePlatform === 'Linux') return '🐧';
+      return '💻';
+    } else {
+      return '🌐';
+    }
+  };
+
+  const formatLastSeen = (lastSeen) => {
+    if (!lastSeen) return 'Never';
+    const date = new Date(lastSeen);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  };
+
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -414,30 +600,44 @@ const Settings = () => {
     }));
   };
 
-  const handleWhatsappInputChange = (e) => {
-    const { name, value } = e.target;
-    setWhatsappFormData(prev => ({
+  const handleTemplateInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setTemplateFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: type === 'checkbox' ? checked : value
     }));
   };
 
+
   const handleAddUser = async (e) => {
     e.preventDefault();
+    setAddingUser(true);
     try {
-      await api.post("/clinic-users/", formData);
+      const userData = {
+        name: formData.name,
+        email: formData.email,
+        role: formData.role
+      };
+      // Only include password if provided
+      if (formData.password && formData.password.trim()) {
+        userData.password = formData.password;
+      }
+      await api.post("/clinic-users/", userData);
         toast.success("User added successfully");
         setShowAddModal(false);
-        setFormData({ name: "", email: "", role: "receptionist" });
+        setFormData({ name: "", email: "", role: "receptionist", password: "" });
         fetchUsers();
     } catch (error) {
       console.error("Error adding user:", error);
       toast.error(error.message || "Error adding user");
+    } finally {
+      setAddingUser(false);
     }
   };
 
   const handleAddTreatment = async (e) => {
     e.preventDefault();
+    setAddingTreatment(true);
     try {
       await api.post("/treatment-types/", {
         name: treatmentFormData.name,
@@ -450,11 +650,14 @@ const Settings = () => {
     } catch (error) {
       console.error("Error adding treatment type:", error);
       toast.error(error.message || "Error adding treatment type");
+    } finally {
+      setAddingTreatment(false);
     }
   };
 
   const handleAddDoctor = async (e) => {
     e.preventDefault();
+    setAddingDoctor(true);
     try {
       await api.post("/referring-doctors/", doctorFormData);
         toast.success("Referring doctor added successfully");
@@ -464,6 +667,8 @@ const Settings = () => {
     } catch (error) {
       console.error("Error adding referring doctor:", error);
       toast.error(error.message || "Error adding referring doctor");
+    } finally {
+      setAddingDoctor(false);
     }
   };
 
@@ -499,7 +704,8 @@ const Settings = () => {
     setFormData({
       name: user.name,
       email: user.email,
-      role: user.role
+      role: user.role,
+      password: ""
     });
     setShowEditModal(true);
   };
@@ -524,26 +730,66 @@ const Settings = () => {
 
   const handleUpdateUser = async (e) => {
     e.preventDefault();
+    setUpdatingUser(true);
     try {
       const updateData = {
         name: formData.name,
         email: formData.email,
         role: formData.role
       };
+      // Only include password if provided
+      if (formData.password && formData.password.trim()) {
+        updateData.password = formData.password;
+      }
       await api.put(`/clinic-users/${editingUser.id}`, updateData);
         toast.success("User updated successfully");
         setShowEditModal(false);
         setEditingUser(null);
-        setFormData({ name: "", email: "", role: "receptionist" });
+        setFormData({ name: "", email: "", role: "receptionist", password: "" });
         fetchUsers();
     } catch (error) {
       console.error("Error updating user:", error);
       toast.error(error.message || "Error updating user");
+    } finally {
+      setUpdatingUser(false);
+    }
+  };
+
+  const handleSetStaffPassword = async (e) => {
+    e.preventDefault();
+    
+    if (staffPassword !== staffPasswordConfirm) {
+      toast.error("Passwords don't match");
+      return;
+    }
+    
+    if (staffPassword.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    
+    setStaffPasswordLoading(true);
+    try {
+      await api.post(`/clinic-users/${selectedUserForPassword.id}/set-password`, {
+        password: staffPassword
+      });
+      toast.success("Password set successfully for " + selectedUserForPassword.name);
+      // Store password to show it
+      setLastSetPassword(staffPassword);
+      setShowPasswordAfterSet(true);
+      // Refresh users to update has_password status
+      fetchUsers();
+    } catch (error) {
+      console.error("Error setting password:", error);
+      toast.error(error.response?.data?.detail || error.message || "Error setting password");
+    } finally {
+      setStaffPasswordLoading(false);
     }
   };
 
   const handleUpdateTreatment = async (e) => {
     e.preventDefault();
+    setUpdatingTreatment(true);
     try {
       await api.put(`/treatment-types/${editingTreatment.id}`, {
         name: treatmentFormData.name,
@@ -557,11 +803,14 @@ const Settings = () => {
     } catch (error) {
       console.error("Error updating treatment type:", error);
       toast.error(error.message || "Error updating treatment type");
+    } finally {
+      setUpdatingTreatment(false);
     }
   };
 
   const handleUpdateDoctor = async (e) => {
     e.preventDefault();
+    setUpdatingDoctor(true);
     try {
       await api.put(`/referring-doctors/${editingDoctor.id}`, doctorFormData);
         toast.success("Referring doctor updated successfully");
@@ -572,6 +821,8 @@ const Settings = () => {
     } catch (error) {
       console.error("Error updating referring doctor:", error);
       toast.error(error.message || "Error updating referring doctor");
+    } finally {
+      setUpdatingDoctor(false);
     }
   };
 
@@ -625,79 +876,6 @@ const Settings = () => {
     }
   };
 
-  const handleAddWhatsappConfig = async (e) => {
-    e.preventDefault();
-    try {
-      await whatsappApi.createConfig(whatsappFormData);
-      toast.success("WhatsApp configuration added successfully");
-      setShowWhatsappModal(false);
-      setWhatsappFormData({ api_key: "", phone_number: "" });
-      fetchWhatsappConfig();
-    } catch (error) {
-      console.error("Error adding WhatsApp config:", error);
-      toast.error(error.message || "Error adding WhatsApp configuration");
-    }
-  };
-
-  const handleEditWhatsappConfig = (config) => {
-    setWhatsappFormData({
-      api_key: config.api_key,
-      phone_number: config.phone_number || ""
-    });
-    setShowWhatsappModal(true);
-  };
-
-  const handleUpdateWhatsappConfig = async (e) => {
-    e.preventDefault();
-    try {
-      await whatsappApi.updateConfig(whatsappConfig.id, whatsappFormData);
-      toast.success("WhatsApp configuration updated successfully");
-      setShowWhatsappModal(false);
-      setWhatsappFormData({ api_key: "", phone_number: "" });
-      fetchWhatsappConfig();
-    } catch (error) {
-      console.error("Error updating WhatsApp config:", error);
-      toast.error(error.message || "Error updating WhatsApp configuration");
-    }
-  };
-
-  const handleDeleteWhatsappConfig = async () => {
-    if (window.confirm("Are you sure you want to delete your WhatsApp configuration?")) {
-      try {
-        await whatsappApi.deleteConfig(whatsappConfig.id);
-        toast.success("WhatsApp configuration deleted successfully");
-        setWhatsappConfig(null);
-        setCreditInfo(null); // Clear credit info on deletion
-      } catch (error) {
-        console.error("Error deleting WhatsApp config:", error);
-        toast.error(error.message || "Error deleting WhatsApp configuration");
-      }
-    }
-  };
-
-  const handleTestWhatsappConnection = async () => {
-    try {
-      setTestingConnection(true);
-      const result = await whatsappApi.testConnection();
-      
-      if (result.success) {
-        toast.success("WhatsApp connection test successful!");
-        // Refresh credit info after successful test
-        fetchCreditInfo();
-      } else {
-        toast.error(`WhatsApp connection test failed: ${result.message}`);
-      }
-    } catch (error) {
-      console.error("Error testing WhatsApp connection:", error);
-      toast.error(error.message || "Error testing WhatsApp connection");
-    } finally {
-      setTestingConnection(false);
-    }
-  };
-
-  const handleRefreshCredit = async () => {
-    await fetchCreditInfo();
-  };
 
   // Password management functions
   const handlePasswordInputChange = (e) => {
@@ -1015,10 +1193,7 @@ const Settings = () => {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="text-gray-600 mt-1">Manage your clinic settings and configurations</p>
-      </div>
+      {/* Header - Removed, now in global Header */}
 
       {/* Tabbed Section */}
       <div className="border-b border-gray-200 mb-6">
@@ -1030,28 +1205,16 @@ const Settings = () => {
             👤 Profile
           </button>
           <button
-            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "security" ? "border-[#6C4CF3] text-[#6C4CF3]" : "border-transparent text-gray-600 hover:text-gray-900"}`}
-            onClick={() => setActiveTab("security")}
-          >
-            🔐 Security
-          </button>
-          <button
             className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "billing" ? "border-blue-600 text-blue-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
             onClick={() => setActiveTab("billing")}
           >
             Billing
           </button>
           <button
-            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "referred" ? "border-blue-600 text-blue-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
-            onClick={() => setActiveTab("referred")}
+            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "templates" ? "border-blue-600 text-blue-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
+            onClick={() => setActiveTab("templates")}
           >
-            Referred By
-          </button>
-          <button
-            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "whatsapp" ? "border-blue-600 text-blue-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
-            onClick={() => setActiveTab("whatsapp")}
-          >
-            WhatsApp Config
+            📝 Message Templates
           </button>
           <button
             className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "other" ? "border-blue-600 text-blue-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
@@ -1101,72 +1264,24 @@ const Settings = () => {
                     <div>
                       {error && <div className="text-red-500 mb-2">{error}</div>}
                       
-                      {hasPermission("users:edit") && (
-                        <button
-                          onClick={() => setShowAddModal(true)}
-                          className="mb-4 bg-[#6C4CF3] text-white px-4 py-2 rounded hover:bg-[#5b3dd9] flex items-center gap-2"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                          </svg>
-                          Add Staff
-                        </button>
-                      )}
+                      <StaffTableHeader
+                        userCount={filteredUsers.length}
+                        searchQuery={searchQuery}
+                        onSearchChange={setSearchQuery}
+                        onFiltersClick={() => setShowFilters(!showFilters)}
+                        onAddUser={() => setShowAddModal(true)}
+                      />
 
-                      <div className="overflow-x-auto bg-white border border-gray-200 rounded-lg">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {users.map((u) => (
-                              <tr key={u.id}>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{u.name}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{u.email}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">{u.role}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2">
-                                  {hasPermission("users:edit") && (
-                                    <>
-                                      <button
-                                        onClick={() => {
-                                          setEditingUser(u);
-                                          setFormData({ name: u.name, email: u.email, role: u.role });
-                                          setShowEditModal(true);
-                                        }}
-                                        className="text-[#9B8CFF] hover:text-[#6C4CF3]"
-                                      >
-                                        Edit
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          setSelectedUserForPermissions(u);
-                                          setShowPermissionsModal(true);
-                                        }}
-                                        className="text-purple-600 hover:text-purple-800"
-                                      >
-                                        Permissions
-                                      </button>
-                                    </>
-                                  )}
-                                  {hasPermission("users:delete") && u.id !== user?.id && (
-                                    <button
-                                      onClick={() => handleDeleteUser(u.id)}
-                                      className="text-red-600 hover:text-red-800"
-                                    >
-                                      Delete
-                                    </button>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                      <StaffTable
+                        users={filteredUsers}
+                        userDevices={userDevices}
+                        loadingUserDevices={loadingUserDevices}
+                        onUserClick={handleUserClick}
+                        getUserInitials={getUserInitials}
+                        formatDate={formatDate}
+                        formatLastSeen={formatLastSeen}
+                        getDeviceIcon={getDeviceIcon}
+                      />
                     </div>
                   )}
                 </div>
@@ -1419,60 +1534,6 @@ const Settings = () => {
             </div>
           )}
 
-          {activeTab === "referred" && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Referring Doctors</h3>
-              {referringDoctorsError && <div className="text-red-500 mb-2">{referringDoctorsError}</div>}
-              {loadingDoctors ? (
-                <div className="w-full flex items-center justify-center py-16">
-                  <div className="text-center">
-                    <GearLoader size="w-8 h-8" className="mx-auto" />
-                    <p className="mt-2 text-sm text-gray-600">Loading referring doctors...</p>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <div className="flex justify-between items-center mb-4">
-                    <h4 className="text-md font-medium text-gray-900">Current Referring Doctors</h4>
-                    <button
-                      onClick={() => setShowAddDoctorModal(true)}
-                      className="bg-[#6C4CF3] text-white px-4 py-2 rounded-lg hover:bg-[#5b3dd9] transition"
-                    >
-                      Add Doctor
-                    </button>
-                  </div>
-                  <div className="space-y-3">
-                    {referringDoctors.length === 0 ? (
-                      <p className="text-gray-500 text-center py-4">No referring doctors configured</p>
-                    ) : (
-                      referringDoctors.map((doctor) => (
-                        <div key={doctor.id} className="flex justify-between items-center p-4 border border-gray-200 rounded-lg">
-                            <div>
-                              <span className="font-medium text-gray-900">{doctor.name}</span>
-                              <span className="ml-4 text-gray-600">{doctor.hospital}</span>
-                            </div>
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => handleEditDoctor(doctor)}
-                                className="text-[#9B8CFF] hover:text-[#6C4CF3] text-sm"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => handleDeleteDoctor(doctor.id)}
-                                className="text-red-600 hover:text-red-800 text-sm"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           {activeTab === "users" && (
             <div>
@@ -1682,246 +1743,71 @@ const Settings = () => {
             </div>
           )}
 
-          {activeTab === "whatsapp" && (
+
+          {activeTab === "templates" && (
             <div>
-              <h3 className="text-lg font-semibold mb-4">WhatsApp Configuration</h3>
-              <p className="text-gray-600 mb-6">Configure your personal WhatsApp API key to send messages from your own number.</p>
+              <h3 className="text-lg font-semibold mb-4">Message Templates</h3>
+              <p className="text-sm text-gray-600 mb-6">
+                Customize automated messages sent to patients. Use variables like {"{patient_name}"}, {"{clinic_name}"}, etc.
+              </p>
               
-              {loadingWhatsapp ? (
-                <div className="w-full flex items-center justify-center py-16">
-                  <div className="text-center">
-                    <GearLoader size="w-8 h-8" className="mx-auto" />
-                    <p className="mt-2 text-sm text-gray-600">Loading WhatsApp configuration...</p>
-                  </div>
+              {loadingTemplates ? (
+                <div className="text-center py-8">
+                  <GearLoader size="w-8 h-8" className="mx-auto" />
+                  <p className="mt-2 text-sm text-gray-600">Loading templates...</p>
                 </div>
               ) : (
-                <div>
-                  {!whatsappConfig ? (
-                    <div className="text-center py-8">
-                      <div className="mb-4">
-                        <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                        </svg>
-                      </div>
-                      <h4 className="text-lg font-medium text-gray-900 mb-2">No WhatsApp Configuration</h4>
-                      <p className="text-gray-500 mb-4">You haven't configured your WhatsApp API key yet. Add one to start sending messages from your own number.</p>
-                      <button
-                        onClick={() => setShowWhatsappModal(true)}
-                        className="bg-[#6C4CF3] text-white px-4 py-2 rounded-lg hover:bg-[#5b3dd9] transition"
-                      >
-                        Add WhatsApp Config
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="bg-white p-6 border border-gray-200 rounded-lg">
-                        <div className="flex justify-between items-start mb-4">
-                          <div className="space-y-3">
-                            <h4 className="text-xl font-semibold text-gray-900">Your WhatsApp Configuration</h4>
-                            <div className="space-y-2">
-                              <p className="text-base text-gray-700">
-                                <span className="font-medium">API Key:</span> 
-                                <span className="ml-2 font-mono bg-gray-100 px-2 py-1 rounded text-sm">{whatsappConfig.api_key.substring(0, 8)}...</span>
-                              </p>
-                              {whatsappConfig.phone_number && (
-                                <p className="text-base text-gray-700">
-                                  <span className="font-medium">Phone:</span> 
-                                  <span className="ml-2">{whatsappConfig.phone_number}</span>
-                                </p>
-                              )}
-                              <p className="text-base text-gray-700">
-                                <span className="font-medium">Status:</span> 
-                                <span className={`ml-2 px-3 py-1 rounded-full text-sm font-medium ${whatsappConfig.is_active ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' : 'bg-red-100 text-red-800'}`}>
-                                  {whatsappConfig.is_active ? 'Active' : 'Inactive'}
-                                </span>
-                              </p>
-                            </div>
-                          </div>
-                          
-                          {/* Credit Information - Redesigned like Smartwords */}
-                          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 min-w-[300px]">
-                            {/* Top Section - Icon and Title */}
-                            <div className="flex items-center mb-4">
-                              <div className="w-10 h-10 bg-[#6C4CF3] rounded-full flex items-center justify-center mr-3">
-                                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/>
-                                </svg>
-                              </div>
-                              <div>
-                                <h5 className="text-lg font-semibold text-gray-900">WhatsApp Credits</h5>
+                <div className="space-y-4">
+                  {messageTemplates.map((template) => (
+                    <div key={template.id} className="bg-white border border-gray-200 rounded-lg p-6">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h4 className="text-lg font-semibold text-gray-900">{template.title}</h4>
+                          <p className="text-sm text-gray-500 mt-1">
+                            Template: <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">{template.name}</span>
+                          </p>
+                          {template.variables && template.variables.length > 0 && (
+                            <div className="mt-2">
+                              <p className="text-xs text-gray-600 mb-1">Available variables:</p>
+                              <div className="flex flex-wrap gap-1">
+                                {template.variables.map((varName, idx) => (
+                                  <span key={idx} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                    {"{"}{varName}{"}"}
+                                  </span>
+                                ))}
                               </div>
                             </div>
-                            
-                            {/* Middle Section - Credit Amount and Progress */}
-                            <div className="mb-4">
-                              {loadingCredit ? (
-                                <div className="text-center py-4">
-                                  <GearLoader size="w-8 h-8" className="mx-auto" />
-                                  <p className="text-sm text-gray-600 mt-2">Loading credits...</p>
-                                </div>
-                              ) : creditInfo ? (
-                                <>
-                                  {/* Credit Amount and Refresh Button */}
-                                  <div className="flex items-center justify-between mb-3">
-                                    <div className="text-3xl font-bold text-gray-900">
-                                      {(() => {
-                                        const values = calculateCreditValues(creditInfo.credit);
-                                        return `₹${values.inr}`;
-                                      })()}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      {/* Add Credit Button */}
-                                      <button
-                                        onClick={() => window.open('https://panel.rapiwha.com/page_cart.php', '_blank')}
-                                        className="w-8 h-8 bg-[#9B8CFF]/20 rounded-full flex items-center justify-center hover:bg-[#9B8CFF]/30 transition-colors"
-                                        title="Add more credits"
-                                      >
-                                        <svg className="w-4 h-4 text-[#6C4CF3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                                        </svg>
-                                      </button>
-                                      
-                                      {/* Refresh Button */}
-                                      <button
-                                        onClick={handleRefreshCredit}
-                                        disabled={loadingCredit}
-                                        className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors"
-                                        title="Refresh credits"
-                                      >
-                                        <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                        </svg>
-                                      </button>
-                                    </div>
-                                  </div>
-                                  
-                                  {/* Progress Bar */}
-                                  <div className="w-full bg-gray-200 rounded-full h-2">
-                                    <div className="bg-[#6C4CF3] h-2 rounded-full" style={{ width: '85%' }}></div>
-                                  </div>
-                                  
-                                  {/* Message Count */}
-                                  <div className="mt-3 text-center">
-                                    <div className="text-lg font-semibold text-[#6C4CF3]">
-                                      {(() => {
-                                        const values = calculateCreditValues(creditInfo.credit);
-                                        return `${values.messages} messages`;
-                                      })()}
-                                    </div>
-                                    <div className="text-sm text-gray-500">available to send</div>
-                                  </div>
-                                </>
-                              ) : (
-                                <div className="text-center py-4">
-                                  <p className="text-sm text-gray-600">Unable to fetch credits</p>
-                                  <button
-                                    onClick={handleRefreshCredit}
-                                    className="text-sm text-[#6C4CF3] hover:text-[#6C4CF3] underline mt-1"
-                                  >
-                                    Try again
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                            
-                            {/* Bottom Section - Plan Info and Upgrade */}
-                            <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                              <div className="text-sm text-gray-500">
-                                <span>Current plan: </span>
-                                <span className="font-medium text-gray-700">Rapiwha API</span>
-                              </div>
-                              <button
-                                onClick={() => window.open('https://panel.rapiwha.com', '_blank')}
-                                className="text-sm text-[#6C4CF3] hover:text-[#6C4CF3] underline font-medium"
-                              >
-                                Go to Rapiwha
-                              </button>
-                            </div>
-                          </div>
+                          )}
                         </div>
-                        
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-3">
+                          <span className={`text-xs px-3 py-1 rounded-full ${
+                            template.is_active 
+                              ? "bg-green-100 text-green-800" 
+                              : "bg-gray-100 text-gray-600"
+                          }`}>
+                            {template.is_active ? "Active" : "Inactive"}
+                          </span>
                           <button
-                            onClick={handleTestWhatsappConnection}
-                            disabled={testingConnection}
-                            className="text-[#9B8CFF] hover:text-[#6C4CF3] text-sm px-3 py-1 border border-blue-600 rounded hover:bg-[#9B8CFF]/10"
-                          >
-                            {testingConnection ? 'Testing...' : 'Test Connection'}
-                          </button>
-                          <button
-                            onClick={() => handleEditWhatsappConfig(whatsappConfig)}
-                            className="text-[#6C4CF3] hover:text-[#6C4CF3] text-sm px-3 py-1 border border-[#6C4CF3] rounded hover:bg-[#9B8CFF]/10"
+                            onClick={() => handleEditTemplate(template)}
+                            className="text-[#6C4CF3] hover:text-[#5b3dd9] text-sm font-medium"
                           >
                             Edit
                           </button>
-                          <button
-                            onClick={handleDeleteWhatsappConfig}
-                            className="text-red-600 hover:text-red-800 text-sm px-3 py-1 border border-red-600 rounded hover:bg-red-50"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                        
-                        <div className="bg-gray-50 p-4 rounded-lg mt-4">
-                          <h5 className="text-sm font-medium text-gray-700 mb-2">How it works:</h5>
-                          <ul className="text-sm text-gray-600 space-y-1">
-                            <li>• Your API key is used to send WhatsApp messages from your own number</li>
-                            <li>• Messages will appear to come from your configured WhatsApp account</li>
-                            <li>• Each user can have their own configuration</li>
-                            <li>• Get your API key from <a href="https://panel.rapiwha.com" target="_blank" rel="noopener noreferrer" className="text-[#9B8CFF] hover:underline">Rapiwha Panel</a></li>
-                          </ul>
                         </div>
                       </div>
+                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{template.content}</p>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {messageTemplates.length === 0 && (
+                    <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
+                      <p className="text-gray-500">No templates found. Default templates will be used.</p>
                     </div>
                   )}
                 </div>
               )}
-            </div>
-          )}
-
-          {activeTab === "security" && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Security Settings</h3>
-              <div className="bg-white border border-gray-200 rounded-lg p-6 max-w-2xl">
-                <div className="mb-6">
-                  <h4 className="text-md font-medium text-gray-900 mb-2">Password Management</h4>
-                  <p className="text-sm text-gray-600 mb-4">
-                    {user?.supabase_user_id && !user.supabase_user_id.startsWith('local_')
-                      ? "Set a password to enable login on the desktop app with your email and password."
-                      : "Change your account password."}
-                  </p>
-                  <button
-                    onClick={() => setShowPasswordModal(true)}
-                    className="bg-[#6C4CF3] text-white px-4 py-2 rounded-lg hover:bg-[#5b3dd9] transition"
-                  >
-                    {user?.supabase_user_id && !user.supabase_user_id.startsWith('local_')
-                      ? "Set Password for Desktop Access"
-                      : "Change Password"}
-                  </button>
-                </div>
-                
-                <div className="border-t border-gray-200 pt-6">
-                  <h4 className="text-md font-medium text-gray-900 mb-2">Account Information</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Email:</span>
-                      <span className="font-medium text-gray-900">{user?.email}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Role:</span>
-                      <span className="font-medium text-gray-900">{user?.role}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Login Method:</span>
-                      <span className="font-medium text-gray-900">
-                        {user?.supabase_user_id && !user.supabase_user_id.startsWith('local_')
-                          ? "Google OAuth"
-                          : "Email/Password"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 
@@ -2058,9 +1944,17 @@ const Settings = () => {
                 <button
                   type="submit"
                   form="add-user-form"
-                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium"
+                  disabled={addingUser}
+                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  Add User
+                  {addingUser ? (
+                    <>
+                      <GearLoader size="w-4 h-4" className="text-white" />
+                      <span>Adding...</span>
+                    </>
+                  ) : (
+                    "Add User"
+                  )}
                 </button>
               </div>
             </div>
@@ -2120,6 +2014,20 @@ const Settings = () => {
                   ))}
                 </select>
               </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  New Password (for desktop app) <span className="text-gray-500 text-xs">(optional)</span>
+                </label>
+                <input
+                  type="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  placeholder="Leave empty to keep current password"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+                />
+                <p className="text-xs text-gray-500 mt-1">Minimum 8 characters. Leave empty to keep current password.</p>
+              </div>
             </form>
             </div>
             <div className="p-6 border-t border-gray-200">
@@ -2134,12 +2042,141 @@ const Settings = () => {
                 <button
                   type="submit"
                   form="edit-user-form"
-                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium"
+                  disabled={updatingUser}
+                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  Update User
+                  {updatingUser ? (
+                    <>
+                      <GearLoader size="w-4 h-4" className="text-white" />
+                      <span>Updating...</span>
+                    </>
+                  ) : (
+                    "Update User"
+                  )}
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Set Password Modal for Staff */}
+      {showStaffPasswordModal && selectedUserForPassword && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={() => { setShowStaffPasswordModal(false); setSelectedUserForPassword(null); setStaffPassword(""); setStaffPasswordConfirm(""); }}></div>
+          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-xl font-semibold text-gray-900">Set Password for Desktop App</h3>
+              <button onClick={() => { setShowStaffPasswordModal(false); setSelectedUserForPassword(null); setStaffPassword(""); setStaffPasswordConfirm(""); }} className="p-2 hover:bg-gray-100 rounded-full transition">
+                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>User:</strong> {selectedUserForPassword.name} ({selectedUserForPassword.email})
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  This password will be used for desktop app login. The user can login with their email and this password.
+                </p>
+              </div>
+              
+              {showPasswordAfterSet ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm font-semibold text-green-800 mb-2">✓ Password Set Successfully!</p>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-xs font-medium text-gray-700">Desktop Login Username:</label>
+                        <div className="mt-1 p-2 bg-white border border-gray-300 rounded font-mono text-sm text-gray-900">
+                          {selectedUserForPassword.email}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-700">Desktop Login Password:</label>
+                        <div className="mt-1 p-2 bg-white border border-gray-300 rounded font-mono text-sm text-gray-900">
+                          {lastSetPassword}
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-xs text-green-700 mt-3">
+                      Copy these credentials to share with the staff member for desktop app login.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowStaffPasswordModal(false);
+                      setSelectedUserForPassword(null);
+                      setStaffPassword("");
+                      setStaffPasswordConfirm("");
+                      setShowPasswordAfterSet(false);
+                      setLastSetPassword("");
+                    }}
+                    className="w-full px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium"
+                  >
+                    Close
+                  </button>
+                </div>
+              ) : (
+                <form id="set-password-form" onSubmit={handleSetStaffPassword}>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                    <input
+                      type="text"
+                      value={staffPassword}
+                      onChange={(e) => setStaffPassword(e.target.value)}
+                      placeholder="Enter password (min 8 characters)"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3] font-mono"
+                      required
+                      minLength={8}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Password is shown in plain text for easy copying</p>
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Confirm Password</label>
+                    <input
+                      type="text"
+                      value={staffPasswordConfirm}
+                      onChange={(e) => setStaffPasswordConfirm(e.target.value)}
+                      placeholder="Confirm password"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3] font-mono"
+                      required
+                      minLength={8}
+                    />
+                  </div>
+                </form>
+              )}
+            </div>
+            {!showPasswordAfterSet && (
+              <div className="p-6 border-t border-gray-200">
+                <div className="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => { setShowStaffPasswordModal(false); setSelectedUserForPassword(null); setStaffPassword(""); setStaffPasswordConfirm(""); }}
+                    className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    form="set-password-form"
+                    disabled={staffPasswordLoading}
+                    className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {staffPasswordLoading ? (
+                      <>
+                        <GearLoader size="w-4 h-4" className="text-white" />
+                        <span>Setting...</span>
+                      </>
+                    ) : (
+                      "Set Password"
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2195,9 +2232,17 @@ const Settings = () => {
                 <button
                   type="submit"
                   form="add-treatment-form"
-                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium"
+                  disabled={addingTreatment}
+                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  Add Treatment Type
+                  {addingTreatment ? (
+                    <>
+                      <GearLoader size="w-4 h-4" className="text-white" />
+                      <span>Adding...</span>
+                    </>
+                  ) : (
+                    "Add Treatment Type"
+                  )}
                 </button>
               </div>
             </div>
@@ -2256,9 +2301,17 @@ const Settings = () => {
                 <button
                   type="submit"
                   form="edit-treatment-form"
-                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium"
+                  disabled={updatingTreatment}
+                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  Update Treatment Type
+                  {updatingTreatment ? (
+                    <>
+                      <GearLoader size="w-4 h-4" className="text-white" />
+                      <span>Updating...</span>
+                    </>
+                  ) : (
+                    "Update Treatment Type"
+                  )}
                 </button>
               </div>
             </div>
@@ -2266,155 +2319,7 @@ const Settings = () => {
         </div>
       )}
 
-      {/* Add Doctor Modal */}
-      {showAddDoctorModal && (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={() => setShowAddDoctorModal(false)}></div>
-          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h3 className="text-xl font-semibold text-gray-900">Add Referring Doctor</h3>
-              <button onClick={() => setShowAddDoctorModal(false)} className="p-2 hover:bg-gray-100 rounded-full transition">
-                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
-            <form id="add-doctor-form" onSubmit={handleAddDoctor}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
-                <input
-                  type="text"
-                  name="name"
-                  value={doctorFormData.name}
-                  onChange={handleDoctorInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Hospital</label>
-                <input
-                  type="text"
-                  name="hospital"
-                  value={doctorFormData.hospital}
-                  onChange={handleDoctorInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
-                  required
-                />
-              </div>
-            </form>
-            </div>
-            <div className="p-6 border-t border-gray-200">
-              <div className="flex justify-end gap-3">
-                <button type="button" onClick={() => setShowAddDoctorModal(false)} className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium">Cancel</button>
-                <button type="submit" form="add-doctor-form" className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium">Add Doctor</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Edit Doctor Modal */}
-      {showEditDoctorModal && (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={() => setShowEditDoctorModal(false)}></div>
-          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h3 className="text-xl font-semibold text-gray-900">Edit Referring Doctor</h3>
-              <button onClick={() => setShowEditDoctorModal(false)} className="p-2 hover:bg-gray-100 rounded-full transition">
-                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
-            <form id="edit-doctor-form" onSubmit={handleUpdateDoctor}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
-                <input
-                  type="text"
-                  name="name"
-                  value={doctorFormData.name}
-                  onChange={handleDoctorInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Hospital</label>
-                <input
-                  type="text"
-                  name="hospital"
-                  value={doctorFormData.hospital}
-                  onChange={handleDoctorInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
-                  required
-                />
-              </div>
-            </form>
-            </div>
-            <div className="p-6 border-t border-gray-200">
-              <div className="flex justify-end gap-3">
-                <button type="button" onClick={() => setShowEditDoctorModal(false)} className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium">Cancel</button>
-                <button type="submit" form="edit-doctor-form" className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium">Update Doctor</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* WhatsApp Configuration Modal */}
-      {showWhatsappModal && (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={() => { setShowWhatsappModal(false); setWhatsappFormData({ api_key: "", phone_number: "" }); }}></div>
-          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h3 className="text-xl font-semibold text-gray-900">{whatsappConfig ? 'Edit WhatsApp Configuration' : 'Add WhatsApp Configuration'}</h3>
-              <button onClick={() => { setShowWhatsappModal(false); setWhatsappFormData({ api_key: "", phone_number: "" }); }} className="p-2 hover:bg-gray-100 rounded-full transition">
-                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
-            <form id="whatsapp-config-form" onSubmit={whatsappConfig ? handleUpdateWhatsappConfig : handleAddWhatsappConfig}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Rapiwha API Key *</label>
-                <input
-                  type="text"
-                  name="api_key"
-                  value={whatsappFormData.api_key}
-                  onChange={handleWhatsappInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
-                  placeholder="Enter your Rapiwha API key"
-                  required
-                />
-                <p className="text-xs text-gray-500 mt-1">Get your API key from <a href="https://panel.rapiwha.com" target="_blank" rel="noopener noreferrer" className="text-[#9B8CFF] hover:underline">Rapiwha Panel</a></p>
-              </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Your Phone Number (Optional)</label>
-                <input
-                  type="text"
-                  name="phone_number"
-                  value={whatsappFormData.phone_number}
-                  onChange={handleWhatsappInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
-                  placeholder="+91 98765 43210"
-                />
-                <p className="text-xs text-gray-500 mt-1">This is for reference only - messages will be sent from your WhatsApp account</p>
-              </div>
-            </form>
-            </div>
-            <div className="p-6 border-t border-gray-200">
-              <div className="flex justify-end gap-3">
-                <button type="button" onClick={() => { setShowWhatsappModal(false); setWhatsappFormData({ api_key: "", phone_number: "" }); }} className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium">Cancel</button>
-                <button type="submit" form="whatsapp-config-form" className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium">{whatsappConfig ? 'Update Config' : 'Add Config'}</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Permissions Modal */}
       {showPermissionsModal && selectedUserForPermissions && (
@@ -2492,11 +2397,146 @@ const Settings = () => {
             <div className="p-6 border-t border-gray-200">
               <div className="flex justify-end gap-3">
                 <button type="button" onClick={() => { setShowPasswordModal(false); setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' }); }} className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium">Cancel</button>
-                <button type="submit" form="password-form" disabled={passwordLoading} className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium disabled:opacity-50">{passwordLoading ? "Updating..." : "Update Password"}</button>
+                <button 
+                  type="submit" 
+                  form="password-form" 
+                  disabled={passwordLoading} 
+                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {passwordLoading ? (
+                    <>
+                      <GearLoader size="w-4 h-4" className="text-white" />
+                      <span>Updating...</span>
+                    </>
+                  ) : (
+                    "Update Password"
+                  )}
+                </button>
               </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Edit Template Modal */}
+      {showEditTemplateModal && editingTemplate && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={() => { setShowEditTemplateModal(false); setEditingTemplate(null); }}></div>
+          <div className="absolute right-0 top-0 h-full w-full max-w-2xl bg-white shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-xl font-semibold text-gray-900">Edit {editingTemplate.title}</h3>
+              <button onClick={() => { setShowEditTemplateModal(false); setEditingTemplate(null); }} className="p-2 hover:bg-gray-100 rounded-full transition">
+                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <form id="edit-template-form" onSubmit={handleUpdateTemplate}>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
+                  <input
+                    type="text"
+                    name="title"
+                    value={templateFormData.title}
+                    onChange={handleTemplateInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+                    required
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Message Content</label>
+                  <textarea
+                    name="content"
+                    value={templateFormData.content}
+                    onChange={handleTemplateInputChange}
+                    rows={10}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3] font-mono text-sm"
+                    placeholder="Enter your message template. Use variables like {patient_name}, {clinic_name}, etc."
+                    required
+                  />
+                  {editingTemplate.variables && editingTemplate.variables.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-xs text-gray-600 mb-1">Available variables:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {editingTemplate.variables.map((varName, idx) => (
+                          <span key={idx} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                            {"{"}{varName}{"}"}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="mb-4">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      name="is_active"
+                      checked={templateFormData.is_active}
+                      onChange={handleTemplateInputChange}
+                      className="mr-2 w-4 h-4 text-[#6C4CF3] border-gray-300 rounded focus:ring-[#6C4CF3]"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Active (use this template)</span>
+                  </label>
+                </div>
+              </form>
+            </div>
+            <div className="p-6 border-t border-gray-200">
+              <div className="flex justify-end gap-3">
+                <button 
+                  type="button" 
+                  onClick={() => { setShowEditTemplateModal(false); setEditingTemplate(null); setTemplateFormData({ title: "", content: "", is_active: true }); }} 
+                  className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  form="edit-template-form" 
+                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium"
+                >
+                  Update Template
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Details Right Panel */}
+      {showUserPanel && selectedUser && (
+        <UserDetailsPanel
+          selectedUser={selectedUser}
+          userPanelTab={userPanelTab}
+          setUserPanelTab={setUserPanelTab}
+          onClose={closeUserPanel}
+          userDevices={userDevices}
+          loadingUserDevices={loadingUserDevices}
+          getUserInitials={getUserInitials}
+          formatDate={formatDate}
+          formatLastSeen={formatLastSeen}
+          getDeviceIcon={getDeviceIcon}
+          hasPermission={hasPermission}
+          user={user}
+          onSetPassword={(user) => {
+            setSelectedUserForPassword(user);
+            setShowStaffPasswordModal(true);
+          }}
+          onEditUser={handleEditUserFromPanel}
+          onManagePermissions={handleManagePermissionsFromPanel}
+          onDeleteUser={handleDeleteUser}
+          formData={formData}
+          setFormData={setFormData}
+          availableRoles={availableRoles}
+          handleInputChange={handleInputChange}
+          handleSaveEditUser={handleSaveEditUser}
+          availablePermissions={availablePermissions}
+          defaultPermissions={defaultPermissions}
+          handleSavePermissions={handleSavePermissions}
+          savingEditUser={savingEditUser}
+          savingPermissions={savingPermissions}
+        />
       )}
     </div>
   );

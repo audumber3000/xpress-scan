@@ -34,12 +34,14 @@ export const authenticatedFetch = async (url, options = {}) => {
   
 
 
-  // Add timeout to fetch requests (30 seconds)
+  // Add timeout to fetch requests (60 seconds for WhatsApp endpoints, 30 for others)
+  const isWhatsAppEndpoint = url.includes('/whatsapp/');
+  const timeout = isWhatsAppEndpoint ? 60000 : 30000;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
   
   try {
-    const response = await fetch(fullUrl, {
+      const response = await fetch(fullUrl, {
       ...options,
       headers,
       signal: controller.signal
@@ -47,17 +49,17 @@ export const authenticatedFetch = async (url, options = {}) => {
     
     clearTimeout(timeoutId);
 
-  if (!response.ok) {
-    if (response.status === 401) {
-      // Token might be expired, clear storage but don't redirect here
-      // Let React router handle navigation through AuthContext
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('user');
-      throw new Error('Authentication failed');
+    if (!response.ok) {
+      if (response.status === 401) {
+        // Token might be expired, clear storage but don't redirect here
+        // Let React router handle navigation through AuthContext
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user');
+        throw new Error('Authentication failed');
+      }
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
     }
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-  }
 
     // Try to parse JSON response
     try {
@@ -104,39 +106,3 @@ export const api = {
     return result.data;
   }
 };
-
-// WhatsApp API methods
-export const whatsappApi = {
-  getMyConfig: async () => {
-    const result = await authenticatedFetch('/whatsapp-config/my-config');
-    return result.data;
-  },
-  createConfig: async (data) => {
-    const result = await authenticatedFetch('/whatsapp-config', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-    return result.data;
-  },
-  updateConfig: async (id, data) => {
-    const result = await authenticatedFetch(`/whatsapp-config/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
-    return result.data;
-  },
-  deleteConfig: async (id) => {
-    const result = await authenticatedFetch(`/whatsapp-config/${id}`, {
-      method: 'DELETE'
-    });
-    return result.data;
-  },
-  testConnection: async () => {
-    const result = await authenticatedFetch('/whatsapp-config/test-connection');
-    return result.data;
-  },
-  getCredit: async () => {
-    const result = await authenticatedFetch('/whatsapp-config/credit');
-    return result.data;
-  }
-}; 

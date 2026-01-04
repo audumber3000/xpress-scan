@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { checkServerStatus } from '../tauri';
+import { performFullSync } from '../utils/sync';
 import betterClinicLogo from '../assets/betterclinic-logo.png';
 
 const StartupScreen = ({ onComplete }) => {
@@ -7,7 +8,7 @@ const StartupScreen = ({ onComplete }) => {
   const [steps, setSteps] = useState([
     { id: 'database', label: 'Connecting to database', status: 'pending' },
     { id: 'api', label: 'Starting API server', status: 'pending' },
-    { id: 'sync', label: 'Syncing data', status: 'pending' },
+    { id: 'cloud_sync', label: 'Syncing with cloud', status: 'pending' },
     { id: 'ready', label: 'Preparing workspace', status: 'pending' },
   ]);
   const [error, setError] = useState(null);
@@ -69,22 +70,30 @@ const StartupScreen = ({ onComplete }) => {
       updateStepStatus('api', 'complete');
       setCurrentStep(2);
 
-      // Step 3: Sync Data (check for cloud sync if enabled)
-      updateStepStatus('sync', 'running');
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Step 3: Sync with Cloud
+      updateStepStatus('cloud_sync', 'running');
+      await new Promise(resolve => setTimeout(resolve, 600));
       
-      // Check if cloud sync is enabled and sync if needed
-      const cloudEnabled = localStorage.getItem('cloud_sync_enabled') === 'true';
-      if (cloudEnabled && navigator.onLine) {
-        // Perform cloud sync
+      if (navigator.onLine) {
         try {
-          await syncFromCloud();
-          localStorage.setItem('last_sync_time', Date.now().toString());
+          const syncResult = await performFullSync();
+          if (syncResult.success) {
+            updateStepStatus('cloud_sync', 'complete');
+          } else if (syncResult.skip) {
+            // Offline - skip sync
+            updateStepStatus('cloud_sync', 'complete');
+          } else {
+            // Sync failed but continue
+            updateStepStatus('cloud_sync', 'complete');
+          }
         } catch (syncError) {
           console.warn('Cloud sync failed, continuing with local data:', syncError);
+          updateStepStatus('cloud_sync', 'complete');
         }
+      } else {
+        // Offline - skip sync
+        updateStepStatus('cloud_sync', 'complete');
       }
-      updateStepStatus('sync', 'complete');
       setCurrentStep(3);
 
       // Step 4: Prepare Workspace
@@ -108,17 +117,12 @@ const StartupScreen = ({ onComplete }) => {
     }
   };
 
-  const syncFromCloud = async () => {
-    // Placeholder for cloud sync logic
-    // This would call your cloud API to get latest data
-    return new Promise(resolve => setTimeout(resolve, 1000));
-  };
 
   const getStepIcon = (status) => {
     switch (status) {
       case 'complete':
         return (
-          <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+          <div className="w-6 h-6 rounded-full bg-[#6C4CF3] flex items-center justify-center">
             <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
@@ -126,7 +130,7 @@ const StartupScreen = ({ onComplete }) => {
         );
       case 'running':
         return (
-          <div className="w-6 h-6 rounded-full border-2 border-green-500 border-t-transparent animate-spin" />
+          <div className="w-6 h-6 rounded-full border-2 border-[#6C4CF3] border-t-transparent animate-spin" />
         );
       case 'error':
         return (
@@ -169,14 +173,14 @@ const StartupScreen = ({ onComplete }) => {
             <div 
               key={step.id}
               className={`flex items-center space-x-4 p-3 rounded-lg transition-colors ${
-                step.status === 'running' ? 'bg-green-50' : 
+                step.status === 'running' ? 'bg-purple-50' : 
                 step.status === 'error' ? 'bg-red-50' : ''
               }`}
             >
               {getStepIcon(step.status)}
               <span className={`flex-1 ${
                 step.status === 'complete' ? 'text-gray-600' :
-                step.status === 'running' ? 'text-green-700 font-medium' :
+                step.status === 'running' ? 'text-purple-700 font-medium' :
                 step.status === 'error' ? 'text-red-700' :
                 'text-gray-400'
               }`}>
@@ -205,7 +209,7 @@ const StartupScreen = ({ onComplete }) => {
         {/* Progress Bar */}
         <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
           <div 
-            className="h-full bg-green-500 transition-all duration-500 ease-out"
+            className="h-full bg-[#6C4CF3] transition-all duration-500 ease-out"
             style={{ width: `${((currentStep + (steps[currentStep]?.status === 'running' ? 0.5 : 0)) / steps.length) * 100}%` }}
           />
         </div>

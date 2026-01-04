@@ -6,6 +6,7 @@ import { FaEye, FaFilePdf, FaSync, FaEdit, FaTrash, FaUser } from 'react-icons/f
 import LoadingButton from "../components/LoadingButton";
 import GearLoader from "../components/GearLoader";
 import { useAuth } from "../contexts/AuthContext";
+import { useHeader } from "../contexts/HeaderContext";
 
 const PATIENTS_PER_PAGE = 8;
 
@@ -13,6 +14,7 @@ const defaultProfile = name => `https://ui-avatars.com/api/?name=${encodeURIComp
 
 const Patients = () => {
   const { user } = useAuth();
+  const { setTitle, setRefreshFunction } = useHeader();
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(1);
   const [patients, setPatients] = useState([]);
@@ -62,6 +64,11 @@ const Patients = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    setTitle('Patients');
+    setRefreshFunction(() => fetchPatients);
+  }, [setTitle, setRefreshFunction]);
 
   useEffect(() => {
     fetchPatients();
@@ -179,23 +186,9 @@ const Patients = () => {
 
   return (
     <div className="flex flex-col h-screen">
-      {/* Header */}
+      {/* Header - Removed, now in global Header */}
       <div className="p-6 pb-4 flex-shrink-0">
-        <div className="flex justify-between items-center">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-gray-900">Patients</h1>
-              <button
-                onClick={fetchPatients}
-                disabled={loading}
-                className="p-1 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
-                title="Refresh patients"
-              >
-                <FaSync className={`w-4 h-4 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
-            <p className="text-gray-600 mt-1">Manage and track all patient records</p>
-          </div>
+        <div className="flex justify-end items-center">
           <div className="flex items-center space-x-4">
             {hasPermission("patients:edit") && (
               <button 

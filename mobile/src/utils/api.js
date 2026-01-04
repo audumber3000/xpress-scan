@@ -34,10 +34,18 @@ export const authenticatedFetch = async (url, options = {}) => {
     }
   }
 
-  const response = await fetch(fullUrl, {
+  // Add body to request if provided
+  const requestOptions = {
     ...options,
     headers
-  });
+  };
+
+  // Add body if it exists and method is not GET
+  if (options.body && options.method !== 'GET') {
+    requestOptions.body = options.body;
+  }
+
+  const response = await fetch(fullUrl, requestOptions);
 
   if (!response.ok) {
     if (response.status === 401) {
@@ -52,8 +60,14 @@ export const authenticatedFetch = async (url, options = {}) => {
 
   // Try to parse JSON response
   try {
-    const data = await response.json();
-    return { data, response };
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const data = await response.json();
+      return { data, response };
+    } else {
+      const text = await response.text();
+      return { data: text, response };
+    }
   } catch {
     return { data: response, response };
   }

@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { toast } from 'react-toastify';
 import { api } from '../utils/api';
+import { useAuth } from '../contexts/AuthContext';
 import LoadingButton from '../components/LoadingButton';
 import betterClinicLogo from '../assets/betterclinic-logo.png';
 
@@ -10,6 +12,52 @@ const Login = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { setUser, setToken } = useAuth();
+
+  const getDeviceInfo = () => {
+    const userAgent = navigator.userAgent;
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+    const isDesktop = /Windows|Mac|Linux/.test(userAgent) && !isMobile;
+    
+    let deviceType = 'web';
+    let devicePlatform = 'Unknown';
+    let deviceOS = '';
+    
+    if (isMobile) {
+      deviceType = 'mobile';
+      if (/Android/i.test(userAgent)) {
+        devicePlatform = 'Android';
+        const androidVersion = userAgent.match(/Android\s([0-9\.]*)/);
+        deviceOS = androidVersion ? `Android ${androidVersion[1]}` : 'Android';
+      } else if (/iPhone|iPad|iPod/i.test(userAgent)) {
+        devicePlatform = 'iOS';
+        const iosVersion = userAgent.match(/OS\s([0-9_]*)/);
+        deviceOS = iosVersion ? `iOS ${iosVersion[1].replace('_', '.')}` : 'iOS';
+      }
+    } else if (isDesktop) {
+      deviceType = 'desktop';
+      if (/Windows/i.test(userAgent)) {
+        devicePlatform = 'Windows';
+        const winVersion = userAgent.match(/Windows NT\s([0-9\.]*)/);
+        deviceOS = winVersion ? `Windows ${winVersion[1]}` : 'Windows';
+      } else if (/Mac/i.test(userAgent)) {
+        devicePlatform = 'macOS';
+        const macVersion = userAgent.match(/Mac OS X\s([0-9_]*)/);
+        deviceOS = macVersion ? `macOS ${macVersion[1].replace('_', '.')}` : 'macOS';
+      } else if (/Linux/i.test(userAgent)) {
+        devicePlatform = 'Linux';
+        deviceOS = 'Linux';
+      }
+    }
+    
+    return {
+      device_type: deviceType,
+      device_platform: devicePlatform,
+      device_os: deviceOS,
+      device_name: `${devicePlatform} ${deviceType === 'mobile' ? 'Device' : deviceType === 'desktop' ? 'Device' : 'Browser'}`,
+      user_agent: userAgent
+    };
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -17,55 +65,162 @@ const Login = () => {
     setLoading(true);
     
     try {
+      const deviceInfo = getDeviceInfo();
       const data = await api.post('/auth/login', {
         email,
-        password
+        password,
+        device: deviceInfo
       });
       
       // Store the JWT token
       localStorage.setItem('auth_token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
-      if (!data.user.clinic_id) {
-        navigate("/onboarding");
-      } else {
-        navigate("/dashboard");
-      }
+      
+      // Update auth context
+      setToken(data.token);
+      setUser(data.user);
+      
+      toast.success('Login successful!');
+      
+      // Small delay to ensure context is updated before navigation
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Redirect based on user state
+      const redirectPath = !data.user.clinic_id ? '/onboarding' : '/dashboard';
+      navigate(redirectPath, { replace: true });
     } catch (error) {
-      setError(error.message || "Network error. Please try again.");
+      const errorMessage = error.message || "Network error. Please try again.";
+      setError(errorMessage);
+      toast.error(errorMessage);
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   const handleGoogleLogin = async () => {
     setError("");
     setLoading(true);
     try {
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      const supabase = createClient(supabaseUrl, supabaseAnonKey);
-      
-      // Initiate OAuth sign in with redirect
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`
-        }
-      });
-      
-      if (error) {
-        setError(error.message);
-        setLoading(false);
-        return;
+      console.log('🔵 [LOGIN] Starting Google login with POPUP...');
+      console.log('🔵 [LOGIN] Current location:', window.location.href);
+
+      const { signInWithPopup, GoogleAuthProvider } = await import('firebase/auth');
+      const { auth } = await import('../firebaseClient');
+
+      console.log('🔵 [LOGIN] Firebase auth loaded:', !!auth);
+
+      const provider = new GoogleAuthProvider();
+      provider.addScope('email');
+      provider.addScope('profile');
+
+      console.log('🔵 [LOGIN] Provider created, about to open popup...');
+
+      const result = await signInWithPopup(auth, provider);
+      console.log('🔵 [LOGIN] Popup result received:', !!result);
+
+      if (result.user) {
+        console.log('🔵 [LOGIN] User authenticated:', result.user.email);
+
+        // Get the ID token
+        console.log('🔵 [LOGIN] Getting ID token...');
+        const idToken = await result.user.getIdToken();
+        console.log('🔵 [LOGIN] ID token received, length:', idToken.length);
+
+        // Get device info
+        const getDeviceInfo = () => {
+          const userAgent = navigator.userAgent;
+          const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+          const isDesktop = /Windows|Mac|Linux/.test(userAgent) && !isMobile;
+          
+          let deviceType = 'web';
+          let devicePlatform = 'Unknown';
+          let deviceOS = '';
+          
+          if (isMobile) {
+            deviceType = 'mobile';
+            if (/Android/i.test(userAgent)) {
+              devicePlatform = 'Android';
+              const androidVersion = userAgent.match(/Android\s([0-9\.]*)/);
+              deviceOS = androidVersion ? `Android ${androidVersion[1]}` : 'Android';
+            } else if (/iPhone|iPad|iPod/i.test(userAgent)) {
+              devicePlatform = 'iOS';
+              const iosVersion = userAgent.match(/OS\s([0-9_]*)/);
+              deviceOS = iosVersion ? `iOS ${iosVersion[1].replace('_', '.')}` : 'iOS';
+            }
+          } else if (isDesktop) {
+            deviceType = 'desktop';
+            if (/Windows/i.test(userAgent)) {
+              devicePlatform = 'Windows';
+              const winVersion = userAgent.match(/Windows NT\s([0-9\.]*)/);
+              deviceOS = winVersion ? `Windows ${winVersion[1]}` : 'Windows';
+            } else if (/Mac/i.test(userAgent)) {
+              devicePlatform = 'macOS';
+              const macVersion = userAgent.match(/Mac OS X\s([0-9_]*)/);
+              deviceOS = macVersion ? `macOS ${macVersion[1].replace('_', '.')}` : 'macOS';
+            } else if (/Linux/i.test(userAgent)) {
+              devicePlatform = 'Linux';
+              deviceOS = 'Linux';
+            }
+          }
+          
+          return {
+            device_type: deviceType,
+            device_platform: devicePlatform,
+            device_os: deviceOS,
+            device_name: `${devicePlatform} ${deviceType === 'mobile' ? 'Device' : deviceType === 'desktop' ? 'Device' : 'Browser'}`,
+            user_agent: userAgent
+          };
+        };
+
+        // Send to backend for verification and JWT generation
+        console.log('🔵 [LOGIN] Calling backend /auth/oauth...');
+        const deviceInfo = getDeviceInfo();
+        const data = await api.post('/auth/oauth', { 
+          id_token: idToken,
+          device: deviceInfo
+        });
+
+        console.log('🔵 [LOGIN] Backend response received');
+        console.log('🔵 [LOGIN] Response data:', {
+          hasToken: !!data.token,
+          hasUser: !!data.user,
+          userId: data.user?.id,
+          clinicId: data.user?.clinic_id,
+          email: data.user?.email
+        });
+
+        // Store the JWT token
+        localStorage.setItem('auth_token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        console.log('🔵 [LOGIN] Stored token and user in localStorage');
+
+        // Update auth context
+        console.log('🔵 [LOGIN] Updating AuthContext...');
+        setToken(data.token);
+        setUser(data.user);
+        console.log('🔵 [LOGIN] AuthContext updated');
+
+        toast.success('Login successful!');
+
+        // Small delay to ensure context is updated before navigation
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        // Redirect based on user state
+        const redirectPath = !data.user.clinic_id ? '/onboarding' : '/dashboard';
+        console.log('🔵 [LOGIN] Redirecting to:', redirectPath);
+        navigate(redirectPath, { replace: true });
+      } else {
+        throw new Error('No user data received from Google');
       }
-      
-      // The redirect will happen automatically
-      // The AuthCallback component will handle the rest
-      
+
     } catch (error) {
-      console.error('Google login error:', error);
-      setError('Google login failed');
+      console.error('🔵 [LOGIN] Google login error:', error);
+      console.error('🔵 [LOGIN] Error code:', error.code);
+      console.error('🔵 [LOGIN] Error message:', error.message);
+      console.error('🔵 [LOGIN] Error stack:', error.stack);
+
+      const errorMessage = error.message || 'Google login failed. Please try again.';
+      setError(errorMessage);
+      toast.error(errorMessage);
       setLoading(false);
     }
   };
@@ -89,7 +244,7 @@ const Login = () => {
         <h2 className="text-2xl font-bold mb-4 text-center">Login</h2>
         {error && <div className="text-red-600 text-center">{error}</div>}
         
-        {/* Google OAuth Button - Primary for clinic owners */}
+        {/* Google OAuth Button */}
         <div className="space-y-2">
           <LoadingButton 
             onClick={handleGoogleLogin}
@@ -105,9 +260,6 @@ const Login = () => {
             </svg>
             Continue with Google
           </LoadingButton>
-          <p className="text-xs text-gray-500 text-center">
-            Recommended for clinic owners - quick access with your Google account
-          </p>
         </div>
 
         <div className="relative">
@@ -146,22 +298,14 @@ const Login = () => {
           </button>
         </form>
         
-        <p className="text-center text-sm text-gray-600">
-          Don't have an account?{" "}
-          <Link to="/signup" className="text-[#6C4CF3] hover:text-[#5b3dd9]">
-            Sign up
+        <div className="text-center">
+          <Link to="/signup" className="text-sm text-[#6C4CF3] hover:underline">
+            Don't have an account? Sign up
           </Link>
-        </p>
-        
-        {/* Branding */}
-        <div className="text-center pt-4 border-t border-gray-200">
-          <p className="text-xs text-gray-400">
-            Powered by <span className="text-[#6C4CF3] font-medium">BetterClinic</span>
-          </p>
         </div>
       </div>
     </div>
   );
 };
 
-export default Login; 
+export default Login;

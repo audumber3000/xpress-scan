@@ -1,100 +1,99 @@
 import React, { useState, useEffect } from 'react';
-import { getSyncStatus, syncToCloud, formatTimeAgo } from '../utils/sync';
+import { Cloud, CloudOff, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
+import { getSyncStatus, formatTimeAgo } from '../utils/sync';
 
 const SyncIndicator = () => {
-  const [syncStatus, setSyncStatus] = useState(getSyncStatus());
+  const [syncStatus, setSyncStatus] = useState({
+    enabled: true,
+    online: navigator.onLine,
+    lastSync: null,
+    lastSyncFormatted: 'Never synced',
+    canSync: true,
+  });
   const [syncing, setSyncing] = useState(false);
 
-  // Update sync status every 30 seconds
   useEffect(() => {
-    const interval = setInterval(() => {
-      setSyncStatus(getSyncStatus());
-    }, 30000);
+    const updateStatus = () => {
+      const status = getSyncStatus();
+      setSyncStatus(status);
+    };
 
-    return () => clearInterval(interval);
-  }, []);
+    // Initial status
+    updateStatus();
 
-  // Listen for online/offline changes
-  useEffect(() => {
-    const handleOnline = () => setSyncStatus(getSyncStatus());
-    const handleOffline = () => setSyncStatus(getSyncStatus());
+    // Update status periodically
+    const interval = setInterval(updateStatus, 30000); // Every 30 seconds
+
+    // Listen for online/offline events
+    const handleOnline = () => updateStatus();
+    const handleOffline = () => updateStatus();
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
     return () => {
+      clearInterval(interval);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
   const handleManualSync = async () => {
-    if (syncing || !syncStatus.canSync) return;
+    if (!syncStatus.canSync || syncing) return;
 
     setSyncing(true);
     try {
-      await syncToCloud();
+      const { performIncrementalSync } = await import('../utils/sync');
+      await performIncrementalSync();
+      // Update status after sync
       setSyncStatus(getSyncStatus());
     } catch (error) {
-      console.error('Manual sync failed:', error);
+      console.error('Manual sync error:', error);
+    } finally {
+      setSyncing(false);
     }
-    setSyncing(false);
   };
 
-  // Don't show if cloud sync is not enabled
-  if (!syncStatus.enabled) {
-    return null;
-  }
+  const getIcon = () => {
+    if (!syncStatus.online) {
+      return <CloudOff className="w-4 h-4 text-gray-400" />;
+    }
+    if (syncing) {
+      return <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />;
+    }
+    if (syncStatus.lastSync) {
+      return <CheckCircle2 className="w-4 h-4 text-[#6C4CF3]" />;
+    }
+    return <Cloud className="w-4 h-4 text-gray-400" />;
+  };
+
+  const getText = () => {
+    if (!syncStatus.online) {
+      return 'Offline';
+    }
+    if (syncing) {
+      return 'Syncing...';
+    }
+    if (syncStatus.lastSync) {
+      return `Synced ${syncStatus.lastSyncFormatted}`;
+    }
+    return 'Not synced';
+  };
 
   return (
-    <button
-      onClick={handleManualSync}
-      disabled={syncing || !syncStatus.online}
-      className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs transition-colors ${
-        syncing 
-          ? 'bg-blue-50 text-blue-600' 
-          : syncStatus.online 
-            ? 'bg-gray-100 hover:bg-gray-200 text-gray-600' 
-            : 'bg-yellow-50 text-yellow-600'
-      }`}
-      title={syncStatus.online ? 'Click to sync now' : 'Offline - sync paused'}
-    >
-      {/* Sync Icon */}
-      <svg 
-        className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} 
-        fill="none" 
-        stroke="currentColor" 
-        viewBox="0 0 24 24"
-      >
-        <path 
-          strokeLinecap="round" 
-          strokeLinejoin="round" 
-          strokeWidth={2} 
-          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
-        />
-      </svg>
-
-      {/* Status Text */}
-      <span>
-        {syncing 
-          ? 'Syncing...' 
-          : syncStatus.online 
-            ? syncStatus.lastSyncFormatted
-            : 'Offline'
-        }
-      </span>
-
-      {/* Status Dot */}
-      <span 
-        className={`w-2 h-2 rounded-full ${
-          syncing 
-            ? 'bg-blue-500 animate-pulse' 
-            : syncStatus.online 
-              ? 'bg-green-500' 
-              : 'bg-yellow-500'
-        }`} 
-      />
-    </button>
+    <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-200">
+      {getIcon()}
+      <span className="text-sm text-gray-600">{getText()}</span>
+      {syncStatus.online && !syncing && (
+        <button
+          onClick={handleManualSync}
+          className="ml-2 p-1 hover:bg-gray-200 rounded transition-colors"
+          title="Sync now"
+        >
+          <RefreshCw className="w-3 h-3 text-gray-500" />
+        </button>
+      )}
+    </div>
   );
 };
 

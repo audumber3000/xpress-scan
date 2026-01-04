@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../supabaseClient';
+import { auth } from '../firebaseClient';
 import { api } from '../utils/api';
+import { onAuthStateChanged } from 'firebase/auth';
 
 const AuthCallback = () => {
   const [loading, setLoading] = useState(true);
@@ -9,53 +10,124 @@ const AuthCallback = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    let unsubscribe;
+    let timeout;
+
     const handleAuthCallback = async () => {
-      try {
-        // Get the session from the URL hash/fragment
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('Auth callback error:', error);
-          setError('Authentication failed');
-          setLoading(false);
-          return;
-        }
+      console.log('Auth callback - checking Firebase auth state...');
 
-        if (session) {
-  
-          
-          // Send session data to backend
-          const data = await api.post('/auth/oauth', { 
-            access_token: session.access_token,
-            user_data: {
-              email: session.user.email,
-              id: session.user.id,
-              user_metadata: session.user.user_metadata
-            }
-          });
-
-          // Store auth data
-          localStorage.setItem('auth_token', data.token);
-          localStorage.setItem('user', JSON.stringify(data.user));
-          
-          // Redirect based on user state
-          if (!data.user.clinic_id) {
-            navigate('/onboarding');
-          } else {
-            navigate('/dashboard');
-          }
-        } else {
-          setError('No session found');
-          setLoading(false);
-        }
-      } catch (error) {
-        console.error('Auth callback error:', error);
-        setError('Authentication failed');
+      // Set a timeout to prevent getting stuck
+      timeout = setTimeout(() => {
+        console.log('Auth callback timeout - redirecting to login');
         setLoading(false);
+        setError('Authentication timed out. Please try logging in again.');
+        setTimeout(() => navigate('/login', { replace: true }), 3000);
+      }, 10000); // 10 second timeout
+
+      try {
+        // Listen for auth state changes
+        unsubscribe = onAuthStateChanged(auth, async (user) => {
+          if (user) {
+            console.log('Firebase user authenticated:', user.email);
+            clearTimeout(timeout);
+            
+            try {
+              // Get the ID token
+              const idToken = await user.getIdToken();
+              
+              console.log('Calling backend /auth/oauth...');
+              
+              // Send to backend for verification and JWT generation
+              const data = await api.post('/auth/oauth', {
+                id_token: idToken
+              });
+
+              console.log('Backend response received:', data);
+              
+              // Store auth data
+              localStorage.setItem('auth_token', data.token);
+              localStorage.setItem('user', JSON.stringify(data.user));
+              
+              // Unsubscribe from auth state changes
+              if (unsubscribe) {
+                unsubscribe();
+              }
+              
+              // Redirect based on user state
+              if (!data.user.clinic_id) {
+                console.log('Redirecting to onboarding...');
+                navigate('/onboarding', { replace: true });
+              } else {
+                console.log('Redirecting to dashboard...');
+                navigate('/dashboard', { replace: true });
+              }
+            } catch (backendError) {
+              console.error('Backend error:', backendError);
+              setError(`Backend error: ${backendError.message || 'Failed to authenticate with backend'}`);
+              setLoading(false);
+              if (unsubscribe) {
+                unsubscribe();
+              }
+              setTimeout(() => navigate('/login', { replace: true }), 3000);
+            }
+          } else {
+            // No user found, check for existing local auth
+            console.log('No Firebase user, checking local storage...');
+            const existingToken = localStorage.getItem('auth_token');
+            const existingUser = localStorage.getItem('user');
+            
+            if (existingToken && existingUser) {
+              try {
+                const user = JSON.parse(existingUser);
+                console.log('Existing login found, redirecting...');
+                clearTimeout(timeout);
+                if (unsubscribe) {
+                  unsubscribe();
+                }
+                if (!user.clinic_id) {
+                  navigate('/onboarding', { replace: true });
+                } else {
+                  navigate('/dashboard', { replace: true });
+                }
+                return;
+              } catch (e) {
+                console.error('Error parsing user:', e);
+              }
+            }
+            
+            // No user and no existing auth, redirect to login
+            console.log('No user and no existing login, redirecting to login...');
+            clearTimeout(timeout);
+            setLoading(false);
+            if (unsubscribe) {
+              unsubscribe();
+            }
+            navigate('/login', { replace: true });
+          }
+        });
+      } catch (e) {
+        console.error('Error in auth callback:', e);
+        clearTimeout(timeout);
+        setLoading(false);
+        setError('Authentication error. Please try logging in again.');
+        if (unsubscribe) {
+          unsubscribe();
+        }
+        setTimeout(() => navigate('/login', { replace: true }), 3000);
       }
     };
 
     handleAuthCallback();
+
+    // Cleanup function
+    return () => {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, [navigate]);
 
   if (loading) {

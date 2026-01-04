@@ -3,7 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 # Check if running in desktop/offline mode or cloud mode
-# Desktop mode uses local PostgreSQL, cloud mode uses Supabase
+# Desktop mode uses local PostgreSQL, cloud mode uses Render PostgreSQL
 USE_LOCAL_DB = os.environ.get("USE_LOCAL_DB", "false").lower() == "true"
 
 if USE_LOCAL_DB:
@@ -15,11 +15,16 @@ if USE_LOCAL_DB:
     LOCAL_DB_PASSWORD = os.environ.get("LOCAL_DB_PASSWORD", "postgres")
     SQLALCHEMY_DATABASE_URL = f"postgresql://{LOCAL_DB_USER}:{LOCAL_DB_PASSWORD}@{LOCAL_DB_HOST}:{LOCAL_DB_PORT}/{LOCAL_DB_NAME}"
 else:
-    # Supabase cloud database (online mode)
-    SQLALCHEMY_DATABASE_URL = os.environ.get(
-        "DATABASE_URL",
-        "postgresql://postgres.awdlcycjawoawdotzxpe:Wcz5SUoCECFLJYLQ@aws-0-ap-south-1.pooler.supabase.com:6543/postgres"
-    )
+    # Render PostgreSQL database (online mode)
+    # DATABASE_URL should be provided by Render in format:
+    # postgresql://user:password@host:port/dbname
+    SQLALCHEMY_DATABASE_URL = os.environ.get("DATABASE_URL")
+    
+    if not SQLALCHEMY_DATABASE_URL:
+        raise ValueError(
+            "DATABASE_URL environment variable is required for cloud mode. "
+            "Please set it to your Render PostgreSQL connection string."
+        )
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

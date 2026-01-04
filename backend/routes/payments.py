@@ -26,6 +26,10 @@ async def create_payment(
 ):
     """Create a new payment record"""
     try:
+        # Check if user has a clinic_id
+        if not current_user.clinic_id:
+            raise HTTPException(status_code=400, detail="User must be associated with a clinic to create payments")
+        
         # Verify patient exists and belongs to user's clinic
         patient = db.query(Patient).filter(
             and_(
@@ -42,7 +46,7 @@ async def create_payment(
             clinic_id=current_user.clinic_id,
             patient_id=payment_data.patient_id,
             report_id=payment_data.report_id,
-            scan_type_id=payment_data.scan_type_id,
+            treatment_type_id=payment_data.treatment_type_id,  # Fixed: was scan_type_id
             amount=payment_data.amount,
             payment_method=payment_data.payment_method,
             status=payment_data.status or "success",  # Default to success if not provided
@@ -79,6 +83,10 @@ async def get_payments(
 ):
     """Get all payments for the current user's clinic with optional filters"""
     try:
+        # Check if user has a clinic_id
+        if not current_user.clinic_id:
+            return []
+        
         query = db.query(Payment).filter(Payment.clinic_id == current_user.clinic_id)
         
         # Apply filters
@@ -214,6 +222,22 @@ async def get_payment_stats(
 ):
     """Get payment statistics for the clinic"""
     try:
+        # Check if user has a clinic_id
+        if not current_user.clinic_id:
+            return {
+                "total_amount": 0,
+                "successful_amount": 0,
+                "pending_amount": 0,
+                "failed_amount": 0,
+                "refunded_amount": 0,
+                "total_count": 0,
+                "successful_count": 0,
+                "pending_count": 0,
+                "failed_count": 0,
+                "refunded_count": 0,
+                "payment_methods": {}
+            }
+        
         query = db.query(Payment).filter(Payment.clinic_id == current_user.clinic_id)
         
         # Apply date filters
@@ -294,7 +318,7 @@ def get_enriched_payment(db: Session, payment: Payment) -> PaymentOut:
         "patient_id": payment.patient_id,
 
         "report_id": payment.report_id,
-        "scan_type_id": payment.scan_type_id,
+        "treatment_type_id": payment.treatment_type_id,  # Fixed: was scan_type_id
         "amount": payment.amount,
         "payment_method": payment.payment_method,
         "status": payment.status,
@@ -304,6 +328,8 @@ def get_enriched_payment(db: Session, payment: Payment) -> PaymentOut:
         "received_by": payment.received_by,
         "created_at": payment.created_at,
         "updated_at": payment.updated_at,
+        "synced_at": getattr(payment, 'synced_at', None),
+        "sync_status": getattr(payment, 'sync_status', 'local'),
         "patient_name": patient.name if patient else None,
         "patient_phone": patient.phone if patient else None,
         "patient_email": getattr(patient, 'email', None) if patient else None,

@@ -6,7 +6,7 @@ Run this script to add the appointments table to your database
 
 import os
 import sys
-from supabase_client import get_supabase_client
+from database import engine
 
 def run_migration():
     """Run the appointments table migration"""
@@ -17,13 +17,16 @@ def run_migration():
         with open(migration_file, 'r') as f:
             sql = f.read()
         
-        # Get Supabase client
-        supabase = get_supabase_client()
-        
         print("🚀 Running migration: Add Appointments Table...")
         
-        # Execute the SQL
-        result = supabase.rpc('exec_sql', {'sql': sql}).execute()
+        # Execute the SQL directly using SQLAlchemy
+        with engine.connect() as conn:
+            # Split SQL into individual statements
+            statements = [s.strip() for s in sql.split(';') if s.strip()]
+            for statement in statements:
+                if statement:
+                    conn.execute(statement)
+            conn.commit()
         
         print("✅ Migration completed successfully!")
         print("   - Created 'appointments' table")
@@ -40,6 +43,8 @@ def run_migration():
 if __name__ == "__main__":
     success = run_migration()
     sys.exit(0 if success else 1)
+
+
 
 
 

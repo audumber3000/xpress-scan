@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ApiProvider } from "./contexts/ApiContext";
+import { HeaderProvider } from "./contexts/HeaderContext";
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -11,25 +12,26 @@ import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import Patients from "./pages/Patients";
 import PatientIntake from "./pages/PatientIntake";
-import Reports from "./pages/Reports";
-import VoiceReporting from "./pages/VoiceReporting";
+import Xray from "./pages/Xray";
 import Payments from "./pages/Payments";
 import DoctorProfile from "./pages/DoctorProfile";
 import Settings from "./pages/Settings";
 import ClinicOnboarding from "./pages/ClinicOnboarding";
 import AuthCallback from "./pages/AuthCallback";
 import LoadingTest from "./pages/LoadingTest";
-import Communication from "./pages/Communication";
 import Calendar from "./pages/Calendar";
 import BookingPage from "./pages/BookingPage";
 import PatientFiles from "./pages/PatientFiles";
 import PatientProfile from "./pages/PatientProfile";
+import Attendance from "./pages/Attendance";
 import About from "./pages/About";
 import Features from "./pages/Features";
 import SetupWizard from "./pages/SetupWizard";
+import Reports from "./pages/Reports";
 
 // Components
 import Sidebar from "./components/Sidebar";
+import Header from "./components/Header";
 import ServerStatus from "./components/ServerStatus";
 import StartupScreen from "./components/StartupScreen";
 import SyncIndicator from "./components/SyncIndicator";
@@ -43,7 +45,7 @@ import TrialBanner from "./components/TrialBanner";
 import LicenseActivation from "./components/LicenseActivation";
 
 // Sync utilities
-import { initializeSync } from "./utils/sync";
+import { initializeSync, performFullSync } from "./utils/sync";
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -69,6 +71,8 @@ function AppContent() {
   const [checkingFirstRun, setCheckingFirstRun] = useState(true);
   const [showLicenseModal, setShowLicenseModal] = useState(false);
   const [licenseStatus, setLicenseStatus] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncComplete, setSyncComplete] = useState(false);
 
   // Check if this is first run (Tauri only)
   useEffect(() => {
@@ -90,9 +94,34 @@ function AppContent() {
     };
     checkFirstRun();
     
-    // Initialize cloud sync
+    // Initialize background sync
     initializeSync();
   }, []);
+
+  // Perform startup sync after authentication
+  useEffect(() => {
+    const performStartupSync = async () => {
+      // Only sync if user is authenticated and not in setup/setup wizard
+      if (user && !loading && !checkingFirstRun && !showSetupWizard && !showStartupScreen && !syncComplete) {
+        setSyncing(true);
+        try {
+          const result = await performFullSync();
+          if (result.success || result.skip) {
+            setSyncComplete(true);
+          }
+          // Continue even if sync fails (work with local data)
+        } catch (error) {
+          console.error('Startup sync error:', error);
+          // Continue even if sync fails
+          setSyncComplete(true);
+        } finally {
+          setSyncing(false);
+        }
+      }
+    };
+
+    performStartupSync();
+  }, [user, loading, checkingFirstRun, showSetupWizard, showStartupScreen, syncComplete]);
 
   // Check license status and start trial if needed
   useEffect(() => {
@@ -142,7 +171,16 @@ function AppContent() {
   const isBookingPage = location.pathname === '/booking';
   const isPublicPage = location.pathname === '/about' || location.pathname === '/features';
 
-  if (loading) return <div>Loading...</div>;
+  if (loading || (user && syncing && !syncComplete)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Syncing data...</p>
+        </div>
+      </div>
+    );
+  }
 
   // For auth pages, landing page, and booking page, render without sidebar
   if (isAuthPage || isLandingPage || isBookingPage || isPublicPage) {
@@ -205,7 +243,7 @@ function AppContent() {
         isCollapsed={isSidebarCollapsed}
         onCollapseChange={setIsSidebarCollapsed}
       />
-      <main className={`flex-1 w-full h-full relative transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'ml-0' : ''} ${licenseStatus && licenseStatus.status === 'trial' ? 'pt-10' : ''}`}>
+      <main className={`flex-1 w-full h-full relative transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'ml-0' : ''} ${licenseStatus && licenseStatus.status === 'trial' ? 'pt-10' : ''} flex flex-col`}>
         {/* Mobile menu button */}
         <button
           onClick={() => setIsMobileSidebarOpen(true)}
@@ -216,22 +254,28 @@ function AppContent() {
           </svg>
         </button>
         
-        <Routes>
+        {/* Header */}
+        <Header />
+        
+        {/* Page Content */}
+        <div className="flex-1 overflow-hidden">
+          <Routes>
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/patients" element={<ProtectedRoute><Patients /></ProtectedRoute>} />
-          <Route path="/patient-files" element={<ProtectedRoute><PatientFiles /></ProtectedRoute>} />
-          <Route path="/patient-profile/:patientId" element={<ProtectedRoute><PatientProfile /></ProtectedRoute>} />
-          <Route path="/patient-intake" element={<ProtectedRoute><PatientIntake /></ProtectedRoute>} />
-          <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
-          <Route path="/voice-reporting" element={<ProtectedRoute><VoiceReporting /></ProtectedRoute>} />
-          <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
-          <Route path="/communication" element={<ProtectedRoute><Communication /></ProtectedRoute>} />
-          <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
-          <Route path="/user-management" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-          <Route path="/doctor-profile" element={<ProtectedRoute><DoctorProfile /></ProtectedRoute>} />
-          <Route path="/loading-test" element={<LoadingTest />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
+            <Route path="/patient-files" element={<ProtectedRoute><PatientFiles /></ProtectedRoute>} />
+            <Route path="/patient-profile/:patientId" element={<ProtectedRoute><PatientProfile /></ProtectedRoute>} />
+            <Route path="/patient-intake" element={<ProtectedRoute><PatientIntake /></ProtectedRoute>} />
+            <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+            <Route path="/xray" element={<ProtectedRoute><Xray /></ProtectedRoute>} />
+            <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
+            <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
+            <Route path="/admin/attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
+            <Route path="/user-management" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            <Route path="/doctor-profile" element={<ProtectedRoute><DoctorProfile /></ProtectedRoute>} />
+            <Route path="/loading-test" element={<LoadingTest />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </div>
       </main>
       <ToastContainer
         position="top-right"
@@ -254,7 +298,9 @@ function App() {
     <Router>
       <ApiProvider>
         <AuthProvider>
-          <AppContent />
+          <HeaderProvider>
+            <AppContent />
+          </HeaderProvider>
         </AuthProvider>
       </ApiProvider>
     </Router>

@@ -4,7 +4,7 @@ from sqlalchemy import func, and_, extract, case
 from datetime import datetime, timedelta
 from typing import Optional
 from database import get_db
-from models import Patient, Report, Payment, User, TreatmentType, Appointment
+from models import Patient, Report, Payment, User, TreatmentType, Appointment, Clinic
 from auth import get_current_user
 
 router = APIRouter()

@@ -1,120 +1,74 @@
 import os
-import requests
-from supabase_client import supabase_storage, SUPABASE_STORAGE_ACCESS_ID, SUPABASE_STORAGE_SECRET_KEY
 from typing import Optional
+# Import R2 storage functions
+from services.r2_storage import upload_pdf_to_r2
 
+# Legacy function name for backward compatibility - now uses Cloudflare R2
 def upload_pdf_to_supabase(file_path: str, filename: str, bucket_name: str = "xpress-scan-bucket") -> Optional[str]:
     """
     Upload a PDF file to storage and return the public URL
+    Legacy function - now uses Cloudflare R2 Storage
     
     Args:
         file_path: Local path to the PDF file
         filename: Name to save the file as in storage
-        bucket_name: Storage bucket name (default: "xpress-scan-bucket")
+        bucket_name: Storage bucket name (ignored, kept for compatibility)
     
     Returns:
         Public URL of the uploaded file or None if upload failed
     """
-    try:
-        # Read the file
-        with open(file_path, 'rb') as file:
-            file_data = file.read()
-        
-        print(f"Attempting to upload {filename} to Supabase storage...")
-        print(f"Supabase URL: {supabase_storage.supabase_url}")
-        print(f"Bucket: {bucket_name}")
-        
-        # Try Supabase storage first
-        try:
-            response = supabase_storage.storage.from_(bucket_name).upload(
-                path=filename,
-                file=file_data,
-                file_options={"content-type": "application/pdf"}
-            )
-            
-            print(f"Upload response: {response}")
-            
-            if response:
-                # Get the public URL
-                public_url = supabase_storage.storage.from_(bucket_name).get_public_url(filename)
-                print(f"Public URL: {public_url}")
-                return public_url
-        except Exception as e:
-            print(f"Supabase storage failed: {e}")
-            print(f"Error type: {type(e)}")
-            print(f"Error details: {str(e)}")
-        
-        # If Supabase fails, return None instead of placeholder
-        print("Supabase upload failed, returning None")
-        return None
-        
-    except Exception as e:
-        print(f"Error uploading to storage: {e}")
-        return None
+    # Use R2 Storage instead - upload to patient-medical-reports folder
+    return upload_pdf_to_r2(file_path, filename, folder="patient-medical-reports")
 
 def delete_file_from_supabase(filename: str, bucket_name: str = "xpress-scan-bucket") -> bool:
     """
     Delete a file from storage
+    Legacy function - now uses Cloudflare R2 Storage
     
     Args:
         filename: Name of the file to delete
-        bucket_name: Storage bucket name (default: "xpress-scan-bucket")
+        bucket_name: Storage bucket name (ignored, kept for compatibility)
     
     Returns:
         True if deletion was successful, False otherwise
     """
-    try:
-        response = supabase_storage.storage.from_(bucket_name).remove([filename])
-        return True
-    except Exception as e:
-        print(f"Error deleting from storage: {e}")
-        return False
+    from services.r2_storage import delete_file_from_r2
+    return delete_file_from_r2(filename, folder="patient-medical-reports")
 
 def list_files_in_bucket(bucket_name: str = "xpress-scan-bucket") -> list:
     """
     List all files in a storage bucket
+    Legacy function - now uses Cloudflare R2 Storage
     
     Args:
-        bucket_name: Storage bucket name (default: "xpress-scan-bucket")
+        bucket_name: Storage bucket name (ignored, kept for compatibility)
     
     Returns:
         List of file objects
     """
-    try:
-        response = supabase_storage.storage.from_(bucket_name).list()
-        return response
-    except Exception as e:
-        print(f"Error listing files from storage: {e}")
-        return []
+    from services.r2_storage import list_files_in_folder
+    return list_files_in_folder(folder="patient-medical-reports")
 
 def create_bucket_if_not_exists(bucket_name: str = "xpress-scan-bucket") -> bool:
     """
     Create a storage bucket if it doesn't exist
+    Legacy function - R2 buckets are created via Cloudflare Dashboard
     
     Args:
-        bucket_name: Name of the bucket to create
+        bucket_name: Name of the bucket (uses env var if not provided)
     
     Returns:
-        True if bucket exists or was created successfully, False otherwise
+        True if bucket exists, False otherwise
     """
-    try:
-        # Try to list files to check if bucket exists
-        supabase_storage.storage.from_(bucket_name).list()
-        return True
-    except Exception:
-        try:
-            # If bucket doesn't exist, create it
-            supabase_storage.storage.create_bucket(bucket_name, {"public": True})
-            return True
-        except Exception as e:
-            print(f"Error creating bucket: {e}")
-            return False
+    from services.r2_storage import create_bucket_if_not_exists as r2_create_bucket
+    return r2_create_bucket(bucket_name)
 
 def get_storage_credentials():
     """
     Get the storage credentials for debugging
     """
     return {
-        "access_id": SUPABASE_STORAGE_ACCESS_ID,
-        "secret_key": SUPABASE_STORAGE_SECRET_KEY[:10] + "..." if SUPABASE_STORAGE_SECRET_KEY else None
+        "storage_type": "cloudflare_r2",
+        "bucket": os.getenv("R2_BUCKET_NAME", "Not configured"),
+        "endpoint": os.getenv("R2_ENDPOINT_URL", "Not configured")
     } 

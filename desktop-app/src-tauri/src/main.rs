@@ -4,6 +4,7 @@
 mod commands;
 mod server;
 mod config;
+mod oauth;
 
 use tauri::Manager;
 
@@ -25,6 +26,7 @@ fn main() {
             commands::get_local_ip,
             commands::is_first_run,
             commands::complete_setup,
+            commands::start_google_oauth,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();

@@ -1,76 +1,119 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { toast } from 'react-toastify';
 import { api } from '../utils/api';
+import { isTauri } from '../tauri';
 import LoadingButton from '../components/LoadingButton';
+import betterClinicLogo from '../assets/betterclinic-logo.png';
+import { startSystemBrowserOAuth, constructFirebaseOAuthUrl, parseOAuthCallback, exchangeCodeForFirebaseToken } from '../utils/oauth';
 
 const Signup = () => {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [role, setRole] = useState("clinic_owner");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleSignup = async (e) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    
-    try {
-      const data = await api.post('/auth/signup', {
-        email,
-        password,
-        first_name: firstName,
-        last_name: lastName,
-        role
-      });
-      
-      // Store the JWT token
-      localStorage.setItem('auth_token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      if (!data.user.clinic_id) {
-        navigate("/onboarding");
-      } else {
-        navigate("/dashboard");
-      }
-    } catch (error) {
-      setError(error.message || "Network error. Please try again.");
-    }
-    
-    setLoading(false);
-  };
 
   const handleGoogleSignup = async () => {
     setError("");
     setLoading(true);
+    
     try {
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      const supabase = createClient(supabaseUrl, supabaseAnonKey);
-      
-      // Initiate OAuth sign in with redirect
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`
+      console.log('🔵 [SIGNUP] Starting Google signup...');
+      console.log('🔵 [SIGNUP] Is Tauri:', isTauri());
+
+      if (isTauri()) {
+        // For Tauri: use system browser OAuth flow
+        console.log('🔵 [SIGNUP] Using system browser OAuth for desktop app...');
+        
+        const authDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN;
+        const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
+        const redirectUri = 'http://localhost:8080';
+        
+        // Construct Firebase OAuth URL
+        const oauthUrl = constructFirebaseOAuthUrl(authDomain, apiKey, redirectUri);
+        console.log('🔵 [SIGNUP] OAuth URL constructed, starting flow...');
+        
+        // Start OAuth flow (opens browser, waits for callback)
+        const fragment = await startSystemBrowserOAuth(oauthUrl);
+        console.log('🔵 [SIGNUP] OAuth callback received');
+        
+        // Parse the callback - might be code or token
+        const callbackData = parseOAuthCallback(fragment);
+        console.log('🔵 [SIGNUP] Callback data parsed:', callbackData.type);
+        
+        let idToken;
+        if (callbackData.type === 'code') {
+          // Need to exchange code for token
+          console.log('🔵 [SIGNUP] Exchanging authorization code for Firebase token...');
+          const tokenData = await exchangeCodeForFirebaseToken(callbackData.code, redirectUri, apiKey);
+          idToken = tokenData.idToken;
+          console.log('🔵 [SIGNUP] ID token obtained from code exchange');
+        } else {
+          // Already have token
+          idToken = callbackData.idToken;
+          console.log('🔵 [SIGNUP] ID token extracted from callback');
         }
-      });
+        
+        // Send to backend for verification and JWT generation
+        const data = await api.post('/auth/oauth', { id_token: idToken });
+
+        // Store the JWT token
+        localStorage.setItem('auth_token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+
+        toast.success('Signup successful!');
+
+        // Redirect based on user state
+        const redirectPath = !data.user.clinic_id ? '/onboarding' : '/dashboard';
+        navigate(redirectPath, { replace: true });
+      } else {
+        // For web: use popup (works fine in browsers)
+        console.log('🔵 [SIGNUP] Using POPUP for web...');
+        
+        const { signInWithPopup, GoogleAuthProvider } = await import('firebase/auth');
+        const { auth } = await import('../firebaseClient');
+
+        const provider = new GoogleAuthProvider();
+        provider.addScope('email');
+        provider.addScope('profile');
+        provider.setCustomParameters({
+          prompt: 'select_account'
+        });
       
-      if (error) {
-        setError(error.message);
-        setLoading(false);
-        return;
+        const result = await signInWithPopup(auth, provider);
+        console.log('🔵 [SIGNUP] Popup result received:', !!result);
+
+        if (result.user) {
+          console.log('🔵 [SIGNUP] User authenticated:', result.user.email);
+
+          // Get the ID token
+          const idToken = await result.user.getIdToken();
+
+          // Send to backend for verification and JWT generation
+          const data = await api.post('/auth/oauth', { id_token: idToken });
+
+          // Store the JWT token
+          localStorage.setItem('auth_token', data.token);
+          localStorage.setItem('user', JSON.stringify(data.user));
+
+          toast.success('Signup successful!');
+
+          // Redirect based on user state
+          const redirectPath = !data.user.clinic_id ? '/onboarding' : '/dashboard';
+          navigate(redirectPath, { replace: true });
+        } else {
+          throw new Error('No user data received from Google');
+        }
       }
-      
-      // The redirect will happen automatically
-      // The AuthCallback component will handle the rest
-      
+
     } catch (error) {
-      console.error('Google signup error:', error);
-      setError('Google signup failed');
+      console.error('🔵 [SIGNUP] Google signup error:', error);
+      console.error('🔵 [SIGNUP] Error message:', error.message);
+      console.error('🔵 [SIGNUP] Full error:', error);
+
+      const errorMessage = error.message || error.toString() || 'Google signup failed. Please try again.';
+      setError(errorMessage);
+      toast.error(errorMessage);
       setLoading(false);
     }
   };
@@ -78,16 +121,29 @@ const Signup = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="bg-white p-8 rounded shadow-md w-full max-w-md space-y-4">
-        <h2 className="text-2xl font-bold mb-4 text-center">Sign Up</h2>
-        {error && <div className="text-red-600 text-center">{error}</div>}
+        {/* Better Clinic Logo */}
+        <div className="flex justify-center mb-6 overflow-hidden">
+          <img 
+            src={betterClinicLogo} 
+            alt="Better Clinic Logo" 
+            className="w-full h-32"
+            style={{ 
+              transform: 'scale(1.1)',
+              objectFit: 'contain'
+            }}
+          />
+        </div>
         
-        {/* Google OAuth Button - Primary for clinic owners */}
-        <div className="space-y-2">
+        <h2 className="text-2xl font-bold mb-4 text-center">Sign Up</h2>
+        {error && <div className="text-red-600 text-center mb-4">{error}</div>}
+        
+        {/* Google OAuth Button */}
+        <div className="space-y-4">
           <LoadingButton 
             onClick={handleGoogleSignup}
             loading={loading}
             disabled={loading}
-            className="w-full bg-white border border-gray-300 rounded-lg px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors font-medium"
+            className="w-full bg-white border-2 border-gray-300 rounded-lg px-4 py-3 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors font-medium shadow-sm"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -98,76 +154,16 @@ const Signup = () => {
             Continue with Google
           </LoadingButton>
           <p className="text-xs text-gray-500 text-center">
-            Recommended for clinic owners - quick setup with your Google account
+            {isTauri() 
+              ? "You'll be redirected to Google to sign up"
+              : "Sign up with your Google account to get started"
+            }
           </p>
         </div>
-
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-300" />
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-white text-gray-500">Or continue with email</span>
-          </div>
-        </div>
-
-        {/* Email/Password Form */}
-        <form onSubmit={handleSignup} className="space-y-4">
-          <div className="grid grid-cols-2 gap-2">
-            <input
-              type="text"
-              placeholder="First Name"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-              required
-            />
-            <input
-              type="text"
-              placeholder="Last Name"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-              required
-            />
-          </div>
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-            required
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-            required
-          />
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-          >
-            <option value="clinic_owner">Clinic Owner</option>
-            <option value="doctor">Doctor</option>
-            <option value="receptionist">Receptionist</option>
-          </select>
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50"
-          >
-            {loading ? "Signing up..." : "Sign Up"}
-          </button>
-        </form>
         
-        <p className="text-center text-sm text-gray-600">
+        <p className="text-center text-sm text-gray-600 mt-6">
           Already have an account?{" "}
-          <Link to="/login" className="text-green-600 hover:text-green-500">
+          <Link to="/login" className="text-[#6C4CF3] hover:text-[#5b3dd9] font-medium">
             Log in
           </Link>
         </p>
@@ -175,7 +171,7 @@ const Signup = () => {
         {/* Branding */}
         <div className="text-center pt-4 border-t border-gray-200">
           <p className="text-xs text-gray-400">
-            Powered by <span className="text-green-600 font-medium">BetterClinic</span>
+            Powered by <span className="text-[#6C4CF3] font-medium">BetterClinic</span>
           </p>
         </div>
       </div>
@@ -183,4 +179,4 @@ const Signup = () => {
   );
 };
 
-export default Signup; 
+export default Signup;

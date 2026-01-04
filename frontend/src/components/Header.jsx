@@ -2,16 +2,20 @@ import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useInboxActions } from "../contexts/InboxContext";
+import { useHeader } from "../contexts/HeaderContext";
+import { FaSync } from "react-icons/fa";
 
 const Header = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { inboxActions } = useInboxActions();
+  const { title, refreshFunction, loading, handleRefresh } = useHeader();
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   
   const isInboxPage = location.pathname === '/inbox';
+  const isDashboardPage = location.pathname === '/dashboard';
 
   // Improved user info extraction
   const userName =
@@ -51,9 +55,25 @@ const Header = () => {
 
   return (
     <header className="bg-white border-b border-gray-200 h-14 flex items-center justify-between px-4 md:px-6 sticky top-0 z-30 shadow-sm">
-      {/* Left side - can be used for breadcrumbs or page title */}
+      {/* Left side - Page title and refresh button */}
       <div className="flex items-center gap-4 flex-1">
-        {/* Add any left-side content here if needed */}
+        {!isDashboardPage && title && (
+          <>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold text-gray-900">{title}</h1>
+              {refreshFunction && (
+                <button
+                  onClick={handleRefresh}
+                  disabled={loading}
+                  className="p-1 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
+                  title={`Refresh ${title.toLowerCase()}`}
+                >
+                  <FaSync className={`w-4 h-4 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Right side - Icons and User Profile */}

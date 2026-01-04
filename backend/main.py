@@ -16,11 +16,17 @@ from routes import clinics
 from routes import users
 from routes import auth
 from routes import payments
-from routes import whatsapp_config
+# from routes import whatsapp_config  # File doesn't exist, commented out
 from routes import whatsapp_inbox
-from routes import dashboard
+from routes import attendance
+from routes import attendance_mobile
 from routes import appointments
-from routes import notifications
+from routes import invoices
+from routes import xray
+from routes import message_templates
+from routes import devices
+from routes import dashboard
+from routes import sync
 from services.template_service import TemplateService
 
 # Get the base path for PyInstaller bundled app
@@ -82,11 +88,17 @@ app.include_router(clinic_users.router, prefix="/clinic-users", tags=["clinic_us
 app.include_router(clinics.router, prefix="/clinics", tags=["clinics"])
 app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(payments.router, prefix="/payments", tags=["payments"])
-app.include_router(whatsapp_config.router, prefix="/whatsapp-config", tags=["whatsapp_config"])
+# app.include_router(whatsapp_config.router, prefix="/whatsapp-config", tags=["whatsapp_config"])  # File doesn't exist, commented out
 app.include_router(whatsapp_inbox.router, prefix="/whatsapp/inbox", tags=["whatsapp_inbox"])
-app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
+app.include_router(attendance.router, prefix="/attendance", tags=["attendance"])
+app.include_router(attendance_mobile.router, prefix="/attendance-mobile", tags=["attendance_mobile"])
 app.include_router(appointments.router, prefix="/appointments", tags=["appointments"])
-app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
+app.include_router(invoices.router, prefix="/invoices", tags=["invoices"])
+app.include_router(xray.router, prefix="/xray", tags=["xray"])
+app.include_router(message_templates.router, prefix="/message-templates", tags=["message_templates"])
+app.include_router(devices.router, prefix="/devices", tags=["devices"])
+app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
+app.include_router(sync.router, prefix="/sync", tags=["sync"])
 
 @app.get("/")
 def root():

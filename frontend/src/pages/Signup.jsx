@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { toast } from 'react-toastify';
 import { api } from '../utils/api';
 import LoadingButton from '../components/LoadingButton';
 
@@ -46,31 +47,52 @@ const Signup = () => {
     setError("");
     setLoading(true);
     try {
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      const supabase = createClient(supabaseUrl, supabaseAnonKey);
-      
-      // Initiate OAuth sign in with redirect
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`
-        }
-      });
-      
-      if (error) {
-        setError(error.message);
-        setLoading(false);
-        return;
+      console.log('🔵 [SIGNUP] Starting Google signup with POPUP...');
+
+      const { signInWithPopup, GoogleAuthProvider } = await import('firebase/auth');
+      const { auth } = await import('../firebaseClient');
+
+      const provider = new GoogleAuthProvider();
+      provider.addScope('email');
+      provider.addScope('profile');
+
+      console.log('🔵 [SIGNUP] About to open popup...');
+
+      const result = await signInWithPopup(auth, provider);
+      console.log('🔵 [SIGNUP] Popup result received:', !!result);
+
+      if (result.user) {
+        console.log('🔵 [SIGNUP] User authenticated:', result.user.email);
+
+        // Get the ID token
+        const idToken = await result.user.getIdToken();
+
+        // Send to backend for verification and JWT generation
+        const data = await api.post('/auth/oauth', { id_token: idToken });
+
+        console.log('🔵 [SIGNUP] Backend response received');
+
+        // Store the JWT token
+        localStorage.setItem('auth_token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+
+        // Update auth context
+        // Note: Signup doesn't have access to setToken/setUser, so we navigate directly
+        toast.success('Signup successful!');
+
+        // Redirect based on user state
+        const redirectPath = !data.user.clinic_id ? '/onboarding' : '/dashboard';
+        console.log('🔵 [SIGNUP] Redirecting to:', redirectPath);
+        navigate(redirectPath, { replace: true });
+      } else {
+        throw new Error('No user data received from Google');
       }
-      
-      // The redirect will happen automatically
-      // The AuthCallback component will handle the rest
-      
+
     } catch (error) {
-      console.error('Google signup error:', error);
-      setError('Google signup failed');
+      console.error('🔵 [SIGNUP] Google signup error:', error);
+      const errorMessage = error.message || 'Google signup failed. Please try again.';
+      setError(errorMessage);
+      toast.error(errorMessage);
       setLoading(false);
     }
   };

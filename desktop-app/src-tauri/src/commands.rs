@@ -3,6 +3,7 @@ use tauri_plugin_store::StoreExt;
 use serde_json::json;
 
 use crate::server;
+use crate::oauth;
 
 const CONFIG_FILE: &str = "config.json";
 
@@ -153,4 +154,9 @@ pub async fn complete_setup(app: AppHandle, mode: String, server_ip: Option<Stri
     }
     
     Ok(())
+}
+
+#[tauri::command]
+pub async fn start_google_oauth(app: AppHandle, oauth_url: String) -> Result<String, String> {
+    oauth::start_oauth_flow(app, oauth_url).await
 }

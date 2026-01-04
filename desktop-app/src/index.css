@@ -1,5 +1,53 @@
 @import "tailwindcss";
 
+/* ========================================
+   MEDICAL CLINIC THEME - Color Variables
+   ======================================== */
+
+:root {
+  /* Primary (Base / Background) */
+  --color-primary-base: #0E0B2D;        /* Deep Indigo Blue - Sidebar, dark backgrounds */
+  
+  /* Accent (Brand / Actions) */
+  --color-accent-primary: #6C4CF3;      /* Modern Medical Purple - Primary buttons, active states */
+  --color-accent-icon: #9B8CFF;         /* Icon color */
+  
+  /* Neutral (Content / Text) */
+  --color-neutral-white: #FFFFFF;       /* Clean White - Text, icons, cards */
+  
+  /* Semantic Colors (derived from theme) */
+  --color-primary-hover: #1A1640;       /* Slightly lighter for hover states */
+  --color-primary-active: #6C4CF3;      /* Same as accent for active states */
+  --color-primary-border: rgba(155, 140, 255, 0.2);  /* Subtle border color */
+}
+
+/* Tailwind CSS Variable Integration */
+
+/* Custom Scrollbar Styles */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 10px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Firefox scrollbar */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+
 /* TipTap Editor Styles */
 .ProseMirror {
   outline: none;

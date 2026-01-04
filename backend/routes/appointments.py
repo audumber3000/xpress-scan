@@ -65,6 +65,9 @@ class AppointmentOut(BaseModel):
     status: str
     notes: Optional[str]
     created_at: datetime
+    updated_at: datetime
+    synced_at: Optional[datetime] = None
+    sync_status: str = "local"
 
     class Config:
         from_attributes = True
@@ -162,7 +165,10 @@ async def create_appointment(
             duration=db_appointment.duration,
             status=db_appointment.status,
             notes=db_appointment.notes,
-            created_at=db_appointment.created_at
+            created_at=db_appointment.created_at,
+            updated_at=getattr(db_appointment, 'updated_at', db_appointment.created_at),
+            synced_at=getattr(db_appointment, 'synced_at', None),
+            sync_status=getattr(db_appointment, 'sync_status', 'local')
         )
     except Exception as e:
         db.rollback()
@@ -300,7 +306,10 @@ async def create_public_appointment(
             duration=db_appointment.duration,
             status=db_appointment.status,
             notes=db_appointment.notes,
-            created_at=db_appointment.created_at
+            created_at=db_appointment.created_at,
+            updated_at=getattr(db_appointment, 'updated_at', db_appointment.created_at),
+            synced_at=getattr(db_appointment, 'synced_at', None),
+            sync_status=getattr(db_appointment, 'sync_status', 'local')
         )
 
     except HTTPException:
@@ -478,7 +487,10 @@ async def get_appointments(
                 duration=apt.duration,
                 status=apt.status,
                 notes=apt.notes,
-                created_at=apt.created_at
+                created_at=apt.created_at,
+                updated_at=getattr(apt, 'updated_at', apt.created_at),
+                synced_at=getattr(apt, 'synced_at', None),
+                sync_status=getattr(apt, 'sync_status', 'local')
             ))
         
         return result
@@ -522,7 +534,10 @@ async def get_appointment(
         duration=appointment.duration,
         status=appointment.status,
         notes=appointment.notes,
-        created_at=appointment.created_at
+        created_at=appointment.created_at,
+        updated_at=getattr(appointment, 'updated_at', appointment.created_at),
+        synced_at=getattr(appointment, 'synced_at', None),
+        sync_status=getattr(appointment, 'sync_status', 'local')
     )
 
 @router.put("/{appointment_id}", response_model=AppointmentOut)
@@ -644,7 +659,10 @@ async def update_appointment(
             duration=appointment.duration,
             status=appointment.status,
             notes=appointment.notes,
-            created_at=appointment.created_at
+            created_at=appointment.created_at,
+            updated_at=getattr(appointment, 'updated_at', appointment.created_at),
+            synced_at=getattr(appointment, 'synced_at', None),
+            sync_status=getattr(appointment, 'sync_status', 'local')
         )
     except HTTPException:
         raise

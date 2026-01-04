@@ -11,8 +11,10 @@ const getAuthHeaders = () => {
 
 // Authenticated fetch wrapper
 export const authenticatedFetch = async (url, options = {}) => {
+  // Check if body is FormData to skip Content-Type header
+  const isFormData = options.body instanceof FormData;
   const headers = {
-    ...getAuthHeaders(),
+    ...getAuthHeaders(isFormData),
     ...options.headers
   };
 
@@ -68,9 +70,19 @@ export const api = {
     return result.data;
   },
   post: async (url, data, options = {}) => {
+    // Handle FormData (for file uploads)
+    const isFormData = data instanceof FormData;
+    const headers = isFormData 
+      ? {} // Don't set Content-Type for FormData, browser will set it with boundary
+      : { 'Content-Type': 'application/json' };
+    
     const result = await authenticatedFetch(url, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: isFormData ? data : JSON.stringify(data),
+      headers: {
+        ...headers,
+        ...options.headers
+      },
       ...options
     });
     return result.data;
@@ -89,39 +101,3 @@ export const api = {
     return result.data;
   }
 };
-
-// WhatsApp API methods
-export const whatsappApi = {
-  getMyConfig: async () => {
-    const result = await authenticatedFetch('/whatsapp-config/my-config');
-    return result.data;
-  },
-  createConfig: async (data) => {
-    const result = await authenticatedFetch('/whatsapp-config', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-    return result.data;
-  },
-  updateConfig: async (id, data) => {
-    const result = await authenticatedFetch(`/whatsapp-config/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
-    return result.data;
-  },
-  deleteConfig: async (id) => {
-    const result = await authenticatedFetch(`/whatsapp-config/${id}`, {
-      method: 'DELETE'
-    });
-    return result.data;
-  },
-  testConnection: async () => {
-    const result = await authenticatedFetch('/whatsapp-config/test-connection');
-    return result.data;
-  },
-  getCredit: async () => {
-    const result = await authenticatedFetch('/whatsapp-config/credit');
-    return result.data;
-  }
-}; 

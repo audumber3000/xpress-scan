@@ -1,11 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { whatsappApi } from "../utils/api";
 
 const Communication = () => {
   const [activeTab, setActiveTab] = useState("whatsapp");
-  const [whatsappConfig, setWhatsappConfig] = useState(null);
-  const [creditInfo, setCreditInfo] = useState(null);
-  const [loadingBalance, setLoadingBalance] = useState(true);
 
   const tabs = [
     { 
@@ -82,51 +78,7 @@ const Communication = () => {
 
   const [selectedMessage, setSelectedMessage] = useState(null);
 
-  // Fetch WhatsApp config and balance on mount
-  useEffect(() => {
-    fetchWhatsappBalance();
-  }, []);
 
-  const fetchWhatsappBalance = async () => {
-    try {
-      setLoadingBalance(true);
-      const config = await whatsappApi.getMyConfig();
-      setWhatsappConfig(config);
-      
-      // If config exists, fetch credit info
-      if (config) {
-        const creditData = await whatsappApi.getCredit();
-        setCreditInfo(creditData);
-      }
-    } catch (error) {
-      console.error("Error fetching WhatsApp balance:", error);
-      setWhatsappConfig(null);
-      setCreditInfo(null);
-    } finally {
-      setLoadingBalance(false);
-    }
-  };
-
-  // Calculate credit values
-  const calculateCreditValues = (credits) => {
-    if (!credits) return { inr: 0, messages: 0 };
-    
-    // Credits ARE dollars (4.8296 credits = $4.8296)
-    const usdValue = credits;
-    
-    // Convert USD to INR (1 USD = 87.32 INR)
-    const inrValue = usdValue * 87.32;
-    
-    // Calculate messages (1 message = $0.0023)
-    const messages = Math.floor(usdValue / 0.0023);
-    
-    return {
-      inr: inrValue.toFixed(2),
-      messages: messages
-    };
-  };
-
-  const creditValues = creditInfo ? calculateCreditValues(creditInfo.credit) : { inr: 0, messages: 0 };
 
   const handleToggle = (id) => {
     setAutomatedMessages(automatedMessages.map(msg => 
@@ -239,41 +191,6 @@ const Communication = () => {
       <div>
         {activeTab === "whatsapp" && (
           <div>
-            {/* Balance Info Cards */}
-            <div className="flex items-center justify-end gap-3 mb-12">
-              {/* Status Card with Glowing Icon */}
-              <div className="bg-white border border-gray-200 rounded-lg shadow-sm w-28 h-16 flex flex-col items-center justify-center">
-                <div className="text-xs text-gray-500">Status</div>
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <div className={`w-2 h-2 rounded-full ${whatsappConfig ? 'bg-[#6C4CF3]' : 'bg-gray-400'}`}></div>
-                    {whatsappConfig && (
-                      <div className="absolute inset-0 w-2 h-2 bg-[#6C4CF3] rounded-full animate-ping opacity-75"></div>
-                    )}
-                  </div>
-                  <span className="text-sm font-semibold text-gray-900">
-                    {whatsappConfig ? 'Online' : 'Offline'}
-                  </span>
-                </div>
-              </div>
-              
-              {/* Balance Card */}
-              <div className="bg-white border border-gray-200 rounded-lg shadow-sm w-28 h-16 flex flex-col items-center justify-center">
-                <div className="text-xs text-gray-500">Balance</div>
-                <div className="text-sm font-semibold text-gray-900">
-                  {loadingBalance ? '...' : `₹${creditValues.inr}`}
-                </div>
-              </div>
-              
-              {/* Messages Card */}
-              <div className="bg-white border border-gray-200 rounded-lg shadow-sm w-28 h-16 flex flex-col items-center justify-center">
-                <div className="text-xs text-gray-500">Messages</div>
-                <div className="text-sm font-semibold text-[#6C4CF3]">
-                  {loadingBalance ? '...' : creditValues.messages.toLocaleString()}
-                </div>
-              </div>
-            </div>
-
             {/* Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
               {automatedMessages.map((msg) => (

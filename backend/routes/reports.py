@@ -3,8 +3,6 @@ from pydantic import BaseModel
 from services.pdf_service import html_template_to_pdf, generate_pdf_filename, cleanup_temp_file
 from services.supabase_storage import upload_pdf_to_supabase, create_bucket_if_not_exists
 from services.template_service import TemplateService
-from services.whatsapp_service import WhatsAppService
-from supabase_client import supabase
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Report, Patient
@@ -39,6 +37,9 @@ class ReportResponse(BaseModel):
     status: str
     whatsapp_sent_count: Optional[int] = 0
     created_at: datetime
+    updated_at: datetime
+    synced_at: Optional[datetime] = None
+    sync_status: str = "local"
 
     class Config:
         from_attributes = True
@@ -74,7 +75,10 @@ def get_all_reports(db: Session = Depends(get_db), current_user = Depends(get_cu
                     pdf_url=report.pdf_url,
                     status=report.status,
                     whatsapp_sent_count=report.whatsapp_sent_count or 0,
-                    created_at=report.created_at if report.created_at else datetime.utcnow()
+                    created_at=report.created_at if report.created_at else datetime.utcnow(),
+                    updated_at=getattr(report, 'updated_at', report.created_at if report.created_at else datetime.utcnow()),
+                    synced_at=getattr(report, 'synced_at', None),
+                    sync_status=getattr(report, 'sync_status', 'local')
                 ))
             except Exception as entry_error:
                 print(f"[REPORTS API] Skipped report id={getattr(report, 'id', None)} due to error: {entry_error}")
@@ -132,7 +136,10 @@ def get_report(report_id: int, db: Session = Depends(get_db), current_user = Dep
             pdf_url=report.pdf_url,
             status=report.status,
             whatsapp_sent_count=report.whatsapp_sent_count or 0,
-            created_at=report.created_at
+            created_at=report.created_at,
+            updated_at=getattr(report, 'updated_at', report.created_at),
+            synced_at=getattr(report, 'synced_at', None),
+            sync_status=getattr(report, 'sync_status', 'local')
         )
     except HTTPException:
         raise
@@ -204,69 +211,6 @@ def send_patient_pdf(request_data: dict):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
-
-@router.post("/send-whatsapp/{report_id}")
-def send_whatsapp_report(report_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    """Send report PDF via WhatsApp to patient"""
-    # Check if user has permission to edit reports (sending WhatsApp is considered editing)
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        reports_permissions = permissions.get("reports", {})
-        if not reports_permissions.get("edit", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to send reports via WhatsApp")
-    
-    try:
-        # Get report from database - scoped by clinic
-        report = db.query(Report).filter(
-            Report.id == report_id,
-            Report.clinic_id == current_user.clinic_id
-        ).first()
-        
-        if not report:
-            raise HTTPException(status_code=404, detail="Report not found")
-        
-        if not report.pdf_url:
-            raise HTTPException(status_code=400, detail="Report PDF not available. Please finalize the report first.")
-        
-        # Get patient data
-        patient = db.query(Patient).filter(Patient.id == report.patient_id).first()
-        if not patient:
-            raise HTTPException(status_code=404, detail="Patient not found")
-        
-        # Initialize WhatsApp service
-        whatsapp_service = WhatsAppService()
-        
-        # Prepare message
-        message = f"Hello {patient.name},\n\nYour {patient.scan_type} report is ready!\n\nPatient Details:\n- Name: {patient.name}\n- Age: {patient.age} years\n- Gender: {patient.gender}\n- Scan Type: {patient.scan_type}\n- Referred By: {patient.referred_by}\n\nPlease click the link below to view your report:"
-        
-        # Send WhatsApp message
-        result = whatsapp_service.send_pdf_link(
-            phone_number=patient.phone,
-            pdf_url=report.pdf_url,
-            message=message
-        )
-        
-        if result["success"]:
-            # Increment WhatsApp sent count
-            report.whatsapp_sent_count = (report.whatsapp_sent_count or 0) + 1
-            db.commit()
-            
-            return {
-                "success": True,
-                "message": "Report sent to patient successfully",
-                "patient_name": patient.name,
-                "phone_number": patient.phone,
-                "whatsapp_sent_count": report.whatsapp_sent_count
-            }
-        else:
-            raise HTTPException(status_code=500, detail=f"Failed to send report to patient: {result['message']}")
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error sending WhatsApp message: {str(e)}")
-
-
 
 @router.post("/voice-doc")
 def create_voice_doc(transcript_data: dict, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
@@ -391,10 +335,10 @@ def finalize_report(report_id: int, final_data: dict, db: Session = Depends(get_
         filename = generate_pdf_filename(patient.name, patient.scan_type)
         
         # Ensure bucket exists
-        create_bucket_if_not_exists("xpress-scan-bucket")
+        create_bucket_if_not_exists("betterclinic-bdent")
         
-        # Upload to Supabase
-        pdf_url = upload_pdf_to_supabase(pdf_path, filename, "xpress-scan-bucket")
+        # Upload to R2 Storage in patient-medical-reports folder
+        pdf_url = upload_pdf_to_supabase(pdf_path, filename, "betterclinic-bdent")
         
         # Clean up temporary file
         cleanup_temp_file(pdf_path)

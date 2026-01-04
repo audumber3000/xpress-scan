@@ -22,6 +22,18 @@ self.addEventListener('install', (event) => {
 
 // Fetch event - serve from cache when offline
 self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+  
+  // Skip service worker for API calls - always fetch from network
+  if (url.pathname.startsWith('/auth/') || 
+      url.pathname.startsWith('/api/') ||
+      url.hostname === 'localhost' && url.port === '8000') {
+    // For API calls, always fetch from network (don't cache)
+    event.respondWith(fetch(event.request));
+    return;
+  }
+  
+  // For other requests, use cache-first strategy
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
@@ -33,6 +45,8 @@ self.addEventListener('fetch', (event) => {
         if (event.request.mode === 'navigate') {
           return caches.match('/index.html');
         }
+        // For non-navigation requests, return a proper error response
+        return new Response('Network error', { status: 408, statusText: 'Request Timeout' });
       })
   );
 });

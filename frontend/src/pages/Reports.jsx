@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { supabase } from "../supabaseClient";
 import { toast } from 'react-toastify';
 import { FaFilePdf, FaEye, FaTrash, FaWhatsapp, FaSync, FaEdit } from 'react-icons/fa';
 import { api } from "../utils/api";

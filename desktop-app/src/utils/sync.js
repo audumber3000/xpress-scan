@@ -104,26 +104,81 @@ export const syncToCloud = async () => {
   }
 };
 
-// Sync data from cloud (pull latest)
-export const syncFromCloud = async () => {
-  if (!isCloudSyncEnabled() || !navigator.onLine) {
-    return { success: false, reason: 'Sync disabled or offline' };
+// Perform full sync (all data)
+export const performFullSync = async () => {
+  if (!navigator.onLine) {
+    return { success: false, skip: true, reason: 'Offline' };
   }
-  
+
   try {
     const token = localStorage.getItem('auth_token');
     if (!token) {
       return { success: false, reason: 'Not authenticated' };
     }
+
+    const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+    const response = await fetch(`${API_URL}/sync/full`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `HTTP ${response.status}`);
+    }
+
+    const result = await response.json();
+    localStorage.setItem('last_sync_time', Date.now().toString());
     
-    // TODO: Implement actual pull logic
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    return { success: true };
+    return { success: true, ...result };
   } catch (error) {
-    console.error('Sync from cloud error:', error);
+    console.error('Full sync error:', error);
     return { success: false, reason: error.message };
   }
+};
+
+// Perform incremental sync (only changed data)
+export const performIncrementalSync = async () => {
+  if (!navigator.onLine) {
+    return { success: false, skip: true, reason: 'Offline' };
+  }
+
+  try {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      return { success: false, reason: 'Not authenticated' };
+    }
+
+    const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+    const response = await fetch(`${API_URL}/sync/incremental`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `HTTP ${response.status}`);
+    }
+
+    const result = await response.json();
+    localStorage.setItem('last_sync_time', Date.now().toString());
+    
+    return { success: true, ...result };
+  } catch (error) {
+    console.error('Incremental sync error:', error);
+    return { success: false, reason: error.message };
+  }
+};
+
+// Sync data from cloud (pull latest) - now uses performIncrementalSync
+export const syncFromCloud = async () => {
+  return await performIncrementalSync();
 };
 
 // Start automatic sync interval
@@ -132,13 +187,12 @@ export const startAutoSync = () => {
     clearInterval(syncIntervalId);
   }
   
-  if (isCloudSyncEnabled()) {
-    syncIntervalId = setInterval(async () => {
-      if (navigator.onLine) {
-        await syncToCloud();
-      }
-    }, SYNC_INTERVAL);
-  }
+  // Always sync when online (not dependent on cloud_sync_enabled flag)
+  syncIntervalId = setInterval(async () => {
+    if (navigator.onLine) {
+      await performIncrementalSync();
+    }
+  }, SYNC_INTERVAL);
 };
 
 // Stop automatic sync
@@ -151,15 +205,13 @@ export const stopAutoSync = () => {
 
 // Initialize sync on app start
 export const initializeSync = () => {
-  if (isCloudSyncEnabled()) {
-    startAutoSync();
-  }
+  // Always start background sync when online
+  startAutoSync();
   
   // Listen for online/offline events
   window.addEventListener('online', () => {
-    if (isCloudSyncEnabled()) {
-      syncToCloud();
-    }
+    // Auto-sync when connection is restored
+    performIncrementalSync();
   });
 };
 
@@ -169,6 +221,8 @@ export default {
   isCloudSyncEnabled,
   setCloudSyncEnabled,
   getSyncStatus,
+  performFullSync,
+  performIncrementalSync,
   syncToCloud,
   syncFromCloud,
   startAutoSync,

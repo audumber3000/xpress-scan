@@ -1,10 +1,20 @@
 import React, { useState, useEffect } from "react";
 import Card from "../components/Card";
+import GearLoader from "../components/GearLoader";
 import { useAuth } from "../contexts/AuthContext";
 import { api } from "../utils/api";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid, ReferenceLine, Label, LineChart, Line, Area, AreaChart, RadialBarChart, RadialBar } from "recharts";
 
-const COLORS = ["#1d8a99", "#6ee7b7", "#d1fae5", "#f59e0b", "#ef4444", "#8b5cf6"];
+const COLORS = ["#6C4CF3", "#9B8CFF", "#6ee7b7", "#f59e0b", "#ef4444", "#8b5cf6"];
+
+// Format number to k notation (e.g., 10000 -> 10k, 10200 -> 10.2k)
+const formatToK = (value) => {
+  if (value >= 1000) {
+    const kValue = value / 1000;
+    return kValue % 1 === 0 ? `${kValue}k` : `${kValue.toFixed(1)}k`;
+  }
+  return value.toString();
+};
 
 // Week-wise data for metrics cards
 const weekData = [
@@ -81,7 +91,7 @@ const appointmentData = [
 
 // Clinic Capacity Utilization Data
 const capacityData = [
-  { name: "Utilization", value: 78, fill: "#1d8a99" }
+  { name: "Utilization", value: 78, fill: "#6C4CF3" }
 ];
 
 function getTodayString() {
@@ -98,12 +108,103 @@ const patientStatsOptions = [
 
 // Icons8 Line Awesome Icons for Dental Dashboard
 const ToothIcon = () => <i className="las la-tooth text-2xl"></i>;
+
+// Dynamic Y-axis domain calculator
+const calculateYAxisDomain = (data, dataKeys, paddingPercent = 0.15) => {
+  if (!data || data.length === 0) return [0, 100];
+
+  // Handle both single key and multiple keys
+  const keys = Array.isArray(dataKeys) ? dataKeys : [dataKeys];
+
+  // Find min and max values across all specified keys
+  let minValue = Infinity;
+  let maxValue = -Infinity;
+
+  data.forEach(item => {
+    keys.forEach(key => {
+      const value = item[key];
+      if (value !== null && value !== undefined && !isNaN(value)) {
+        minValue = Math.min(minValue, value);
+        maxValue = Math.max(maxValue, value);
+      }
+    });
+  });
+
+  // If no valid data, return default
+  if (minValue === Infinity || maxValue === -Infinity) return [0, 100];
+
+  // Calculate padding
+  const range = maxValue - minValue;
+  const padding = range * paddingPercent;
+
+  // Apply padding
+  let domainMin = Math.max(0, minValue - padding); // Don't go below 0
+  let domainMax = maxValue + padding;
+
+  // Round to nice numbers
+  const niceMin = Math.floor(domainMin / getNiceStep(domainMin, domainMax)) * getNiceStep(domainMin, domainMax);
+  const niceMax = Math.ceil(domainMax / getNiceStep(domainMin, domainMax)) * getNiceStep(domainMin, domainMax);
+
+  return [niceMin, niceMax];
+};
+
+// Helper function to get nice step size
+const getNiceStep = (min, max) => {
+  const range = max - min;
+  const roughStep = range / 5; // Aim for about 5 ticks
+
+  const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+  const normalizedStep = roughStep / magnitude;
+
+  // Choose nice step sizes
+  const niceSteps = [1, 2, 5, 10];
+  let bestStep = 1;
+
+  for (const step of niceSteps) {
+    if (step >= normalizedStep) {
+      bestStep = step;
+      break;
+    }
+  }
+
+  return bestStep * magnitude;
+};
 const CalendarCheckIcon = () => <i className="las la-calendar-check text-2xl"></i>;
 const ChairIcon = () => <i className="las la-procedures text-2xl"></i>;
 const TreatmentIcon = () => <i className="las la-syringe text-2xl"></i>;
 const QualityIcon = () => <i className="las la-star text-2xl"></i>;
 const ClockIcon = () => <i className="las la-clock text-2xl"></i>;
 const ActivityIcon = () => <i className="las la-heartbeat text-2xl"></i>;
+
+// Purple AI Sparkle Icon Component (two four-pointed stars)
+const AISparkleIcon = ({ className = "w-3 h-3" }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* Larger star */}
+    <path 
+      d="M12 2L13.5 6.5L18 8L13.5 9.5L12 14L10.5 9.5L6 8L10.5 6.5L12 2Z" 
+      fill="url(#purpleGradient1)" 
+      stroke="#6C4CF3" 
+      strokeWidth="1.5"
+    />
+    {/* Smaller star */}
+    <path 
+      d="M18 16L18.75 18.25L21 19L18.75 19.75L18 22L17.25 19.75L15 19L17.25 18.25L18 16Z" 
+      fill="url(#purpleGradient2)" 
+      stroke="#6C4CF3" 
+      strokeWidth="1.5"
+    />
+    <defs>
+      <linearGradient id="purpleGradient1" x1="12" y1="2" x2="12" y2="14" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#9B8CFF" />
+        <stop offset="100%" stopColor="#6C4CF3" />
+      </linearGradient>
+      <linearGradient id="purpleGradient2" x1="18" y1="16" x2="18" y2="22" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#9B8CFF" />
+        <stop offset="100%" stopColor="#6C4CF3" />
+      </linearGradient>
+    </defs>
+  </svg>
+);
 
 // Metric Card Component with dental icons
 const MetricCard = ({ title, value, change, changeType, sub, weekData, onClick, icon }) => {
@@ -118,7 +219,7 @@ const MetricCard = ({ title, value, change, changeType, sub, weekData, onClick, 
     <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col gap-2 min-w-0 hover:shadow-md transition cursor-pointer" onClick={onClick}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <div className="p-2 bg-green-50 rounded-lg text-green-600">
+          <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#6C4CF3]">
             {getIcon()}
           </div>
           <span className="text-xs text-gray-500 font-medium">
@@ -131,8 +232,9 @@ const MetricCard = ({ title, value, change, changeType, sub, weekData, onClick, 
       </div>
       <div className="text-2xl font-bold text-gray-900 leading-tight">{value.toLocaleString()}</div>
       <div className="flex items-center gap-1 text-xs">
-        <span className={changeType === "up" ? "text-green-500" : "text-red-500"}>{changeType === "up" ? "▲" : "▼"} {change}</span>
-        <span className="text-gray-400">{sub}</span>
+        <span className={changeType === "up" ? "text-green-600" : "text-red-500"}>
+          {changeType === "up" ? "▲" : "▼"} {change}% vs last week
+        </span>
       </div>
     </div>
   );
@@ -152,13 +254,41 @@ const Dashboard = () => {
     { title: "Appointments Today", value: 0, change: "0%", changeType: "up", sub: "vs yesterday", weekData, icon: "calendar" },
     { title: "Chair Capacity", value: 0, change: "0%", changeType: "up", sub: "utilization", weekData, icon: "chair" },
   ]);
-  const [patientStatsData, setPatientStatsData] = useState(patientStatsDataByMonth);
-  const [venueVisitorDataState, setVenueVisitorDataState] = useState(venueVisitorData);
-  const [revenueDataState, setRevenueDataState] = useState(revenueData);
-  const [capacityDataState, setCapacityDataState] = useState(capacityData);
+  const [patientStatsData, setPatientStatsData] = useState([]);
+  const [venueVisitorDataState, setVenueVisitorDataState] = useState([]);
+  const [revenueDataState, setRevenueDataState] = useState([]);
+  const [capacityDataState, setCapacityDataState] = useState([]);
+  const [appointmentDataState, setAppointmentDataState] = useState([]);
   const [treatmentStatsData, setTreatmentStatsData] = useState([]);
   const [appointmentQualityData, setAppointmentQualityData] = useState(null);
   const [chairDetailsData, setChairDetailsData] = useState(null);
+  const [clinicPerformanceData, setClinicPerformanceData] = useState(null);
+  const [patientMapData, setPatientMapData] = useState([]);
+  
+  // Loading states for each graph
+  const [loadingPatientStats, setLoadingPatientStats] = useState(true);
+  const [loadingDemographics, setLoadingDemographics] = useState(true);
+  const [loadingRevenue, setLoadingRevenue] = useState(true);
+  const [loadingAppointments, setLoadingAppointments] = useState(true);
+  const [loadingCapacity, setLoadingCapacity] = useState(true);
+  const [loadingTreatments, setLoadingTreatments] = useState(true);
+  const [loadingQuality, setLoadingQuality] = useState(true);
+  const [loadingChairs, setLoadingChairs] = useState(true);
+  const [compareClinicIds, setCompareClinicIds] = useState('');
+  const [revenuePeriod, setRevenuePeriod] = useState('week');
+  const [showRevenueDropdown, setShowRevenueDropdown] = useState(false);
+
+  // Chat panel states
+  const [chatMessages, setChatMessages] = useState([
+    {
+      id: 1,
+      type: 'bot',
+      content: 'Hi! I\'m your AI dental assistant. How can I help you today?',
+      timestamp: new Date()
+    }
+  ]);
+  const [chatInput, setChatInput] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
   
   // Drawer states
   const [selectedMetric, setSelectedMetric] = useState(null);
@@ -168,6 +298,7 @@ const Dashboard = () => {
   // Dashboard customization states
   const [isEditMode, setIsEditMode] = useState(false);
   const [showCustomizeDrawer, setShowCustomizeDrawer] = useState(false);
+  const [showChatPanel, setShowChatPanel] = useState(false);
   const [visibleWidgets, setVisibleWidgets] = useState({
     patientStats: true,
     demographics: true,
@@ -175,6 +306,8 @@ const Dashboard = () => {
     appointments: true,
     dentalChairs: true,
     chairUtilization: true,
+    clinicPerformance: true,
+    patientMap: true,
     treatments: true,
     quality: true
   });
@@ -243,11 +376,15 @@ const Dashboard = () => {
   // Fetch patient statistics when timeRange changes
   useEffect(() => {
     const fetchPatientStats = async () => {
+      setLoadingPatientStats(true);
       try {
         const data = await api.get(`/dashboard/patient-stats?period=${timeRange}`);
         setPatientStatsData(data);
       } catch (error) {
         console.error("Error fetching patient stats:", error);
+        setPatientStatsData([]);
+      } finally {
+        setLoadingPatientStats(false);
       }
     };
     
@@ -257,53 +394,134 @@ const Dashboard = () => {
   // Fetch demographics
   useEffect(() => {
     const fetchDemographics = async () => {
+      setLoadingDemographics(true);
       try {
         const data = await api.get("/dashboard/demographics");
         setVenueVisitorDataState(data);
       } catch (error) {
         console.error("Error fetching demographics:", error);
+        setVenueVisitorDataState([]);
+      } finally {
+        setLoadingDemographics(false);
       }
     };
     
     fetchDemographics();
   }, []);
-  
+
+  // Fetch clinic performance data
+  useEffect(() => {
+    const fetchClinicPerformance = async () => {
+      try {
+        const data = await api.get("/dashboard/clinic-performance", {
+          params: compareClinicIds ? { compare_clinic_ids: compareClinicIds } : {}
+        });
+        setClinicPerformanceData(data);
+      } catch (error) {
+        console.error("Error fetching clinic performance:", error);
+      }
+    };
+
+    fetchClinicPerformance();
+  }, [compareClinicIds]);
+
+  // Fetch patient map data
+  useEffect(() => {
+    const fetchPatientLocations = async () => {
+      try {
+        const data = await api.get("/dashboard/patient-locations");
+        setPatientMapData(data);
+      } catch (error) {
+        console.error("Error fetching patient locations:", error);
+      }
+    };
+
+    fetchPatientLocations();
+  }, []);
+
   // Fetch revenue data
   useEffect(() => {
     const fetchRevenue = async () => {
+      setLoadingRevenue(true);
       try {
-        const data = await api.get("/dashboard/revenue?period=week");
+        const data = await api.get(`/dashboard/revenue?period=${revenuePeriod}`);
         setRevenueDataState(data);
       } catch (error) {
         console.error("Error fetching revenue:", error);
+        setRevenueDataState([]);
+      } finally {
+        setLoadingRevenue(false);
       }
     };
     
     fetchRevenue();
-  }, []);
+  }, [revenuePeriod]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showRevenueDropdown && !event.target.closest('.revenue-dropdown')) {
+        setShowRevenueDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showRevenueDropdown]);
   
   // Fetch capacity
   useEffect(() => {
     const fetchCapacity = async () => {
+      setLoadingCapacity(true);
       try {
         const data = await api.get("/dashboard/capacity");
-        setCapacityDataState([{ name: "Utilization", value: data.utilization, fill: "#1d8a99" }]);
+        setCapacityDataState([{ name: "Utilization", value: data.utilization, fill: "#6C4CF3" }]);
       } catch (error) {
         console.error("Error fetching capacity:", error);
+        setCapacityDataState([]);
+      } finally {
+        setLoadingCapacity(false);
       }
     };
     
     fetchCapacity();
   }, []);
   
+  // Fetch appointment trends
+  useEffect(() => {
+    const fetchAppointmentTrends = async () => {
+      setLoadingAppointments(true);
+      try {
+        const data = await api.get("/dashboard/appointments/trends");
+        console.log("Appointment trends data received:", data);
+        if (data && Array.isArray(data) && data.length > 0) {
+          setAppointmentDataState(data);
+        } else {
+          setAppointmentDataState([]);
+        }
+      } catch (error) {
+        console.error("Error fetching appointment trends:", error);
+        setAppointmentDataState([]);
+      } finally {
+        setLoadingAppointments(false);
+      }
+    };
+    
+    fetchAppointmentTrends();
+  }, []);
+  
   // Fetch treatment statistics
   useEffect(() => {
     const fetchTreatments = async () => {
+      setLoadingTreatments(true);
       try {
         const data = await api.get("/dashboard/treatments/stats?period=week");
         setTreatmentStatsData(data.treatments || []);
       } catch (error) {
         console.error("Error fetching treatments:", error);
+        setTreatmentStatsData([]);
+      } finally {
+        setLoadingTreatments(false);
       }
     };
     
@@ -313,11 +531,15 @@ const Dashboard = () => {
   // Fetch appointment quality
   useEffect(() => {
     const fetchQuality = async () => {
+      setLoadingQuality(true);
       try {
         const data = await api.get("/dashboard/appointments/quality");
         setAppointmentQualityData(data);
       } catch (error) {
         console.error("Error fetching appointment quality:", error);
+        setAppointmentQualityData(null);
+      } finally {
+        setLoadingQuality(false);
       }
     };
     
@@ -327,11 +549,15 @@ const Dashboard = () => {
   // Fetch detailed chair data
   useEffect(() => {
     const fetchChairDetails = async () => {
+      setLoadingChairs(true);
       try {
         const data = await api.get("/dashboard/chairs/status");
         setChairDetailsData(data);
       } catch (error) {
         console.error("Error fetching chair details:", error);
+        setChairDetailsData(null);
+      } finally {
+        setLoadingChairs(false);
       }
     };
     
@@ -393,6 +619,41 @@ const Dashboard = () => {
       setVisibleWidgets(newWidgets);
     } catch (error) {
       console.error("Error saving dashboard preferences:", error);
+    }
+  };
+
+  // Chat functions
+  const sendMessage = async () => {
+    if (!chatInput.trim()) return;
+
+    const userMessage = {
+      id: Date.now(),
+      type: 'user',
+      content: chatInput,
+      timestamp: new Date()
+    };
+
+    setChatMessages(prev => [...prev, userMessage]);
+    setChatInput('');
+    setIsTyping(true);
+
+    // Simulate AI response (will be replaced with OpenAI integration later)
+    setTimeout(() => {
+      const botResponse = {
+        id: Date.now() + 1,
+        type: 'bot',
+        content: 'I\'m still learning! OpenAI integration with LangChain will be added soon. For now, I can help with basic dental queries.',
+        timestamp: new Date()
+      };
+      setChatMessages(prev => [...prev, botResponse]);
+      setIsTyping(false);
+    }, 1500);
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
     }
   };
   
@@ -500,16 +761,9 @@ const Dashboard = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <button 
-              onClick={() => setShowCustomizeDrawer(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition"
-            >
-              <i className="fi fi-sr-settings text-lg"></i>
-              <span className="text-sm font-medium text-gray-700">Customize Dashboard</span>
-            </button>
             <div className="text-right">
               <div className="text-sm font-medium text-gray-900">{getTodayString()}</div>
-              <div className="text-xs text-gray-500 mt-1 flex items-center gap-2">
+              <div className="text-xs text-gray-500 mt-1 flex items-center gap-2 justify-end">
                 {loading ? (
                   <div className="animate-pulse">Loading weather...</div>
                 ) : weather ? (
@@ -522,6 +776,17 @@ const Dashboard = () => {
                 )}
               </div>
             </div>
+            
+            {/* Customize Dashboard Icon Button */}
+            <button 
+              onClick={() => setShowCustomizeDrawer(true)}
+              className="p-2.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              title="Customize Dashboard"
+            >
+              <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
           </div>
         </div>
         <div className="border-b border-gray-200 mt-4"></div>
@@ -536,37 +801,94 @@ const Dashboard = () => {
       <div className="flex flex-wrap gap-6 mb-6">
         {/* Patient Statistics Bar Chart (2/3 width) */}
         {visibleWidgets.patientStats && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col flex-1 min-w-[500px]">
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-semibold text-gray-800">Patient Statistics</span>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-2 flex flex-col flex-1 min-w-[500px] relative">
+          {/* AI Sparkle Icon */}
+          <button
+            onClick={() => setShowChatPanel(true)}
+            className="absolute top-3 right-3 p-1.5 bg-white border border-[#6C4CF3]/20 rounded-full hover:bg-[#6C4CF3]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
+            title="Ask AI Assistant"
+          >
+            <AISparkleIcon className="w-3 h-3" />
+          </button>
+          <div className="flex items-center justify-between mb-2 pr-10">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#6C4CF3]">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <span className="font-semibold text-gray-800">Patient Statistics</span>
+            </div>
             <select value={timeRange} onChange={e => setTimeRange(e.target.value)} className="border rounded px-2 py-1 text-xs">
               {patientStatsOptions.map(opt => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
           </div>
+          {loadingPatientStats || patientStatsData.length === 0 ? (
+            <div className="flex items-center justify-center h-[220px]">
+              <div className="flex flex-col items-center gap-2">
+                <GearLoader size="w-8 h-8" />
+                <span className="text-xs text-gray-500">Loading data...</span>
+              </div>
+            </div>
+          ) : (
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={patientStatsData} barGap={8}>
+              <defs>
+                <linearGradient id="patientGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#6C4CF3" stopOpacity={0.8} />
+                  <stop offset="100%" stopColor="#9B8CFF" stopOpacity={0.6} />
+                </linearGradient>
+                <linearGradient id="inpatientGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#6C4CF3" stopOpacity={0.7} />
+                  <stop offset="100%" stopColor="#9B8CFF" stopOpacity={0.5} />
+                </linearGradient>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" vertical={false} />
               <XAxis dataKey={xKey} axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} domain={[0, 'dataMax + 2000']} />
-              <Tooltip contentStyle={{ borderRadius: 8, background: '#222', color: '#fff', fontSize: 13 }} cursor={{ fill: '#f3f4f6' }} formatter={(value, name) => name === 'patient' ? [`$${(value/1000).toFixed(1)}K`, 'Patient'] : [`$${(value/1000).toFixed(1)}K`, 'Inpatient']} />
-              <ReferenceLine y={avg} stroke="#111" strokeDasharray="6 3" label={{ position: 'left', value: 'Avg', fill: '#fff', fontSize: 12, fontWeight: 600, background: '#111', padding: 4 }} />
-              <Bar dataKey="patient" stackId="a" fill="#1d8a99" radius={0} />
-              <Bar dataKey="inpatient" stackId="a" fill="#6ee7b7" radius={0} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} domain={calculateYAxisDomain(patientStatsData, 'patient')} tickFormatter={formatToK} />
+              <Tooltip contentStyle={{ borderRadius: 8, background: '#222', color: '#fff', fontSize: 13 }} cursor={{ fill: '#f3f4f6' }} formatter={(value, name) => [formatToK(value), name === 'patient' ? 'Patient' : 'Inpatient']} />
+              <ReferenceLine y={avg} stroke="#111" strokeDasharray="6 3" label={{ position: 'left', value: `Avg ${formatToK(avg)}`, fill: '#fff', fontSize: 12, fontWeight: 600, background: '#111', padding: 4 }} />
+              <Bar dataKey="patient" stackId="a" fill="url(#patientGradient)" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="inpatient" stackId="a" fill="url(#inpatientGradient)" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+          )}
         </div>
         )}
         {/* Venue Visitor Semi-Donut Chart (1/3 width) */}
-        <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col items-center justify-center relative flex-1 min-w-[300px]">
-          <div className="flex items-center justify-between w-full mb-2">
-            <span className="font-semibold text-gray-800">Patient Demographics</span>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-1 flex flex-col items-center justify-center relative flex-1 min-w-[300px]">
+          {/* AI Sparkle Icon */}
+          <button
+            onClick={() => setShowChatPanel(true)}
+            className="absolute top-3 right-3 p-1.5 bg-white border border-[#6C4CF3]/20 rounded-full hover:bg-[#6C4CF3]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
+            title="Ask AI Assistant"
+          >
+            <AISparkleIcon className="w-3 h-3" />
+          </button>
+          <div className="flex items-center justify-between w-full mb-2 pr-10">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#6C4CF3]">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+              <span className="font-semibold text-gray-800">Patient Demographics</span>
+            </div>
             <button className="flex items-center gap-1 text-xs border rounded px-2 py-1">
               All Time
               <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" /></svg>
             </button>
           </div>
+          {loadingDemographics || venueVisitorDataState.length === 0 ? (
+            <div className="flex items-center justify-center h-[140px]">
+              <div className="flex flex-col items-center gap-2">
+                <GearLoader size="w-8 h-8" />
+                <span className="text-xs text-gray-500">Loading data...</span>
+              </div>
+            </div>
+          ) : (
           <div className="relative flex items-center justify-center" style={{ width: 180, height: 140 }}>
             {/* Dotted ring background */}
             <svg width="140" height="140" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ zIndex: 0 }}>
@@ -598,6 +920,7 @@ const Dashboard = () => {
               <div className="text-2xl font-bold text-gray-900">{venueVisitorDataState.reduce((sum, d) => sum + d.value, 0).toLocaleString()}</div>
             </div>
           </div>
+          )}
           <div className="flex gap-6 mt-4 text-sm">
             {venueVisitorDataState.map((item, idx) => (
               <span key={item.name} className="flex items-center gap-2">
@@ -613,23 +936,86 @@ const Dashboard = () => {
       <div className="flex flex-wrap gap-6 mb-6">
         {/* Revenue Analytics Line Chart */}
         {visibleWidgets.revenue && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col flex-1 min-w-[300px]">
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-semibold text-gray-800">Revenue Analytics</span>
-            <button className="flex items-center gap-1 text-xs border rounded px-2 py-1">
-              This Week
-              <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" /></svg>
-            </button>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-2 flex flex-col flex-1 min-w-[300px] relative">
+          {/* AI Sparkle Icon */}
+          <button
+            onClick={() => setShowChatPanel(true)}
+            className="absolute top-3 right-3 p-1.5 bg-white border border-[#6C4CF3]/20 rounded-full hover:bg-[#6C4CF3]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
+            title="Ask AI Assistant"
+          >
+            <AISparkleIcon className="w-3 h-3" />
+          </button>
+          <div className="flex items-center justify-between mb-2 pr-10">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#6C4CF3]">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <span className="font-semibold text-gray-800">Revenue Analytics</span>
+            </div>
+            <div className="relative revenue-dropdown">
+              <button
+                onClick={() => setShowRevenueDropdown(!showRevenueDropdown)}
+                className="flex items-center gap-1 text-xs border rounded px-2 py-1 hover:bg-gray-50 transition-colors"
+              >
+                {revenuePeriod === 'week' ? 'This Week' :
+                 revenuePeriod === 'month' ? 'This Month' : 'This Year'}
+                <svg className={`w-4 h-4 ml-1 transition-transform ${showRevenueDropdown ? 'rotate-180' : ''}`}
+                     fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showRevenueDropdown && (
+                <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10 min-w-[100px]">
+                  <button
+                    onClick={() => {
+                      setRevenuePeriod('week');
+                      setShowRevenueDropdown(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition-colors"
+                  >
+                    This Week
+                  </button>
+                  <button
+                    onClick={() => {
+                      setRevenuePeriod('month');
+                      setShowRevenueDropdown(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition-colors"
+                  >
+                    This Month
+                  </button>
+                  <button
+                    onClick={() => {
+                      setRevenuePeriod('year');
+                      setShowRevenueDropdown(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition-colors"
+                  >
+                    This Year
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
+          {loadingRevenue || revenueDataState.length === 0 ? (
+            <div className="flex items-center justify-center h-[220px]">
+              <div className="flex flex-col items-center gap-2">
+                <GearLoader size="w-8 h-8" />
+                <span className="text-xs text-gray-500">Loading data...</span>
+              </div>
+            </div>
+          ) : (
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={revenueDataState}>
               <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" vertical={false} />
               <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} domain={[0, 'dataMax + 10000']} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} domain={calculateYAxisDomain(revenueDataState, 'revenue')} tickFormatter={formatToK} />
               <Tooltip 
                 contentStyle={{ borderRadius: 8, background: '#222', color: '#fff', fontSize: 13 }} 
                 formatter={(value, name) => [
-                  `₹${(value/1000).toFixed(1)}K`, 
+                  `₹${formatToK(value)}`, 
                   name === 'revenue' ? 'Revenue' : 'Target'
                 ]} 
               />
@@ -644,58 +1030,115 @@ const Dashboard = () => {
               <Line 
                 type="monotone" 
                 dataKey="revenue" 
-                stroke="#1d8a99" 
+                stroke="#6C4CF3" 
                 strokeWidth={3} 
-                dot={{ fill: '#1d8a99', strokeWidth: 2, r: 4 }}
-                activeDot={{ r: 6, stroke: '#1d8a99', strokeWidth: 2 }}
+                dot={{ fill: '#6C4CF3', strokeWidth: 2, r: 4 }}
+                activeDot={{ r: 6, stroke: '#6C4CF3', strokeWidth: 2 }}
               />
             </LineChart>
           </ResponsiveContainer>
+          )}
         </div>
         )}
 
         {/* Appointment Booking Trends Bar Chart */}
         {visibleWidgets.appointments && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col flex-1 min-w-[300px]">
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-semibold text-gray-800">Appointment Trends</span>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-2 flex flex-col flex-1 min-w-[300px] relative">
+          {/* AI Sparkle Icon */}
+          <button
+            onClick={() => setShowChatPanel(true)}
+            className="absolute top-3 right-3 p-1.5 bg-white border border-[#6C4CF3]/20 rounded-full hover:bg-[#6C4CF3]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
+            title="Ask AI Assistant"
+          >
+            <AISparkleIcon className="w-3 h-3" />
+          </button>
+          <div className="flex items-center justify-between mb-2 pr-10">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#6C4CF3]">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <span className="font-semibold text-gray-800">Appointment Trends</span>
+            </div>
             <button className="flex items-center gap-1 text-xs border rounded px-2 py-1">
               Today
               <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" /></svg>
             </button>
           </div>
+          {loadingAppointments || appointmentDataState.length === 0 ? (
+            <div className="flex items-center justify-center h-[220px]">
+              <div className="flex flex-col items-center gap-2">
+                <GearLoader size="w-8 h-8" />
+                <span className="text-xs text-gray-500">Loading data...</span>
+              </div>
+            </div>
+          ) : (
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={appointmentData} barGap={4}>
+            <AreaChart data={appointmentDataState}>
+              <defs>
+                <linearGradient id="capacityAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#9B8CFF" stopOpacity={0.3} />
+                  <stop offset="100%" stopColor="#6C4CF3" stopOpacity={0.1} />
+                </linearGradient>
+                <linearGradient id="bookingsAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#6C4CF3" stopOpacity={0.4} />
+                  <stop offset="100%" stopColor="#9B8CFF" stopOpacity={0.15} />
+                </linearGradient>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" vertical={false} />
               <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} domain={[0, 'dataMax + 5']} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} domain={calculateYAxisDomain(appointmentDataState, ['bookings', 'capacity'])} tickFormatter={formatToK} />
               <Tooltip 
                 contentStyle={{ borderRadius: 8, background: '#222', color: '#fff', fontSize: 13 }} 
                 formatter={(value, name) => [
-                  value, 
+                  formatToK(value), 
                   name === 'bookings' ? 'Bookings' : 'Capacity'
                 ]} 
               />
-              <Bar dataKey="capacity" fill="#e5e7eb" radius={2} />
-              <Bar dataKey="bookings" fill="#6ee7b7" radius={2} />
-            </BarChart>
+              <Area 
+                type="monotone" 
+                dataKey="capacity" 
+                stroke="#9B8CFF" 
+                strokeWidth={2}
+                fill="url(#capacityAreaGradient)" 
+                fillOpacity={1}
+              />
+              <Area 
+                type="monotone" 
+                dataKey="bookings" 
+                stroke="#6C4CF3" 
+                strokeWidth={2.5}
+                fill="url(#bookingsAreaGradient)" 
+                fillOpacity={1}
+              />
+            </AreaChart>
           </ResponsiveContainer>
+          )}
         </div>
         )}
 
         {/* Dental Chair Status Visualization */}
         {visibleWidgets.dentalChairs && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col items-center justify-center relative flex-1 min-w-[300px]">
-          <div className="flex items-center justify-between w-full mb-4">
+        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-1 flex flex-col items-center justify-center relative flex-1 min-w-[300px]">
+          {/* AI Sparkle Icon */}
+          <button
+            onClick={() => setShowChatPanel(true)}
+            className="absolute top-3 right-3 p-1.5 bg-white border border-[#6C4CF3]/20 rounded-full hover:bg-[#6C4CF3]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
+            title="Ask AI Assistant"
+          >
+            <AISparkleIcon className="w-3 h-3" />
+          </button>
+          <div className="flex items-center justify-between w-full mb-4 pr-10">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-green-50 rounded-lg text-green-600">
+              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#6C4CF3]">
                 <ChairIcon />
               </div>
               <span className="font-semibold text-gray-800">Dental Chairs</span>
             </div>
             <button className="flex items-center gap-1 text-xs border rounded px-2 py-1">
               Live
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <div className="w-2 h-2 bg-[#6C4CF3] rounded-full animate-pulse"></div>
             </button>
           </div>
           
@@ -706,7 +1149,7 @@ const Dashboard = () => {
               return (
                 <div key={chairNum} className="flex flex-col items-center gap-1">
                   <div className={`w-12 h-12 rounded-lg flex items-center justify-center transition ${
-                    isOccupied ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-400'
+                    isOccupied ? 'bg-[#6C4CF3] text-white' : 'bg-gray-100 text-gray-400'
                   }`}>
                     <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M7 11V13H17V11H19V13C19 14.1 18.1 15 17 15V19H15V15H9V19H7V15C5.9 15 5 14.1 5 13V11H7M7 7C7 5.9 7.9 5 9 5H15C16.1 5 17 5.9 17 7V9H7V7Z"/>
@@ -722,7 +1165,7 @@ const Dashboard = () => {
           <div className="w-full bg-gray-50 rounded-lg p-3">
             <div className="flex justify-between items-center text-sm">
               <div className="flex items-center gap-2">
-                <span className="inline-block w-3 h-3 rounded-full bg-green-600"></span>
+                <span className="inline-block w-3 h-3 rounded-full bg-[#6C4CF3]"></span>
                 <span className="text-gray-700">Occupied</span>
               </div>
               <span className="font-semibold text-gray-900">{Math.floor((capacityDataState[0]?.value || 0) / 20)}/5</span>
@@ -743,24 +1186,31 @@ const Dashboard = () => {
       <div className="flex flex-wrap gap-6 mb-6">
         {/* Chair Utilization Details */}
         {visibleWidgets.chairUtilization && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col flex-1 min-w-[300px]">
+        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-1 flex flex-col flex-1 min-w-[300px]">
           <div className="flex items-center gap-2 mb-4">
-            <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
+            <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#9B8CFF]">
               <ActivityIcon />
             </div>
             <span className="font-semibold text-gray-800">Chair Utilization</span>
           </div>
           
-          {chairDetailsData && (
+          {loadingChairs ? (
+            <div className="flex items-center justify-center h-[200px]">
+              <div className="flex flex-col items-center gap-2">
+                <GearLoader size="w-8 h-8" />
+                <span className="text-xs text-gray-500">Loading data...</span>
+              </div>
+            </div>
+          ) : chairDetailsData ? (
             <div className="space-y-3">
               {/* Utilization Percentage */}
-              <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-lg p-3">
+              <div className="bg-gradient-to-r from-[#9B8CFF]/10 to-[#9B8CFF]/20 rounded-lg p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-700">Active</span>
-                  <span className="text-2xl font-bold text-green-600">{chairDetailsData.utilization_percent}%</span>
+                  <span className="text-2xl font-bold text-[#6C4CF3]">{chairDetailsData.utilization_percent}%</span>
                 </div>
                 <div className="w-full bg-white rounded-full h-2 mt-2">
-                  <div className="bg-green-600 h-2 rounded-full transition-all" style={{ width: `${chairDetailsData.utilization_percent}%` }}></div>
+                  <div className="bg-[#6C4CF3] h-2 rounded-full transition-all" style={{ width: `${chairDetailsData.utilization_percent}%` }}></div>
                 </div>
               </div>
               
@@ -777,11 +1227,11 @@ const Dashboard = () => {
               
               {/* Time Breakdown */}
               <div className="grid grid-cols-2 gap-2 mt-3">
-                <div className="bg-green-50 rounded-lg p-2 text-center">
+                <div className="bg-[#9B8CFF]/10 rounded-lg p-2 text-center">
                   <div className="flex items-center justify-center gap-1 mb-1">
                     <ClockIcon />
                   </div>
-                  <div className="text-lg font-bold text-green-600">{chairDetailsData.active_hours}h</div>
+                  <div className="text-lg font-bold text-[#6C4CF3]">{chairDetailsData.active_hours}h</div>
                   <div className="text-xs text-gray-600">Active Time</div>
                 </div>
                 <div className="bg-gray-50 rounded-lg p-2 text-center">
@@ -793,14 +1243,22 @@ const Dashboard = () => {
                 </div>
               </div>
             </div>
-          )}
+          ) : null}
         </div>
         )}
 
         {/* Treatment Statistics */}
         {visibleWidgets.treatments && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col flex-1 min-w-[300px]">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-2 flex flex-col flex-1 min-w-[300px] relative">
+          {/* AI Sparkle Icon */}
+          <button
+            onClick={() => setShowChatPanel(true)}
+            className="absolute top-3 right-3 p-1.5 bg-white border border-[#6C4CF3]/20 rounded-full hover:bg-[#6C4CF3]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
+            title="Ask AI Assistant"
+          >
+            <AISparkleIcon className="w-3 h-3" />
+          </button>
+          <div className="flex items-center justify-between mb-4 pr-10">
             <div className="flex items-center gap-2">
               <div className="p-2 bg-purple-50 rounded-lg text-purple-600">
                 <TreatmentIcon />
@@ -812,6 +1270,14 @@ const Dashboard = () => {
             </button>
           </div>
           
+          {loadingTreatments ? (
+            <div className="flex items-center justify-center h-[200px]">
+              <div className="flex flex-col items-center gap-2">
+                <GearLoader size="w-8 h-8" />
+                <span className="text-xs text-gray-500">Loading data...</span>
+              </div>
+            </div>
+          ) : (
           <div className="space-y-2 flex-1">
             {treatmentStatsData.slice(0, 5).map((treatment, idx) => (
               <div key={idx} className="flex items-center justify-between">
@@ -831,20 +1297,36 @@ const Dashboard = () => {
               </div>
             )}
           </div>
+          )}
         </div>
         )}
 
         {/* Appointment Quality */}
         {visibleWidgets.quality && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col flex-1 min-w-[300px]">
-          <div className="flex items-center gap-2 mb-4">
+        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-2 flex flex-col flex-1 min-w-[300px] relative">
+          {/* AI Sparkle Icon */}
+          <button
+            onClick={() => setShowChatPanel(true)}
+            className="absolute top-3 right-3 p-1.5 bg-white border border-[#6C4CF3]/20 rounded-full hover:bg-[#6C4CF3]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
+            title="Ask AI Assistant"
+          >
+            <AISparkleIcon className="w-3 h-3" />
+          </button>
+          <div className="flex items-center gap-2 mb-4 pr-10">
             <div className="p-2 bg-yellow-50 rounded-lg text-yellow-600">
               <QualityIcon />
             </div>
             <span className="font-semibold text-gray-800">Appointment Quality</span>
           </div>
           
-          {appointmentQualityData && (
+          {loadingQuality ? (
+            <div className="flex items-center justify-center h-[200px]">
+              <div className="flex flex-col items-center gap-2">
+                <GearLoader size="w-8 h-8" />
+                <span className="text-xs text-gray-500">Loading data...</span>
+              </div>
+            </div>
+          ) : appointmentQualityData ? (
             <div className="space-y-3">
               {/* Overall Quality Score */}
               <div className="bg-gradient-to-r from-yellow-50 to-yellow-100 rounded-lg p-3 text-center">
@@ -858,7 +1340,7 @@ const Dashboard = () => {
                   <span className="text-gray-700">Completion Rate</span>
                   <div className="flex items-center gap-2">
                     <div className="w-20 bg-gray-200 rounded-full h-1.5">
-                      <div className="bg-green-600 h-1.5 rounded-full" style={{ width: `${appointmentQualityData.completion_rate}%` }}></div>
+                      <div className="bg-[#6C4CF3] h-1.5 rounded-full" style={{ width: `${appointmentQualityData.completion_rate}%` }}></div>
                     </div>
                     <span className="font-semibold text-gray-900 w-10 text-right">{appointmentQualityData.completion_rate}%</span>
                   </div>
@@ -868,7 +1350,7 @@ const Dashboard = () => {
                   <span className="text-gray-700">On-Time Rate</span>
                   <div className="flex items-center gap-2">
                     <div className="w-20 bg-gray-200 rounded-full h-1.5">
-                      <div className="bg-blue-600 h-1.5 rounded-full" style={{ width: `${appointmentQualityData.on_time_rate}%` }}></div>
+                      <div className="bg-[#9B8CFF] h-1.5 rounded-full" style={{ width: `${appointmentQualityData.on_time_rate}%` }}></div>
                     </div>
                     <span className="font-semibold text-gray-900 w-10 text-right">{appointmentQualityData.on_time_rate}%</span>
                   </div>
@@ -878,11 +1360,154 @@ const Dashboard = () => {
                   <span className="text-gray-700">Satisfaction</span>
                   <div className="flex items-center gap-2">
                     <div className="w-20 bg-gray-200 rounded-full h-1.5">
-                      <div className="bg-yellow-600 h-1.5 rounded-full" style={{ width: `${appointmentQualityData.satisfaction_rate}%` }}></div>
+                      <div className="bg-[#6C4CF3] h-1.5 rounded-full" style={{ width: `${appointmentQualityData.satisfaction_rate}%` }}></div>
                     </div>
                     <span className="font-semibold text-gray-900 w-10 text-right">{appointmentQualityData.satisfaction_rate}%</span>
                   </div>
                 </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+        )}
+
+        {/* Clinic Performance Comparison */}
+        {visibleWidgets.clinicPerformance && (
+        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-2 flex flex-col flex-1 min-w-[300px] relative">
+          {/* AI Sparkle Icon */}
+          <button
+            onClick={() => setShowChatPanel(true)}
+            className="absolute top-3 right-10 p-1.5 bg-white border border-[#6C4CF3]/20 rounded-full hover:bg-[#6C4CF3]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
+            title="Ask AI Assistant"
+          >
+            <AISparkleIcon className="w-3 h-3" />
+          </button>
+          <div className="flex items-center justify-between mb-4 pr-16">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-purple-50 rounded-lg text-purple-600">
+                <i className="las la-trophy text-2xl"></i>
+              </div>
+              <span className="font-semibold text-gray-800">Clinic Performance</span>
+            </div>
+            <button
+              onClick={() => {/* Open settings for clinic comparison */}}
+              className="p-1 hover:bg-gray-100 rounded"
+              title="Compare with other clinics"
+            >
+              <i className="las la-cog text-gray-400"></i>
+            </button>
+          </div>
+
+          {clinicPerformanceData ? (
+            <div className="space-y-4">
+              {/* Current Clinic */}
+              <div className="border border-gray-200 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-900">Current Clinic</span>
+                  <span className="text-xs text-gray-500">{clinicPerformanceData.current_clinic.name}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="text-center">
+                    <div className="font-semibold text-[#6C4CF3]">{clinicPerformanceData.current_clinic.metrics.appointments_count}</div>
+                    <div className="text-gray-500">Appointments</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="font-semibold text-[#9B8CFF]">₹{clinicPerformanceData.current_clinic.metrics.revenue.toLocaleString()}</div>
+                    <div className="text-gray-500">Revenue</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="font-semibold text-yellow-600">{clinicPerformanceData.current_clinic.metrics.satisfaction_score}%</div>
+                    <div className="text-gray-500">Satisfaction</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="font-semibold text-purple-600">{clinicPerformanceData.current_clinic.metrics.chair_utilization}%</div>
+                    <div className="text-gray-500">Utilization</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Comparison Clinics */}
+              {clinicPerformanceData.comparisons.map((clinic, index) => (
+                <div key={clinic.id} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700">Clinic {index + 1}</span>
+                    <span className="text-xs text-gray-500">{clinic.name}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="text-center">
+                      <div className="font-semibold text-[#6C4CF3]">{clinic.metrics.appointments_count}</div>
+                      <div className="text-gray-500">Appointments</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="font-semibold text-[#9B8CFF]">₹{clinic.metrics.revenue.toLocaleString()}</div>
+                      <div className="text-gray-500">Revenue</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-32 text-gray-500">
+              <div className="text-center">
+                <i className="las la-chart-line text-2xl mb-2"></i>
+                <div className="text-sm">Loading performance data...</div>
+              </div>
+            </div>
+          )}
+        </div>
+        )}
+
+        {/* Patient Location Map */}
+        {visibleWidgets.patientMap && (
+        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-2 flex flex-col flex-1 min-w-[300px] relative">
+          {/* AI Sparkle Icon */}
+          <button
+            onClick={() => setShowChatPanel(true)}
+            className="absolute top-3 right-3 p-1.5 bg-white border border-[#6C4CF3]/20 rounded-full hover:bg-[#6C4CF3]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
+            title="Ask AI Assistant"
+          >
+            <AISparkleIcon className="w-3 h-3" />
+          </button>
+          <div className="flex items-center gap-2 mb-4 pr-10">
+            <div className="p-2 bg-red-50 rounded-lg text-red-600">
+              <i className="las la-map-marked-alt text-2xl"></i>
+            </div>
+            <span className="font-semibold text-gray-800">Patient Locations</span>
+          </div>
+
+          {patientMapData && patientMapData.length > 0 ? (
+            <div className="space-y-3">
+              {/* Simple map representation */}
+              <div className="bg-gray-100 rounded-lg h-32 flex items-center justify-center text-gray-500 mb-4">
+                <div className="text-center">
+                  <i className="las la-map text-3xl mb-1"></i>
+                  <div className="text-xs">Patient Distribution Map</div>
+                </div>
+              </div>
+
+              {/* Location list */}
+              <div className="space-y-2 max-h-32 overflow-y-auto">
+                {patientMapData.slice(0, 5).map((location, index) => (
+                  <div key={index} className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                      <span className="text-gray-700">{location.location}</span>
+                    </div>
+                    <span className="font-semibold text-gray-900">{location.count} patients</span>
+                  </div>
+                ))}
+                {patientMapData.length > 5 && (
+                  <div className="text-xs text-gray-500 text-center pt-1">
+                    +{patientMapData.length - 5} more locations
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-32 text-gray-500">
+              <div className="text-center">
+                <i className="las la-map-marker text-2xl mb-2"></i>
+                <div className="text-sm">Loading location data...</div>
               </div>
             </div>
           )}
@@ -914,7 +1539,7 @@ const Dashboard = () => {
             <div className="flex-1 overflow-y-auto p-6">
               {drawerLoading ? (
                 <div className="flex items-center justify-center h-64">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+                  <GearLoader size="w-12 h-12" />
                 </div>
               ) : drawerData.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-64 text-gray-500">
@@ -955,7 +1580,7 @@ const Dashboard = () => {
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <div className="p-2 bg-green-50 rounded-lg text-green-600">
+                            <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#6C4CF3]">
                               <CalendarCheckIcon />
                             </div>
                             <div>
@@ -977,8 +1602,8 @@ const Dashboard = () => {
               ) : selectedMetric.title === "Chair Capacity" && drawerData.chairs ? (
                 <div>
                   <div className="grid grid-cols-2 gap-4 mb-6">
-                    <div className="bg-green-50 rounded-lg p-4 text-center">
-                      <div className="text-3xl font-bold text-green-600">{drawerData.chairs_occupied}</div>
+                    <div className="bg-[#9B8CFF]/10 rounded-lg p-4 text-center">
+                      <div className="text-3xl font-bold text-[#6C4CF3]">{drawerData.chairs_occupied}</div>
                       <div className="text-sm text-gray-600 mt-1">Occupied Chairs</div>
                     </div>
                     <div className="bg-gray-50 rounded-lg p-4 text-center">
@@ -989,10 +1614,10 @@ const Dashboard = () => {
                   <div className="space-y-2">
                     {drawerData.chairs.map((chair) => (
                       <div key={chair.chair_number} className={`rounded-lg p-4 flex items-center justify-between ${
-                        chair.status === 'occupied' ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'
+                        chair.status === 'occupied' ? 'bg-[#9B8CFF]/10 border border-[#9B8CFF]' : 'bg-gray-50 border border-gray-200'
                       }`}>
                         <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-lg ${chair.status === 'occupied' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                          <div className={`p-2 rounded-lg ${chair.status === 'occupied' ? 'bg-[#6C4CF3] text-white' : 'bg-gray-200 text-gray-500'}`}>
                             <ChairIcon />
                           </div>
                           <div>
@@ -1001,7 +1626,7 @@ const Dashboard = () => {
                           </div>
                         </div>
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          chair.status === 'occupied' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                          chair.status === 'occupied' ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' : 'bg-gray-100 text-gray-600'
                         }`}>
                           {chair.status === 'occupied' ? 'Occupied' : 'Available'}
                         </span>
@@ -1018,7 +1643,7 @@ const Dashboard = () => {
                           <h4 className="font-semibold text-gray-900">Report #{item.id}</h4>
                           <div className="grid grid-cols-2 gap-2 mt-2 text-sm text-gray-600">
                             <div><span className="font-medium">Patient ID:</span> {item.patient_id}</div>
-                            <div><span className="font-medium">Status:</span> <span className={`px-2 py-1 rounded text-xs ${item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : item.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{item.status}</span></div>
+                            <div><span className="font-medium">Status:</span> <span className={`px-2 py-1 rounded text-xs ${item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : item.status === 'completed' ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' : 'bg-gray-100 text-gray-800'}`}>{item.status}</span></div>
                           </div>
                           {item.created_at && (
                             <div className="text-xs text-gray-500 mt-2">
@@ -1072,7 +1697,7 @@ const Dashboard = () => {
                 {/* Patient Statistics Toggle */}
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
                   <div className="flex items-center gap-3">
-                    <i className="fi fi-sr-chart-histogram text-xl text-blue-600"></i>
+                    <i className="fi fi-sr-chart-histogram text-xl text-[#9B8CFF]"></i>
                     <div>
                       <div className="font-semibold text-gray-900">Patient Statistics</div>
                       <div className="text-xs text-gray-600">Bar chart showing patient trends</div>
@@ -1085,7 +1710,7 @@ const Dashboard = () => {
                       onChange={() => toggleWidget('patientStats')}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
                   </label>
                 </div>
 
@@ -1105,14 +1730,14 @@ const Dashboard = () => {
                       onChange={() => toggleWidget('demographics')}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
                   </label>
                 </div>
 
                 {/* Revenue Analytics Toggle */}
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
                   <div className="flex items-center gap-3">
-                    <i className="fi fi-sr-chart-line-up text-xl text-green-600"></i>
+                    <i className="fi fi-sr-chart-line-up text-xl text-[#6C4CF3]"></i>
                     <div>
                       <div className="font-semibold text-gray-900">Revenue Analytics</div>
                       <div className="text-xs text-gray-600">Weekly revenue line chart</div>
@@ -1125,7 +1750,7 @@ const Dashboard = () => {
                       onChange={() => toggleWidget('revenue')}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
                   </label>
                 </div>
 
@@ -1145,7 +1770,7 @@ const Dashboard = () => {
                       onChange={() => toggleWidget('appointments')}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
                   </label>
                 </div>
 
@@ -1165,7 +1790,7 @@ const Dashboard = () => {
                       onChange={() => toggleWidget('dentalChairs')}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
                   </label>
                 </div>
 
@@ -1185,7 +1810,7 @@ const Dashboard = () => {
                       onChange={() => toggleWidget('chairUtilization')}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
                   </label>
                 </div>
 
@@ -1205,7 +1830,7 @@ const Dashboard = () => {
                       onChange={() => toggleWidget('treatments')}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
                   </label>
                 </div>
 
@@ -1219,13 +1844,53 @@ const Dashboard = () => {
                     </div>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       checked={visibleWidgets.quality}
                       onChange={() => toggleWidget('quality')}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
+                  </label>
+                </div>
+
+                {/* Clinic Performance Toggle */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
+                  <div className="flex items-center gap-3">
+                    <i className="las la-trophy text-2xl text-purple-600"></i>
+                    <div>
+                      <div className="font-semibold text-gray-900">Clinic Performance</div>
+                      <div className="text-xs text-gray-600">Compare clinic metrics</div>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={visibleWidgets.clinicPerformance}
+                      onChange={() => toggleWidget('clinicPerformance')}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
+                  </label>
+                </div>
+
+                {/* Patient Map Toggle */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
+                  <div className="flex items-center gap-3">
+                    <i className="las la-map-marked-alt text-2xl text-red-600"></i>
+                    <div>
+                      <div className="font-semibold text-gray-900">Patient Locations</div>
+                      <div className="text-xs text-gray-600">Geographic patient distribution</div>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={visibleWidgets.patientMap}
+                      onChange={() => toggleWidget('patientMap')}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
                   </label>
                 </div>
               </div>
@@ -1235,13 +1900,137 @@ const Dashboard = () => {
             <div className="p-6 border-t border-gray-200">
               <button 
                 onClick={() => setShowCustomizeDrawer(false)} 
-                className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium"
+                className="w-full px-6 py-3 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium"
               >
                 Done
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Floating AI Chat Button */}
+      <button
+        onClick={() => setShowChatPanel(true)}
+        className="fixed bottom-6 right-6 bg-gradient-to-r from-[#6C4CF3] to-[#9B8CFF] hover:from-[#5b3dd9] hover:to-[#9B8CFF] text-white rounded-full p-4 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 z-40 group"
+        title="AI Dental Assistant"
+      >
+        <div className="relative">
+          {/* Teeth Icon */}
+          <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2C10.34 2 9 3.34 9 5C9 5.87 9.32 6.67 9.84 7.28C8.78 8.13 8 9.46 8 11C8 11.7 8.13 12.36 8.37 12.97C7.55 13.23 6.87 13.77 6.42 14.47C5.97 15.17 5.76 16 5.76 16.84C5.76 18.58 7.18 20 8.92 20C10.2 20 11.3 19.23 11.78 18.13C11.92 18.21 12.07 18.26 12.22 18.26C12.37 18.26 12.52 18.21 12.66 18.13C13.14 19.23 14.24 20 15.52 20C17.26 20 18.68 18.58 18.68 16.84C18.68 16 18.47 15.17 18.02 14.47C17.57 13.77 16.89 13.23 16.07 12.97C16.31 12.36 16.44 11.7 16.44 11C16.44 9.46 15.66 8.13 14.6 7.28C15.12 6.67 15.44 5.87 15.44 5C15.44 3.34 14.1 2 12.44 2H12Z"/>
+          </svg>
+          {/* AI Sparkle Effect */}
+          <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full animate-pulse">
+            <div className="absolute inset-0 bg-yellow-400 rounded-full animate-ping"></div>
+          </div>
+        </div>
+        {/* Tooltip */}
+        <div className="absolute bottom-full right-0 mb-2 px-3 py-1 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap">
+          AI Dental Assistant
+          <div className="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+        </div>
+      </button>
+
+      {/* AI Chat Panel */}
+      {showChatPanel && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50"
+            onClick={() => setShowChatPanel(false)}
+          />
+
+          {/* Chat Panel */}
+          <div className="fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 flex flex-col animate-slide-in-right">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-[#9B8CFF]/10 to-blue-50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-r from-[#6C4CF3] to-[#9B8CFF] rounded-full flex items-center justify-center">
+                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C10.34 2 9 3.34 9 5C9 5.87 9.32 6.67 9.84 7.28C8.78 8.13 8 9.46 8 11C8 11.7 8.13 12.36 8.37 12.97C7.55 13.23 6.87 13.77 6.42 14.47C5.97 15.17 5.76 16 5.76 16.84C5.76 18.58 7.18 20 8.92 20C10.2 20 11.3 19.23 11.78 18.13C11.92 18.21 12.07 18.26 12.22 18.26C12.37 18.26 12.52 18.21 12.66 18.13C13.14 19.23 14.24 20 15.52 20C17.26 20 18.68 18.58 18.68 16.84C18.68 16 18.47 15.17 18.02 14.47C17.57 13.77 16.89 13.23 16.07 12.97C16.31 12.36 16.44 11.7 16.44 11C16.44 9.46 15.66 8.13 14.6 7.28C15.12 6.67 15.44 5.87 15.44 5C15.44 3.34 14.1 2 12.44 2H12Z"/>
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">AI Dental Assistant</h3>
+                  <p className="text-xs text-gray-600">Powered by OpenAI & LangChain</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowChatPanel(false)}
+                className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Messages Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {chatMessages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
+                      message.type === 'user'
+                        ? 'bg-gradient-to-r from-[#6C4CF3] to-[#9B8CFF] text-white'
+                        : 'bg-gray-100 text-gray-900'
+                    }`}
+                  >
+                    <p className="text-sm">{message.content}</p>
+                    <p className={`text-xs mt-1 ${
+                      message.type === 'user' ? 'text-white' : 'text-gray-500'
+                    }`}>
+                      {message.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    </p>
+                  </div>
+                </div>
+              ))}
+
+              {/* Typing Indicator */}
+              {isTyping && (
+                <div className="flex justify-start">
+                  <div className="bg-gray-100 px-4 py-2 rounded-2xl">
+                    <div className="flex space-x-1">
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Input Area */}
+            <div className="p-4 border-t border-gray-200 bg-gray-50">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="Ask me about dental care, treatments, or clinic data..."
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                />
+                <button
+                  onClick={sendMessage}
+                  disabled={!chatInput.trim()}
+                  className="px-4 py-2 bg-gradient-to-r from-[#6C4CF3] to-[#9B8CFF] text-white rounded-full hover:from-[#5b3dd9] hover:to-[#9B8CFF] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-2 text-center">
+                AI integration with OpenAI & LangChain coming soon
+              </p>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

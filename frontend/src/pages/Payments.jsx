@@ -1,20 +1,24 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { FaSync } from "react-icons/fa";
+import { useHeader } from "../contexts/HeaderContext";
 import GearLoader from "../components/GearLoader";
 import { api } from "../utils/api";
+import InvoiceEditor from "../components/payments/InvoiceEditor";
+import InvoiceItem from "../components/payments/InvoiceItem";
 
-const PAYMENTS_PER_PAGE = 10;
+const INVOICES_PER_PAGE = 10;
 
 const Payments = () => {
   const { user } = useAuth();
-  const [payments, setPayments] = useState([]);
+  const { setTitle, setRefreshFunction } = useHeader();
+  const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [error, setError] = useState("");
   const [totalCount, setTotalCount] = useState(0);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
 
   // Debounce search term to avoid too many API calls
   useEffect(() => {
@@ -26,133 +30,81 @@ const Payments = () => {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Fetch payments from API with pagination and search
-  const fetchPayments = async () => {
+  // Fetch invoices from API with pagination and search
+  const fetchInvoices = async () => {
     try {
       setLoading(true);
       setError("");
       
-      const skip = (page - 1) * PAYMENTS_PER_PAGE;
+      const skip = (page - 1) * INVOICES_PER_PAGE;
       
       // Build query params
       const params = {
         skip: skip,
-        limit: PAYMENTS_PER_PAGE
+        limit: INVOICES_PER_PAGE
       };
       
-      // Add search filter if exists
+      // Add search filter if exists (search by patient name)
       if (debouncedSearch.trim()) {
-        params.patient_name = debouncedSearch;
+        // Note: Backend invoice search by patient_name would need to be implemented
+        // For now, we'll fetch all and filter client-side or implement backend search
       }
       
-      const paymentsData = await api.get('/payments', { params });
-      setPayments(paymentsData || []);
+      const invoicesData = await api.get('/invoices', { params });
+      setInvoices(invoicesData || []);
       
       // For total count, we'll use a rough estimate based on the number of results
-      // In a production app, the backend should return total count
-      if (paymentsData && paymentsData.length === PAYMENTS_PER_PAGE) {
-        setTotalCount((page) * PAYMENTS_PER_PAGE + 1); // At least one more page
+      if (invoicesData && invoicesData.length === INVOICES_PER_PAGE) {
+        setTotalCount((page) * INVOICES_PER_PAGE + 1);
       } else {
-        setTotalCount((page - 1) * PAYMENTS_PER_PAGE + (paymentsData?.length || 0));
+        setTotalCount((page - 1) * INVOICES_PER_PAGE + (invoicesData?.length || 0));
       }
     } catch (err) {
-      console.error('Error fetching payments:', err);
-      setError(err.message || 'Failed to fetch payments');
-      setPayments([]);
+      console.error('Error fetching invoices:', err);
+      setError(err.message || 'Failed to fetch invoices');
+      setInvoices([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchPayments();
+    setTitle('Invoices');
+    setRefreshFunction(() => fetchInvoices);
+  }, [setTitle, setRefreshFunction]);
+
+  useEffect(() => {
+    fetchInvoices();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, debouncedSearch]);
 
-  const getStatusBadge = (status) => {
-    const statusConfig = {
-      success: { color: "bg-[#9B8CFF]/20 text-[#6C4CF3] border-[#9B8CFF]", dot: "bg-[#6C4CF3]" },
-      pending: { color: "bg-orange-100 text-orange-800 border-orange-200", dot: "bg-orange-500" },
-      failed: { color: "bg-red-100 text-red-800 border-red-200", dot: "bg-red-500" },
-      refunded: { color: "bg-gray-100 text-gray-800 border-gray-200", dot: "bg-gray-500" }
-    };
-
-    const config = statusConfig[status] || statusConfig.pending;
-
-    return (
-      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${config.color}`}>
-        <span className={`w-2 h-2 rounded-full ${config.dot}`}></span>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
-      </span>
-    );
+  const handleInvoiceSelect = (invoiceId) => {
+    setSelectedInvoiceId(invoiceId);
   };
 
-  const formatAmount = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-    }).format(amount);
+  const handleInvoiceClose = () => {
+    setSelectedInvoiceId(null);
+    fetchInvoices(); // Refresh list after closing
   };
 
-  // Since we're using backend pagination, we use the current payments directly
-  const totalPages = Math.ceil(totalCount / PAYMENTS_PER_PAGE) || 1;
-  const currentPayments = payments;
-
-  if (loading) {
+  // Filter invoices client-side for search (until backend search is implemented)
+  const filteredInvoices = invoices.filter((invoice) => {
+    if (!searchTerm.trim()) return true;
+    const searchLower = searchTerm.toLowerCase();
     return (
-      <div className="flex items-center justify-center h-64">
-        <GearLoader size="w-8 h-8" />
-      </div>
+      invoice.patient_name?.toLowerCase().includes(searchLower) ||
+      invoice.invoice_number?.toLowerCase().includes(searchLower) ||
+      invoice.patient_phone?.toLowerCase().includes(searchLower)
     );
-  }
+  });
 
-  if (error) {
-    return (
-      <div className="p-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">Error loading payments</h3>
-              <p className="mt-1 text-sm text-red-700">{error}</p>
-              <button 
-                onClick={fetchPayments}
-                className="mt-2 text-sm bg-red-100 hover:bg-red-200 text-red-800 px-3 py-1 rounded"
-              >
-                Try Again
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Since we're using backend pagination, we use the current invoices directly
+  const totalPages = Math.ceil(totalCount / INVOICES_PER_PAGE) || 1;
+  const currentInvoices = filteredInvoices;
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="mb-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-gray-900">Payments</h1>
-              <button
-                onClick={fetchPayments}
-                disabled={loading}
-                className="p-1 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
-                title="Refresh payments"
-              >
-                <FaSync className={`w-4 h-4 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
-            <p className="text-gray-600 mt-1">Manage and track all payment transactions</p>
-          </div>
-        </div>
-      </div>
+    <div className="flex flex-col h-screen">
+      {/* Header - Removed, now in global Header */}
 
       {/* Search */}
       <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex-shrink-0">
@@ -160,7 +112,7 @@ const Payments = () => {
           <div className="flex-1">
             <input
               type="text"
-              placeholder="Search payments..."
+              placeholder="Search invoices..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
@@ -169,75 +121,72 @@ const Payments = () => {
         </div>
       </div>
 
-      {/* Payments Table Container */}
+      {/* Invoices Table Container */}
       <div className="flex-1 overflow-hidden">
-        <div className="h-full overflow-auto relative">
-          {loading && payments.length === 0 ? (
+        <div className="h-full overflow-auto">
+          {loading && invoices.length === 0 ? (
             <div className="w-full flex items-center justify-center py-16">
               <div className="text-center">
                 <GearLoader size="w-8 h-8" className="mx-auto" />
-                <p className="mt-2 text-sm text-gray-600">Loading payments...</p>
+                <p className="mt-2 text-sm text-gray-600">Loading invoices...</p>
+              </div>
+            </div>
+          ) : error ? (
+            <div className="p-6">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-red-800">Error loading invoices</h3>
+                    <p className="mt-1 text-sm text-red-700">{error}</p>
+                    <button 
+                      onClick={fetchInvoices}
+                      className="mt-2 text-sm bg-red-100 hover:bg-red-200 text-red-800 px-3 py-1 rounded"
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           ) : (
-            <>
-              <table className="w-full">
+            <table className="w-full">
               <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">Invoice</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice #</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Method</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Mode</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {currentPayments.length === 0 ? (
+                {currentInvoices.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                       <div>
-                        <p className="text-lg font-medium">No payments found</p>
-                        <p className="text-sm mt-1">Payments will appear here once transactions are made</p>
+                        <p className="text-lg font-medium">No invoices found</p>
+                        <p className="text-sm mt-1">Invoices will appear here once patients are registered</p>
                       </div>
                     </td>
                   </tr>
                 ) : (
-                  currentPayments.map((payment) => (
-                    <tr key={payment.id} className="hover:bg-gray-50 transition-colors duration-150">
-                      <td className="px-4 py-4 whitespace-nowrap text-center">
-                        <span className="text-gray-900 font-medium text-sm">
-                          #{payment.id}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="font-semibold text-gray-900">{payment.patient_name || payment.paid_by || 'Unknown Patient'}</div>
-                          <div className="text-sm text-gray-500">Patient</div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-900">{payment.patient_phone || 'N/A'}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-900">{formatAmount(payment.amount)}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(payment.status)}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-900">{payment.payment_method}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-900">{payment.created_at ? new Date(payment.created_at).toLocaleDateString() : 'N/A'}</td>
-                    </tr>
+                  currentInvoices.map((invoice) => (
+                    <InvoiceItem
+                      key={invoice.id}
+                      invoice={invoice}
+                      onSelect={handleInvoiceSelect}
+                    />
                   ))
                 )}
               </tbody>
             </table>
-            
-            {/* Loading overlay during pagination */}
-            {loading && payments.length > 0 && (
-              <div className="absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center">
-                <div className="flex flex-col items-center">
-                  <GearLoader size="w-8 h-8" />
-                  <p className="text-sm text-gray-600 mt-2">Loading...</p>
-                </div>
-              </div>
-            )}
-          </>
           )}
         </div>
       </div>
@@ -264,9 +213,9 @@ const Payments = () => {
           <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
             <div>
               <p className="text-sm text-gray-700">
-                Showing <span className="font-medium">{(page - 1) * PAYMENTS_PER_PAGE + 1}</span> to{' '}
-                <span className="font-medium">{Math.min(page * PAYMENTS_PER_PAGE, filteredPayments.length)}</span> of{' '}
-                <span className="font-medium">{filteredPayments.length}</span> results
+                Showing <span className="font-medium">{(page - 1) * INVOICES_PER_PAGE + 1}</span> to{' '}
+                <span className="font-medium">{Math.min(page * INVOICES_PER_PAGE, totalCount)}</span> of{' '}
+                <span className="font-medium">{totalCount}</span> results
               </p>
             </div>
             <div>
@@ -310,6 +259,15 @@ const Payments = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Invoice Editor Panel */}
+      {selectedInvoiceId && (
+        <InvoiceEditor
+          invoiceId={selectedInvoiceId}
+          onClose={handleInvoiceClose}
+          onSave={handleInvoiceClose}
+        />
       )}
     </div>
   );

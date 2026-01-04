@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 # Clinic Schemas
@@ -30,6 +30,9 @@ class ClinicCreate(ClinicBase):
 class ClinicOut(ClinicBase):
     id: int
     created_at: datetime
+    updated_at: datetime
+    synced_at: Optional[datetime] = None
+    sync_status: str = "local"
 
     class Config:
         from_attributes = True
@@ -53,6 +56,9 @@ class UserOut(UserBase):
     created_by: Optional[int] = None
     is_active: bool
     created_at: datetime
+    updated_at: datetime
+    synced_at: Optional[datetime] = None
+    sync_status: str = "local"
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     supabase_user_id: Optional[str] = None
@@ -79,6 +85,9 @@ class PatientOut(PatientBase):
     id: int
     clinic_id: int
     created_at: datetime
+    updated_at: datetime
+    synced_at: Optional[datetime] = None
+    sync_status: str = "local"
     
     class Config:
         from_attributes = True
@@ -87,6 +96,9 @@ class PatientResponse(PatientBase):
     id: int
     clinic_id: int
     created_at: datetime
+    updated_at: datetime
+    synced_at: Optional[datetime] = None
+    sync_status: str = "local"
     
     class Config:
         from_attributes = True 
@@ -108,6 +120,10 @@ class TreatmentTypeUpdate(BaseModel):
 class TreatmentTypeOut(TreatmentTypeBase):
     id: int
     clinic_id: int
+    created_at: datetime
+    updated_at: datetime
+    synced_at: Optional[datetime] = None
+    sync_status: str = "local"
 
     class Config:
         from_attributes = True 
@@ -129,6 +145,10 @@ class ReferringDoctorUpdate(BaseModel):
 class ReferringDoctorOut(ReferringDoctorBase):
     id: int
     clinic_id: int
+    created_at: datetime
+    updated_at: datetime
+    synced_at: Optional[datetime] = None
+    sync_status: str = "local"
     
     class Config:
         from_attributes = True 
@@ -163,6 +183,8 @@ class PaymentOut(PaymentBase):
     clinic_id: int
     created_at: datetime
     updated_at: datetime
+    synced_at: Optional[datetime] = None
+    sync_status: str = "local"
     
     # Nested patient info for frontend display
     patient_name: Optional[str] = None
@@ -174,6 +196,104 @@ class PaymentOut(PaymentBase):
     
     # Nested received by user info  
     received_by_name: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+# Invoice Schemas
+class InvoiceLineItemBase(BaseModel):
+    description: str
+    quantity: float = 1.0
+    unit_price: float
+    amount: Optional[float] = None  # Will be calculated as quantity * unit_price
+
+class InvoiceLineItemCreate(InvoiceLineItemBase):
+    pass
+
+class InvoiceLineItemOut(InvoiceLineItemBase):
+    id: int
+    invoice_id: int
+    created_at: datetime
+    updated_at: datetime
+    synced_at: Optional[datetime] = None
+    sync_status: str = "local"
+    
+    class Config:
+        from_attributes = True
+
+class InvoiceBase(BaseModel):
+    patient_id: int
+    visit_id: Optional[int] = None
+    payment_mode: Optional[str] = None
+    utr: Optional[str] = None
+    notes: Optional[str] = None
+
+class InvoiceCreate(InvoiceBase):
+    pass
+
+class InvoiceUpdate(BaseModel):
+    payment_mode: Optional[str] = None
+    utr: Optional[str] = None
+    notes: Optional[str] = None
+
+class InvoiceOut(InvoiceBase):
+    id: int
+    clinic_id: int
+    invoice_number: str
+    status: str  # draft, paid_unverified, paid_verified, cancelled
+    subtotal: float
+    tax: float
+    total: float
+    created_by: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+    synced_at: Optional[datetime] = None
+    sync_status: str = "local"
+    paid_at: Optional[datetime] = None
+    
+    # Nested patient info
+    patient_name: Optional[str] = None
+    patient_phone: Optional[str] = None
+    
+    # Line items
+    line_items: List[InvoiceLineItemOut] = []
+    
+    class Config:
+        from_attributes = True
+
+class MarkAsPaidRequest(BaseModel):
+    payment_mode: str  # UPI, Cash, Card, etc.
+    utr: Optional[str] = None
+
+# X-ray Image Schemas
+class XrayImageCreate(BaseModel):
+    patient_id: int
+    appointment_id: Optional[int] = None
+    image_type: str  # 'bitewing', 'panoramic', 'periapical', 'occlusal', 'ceph', etc.
+    notes: Optional[str] = None
+    brightness: Optional[float] = None
+    contrast: Optional[float] = None
+
+class XrayImageOut(BaseModel):
+    id: int
+    patient_id: int
+    appointment_id: Optional[int] = None
+    file_name: str
+    file_path: str
+    file_size: int
+    image_type: str
+    capture_date: datetime
+    brightness: Optional[float] = None
+    contrast: Optional[float] = None
+    notes: Optional[str] = None
+    created_by: int
+    created_at: datetime
+    updated_at: datetime
+    synced_at: Optional[datetime] = None
+    sync_status: str = "local"
+    
+    # Nested patient info
+    patient_name: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -191,30 +311,102 @@ class ReportResponse(BaseModel):
     pdf_url: Optional[str] = None
     status: str
     created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    synced_at: Optional[datetime] = None
+    sync_status: str = "local"
 
     class Config:
-        from_attributes = True 
+        from_attributes = True
 
-# WhatsApp Configuration Schemas
-class WhatsAppConfigBase(BaseModel):
-    api_key: str
-    phone_number: Optional[str] = None
-    is_active: bool = True
+# Subscription Schemas
+class SubscriptionBase(BaseModel):
+    plan_name: str
+    status: str = "active"
 
-class WhatsAppConfigCreate(WhatsAppConfigBase):
+class SubscriptionOut(SubscriptionBase):
+    id: int
+    clinic_id: int
+    razorpay_subscription_id: Optional[str] = None
+    razorpay_customer_id: Optional[str] = None
+    razorpay_plan_id: Optional[str] = None
+    current_start: Optional[datetime] = None
+    current_end: Optional[datetime] = None
+    quantity: int = 1
+    notes: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    updated_at: datetime
+    synced_at: Optional[datetime] = None
+    sync_status: str = "local"
+
+    class Config:
+        from_attributes = True
+
+class SubscriptionCreate(BaseModel):
+    plan_name: str  # professional, enterprise
+    razorpay_plan_id: str
+
+class SubscriptionUpdate(BaseModel):
+    status: Optional[str] = None
+    notes: Optional[Dict[str, Any]] = None
+
+# Attendance Schemas
+class AttendanceBase(BaseModel):
+    user_id: int
+    date: datetime
+    status: str  # on_time, late, absent, holiday
+    check_in_time: Optional[datetime] = None
+    check_out_time: Optional[datetime] = None
+    reason: Optional[str] = None
+    notes: Optional[str] = None
+
+class AttendanceCreate(AttendanceBase):
     pass
 
-class WhatsAppConfigUpdate(BaseModel):
-    api_key: Optional[str] = None
-    phone_number: Optional[str] = None
+class AttendanceUpdate(BaseModel):
+    status: Optional[str] = None
+    check_in_time: Optional[datetime] = None
+    check_out_time: Optional[datetime] = None
+    reason: Optional[str] = None
+    notes: Optional[str] = None
+
+class AttendanceOut(AttendanceBase):
+    id: int
+    clinic_id: int
+    marked_by: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+    synced_at: Optional[datetime] = None
+    sync_status: str = "local"
+    user_name: Optional[str] = None
+    user_role: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+# Message Template Schemas
+class MessageTemplateBase(BaseModel):
+    name: str  # e.g., "welcome", "invoice"
+    title: str  # Display name
+    content: str  # Template content
+    variables: Optional[List[str]] = []  # Available variables
+    is_active: bool = True
+
+class MessageTemplateCreate(MessageTemplateBase):
+    clinic_id: Optional[int] = None
+
+class MessageTemplateUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    variables: Optional[List[str]] = None
     is_active: Optional[bool] = None
 
-class WhatsAppConfigResponse(WhatsAppConfigBase):
+class MessageTemplateOut(MessageTemplateBase):
     id: int
-    user_id: int
     clinic_id: int
     created_at: datetime
     updated_at: datetime
+    synced_at: Optional[datetime] = None
+    sync_status: str = "local"
     
     class Config:
         from_attributes = True 
