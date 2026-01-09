@@ -64,3 +64,7 @@ def add_attendance_location_fields():
 if __name__ == "__main__":
     add_attendance_location_fields()
 
+
+
+
+

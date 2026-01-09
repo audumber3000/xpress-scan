@@ -3,191 +3,352 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Better Clinic - Healthcare Software Solutions</title>
-    <meta name="description" content="Better Clinic builds healthcare software for modern clinics. BDent for dental, BSono for sonography.">
-    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-icon-32x32.png">
+    <title>Clino Health - Healthcare Software Solutions</title>
+    <meta name="description" content="Clino Health builds healthcare software for modern clinics. BDent for dental, BSono for sonography.">
+    <link rel="icon" type="image/svg+xml" href="assets/clino-health-logo.svg">
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>body { font-family: 'Inter', sans-serif; }</style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+        }
+        :root {
+            --clino-dark: #143601;
+            --clino-medium: #245501;
+            --clino-light: #73a942;
+        }
+        .gradient-bg {
+            background: linear-gradient(135deg, #f0f9f0 0%, #ffffff 50%, #f0f9f0 100%);
+        }
+        .text-clino-dark { color: #143601; }
+        .text-clino-medium { color: #245501; }
+        .text-clino-light { color: #73a942; }
+        .bg-clino-dark { background-color: #143601; }
+        .bg-clino-medium { background-color: #245501; }
+        .bg-clino-light { background-color: #73a942; }
+        .border-clino-dark { border-color: #143601; }
+        .border-clino-medium { border-color: #245501; }
+        .border-clino-light { border-color: #73a942; }
+        .hover\:bg-clino-dark:hover { background-color: #143601; }
+        .hover\:bg-clino-medium:hover { background-color: #245501; }
+        .hover\:text-clino-light:hover { color: #73a942; }
+    </style>
 </head>
 <body class="bg-white">
     <!-- Navigation -->
-    <nav class="fixed top-0 w-full bg-white/95 backdrop-blur-sm border-b border-gray-100 z-50">
+    <nav class="fixed top-0 w-full bg-white/98 backdrop-blur-md border-b border-gray-100 z-50 shadow-sm">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-16">
-                <a href="/"><img src="assets/betterclinic-logo.png" alt="Better Clinic" class="h-12 w-auto"></a>
-                <div class="hidden md:flex items-center space-x-8">
-                    <a href="#products" class="text-gray-600 hover:text-green-600">Products</a>
-                    <a href="#why-us" class="text-gray-600 hover:text-green-600">Why Us</a>
-                    <a href="#contact" class="text-gray-600 hover:text-green-600">Contact</a>
+            <div class="flex justify-between items-center h-20">
+                <a href="/" class="flex items-center space-x-3">
+                    <img src="assets/clino-health-logo-full.svg" alt="Clino Health" class="h-12 w-auto" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <span class="hidden text-2xl font-bold">
+                        <span class="text-clino-light">Clino</span> <span class="text-clino-dark">Health</span>
+                    </span>
+                </a>
+                <div class="hidden md:flex items-center space-x-10">
+                    <a href="#products" class="text-gray-700 hover:text-clino-medium font-medium transition-colors">Products</a>
+                    <a href="#features" class="text-gray-700 hover:text-clino-medium font-medium transition-colors">Features</a>
+                    <a href="#why-us" class="text-gray-700 hover:text-clino-medium font-medium transition-colors">Why Us</a>
+                    <a href="#contact" class="text-gray-700 hover:text-clino-medium font-medium transition-colors">Contact</a>
                 </div>
-                <a href="bdent/" class="hidden md:flex bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">Get Started</a>
+                <a href="bdent/" class="hidden md:flex bg-clino-medium text-white px-8 py-3 rounded-lg font-semibold hover:bg-clino-dark transition-all shadow-md hover:shadow-lg">
+                    Get Started
+                </a>
             </div>
         </div>
     </nav>
 
-    <!-- Hero -->
-    <section class="pt-28 pb-20 bg-gradient-to-br from-green-50 via-white to-blue-50">
-        <div class="max-w-4xl mx-auto px-4 text-center">
-            <div class="inline-flex bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-medium mb-8">
-                🏥 Building the future of healthcare software
-            </div>
-            <h1 class="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
-                Healthcare Software<br><span class="text-green-600">Built for India</span>
-            </h1>
-            <p class="text-xl text-gray-600 mb-10 max-w-3xl mx-auto">
-                We build specialized clinic management software for healthcare professionals. 
-                Simple, affordable, and designed to work offline. Trusted by 250+ clinics.
-            </p>
-            <div class="flex flex-col sm:flex-row gap-4 justify-center">
-                <a href="#products" class="bg-green-600 text-white px-8 py-4 rounded-xl hover:bg-green-700 text-lg font-medium shadow-lg">
-                    Explore Products ↓
-                </a>
-                <a href="#contact" class="text-gray-600 hover:text-green-600 px-8 py-4 font-medium">Contact Sales →</a>
-            </div>
-            
-            <!-- Stats -->
-            <div class="mt-20 grid grid-cols-2 md:grid-cols-4 gap-8">
-                <div class="text-center"><div class="text-4xl font-bold text-green-600">250+</div><div class="text-gray-600">Clinics</div></div>
-                <div class="text-center"><div class="text-4xl font-bold text-green-600">50K+</div><div class="text-gray-600">Patients</div></div>
-                <div class="text-center"><div class="text-4xl font-bold text-green-600">99.9%</div><div class="text-gray-600">Uptime</div></div>
-                <div class="text-center"><div class="text-4xl font-bold text-green-600">24/7</div><div class="text-gray-600">Support</div></div>
+    <!-- Hero Section -->
+    <section class="pt-32 pb-24 gradient-bg relative overflow-hidden">
+        <div class="absolute inset-0 opacity-5">
+            <div class="absolute top-20 left-10 w-72 h-72 bg-clino-light rounded-full blur-3xl"></div>
+            <div class="absolute bottom-20 right-10 w-96 h-96 bg-clino-medium rounded-full blur-3xl"></div>
+        </div>
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div class="text-center max-w-4xl mx-auto">
+                <div class="inline-flex items-center bg-clino-light/10 text-clino-dark px-6 py-3 rounded-full text-sm font-semibold mb-8 border border-clino-light/20">
+                    <span class="mr-2">🏥</span>
+                    Building the future of healthcare software
+                </div>
+                <h1 class="text-5xl md:text-7xl font-extrabold text-gray-900 mb-8 leading-tight">
+                    Healthcare Software<br>
+                    <span class="bg-gradient-to-r from-clino-dark to-clino-medium bg-clip-text text-transparent">
+                        Built for India
+                    </span>
+                </h1>
+                <p class="text-xl md:text-2xl text-gray-600 mb-12 max-w-3xl mx-auto leading-relaxed">
+                    We build specialized clinic management software for healthcare professionals. 
+                    Simple, affordable, and designed to work offline. Trusted by 250+ clinics across India.
+                </p>
+                <div class="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
+                    <a href="#products" class="bg-clino-medium text-white px-10 py-4 rounded-xl hover:bg-clino-dark text-lg font-semibold shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-1">
+                        Explore Products ↓
+                    </a>
+                    <a href="#contact" class="text-gray-700 hover:text-clino-medium px-10 py-4 font-semibold text-lg border-2 border-gray-300 rounded-xl hover:border-clino-medium transition-all">
+                        Contact Sales →
+                    </a>
+                </div>
+                
+                <!-- Stats -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-8 mt-20">
+                    <div class="text-center">
+                        <div class="text-5xl font-extrabold text-clino-medium mb-2">250+</div>
+                        <div class="text-gray-600 font-medium">Clinics</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-5xl font-extrabold text-clino-medium mb-2">50K+</div>
+                        <div class="text-gray-600 font-medium">Patients</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-5xl font-extrabold text-clino-medium mb-2">99.9%</div>
+                        <div class="text-gray-600 font-medium">Uptime</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-5xl font-extrabold text-clino-medium mb-2">24/7</div>
+                        <div class="text-gray-600 font-medium">Support</div>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
 
-    <!-- Products -->
-    <section id="products" class="py-20 bg-white">
-        <div class="max-w-7xl mx-auto px-4">
-            <div class="text-center mb-16">
-                <h2 class="text-4xl font-bold text-gray-900 mb-4">Our Products</h2>
-                <p class="text-xl text-gray-600">Specialized software for different healthcare practices</p>
+    <!-- Products Section -->
+    <section id="products" class="py-24 bg-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-20">
+                <h2 class="text-4xl md:text-5xl font-extrabold text-gray-900 mb-6">Our Products</h2>
+                <p class="text-xl text-gray-600 max-w-2xl mx-auto">Specialized software solutions for different healthcare practices</p>
             </div>
-            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-5xl mx-auto">
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
                 <!-- BDent -->
-                <a href="bdent/" class="group border-2 border-green-200 rounded-2xl p-8 hover:border-green-500 hover:shadow-xl transition-all">
-                    <div class="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-green-200">
-                        <span class="text-3xl">🦷</span>
+                <a href="bdent/" class="group border-2 border-clino-light/30 rounded-2xl p-8 hover:border-clino-medium hover:shadow-2xl transition-all transform hover:-translate-y-2 bg-white">
+                    <div class="w-20 h-20 bg-clino-light/10 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-clino-light/20 transition-colors">
+                        <span class="text-4xl">🦷</span>
                     </div>
-                    <span class="inline-block bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium mb-4">Available</span>
-                    <h3 class="text-2xl font-bold text-gray-900 mb-2">BDent</h3>
-                    <p class="text-gray-600 mb-4">Dental practice management software</p>
-                    <span class="text-green-600 font-medium">Learn more →</span>
+                    <span class="inline-block bg-clino-light/10 text-clino-dark px-4 py-2 rounded-full text-sm font-semibold mb-4">Available</span>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-3">BDent</h3>
+                    <p class="text-gray-600 mb-6 leading-relaxed">Dental practice management software</p>
+                    <span class="text-clino-medium font-semibold group-hover:text-clino-dark">Learn more →</span>
                 </a>
                 <!-- BSono -->
-                <a href="bsono/" class="group border-2 border-blue-200 rounded-2xl p-8 hover:border-blue-500 hover:shadow-xl transition-all">
-                    <div class="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-blue-200">
-                        <span class="text-3xl">🔊</span>
+                <a href="bsono/" class="group border-2 border-blue-200 rounded-2xl p-8 hover:border-blue-400 hover:shadow-2xl transition-all transform hover:-translate-y-2 bg-white">
+                    <div class="w-20 h-20 bg-blue-100 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-blue-200 transition-colors">
+                        <span class="text-4xl">🔊</span>
                     </div>
-                    <span class="inline-block bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-sm font-medium mb-4">Coming Soon</span>
-                    <h3 class="text-2xl font-bold text-gray-900 mb-2">BSono</h3>
-                    <p class="text-gray-600 mb-4">Sonography center management</p>
-                    <span class="text-blue-600 font-medium">Notify me →</span>
+                    <span class="inline-block bg-yellow-100 text-yellow-700 px-4 py-2 rounded-full text-sm font-semibold mb-4">Coming Soon</span>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-3">BSono</h3>
+                    <p class="text-gray-600 mb-6 leading-relaxed">Sonography center management</p>
+                    <span class="text-blue-600 font-semibold">Notify me →</span>
                 </a>
                 <!-- BPhysio -->
-                <div class="border-2 border-gray-200 rounded-2xl p-8 opacity-60">
-                    <div class="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-6">
-                        <span class="text-3xl">💪</span>
+                <div class="border-2 border-gray-200 rounded-2xl p-8 opacity-60 bg-white">
+                    <div class="w-20 h-20 bg-gray-100 rounded-2xl flex items-center justify-center mb-6">
+                        <span class="text-4xl">💪</span>
                     </div>
-                    <span class="inline-block bg-gray-200 text-gray-600 px-3 py-1 rounded-full text-sm font-medium mb-4">Coming Soon</span>
-                    <h3 class="text-2xl font-bold text-gray-900 mb-2">BPhysio</h3>
-                    <p class="text-gray-600 mb-4">Physiotherapy clinic management</p>
-                    <span class="text-gray-400 font-medium">Notify me →</span>
+                    <span class="inline-block bg-gray-200 text-gray-600 px-4 py-2 rounded-full text-sm font-semibold mb-4">Coming Soon</span>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-3">BPhysio</h3>
+                    <p class="text-gray-600 mb-6 leading-relaxed">Physiotherapy clinic management</p>
+                    <span class="text-gray-400 font-semibold">Notify me →</span>
                 </div>
                 <!-- BPath -->
-                <div class="border-2 border-gray-200 rounded-2xl p-8 opacity-60">
-                    <div class="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-6">
-                        <span class="text-3xl">🔬</span>
+                <div class="border-2 border-gray-200 rounded-2xl p-8 opacity-60 bg-white">
+                    <div class="w-20 h-20 bg-gray-100 rounded-2xl flex items-center justify-center mb-6">
+                        <span class="text-4xl">🔬</span>
                     </div>
-                    <span class="inline-block bg-gray-200 text-gray-600 px-3 py-1 rounded-full text-sm font-medium mb-4">Coming Soon</span>
-                    <h3 class="text-2xl font-bold text-gray-900 mb-2">BPath</h3>
-                    <p class="text-gray-600 mb-4">Pathology lab management</p>
-                    <span class="text-gray-400 font-medium">Notify me →</span>
+                    <span class="inline-block bg-gray-200 text-gray-600 px-4 py-2 rounded-full text-sm font-semibold mb-4">Coming Soon</span>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-3">BPath</h3>
+                    <p class="text-gray-600 mb-6 leading-relaxed">Pathology lab management</p>
+                    <span class="text-gray-400 font-semibold">Notify me →</span>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Why Us -->
-    <section id="why-us" class="py-20 bg-gray-50">
-        <div class="max-w-7xl mx-auto px-4">
-            <div class="text-center mb-16">
-                <h2 class="text-4xl font-bold text-gray-900 mb-4">Why Better Clinic?</h2>
-                <p class="text-xl text-gray-600">Built for Indian healthcare providers</p>
+    <!-- Features Section -->
+    <section id="features" class="py-24 bg-gradient-to-b from-white to-gray-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-20">
+                <h2 class="text-4xl md:text-5xl font-extrabold text-gray-900 mb-6">Powerful Features</h2>
+                <p class="text-xl text-gray-600 max-w-2xl mx-auto">Everything you need to run your clinic efficiently</p>
             </div>
-            <div class="grid md:grid-cols-4 gap-8">
-                <div class="text-center bg-white p-6 rounded-xl shadow-sm">
-                    <div class="w-14 h-14 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                        <svg class="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <div class="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all transform hover:-translate-y-1 border border-gray-100">
+                    <div class="w-16 h-16 bg-clino-light/10 rounded-2xl flex items-center justify-center mb-6">
+                        <svg class="w-8 h-8 text-clino-medium" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                        </svg>
                     </div>
-                    <h3 class="font-semibold text-gray-900 mb-2">Works Offline</h3>
-                    <p class="text-gray-600 text-sm">No internet? No problem. Your clinic keeps running.</p>
+                    <h3 class="text-xl font-bold text-gray-900 mb-3">Works Offline</h3>
+                    <p class="text-gray-600 leading-relaxed">No internet? No problem. Your clinic keeps running seamlessly.</p>
                 </div>
-                <div class="text-center bg-white p-6 rounded-xl shadow-sm">
-                    <div class="w-14 h-14 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                        <svg class="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <div class="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all transform hover:-translate-y-1 border border-gray-100">
+                    <div class="w-16 h-16 bg-clino-light/10 rounded-2xl flex items-center justify-center mb-6">
+                        <svg class="w-8 h-8 text-clino-medium" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
                     </div>
-                    <h3 class="font-semibold text-gray-900 mb-2">Affordable</h3>
-                    <p class="text-gray-600 text-sm">One-time payment. No expensive monthly fees.</p>
+                    <h3 class="text-xl font-bold text-gray-900 mb-3">Affordable</h3>
+                    <p class="text-gray-600 leading-relaxed">One-time payment. No expensive monthly fees or hidden charges.</p>
                 </div>
-                <div class="text-center bg-white p-6 rounded-xl shadow-sm">
-                    <div class="w-14 h-14 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                        <svg class="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
+                <div class="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all transform hover:-translate-y-1 border border-gray-100">
+                    <div class="w-16 h-16 bg-clino-light/10 rounded-2xl flex items-center justify-center mb-6">
+                        <svg class="w-8 h-8 text-clino-medium" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
+                        </svg>
                     </div>
-                    <h3 class="font-semibold text-gray-900 mb-2">Local Support</h3>
-                    <p class="text-gray-600 text-sm">WhatsApp & phone support in Hindi/English.</p>
+                    <h3 class="text-xl font-bold text-gray-900 mb-3">Local Support</h3>
+                    <p class="text-gray-600 leading-relaxed">WhatsApp & phone support in Hindi/English. Always here to help.</p>
                 </div>
-                <div class="text-center bg-white p-6 rounded-xl shadow-sm">
-                    <div class="w-14 h-14 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                        <svg class="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                <div class="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all transform hover:-translate-y-1 border border-gray-100">
+                    <div class="w-16 h-16 bg-clino-light/10 rounded-2xl flex items-center justify-center mb-6">
+                        <svg class="w-8 h-8 text-clino-medium" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                        </svg>
                     </div>
-                    <h3 class="font-semibold text-gray-900 mb-2">Your Data, Your Control</h3>
-                    <p class="text-gray-600 text-sm">Data stored locally. Complete privacy.</p>
+                    <h3 class="text-xl font-bold text-gray-900 mb-3">Your Data, Your Control</h3>
+                    <p class="text-gray-600 leading-relaxed">Data stored locally. Complete privacy and security guaranteed.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Contact -->
-    <section id="contact" class="py-20 bg-white">
-        <div class="max-w-4xl mx-auto px-4 text-center">
-            <h2 class="text-4xl font-bold text-gray-900 mb-4">Get in Touch</h2>
-            <p class="text-xl text-gray-600 mb-8">Ready to transform your practice?</p>
-            <div class="grid md:grid-cols-3 gap-6 mb-8">
-                <a href="https://wa.me/918766742410" class="flex items-center justify-center space-x-3 bg-green-100 text-green-700 px-6 py-4 rounded-xl font-medium hover:bg-green-200">
-                    <span>📱 WhatsApp</span>
+    <!-- Why Us Section -->
+    <section id="why-us" class="py-24 bg-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-20">
+                <h2 class="text-4xl md:text-5xl font-extrabold text-gray-900 mb-6">Why Clino Health?</h2>
+                <p class="text-xl text-gray-600 max-w-2xl mx-auto">Built specifically for Indian healthcare providers</p>
+            </div>
+            <div class="grid lg:grid-cols-2 gap-12 items-center">
+                <div>
+                    <div class="space-y-8">
+                        <div class="flex items-start space-x-4">
+                            <div class="flex-shrink-0 w-12 h-12 bg-clino-medium rounded-xl flex items-center justify-center">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900 mb-2">Made for Indian Clinics</h3>
+                                <p class="text-gray-600">Designed with Indian healthcare workflows in mind. Supports local languages and payment methods.</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start space-x-4">
+                            <div class="flex-shrink-0 w-12 h-12 bg-clino-medium rounded-xl flex items-center justify-center">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900 mb-2">Easy to Use</h3>
+                                <p class="text-gray-600">Intuitive interface that your staff can learn in minutes. No complex training required.</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start space-x-4">
+                            <div class="flex-shrink-0 w-12 h-12 bg-clino-medium rounded-xl flex items-center justify-center">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900 mb-2">Regular Updates</h3>
+                                <p class="text-gray-600">We continuously improve based on feedback from real clinics. Your software gets better over time.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gradient-to-br from-clino-light/10 to-clino-medium/10 rounded-3xl p-12 border border-clino-light/20">
+                    <div class="text-center">
+                        <div class="text-6xl font-extrabold text-clino-medium mb-4">250+</div>
+                        <div class="text-2xl font-semibold text-gray-900 mb-8">Clinics Trust Us</div>
+                        <div class="space-y-4 text-left">
+                            <div class="flex items-center space-x-3">
+                                <svg class="w-6 h-6 text-clino-medium" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                                <span class="text-gray-700">50,000+ patients managed</span>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <svg class="w-6 h-6 text-clino-medium" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                                <span class="text-gray-700">99.9% uptime guarantee</span>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <svg class="w-6 h-6 text-clino-medium" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                                <span class="text-gray-700">24/7 customer support</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contact" class="py-24 bg-gradient-to-b from-gray-50 to-white">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <h2 class="text-4xl md:text-5xl font-extrabold text-gray-900 mb-6">Get in Touch</h2>
+            <p class="text-xl text-gray-600 mb-12">Ready to transform your practice? Let's talk.</p>
+            <div class="grid md:grid-cols-3 gap-6 mb-12">
+                <a href="https://wa.me/918766742410" class="flex flex-col items-center justify-center space-y-3 bg-clino-light/10 text-clino-dark px-8 py-6 rounded-2xl font-semibold hover:bg-clino-light/20 transition-all border-2 border-clino-light/20 hover:border-clino-medium transform hover:-translate-y-1">
+                    <span class="text-4xl">📱</span>
+                    <span>WhatsApp</span>
                 </a>
-                <a href="mailto:support@betterclinic.app" class="flex items-center justify-center space-x-3 bg-blue-100 text-blue-700 px-6 py-4 rounded-xl font-medium hover:bg-blue-200">
-                    <span>✉️ Email</span>
+                <a href="mailto:support@clinohealth.app" class="flex flex-col items-center justify-center space-y-3 bg-clino-medium/10 text-clino-dark px-8 py-6 rounded-2xl font-semibold hover:bg-clino-medium/20 transition-all border-2 border-clino-medium/20 hover:border-clino-medium transform hover:-translate-y-1">
+                    <span class="text-4xl">✉️</span>
+                    <span>Email</span>
                 </a>
-                <a href="tel:+918766742410" class="flex items-center justify-center space-x-3 bg-gray-100 text-gray-700 px-6 py-4 rounded-xl font-medium hover:bg-gray-200">
-                    <span>📞 +91 8766742410</span>
+                <a href="tel:+918766742410" class="flex flex-col items-center justify-center space-y-3 bg-clino-dark/10 text-clino-dark px-8 py-6 rounded-2xl font-semibold hover:bg-clino-dark/20 transition-all border-2 border-clino-dark/20 hover:border-clino-dark transform hover:-translate-y-1">
+                    <span class="text-4xl">📞</span>
+                    <span>+91 8766742410</span>
                 </a>
             </div>
-            <p class="text-gray-500 text-sm">Based in Pune, Maharashtra. Serving clinics across India.</p>
+            <div class="bg-white rounded-2xl p-8 shadow-lg border border-gray-100">
+                <p class="text-gray-700 font-medium mb-2">📍 Based in Pune, Maharashtra</p>
+                <p class="text-gray-600">Serving clinics across India</p>
+            </div>
         </div>
     </section>
 
     <!-- Footer -->
-    <footer class="bg-gray-900 text-white py-12">
-        <div class="max-w-7xl mx-auto px-4">
-            <div class="flex flex-col md:flex-row justify-between items-center">
-                <img src="assets/betterclinic-logo.png" alt="Better Clinic" class="h-10 w-auto brightness-0 invert mb-4 md:mb-0">
-                <div class="flex space-x-6 text-gray-400 text-sm">
-                    <a href="bdent/" class="hover:text-white">BDent</a>
-                    <a href="#products" class="hover:text-white">Products</a>
-                    <a href="#contact" class="hover:text-white">Contact</a>
+    <footer class="bg-clino-dark text-white py-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-12">
+                <div class="mb-6 md:mb-0">
+                    <img src="assets/clino-health-logo-full.svg" alt="Clino Health" class="h-12 w-auto brightness-0 invert" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <div class="hidden text-2xl font-bold">
+                        <span class="text-clino-light">Clino</span> <span class="text-white">Health</span>
+                    </div>
+                </div>
+                <div class="flex flex-wrap justify-center gap-8 text-gray-300">
+                    <a href="bdent/" class="hover:text-white transition-colors font-medium">BDent</a>
+                    <a href="#products" class="hover:text-white transition-colors font-medium">Products</a>
+                    <a href="#features" class="hover:text-white transition-colors font-medium">Features</a>
+                    <a href="#contact" class="hover:text-white transition-colors font-medium">Contact</a>
                 </div>
             </div>
-            <div class="mt-8 pt-8 border-t border-gray-800 text-center text-gray-500 text-sm">
-                © 2024 Better Clinic. Made with ❤️ in India.
+            <div class="pt-8 border-t border-gray-700 text-center text-gray-400 text-sm">
+                © 2024 Clino Health. Made with ❤️ in India.
             </div>
         </div>
     </footer>
 
     <script>
-        document.getElementById('mobile-menu-btn')?.addEventListener('click', function() {
-            document.getElementById('mobile-menu').classList.toggle('hidden');
+        // Smooth scrolling for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
         });
     </script>
 </body>

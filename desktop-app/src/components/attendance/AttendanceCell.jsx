@@ -51,3 +51,7 @@ const AttendanceCell = ({ status, reason, isHoliday, holidayName }) => {
 export default AttendanceCell;
 
 
+
+
+
+

@@ -18,6 +18,10 @@ from routes import auth
 from routes import payments
 # from routes import whatsapp_config  # File doesn't exist, commented out
 from routes import whatsapp_inbox
+from routes import whatsapp_groups
+from routes import whatsapp_profile
+from routes import whatsapp_contacts
+from routes import whatsapp_messages_advanced
 from routes import attendance
 from routes import attendance_mobile
 from routes import appointments
@@ -27,6 +31,7 @@ from routes import message_templates
 from routes import devices
 from routes import dashboard
 from routes import sync
+from routes import auth_mobile
 from services.template_service import TemplateService
 
 # Get the base path for PyInstaller bundled app
@@ -80,6 +85,7 @@ else:
     print(f"Warning: templates/assets not found at {templates_assets_path}")
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
+app.include_router(auth_mobile.router, prefix="/auth/mobile", tags=["auth_mobile"])
 app.include_router(patients.router, prefix="/patients", tags=["patients"])
 app.include_router(reports.router, prefix="/reports", tags=["reports"])
 app.include_router(treatment_types.router, prefix="/treatment-types", tags=["treatment_types"])
@@ -90,6 +96,10 @@ app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(payments.router, prefix="/payments", tags=["payments"])
 # app.include_router(whatsapp_config.router, prefix="/whatsapp-config", tags=["whatsapp_config"])  # File doesn't exist, commented out
 app.include_router(whatsapp_inbox.router, prefix="/whatsapp/inbox", tags=["whatsapp_inbox"])
+app.include_router(whatsapp_groups.router, prefix="/whatsapp/groups", tags=["whatsapp_groups"])
+app.include_router(whatsapp_profile.router, prefix="/whatsapp/profile", tags=["whatsapp_profile"])
+app.include_router(whatsapp_contacts.router, prefix="/whatsapp/contacts", tags=["whatsapp_contacts"])
+app.include_router(whatsapp_messages_advanced.router, prefix="/whatsapp/messages", tags=["whatsapp_messages_advanced"])
 app.include_router(attendance.router, prefix="/attendance", tags=["attendance"])
 app.include_router(attendance_mobile.router, prefix="/attendance-mobile", tags=["attendance_mobile"])
 app.include_router(appointments.router, prefix="/appointments", tags=["appointments"])

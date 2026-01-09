@@ -223,7 +223,7 @@ async def signup(
         
         # Create JWT token for backend authentication
         token = create_jwt_token(user.id)
-        
+
         return {
             "message": "User created successfully",
             "user": UserOut.from_orm(user),
@@ -293,7 +293,7 @@ async def login(
         
         # Create JWT token for backend authentication
         token = create_jwt_token(user.id)
-        
+
         return {
             "message": "Login successful",
             "user": UserOut.from_orm(user),
@@ -447,7 +447,7 @@ async def oauth_login(request: Request, db: Session = Depends(get_db)):
     # Issue backend JWT
     token = create_jwt_token(user.id)
     print(f"Generated JWT token for user {user.id}")
-    
+
     return {
         "message": "OAuth login successful",
         "user": UserOut.from_orm(user),

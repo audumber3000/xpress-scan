@@ -111,3 +111,7 @@ const XrayCapture = ({ onImageCaptured, disabled = false }) => {
 export default XrayCapture;
 
 
+
+
+
+

@@ -6,7 +6,7 @@ from models import User, ScheduledMessage, Patient
 import os
 import requests
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel
 
 router = APIRouter(tags=["WhatsApp Inbox"])
@@ -314,7 +314,7 @@ async def schedule_whatsapp_message(
             scheduled_datetime = datetime.fromisoformat(scheduled_at_str)
             # Convert to UTC if timezone-aware
             if scheduled_datetime.tzinfo:
-                scheduled_datetime = scheduled_datetime.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+                scheduled_datetime = scheduled_datetime.astimezone(timezone.utc).replace(tzinfo=None)
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -322,7 +322,7 @@ async def schedule_whatsapp_message(
             )
         
         # Validate it's in the future
-        if scheduled_datetime <= datetime.utcnow():
+        if scheduled_datetime <= datetime.now(timezone.utc).replace(tzinfo=None):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Scheduled time must be in the future"

@@ -153,3 +153,7 @@ const EmployeeDetailsPanel = ({ employee, onClose }) => {
 export default EmployeeDetailsPanel;
 
 
+
+
+
+

@@ -67,3 +67,7 @@ def add_created_at_to_treatment_types():
 if __name__ == "__main__":
     add_created_at_to_treatment_types()
 
+
+
+
+

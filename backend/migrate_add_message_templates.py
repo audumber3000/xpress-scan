@@ -103,3 +103,7 @@ def create_message_templates_table():
 if __name__ == "__main__":
     create_message_templates_table()
 
+
+
+
+

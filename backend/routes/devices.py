@@ -179,3 +179,7 @@ def delete_device(
     db.commit()
     return None
 
+
+
+
+

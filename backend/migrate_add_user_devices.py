@@ -67,3 +67,7 @@ def create_user_devices_table():
 if __name__ == "__main__":
     create_user_devices_table()
 
+
+
+
+

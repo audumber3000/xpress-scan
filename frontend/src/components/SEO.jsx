@@ -1,28 +1,60 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
 
-const SEO = ({ title, description, keywords, image }) => {
-  const defaultTitle = 'BetterClinic - Medical Practice Management';
-  const defaultDescription = 'Streamline your medical practice with BetterClinic - comprehensive patient management, reporting, and billing solutions.';
-  const defaultKeywords = 'medical practice management, clinic software, patient management, medical billing';
+const SEO = ({ title, description, keywords, url, image, structuredData, faqStructuredData }) => {
+  const defaultTitle = 'Clino Health - Healthcare Software Solutions';
+  const defaultDescription = 'Clino Health builds healthcare software for modern clinics. BDent for dental, BSono for sonography. Simple, affordable, and designed to work offline.';
+  const defaultKeywords = 'clino health, healthcare software, clinic management software, dental software, sonography software, medical practice management';
+  const defaultUrl = 'https://clinohealth.app';
+  const defaultImage = 'https://clinohealth.app/og-image.png';
+
+  const pageTitle = title || defaultTitle;
+  const pageDescription = description || defaultDescription;
+  const pageKeywords = keywords || defaultKeywords;
+  const pageUrl = url || defaultUrl;
+  const pageImage = image || defaultImage;
 
   return (
     <Helmet>
-      <title>{title || defaultTitle}</title>
-      <meta name="description" content={description || defaultDescription} />
-      <meta name="keywords" content={keywords || defaultKeywords} />
+      {/* Primary Meta Tags */}
+      <title>{pageTitle}</title>
+      <meta name="description" content={pageDescription} />
+      <meta name="keywords" content={pageKeywords} />
+      <meta name="author" content="Clino Health" />
+      <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+      <link rel="canonical" href={pageUrl} />
       
       {/* Open Graph / Facebook */}
       <meta property="og:type" content="website" />
-      <meta property="og:title" content={title || defaultTitle} />
-      <meta property="og:description" content={description || defaultDescription} />
-      {image && <meta property="og:image" content={image} />}
+      <meta property="og:url" content={pageUrl} />
+      <meta property="og:title" content={pageTitle} />
+      <meta property="og:description" content={pageDescription} />
+      <meta property="og:image" content={pageImage} />
+      <meta property="og:image:width" content="1200" />
+      <meta property="og:image:height" content="630" />
+      <meta property="og:site_name" content="Clino Health" />
+      <meta property="og:locale" content="en_US" />
       
       {/* Twitter */}
       <meta name="twitter:card" content="summary_large_image" />
-      <meta name="twitter:title" content={title || defaultTitle} />
-      <meta name="twitter:description" content={description || defaultDescription} />
-      {image && <meta name="twitter:image" content={image} />}
+      <meta name="twitter:url" content={pageUrl} />
+      <meta name="twitter:title" content={pageTitle} />
+      <meta name="twitter:description" content={pageDescription} />
+      <meta name="twitter:image" content={pageImage} />
+      
+      {/* Structured Data - Organization */}
+      {structuredData && (
+        <script type="application/ld+json">
+          {JSON.stringify(structuredData)}
+        </script>
+      )}
+      
+      {/* Structured Data - FAQ */}
+      {faqStructuredData && (
+        <script type="application/ld+json">
+          {JSON.stringify(faqStructuredData)}
+        </script>
+      )}
     </Helmet>
   );
 };

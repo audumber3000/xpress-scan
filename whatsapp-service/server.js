@@ -1888,6 +1888,10 @@ app.get('/api/messages/:userId', async (req, res) => {
   }
 });
 
+// ============================================
+// GROUP MANAGEMENT ENDPOINTS
+// ============================================
+
 // Get group info
 app.get('/api/group/:userId/:groupId', async (req, res) => {
   const userId = req.params.userId;
@@ -1930,6 +1934,856 @@ app.get('/api/group/:userId/:groupId', async (req, res) => {
     console.error(`Error getting group info for user ${userId}:`, error);
     res.status(500).json({
       error: error.message || 'Failed to get group info'
+    });
+  }
+});
+
+// Create group
+app.post('/api/group/create/:userId', async (req, res) => {
+  const userId = req.params.userId;
+  const { name, participants } = req.body;
+  
+  try {
+    if (!clients.has(userId) || !clients.get(userId).isReady) {
+      return res.status(400).json({
+        success: false,
+        error: 'WhatsApp session not ready'
+      });
+    }
+    
+    if (!name || !participants || !Array.isArray(participants) || participants.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Group name and at least one participant are required'
+      });
+    }
+    
+    const clientData = clients.get(userId);
+    const client = clientData.client;
+    
+    // Format participant IDs (add @c.us if not present)
+    const formattedParticipants = participants.map(p => {
+      const clean = p.replace(/\D/g, '');
+      return clean.includes('@') ? p : `${clean}@c.us`;
+    });
+    
+    const group = await client.createGroup(name, formattedParticipants);
+    
+    // Handle different return structures from createGroup
+    const groupId = group.gid?._serialized || group.id?._serialized || group.id || null;
+    const groupName = group.name || name;
+    
+    res.json({
+      success: true,
+      groupId: groupId,
+      groupName: groupName,
+      message: 'Group created successfully'
+    });
+  } catch (error) {
+    console.error(`Error creating group for user ${userId}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to create group'
+    });
+  }
+});
+
+// Invite user to group
+app.post('/api/group/invite/:userId/:groupId', async (req, res) => {
+  const userId = req.params.userId;
+  const groupId = req.params.groupId;
+  const { participant } = req.body;
+  
+  try {
+    if (!clients.has(userId) || !clients.get(userId).isReady) {
+      return res.status(400).json({
+        success: false,
+        error: 'WhatsApp session not ready'
+      });
+    }
+    
+    if (!participant) {
+      return res.status(400).json({
+        success: false,
+        error: 'Participant phone number is required'
+      });
+    }
+    
+    const clientData = clients.get(userId);
+    const client = clientData.client;
+    
+    const chat = await client.getChatById(groupId);
+    
+    if (!chat.isGroup) {
+      return res.status(400).json({
+        success: false,
+        error: 'Chat is not a group'
+      });
+    }
+    
+    // Format participant ID
+    const clean = participant.replace(/\D/g, '');
+    const participantId = clean.includes('@') ? participant : `${clean}@c.us`;
+    
+    await chat.addParticipants([participantId]);
+    
+    res.json({
+      success: true,
+      message: 'User invited to group successfully'
+    });
+  } catch (error) {
+    console.error(`Error inviting user to group for user ${userId}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to invite user to group'
+    });
+  }
+});
+
+// Make user admin
+app.post('/api/group/make-admin/:userId/:groupId', async (req, res) => {
+  const userId = req.params.userId;
+  const groupId = req.params.groupId;
+  const { participant } = req.body;
+  
+  try {
+    if (!clients.has(userId) || !clients.get(userId).isReady) {
+      return res.status(400).json({
+        success: false,
+        error: 'WhatsApp session not ready'
+      });
+    }
+    
+    if (!participant) {
+      return res.status(400).json({
+        success: false,
+        error: 'Participant phone number is required'
+      });
+    }
+    
+    const clientData = clients.get(userId);
+    const client = clientData.client;
+    
+    const chat = await client.getChatById(groupId);
+    
+    if (!chat.isGroup) {
+      return res.status(400).json({
+        success: false,
+        error: 'Chat is not a group'
+      });
+    }
+    
+    // Format participant ID
+    const clean = participant.replace(/\D/g, '');
+    const participantId = clean.includes('@') ? participant : `${clean}@c.us`;
+    
+    await chat.promoteParticipants([participantId]);
+    
+    res.json({
+      success: true,
+      message: 'User promoted to admin successfully'
+    });
+  } catch (error) {
+    console.error(`Error making user admin for user ${userId}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to make user admin'
+    });
+  }
+});
+
+// Demote admin
+app.post('/api/group/demote-admin/:userId/:groupId', async (req, res) => {
+  const userId = req.params.userId;
+  const groupId = req.params.groupId;
+  const { participant } = req.body;
+  
+  try {
+    if (!clients.has(userId) || !clients.get(userId).isReady) {
+      return res.status(400).json({
+        success: false,
+        error: 'WhatsApp session not ready'
+      });
+    }
+    
+    if (!participant) {
+      return res.status(400).json({
+        success: false,
+        error: 'Participant phone number is required'
+      });
+    }
+    
+    const clientData = clients.get(userId);
+    const client = clientData.client;
+    
+    const chat = await client.getChatById(groupId);
+    
+    if (!chat.isGroup) {
+      return res.status(400).json({
+        success: false,
+        error: 'Chat is not a group'
+      });
+    }
+    
+    // Format participant ID
+    const clean = participant.replace(/\D/g, '');
+    const participantId = clean.includes('@') ? participant : `${clean}@c.us`;
+    
+    await chat.demoteParticipants([participantId]);
+    
+    res.json({
+      success: true,
+      message: 'Admin demoted successfully'
+    });
+  } catch (error) {
+    console.error(`Error demoting admin for user ${userId}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to demote admin'
+    });
+  }
+});
+
+// Leave group
+app.post('/api/group/leave/:userId/:groupId', async (req, res) => {
+  const userId = req.params.userId;
+  const groupId = req.params.groupId;
+  
+  try {
+    if (!clients.has(userId) || !clients.get(userId).isReady) {
+      return res.status(400).json({
+        success: false,
+        error: 'WhatsApp session not ready'
+      });
+    }
+    
+    const clientData = clients.get(userId);
+    const client = clientData.client;
+    
+    const chat = await client.getChatById(groupId);
+    
+    if (!chat.isGroup) {
+      return res.status(400).json({
+        success: false,
+        error: 'Chat is not a group'
+      });
+    }
+    
+    await chat.leave();
+    
+    res.json({
+      success: true,
+      message: 'Left group successfully'
+    });
+  } catch (error) {
+    console.error(`Error leaving group for user ${userId}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to leave group'
+    });
+  }
+});
+
+// Get all groups
+app.get('/api/groups/:userId', async (req, res) => {
+  const userId = req.params.userId;
+  
+  try {
+    if (!clients.has(userId) || !clients.get(userId).isReady) {
+      return res.status(200).json({
+        groups: [],
+        total: 0,
+        error: 'WhatsApp session not ready'
+      });
+    }
+    
+    const clientData = clients.get(userId);
+    const client = clientData.client;
+    
+    console.log(`[${userId}] Fetching groups...`);
+    const chats = await client.getChats();
+    console.log(`[${userId}] Total chats: ${chats.length}`);
+    const groups = chats.filter(chat => chat.isGroup);
+    console.log(`[${userId}] Total groups: ${groups.length}`);
+    
+    const groupsList = await Promise.all(groups.map(async (chat) => {
+      try {
+        const participants = await chat.participants;
+        return {
+          id: chat.id._serialized,
+          name: chat.name,
+          description: chat.description || '',
+          participantCount: participants.length,
+          createdAt: chat.groupMetadata?.creation || null
+        };
+      } catch (e) {
+        return {
+          id: chat.id._serialized,
+          name: chat.name,
+          description: chat.description || '',
+          participantCount: 0,
+          createdAt: null
+        };
+      }
+    }));
+    
+    console.log(`[${userId}] Returning ${groupsList.length} groups`);
+    res.json({
+      groups: groupsList,
+      total: groupsList.length
+    });
+  } catch (error) {
+    console.error(`Error getting groups for user ${userId}:`, error);
+    res.status(500).json({
+      groups: [],
+      total: 0,
+      error: error.message || 'Failed to get groups'
+    });
+  }
+});
+
+// Update group subject
+app.post('/api/group/update-subject/:userId/:groupId', async (req, res) => {
+  const userId = req.params.userId;
+  const groupId = req.params.groupId;
+  const { subject } = req.body;
+  
+  try {
+    if (!clients.has(userId) || !clients.get(userId).isReady) {
+      return res.status(400).json({
+        success: false,
+        error: 'WhatsApp session not ready'
+      });
+    }
+    
+    if (!subject) {
+      return res.status(400).json({
+        success: false,
+        error: 'Group subject is required'
+      });
+    }
+    
+    const clientData = clients.get(userId);
+    const client = clientData.client;
+    
+    const chat = await client.getChatById(groupId);
+    
+    if (!chat.isGroup) {
+      return res.status(400).json({
+        success: false,
+        error: 'Chat is not a group'
+      });
+    }
+    
+    await chat.setSubject(subject);
+    
+    res.json({
+      success: true,
+      message: 'Group subject updated successfully'
+    });
+  } catch (error) {
+    console.error(`Error updating group subject for user ${userId}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to update group subject'
+    });
+  }
+});
+
+// Update group description
+app.post('/api/group/update-description/:userId/:groupId', async (req, res) => {
+  const userId = req.params.userId;
+  const groupId = req.params.groupId;
+  const { description } = req.body;
+  
+  try {
+    if (!clients.has(userId) || !clients.get(userId).isReady) {
+      return res.status(400).json({
+        success: false,
+        error: 'WhatsApp session not ready'
+      });
+    }
+    
+    const clientData = clients.get(userId);
+    const client = clientData.client;
+    
+    const chat = await client.getChatById(groupId);
+    
+    if (!chat.isGroup) {
+      return res.status(400).json({
+        success: false,
+        error: 'Chat is not a group'
+      });
+    }
+    
+    await chat.setDescription(description || '');
+    
+    res.json({
+      success: true,
+      message: 'Group description updated successfully'
+    });
+  } catch (error) {
+    console.error(`Error updating group description for user ${userId}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to update group description'
+    });
+  }
+});
+
+// Get group invite code
+app.get('/api/group/invite-code/:userId/:groupId', async (req, res) => {
+  const userId = req.params.userId;
+  const groupId = req.params.groupId;
+  
+  try {
+    if (!clients.has(userId) || !clients.get(userId).isReady) {
+      return res.status(400).json({
+        error: 'WhatsApp session not ready'
+      });
+    }
+    
+    const clientData = clients.get(userId);
+    const client = clientData.client;
+    
+    const chat = await client.getChatById(groupId);
+    
+    if (!chat.isGroup) {
+      return res.status(400).json({
+        error: 'Chat is not a group'
+      });
+    }
+    
+    const code = await chat.getInviteInfo();
+    
+    res.json({
+      inviteCode: code.code || null,
+      inviteLink: code.link || null
+    });
+  } catch (error) {
+    console.error(`Error getting group invite code for user ${userId}:`, error);
+    res.status(500).json({
+      error: error.message || 'Failed to get group invite code'
+    });
+  }
+});
+
+// ============================================
+// STATUS & PROFILE ENDPOINTS
+// ============================================
+
+// Set status
+app.post('/api/status/set/:userId', async (req, res) => {
+  const userId = req.params.userId;
+  const { status } = req.body;
+  
+  try {
+    if (!clients.has(userId) || !clients.get(userId).isReady) {
+      return res.status(400).json({
+        success: false,
+        error: 'WhatsApp session not ready'
+      });
+    }
+    
+    if (!status) {
+      return res.status(400).json({
+        success: false,
+        error: 'Status text is required'
+      });
+    }
+    
+    const clientData = clients.get(userId);
+    const client = clientData.client;
+    
+    await client.setStatus(status);
+    
+    res.json({
+      success: true,
+      message: 'Status updated successfully'
+    });
+  } catch (error) {
+    console.error(`Error setting status for user ${userId}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to set status'
+    });
+  }
+});
+
+// Get user status
+app.get('/api/status/user/:userId/:phone', async (req, res) => {
+  const userId = req.params.userId;
+  const phone = req.params.phone.replace(/\D/g, '');
+  
+  try {
+    if (!clients.has(userId) || !clients.get(userId).isReady) {
+      return res.status(400).json({
+        error: 'WhatsApp session not ready'
+      });
+    }
+    
+    const clientData = clients.get(userId);
+    const client = clientData.client;
+    
+    const contactId = `${phone}@c.us`;
+    const contact = await client.getContactById(contactId);
+    const status = await contact.getStatus();
+    
+    res.json({
+      phone: phone,
+      status: status.status || null,
+      statusTimestamp: status.setAt || null
+    });
+  } catch (error) {
+    console.error(`Error getting user status for user ${userId}:`, error);
+    res.status(500).json({
+      error: error.message || 'Failed to get user status'
+    });
+  }
+});
+
+// Update profile picture
+app.post('/api/profile/picture/:userId', async (req, res) => {
+  const userId = req.params.userId;
+  const { image, imageType } = req.body;
+  
+  try {
+    if (!clients.has(userId) || !clients.get(userId).isReady) {
+      return res.status(400).json({
+        success: false,
+        error: 'WhatsApp session not ready'
+      });
+    }
+    
+    if (!image) {
+      return res.status(400).json({
+        success: false,
+        error: 'Image data is required (base64)'
+      });
+    }
+    
+    const clientData = clients.get(userId);
+    const client = clientData.client;
+    
+    const { MessageMedia } = require('whatsapp-web.js');
+    const media = new MessageMedia(imageType || 'image/jpeg', image);
+    
+    await client.setProfilePicture(media);
+    
+    res.json({
+      success: true,
+      message: 'Profile picture updated successfully'
+    });
+  } catch (error) {
+    console.error(`Error updating profile picture for user ${userId}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to update profile picture'
+    });
+  }
+});
+
+// Download profile picture
+app.get('/api/profile/picture/:userId/:phone', async (req, res) => {
+  const userId = req.params.userId;
+  const phone = req.params.phone.replace(/\D/g, '');
+  
+  try {
+    if (!clients.has(userId) || !clients.get(userId).isReady) {
+      return res.status(400).json({
+        error: 'WhatsApp session not ready'
+      });
+    }
+    
+    const clientData = clients.get(userId);
+    const client = clientData.client;
+    
+    const contactId = `${phone}@c.us`;
+    const contact = await client.getContactById(contactId);
+    const profilePicUrl = await contact.getProfilePicUrl();
+    
+    if (!profilePicUrl) {
+      return res.json({
+        phone: phone,
+        profilePicUrl: null,
+        message: 'No profile picture available'
+      });
+    }
+    
+    res.json({
+      phone: phone,
+      profilePicUrl: profilePicUrl
+    });
+  } catch (error) {
+    console.error(`Error getting profile picture for user ${userId}:`, error);
+    res.status(500).json({
+      error: error.message || 'Failed to get profile picture'
+    });
+  }
+});
+
+// ============================================
+// CONTACT MANAGEMENT ENDPOINTS
+// ============================================
+
+// Check if user is on WhatsApp
+app.get('/api/is-on-whatsapp/:userId/:phone', async (req, res) => {
+  const userId = req.params.userId;
+  const phone = req.params.phone.replace(/\D/g, '');
+  
+  try {
+    if (!clients.has(userId) || !clients.get(userId).isReady) {
+      return res.status(200).json({
+        phone: phone,
+        isRegistered: false,
+        error: 'WhatsApp session not ready'
+      });
+    }
+    
+    const clientData = clients.get(userId);
+    const client = clientData.client;
+    
+    const contactId = `${phone}@c.us`;
+    console.log(`[${userId}] Checking if ${phone} (${contactId}) is registered on WhatsApp...`);
+    
+    let isRegistered = false;
+    try {
+      isRegistered = await client.isRegisteredUser(contactId);
+      console.log(`[${userId}] Registration check result for ${phone}: ${isRegistered}`);
+    } catch (checkError) {
+      console.error(`[${userId}] Error checking registration:`, checkError.message);
+      // If check fails, return false with error
+      return res.json({
+        phone: phone,
+        isRegistered: false,
+        error: checkError.message || 'Failed to check registration'
+      });
+    }
+    
+    res.json({
+      phone: phone,
+      isRegistered: isRegistered
+    });
+  } catch (error) {
+    console.error(`Error checking if user is on WhatsApp for user ${userId}:`, error);
+    res.status(200).json({
+      phone: phone,
+      isRegistered: false,
+      error: error.message || 'Failed to check if user is on WhatsApp'
+    });
+  }
+});
+
+// ============================================
+// BUTTON, LIST, CONTACT MESSAGE ENDPOINTS
+// ============================================
+
+// Send button message
+app.post('/api/send-button/:userId', async (req, res) => {
+  const userId = req.params.userId;
+  const { phone, message, buttons, footer, media, mediaType } = req.body;
+  
+  try {
+    if (!clients.has(userId) || !clients.get(userId).isReady) {
+      return res.status(400).json({
+        success: false,
+        error: 'WhatsApp session not ready'
+      });
+    }
+    
+    if (!phone || !message || !buttons || !Array.isArray(buttons) || buttons.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Phone number, message, and at least one button are required'
+      });
+    }
+    
+    const clientData = clients.get(userId);
+    const client = clientData.client;
+    
+    const clean = phone.replace(/\D/g, '');
+    const chatId = `${clean}@c.us`;
+    
+    const { Buttons, MessageMedia } = require('whatsapp-web.js');
+    
+    // Validate button format - buttons should be array of {id, body}
+    const validButtons = buttons.map(btn => {
+      if (typeof btn === 'string') {
+        // If button is just a string, convert to {id, body}
+        return { id: btn.toLowerCase().replace(/\s+/g, '_'), body: btn };
+      }
+      return { id: btn.id || btn.body?.toLowerCase().replace(/\s+/g, '_'), body: btn.body || btn.id };
+    }).filter(btn => btn.id && btn.body);
+    
+    if (validButtons.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid button format. Buttons must have both id and body.'
+      });
+    }
+    
+    // Validate button text length (WhatsApp limit is 20 characters)
+    const invalidButtons = validButtons.filter(btn => btn.body.length > 20);
+    if (invalidButtons.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: `Button text too long. Maximum 20 characters. Invalid buttons: ${invalidButtons.map(b => b.body).join(', ')}`
+      });
+    }
+    
+    // Check for duplicate button texts
+    const buttonTexts = validButtons.map(b => b.body);
+    const duplicates = buttonTexts.filter((text, index) => buttonTexts.indexOf(text) !== index);
+    if (duplicates.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: `Duplicate button texts not allowed: ${[...new Set(duplicates)].join(', ')}`
+      });
+    }
+    
+    let buttonMessage;
+    
+    try {
+      if (media && mediaType) {
+        // Button message with media
+        const messageMedia = new MessageMedia(mediaType, media);
+        buttonMessage = new Buttons(message, validButtons, null, footer || null, messageMedia);
+      } else {
+        // Button message without media
+        buttonMessage = new Buttons(message, validButtons, null, footer || null);
+      }
+    } catch (buttonError) {
+      console.error(`Error creating Buttons object:`, buttonError);
+      return res.status(500).json({
+        success: false,
+        error: `Failed to create button message: ${buttonError.message}. Note: Buttons feature may be deprecated in this version of whatsapp-web.js.`
+      });
+    }
+    
+    try {
+      const sentMessage = await client.sendMessage(chatId, buttonMessage);
+      
+      res.json({
+        success: true,
+        message: 'Button message sent successfully',
+        messageId: sentMessage.id._serialized || sentMessage.id.id
+      });
+    } catch (sendError) {
+      console.error(`Error sending button message for user ${userId}:`, sendError);
+      // Check if it's a deprecation issue
+      if (sendError.message && sendError.message.includes('deprecated')) {
+        return res.status(500).json({
+          success: false,
+          error: 'Button messages are deprecated in this version of WhatsApp. Please use List messages or regular text messages instead.'
+        });
+      }
+      throw sendError;
+    }
+  } catch (error) {
+    console.error(`Error sending button message for user ${userId}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to send button message'
+    });
+  }
+});
+
+// Send list message
+app.post('/api/send-list/:userId', async (req, res) => {
+  const userId = req.params.userId;
+  const { phone, title, description, buttonText, sections, footer } = req.body;
+  
+  try {
+    if (!clients.has(userId) || !clients.get(userId).isReady) {
+      return res.status(400).json({
+        success: false,
+        error: 'WhatsApp session not ready'
+      });
+    }
+    
+    if (!phone || !title || !buttonText || !sections || !Array.isArray(sections) || sections.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Phone number, title, button text, and at least one section are required'
+      });
+    }
+    
+    const clientData = clients.get(userId);
+    const client = clientData.client;
+    
+    const clean = phone.replace(/\D/g, '');
+    const chatId = `${clean}@c.us`;
+    
+    const { List } = require('whatsapp-web.js');
+    
+    const listMessage = new List(title, buttonText, sections, description || '', footer || '');
+    
+    const sentMessage = await client.sendMessage(chatId, listMessage);
+    
+    res.json({
+      success: true,
+      message: 'List message sent successfully',
+      messageId: sentMessage.id._serialized || sentMessage.id.id
+    });
+  } catch (error) {
+    console.error(`Error sending list message for user ${userId}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to send list message'
+    });
+  }
+});
+
+// Send contact message
+app.post('/api/send-contact/:userId', async (req, res) => {
+  const userId = req.params.userId;
+  const { phone, contact } = req.body;
+  
+  try {
+    if (!clients.has(userId) || !clients.get(userId).isReady) {
+      return res.status(400).json({
+        success: false,
+        error: 'WhatsApp session not ready'
+      });
+    }
+    
+    if (!phone || !contact) {
+      return res.status(400).json({
+        success: false,
+        error: 'Phone number and contact data are required'
+      });
+    }
+    
+    if (!contact.name || !contact.number) {
+      return res.status(400).json({
+        success: false,
+        error: 'Contact name and number are required'
+      });
+    }
+    
+    const clientData = clients.get(userId);
+    const client = clientData.client;
+    
+    const clean = phone.replace(/\D/g, '');
+    const chatId = `${clean}@c.us`;
+    
+    const { ContactCard } = require('whatsapp-web.js');
+    
+    const contactCard = new ContactCard(contact.name, contact.number);
+    if (contact.displayName) contactCard.setDisplayName(contact.displayName);
+    
+    const sentMessage = await client.sendMessage(chatId, contactCard);
+    
+    res.json({
+      success: true,
+      message: 'Contact message sent successfully',
+      messageId: sentMessage.id._serialized || sentMessage.id.id
+    });
+  } catch (error) {
+    console.error(`Error sending contact message for user ${userId}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to send contact message'
     });
   }
 });

@@ -1,0 +1,31 @@
+<svg width="300" height="100" viewBox="0 0 300 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Cross symbol -->
+  <g transform="translate(0, 10) scale(0.3)">
+    <defs>
+      <clipPath id="lightGreenClip">
+        <path d="M0 0 L200 0 L200 200 Q 140 140 100 100 Q 60 60 0 0 Z"/>
+      </clipPath>
+      <clipPath id="darkGreenClip">
+        <path d="M200 200 L0 200 L0 0 Q 60 60 100 100 Q 140 140 200 200 Z"/>
+      </clipPath>
+    </defs>
+    
+    <path d="M100 20 L100 80 L20 80 L20 120 L100 120 L100 180 L120 180 L120 120 L180 120 L180 80 L120 80 L120 20 Z" 
+          fill="#73a942" 
+          clip-path="url(#lightGreenClip)"/>
+    
+    <path d="M100 20 L100 80 L20 80 L20 120 L100 120 L100 180 L120 180 L120 120 L180 120 L180 80 L120 80 L120 20 Z" 
+          fill="#143601" 
+          clip-path="url(#darkGreenClip)"/>
+    
+    <path d="M 100 20 Q 140 60 180 120" 
+          stroke="#ffffff" 
+          stroke-width="8" 
+          fill="none" 
+          stroke-linecap="round"/>
+  </g>
+  
+  <!-- Text: Clino Health -->
+  <text x="70" y="35" font-family="Inter, sans-serif" font-size="28" font-weight="600" fill="#73a942">Clino</text>
+  <text x="70" y="65" font-family="Inter, sans-serif" font-size="28" font-weight="600" fill="#143601">Health</text>
+</svg>

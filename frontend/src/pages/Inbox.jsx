@@ -8,6 +8,10 @@ import { getWhatsAppSocket } from "../utils/whatsappSocket";
 import BulkMessagePanel from "../components/inbox/BulkMessagePanel";
 import ScheduleMessagePanel from "../components/inbox/ScheduleMessagePanel";
 import ScheduledMessagesListPanel from "../components/inbox/ScheduledMessagesListPanel";
+import GroupManagementPanel from "../components/inbox/GroupManagementPanel";
+import ProfileStatusPanel from "../components/inbox/ProfileStatusPanel";
+import ContactManagementPanel from "../components/inbox/ContactManagementPanel";
+import AdvancedMessagePanel from "../components/inbox/AdvancedMessagePanel";
 import ChatList from "../components/inbox/ChatList";
 import ChatWindow from "../components/inbox/ChatWindow";
 
@@ -34,6 +38,10 @@ const Inbox = () => {
   const [showBulkMessagePanel, setShowBulkMessagePanel] = useState(false);
   const [showScheduleMessagePanel, setShowScheduleMessagePanel] = useState(false);
   const [showScheduledMessagesPanel, setShowScheduledMessagesPanel] = useState(false);
+  const [showGroupManagementPanel, setShowGroupManagementPanel] = useState(false);
+  const [showProfileStatusPanel, setShowProfileStatusPanel] = useState(false);
+  const [showContactManagementPanel, setShowContactManagementPanel] = useState(false);
+  const [showAdvancedMessagePanel, setShowAdvancedMessagePanel] = useState(false);
   
   // Real chat list and messages
   const [chats, setChats] = useState([]);
@@ -997,6 +1005,10 @@ const Inbox = () => {
             onBulkMessageClick={() => setShowBulkMessagePanel(true)}
             onScheduleMessageClick={() => setShowScheduleMessagePanel(true)}
             onScheduledListClick={() => setShowScheduledMessagesPanel(true)}
+            onGroupManagementClick={() => setShowGroupManagementPanel(true)}
+            onProfileStatusClick={() => setShowProfileStatusPanel(true)}
+            onContactManagementClick={() => setShowContactManagementPanel(true)}
+            onAdvancedMessageClick={() => setShowAdvancedMessagePanel(true)}
             showChatMenu={showChatMenu}
             setShowChatMenu={setShowChatMenu}
             phoneNumber={phoneNumber}
@@ -1060,6 +1072,34 @@ const Inbox = () => {
         isOpen={showScheduledMessagesPanel}
         onClose={() => setShowScheduledMessagesPanel(false)}
       />
+
+      {showGroupManagementPanel && (
+        <GroupManagementPanel
+          onClose={() => setShowGroupManagementPanel(false)}
+        />
+      )}
+
+      {showProfileStatusPanel && (
+        <ProfileStatusPanel
+          onClose={() => setShowProfileStatusPanel(false)}
+        />
+      )}
+
+      {showContactManagementPanel && (
+        <ContactManagementPanel
+          onClose={() => setShowContactManagementPanel(false)}
+        />
+      )}
+
+      {showAdvancedMessagePanel && (
+        <AdvancedMessagePanel
+          onClose={() => setShowAdvancedMessagePanel(false)}
+          onMessageSent={() => {
+            // Optionally refresh chats or show success
+            fetchChats(true);
+          }}
+        />
+      )}
 
       {/* New Message Modal */}
       {showNewMessageModal && (

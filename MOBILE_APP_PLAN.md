@@ -137,3 +137,7 @@ python migrate_add_clinic_location.py  # Need to create
 - **Shared Screens**: Patient files, appointments, payments use same components
 - **Color Scheme**: Purple (#6C4CF3) for headers, Green (#16a34a) for primary actions
 
+
+
+
+

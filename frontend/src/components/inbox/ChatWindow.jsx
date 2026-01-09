@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import GearLoader from "../GearLoader";
+import EmojiPicker from "./EmojiPicker";
 
 const ChatWindow = ({
   selectedChat,
@@ -14,6 +15,13 @@ const ChatWindow = ({
   onSendMessage,
   onMessageChange
 }) => {
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  const handleEmojiSelect = (emoji) => {
+    onMessageChange(sendMessage + emoji);
+    setShowEmojiPicker(false);
+  };
+
   const formatTime = (timestamp) => {
     if (!timestamp) return '';
     const date = new Date(timestamp);
@@ -143,9 +151,19 @@ const ChatWindow = ({
       </div>
 
       {/* Message Input */}
-      <div className="bg-[#F0F2F5] px-4 py-3 border-t border-gray-300">
+      <div className="bg-[#F0F2F5] px-4 py-3 border-t border-gray-300 relative">
+        {showEmojiPicker && (
+          <EmojiPicker
+            onEmojiSelect={handleEmojiSelect}
+            onClose={() => setShowEmojiPicker(false)}
+          />
+        )}
         <div className="flex items-center gap-2">
-          <button className="p-2 text-gray-600 hover:bg-gray-200 rounded-full transition">
+          <button 
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            className="p-2 text-gray-600 hover:bg-gray-200 rounded-full transition relative"
+            type="button"
+          >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -155,6 +173,7 @@ const ChatWindow = ({
             value={sendMessage}
             onChange={(e) => onMessageChange(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && onSendMessage()}
+            onFocus={() => setShowEmojiPicker(false)}
             placeholder="Type a message"
             className="flex-1 bg-white px-4 py-2 rounded-full border-none outline-none text-sm"
           />
@@ -178,6 +197,10 @@ const ChatWindow = ({
 };
 
 export default ChatWindow;
+
+
+
+
 
 
 
