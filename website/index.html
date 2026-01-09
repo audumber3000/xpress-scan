@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Clino Health - Healthcare Software Solutions</title>
     <meta name="description" content="Clino Health builds healthcare software for modern clinics. BDent for dental, BSono for sonography.">
-    <link rel="icon" type="image/svg+xml" href="assets/clino-health-logo.svg">
+    <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
@@ -35,77 +35,341 @@
     </style>
 </head>
 <body class="bg-white">
-    <!-- Navigation -->
-    <nav class="fixed top-0 w-full bg-white/98 backdrop-blur-md border-b border-gray-100 z-50 shadow-sm">
+    <!-- Top Trust Banner -->
+    <div class="fixed top-0 w-full bg-clino-light z-50 border-b border-clino-light/20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-center h-10 text-sm">
+                <div class="flex items-center space-x-2">
+                    <svg class="w-5 h-5 text-clino-dark" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                    </svg>
+                    <span class="text-clino-dark font-medium">We treat patient data like it's our own</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Navigation -->
+    <nav class="fixed top-10 w-full bg-white/98 backdrop-blur-md border-b border-gray-100 z-40 shadow-sm">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-20">
-                <a href="/" class="flex items-center space-x-3">
-                    <img src="assets/clino-health-logo-full.svg" alt="Clino Health" class="h-12 w-auto" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                    <span class="hidden text-2xl font-bold">
-                        <span class="text-clino-light">Clino</span> <span class="text-clino-dark">Health</span>
-                    </span>
+                <!-- Logo -->
+                <a href="/" class="flex items-center">
+                    <img src="assets/logo and name.svg" alt="Clino Health" class="h-14 w-auto">
                 </a>
-                <div class="hidden md:flex items-center space-x-10">
-                    <a href="#products" class="text-gray-700 hover:text-clino-medium font-medium transition-colors">Products</a>
-                    <a href="#features" class="text-gray-700 hover:text-clino-medium font-medium transition-colors">Features</a>
-                    <a href="#why-us" class="text-gray-700 hover:text-clino-medium font-medium transition-colors">Why Us</a>
-                    <a href="#contact" class="text-gray-700 hover:text-clino-medium font-medium transition-colors">Contact</a>
+                
+                <!-- Desktop Navigation -->
+                <div class="hidden lg:flex items-center space-x-8">
+                    <!-- Products Dropdown -->
+                    <div class="relative group">
+                        <button class="flex items-center text-gray-700 hover:text-clino-medium font-medium transition-colors">
+                            Products
+                            <svg class="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </button>
+                        <div class="absolute top-full left-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+                            <div class="py-2">
+                                <a href="#products" class="block px-4 py-2 text-gray-700 hover:bg-clino-light/10 hover:text-clino-medium transition-colors">All Products</a>
+                                <a href="bdent/" class="block px-4 py-2 text-gray-700 hover:bg-clino-light/10 hover:text-clino-medium transition-colors">BDent</a>
+                                <a href="#products" class="block px-4 py-2 text-gray-700 hover:bg-clino-light/10 hover:text-clino-medium transition-colors">BSono (Coming Soon)</a>
+                                <a href="#products" class="block px-4 py-2 text-gray-700 hover:bg-clino-light/10 hover:text-clino-medium transition-colors">BPhysio (Coming Soon)</a>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Resources Dropdown -->
+                    <div class="relative group">
+                        <button class="flex items-center text-gray-700 hover:text-clino-medium font-medium transition-colors">
+                            Resources
+                            <svg class="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </button>
+                        <div class="absolute top-full left-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+                            <div class="py-2">
+                                <a href="#features" class="block px-4 py-2 text-gray-700 hover:bg-clino-light/10 hover:text-clino-medium transition-colors">Features</a>
+                                <a href="#why-us" class="block px-4 py-2 text-gray-700 hover:bg-clino-light/10 hover:text-clino-medium transition-colors">Why Clino Health</a>
+                                <a href="#contact" class="block px-4 py-2 text-gray-700 hover:bg-clino-light/10 hover:text-clino-medium transition-colors">Support</a>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <a href="security.html" class="text-gray-700 hover:text-clino-medium font-medium transition-colors">Security</a>
+                    <a href="pricing.html" class="text-gray-700 hover:text-clino-medium font-medium transition-colors">Pricing</a>
+                    <a href="about.html" class="text-gray-700 hover:text-clino-medium font-medium transition-colors">Why Clino Health?</a>
                 </div>
-                <a href="bdent/" class="hidden md:flex bg-clino-medium text-white px-8 py-3 rounded-lg font-semibold hover:bg-clino-dark transition-all shadow-md hover:shadow-lg">
-                    Get Started
-                </a>
+                
+                <!-- Right Side Actions -->
+                <div class="hidden lg:flex items-center space-x-4">
+                    <!-- Search Button -->
+                    <button class="p-2 rounded-full hover:bg-gray-100 transition-colors" aria-label="Search">
+                        <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        </svg>
+                    </button>
+                    
+                    <!-- Region Selector -->
+                    <button class="flex items-center space-x-1 px-3 py-2 rounded-full hover:bg-gray-100 transition-colors">
+                        <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span class="text-sm text-gray-700 font-medium">IN</span>
+                        <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </button>
+                    
+                    <!-- Login -->
+                    <a href="/login" class="text-gray-700 hover:text-clino-medium font-medium transition-colors">Login</a>
+                    
+                    <!-- Get Started Button -->
+                    <a href="bdent/" class="bg-clino-light text-clino-dark px-6 py-2.5 rounded-full font-semibold hover:bg-clino-medium hover:text-white transition-all shadow-sm hover:shadow-md">
+                        Get Started Free
+                    </a>
+                </div>
+                
+                <!-- Mobile Menu Button -->
+                <button id="mobile-menu-btn" class="lg:hidden p-2 rounded-lg hover:bg-gray-100">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    </svg>
+                </button>
             </div>
         </div>
     </nav>
 
     <!-- Hero Section -->
-    <section class="pt-32 pb-24 gradient-bg relative overflow-hidden">
-        <div class="absolute inset-0 opacity-5">
-            <div class="absolute top-20 left-10 w-72 h-72 bg-clino-light rounded-full blur-3xl"></div>
-            <div class="absolute bottom-20 right-10 w-96 h-96 bg-clino-medium rounded-full blur-3xl"></div>
-        </div>
+    <section class="pt-32 pb-24 relative overflow-hidden bg-white">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <div class="text-center max-w-4xl mx-auto">
-                <div class="inline-flex items-center bg-clino-light/10 text-clino-dark px-6 py-3 rounded-full text-sm font-semibold mb-8 border border-clino-light/20">
-                    <span class="mr-2">🏥</span>
-                    Building the future of healthcare software
-                </div>
-                <h1 class="text-5xl md:text-7xl font-extrabold text-gray-900 mb-8 leading-tight">
-                    Healthcare Software<br>
-                    <span class="bg-gradient-to-r from-clino-dark to-clino-medium bg-clip-text text-transparent">
-                        Built for India
-                    </span>
-                </h1>
-                <p class="text-xl md:text-2xl text-gray-600 mb-12 max-w-3xl mx-auto leading-relaxed">
-                    We build specialized clinic management software for healthcare professionals. 
-                    Simple, affordable, and designed to work offline. Trusted by 250+ clinics across India.
-                </p>
-                <div class="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
-                    <a href="#products" class="bg-clino-medium text-white px-10 py-4 rounded-xl hover:bg-clino-dark text-lg font-semibold shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-1">
-                        Explore Products ↓
-                    </a>
-                    <a href="#contact" class="text-gray-700 hover:text-clino-medium px-10 py-4 font-semibold text-lg border-2 border-gray-300 rounded-xl hover:border-clino-medium transition-all">
-                        Contact Sales →
-                    </a>
+            <div class="grid lg:grid-cols-2 gap-16 items-center">
+                <!-- Left Side: Content -->
+                <div class="space-y-8">
+                    <!-- Headline -->
+                    <h1 class="text-5xl md:text-6xl font-extrabold text-gray-900 leading-tight">
+                        Clino Health<br>
+                        <span class="text-clino-dark">Practice Management Platform</span>
+            </h1>
+                    <p class="text-2xl md:text-3xl font-semibold text-gray-700">
+                        Accelerate your clinic operations
+                    </p>
+                    
+                    <!-- CTA Button -->
+                    <div>
+                        <a href="#products" class="inline-block bg-red-600 text-white px-8 py-4 rounded-full font-semibold text-lg hover:bg-red-700 transition-all shadow-lg hover:shadow-xl">
+                            Get a demo
+                        </a>
+                    </div>
+                    
+                    <!-- Additional Text -->
+                    <p class="text-sm text-gray-500">
+                        Explore our Digital Health App and Practice Management Accelerators
+                    </p>
                 </div>
                 
-                <!-- Stats -->
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-8 mt-20">
-                    <div class="text-center">
-                        <div class="text-5xl font-extrabold text-clino-medium mb-2">250+</div>
-                        <div class="text-gray-600 font-medium">Clinics</div>
+                <!-- Right Side: Overlapping UI Cards -->
+                <div class="relative h-[600px]">
+                    <!-- Activity Graph Card -->
+                    <div class="absolute top-0 right-0 w-64 bg-white rounded-2xl shadow-xl p-6 z-30 transform rotate-2">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-sm font-semibold text-gray-900">Patient Activity</h3>
+                            <span class="text-xs text-gray-500">This Week</span>
+                        </div>
+                        <div class="relative h-32 mb-4">
+                            <svg class="w-full h-full" viewBox="0 0 200 100" preserveAspectRatio="none">
+                                <path d="M0,80 Q50,60 100,50 T200,30" stroke="#73a942" stroke-width="3" fill="none" stroke-linecap="round"/>
+                                <circle cx="50" cy="60" r="4" fill="#73a942"/>
+                                <circle cx="100" cy="50" r="4" fill="#73a942"/>
+                                <circle cx="150" cy="40" r="4" fill="#73a942"/>
+                            </svg>
+                            <div class="absolute top-2 left-2">
+                                <span class="text-xs">🍽️</span>
+                            </div>
+                            <div class="absolute bottom-4 right-4">
+                                <span class="text-xs">👟</span>
+                            </div>
+                        </div>
+                        <div class="text-xs text-gray-600">12 appointments today</div>
                     </div>
-                    <div class="text-center">
-                        <div class="text-5xl font-extrabold text-clino-medium mb-2">50K+</div>
-                        <div class="text-gray-600 font-medium">Patients</div>
+                    
+                    <!-- Action List Card -->
+                    <div class="absolute top-32 left-0 w-72 bg-white rounded-2xl shadow-xl p-6 z-20 transform -rotate-1">
+                        <div class="space-y-4">
+                            <div class="border-b pb-3">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm font-medium text-gray-900">Track Appointments</span>
+                                    <button class="text-xs bg-clino-light text-clino-dark px-3 py-1 rounded-full font-medium">Add</button>
+                                </div>
+                            </div>
+                            <div class="border-b pb-3">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm font-medium text-gray-900">Manage Records</span>
+                                    <span class="text-xs text-gray-500">5 pending</span>
+                                </div>
+                            </div>
+                            <div class="border-b pb-3">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm font-medium text-gray-900">View Reports</span>
+                                    <button class="text-xs bg-gray-100 text-gray-700 px-3 py-1 rounded-full">Start</button>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between pt-2">
+                                <span class="text-xs text-gray-600">2 Completed Actions</span>
+                                <svg class="w-4 h-4 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
+                                </svg>
+                            </div>
+                        </div>
                     </div>
-                    <div class="text-center">
-                        <div class="text-5xl font-extrabold text-clino-medium mb-2">99.9%</div>
-                        <div class="text-gray-600 font-medium">Uptime</div>
+                    
+                    <!-- Chat Card -->
+                    <div class="absolute top-48 right-8 w-64 bg-white rounded-2xl shadow-xl p-4 z-40 transform rotate-1">
+                        <div class="flex items-center space-x-3 mb-3">
+                            <div class="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                                <span class="text-lg">👨</span>
+                            </div>
+                            <div class="flex-1">
+                                <div class="h-3 bg-gray-200 rounded mb-2"></div>
+                                <div class="h-3 bg-gray-200 rounded w-3/4"></div>
+                            </div>
+                        </div>
+                        <div class="bg-purple-100 rounded-2xl p-4 mb-3">
+                            <div class="flex items-start space-x-3">
+                                <div class="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <span class="text-white text-xs">👩</span>
+                                </div>
+                                <div class="flex-1">
+                                    <p class="text-sm text-gray-900 mb-1">Hi Dr. Sarah, Nice progress! Keep up the great work!</p>
+                                    <span class="text-xs text-gray-500">10:46 am</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white border border-gray-200 rounded-2xl p-3">
+                            <div class="flex items-start space-x-3">
+                                <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <span class="text-gray-600 text-xs">👨</span>
+                                </div>
+                                <div class="flex-1">
+                                    <p class="text-sm text-gray-900">Thanks! 😊</p>
+                                    <span class="text-xs text-gray-500">10:48 am</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="text-center">
-                        <div class="text-5xl font-extrabold text-clino-medium mb-2">24/7</div>
-                        <div class="text-gray-600 font-medium">Support</div>
+                    
+                    <!-- Patient Profile Card -->
+                    <div class="absolute bottom-20 right-0 w-56 bg-white rounded-2xl shadow-xl p-5 z-30 transform -rotate-2">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 bg-clino-light rounded-full flex items-center justify-center">
+                                <span class="text-2xl">👤</span>
+                            </div>
+                            <div class="w-8 h-8 bg-gray-200 rounded-full"></div>
+                        </div>
+                        <h3 class="font-semibold text-gray-900 mb-1">Patient Profile</h3>
+                        <p class="text-xs text-gray-600 mb-3">Active since Jan 2024</p>
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-gray-600">Appointments</span>
+                                <span class="font-semibold text-gray-900">24</span>
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-gray-600">Records</span>
+                                <span class="font-semibold text-gray-900">12</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Medication Reminder Card -->
+                    <div class="absolute bottom-0 left-8 w-64 bg-white rounded-2xl shadow-xl p-5 z-20 transform rotate-1">
+                        <h3 class="text-sm font-semibold text-gray-900 mb-3">Morning Reminder</h3>
+                        <div class="flex items-center justify-between mb-3">
+                            <div>
+                                <p class="text-sm font-medium text-gray-900">Follow-up Appointment</p>
+                                <p class="text-xs text-gray-500">10:00 AM</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button class="flex-1 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium">Scheduled</button>
+                            <button class="flex-1 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium">Reschedule</button>
+                        </div>
+                    </div>
+                    
+                    <!-- eConsent Card -->
+                    <div class="absolute top-64 left-16 w-48 bg-white rounded-2xl shadow-xl p-4 z-10 transform -rotate-3">
+                        <h3 class="text-sm font-semibold text-gray-900 mb-3">eConsent</h3>
+                        <div class="border-2 border-purple-300 rounded-lg p-3">
+                            <div class="text-xs text-gray-600 mb-2">Digital Signature</div>
+                            <div class="h-8 bg-purple-100 rounded flex items-center justify-center">
+                                <span class="text-purple-600 text-xs font-semibold">✓ Signed</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Stats Card -->
+                    <div class="absolute bottom-32 left-32 w-52 bg-gradient-to-br from-clino-light to-clino-medium rounded-2xl shadow-xl p-5 z-25 transform rotate-2">
+                        <h3 class="text-sm font-semibold text-white mb-3">Today's Stats</h3>
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-white/90">Patients</span>
+                                <span class="text-lg font-bold text-white">18</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-white/90">Revenue</span>
+                                <span class="text-lg font-bold text-white">₹45K</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Reviews Section -->
+    <section class="py-12 bg-gray-50 border-y border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row items-center justify-center gap-8">
+                <!-- Review Count and Stars -->
+                <div class="flex items-center gap-4">
+                    <span class="text-2xl font-bold text-gray-900">1,000+ Reviews</span>
+                    <div class="flex items-center gap-1 bg-purple-50 border-2 border-purple-200 rounded-lg px-3 py-1.5">
+                        <svg class="w-5 h-5 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                        </svg>
+                        <svg class="w-5 h-5 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                        </svg>
+                        <svg class="w-5 h-5 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                        </svg>
+                        <svg class="w-5 h-5 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                        </svg>
+                        <svg class="w-5 h-5 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                        </svg>
+                    </div>
+            </div>
+            
+                <!-- Platform Logos -->
+                <div class="flex items-center gap-6 opacity-60">
+                    <div class="text-gray-500 font-semibold text-sm">G2</div>
+                    <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
+                        </svg>
+                        <span class="text-gray-600 font-semibold">Capterra</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V8zm0 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2z" clip-rule="evenodd"/>
+                        </svg>
+                        <span class="text-gray-600 font-semibold">SourceForge</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                        </svg>
+                        <span class="text-gray-500 font-semibold text-sm">Reviews</span>
                     </div>
                 </div>
             </div>
@@ -316,18 +580,44 @@
     <!-- Footer -->
     <footer class="bg-clino-dark text-white py-16">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex flex-col md:flex-row justify-between items-center mb-12">
-                <div class="mb-6 md:mb-0">
-                    <img src="assets/clino-health-logo-full.svg" alt="Clino Health" class="h-12 w-auto brightness-0 invert" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                    <div class="hidden text-2xl font-bold">
-                        <span class="text-clino-light">Clino</span> <span class="text-white">Health</span>
-                    </div>
+            <div class="grid md:grid-cols-4 gap-12 mb-12">
+                <!-- Company -->
+                <div>
+                    <img src="assets/logo and name.svg" alt="Clino Health" class="h-12 w-auto brightness-0 invert mb-6">
+                    <p class="text-gray-400 text-sm">Practice management software for healthcare professionals across India.</p>
                 </div>
-                <div class="flex flex-wrap justify-center gap-8 text-gray-300">
-                    <a href="bdent/" class="hover:text-white transition-colors font-medium">BDent</a>
-                    <a href="#products" class="hover:text-white transition-colors font-medium">Products</a>
-                    <a href="#features" class="hover:text-white transition-colors font-medium">Features</a>
-                    <a href="#contact" class="hover:text-white transition-colors font-medium">Contact</a>
+                
+                <!-- Products -->
+                <div>
+                    <h3 class="text-white font-semibold mb-4">Products</h3>
+                    <ul class="space-y-3 text-gray-300 text-sm">
+                        <li><a href="bdent/" class="hover:text-white transition-colors">BDent</a></li>
+                        <li><a href="index.html#products" class="hover:text-white transition-colors">BSono (Coming Soon)</a></li>
+                        <li><a href="index.html#products" class="hover:text-white transition-colors">BPhysio (Coming Soon)</a></li>
+                        <li><a href="index.html#products" class="hover:text-white transition-colors">BPath (Coming Soon)</a></li>
+                    </ul>
+                </div>
+                
+                <!-- Company Links -->
+                <div>
+                    <h3 class="text-white font-semibold mb-4">Company</h3>
+                    <ul class="space-y-3 text-gray-300 text-sm">
+                        <li><a href="about.html" class="hover:text-white transition-colors">About Us</a></li>
+                        <li><a href="index.html#features" class="hover:text-white transition-colors">Features</a></li>
+                        <li><a href="pricing.html" class="hover:text-white transition-colors">Pricing</a></li>
+                        <li><a href="contact.html" class="hover:text-white transition-colors">Contact</a></li>
+                    </ul>
+                </div>
+                
+                <!-- Legal & Support -->
+                <div>
+                    <h3 class="text-white font-semibold mb-4">Legal & Support</h3>
+                    <ul class="space-y-3 text-gray-300 text-sm">
+                        <li><a href="security.html" class="hover:text-white transition-colors">Security</a></li>
+                        <li><a href="privacy.html" class="hover:text-white transition-colors">Privacy Policy</a></li>
+                        <li><a href="terms.html" class="hover:text-white transition-colors">Terms of Service</a></li>
+                        <li><a href="contact.html" class="hover:text-white transition-colors">Support</a></li>
+                    </ul>
                 </div>
             </div>
             <div class="pt-8 border-t border-gray-700 text-center text-gray-400 text-sm">

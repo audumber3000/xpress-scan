@@ -8,8 +8,8 @@ This folder contains static HTML landing pages for better SEO performance. These
 landing/
 ├── index.html          # Main landing page
 ├── assets/             # Images, logos, and other assets
-│   ├── clino-health-logo.svg
-│   ├── clino-health-logo-full.svg
+│   ├── logo.svg              # Logo icon (for favicon)
+│   ├── logo and name.svg     # Full logo with text
 │   └── *.png          # Screenshot images
 └── README.md
 ```

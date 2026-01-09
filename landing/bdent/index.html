@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BDent - Dental Practice Management Software | Clino Health</title>
     <meta name="description" content="BDent - Professional dental practice management software. Patient records, appointments, billing, reports. Works offline. ₹7,999 lifetime.">
-    <link rel="icon" type="image/png" href="../assets/clino-health-logo.png">
+    <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>body { font-family: 'Inter', sans-serif; }</style>
@@ -16,10 +16,7 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-16">
                 <a href="../" class="flex items-center">
-                    <img src="../assets/clino-health-logo.png" alt="Clino Health" class="h-12 w-auto" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                    <span class="hidden text-xl font-bold">
-                        <span style="color: #73a942;">Clino</span> <span style="color: #143601;">Health</span>
-                    </span>
+                    <img src="../assets/logo and name.svg" alt="Clino Health" class="h-12 w-auto">
                 </a>
                 <div class="hidden md:flex items-center space-x-8">
                     <a href="#features" class="text-gray-600 hover:text-[#245501]">Features</a>
@@ -273,21 +270,49 @@
     </section>
 
     <!-- Footer -->
-    <footer class="bg-gray-900 text-white py-12">
-        <div class="max-w-7xl mx-auto px-4">
-            <div class="flex flex-col md:flex-row justify-between items-center">
-                <img src="../assets/clino-health-logo.png" alt="Clino Health" class="h-10 w-auto brightness-0 invert mb-4 md:mb-0" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                <div class="hidden text-xl font-bold text-white mb-4 md:mb-0">
-                    <span style="color: #73a942;">Clino</span> <span>Health</span>
+    <footer class="bg-clino-dark text-white py-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid md:grid-cols-4 gap-12 mb-12">
+                <!-- Company -->
+                <div>
+                    <img src="../assets/logo and name.svg" alt="Clino Health" class="h-12 w-auto brightness-0 invert mb-6">
+                    <p class="text-gray-400 text-sm">Practice management software for healthcare professionals across India.</p>
                 </div>
-                <div class="flex space-x-6 text-gray-400 text-sm">
-                    <a href="../" class="hover:text-white">Home</a>
-                    <a href="#features" class="hover:text-white">Features</a>
-                    <a href="#pricing" class="hover:text-white">Pricing</a>
-                    <a href="https://wa.me/918766742410" class="hover:text-white">Support</a>
+                
+                <!-- Products -->
+                <div>
+                    <h3 class="text-white font-semibold mb-4">Products</h3>
+                    <ul class="space-y-3 text-gray-300 text-sm">
+                        <li><a href="../bdent/" class="hover:text-white transition-colors">BDent</a></li>
+                        <li><a href="../index.html#products" class="hover:text-white transition-colors">BSono (Coming Soon)</a></li>
+                        <li><a href="../index.html#products" class="hover:text-white transition-colors">BPhysio (Coming Soon)</a></li>
+                        <li><a href="../index.html#products" class="hover:text-white transition-colors">BPath (Coming Soon)</a></li>
+                    </ul>
+                </div>
+                
+                <!-- Company Links -->
+                <div>
+                    <h3 class="text-white font-semibold mb-4">Company</h3>
+                    <ul class="space-y-3 text-gray-300 text-sm">
+                        <li><a href="../about.html" class="hover:text-white transition-colors">About Us</a></li>
+                        <li><a href="../index.html#features" class="hover:text-white transition-colors">Features</a></li>
+                        <li><a href="../pricing.html" class="hover:text-white transition-colors">Pricing</a></li>
+                        <li><a href="../contact.html" class="hover:text-white transition-colors">Contact</a></li>
+                    </ul>
+                </div>
+                
+                <!-- Legal & Support -->
+                <div>
+                    <h3 class="text-white font-semibold mb-4">Legal & Support</h3>
+                    <ul class="space-y-3 text-gray-300 text-sm">
+                        <li><a href="../security.html" class="hover:text-white transition-colors">Security</a></li>
+                        <li><a href="../privacy.html" class="hover:text-white transition-colors">Privacy Policy</a></li>
+                        <li><a href="../terms.html" class="hover:text-white transition-colors">Terms of Service</a></li>
+                        <li><a href="../contact.html" class="hover:text-white transition-colors">Support</a></li>
+                    </ul>
                 </div>
             </div>
-            <div class="mt-8 pt-8 border-t border-gray-800 text-center text-gray-500 text-sm">
+            <div class="pt-8 border-t border-gray-700 text-center text-gray-400 text-sm">
                 © 2024 Clino Health. Made with ❤️ in India.
             </div>
         </div>

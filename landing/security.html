@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security - Clino Health</title>
+    <meta name="description" content="Learn about Clino Health's security measures and data protection">
+    <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        :root {
+            --clino-dark: #143601;
+            --clino-medium: #245501;
+            --clino-light: #73a942;
+        }
+        .text-clino-dark { color: #143601; }
+        .text-clino-medium { color: #245501; }
+        .text-clino-light { color: #73a942; }
+        .bg-clino-dark { background-color: #143601; }
+        .bg-clino-medium { background-color: #245501; }
+        .bg-clino-light { background-color: #73a942; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Top Trust Banner -->
+    <div class="fixed top-0 w-full bg-clino-light z-50 border-b border-clino-light/20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-center h-10 text-sm">
+                <div class="flex items-center space-x-2">
+                    <svg class="w-5 h-5 text-clino-dark" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                    </svg>
+                    <span class="text-clino-dark font-medium">We treat patient data like it's our own</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="fixed top-10 w-full bg-white/98 backdrop-blur-md border-b border-gray-100 z-40 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-20">
+                <a href="index.html" class="flex items-center">
+                    <img src="assets/logo and name.svg" alt="Clino Health" class="h-14 w-auto">
+                </a>
+                <a href="index.html" class="text-gray-700 hover:text-clino-medium font-medium transition-colors">← Back to Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Content -->
+    <section class="pt-40 pb-24">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h1 class="text-4xl md:text-5xl font-extrabold text-gray-900 mb-4">Security & Data Protection</h1>
+            <p class="text-xl text-gray-600 mb-12">Your data security is our top priority</p>
+            
+            <div class="prose prose-lg max-w-none space-y-8 text-gray-700">
+                <section>
+                    <h2 class="text-2xl font-bold text-gray-900 mb-4">Local Data Storage</h2>
+                    <p>Clino Health software stores all your patient data locally on your computer. Your data never leaves your system unless you explicitly choose to use cloud backup features. This means:</p>
+                    <ul class="list-disc pl-6 space-y-2 mt-4">
+                        <li>No data transmission over the internet</li>
+                        <li>Complete control over your data</li>
+                        <li>Works offline - no internet required</li>
+                        <li>No third-party access to your patient records</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h2 class="text-2xl font-bold text-gray-900 mb-4">Encryption</h2>
+                    <p>All sensitive data stored by Clino Health software is encrypted using industry-standard encryption algorithms. This ensures that even if someone gains physical access to your computer, your patient data remains protected.</p>
+                </section>
+
+                <section>
+                    <h2 class="text-2xl font-bold text-gray-900 mb-4">Access Control</h2>
+                    <p>Clino Health software includes role-based access control, allowing you to:</p>
+                    <ul class="list-disc pl-6 space-y-2 mt-4">
+                        <li>Create user accounts with different permission levels</li>
+                        <li>Control who can view, edit, or delete patient records</li>
+                        <li>Track all user activities with audit logs</li>
+                        <li>Set password requirements and enforce security policies</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h2 class="text-2xl font-bold text-gray-900 mb-4">Compliance</h2>
+                    <p>Clino Health is designed to help you comply with:</p>
+                    <div class="grid md:grid-cols-2 gap-4 mt-6">
+                        <div class="bg-white p-6 rounded-xl shadow-sm">
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">HIPAA</h3>
+                            <p class="text-gray-600">Helps maintain HIPAA compliance with proper access controls and audit trails.</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm">
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">ISO 27001</h3>
+                            <p class="text-gray-600">Follows ISO 27001 security standards for information security management.</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm">
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">Indian Regulations</h3>
+                            <p class="text-gray-600">Compliant with Indian data protection and healthcare regulations.</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm">
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">Data Protection</h3>
+                            <p class="text-gray-600">Implements best practices for patient data protection and privacy.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2 class="text-2xl font-bold text-gray-900 mb-4">Regular Updates</h2>
+                    <p>We regularly release security updates to address any vulnerabilities and improve the overall security of our software. We recommend keeping your software updated to the latest version.</p>
+                </section>
+
+                <section>
+                    <h2 class="text-2xl font-bold text-gray-900 mb-4">Your Responsibility</h2>
+                    <p>While we provide secure software, you are responsible for:</p>
+                    <ul class="list-disc pl-6 space-y-2 mt-4">
+                        <li>Maintaining secure backups of your data</li>
+                        <li>Using strong passwords for user accounts</li>
+                        <li>Keeping your operating system and software updated</li>
+                        <li>Restricting physical access to computers running the software</li>
+                        <li>Following your local healthcare data protection regulations</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h2 class="text-2xl font-bold text-gray-900 mb-4">Report Security Issues</h2>
+                    <p>If you discover a security vulnerability, please report it to us immediately at:</p>
+                    <p class="mt-2">
+                        <strong>Email:</strong> security@clinohealth.app<br>
+                        <strong>Phone:</strong> +91 8766742410
+                    </p>
+                    <p class="mt-4">We take all security reports seriously and will respond promptly.</p>
+                </section>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-clino-dark text-white py-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid md:grid-cols-4 gap-12 mb-12">
+                <!-- Company -->
+                <div>
+                    <img src="assets/logo and name.svg" alt="Clino Health" class="h-12 w-auto brightness-0 invert mb-6">
+                    <p class="text-gray-400 text-sm">Practice management software for healthcare professionals across India.</p>
+                </div>
+                
+                <!-- Products -->
+                <div>
+                    <h3 class="text-white font-semibold mb-4">Products</h3>
+                    <ul class="space-y-3 text-gray-300 text-sm">
+                        <li><a href="bdent/" class="hover:text-white transition-colors">BDent</a></li>
+                        <li><a href="index.html#products" class="hover:text-white transition-colors">BSono (Coming Soon)</a></li>
+                        <li><a href="index.html#products" class="hover:text-white transition-colors">BPhysio (Coming Soon)</a></li>
+                        <li><a href="index.html#products" class="hover:text-white transition-colors">BPath (Coming Soon)</a></li>
+                    </ul>
+                </div>
+                
+                <!-- Company Links -->
+                <div>
+                    <h3 class="text-white font-semibold mb-4">Company</h3>
+                    <ul class="space-y-3 text-gray-300 text-sm">
+                        <li><a href="about.html" class="hover:text-white transition-colors">About Us</a></li>
+                        <li><a href="index.html#features" class="hover:text-white transition-colors">Features</a></li>
+                        <li><a href="pricing.html" class="hover:text-white transition-colors">Pricing</a></li>
+                        <li><a href="contact.html" class="hover:text-white transition-colors">Contact</a></li>
+                    </ul>
+                </div>
+                
+                <!-- Legal & Support -->
+                <div>
+                    <h3 class="text-white font-semibold mb-4">Legal & Support</h3>
+                    <ul class="space-y-3 text-gray-300 text-sm">
+                        <li><a href="security.html" class="hover:text-white transition-colors">Security</a></li>
+                        <li><a href="privacy.html" class="hover:text-white transition-colors">Privacy Policy</a></li>
+                        <li><a href="terms.html" class="hover:text-white transition-colors">Terms of Service</a></li>
+                        <li><a href="contact.html" class="hover:text-white transition-colors">Support</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="pt-8 border-t border-gray-700 text-center text-gray-400 text-sm">
+                © 2024 Clino Health. Made with ❤️ in India.
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
