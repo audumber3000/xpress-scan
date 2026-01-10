@@ -3,7 +3,7 @@
   
   <!-- Homepage -->
   <url>
-    <loc>https://betterclinic.app/</loc>
+    <loc>https://clinohealth.com/</loc>
     <lastmod>2026-01-09</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
@@ -11,7 +11,7 @@
   
   <!-- About Page -->
   <url>
-    <loc>https://betterclinic.app/about.html</loc>
+    <loc>https://clinohealth.com/about.html</loc>
     <lastmod>2026-01-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
@@ -19,7 +19,7 @@
   
   <!-- Contact Page -->
   <url>
-    <loc>https://betterclinic.app/contact.html</loc>
+    <loc>https://clinohealth.com/contact.html</loc>
     <lastmod>2026-01-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
@@ -27,7 +27,7 @@
   
   <!-- Pricing Page -->
   <url>
-    <loc>https://betterclinic.app/pricing.html</loc>
+    <loc>https://clinohealth.com/pricing.html</loc>
     <lastmod>2026-01-09</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
@@ -35,7 +35,7 @@
   
   <!-- Privacy Policy -->
   <url>
-    <loc>https://betterclinic.app/privacy.html</loc>
+    <loc>https://clinohealth.com/privacy.html</loc>
     <lastmod>2026-01-09</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
@@ -43,7 +43,7 @@
   
   <!-- Security Page -->
   <url>
-    <loc>https://betterclinic.app/security.html</loc>
+    <loc>https://clinohealth.com/security.html</loc>
     <lastmod>2026-01-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
@@ -51,15 +51,31 @@
   
   <!-- Terms of Service -->
   <url>
-    <loc>https://betterclinic.app/terms.html</loc>
+    <loc>https://clinohealth.com/terms.html</loc>
     <lastmod>2026-01-09</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
   </url>
   
-  <!-- BDent Subdirectory -->
+  <!-- Clintal -->
   <url>
-    <loc>https://betterclinic.app/bdent/</loc>
+    <loc>https://clinohealth.com/Clintal/</loc>
+    <lastmod>2026-01-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+  <!-- Sonolin -->
+  <url>
+    <loc>https://clinohealth.com/Sonolin/</loc>
+    <lastmod>2026-01-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+  <!-- Flexio -->
+  <url>
+    <loc>https://clinohealth.com/Flexio/</loc>
     <lastmod>2026-01-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
