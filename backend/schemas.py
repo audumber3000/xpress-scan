@@ -73,7 +73,7 @@ class PatientBase(BaseModel):
     gender: str
     village: str
     phone: str
-    referred_by: Optional[str] = None
+    referred_by: str
     treatment_type: str
     notes: Optional[str] = None
     payment_type: str = "Cash"

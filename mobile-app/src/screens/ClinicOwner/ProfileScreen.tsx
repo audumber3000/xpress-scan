@@ -1,0 +1,440 @@
+import React, { useEffect, useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { User, Mail, Phone, Building2, MapPin, Bell, Lock, HelpCircle, LogOut, ChevronRight, Edit } from 'lucide-react-native';
+import { useAuth } from '../../context/AuthContext';
+import { ScreenHeader } from '../../components/ScreenHeader';
+import { GearLoader } from '../../components/GearLoader';
+import { colors } from '../../constants/colors';
+import { apiService, BackendUser } from '../../services/api/apiService';
+
+interface ProfileScreenProps {
+  navigation: any;
+}
+
+export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
+  const { user, logout } = useAuth();
+  const [profileData, setProfileData] = useState<BackendUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState({ patients: 142, appointments: 1248, rating: 4.9 });
+
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // First test if backend is reachable
+      console.log('🔌 [PROFILE] Testing backend connection...');
+      const isConnected = await apiService.testConnection();
+      
+      if (!isConnected) {
+        setError('Cannot connect to backend server. Make sure your backend is running at http://localhost:8000');
+        setLoading(false);
+        return;
+      }
+      
+      console.log('✅ [PROFILE] Backend is reachable, fetching profile...');
+      
+      const [userData, statsData] = await Promise.all([
+        apiService.getCurrentUser(),
+        apiService.getProfileStats(),
+      ]);
+      
+      if (!userData) {
+        setError('Failed to load profile data. You may need to login first.');
+      } else {
+        setProfileData(userData);
+      }
+      
+      if (statsData) {
+        setStats(statsData);
+      }
+    } catch (err: any) {
+      console.error('❌ [PROFILE] Load error:', err);
+      setError(`Error: ${err.message || 'An error occurred while loading your profile.'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const userName = profileData?.name || user?.displayName || 'Doctor';
+  const userEmail = profileData?.email || user?.email || '';
+  const userPhone = profileData?.phone || '+1 (555) 123-4567';
+  const clinicName = profileData?.clinic?.name || 'Smile Dental Clinic';
+  const clinicAddress = profileData?.clinic?.address || '123 Medical Center, NY 10001';
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Logout', 
+          style: 'destructive',
+          onPress: () => logout()
+        }
+      ]
+    );
+  };
+
+  const MenuItem = ({ icon: Icon, title, subtitle, onPress, showArrow = true, color = '#1F2937' }: any) => (
+    <TouchableOpacity style={styles.menuItem} onPress={onPress}>
+      <View style={[styles.menuIcon, { backgroundColor: `${color}15` }]}>
+        <Icon size={20} color={color} />
+      </View>
+      <View style={styles.menuContent}>
+        <Text style={styles.menuTitle}>{title}</Text>
+        {subtitle && <Text style={styles.menuSubtitle}>{subtitle}</Text>}
+      </View>
+      {showArrow && <ChevronRight size={20} color="#9CA3AF" />}
+    </TouchableOpacity>
+  );
+
+  
+  return (
+    <SafeAreaView style={styles.container} edges={[]}>
+      <ScreenHeader 
+        title="Profile" 
+        rightComponent={
+          <TouchableOpacity style={styles.editButton}>
+            <Edit size={20} color={colors.white} />
+          </TouchableOpacity>
+        }
+      />
+
+      {/* Error Message */}
+      {error && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity onPress={loadProfile} style={styles.retryButton}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Loading State */}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <GearLoader text="Loading profile..." />
+        </View>
+      ) : (
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Profile Card */}
+        <View style={styles.profileCard}>
+          <View style={styles.avatarContainer}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {userName.split(' ').map(n => n[0]).join('').toUpperCase()}
+              </Text>
+            </View>
+            <View style={styles.statusIndicator} />
+          </View>
+          <Text style={styles.profileName}>Dr. {userName}</Text>
+          <Text style={styles.profileRole}>Clinic Owner</Text>
+          <View style={styles.profileStats}>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{stats.patients}</Text>
+              <Text style={styles.statLabel}>Patients</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{stats.appointments.toLocaleString()}</Text>
+              <Text style={styles.statLabel}>Appointments</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{stats.rating}</Text>
+              <Text style={styles.statLabel}>Rating</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Personal Profile */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Personal Profile</Text>
+          <View style={styles.menuGroup}>
+            <MenuItem
+              icon={User}
+              title="Full Name"
+              subtitle={`Dr. ${userName}`}
+              color={colors.primary}
+              onPress={() => {}}
+            />
+            <MenuItem
+              icon={Mail}
+              title="Email Address"
+              subtitle={userEmail}
+              color={colors.info}
+              onPress={() => {}}
+            />
+            <MenuItem
+              icon={Phone}
+              title="Phone Number"
+              subtitle={userPhone}
+              color={colors.success}
+              onPress={() => {}}
+            />
+          </View>
+        </View>
+
+        {/* Clinic Profile */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Clinic Profile</Text>
+          <View style={styles.menuGroup}>
+            <MenuItem
+              icon={Building2}
+              title="Clinic Name"
+              subtitle={clinicName}
+              color={colors.warning}
+              onPress={() => {}}
+            />
+            <MenuItem
+              icon={MapPin}
+              title="Clinic Address"
+              subtitle={clinicAddress}
+              color={colors.error}
+              onPress={() => {}}
+            />
+          </View>
+        </View>
+
+        {/* Settings */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Settings</Text>
+          <View style={styles.menuGroup}>
+            <MenuItem
+              icon={Bell}
+              title="Notifications"
+              subtitle="Manage notification preferences"
+              color="#9333EA"
+              onPress={() => {}}
+            />
+            <MenuItem
+              icon={Lock}
+              title="Privacy & Security"
+              subtitle="Password, 2FA, data privacy"
+              color="#3B82F6"
+              onPress={() => {}}
+            />
+          </View>
+        </View>
+
+        {/* Support */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Support</Text>
+          <View style={styles.menuGroup}>
+            <MenuItem
+              icon={HelpCircle}
+              title="Help & Support"
+              subtitle="FAQs, contact support"
+              color="#10B981"
+              onPress={() => {}}
+            />
+          </View>
+        </View>
+
+        {/* Logout */}
+        <View style={styles.section}>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <LogOut size={20} color="#EF4444" />
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
+
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      )}
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.gray50,
+  },
+  editButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: colors.gray600,
+    marginTop: 8,
+  },
+  errorContainer: {
+    backgroundColor: '#FEE2E2',
+    borderLeftWidth: 4,
+    borderLeftColor: '#EF4444',
+    padding: 16,
+    marginHorizontal: 20,
+    marginTop: 16,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#991B1B',
+    marginRight: 12,
+  },
+  retryButton: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  retryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.white,
+  },
+  content: {
+    flex: 1,
+  },
+  profileCard: {
+    backgroundColor: colors.white,
+    marginHorizontal: 20,
+    marginTop: 20,
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+  },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 16,
+  },
+  avatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.primaryBgLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: colors.primary,
+  },
+  statusIndicator: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: colors.success,
+    borderWidth: 3,
+    borderColor: colors.white,
+  },
+  profileName: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  profileRole: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    marginBottom: 20,
+  },
+  profileStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    justifyContent: 'space-around',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#9CA3AF',
+  },
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: '#E5E7EB',
+  },
+  section: {
+    marginTop: 24,
+    paddingHorizontal: 20,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  menuGroup: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  menuIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  menuContent: {
+    flex: 1,
+  },
+  menuTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  menuSubtitle: {
+    fontSize: 13,
+    color: '#9CA3AF',
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+  },
+  logoutText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#EF4444',
+  },
+});

@@ -1,4 +1,33 @@
-# Radiology Clinical Software
+# Xpress-Scan - Complete Clinic Management System
+
+A comprehensive radiology clinic management system with both web and mobile applications, featuring Google OAuth integration, real-time analytics, and streamlined clinic operations.
+
+## 📱 Mobile App Now Available!
+
+We're excited to announce the launch of our **React Native Mobile App** for iOS and Android! 
+
+### 🚀 Mobile App Features
+- **📊 Interactive Analytics Dashboard** with patient visit charts
+- **👥 Patient Management** with swipe-to-delete functionality  
+- **📅 Appointment Scheduling** with real-time availability
+- **💰 Transaction Tracking** with status indicators
+- **🔔 Real-time Notifications** with slide-in animations
+- **👤 Profile Management** for user settings
+- **🔐 Secure Authentication** with JWT tokens
+
+### 📱 Quick Start - Mobile App
+```bash
+cd mobile-app
+npm install
+npm run ios    # For iOS
+npm run android  # For Android
+```
+
+📖 **[View Mobile App Documentation](./MOBILE_APP_README.md)**
+
+---
+
+## 🌐 Web Application
 
 A comprehensive radiology clinic management system with Google OAuth integration and streamlined onboarding.
 
@@ -147,6 +176,70 @@ frontend/
 └── package.json       # Dependencies
 ```
 
+### 📱 Mobile App Structure
+```
+mobile-app/
+├── src/
+│   ├── components/          # Reusable UI components
+│   │   ├── home/          # Home screen components
+│   │   │   ├── PatientVisitsChart.tsx
+│   │   │   └── RecentTransactions.tsx
+│   │   └── GearLoader.tsx
+│   ├── context/           # React Context providers
+│   │   └── AuthContext.tsx
+│   ├── constants/         # App constants and colors
+│   │   └── colors.ts
+│   ├── navigation/        # Navigation configuration
+│   │   └── AppNavigator.tsx
+│   ├── screens/           # Main app screens
+│   │   └── ClinicOwner/
+│   │       ├── HomeScreen.tsx
+│   │       ├── PatientsScreen.tsx
+│   │       ├── AppointmentsScreen.tsx
+│   │       ├── ProfileScreen.tsx
+│   │       └── NotificationsScreen.tsx
+│   └── services/         # API and service layers
+│       └── api/
+│           └── apiService.ts
+├── App.tsx               # Main app entry point
+└── package.json          # Dependencies and scripts
+```
+
+## 🚀 Deployment
+
+### Web Application
+```bash
+# Backend Deployment
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000
+
+# Frontend Deployment
+cd frontend
+npm run build
+# Deploy dist/ folder to your hosting service
+```
+
+### Mobile App
+```bash
+# iOS Deployment
+cd mobile-app
+npx react-native run-ios --device
+# Build for App Store through Xcode
+
+# Android Deployment
+cd mobile-app
+npx react-native run-android
+# Build APK or AAB through Android Studio
+```
+
+## 📚 Documentation
+
+- **[Mobile App Documentation](./MOBILE_APP_README.md)** - Complete mobile app guide
+- **[Changelog](./CHANGELOG.md)** - Version history and changes
+- **[API Documentation](./backend/docs/)** - Backend API reference
+- **[Development Guide](./docs/)** - Development setup and guidelines
+
 ## Contributing
 
 1. Fork the repository
@@ -155,6 +248,25 @@ frontend/
 4. Add tests if applicable
 5. Submit a pull request
 
+### Development Guidelines
+- Follow TypeScript best practices for mobile app
+- Maintain consistent code style across all platforms
+- Write tests for new features
+- Update documentation for changes
+- Test on both iOS and Android for mobile changes
+
+## 📞 Support
+
+For support and questions:
+- 📖 Check the documentation
+- 🐛 Report issues through GitHub
+- 📧 Contact the development team
+- 💬 Join our community discussions
+
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+**Xpress-Scan** - Modern clinic management system for web and mobile. 🏥📱
