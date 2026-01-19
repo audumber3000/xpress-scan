@@ -1,0 +1,659 @@
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Search, ChevronLeft, ChevronRight, Filter } from 'lucide-react-native';
+import { useAuth } from '../../../../app/AuthContext';
+import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
+import { GearLoader } from '../../../../shared/components/GearLoader';
+import { Toggle } from '../../../../shared/components/Toggle';
+import { MonthView } from '../../../../shared/components/MonthView';
+import { colors } from '../../../../shared/constants/colors';
+import { appointmentsApiService, Appointment } from '../../../../services/api/appointments.api';
+
+interface AppointmentsScreenProps {
+  navigation: any;
+}
+
+export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigation }) => {
+  const { user } = useAuth();
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState<'Week' | 'Month'>('Week');
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    loadAppointments();
+  }, [selectedDate, viewMode]);
+
+  const loadAppointments = async () => {
+    setLoading(true);
+    try {
+      console.log('🔄 [APPOINTMENTS] Loading appointments...');
+      const dateStr = selectedDate.toISOString().split('T')[0];
+      const data = await appointmentsApiService.getAppointments(dateStr, viewMode.toLowerCase() as 'week' | 'month');
+      setAppointments(data);
+      console.log('✅ [APPOINTMENTS] Loaded', data.length, 'appointments');
+    } catch (err: any) {
+      console.error('❌ [APPOINTMENTS] Load error:', err);
+      // Set empty data on error to prevent infinite loading
+      setAppointments([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      console.log('🔄 [APPOINTMENTS] Refreshing appointments...');
+      const dateStr = selectedDate.toISOString().split('T')[0];
+      const data = await appointmentsApiService.getAppointments(dateStr, viewMode.toLowerCase() as 'week' | 'month');
+      setAppointments(data);
+      console.log('✅ [APPOINTMENTS] Refreshed', data.length, 'appointments');
+    } catch (err: any) {
+      console.error('❌ [APPOINTMENTS] Refresh error:', err);
+      // Set empty data on error to prevent infinite loading
+      setAppointments([]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'Finished':
+        return '#10B981';
+      case 'Encounter':
+        return '#F59E0B';
+      case 'Registered':
+        return '#6B7280';
+      case 'Cancelled':
+        return '#EF4444';
+      default:
+        return '#6B7280';
+    }
+  };
+
+  const getWeekDays = () => {
+    const today = new Date();
+    const currentDay = today.getDay();
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - currentDay + (currentDay === 0 ? -6 : 1)); // Start from Monday
+    
+    const weekDays = [];
+    const dayNames = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+    
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(weekStart);
+      date.setDate(weekStart.getDate() + i);
+      
+      const isToday = date.toDateString() === today.toDateString();
+      const dayName = isToday ? 'TODAY' : dayNames[i];
+      const dayNumber = date.getDate();
+      
+      weekDays.push({
+        date,
+        label: `${dayName}\n${dayNumber}`,
+        isToday,
+      });
+    }
+    
+    return weekDays;
+  };
+
+  const getMonthCalendarDays = () => {
+    const year = selectedDate.getFullYear();
+    const month = selectedDate.getMonth();
+    
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+    
+    const days: any[] = [];
+    
+    // Add empty days for alignment
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push({ type: 'empty' });
+    }
+    
+    const today = new Date();
+    
+    // Add actual days
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, month, day);
+      const isToday = today.toDateString() === date.toDateString();
+      
+      // Check if this day has appointments
+      const dayAppointments = appointments.filter(appointment => {
+        const appointmentDate = new Date(appointment.date);
+        return appointmentDate.toDateString() === date.toDateString();
+      });
+      
+      const hasAppointments = dayAppointments.length > 0;
+      
+      days.push({
+        type: 'day',
+        day,
+        date,
+        isToday,
+        hasAppointments,
+        appointmentCount: dayAppointments.length
+      });
+    }
+    
+    return days;
+  };
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.customHeader}>
+        {/* Filter Icon */}
+        <TouchableOpacity style={styles.filterIconButton}>
+          <Filter size={24} color={colors.gray700} />
+        </TouchableOpacity>
+
+        {/* Week/Month Toggle */}
+        <View style={styles.toggleContainer}>
+          <Toggle
+            options={[
+              { label: 'Week', value: 'Week' },
+              { label: 'Month', value: 'Month' }
+            ]}
+            selectedValue={viewMode}
+            onValueChange={(value) => setViewMode(value as 'Week' | 'Month')}
+            backgroundColor='#F3F4F6'
+            activeColor='#6C4CF3'
+            textColor='#6B7280'
+            activeTextColor='#FFFFFF'
+          />
+        </View>
+
+        {/* Search Icon */}
+        <TouchableOpacity style={styles.searchIconButton}>
+          <Search size={24} color={colors.gray700} />
+        </TouchableOpacity>
+      </View>
+
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <GearLoader text="Loading appointments..." />
+        </View>
+      ) : viewMode === 'Week' ? (
+        <ScrollView 
+            style={styles.content} 
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={colors.primary}
+                colors={[colors.primary]}
+                progressBackgroundColor={colors.gray100}
+              />
+            }
+          >
+          {/* Date Selector */}
+          <View style={styles.dateSection}>
+          <View style={styles.dateHeader}>
+            <View style={styles.dateInfo}>
+              <Text style={styles.todayText}>Today, </Text>
+              <Text style={styles.dateText}>
+                {selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </Text>
+            </View>
+          </View>
+
+          {/* Week Calendar */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.weekCalendar}>
+            {getWeekDays().map((dayInfo, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.dayCard, 
+                  dayInfo.isToday && styles.dayCardActive,
+                  selectedDate.toDateString() === dayInfo.date.toDateString() && styles.dayCardSelected
+                ]}
+                onPress={() => setSelectedDate(dayInfo.date)}
+              >
+                <Text style={[
+                  styles.dayText, 
+                  dayInfo.isToday && styles.dayTextActive,
+                  selectedDate.toDateString() === dayInfo.date.toDateString() && !dayInfo.isToday && styles.dayTextSelected
+                ]}>
+                  {dayInfo.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Time Indicator */}
+        <View style={styles.monthLabel}>
+          <Text style={styles.monthText}>
+            {selectedDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}
+          </Text>
+        </View>
+
+        {/* Appointments List */}
+        <View style={styles.appointmentsList}>
+          {appointments.length > 0 ? (
+            appointments.map((appointment) => (
+              <View key={appointment.id} style={styles.timeSlot}>
+                <Text style={styles.timeLabel}>
+                  {new Date(`1970-01-01T${appointment.startTime}`).toLocaleTimeString('en-US', { 
+                    hour: 'numeric', 
+                    minute: '2-digit',
+                    hour12: true 
+                  })}
+                </Text>
+                <View style={styles.appointmentCard}>
+                  <View style={styles.appointmentContent}>
+                    <Text style={styles.patientName}>{appointment.patientName}</Text>
+                    <Text style={styles.appointmentTime}>
+                      {appointment.startTime} › {appointment.endTime}
+                    </Text>
+                  </View>
+                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appointment.status) }]}>
+                    <View style={[styles.statusDot, { backgroundColor: getStatusColor(appointment.status) }]} />
+                    <Text style={[styles.statusText, { color: getStatusColor(appointment.status) }]}>
+                      {appointment.status}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={styles.noAppointmentsContainer}>
+              <Text style={styles.noAppointmentsText}>
+                {selectedDate.toDateString() === new Date().toDateString() 
+                  ? "You have no appointments today" 
+                  : `No appointments on ${selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`
+                }
+              </Text>
+            </View>
+          )}
+
+          <View style={{ height: 20 }} />
+        </View>
+        </ScrollView>
+      ) : (
+        <MonthView
+          selectedDate={selectedDate}
+          appointments={appointments}
+          onDateSelect={setSelectedDate}
+          onMonthChange={setSelectedDate}
+        />
+      )}
+
+      {/* Inbox Button */}
+      <TouchableOpacity style={styles.inboxButton}>
+        <Text style={styles.inboxIcon}>📥</Text>
+        <Text style={styles.inboxText}>Inbox</Text>
+      </TouchableOpacity>
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.gray50,
+  },
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
+    backgroundColor: colors.primary,
+    gap: 12,
+  },
+  filterIconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  searchIconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  toggleContainer: {
+    flex: 1,
+    maxWidth: 200,
+    minWidth: 140,
+  },
+    loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  comingSoon: {
+    fontSize: 16,
+    color: colors.gray500,
+    textAlign: 'center',
+    paddingVertical: 60,
+  },
+  content: {
+    flex: 1,
+    paddingTop: 16,
+  },
+  dateSection: {
+    backgroundColor: colors.white,
+    paddingTop: 20,
+    paddingBottom: 16,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+  },
+  dateHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  dateInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  todayText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  dateText: {
+    fontSize: 18,
+    color: '#9CA3AF',
+  },
+  dateControls: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  dateArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  viewModeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 4,
+  },
+  viewModeText: {
+    fontSize: 14,
+    color: '#1F2937',
+    fontWeight: '500',
+  },
+  viewModeIcon: {
+    fontSize: 10,
+    color: '#9CA3AF',
+  },
+  weekCalendar: {
+    paddingHorizontal: 20,
+  },
+  dayCard: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginRight: 8,
+    borderRadius: 8,
+    backgroundColor: '#F9FAFB',
+    minWidth: 60,
+  },
+  dayCardActive: {
+    backgroundColor: colors.primary,
+  },
+  dayCardSelected: {
+    backgroundColor: '#EDE9FE',
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  dayText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  dayTextActive: {
+    color: colors.white,
+  },
+  dayTextSelected: {
+    color: colors.primary,
+  },
+  monthLabel: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  monthText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    letterSpacing: 1,
+  },
+  appointmentsList: {
+    paddingHorizontal: 20,
+  },
+  timeSlot: {
+    flexDirection: 'row',
+    marginBottom: 16,
+  },
+  timeLabel: {
+    width: 60,
+    fontSize: 13,
+    color: '#9CA3AF',
+    paddingTop: 4,
+  },
+  appointmentCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    padding: 16,
+    marginLeft: 12,
+    position: 'relative',
+  },
+  appointmentCardActive: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#F59E0B',
+  },
+  currentTimeIndicator: {
+    position: 'absolute',
+    top: -8,
+    left: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1F2937',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  currentTimeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+    marginRight: 6,
+  },
+  currentTimeText: {
+    fontSize: 11,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  appointmentContent: {
+    marginBottom: 8,
+  },
+  patientName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  appointmentTime: {
+    fontSize: 13,
+    color: '#9CA3AF',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  sunIcon: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+  },
+  emptySlot: {
+    flex: 1,
+    height: 40,
+    marginLeft: 12,
+  },
+  inboxButton: {
+    position: 'absolute',
+    bottom: 80,
+    right: 20,
+    backgroundColor: '#1F2937',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  inboxIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  inboxText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  monthCalendarContainer: {
+    backgroundColor: colors.white,
+    margin: 16,
+    borderRadius: 12,
+    padding: 20,
+  },
+  monthHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  monthNavButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  monthHeaderText: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: colors.gray900,
+  },
+  monthHestatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.white,
+  },
+  noAppointmentsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  noAppointmentsText: {
+    fontSize: 16,
+    color: colors.gray500,
+    textAlign: 'center',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  calendarDay: {
+    width: '13%',
+    aspectRatio: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  emptyDay: {
+    width: '100%',
+    height: '100%',
+  },
+  dayCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.white,
+    borderWidth: 2,
+    borderColor: colors.gray200,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dayCircleToday: {
+    backgroundColor: colors.gray900,
+    borderColor: colors.gray900,
+  },
+  dayNumber: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: colors.gray700,
+  },
+  dayNumberToday: {
+    color: colors.white,
+    fontWeight: '600',
+  },
+  dayCircleWithAppointments: {
+    backgroundColor: '#D1FAE5', // Light green background
+    borderWidth: 1,
+    borderColor: '#10B981', // Green border
+  },
+  dayNumberWithAppointments: {
+    color: '#065F46', // Dark green text
+    fontWeight: '500',
+  },
+    selectedDayAppointments: {
+    marginTop: 20,
+    paddingHorizontal: 20,
+  },
+  selectedDayHeader: {
+    marginBottom: 16,
+  },
+  selectedDayTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.gray900,
+  },
+});

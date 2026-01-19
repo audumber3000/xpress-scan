@@ -11,7 +11,7 @@ import {
 import { Platform } from 'react-native'
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin'
 import { auth } from '../../config/firebase'
-import { apiService } from '../api/apiService'
+import { authApiService } from '../api/auth.api'
 
 // Configure Google Sign-In
 // Get web client ID from Firebase Console → Project Settings → General → Your apps → Web app
@@ -77,7 +77,7 @@ export const signUpWithEmail = async (email: string, password: string) => {
     // Get Firebase ID token and sync with backend
     const firebaseIdToken = await userCredential.user.getIdToken()
     try {
-      await apiService.oauthLogin(firebaseIdToken)
+      await authApiService.oauthLogin(firebaseIdToken)
     } catch (backendError) {
       console.warn('Backend sync failed:', backendError)
       // Continue even if backend sync fails - user is still logged in to Firebase
@@ -105,7 +105,7 @@ export const signInWithEmail = async (email: string, password: string) => {
     // Get Firebase ID token and sync with backend
     const firebaseIdToken = await userCredential.user.getIdToken()
     try {
-      await apiService.oauthLogin(firebaseIdToken)
+      await authApiService.oauthLogin(firebaseIdToken)
     } catch (backendError) {
       console.warn('Backend sync failed:', backendError)
       // Continue even if backend sync fails - user is still logged in to Firebase
@@ -129,7 +129,7 @@ export const signInWithEmail = async (email: string, password: string) => {
 export const signOutUser = async () => {
   try {
     // Clear backend tokens
-    await apiService.clearTokens()
+    await authApiService.clearTokens()
     // Sign out from Firebase
     await signOut(auth)
     return { error: null }
@@ -241,7 +241,7 @@ export const signInWithGoogle = async () => {
     // Get Firebase ID token and sync with backend
     const firebaseIdToken = await userCredential.user.getIdToken()
     try {
-      await apiService.oauthLogin(firebaseIdToken)
+      await authApiService.oauthLogin(firebaseIdToken)
     } catch (backendError) {
       console.warn('Backend sync failed:', backendError)
       // Continue even if backend sync fails - user is still logged in to Firebase

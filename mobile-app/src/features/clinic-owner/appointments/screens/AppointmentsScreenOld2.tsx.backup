@@ -1,0 +1,646 @@
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Calendar, Search, SlidersHorizontal } from 'lucide-react-native';
+import { appointmentsApiService, Appointment } from '../../../../services/api/appointments.api';
+
+interface AppointmentsScreenProps {
+  navigation: any;
+}
+
+export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigation }) => {
+  const [viewMode, setViewMode] = useState<'Week' | 'Month'>('Month');
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    loadAppointments();
+  }, [selectedDate]);
+
+  const loadAppointments = async () => {
+    setLoading(true);
+    try {
+      // Dummy data for testing
+      const dummyAppointments: any[] = [
+        {
+          id: '1',
+          patientName: 'John Doe',
+          date: selectedDate.toISOString().split('T')[0],
+          startTime: '09:00',
+          endTime: '09:30',
+          status: 'Finished',
+          treatment: 'Root Canal Treatment',
+        },
+        {
+          id: '2',
+          patientName: 'Sarah Smith',
+          date: selectedDate.toISOString().split('T')[0],
+          startTime: '10:30',
+          endTime: '11:00',
+          status: 'Encounter',
+          treatment: 'Routine Check-up',
+        },
+        {
+          id: '3',
+          patientName: 'Mike Ross',
+          date: selectedDate.toISOString().split('T')[0],
+          startTime: '11:15',
+          endTime: '12:00',
+          status: 'Encounter',
+          treatment: 'Teeth Whitening',
+        },
+        {
+          id: '4',
+          patientName: 'Emily Davis',
+          date: selectedDate.toISOString().split('T')[0],
+          startTime: '14:00',
+          endTime: '14:45',
+          status: 'Registered',
+          treatment: 'Dental Cleaning',
+        },
+        {
+          id: '5',
+          patientName: 'James Wilson',
+          date: selectedDate.toISOString().split('T')[0],
+          startTime: '15:30',
+          endTime: '16:15',
+          status: 'Cancelled',
+          treatment: 'Cavity Filling',
+        },
+      ];
+      setAppointments(dummyAppointments);
+      
+      // Uncomment below to use real API
+      // const dateStr = selectedDate.toISOString().split('T')[0];
+      // const data = await appointmentsApiService.getAppointments(dateStr, 'week');
+      // setAppointments(data);
+    } catch (err) {
+      setAppointments([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadAppointments();
+    setRefreshing(false);
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status.toUpperCase()) {
+      case 'FINISHED':
+        return { border: '#10B981', bg: '#D1FAE5', text: '#065F46' };
+      case 'ENCOUNTER':
+        return { border: '#F59E0B', bg: '#FEF3C7', text: '#92400E' };
+      case 'REGISTERED':
+        return { border: '#6B7280', bg: '#F3F4F6', text: '#374151' };
+      case 'CANCELLED':
+        return { border: '#EF4444', bg: '#FEE2E2', text: '#991B1B' };
+      default:
+        return { border: '#6B7280', bg: '#F3F4F6', text: '#374151' };
+    }
+  };
+
+  const getMonthCalendar = () => {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+
+    const days: any[] = [];
+    const today = new Date();
+
+    // Add empty cells for alignment (Sunday = 0)
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      const prevMonthDay = new Date(year, month, -startingDayOfWeek + i + 1);
+      days.push({ 
+        type: 'empty', 
+        day: prevMonthDay.getDate(),
+        date: prevMonthDay 
+      });
+    }
+
+    // Add actual days
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, month, day);
+      const isToday = today.toDateString() === date.toDateString();
+      const isSelected = selectedDate.toDateString() === date.toDateString();
+      
+      // Mock appointment indicators (replace with actual data)
+      const hasAppointments = [1, 2, 4, 8, 15, 22].includes(day);
+      
+      days.push({
+        type: 'day',
+        day,
+        date,
+        isToday,
+        isSelected,
+        hasAppointments,
+      });
+    }
+
+    return days;
+  };
+
+  const getWeekDays = () => {
+    const startOfWeek = new Date(selectedDate);
+    const day = startOfWeek.getDay();
+    const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1); // Monday as first day
+    startOfWeek.setDate(diff);
+
+    const weekDays = [];
+    const dayNames = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(startOfWeek);
+      date.setDate(startOfWeek.getDate() + i);
+      const isSelected = selectedDate.toDateString() === date.toDateString();
+      
+      weekDays.push({
+        date,
+        dayName: dayNames[i],
+        dayNumber: date.getDate(),
+        isSelected,
+        hasAppointments: true, // Mock data
+      });
+    }
+
+    return weekDays;
+  };
+
+  const navigateMonth = (direction: 'prev' | 'next') => {
+    const newMonth = new Date(currentMonth);
+    newMonth.setMonth(currentMonth.getMonth() + (direction === 'next' ? 1 : -1));
+    setCurrentMonth(newMonth);
+  };
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  };
+
+  const filteredAppointments = appointments.filter(apt => {
+    const aptDate = new Date(apt.date);
+    return aptDate.toDateString() === selectedDate.toDateString();
+  });
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Calendar size={24} color="#111827" />
+          <Text style={styles.headerTitle}>Appointments</Text>
+        </View>
+        <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.iconButton}>
+            <Search size={22} color="#6B7280" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton}>
+            <SlidersHorizontal size={22} color="#6B7280" />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <ScrollView 
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* View Mode Toggle */}
+        <View style={styles.toggleContainer}>
+          <TouchableOpacity
+            style={[styles.toggleButton, viewMode === 'Week' && styles.toggleButtonActive]}
+            onPress={() => setViewMode('Week')}
+          >
+            <Text style={[styles.toggleText, viewMode === 'Week' && styles.toggleTextActive]}>
+              Week
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.toggleButton, viewMode === 'Month' && styles.toggleButtonActive]}
+            onPress={() => setViewMode('Month')}
+          >
+            <Text style={[styles.toggleText, viewMode === 'Month' && styles.toggleTextActive]}>
+              Month
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {viewMode === 'Month' ? (
+          <>
+            {/* Month Navigation */}
+            <View style={styles.monthHeader}>
+              <TouchableOpacity onPress={() => navigateMonth('prev')}>
+                <Text style={styles.navArrow}>‹</Text>
+              </TouchableOpacity>
+              <Text style={styles.monthTitle}>
+                {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              </Text>
+              <TouchableOpacity onPress={() => navigateMonth('next')}>
+                <Text style={styles.navArrow}>›</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Calendar Grid */}
+            <View style={styles.calendar}>
+              {/* Day Headers */}
+              <View style={styles.dayHeaders}>
+                {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map((day) => (
+                  <Text key={day} style={styles.dayHeader}>{day}</Text>
+                ))}
+              </View>
+
+              {/* Calendar Days */}
+              <View style={styles.calendarGrid}>
+                {getMonthCalendar().map((dayInfo, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.calendarDay,
+                      dayInfo.isSelected && styles.calendarDaySelected,
+                    ]}
+                    onPress={() => dayInfo.type === 'day' && setSelectedDate(dayInfo.date)}
+                    disabled={dayInfo.type === 'empty'}
+                  >
+                    <Text style={[
+                      styles.calendarDayText,
+                      dayInfo.type === 'empty' && styles.calendarDayTextEmpty,
+                      dayInfo.isSelected && styles.calendarDayTextSelected,
+                    ]}>
+                      {dayInfo.day}
+                    </Text>
+                    {dayInfo.hasAppointments && dayInfo.type === 'day' && (
+                      <View style={styles.appointmentDots}>
+                        <View style={[styles.dot, { backgroundColor: '#10B981' }]} />
+                        <View style={[styles.dot, { backgroundColor: '#F59E0B' }]} />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </>
+        ) : (
+          /* Week View - Horizontal Date Selector */
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.weekScroll}>
+            {getWeekDays().map((dayInfo, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.weekDay,
+                  dayInfo.isSelected && styles.weekDaySelected,
+                ]}
+                onPress={() => setSelectedDate(dayInfo.date)}
+              >
+                <Text style={[
+                  styles.weekDayName,
+                  dayInfo.isSelected && styles.weekDayNameSelected,
+                ]}>
+                  {dayInfo.dayName}
+                </Text>
+                <Text style={[
+                  styles.weekDayNumber,
+                  dayInfo.isSelected && styles.weekDayNumberSelected,
+                ]}>
+                  {dayInfo.dayNumber}
+                </Text>
+                {dayInfo.hasAppointments && dayInfo.isSelected && (
+                  <View style={styles.selectedDot} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+
+        {/* Appointments List */}
+        <View style={styles.appointmentsSection}>
+          <View style={styles.appointmentsHeader}>
+            <Text style={styles.appointmentsDate}>
+              {formatDate(selectedDate).toUpperCase()}
+            </Text>
+            <Text style={styles.appointmentsCount}>
+              {filteredAppointments.length} Appointments
+            </Text>
+          </View>
+
+          {filteredAppointments.length > 0 ? (
+            filteredAppointments.map((appointment) => {
+              const statusColors = getStatusColor(appointment.status);
+              return (
+                <TouchableOpacity
+                  key={appointment.id}
+                  style={styles.appointmentCard}
+                  onPress={() => navigation.navigate('AppointmentDetails', { appointment })}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.appointmentBorder, { backgroundColor: statusColors.border }]} />
+                  <View style={styles.appointmentContent}>
+                    <View style={styles.appointmentLeft}>
+                      <Text style={styles.appointmentTime}>
+                        {appointment.startTime.substring(0, 5)}
+                      </Text>
+                      <Text style={styles.appointmentPeriod}>AM</Text>
+                    </View>
+                    <View style={styles.appointmentMiddle}>
+                      <Text style={styles.appointmentPatient}>{appointment.patientName}</Text>
+                      <Text style={styles.appointmentTreatment}>{appointment.treatment || 'Treatment'}</Text>
+                    </View>
+                    <View style={styles.appointmentRight}>
+                      <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
+                        <Text style={[styles.statusText, { color: statusColors.text }]}>
+                          {appointment.status.toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={[styles.statusDot, { backgroundColor: statusColors.border }]} />
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          ) : (
+            <Text style={styles.noAppointments}>No more appointments today</Text>
+          )}
+        </View>
+
+        <View style={{ height: 100 }} />
+      </ScrollView>
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F9FAFB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  content: {
+    flex: 1,
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 16,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    padding: 4,
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  toggleButtonActive: {
+    backgroundColor: '#7C3AED',
+  },
+  toggleText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  toggleTextActive: {
+    color: '#FFFFFF',
+  },
+  monthHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  navArrow: {
+    fontSize: 28,
+    color: '#6B7280',
+    paddingHorizontal: 12,
+  },
+  monthTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  calendar: {
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  dayHeaders: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  dayHeader: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    textAlign: 'center',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarDay: {
+    width: '14.28%',
+    aspectRatio: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  calendarDaySelected: {
+    backgroundColor: '#7C3AED',
+    borderRadius: 12,
+  },
+  calendarDayText: {
+    fontSize: 15,
+    color: '#111827',
+    fontWeight: '500',
+  },
+  calendarDayTextEmpty: {
+    color: '#D1D5DB',
+  },
+  calendarDayTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  appointmentDots: {
+    flexDirection: 'row',
+    gap: 3,
+    marginTop: 4,
+  },
+  dot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+  },
+  weekScroll: {
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  weekDay: {
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginRight: 12,
+    borderRadius: 16,
+    backgroundColor: '#F9FAFB',
+    minWidth: 70,
+  },
+  weekDaySelected: {
+    backgroundColor: '#7C3AED',
+  },
+  weekDayName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginBottom: 6,
+  },
+  weekDayNameSelected: {
+    color: '#FFFFFF',
+  },
+  weekDayNumber: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  weekDayNumberSelected: {
+    color: '#FFFFFF',
+  },
+  selectedDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+    marginTop: 6,
+  },
+  appointmentsSection: {
+    paddingHorizontal: 20,
+  },
+  appointmentsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  appointmentsDate: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    letterSpacing: 0.5,
+  },
+  appointmentsCount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#7C3AED',
+  },
+  appointmentCard: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  appointmentBorder: {
+    width: 4,
+  },
+  appointmentContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  appointmentLeft: {
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  appointmentTime: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  appointmentPeriod: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  appointmentMiddle: {
+    flex: 1,
+  },
+  appointmentPatient: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  appointmentTreatment: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  appointmentRight: {
+    alignItems: 'flex-end',
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  noAppointments: {
+    fontSize: 15,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    paddingVertical: 40,
+  },
+});
