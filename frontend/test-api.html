@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Test</title>
+</head>
+<body>
+    <h1>API Test</h1>
+    <div id="results"></div>
+
+    <script type="module">
+        // Test API configuration
+        const API_URL = "http://localhost:8000";
+        const API_BASE_PATH = "/api/v1";
+
+        function addResult(message, success = true) {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.style.color = success ? 'green' : 'red';
+            div.textContent = message;
+            results.appendChild(div);
+        }
+
+        async function testAPI() {
+            try {
+                // Test 1: Check if backend is running
+                const healthResponse = await fetch(`${API_URL}/health`);
+                if (healthResponse.ok) {
+                    addResult('✅ Backend is running');
+                } else {
+                    addResult('❌ Backend not responding', false);
+                    return;
+                }
+
+                // Test 2: Check API v1 routes
+                const routesResponse = await fetch(`${API_URL}/openapi.json`);
+                if (routesResponse.ok) {
+                    const routes = await routesResponse.json();
+                    const paths = Object.keys(routes.paths);
+
+                    // Check for our expected routes
+                    const expectedRoutes = [
+                        '/api/v1/auth/login',
+                        '/api/v1/auth/register',
+                        '/api/v1/auth/oauth',
+                        '/api/v1/auth/me',
+                        '/api/v1/patients/',
+                        '/api/v1/clinics/'
+                    ];
+
+                    expectedRoutes.forEach(route => {
+                        if (paths.includes(route)) {
+                            addResult(`✅ Route exists: ${route}`);
+                        } else {
+                            addResult(`❌ Route missing: ${route}`, false);
+                        }
+                    });
+                }
+
+                // Test 3: Check OAuth endpoint specifically
+                const oauthExists = paths.some(path => path.includes('/api/v1/auth/oauth'));
+                if (oauthExists) {
+                    addResult('✅ OAuth endpoint found at /api/v1/auth/oauth');
+                } else {
+                    addResult('❌ OAuth endpoint not found', false);
+                }
+
+                addResult('🎉 API test completed!');
+
+            } catch (error) {
+                addResult(`❌ Test failed: ${error.message}`, false);
+            }
+        }
+
+        // Run test when page loads
+        testAPI();
+    </script>
+</body>
+</html>

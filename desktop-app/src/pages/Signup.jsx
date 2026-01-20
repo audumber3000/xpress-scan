@@ -171,7 +171,7 @@ const Signup = () => {
         {/* Branding */}
         <div className="text-center pt-4 border-t border-gray-200">
           <p className="text-xs text-gray-400">
-            Powered by <span className="text-[#6C4CF3] font-medium">BetterClinic</span>
+            Powered by <span className="text-[#6C4CF3] font-medium">Clino Health</span>
           </p>
         </div>
       </div>

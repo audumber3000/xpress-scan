@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { toast } from 'react-toastify';
 import { api } from '../utils/api';
 import LoadingButton from '../components/LoadingButton';
+import loginImage from '../assets/login-page-left-side.png';
 
 const Signup = () => {
   const [email, setEmail] = useState("");
@@ -98,18 +99,36 @@ const Signup = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="bg-white p-8 rounded shadow-md w-full max-w-md space-y-4">
-        <h2 className="text-2xl font-bold mb-4 text-center">Sign Up</h2>
-        {error && <div className="text-red-600 text-center">{error}</div>}
-        
-        {/* Google OAuth Button - Primary for clinic owners */}
-        <div className="space-y-2">
+    <div className="h-screen flex overflow-hidden">
+      {/* Left Side - Image */}
+      <div className="hidden lg:flex lg:w-1/2 relative">
+        <img 
+          src={loginImage} 
+          alt="Clino Health" 
+          className="w-full h-full object-cover"
+        />
+      </div>
+
+      {/* Right Side - Form */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center bg-white p-8 overflow-y-auto">
+        <div className="w-full max-w-md space-y-6 py-8">
+          <div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-2">Create your account</h2>
+            <p className="text-gray-600">Start managing your clinic efficiently</p>
+          </div>
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
+              {error}
+            </div>
+          )}
+          
+          {/* Google OAuth Button */}
           <LoadingButton 
             onClick={handleGoogleSignup}
             loading={loading}
             disabled={loading}
-            className="w-full bg-white border border-gray-300 rounded-lg px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors font-medium"
+            className="w-full bg-white border-2 border-gray-200 rounded-lg px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors font-medium flex items-center justify-center gap-3"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -119,86 +138,103 @@ const Signup = () => {
             </svg>
             Continue with Google
           </LoadingButton>
-          <p className="text-xs text-gray-500 text-center">
-            Recommended for clinic owners - quick setup with your Google account
-          </p>
-        </div>
 
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-300" />
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-white text-gray-500 font-medium">Or continue with email</span>
+            </div>
           </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-white text-gray-500">Or continue with email</span>
-          </div>
-        </div>
 
-        {/* Email/Password Form */}
-        <form onSubmit={handleSignup} className="space-y-4">
-          <div className="grid grid-cols-2 gap-2">
-            <input
-              type="text"
-              placeholder="First Name"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
-              required
-            />
-            <input
-              type="text"
-              placeholder="Last Name"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
-              required
-            />
+          {/* Email/Password Form */}
+          <form onSubmit={handleSignup} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  First Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="John"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Last Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="Doe"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
+                  required
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Email address
+              </label>
+              <input
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Password
+              </label>
+              <input
+                type="password"
+                placeholder="Create a password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Role
+              </label>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
+              >
+                <option value="clinic_owner">Clinic Owner</option>
+                <option value="doctor">Doctor</option>
+                <option value="receptionist">Receptionist</option>
+              </select>
+            </div>
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="w-full bg-[#2a276e] text-white py-3 px-4 rounded-lg hover:bg-[#1a1548] focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:ring-offset-2 disabled:opacity-50 font-medium transition-colors"
+            >
+              {loading ? "Creating account..." : "Create account"}
+            </button>
+          </form>
+          
+          <div className="text-center">
+            <p className="text-sm text-gray-600">
+              Already have an account?{' '}
+              <Link to="/login" className="text-[#2a276e] hover:text-[#1a1548] font-semibold">
+                Sign in
+              </Link>
+            </p>
           </div>
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
-            required
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
-            required
-          />
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
-          >
-            <option value="clinic_owner">Clinic Owner</option>
-            <option value="doctor">Doctor</option>
-            <option value="receptionist">Receptionist</option>
-          </select>
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="w-full bg-[#6C4CF3] text-white py-2 px-4 rounded-lg hover:bg-[#5b3dd9] focus:outline-none focus:ring-2 focus:ring-[#6C4CF3] focus:ring-offset-2 disabled:opacity-50"
-          >
-            {loading ? "Signing up..." : "Sign Up"}
-          </button>
-        </form>
-        
-        <p className="text-center text-sm text-gray-600">
-          Already have an account?{" "}
-          <Link to="/login" className="text-[#6C4CF3] hover:text-[#5b3dd9]">
-            Log in
-          </Link>
-        </p>
-        
-        {/* Branding */}
-        <div className="text-center pt-4 border-t border-gray-200">
-          <p className="text-xs text-gray-400">
-            Powered by <span className="text-[#6C4CF3] font-medium">BetterClinic</span>
-          </p>
         </div>
       </div>
     </div>

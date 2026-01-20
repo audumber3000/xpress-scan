@@ -39,7 +39,7 @@ const Header = () => {
       case "doctor":
         return { label: "Doctor", color: "text-blue-700" };
       case "receptionist":
-        return { label: "Receptionist", color: "text-[#6C4CF3]" };
+        return { label: "Receptionist", color: "text-[#2a276e]" };
       default:
         return { label: "Staff", color: "text-gray-700" };
     }
@@ -143,7 +143,7 @@ const Header = () => {
                 // Add your create action here
                 console.log("Create clicked");
               }}
-              className="p-2 rounded-lg bg-[#6C4CF3] hover:bg-[#5b3dd9] text-white transition-colors"
+              className="p-2 rounded-lg bg-[#2a276e] hover:bg-[#1a1548] text-white transition-colors"
               title="Create new"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">

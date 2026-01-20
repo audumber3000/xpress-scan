@@ -12,7 +12,6 @@ const PatientProfile = () => {
   const [patientData, setPatientData] = useState(null);
   const [appointments, setAppointments] = useState([]);
   const [payments, setPayments] = useState([]);
-  const [xrayImages, setXrayImages] = useState([]);
 
   const tabs = [
     { id: "chart", name: "Dental Chart" },
@@ -85,15 +84,6 @@ const PatientProfile = () => {
           console.error('Error fetching payments:', error);
           // Don't show alert, just log the error
           setPayments([]);
-        }
-        
-        // Fetch X-ray images for patient (optional - don't show error)
-        try {
-          const xrays = await api.get(`/xray/patient/${patientId}`);
-          setXrayImages(xrays || []);
-        } catch (error) {
-          console.error('Error fetching X-ray images:', error);
-          setXrayImages([]);
         }
         
       } catch (error) {
@@ -246,7 +236,7 @@ const PatientProfile = () => {
           <p className="text-gray-600 mb-4">Patient not found</p>
           <button
             onClick={() => navigate("/patient-files")}
-            className="px-4 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9]"
+            className="px-4 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548]"
           >
             Back to Patient Files
           </button>
@@ -283,7 +273,7 @@ const PatientProfile = () => {
                     onClick={() => setActiveTab(tab.id)}
                     className={`py-2 px-1 border-b-2 font-medium text-sm ${
                       activeTab === tab.id
-                        ? "border-[#6C4CF3] text-[#6C4CF3]"
+                        ? "border-[#2a276e] text-[#2a276e]"
                         : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                     }`}
                   >
@@ -347,7 +337,7 @@ const PatientProfile = () => {
                           </div>
                           <div className="flex gap-1">
                             {Object.entries(data.surfaces || {}).map(([surface, condition]) => (
-                              <span key={surface} className="text-xs px-2 py-1 bg-[#9B8CFF]/20 text-[#6C4CF3] rounded">
+                              <span key={surface} className="text-xs px-2 py-1 bg-[#9B8CFF]/20 text-[#2a276e] rounded">
                                 {surface}: {CONDITION_LABELS[condition]}
                               </span>
                             ))}
@@ -370,7 +360,7 @@ const PatientProfile = () => {
             {/* Upcoming Appointments */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <div className="flex items-center gap-2 mb-4">
-                <svg className="w-6 h-6 text-[#6C4CF3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-[#2a276e]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
                 <h3 className="text-lg font-semibold text-gray-900">Upcoming Appointments</h3>
@@ -379,17 +369,17 @@ const PatientProfile = () => {
               {upcomingAppointments.length > 0 ? (
                 <div className="space-y-3">
                   {upcomingAppointments.map((apt) => (
-                    <div key={apt.id} className="p-4 border-l-4 border-[#6C4CF3] bg-[#9B8CFF]/10 rounded-r-lg hover:shadow-md transition-shadow">
+                    <div key={apt.id} className="p-4 border-l-4 border-[#2a276e] bg-[#9B8CFF]/10 rounded-r-lg hover:shadow-md transition-shadow">
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3">
                           <div className="w-10 h-10 bg-[#9B8CFF]/20 rounded-full flex items-center justify-center flex-shrink-0">
-                            <svg className="w-5 h-5 text-[#6C4CF3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-5 h-5 text-[#2a276e]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                           </div>
                           <div>
                             <p className="font-semibold text-gray-900">{apt.procedure}</p>
-                            <p className="text-sm text-[#6C4CF3] font-medium mt-1">
+                            <p className="text-sm text-[#2a276e] font-medium mt-1">
                               {new Date(apt.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} at {formatTime(apt.time)}
                             </p>
                             {apt.doctor && (
@@ -402,7 +392,7 @@ const PatientProfile = () => {
                         </div>
                         <div className="text-right">
                           <span className={`text-xs font-medium px-3 py-1 rounded-full ${
-                            apt.status === 'accepted' ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' :
+                            apt.status === 'accepted' ? 'bg-[#9B8CFF]/20 text-[#2a276e]' :
                             apt.status === 'confirmed' ? 'bg-yellow-100 text-yellow-700' :
                             'bg-gray-100 text-gray-700'
                           }`}>
@@ -484,7 +474,7 @@ const PatientProfile = () => {
                         <div className="mt-3">
                           <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${
                             treatment.status === 'completed' 
-                              ? 'bg-[#9B8CFF]/20 text-[#6C4CF3] border border-[#9B8CFF]' 
+                              ? 'bg-[#9B8CFF]/20 text-[#2a276e] border border-[#9B8CFF]' 
                               : 'bg-yellow-100 text-yellow-800 border border-yellow-200'
                           }`}>
                             {treatment.status === 'completed' ? (
@@ -516,38 +506,6 @@ const PatientProfile = () => {
         {/* Billing Tab */}
         {activeTab === "billing" && (
           <div className="space-y-6">
-            {/* X-ray Images Section */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">X-ray Images</h3>
-              {xrayImages.length > 0 ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {xrayImages.map((xray) => (
-                    <div
-                      key={xray.id}
-                      className="border border-gray-200 rounded-lg p-3 hover:shadow-md transition-shadow cursor-pointer"
-                      onClick={() => {
-                        // Download or view X-ray
-                        const apiUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-                        window.open(`${apiUrl}/xray/${xray.id}/download`, '_blank');
-                      }}
-                    >
-                      <div className="aspect-square bg-gray-100 rounded mb-2 flex items-center justify-center">
-                        <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                      </div>
-                      <p className="text-xs font-medium text-gray-900 truncate capitalize">{xray.image_type}</p>
-                      <p className="text-xs text-gray-500">
-                        {new Date(xray.capture_date).toLocaleDateString()}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500 text-center py-4">No X-ray images found</p>
-              )}
-            </div>
-            
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Billing Summary</h3>
               
@@ -555,7 +513,7 @@ const PatientProfile = () => {
               <div className="mb-6 p-4 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
                 <div className="flex items-center justify-between">
                   <span className="text-gray-700">Total Paid</span>
-                  <span className="text-2xl font-bold text-[#6C4CF3]">
+                  <span className="text-2xl font-bold text-[#2a276e]">
                     ₹{payments.filter(p => p.status === 'success').reduce((sum, p) => sum + p.amount, 0).toLocaleString('en-IN')}
                   </span>
                 </div>
@@ -603,13 +561,13 @@ const PatientProfile = () => {
                 <div key={rx.id} className="p-4 border border-gray-200 rounded-lg">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center space-x-2">
-                      <svg className="w-5 h-5 text-[#6C4CF3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-5 h-5 text-[#2a276e]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                       </svg>
                       <h4 className="font-semibold text-gray-900">{rx.medication}</h4>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      rx.status === 'active' ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' : 'bg-gray-100 text-gray-800'
+                      rx.status === 'active' ? 'bg-[#9B8CFF]/20 text-[#2a276e]' : 'bg-gray-100 text-gray-800'
                     }`}>
                       {rx.status}
                     </span>
@@ -637,7 +595,7 @@ const PatientProfile = () => {
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Personal Information</h3>
               <div className="space-y-3">
                 <div className="flex items-center space-x-3">
-                  <div className="w-16 h-16 rounded-full bg-[#9B8CFF]/20 flex items-center justify-center text-xl font-semibold text-[#6C4CF3]">
+                  <div className="w-16 h-16 rounded-full bg-[#9B8CFF]/20 flex items-center justify-center text-xl font-semibold text-[#2a276e]">
                     {getPatientInitials(patientData.name)}
                   </div>
                   <div>

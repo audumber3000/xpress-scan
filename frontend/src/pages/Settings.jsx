@@ -1038,7 +1038,7 @@ const Settings = () => {
             <div className="mb-6">
             <label className="block text-sm font-medium mb-2">Role</label>
             <select
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
               value={selectedRole}
               onChange={(e) => handleRoleChange(e.target.value)}
             >
@@ -1056,7 +1056,7 @@ const Settings = () => {
                 onClick={() => handlePresetChange("receptionist")}
                 className={`px-3 py-1 rounded text-sm ${
                   selectedRole === "receptionist" && !customMode 
-                    ? "bg-[#6C4CF3] text-white" 
+                    ? "bg-[#2a276e] text-white" 
                     : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                 }`}
               >
@@ -1066,7 +1066,7 @@ const Settings = () => {
                 onClick={() => handlePresetChange("doctor")}
                 className={`px-3 py-1 rounded text-sm ${
                   selectedRole === "doctor" && !customMode 
-                    ? "bg-[#6C4CF3] text-white" 
+                    ? "bg-[#2a276e] text-white" 
                     : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                 }`}
               >
@@ -1076,7 +1076,7 @@ const Settings = () => {
                 onClick={() => handlePresetChange("clinic_owner")}
                 className={`px-3 py-1 rounded text-sm ${
                   selectedRole === "clinic_owner" && !customMode 
-                    ? "bg-[#6C4CF3] text-white" 
+                    ? "bg-[#2a276e] text-white" 
                     : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                 }`}
               >
@@ -1086,7 +1086,7 @@ const Settings = () => {
                 onClick={() => handlePresetChange("custom")}
                 className={`px-3 py-1 rounded text-sm ${
                   customMode 
-                    ? "bg-[#6C4CF3] text-white" 
+                    ? "bg-[#2a276e] text-white" 
                     : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                 }`}
               >
@@ -1118,7 +1118,7 @@ const Settings = () => {
                             type="checkbox"
                             checked={!!permissions[section.key]?.[permission]}
                             onChange={() => handleCheckbox(section.key, permission)}
-                            className="accent-[#6C4CF3] w-4 h-4"
+                            className="accent-[#2a276e] w-4 h-4"
                             disabled={!customMode && selectedRole !== "clinic_owner"}
                           />
                         </td>
@@ -1179,7 +1179,7 @@ const Settings = () => {
                 Cancel
               </button>
               <button 
-                className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium" 
+                className="px-6 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition font-medium" 
                 onClick={handleSave}
               >
                 Save Changes
@@ -1199,7 +1199,7 @@ const Settings = () => {
       <div className="border-b border-gray-200 mb-6">
         <div className="flex overflow-x-auto">
           <button
-            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "profile" ? "border-[#6C4CF3] text-[#6C4CF3]" : "border-transparent text-gray-600 hover:text-gray-900"}`}
+            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "profile" ? "border-[#2a276e] text-[#2a276e]" : "border-transparent text-gray-600 hover:text-gray-900"}`}
             onClick={() => setActiveTab("profile")}
           >
             👤 Profile
@@ -1232,13 +1232,13 @@ const Settings = () => {
               {/* Sub-tabs for Users and Clinic */}
               <div className="flex border-b border-gray-200 mb-6">
                 <button
-                  className={`px-4 py-2 font-medium text-sm focus:outline-none transition border-b-2 ${profileSubTab === "users" ? "border-[#6C4CF3] text-[#6C4CF3]" : "border-transparent text-gray-600 hover:text-gray-900"}`}
+                  className={`px-4 py-2 font-medium text-sm focus:outline-none transition border-b-2 ${profileSubTab === "users" ? "border-[#2a276e] text-[#2a276e]" : "border-transparent text-gray-600 hover:text-gray-900"}`}
                   onClick={() => setProfileSubTab("users")}
                 >
                   👥 Users (Staff)
                 </button>
                 <button
-                  className={`px-4 py-2 font-medium text-sm focus:outline-none transition border-b-2 ${profileSubTab === "clinic" ? "border-[#6C4CF3] text-[#6C4CF3]" : "border-transparent text-gray-600 hover:text-gray-900"}`}
+                  className={`px-4 py-2 font-medium text-sm focus:outline-none transition border-b-2 ${profileSubTab === "clinic" ? "border-[#2a276e] text-[#2a276e]" : "border-transparent text-gray-600 hover:text-gray-900"}`}
                   onClick={() => setProfileSubTab("clinic")}
                 >
                   🏥 Clinic
@@ -1325,7 +1325,7 @@ const Settings = () => {
                                 type="text"
                                 value={clinicData.name}
                                 onChange={(e) => setClinicData({ ...clinicData, name: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                                 placeholder="Enter clinic name"
                               />
                             </div>
@@ -1337,7 +1337,7 @@ const Settings = () => {
                                 type="text"
                                 value={clinicData.gst_number}
                                 onChange={(e) => setClinicData({ ...clinicData, gst_number: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                                 placeholder="Enter GST number (optional)"
                               />
                             </div>
@@ -1349,7 +1349,7 @@ const Settings = () => {
                                 type="text"
                                 value={clinicData.address}
                                 onChange={(e) => setClinicData({ ...clinicData, address: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                                 placeholder="Enter clinic address"
                               />
                             </div>
@@ -1361,7 +1361,7 @@ const Settings = () => {
                                 type="tel"
                                 value={clinicData.phone}
                                 onChange={(e) => setClinicData({ ...clinicData, phone: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                                 placeholder="Enter phone number"
                               />
                             </div>
@@ -1373,7 +1373,7 @@ const Settings = () => {
                                 type="email"
                                 value={clinicData.email}
                                 onChange={(e) => setClinicData({ ...clinicData, email: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                                 placeholder="Enter clinic email"
                               />
                             </div>
@@ -1403,7 +1403,7 @@ const Settings = () => {
                                       }
                                     })}
                                     disabled={timing.closed}
-                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent disabled:bg-gray-200 disabled:text-gray-500"
+                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent disabled:bg-gray-200 disabled:text-gray-500"
                                   />
                                   <span className="text-gray-500">to</span>
                                   <input
@@ -1417,7 +1417,7 @@ const Settings = () => {
                                       }
                                     })}
                                     disabled={timing.closed}
-                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent disabled:bg-gray-200 disabled:text-gray-500"
+                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent disabled:bg-gray-200 disabled:text-gray-500"
                                   />
                                 </div>
 
@@ -1432,7 +1432,7 @@ const Settings = () => {
                                         [day]: { ...timing, closed: e.target.checked }
                                       }
                                     })}
-                                    className="w-4 h-4 text-[#6C4CF3] border-gray-300 rounded focus:ring-[#6C4CF3]"
+                                    className="w-4 h-4 text-[#2a276e] border-gray-300 rounded focus:ring-[#2a276e]"
                                   />
                                   <span className="text-sm text-gray-600">Closed</span>
                                 </label>
@@ -1446,7 +1446,7 @@ const Settings = () => {
                           <button
                             onClick={saveClinicData}
                             disabled={savingClinicData}
-                            className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+                            className="px-6 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
                           >
                             {savingClinicData ? (
                               <>
@@ -1493,7 +1493,7 @@ const Settings = () => {
                     {hasPermission("billing:edit") && (
                     <button
                       onClick={() => setShowAddTreatmentModal(true)}
-                      className="bg-[#6C4CF3] text-white px-4 py-2 rounded-lg hover:bg-[#5b3dd9] transition"
+                      className="bg-[#2a276e] text-white px-4 py-2 rounded-lg hover:bg-[#1a1548] transition"
                     >
                       Add Treatment Type
                     </button>
@@ -1513,7 +1513,7 @@ const Settings = () => {
                             <div className="flex gap-2">
                               <button
                                 onClick={() => handleEditTreatment(treatment)}
-                                className="text-[#9B8CFF] hover:text-[#6C4CF3] text-sm"
+                                className="text-[#9B8CFF] hover:text-[#2a276e] text-sm"
                               >
                                 Edit
                               </button>
@@ -1556,7 +1556,7 @@ const Settings = () => {
                     {hasPermission("users:edit") && (
                     <button
                       onClick={() => setShowAddModal(true)}
-                      className="bg-[#6C4CF3] text-white px-4 py-2 rounded-lg hover:bg-[#5b3dd9] transition"
+                      className="bg-[#2a276e] text-white px-4 py-2 rounded-lg hover:bg-[#1a1548] transition"
                     >
                       Add User
                     </button>
@@ -1580,13 +1580,13 @@ const Settings = () => {
                             <div className="flex gap-2">
                                 <button
                                   onClick={() => handleEditPermissions(user)}
-                                  className="text-[#6C4CF3] hover:text-[#6C4CF3] text-sm"
+                                  className="text-[#2a276e] hover:text-[#2a276e] text-sm"
                                 >
                                   Permissions
                                 </button>
                               <button
                                 onClick={() => handleEditUser(user)}
-                                className="text-[#9B8CFF] hover:text-[#6C4CF3] text-sm"
+                                className="text-[#9B8CFF] hover:text-[#2a276e] text-sm"
                               >
                                 Edit
                               </button>
@@ -1618,7 +1618,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.patients?.view 
-                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#2a276e]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1627,7 +1627,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.patients?.edit 
-                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#2a276e]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1636,7 +1636,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.patients?.delete 
-                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#2a276e]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1650,7 +1650,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.reports?.view 
-                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#2a276e]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1659,7 +1659,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.reports?.edit 
-                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#2a276e]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1668,7 +1668,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.reports?.delete 
-                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#2a276e]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1682,7 +1682,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.billing?.view 
-                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#2a276e]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1691,7 +1691,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.billing?.edit 
-                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#2a276e]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1705,7 +1705,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.users?.view 
-                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#2a276e]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1714,7 +1714,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.users?.edit 
-                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#2a276e]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1723,7 +1723,7 @@ const Settings = () => {
                                     <span
                                       className={`text-xs px-2 py-1 rounded ${
                                         user.role === "clinic_owner" || user.permissions?.users?.delete 
-                                          ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' 
+                                          ? 'bg-[#9B8CFF]/20 text-[#2a276e]' 
                                           : 'bg-gray-100 text-gray-500'
                                       }`}
                                     >
@@ -1789,7 +1789,7 @@ const Settings = () => {
                           </span>
                           <button
                             onClick={() => handleEditTemplate(template)}
-                            className="text-[#6C4CF3] hover:text-[#5b3dd9] text-sm font-medium"
+                            className="text-[#2a276e] hover:text-[#1a1548] text-sm font-medium"
                           >
                             Edit
                           </button>
@@ -1835,7 +1835,7 @@ const Settings = () => {
                         className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
                           testEmailError 
                             ? 'border-red-500 focus:ring-red-500' 
-                            : 'border-gray-300 focus:ring-[#6C4CF3]'
+                            : 'border-gray-300 focus:ring-[#2a276e]'
                         }`}
                         required
                         disabled={testEmailLoading}
@@ -1900,7 +1900,7 @@ const Settings = () => {
                   name="name"
                   value={formData.name}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
                   required
                 />
               </div>
@@ -1911,7 +1911,7 @@ const Settings = () => {
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
                   required
                 />
               </div>
@@ -1921,7 +1921,7 @@ const Settings = () => {
                   name="role"
                   value={formData.role}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
                 >
                   {availableRoles.map((role) => (
                     <option key={role.value || role} value={role.value || role}>
@@ -1945,7 +1945,7 @@ const Settings = () => {
                   type="submit"
                   form="add-user-form"
                   disabled={addingUser}
-                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="px-6 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {addingUser ? (
                     <>
@@ -1984,7 +1984,7 @@ const Settings = () => {
                   name="name"
                   value={formData.name}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
                   required
                 />
               </div>
@@ -1995,7 +1995,7 @@ const Settings = () => {
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
                   required
                 />
               </div>
@@ -2005,7 +2005,7 @@ const Settings = () => {
                   name="role"
                   value={formData.role}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
                 >
                   {availableRoles.map((role) => (
                     <option key={role.value || role} value={role.value || role}>
@@ -2024,7 +2024,7 @@ const Settings = () => {
                   value={formData.password}
                   onChange={handleInputChange}
                   placeholder="Leave empty to keep current password"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
                 />
                 <p className="text-xs text-gray-500 mt-1">Minimum 8 characters. Leave empty to keep current password.</p>
               </div>
@@ -2043,7 +2043,7 @@ const Settings = () => {
                   type="submit"
                   form="edit-user-form"
                   disabled={updatingUser}
-                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="px-6 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {updatingUser ? (
                     <>
@@ -2114,7 +2114,7 @@ const Settings = () => {
                       setShowPasswordAfterSet(false);
                       setLastSetPassword("");
                     }}
-                    className="w-full px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium"
+                    className="w-full px-6 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition font-medium"
                   >
                     Close
                   </button>
@@ -2128,7 +2128,7 @@ const Settings = () => {
                       value={staffPassword}
                       onChange={(e) => setStaffPassword(e.target.value)}
                       placeholder="Enter password (min 8 characters)"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3] font-mono"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] font-mono"
                       required
                       minLength={8}
                     />
@@ -2141,7 +2141,7 @@ const Settings = () => {
                       value={staffPasswordConfirm}
                       onChange={(e) => setStaffPasswordConfirm(e.target.value)}
                       placeholder="Confirm password"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3] font-mono"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] font-mono"
                       required
                       minLength={8}
                     />
@@ -2163,7 +2163,7 @@ const Settings = () => {
                     type="submit"
                     form="set-password-form"
                     disabled={staffPasswordLoading}
-                    className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="px-6 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {staffPasswordLoading ? (
                       <>
@@ -2203,7 +2203,7 @@ const Settings = () => {
                   name="name"
                   value={treatmentFormData.name}
                   onChange={handleTreatmentInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
                   required
                 />
               </div>
@@ -2214,7 +2214,7 @@ const Settings = () => {
                   name="price"
                   value={treatmentFormData.price}
                   onChange={handleTreatmentInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
                   required
                 />
               </div>
@@ -2233,7 +2233,7 @@ const Settings = () => {
                   type="submit"
                   form="add-treatment-form"
                   disabled={addingTreatment}
-                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="px-6 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {addingTreatment ? (
                     <>
@@ -2272,7 +2272,7 @@ const Settings = () => {
                   name="name"
                   value={treatmentFormData.name}
                   onChange={handleTreatmentInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
                   required
                 />
               </div>
@@ -2283,7 +2283,7 @@ const Settings = () => {
                   name="price"
                   value={treatmentFormData.price}
                   onChange={handleTreatmentInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
                   required
                 />
               </div>
@@ -2302,7 +2302,7 @@ const Settings = () => {
                   type="submit"
                   form="edit-treatment-form"
                   disabled={updatingTreatment}
-                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="px-6 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {updatingTreatment ? (
                     <>
@@ -2356,7 +2356,7 @@ const Settings = () => {
                     name="currentPassword"
                     value={passwordForm.currentPassword}
                     onChange={handlePasswordInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
                     required
                   />
                 </div>
@@ -2368,7 +2368,7 @@ const Settings = () => {
                   name="newPassword"
                   value={passwordForm.newPassword}
                   onChange={handlePasswordInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
                   placeholder="At least 8 characters"
                   required
                 />
@@ -2380,14 +2380,14 @@ const Settings = () => {
                   name="confirmPassword"
                   value={passwordForm.confirmPassword}
                   onChange={handlePasswordInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
                   placeholder="Re-enter your password"
                   required
                 />
               </div>
               {user?.supabase_user_id && !user.supabase_user_id.startsWith('local_') && (
                 <div className="mb-4 p-3 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
-                  <p className="text-sm text-[#6C4CF3]">
+                  <p className="text-sm text-[#2a276e]">
                     <strong>Note:</strong> After setting a password, you'll be able to login on the desktop app using your email and this password.
                   </p>
                 </div>
@@ -2401,7 +2401,7 @@ const Settings = () => {
                   type="submit" 
                   form="password-form" 
                   disabled={passwordLoading} 
-                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="px-6 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {passwordLoading ? (
                     <>
@@ -2440,7 +2440,7 @@ const Settings = () => {
                     name="title"
                     value={templateFormData.title}
                     onChange={handleTemplateInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
                     required
                   />
                 </div>
@@ -2451,7 +2451,7 @@ const Settings = () => {
                     value={templateFormData.content}
                     onChange={handleTemplateInputChange}
                     rows={10}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3] font-mono text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] font-mono text-sm"
                     placeholder="Enter your message template. Use variables like {patient_name}, {clinic_name}, etc."
                     required
                   />
@@ -2475,7 +2475,7 @@ const Settings = () => {
                       name="is_active"
                       checked={templateFormData.is_active}
                       onChange={handleTemplateInputChange}
-                      className="mr-2 w-4 h-4 text-[#6C4CF3] border-gray-300 rounded focus:ring-[#6C4CF3]"
+                      className="mr-2 w-4 h-4 text-[#2a276e] border-gray-300 rounded focus:ring-[#2a276e]"
                     />
                     <span className="text-sm font-medium text-gray-700">Active (use this template)</span>
                   </label>
@@ -2494,7 +2494,7 @@ const Settings = () => {
                 <button 
                   type="submit" 
                   form="edit-template-form" 
-                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium"
+                  className="px-6 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition font-medium"
                 >
                   Update Template
                 </button>

@@ -476,7 +476,7 @@ const BookingPage = () => {
       <div className="min-h-screen bg-gradient-to-br from-[#9B8CFF]/10 to-blue-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
           <div className="w-16 h-16 bg-[#9B8CFF]/20 rounded-full flex items-center justify-center mx-auto mb-6">
-            <CheckCircle className="w-8 h-8 text-[#6C4CF3]" />
+            <CheckCircle className="w-8 h-8 text-[#2a276e]" />
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Appointment Booked!</h2>
           <p className="text-gray-600 mb-6">
@@ -511,7 +511,7 @@ const BookingPage = () => {
                 doctorName: formData.doctorName
               });
             }}
-            className="w-full bg-[#6C4CF3] text-white py-3 rounded-lg hover:bg-[#5b3dd9] transition-colors"
+            className="w-full bg-[#2a276e] text-white py-3 rounded-lg hover:bg-[#1a1548] transition-colors"
           >
             Book Another Appointment
           </button>
@@ -527,7 +527,7 @@ const BookingPage = () => {
         <div className="max-w-4xl mx-auto px-4 py-6">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-[#6C4CF3] rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-[#2a276e] rounded-lg flex items-center justify-center">
                 <Calendar className="w-6 h-6 text-white" />
               </div>
               <div>
@@ -555,12 +555,12 @@ const BookingPage = () => {
         <div className="bg-white rounded-2xl shadow-lg p-8">
           <div className="flex items-center space-x-4 mb-8">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
-              currentStep >= 1 ? 'bg-[#6C4CF3] text-white' : 'bg-gray-200 text-gray-600'
+              currentStep >= 1 ? 'bg-[#2a276e] text-white' : 'bg-gray-200 text-gray-600'
             }`}>
               1
             </div>
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
-              currentStep >= 2 ? 'bg-[#6C4CF3] text-white' : 'bg-gray-200 text-gray-600'
+              currentStep >= 2 ? 'bg-[#2a276e] text-white' : 'bg-gray-200 text-gray-600'
             }`}>
               2
             </div>
@@ -571,7 +571,7 @@ const BookingPage = () => {
             {/* Personal Information */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                <User className="w-5 h-5 mr-2 text-[#6C4CF3]" />
+                <User className="w-5 h-5 mr-2 text-[#2a276e]" />
                 Personal Information
               </h3>
               
@@ -585,7 +585,7 @@ const BookingPage = () => {
                   value={formData.patientName}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent transition-colors"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent transition-colors"
                   placeholder="Enter your full name"
                 />
               </div>
@@ -601,7 +601,7 @@ const BookingPage = () => {
                     name="patientEmail"
                     value={formData.patientEmail}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent transition-colors"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent transition-colors"
                     placeholder="your@email.com"
                   />
                 </div>
@@ -616,7 +616,7 @@ const BookingPage = () => {
                     value={formData.patientPhone}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent transition-colors"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent transition-colors"
                     placeholder="+91 98765 43210"
                   />
                 </div>
@@ -635,7 +635,7 @@ const BookingPage = () => {
                     required
                     min="0"
                     max="150"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent transition-colors"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent transition-colors"
                     placeholder="Enter age"
                   />
                 </div>
@@ -648,7 +648,7 @@ const BookingPage = () => {
                     value={formData.gender}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent transition-colors"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent transition-colors"
                   >
                     <option value="">Select Gender</option>
                     <option value="Male">Male</option>
@@ -666,7 +666,7 @@ const BookingPage = () => {
                     value={formData.village}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent transition-colors"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent transition-colors"
                     placeholder="Enter your address"
                   />
                 </div>
@@ -676,7 +676,7 @@ const BookingPage = () => {
             {/* Appointment Details */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                <Calendar className="w-5 h-5 mr-2 text-[#6C4CF3]" />
+                <Calendar className="w-5 h-5 mr-2 text-[#2a276e]" />
                 Appointment Details
               </h3>
 
@@ -689,7 +689,7 @@ const BookingPage = () => {
                   value={formData.treatment}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent transition-colors"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent transition-colors"
                 >
                   <option value="">Select treatment type</option>
                   {treatmentOptions.map((treatment) => (
@@ -711,7 +711,7 @@ const BookingPage = () => {
                   onChange={handleInputChange}
                   min={new Date().toISOString().split('T')[0]}
                   required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent transition-colors"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent transition-colors"
                 />
               </div>
 
@@ -727,7 +727,7 @@ const BookingPage = () => {
                       onClick={() => setFormData(prev => ({ ...prev, duration: option.value }))}
                       className={`px-4 py-3 text-sm font-medium rounded-lg border-2 transition-all ${
                         formData.duration === option.value
-                          ? 'bg-[#6C4CF3] text-white border-[#6C4CF3] shadow-md'
+                          ? 'bg-[#2a276e] text-white border-[#2a276e] shadow-md'
                           : 'bg-white text-gray-700 border-gray-300 hover:border-[#9B8CFF] hover:bg-[#9B8CFF]/10'
                       }`}
                     >
@@ -746,7 +746,7 @@ const BookingPage = () => {
                   name="time"
                   value={formData.time}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent transition-colors"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent transition-colors"
                 >
                   <option value="">Select preferred time</option>
                   {formData.date && getTimeSlots(formData.date).map((slot) => (
@@ -765,19 +765,19 @@ const BookingPage = () => {
                 {/* Next Available Slot Suggestion */}
                 {!formData.time && formData.date && (
                   <div className="mt-2 p-3 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
-                    <div className="flex items-center text-sm text-[#6C4CF3] mb-1">
+                    <div className="flex items-center text-sm text-[#2a276e] mb-1">
                       <Clock className="w-4 h-4 mr-1" />
                       <span className="font-medium">Next Available Slot</span>
                     </div>
                     {loadingNextSlot ? (
                       <div className="text-xs text-gray-600">Checking availability...</div>
                     ) : nextAvailableSlot ? (
-                      <div className="text-xs text-[#6C4CF3]">
+                      <div className="text-xs text-[#2a276e]">
                         <p>Suggested time: <span className="font-semibold">{nextAvailableSlot}</span></p>
                         <button
                           type="button"
                           onClick={() => setFormData(prev => ({ ...prev, time: nextAvailableSlot }))}
-                          className="mt-1 px-2 py-1 bg-[#6C4CF3] text-white text-xs rounded hover:bg-[#5b3dd9] transition-colors"
+                          className="mt-1 px-2 py-1 bg-[#2a276e] text-white text-xs rounded hover:bg-[#1a1548] transition-colors"
                         >
                           Use this time
                         </button>
@@ -801,11 +801,11 @@ const BookingPage = () => {
                     </div>
                   ) : (
                     <div className="mt-2 p-3 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
-                      <div className="flex items-center text-sm text-[#6C4CF3]">
+                      <div className="flex items-center text-sm text-[#2a276e]">
                         <CheckCircle className="w-4 h-4 mr-1" />
                         <span className="font-medium">Time Available</span>
                       </div>
-                      <p className="text-xs text-[#6C4CF3] mt-1">Selected time is within clinic operating hours.</p>
+                      <p className="text-xs text-[#2a276e] mt-1">Selected time is within clinic operating hours.</p>
                     </div>
                   );
                 })()}
@@ -815,7 +815,7 @@ const BookingPage = () => {
 
             {/* Confirmation Note */}
             <div className="mt-6 p-4 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
-              <div className="flex items-center text-sm text-[#6C4CF3]">
+              <div className="flex items-center text-sm text-[#2a276e]">
                 <Info className="w-4 h-4 mr-2 flex-shrink-0" />
                 <span className="font-medium">For confirmation, it's always good to call the clinic.</span>
               </div>
@@ -823,7 +823,7 @@ const BookingPage = () => {
 
             <button
               type="submit"
-              className="w-full bg-[#6C4CF3] text-white py-4 rounded-lg hover:bg-[#5b3dd9] transition-colors font-semibold text-lg shadow-lg hover:shadow-xl"
+              className="w-full bg-[#2a276e] text-white py-4 rounded-lg hover:bg-[#1a1548] transition-colors font-semibold text-lg shadow-lg hover:shadow-xl"
             >
               Book Appointment
             </button>

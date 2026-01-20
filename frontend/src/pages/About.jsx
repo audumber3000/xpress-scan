@@ -8,14 +8,14 @@ const About = () => {
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "AboutPage",
-    "name": "About BetterClinic",
-    "description": "Learn about BetterClinic, India's leading clinic management software helping healthcare professionals streamline their practice management.",
+    "name": "About Clino Health",
+    "description": "Learn about Clino Health, India's leading clinic management software helping healthcare professionals streamline their practice management.",
     "publisher": {
       "@type": "Organization",
-      "name": "BetterClinic",
+      "name": "Clino Health",
       "logo": {
         "@type": "ImageObject",
-        "url": "https://betterclinic.app/icons/icon-512x512.png"
+        "url": "https://clinohealth.app/icons/icon-512x512.png"
       }
     }
   };
@@ -23,10 +23,10 @@ const About = () => {
   return (
     <div className="min-h-screen bg-white">
       <SEO
-        title="About BetterClinic - Leading Clinic Management Software in India"
-        description="Discover how BetterClinic is revolutionizing healthcare management for doctors, dentists, and radiologists across India. Learn about our mission to simplify clinic operations with innovative technology."
+        title="About Clino Health - Leading Clinic Management Software in India"
+        description="Discover how Clino Health is revolutionizing healthcare management for doctors, dentists, and radiologists across India. Learn about our mission to simplify clinic operations with innovative technology."
         keywords="about better clinic, clinic management software company, healthcare software India, medical practice management, clinic software provider, healthcare technology India"
-        url="https://betterclinic.app/about"
+        url="https://clinohealth.app/about"
         type="website"
         structuredData={structuredData}
       />
@@ -45,12 +45,12 @@ const About = () => {
               </Link>
             </div>
             <div className="flex items-center space-x-6">
-              <Link to="/" className="text-gray-600 hover:text-[#6C4CF3] transition-colors">
+              <Link to="/" className="text-gray-600 hover:text-[#2a276e] transition-colors">
                 Home
               </Link>
               <Link 
                 to="/signup" 
-                className="bg-[#6C4CF3] text-white px-6 py-2 rounded-lg hover:bg-[#5b3dd9] transition-colors"
+                className="bg-[#2a276e] text-white px-6 py-2 rounded-lg hover:bg-[#1a1548] transition-colors"
               >
                 Get Started
               </Link>
@@ -60,11 +60,11 @@ const About = () => {
       </nav>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-16 bg-gradient-to-br from-[#6C4CF3]50 via-blue-50 to-[#6C4CF3]100">
+      <section className="pt-32 pb-16 bg-gradient-to-br from-[#2a276e]50 via-blue-50 to-[#2a276e]100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-4xl mx-auto">
             <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
-              About <span className="text-[#6C4CF3]">Better Clinic</span>
+              About <span className="text-[#2a276e]">Better Clinic</span>
             </h1>
             <p className="text-xl text-gray-600 mb-8">
               Making healthcare management simple, efficient, and accessible for medical professionals across India
@@ -82,7 +82,7 @@ const About = () => {
                 Our Mission
               </h2>
               <p className="text-lg text-gray-600 mb-6">
-                At BetterClinic, we're on a mission to transform healthcare delivery in India by providing 
+                At Clino Health, we're on a mission to transform healthcare delivery in India by providing 
                 doctors, dentists, radiologists, and physiotherapists with the best clinic management software 
                 that simplifies their daily operations.
               </p>
@@ -98,7 +98,7 @@ const About = () => {
             </div>
             <div className="grid grid-cols-2 gap-6">
               <div className="bg-[#9B8CFF]/10 rounded-xl p-6 text-center">
-                <div className="text-4xl font-bold text-[#6C4CF3] mb-2">250+</div>
+                <div className="text-4xl font-bold text-[#2a276e] mb-2">250+</div>
                 <div className="text-gray-600">Clinics Trust Us</div>
               </div>
               <div className="bg-[#9B8CFF]/10 rounded-xl p-6 text-center">
@@ -132,7 +132,7 @@ const About = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="bg-white rounded-xl p-8 shadow-sm border border-gray-100">
               <div className="mb-4">
-                <Heart className="w-12 h-12 text-[#6C4CF3]" />
+                <Heart className="w-12 h-12 text-[#2a276e]" />
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-3">
                 Patient-Centric
@@ -144,7 +144,7 @@ const About = () => {
             </div>
             <div className="bg-white rounded-xl p-8 shadow-sm border border-gray-100">
               <div className="mb-4">
-                <Target className="w-12 h-12 text-[#6C4CF3]" />
+                <Target className="w-12 h-12 text-[#2a276e]" />
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-3">
                 Simplicity First
@@ -156,7 +156,7 @@ const About = () => {
             </div>
             <div className="bg-white rounded-xl p-8 shadow-sm border border-gray-100">
               <div className="mb-4">
-                <Award className="w-12 h-12 text-[#6C4CF3]" />
+                <Award className="w-12 h-12 text-[#2a276e]" />
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-3">
                 Innovation
@@ -175,7 +175,7 @@ const About = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Why Healthcare Professionals Choose BetterClinic
+              Why Healthcare Professionals Choose Clino Health
             </h2>
             <p className="text-xl text-gray-600">
               The better clinic software trusted by medical professionals across India
@@ -183,7 +183,7 @@ const About = () => {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
             <div className="flex items-start space-x-4">
-              <CheckCircle className="w-6 h-6 text-[#6C4CF3] flex-shrink-0 mt-1" />
+              <CheckCircle className="w-6 h-6 text-[#2a276e] flex-shrink-0 mt-1" />
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
                   Complete Clinic Management Solution
@@ -194,7 +194,7 @@ const About = () => {
               </div>
             </div>
             <div className="flex items-start space-x-4">
-              <CheckCircle className="w-6 h-6 text-[#6C4CF3] flex-shrink-0 mt-1" />
+              <CheckCircle className="w-6 h-6 text-[#2a276e] flex-shrink-0 mt-1" />
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
                   Built for Indian Healthcare
@@ -205,7 +205,7 @@ const About = () => {
               </div>
             </div>
             <div className="flex items-start space-x-4">
-              <CheckCircle className="w-6 h-6 text-[#6C4CF3] flex-shrink-0 mt-1" />
+              <CheckCircle className="w-6 h-6 text-[#2a276e] flex-shrink-0 mt-1" />
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
                   24/7 Support in Hindi & English
@@ -216,7 +216,7 @@ const About = () => {
               </div>
             </div>
             <div className="flex items-start space-x-4">
-              <CheckCircle className="w-6 h-6 text-[#6C4CF3] flex-shrink-0 mt-1" />
+              <CheckCircle className="w-6 h-6 text-[#2a276e] flex-shrink-0 mt-1" />
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
                   Secure & HIPAA Compliant
@@ -227,7 +227,7 @@ const About = () => {
               </div>
             </div>
             <div className="flex items-start space-x-4">
-              <CheckCircle className="w-6 h-6 text-[#6C4CF3] flex-shrink-0 mt-1" />
+              <CheckCircle className="w-6 h-6 text-[#2a276e] flex-shrink-0 mt-1" />
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
                   Affordable Pricing
@@ -238,7 +238,7 @@ const About = () => {
               </div>
             </div>
             <div className="flex items-start space-x-4">
-              <CheckCircle className="w-6 h-6 text-[#6C4CF3] flex-shrink-0 mt-1" />
+              <CheckCircle className="w-6 h-6 text-[#2a276e] flex-shrink-0 mt-1" />
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
                   Quick Setup & Training
@@ -253,17 +253,17 @@ const About = () => {
       </section>
 
       {/* CTA Section */}
-      <section className="py-16 bg-gradient-to-br from-[#6C4CF3] to-[#5b3dd9]">
+      <section className="py-16 bg-gradient-to-br from-[#2a276e] to-[#1a1548]">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-4xl font-bold text-white mb-6">
             Ready to Transform Your Practice?
           </h2>
           <p className="text-xl text-white mb-8">
-            Join 250+ healthcare professionals using BetterClinic to manage their practice better
+            Join 250+ healthcare professionals using Clino Health to manage their practice better
           </p>
           <Link 
             to="/signup" 
-            className="inline-flex items-center space-x-2 bg-white text-[#6C4CF3] px-8 py-4 rounded-lg hover:bg-gray-50 transition-colors text-lg font-medium"
+            className="inline-flex items-center space-x-2 bg-white text-[#2a276e] px-8 py-4 rounded-lg hover:bg-gray-50 transition-colors text-lg font-medium"
           >
             <span>Start Your Free Trial</span>
             <ArrowRight className="w-5 h-5" />

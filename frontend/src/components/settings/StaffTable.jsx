@@ -2,13 +2,13 @@ import React from 'react';
 
 const StaffTable = ({ 
   users, 
-  userDevices, 
-  loadingUserDevices,
+  userDevices = {}, 
+  loadingUserDevices = false,
   onUserClick,
-  getUserInitials,
-  formatDate,
-  formatLastSeen,
-  getDeviceIcon
+  getUserInitials = (name) => name?.split(' ').map(n => n[0]).join('').toUpperCase() || '??',
+  formatDate = (date) => date ? new Date(date).toLocaleDateString() : 'N/A',
+  formatLastSeen = (date) => date ? new Date(date).toLocaleString() : 'Never',
+  getDeviceIcon = () => null
 }) => {
   return (
     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -64,7 +64,7 @@ const StaffTable = ({
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-10 w-10">
-                        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#6C4CF3] to-[#9B8CFF] flex items-center justify-center text-white font-semibold text-sm">
+                        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#2a276e] to-[#9B8CFF] flex items-center justify-center text-white font-semibold text-sm">
                           {getUserInitials(u.name)}
                         </div>
                       </div>
@@ -100,7 +100,7 @@ const StaffTable = ({
                         <span className={`w-2 h-2 rounded-full ${
                           lastActiveDevice.is_online ? 'bg-green-400' : 'bg-gray-400'
                         }`}></span>
-                        <span>{formatDate(lastActiveDevice.last_seen)}</span>
+                        <span>{formatLastSeen(lastActiveDevice.last_seen)}</span>
                       </div>
                     ) : (
                       <span className="text-gray-400">Never</span>

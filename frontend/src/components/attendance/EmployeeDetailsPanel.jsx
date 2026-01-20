@@ -78,7 +78,7 @@ const EmployeeDetailsPanel = ({ employee, onClose }) => {
             <h4 className="text-lg font-semibold text-gray-900 mb-4">Attendance Statistics</h4>
             <div className="grid grid-cols-3 gap-4">
               <div className="bg-[#9B8CFF]/10 rounded-lg p-4 text-center border border-[#9B8CFF]/20">
-                <div className="text-2xl font-bold text-[#6C4CF3]">{stats.onTime}</div>
+                <div className="text-2xl font-bold text-[#2a276e]">{stats.onTime}</div>
                 <div className="text-xs text-gray-600 mt-1">On Time</div>
               </div>
               <div className="bg-yellow-100 rounded-lg p-4 text-center border border-yellow-200">
@@ -119,7 +119,7 @@ const EmployeeDetailsPanel = ({ employee, onClose }) => {
                     const getStatusBadge = () => {
                       switch (record.status) {
                         case 'on_time':
-                          return <span className="px-2 py-1 bg-[#9B8CFF]/20 text-[#6C4CF3] rounded text-xs font-medium">On Time</span>;
+                          return <span className="px-2 py-1 bg-[#9B8CFF]/20 text-[#2a276e] rounded text-xs font-medium">On Time</span>;
                         case 'late':
                           return <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded text-xs font-medium">Late</span>;
                         case 'absent':

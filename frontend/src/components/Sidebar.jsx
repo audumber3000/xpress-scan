@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { api } from "../utils/api";
 
-const navItems = [
+const mainNavItems = [
   {
     name: "Dashboard",
     path: "/dashboard",
@@ -42,15 +42,6 @@ const navItems = [
     ),
   },
   {
-    name: "X-ray",
-    path: "/xray",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-      </svg>
-    ),
-  },
-  {
     name: "Payments",
     path: "/payments",
     icon: (
@@ -68,22 +59,15 @@ const navItems = [
       </svg>
     ),
   },
+];
+
+const adminNavItems = [
   {
     name: "Admin",
-    path: "/admin/attendance",
+    path: "/admin",
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-      </svg>
-    ),
-  },
-  {
-    name: "Settings",
-    path: "/user-management",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
       </svg>
     ),
   },
@@ -132,15 +116,11 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
     const isActive = location.pathname === path;
     const baseClasses = collapsed 
       ? "flex items-center justify-center py-3 px-3 rounded-xl transition-all font-medium whitespace-nowrap relative"
-      : "flex items-center gap-3 py-2 px-4 rounded-lg transition font-medium whitespace-nowrap";
-    // Light, faded background for active tab - no button feel, just subtle highlight
+      : "flex items-center gap-3 py-3 px-4 rounded-xl transition-all font-medium whitespace-nowrap";
+    // White background for active tab, transparent for inactive
     const activeClasses = isActive 
-      ? collapsed
-        ? "bg-white/8 text-white"
-        : "bg-white/8 text-white"
-      : collapsed
-        ? "text-[#9B8CFF] hover:bg-white/5 hover:text-white"
-        : "text-white/70 hover:bg-white/5 hover:text-white";
+      ? "bg-white text-gray-900 shadow-lg"
+      : "text-white/80 hover:bg-white/10 hover:text-white";
     return `${baseClasses} ${activeClasses}`;
   };
 
@@ -168,11 +148,23 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
     ? `fixed top-0 left-0 z-50 h-full transform transition-transform duration-300 ease-in-out ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'}`
     : '';
 
-  // Desktop sidebar classes - Deep Indigo Blue background (#0E0B2D)
-  // When collapsed, add curved right edge and better spacing
+  // Check if current route is in admin section
+  const isAdminRoute = useMemo(() => {
+    return location.pathname.startsWith('/admin');
+  }, [location.pathname]);
+
+  // Desktop sidebar classes - Gradient background (teal for admin, purple for main)
   const desktopClasses = !isMobile 
-    ? `flex flex-col h-screen bg-[#0E0B2D] transition-all duration-300 ease-in-out ${collapsed ? 'w-20' : 'w-64'} ${collapsed ? 'p-3' : 'p-4'} ${collapsed ? 'rounded-r-2xl' : ''} relative`
-    : 'flex flex-col h-full w-64 bg-[#0E0B2D] p-4';
+    ? `flex flex-col h-screen transition-all duration-300 ease-in-out ${collapsed ? 'w-20' : 'w-64'} ${collapsed ? 'p-3' : 'p-5'} relative ${
+        isAdminRoute 
+          ? 'bg-gradient-to-b from-[#0d2a2d] via-[#1F6B72] to-[#29828a]' 
+          : 'bg-gradient-to-b from-[#0d0a2d] via-[#1a1548] to-[#2a276e]'
+      }`
+    : `flex flex-col h-full w-64 p-5 ${
+        isAdminRoute
+          ? 'bg-gradient-to-b from-[#0d2a2d] via-[#1F6B72] to-[#29828a]'
+          : 'bg-gradient-to-b from-[#0d0a2d] via-[#1a1548] to-[#2a276e]'
+      }`;
 
   return (
     <>
@@ -184,7 +176,20 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
         />
       )}
       
-      <aside className={`${mobileClasses} ${desktopClasses} ${collapsed && !isMobile ? 'shadow-2xl' : ''} ${collapsed && !isMobile ? 'overflow-visible' : ''}`}>
+      <aside className={`${mobileClasses} ${desktopClasses} ${collapsed && !isMobile ? 'shadow-2xl' : ''} ${collapsed && !isMobile ? 'overflow-visible' : ''} relative`}>
+        {/* Dotted pattern effect at bottom - color changes based on admin/main */}
+        <div 
+          className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none opacity-30"
+          style={{
+            backgroundImage: isAdminRoute 
+              ? 'radial-gradient(circle, rgba(45, 149, 150, 0.4) 1px, transparent 1px)'
+              : 'radial-gradient(circle, rgba(155, 140, 255, 0.4) 1px, transparent 1px)',
+            backgroundSize: '8px 8px',
+            maskImage: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%)',
+            WebkitMaskImage: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%)'
+          }}
+        ></div>
+
         {/* Curved right edge effect when collapsed */}
         {collapsed && !isMobile && (
           <div 
@@ -209,27 +214,24 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
         )}
 
         {/* Branding */}
-        <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'} h-16 mb-4 ${collapsed ? 'px-2' : ''} relative`}>
+        <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'} mb-6 ${collapsed ? 'px-2' : ''} relative`}>
           {/* Logo: Show clinic logo if available, otherwise tooth icon */}
           {clinicData?.logo ? (
             <img 
               src={clinicData.logo} 
               alt={clinicData.name || "Clinic Logo"} 
-              className={`${collapsed ? 'w-10 h-10' : 'w-12 h-12'} rounded-full object-cover flex-shrink-0 border-2 border-white/20 transition-all`}
+              className={`${collapsed ? 'w-10 h-10' : 'w-11 h-11'} rounded-xl object-cover flex-shrink-0 transition-all`}
             />
           ) : (
-            <div className={`${collapsed ? 'w-10 h-10' : 'w-16 h-16'} flex items-center justify-center bg-[#1A1640] text-[#9B8CFF] rounded-full flex-shrink-0 border-2 border-[rgba(155,140,255,0.2)] transition-all`}>
-              {/* Line Awesome Tooth Icon - Same as Dashboard */}
-              <i className={`las la-tooth ${collapsed ? 'text-2xl' : 'text-4xl'}`}></i>
+            <div className={`${collapsed ? 'w-10 h-10' : 'w-11 h-11'} flex items-center justify-center bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex-shrink-0 transition-all shadow-lg`}>
+              {/* Tooth Icon */}
+              <i className={`las la-tooth ${collapsed ? 'text-xl' : 'text-2xl'} text-white`}></i>
             </div>
           )}
           {!collapsed && (
             <div className="flex flex-col min-w-0 flex-1">
-              <span className="text-3xl font-extrabold text-white tracking-tight" style={{ fontFamily: 'serif', letterSpacing: '-0.03em' }}>
-                {formatClinicName(clinicData?.name).first}
-              </span>
-              <span className="text-sm font-medium text-white/80 tracking-wide">
-                {formatClinicName(clinicData?.name).rest}
+              <span className="text-base font-bold text-white leading-tight">
+                {clinicData?.name || "Clino Health"}
               </span>
             </div>
           )}
@@ -276,9 +278,16 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
           )}
         </div>
 
-        {/* Main Nav with Scroll - More space */}
-        <nav className="flex-1 overflow-y-auto flex flex-col gap-2 mb-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
-          {navItems.map((item) => {
+        {/* Main Menu Section */}
+        {!collapsed && (
+          <div className="mb-3">
+            <span className="text-xs font-semibold text-white/50 uppercase tracking-wider px-4">Main Menu</span>
+          </div>
+        )}
+
+        {/* Main Nav */}
+        <nav className="flex flex-col gap-1.5">
+          {mainNavItems.map((item) => {
             const isActive = location.pathname === item.path;
             return (
               <Link 
@@ -287,13 +296,13 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
                 className={`${linkClass(item.path)} ${collapsed ? 'group' : ''}`}
                 title={collapsed ? item.name : ''}
               >
-                <div className={`${collapsed ? 'w-6 h-6' : 'w-5 h-5'} flex items-center justify-center transition-all ${isActive ? 'text-white' : 'text-[#9B8CFF]'} ${collapsed && isActive ? 'scale-110' : ''}`}>
+                <div className={`${collapsed ? 'w-6 h-6' : 'w-5 h-5'} flex items-center justify-center transition-all ${isActive ? 'text-gray-900' : 'text-white/80'}`}>
                   {item.icon}
                 </div>
-                {!collapsed && item.name}
+                {!collapsed && <span className="text-sm">{item.name}</span>}
                 {/* Tooltip for collapsed state */}
                 {collapsed && (
-                  <span className="absolute left-full ml-2 px-2 py-1 bg-[#1A1640] text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 border border-[rgba(155,140,255,0.2)]">
+                  <span className="absolute left-full ml-2 px-3 py-1.5 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 shadow-xl">
                     {item.name}
                   </span>
                 )}
@@ -302,70 +311,39 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
           })}
         </nav>
 
-        {/* Subscription Section - Only when expanded */}
+        {/* Admin Section */}
         {!collapsed && (
-          <div className="flex flex-col pt-3 border-t border-[rgba(155,140,255,0.2)]">
-            <div className="px-3 py-2.5 bg-[#1A1640] rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                  </svg>
-                  <span className="text-sm font-semibold text-white">Subscription</span>
-                </div>
-                <span className="text-xs font-medium text-white bg-[#6C4CF3] px-2 py-0.5 rounded-full border border-[#9B8CFF]">Free (current)</span>
-              </div>
-
-              {/* Tutorial Link */}
-              <button
-                onClick={() => window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ', '_blank')}
-                className="w-full flex items-center gap-2 text-sm text-white/80 hover:text-white transition group mb-3"
-              >
-                <div className="w-7 h-7 bg-red-500/50 rounded-lg flex items-center justify-center group-hover:bg-red-500 transition flex-shrink-0">
-                  <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z"/>
-                  </svg>
-                </div>
-                <span className="text-xs font-medium">Watch tutorial</span>
-              </button>
-
-              {/* Upgrade Button */}
-              <button 
-                onClick={() => navigate("/subscription")}
-                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm shadow-sm"
-              >
-                Upgrade to Pro
-              </button>
-
-              {/* Trial notification */}
-              {true && (
-                <p className="text-xs text-amber-300 text-center mt-2">
-                  Trial ends in 7 days
-                </p>
-              )}
-            </div>
+          <div className="mt-6 mb-3">
+            <span className="text-xs font-semibold text-white/50 uppercase tracking-wider px-4">Admin</span>
           </div>
         )}
 
-        {/* Upgrade button when collapsed */}
-        {collapsed && (
-          <div className="flex flex-col pt-3 border-t border-[rgba(155,140,255,0.2)]">
-            <button
-              onClick={() => navigate("/subscription")}
-              className="relative bg-orange-500 hover:bg-orange-600 rounded-xl p-3 transition-all group w-full"
-              title="Upgrade - Trial ends in 7 days"
-            >
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#0E0B2D]"></span>
-              {/* Tooltip */}
-              <span className="absolute left-full ml-2 px-2 py-1 bg-[#1A1640] text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 border border-[rgba(155,140,255,0.2)]">
-                Upgrade
-              </span>
-            </button>
-          </div>
-        )}
+        {/* Admin Nav with Scroll */}
+        <nav className="flex-1 overflow-y-auto flex flex-col gap-1.5 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+          {adminNavItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <Link 
+                key={item.name} 
+                to={item.path} 
+                className={`${linkClass(item.path)} ${collapsed ? 'group' : ''}`}
+                title={collapsed ? item.name : ''}
+              >
+                <div className={`${collapsed ? 'w-6 h-6' : 'w-5 h-5'} flex items-center justify-center transition-all ${isActive ? 'text-gray-900' : 'text-white/80'}`}>
+                  {item.icon}
+                </div>
+                {!collapsed && <span className="text-sm">{item.name}</span>}
+                {/* Tooltip for collapsed state */}
+                {collapsed && (
+                  <span className="absolute left-full ml-2 px-3 py-1.5 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 shadow-xl">
+                    {item.name}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
+
       </aside>
     </>
   );

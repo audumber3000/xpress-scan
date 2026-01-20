@@ -21,11 +21,11 @@ const Features = () => {
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "Product",
-    "name": "BetterClinic Clinic Management Software",
+    "name": "Clino Health Clinic Management Software",
     "description": "Comprehensive clinic management software with patient management, appointments, WhatsApp integration, voice reporting, and more",
     "brand": {
       "@type": "Brand",
-      "name": "BetterClinic"
+      "name": "Clino Health"
     },
     "offers": {
       "@type": "AggregateOffer",
@@ -161,10 +161,10 @@ const Features = () => {
   return (
     <div className="min-h-screen bg-white">
       <SEO
-        title="Features - BetterClinic Clinic Management Software | Complete Healthcare Solution"
-        description="Explore BetterClinic's comprehensive features: patient management, appointment scheduling, WhatsApp integration, voice reporting, payment tracking, analytics & more. Best clinic management software for doctors, dentists & radiologists in India."
+        title="Features - Clino Health Clinic Management Software | Complete Healthcare Solution"
+        description="Explore Clino Health's comprehensive features: patient management, appointment scheduling, WhatsApp integration, voice reporting, payment tracking, analytics & more. Best clinic management software for doctors, dentists & radiologists in India."
         keywords="clinic management features, patient management system, appointment scheduling software, WhatsApp clinic integration, voice reporting software, medical billing software, clinic analytics, healthcare software features, clinic automation, medical practice management features"
-        url="https://betterclinic.app/features"
+        url="https://clinohealth.app/features"
         structuredData={structuredData}
       />
 
@@ -271,7 +271,7 @@ const Features = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Why Healthcare Professionals Love BetterClinic
+              Why Healthcare Professionals Love Clino Health
             </h2>
             <p className="text-xl text-gray-600">
               The complete clinic management software solution built for Indian healthcare
@@ -301,7 +301,7 @@ const Features = () => {
             Ready to Experience Better Clinic Management?
           </h2>
           <p className="text-xl text-green-50 mb-8">
-            Join hundreds of healthcare professionals using BetterClinic to streamline their practice
+            Join hundreds of healthcare professionals using Clino Health to streamline their practice
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link 

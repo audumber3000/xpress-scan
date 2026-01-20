@@ -23,7 +23,7 @@ const EditUserTab = ({
               name="name"
               value={formData.name}
               onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
               required
             />
           </div>
@@ -34,7 +34,7 @@ const EditUserTab = ({
               name="email"
               value={formData.email}
               onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
               required
             />
           </div>
@@ -44,7 +44,7 @@ const EditUserTab = ({
               name="role"
               value={formData.role}
               onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
             >
               {availableRoles.map((role) => (
                 <option key={role.value || role} value={role.value || role}>
@@ -63,7 +63,7 @@ const EditUserTab = ({
               value={formData.password}
               onChange={handleInputChange}
               placeholder="Leave empty to keep current password"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3] font-mono"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] font-mono"
             />
             <p className="text-xs text-gray-500 mt-1">Minimum 8 characters. Leave empty to keep current password.</p>
           </div>
@@ -82,7 +82,7 @@ const EditUserTab = ({
           type="submit"
           form="edit-user-form"
           disabled={saving}
-          className="flex-1 px-4 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+          className="flex-1 px-4 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
         >
           {saving ? (
             <>

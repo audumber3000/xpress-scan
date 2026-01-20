@@ -149,8 +149,8 @@ const ClinicOnboarding = () => {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Personal Info Section */}
             <div className="bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg p-4 mb-6">
-              <h3 className="text-lg font-medium text-[#6C4CF3] mb-2">Your Information</h3>
-              <p className="text-[#6C4CF3]">
+              <h3 className="text-lg font-medium text-[#2a276e] mb-2">Your Information</h3>
+              <p className="text-[#2a276e]">
                 <strong>Name:</strong> {user.name}<br/>
                 <strong>Email:</strong> {user.email}
               </p>
@@ -167,7 +167,7 @@ const ClinicOnboarding = () => {
                   name="clinic_name"
                   value={formData.clinic_name}
                   onChange={handleInputChange}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#6C4CF3] focus:border-[#6C4CF3]"
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#2a276e] focus:border-[#2a276e]"
                   placeholder="e.g., Sharma's Medical Clinic"
                   required
                 />
@@ -183,7 +183,7 @@ const ClinicOnboarding = () => {
                   value={formData.clinic_address}
                   onChange={handleInputChange}
                   rows={3}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#6C4CF3] focus:border-[#6C4CF3]"
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#2a276e] focus:border-[#2a276e]"
                 />
               </div>
 
@@ -195,7 +195,7 @@ const ClinicOnboarding = () => {
                     name="clinic_phone"
                     value={formData.clinic_phone}
                     onChange={handleInputChange}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#6C4CF3] focus:border-[#6C4CF3]"
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#2a276e] focus:border-[#2a276e]"
                   />
                 </div>
                 <div>
@@ -205,7 +205,7 @@ const ClinicOnboarding = () => {
                     name="clinic_email"
                     value={formData.clinic_email}
                     onChange={handleInputChange}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#6C4CF3] focus:border-[#6C4CF3]"
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#2a276e] focus:border-[#2a276e]"
                   />
                 </div>
               </div>
@@ -217,7 +217,7 @@ const ClinicOnboarding = () => {
                     name="specialization"
                     value={formData.specialization}
                     onChange={handleInputChange}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#6C4CF3] focus:border-[#6C4CF3]"
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#2a276e] focus:border-[#2a276e]"
                   >
                     <option value="radiologist">Radiologist</option>
                     <option value="dentist">Dentist</option>
@@ -230,7 +230,7 @@ const ClinicOnboarding = () => {
                     name="subscription_plan"
                     value={formData.subscription_plan}
                     onChange={handleInputChange}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#6C4CF3] focus:border-[#6C4CF3]"
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#2a276e] focus:border-[#2a276e]"
                   >
                     <option value="free">Free Plan (50 patients/month)</option>
                     <option value="professional">Professional ($29/month)</option>
@@ -253,14 +253,14 @@ const ClinicOnboarding = () => {
                       value={scan.name}
                       onChange={(e) => handleScanTypeChange(index, 'name', e.target.value)}
                       placeholder="Treatment name"
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#6C4CF3] focus:border-[#6C4CF3]"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#2a276e] focus:border-[#2a276e]"
                     />
                     <input
                       type="number"
                       value={scan.price}
                       onChange={(e) => handleScanTypeChange(index, 'price', parseFloat(e.target.value) || 0)}
                       placeholder="Price"
-                      className="w-24 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#6C4CF3] focus:border-[#6C4CF3]"
+                      className="w-24 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#2a276e] focus:border-[#2a276e]"
                     />
                     <button
                       type="button"
@@ -276,7 +276,7 @@ const ClinicOnboarding = () => {
               <button
                 type="button"
                 onClick={addScanType}
-                className="w-full py-2 border-2 border-dashed border-gray-300 rounded-md text-gray-600 hover:border-[#6C4CF3] hover:text-[#6C4CF3] focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+                className="w-full py-2 border-2 border-dashed border-gray-300 rounded-md text-gray-600 hover:border-[#2a276e] hover:text-[#2a276e] focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
               >
                 + Add Treatment Type
               </button>
@@ -285,7 +285,7 @@ const ClinicOnboarding = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#6C4CF3] text-white py-3 px-4 rounded-md hover:bg-[#5b3dd9] focus:outline-none focus:ring-2 focus:ring-[#6C4CF3] focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-[#2a276e] text-white py-3 px-4 rounded-md hover:bg-[#1a1548] focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? "Setting up your clinic..." : "Complete Setup"}
             </button>

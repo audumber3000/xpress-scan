@@ -8,14 +8,14 @@ const About = () => {
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "AboutPage",
-    "name": "About BetterClinic",
-    "description": "Learn about BetterClinic, India's leading clinic management software helping healthcare professionals streamline their practice management.",
+    "name": "About Clino Health",
+    "description": "Learn about Clino Health, India's leading clinic management software helping healthcare professionals streamline their practice management.",
     "publisher": {
       "@type": "Organization",
-      "name": "BetterClinic",
+      "name": "Clino Health",
       "logo": {
         "@type": "ImageObject",
-        "url": "https://betterclinic.app/icons/icon-512x512.png"
+        "url": "https://clinohealth.app/icons/icon-512x512.png"
       }
     }
   };
@@ -23,10 +23,10 @@ const About = () => {
   return (
     <div className="min-h-screen bg-white">
       <SEO
-        title="About BetterClinic - Leading Clinic Management Software in India"
-        description="Discover how BetterClinic is revolutionizing healthcare management for doctors, dentists, and radiologists across India. Learn about our mission to simplify clinic operations with innovative technology."
+        title="About Clino Health - Leading Clinic Management Software in India"
+        description="Discover how Clino Health is revolutionizing healthcare management for doctors, dentists, and radiologists across India. Learn about our mission to simplify clinic operations with innovative technology."
         keywords="about better clinic, clinic management software company, healthcare software India, medical practice management, clinic software provider, healthcare technology India"
-        url="https://betterclinic.app/about"
+        url="https://clinohealth.app/about"
         type="website"
         structuredData={structuredData}
       />
@@ -82,7 +82,7 @@ const About = () => {
                 Our Mission
               </h2>
               <p className="text-lg text-gray-600 mb-6">
-                At BetterClinic, we're on a mission to transform healthcare delivery in India by providing 
+                At Clino Health, we're on a mission to transform healthcare delivery in India by providing 
                 doctors, dentists, radiologists, and physiotherapists with the best clinic management software 
                 that simplifies their daily operations.
               </p>
@@ -175,7 +175,7 @@ const About = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Why Healthcare Professionals Choose BetterClinic
+              Why Healthcare Professionals Choose Clino Health
             </h2>
             <p className="text-xl text-gray-600">
               The better clinic software trusted by medical professionals across India
@@ -259,7 +259,7 @@ const About = () => {
             Ready to Transform Your Practice?
           </h2>
           <p className="text-xl text-green-50 mb-8">
-            Join 250+ healthcare professionals using BetterClinic to manage their practice better
+            Join 250+ healthcare professionals using Clino Health to manage their practice better
           </p>
           <Link 
             to="/signup" 

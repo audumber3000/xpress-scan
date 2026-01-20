@@ -86,7 +86,7 @@ const PermissionsTab = ({
               onClick={() => handlePresetChange("receptionist")}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
                 selectedRole === "receptionist" && !customMode
-                  ? "bg-[#6C4CF3] text-white"
+                  ? "bg-[#2a276e] text-white"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
@@ -97,7 +97,7 @@ const PermissionsTab = ({
               onClick={() => handlePresetChange("doctor")}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
                 selectedRole === "doctor" && !customMode
-                  ? "bg-[#6C4CF3] text-white"
+                  ? "bg-[#2a276e] text-white"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
@@ -108,7 +108,7 @@ const PermissionsTab = ({
               onClick={() => handlePresetChange("clinic_owner")}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
                 selectedRole === "clinic_owner" && !customMode
-                  ? "bg-[#6C4CF3] text-white"
+                  ? "bg-[#2a276e] text-white"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
@@ -119,7 +119,7 @@ const PermissionsTab = ({
               onClick={() => handlePresetChange("custom")}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
                 customMode
-                  ? "bg-[#6C4CF3] text-white"
+                  ? "bg-[#2a276e] text-white"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
@@ -161,7 +161,7 @@ const PermissionsTab = ({
                               type="checkbox"
                               checked={isChecked}
                               onChange={() => handleCheckbox(section.key, permission)}
-                              className="accent-[#6C4CF3] w-5 h-5 cursor-pointer"
+                              className="accent-[#2a276e] w-5 h-5 cursor-pointer"
                               disabled={!customMode && selectedRole !== "clinic_owner" && selectedUser?.role !== "clinic_owner"}
                             />
                           ) : (

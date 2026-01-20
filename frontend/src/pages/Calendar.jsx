@@ -78,9 +78,9 @@ const Calendar = () => {
         const transformedAppointments = response.map(apt => {
           // Generate color based on status or treatment
           const colors = [
-            "bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#6C4CF3]",
+            "bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#2a276e]",
             "bg-purple-100 border-purple-200 text-purple-800",
-            "bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#6C4CF3]",
+            "bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#2a276e]",
             "bg-pink-100 border-pink-200 text-pink-800",
             "bg-yellow-100 border-yellow-200 text-yellow-800"
           ];
@@ -684,9 +684,9 @@ const Calendar = () => {
       
       // Generate color for display
     const colors = [
-      'bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#6C4CF3]',
+      'bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#2a276e]',
       'bg-purple-100 border-purple-200 text-purple-800',
-      'bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#6C4CF3]',
+      'bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#2a276e]',
       'bg-yellow-100 border-yellow-200 text-yellow-800',
       'bg-pink-100 border-pink-200 text-pink-800',
       'bg-indigo-100 border-indigo-200 text-indigo-800'
@@ -854,9 +854,9 @@ const Calendar = () => {
       
       const transformedAppointments = appointmentsResponse.map(apt => {
         const colors = [
-          "bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#6C4CF3]",
+          "bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#2a276e]",
           "bg-purple-100 border-purple-200 text-purple-800",
-          "bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#6C4CF3]",
+          "bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#2a276e]",
           "bg-pink-100 border-pink-200 text-pink-800",
           "bg-yellow-100 border-yellow-200 text-yellow-800"
         ];
@@ -1048,7 +1048,7 @@ const Calendar = () => {
             </Link>
             <button 
               onClick={() => setShowAddForm(true)}
-              className="bg-[#6C4CF3] text-white px-4 py-2 rounded-lg hover:bg-[#5b3dd9] transition-colors flex items-center gap-2"
+              className="bg-[#2a276e] text-white px-4 py-2 rounded-lg hover:bg-[#1a1548] transition-colors flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
               Add new Appointment
@@ -1177,7 +1177,7 @@ const Calendar = () => {
                           {/* Patient Info */}
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-2">
-                              <div className="w-12 h-12 bg-[#9B8CFF]/20 rounded-full flex items-center justify-center text-lg font-semibold text-[#6C4CF3]">
+                              <div className="w-12 h-12 bg-[#9B8CFF]/20 rounded-full flex items-center justify-center text-lg font-semibold text-[#2a276e]">
                                 {apt.patientAvatar}
                               </div>
                               <div>
@@ -1210,7 +1210,7 @@ const Calendar = () => {
                         {/* Right: Status Badge */}
                         <div className="flex flex-col items-end gap-2">
                           {apt.status === 'accepted' && (
-                            <div className="flex items-center gap-2 px-3 py-2 bg-[#9B8CFF]/20 text-[#6C4CF3] rounded-full">
+                            <div className="flex items-center gap-2 px-3 py-2 bg-[#9B8CFF]/20 text-[#2a276e] rounded-full">
                               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                               </svg>
@@ -1233,7 +1233,7 @@ const Calendar = () => {
                               <span className="text-sm font-semibold">Pending</span>
                             </div>
                           )}
-                          <button className="text-[#9B8CFF] hover:text-[#6C4CF3] text-sm font-medium flex items-center gap-1">
+                          <button className="text-[#9B8CFF] hover:text-[#2a276e] text-sm font-medium flex items-center gap-1">
                             View Details
                             <ChevronRight className="w-4 h-4" />
                           </button>
@@ -1360,7 +1360,7 @@ const Calendar = () => {
                           <div className="p-2 h-full flex flex-col justify-center relative">
                             {/* Status indicator badge */}
                             {appointment.status === 'accepted' && (
-                              <div className="absolute top-1 right-1 w-5 h-5 bg-[#6C4CF3] rounded-full flex items-center justify-center z-10">
+                              <div className="absolute top-1 right-1 w-5 h-5 bg-[#2a276e] rounded-full flex items-center justify-center z-10">
                                 <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                 </svg>
@@ -1409,7 +1409,7 @@ const Calendar = () => {
             </div>
             <div className="flex-1 overflow-y-auto p-6">
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 bg-[#9B8CFF]/20 rounded-full flex items-center justify-center text-xl font-semibold text-[#6C4CF3]">
+                <div className="w-16 h-16 bg-[#9B8CFF]/20 rounded-full flex items-center justify-center text-xl font-semibold text-[#2a276e]">
                   {selectedAppointment.patientAvatar}
                 </div>
                 <div>
@@ -1442,7 +1442,7 @@ const Calendar = () => {
                 <div>
                   <span className="text-sm font-medium text-gray-600">Status:</span>
                   <span className={`ml-2 text-sm font-semibold ${
-                    selectedAppointment.status === 'accepted' ? 'text-[#6C4CF3]' :
+                    selectedAppointment.status === 'accepted' ? 'text-[#2a276e]' :
                     selectedAppointment.status === 'rejected' ? 'text-red-600' :
                     'text-yellow-600'
                   }`}>
@@ -1457,13 +1457,13 @@ const Calendar = () => {
               {/* Status Message */}
               {selectedAppointment.status === 'accepted' && (
                 <div className="mb-6 p-4 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
-                  <div className="flex items-center gap-2 text-[#6C4CF3]">
+                  <div className="flex items-center gap-2 text-[#2a276e]">
                     <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
                     <span className="font-medium">Appointment Accepted</span>
             </div>
-                  <p className="text-sm text-[#6C4CF3] mt-1">Patient registration completed.</p>
+                  <p className="text-sm text-[#2a276e] mt-1">Patient registration completed.</p>
                 </div>
               )}
 
@@ -1558,7 +1558,7 @@ const Calendar = () => {
                     value={patientFormData.name}
                     onChange={(e) => setPatientFormData({ ...patientFormData, name: e.target.value })}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent bg-gray-50"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent bg-gray-50"
                     readOnly
                   />
                 </div>
@@ -1575,7 +1575,7 @@ const Calendar = () => {
                     required
                     min="1"
                     max="150"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                     placeholder="Enter age"
                   />
                 </div>
@@ -1589,7 +1589,7 @@ const Calendar = () => {
                     value={patientFormData.gender}
                     onChange={(e) => setPatientFormData({ ...patientFormData, gender: e.target.value })}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                   >
                     <option value="">Select gender</option>
                     <option value="Male">Male</option>
@@ -1608,7 +1608,7 @@ const Calendar = () => {
                     value={patientFormData.village}
                     onChange={(e) => setPatientFormData({ ...patientFormData, village: e.target.value })}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                     placeholder="Enter village or city"
                   />
                 </div>
@@ -1623,7 +1623,7 @@ const Calendar = () => {
                     value={patientFormData.phone}
                     onChange={(e) => setPatientFormData({ ...patientFormData, phone: e.target.value })}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                     placeholder="Enter phone number"
                   />
                 </div>
@@ -1637,7 +1637,7 @@ const Calendar = () => {
                     type="text"
                     value={patientFormData.referred_by}
                     onChange={(e) => setPatientFormData({ ...patientFormData, referred_by: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                     placeholder="Enter referral source (optional)"
                   />
                 </div>
@@ -1652,7 +1652,7 @@ const Calendar = () => {
                     value={patientFormData.treatment_type}
                     onChange={(e) => setPatientFormData({ ...patientFormData, treatment_type: e.target.value })}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent bg-gray-50"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent bg-gray-50"
                     placeholder="Treatment type"
                   />
                 </div>
@@ -1666,7 +1666,7 @@ const Calendar = () => {
                     value={patientFormData.payment_type}
                     onChange={(e) => setPatientFormData({ ...patientFormData, payment_type: e.target.value })}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                   >
                     <option value="Cash">Cash</option>
                     <option value="Credit Card">Credit Card</option>
@@ -1684,7 +1684,7 @@ const Calendar = () => {
                     value={patientFormData.notes}
                     onChange={(e) => setPatientFormData({ ...patientFormData, notes: e.target.value })}
                     rows="3"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                     placeholder="Additional notes (optional)"
                   />
                 </div>
@@ -1694,7 +1694,7 @@ const Calendar = () => {
               <button 
                 type="submit" 
                 form="patient-registration-form"
-                className="w-full bg-[#6C4CF3] text-white py-3 rounded-lg hover:bg-[#5b3dd9] transition-colors font-medium"
+                className="w-full bg-[#2a276e] text-white py-3 rounded-lg hover:bg-[#1a1548] transition-colors font-medium"
               >
                 Complete Registration
               </button>
@@ -1729,7 +1729,7 @@ const Calendar = () => {
                   value={newAppointment.patientName}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                   placeholder="Enter patient name"
                 />
               </div>
@@ -1745,7 +1745,7 @@ const Calendar = () => {
                   value={newAppointment.patientEmail}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                   placeholder="Enter patient email"
                 />
               </div>
@@ -1761,7 +1761,7 @@ const Calendar = () => {
                   value={newAppointment.patientPhone}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                   placeholder="Enter patient phone"
                 />
               </div>
@@ -1776,7 +1776,7 @@ const Calendar = () => {
                   value={newAppointment.treatment}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                 >
                   <option value="">Select treatment</option>
                   <option value="Root Canal">Root Canal</option>
@@ -1801,7 +1801,7 @@ const Calendar = () => {
                   value={newAppointment.date}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                 />
               </div>
 
@@ -1815,7 +1815,7 @@ const Calendar = () => {
                   name="time"
                   value={newAppointment.time}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                   placeholder="Leave empty to auto-assign"
                 />
                 {newAppointment.date && (() => {
@@ -1828,7 +1828,7 @@ const Calendar = () => {
                     <div className="mt-2 space-y-2">
                       {/* Operating Hours Info */}
                       <div className="p-2 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
-                        <p className="text-xs text-[#6C4CF3] flex items-center gap-2">
+                        <p className="text-xs text-[#2a276e] flex items-center gap-2">
                           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
                           </svg>
@@ -1879,7 +1879,7 @@ const Calendar = () => {
                       onClick={() => setNewAppointment(prev => ({ ...prev, duration: option.value }))}
                       className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
                         newAppointment.duration === option.value
-                          ? 'bg-[#6C4CF3] text-white border-[#6C4CF3]'
+                          ? 'bg-[#2a276e] text-white border-[#2a276e]'
                           : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                       }`}
                     >
@@ -1903,7 +1903,7 @@ const Calendar = () => {
                 <button
                   type="submit"
                   form="add-appointment-form"
-                  className="px-6 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium"
+                  className="px-6 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition font-medium"
                 >
                   Add Appointment
                 </button>

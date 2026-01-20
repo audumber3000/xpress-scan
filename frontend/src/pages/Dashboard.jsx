@@ -5,7 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { api } from "../utils/api";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid, ReferenceLine, Label, LineChart, Line, Area, AreaChart, RadialBarChart, RadialBar } from "recharts";
 
-const COLORS = ["#6C4CF3", "#9B8CFF", "#6ee7b7", "#f59e0b", "#ef4444", "#8b5cf6"];
+const COLORS = ["#2a276e", "#9B8CFF", "#6ee7b7", "#f59e0b", "#ef4444", "#8b5cf6"];
 
 // Format number to k notation (e.g., 10000 -> 10k, 10200 -> 10.2k)
 const formatToK = (value) => {
@@ -91,7 +91,7 @@ const appointmentData = [
 
 // Clinic Capacity Utilization Data
 const capacityData = [
-  { name: "Utilization", value: 78, fill: "#6C4CF3" }
+  { name: "Utilization", value: 78, fill: "#2a276e" }
 ];
 
 function getTodayString() {
@@ -183,24 +183,24 @@ const AISparkleIcon = ({ className = "w-3 h-3" }) => (
     <path 
       d="M12 2L13.5 6.5L18 8L13.5 9.5L12 14L10.5 9.5L6 8L10.5 6.5L12 2Z" 
       fill="url(#purpleGradient1)" 
-      stroke="#6C4CF3" 
+      stroke="#2a276e" 
       strokeWidth="1.5"
     />
     {/* Smaller star */}
     <path 
       d="M18 16L18.75 18.25L21 19L18.75 19.75L18 22L17.25 19.75L15 19L17.25 18.25L18 16Z" 
       fill="url(#purpleGradient2)" 
-      stroke="#6C4CF3" 
+      stroke="#2a276e" 
       strokeWidth="1.5"
     />
     <defs>
       <linearGradient id="purpleGradient1" x1="12" y1="2" x2="12" y2="14" gradientUnits="userSpaceOnUse">
         <stop offset="0%" stopColor="#9B8CFF" />
-        <stop offset="100%" stopColor="#6C4CF3" />
+        <stop offset="100%" stopColor="#2a276e" />
       </linearGradient>
       <linearGradient id="purpleGradient2" x1="18" y1="16" x2="18" y2="22" gradientUnits="userSpaceOnUse">
         <stop offset="0%" stopColor="#9B8CFF" />
-        <stop offset="100%" stopColor="#6C4CF3" />
+        <stop offset="100%" stopColor="#2a276e" />
       </linearGradient>
     </defs>
   </svg>
@@ -219,7 +219,7 @@ const MetricCard = ({ title, value, change, changeType, sub, weekData, onClick, 
     <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col gap-2 min-w-0 hover:shadow-md transition cursor-pointer" onClick={onClick}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#6C4CF3]">
+          <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#2a276e]">
             {getIcon()}
           </div>
           <span className="text-xs text-gray-500 font-medium">
@@ -475,7 +475,7 @@ const Dashboard = () => {
       setLoadingCapacity(true);
       try {
         const data = await api.get("/dashboard/capacity");
-        setCapacityDataState([{ name: "Utilization", value: data.utilization, fill: "#6C4CF3" }]);
+        setCapacityDataState([{ name: "Utilization", value: data.utilization, fill: "#2a276e" }]);
       } catch (error) {
         console.error("Error fetching capacity:", error);
         setCapacityDataState([]);
@@ -805,14 +805,14 @@ const Dashboard = () => {
           {/* AI Sparkle Icon */}
           <button
             onClick={() => setShowChatPanel(true)}
-            className="absolute top-3 right-3 p-1.5 bg-white border border-[#6C4CF3]/20 rounded-full hover:bg-[#6C4CF3]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
+            className="absolute top-3 right-3 p-1.5 bg-white border border-[#2a276e]/20 rounded-full hover:bg-[#2a276e]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
             title="Ask AI Assistant"
           >
             <AISparkleIcon className="w-3 h-3" />
           </button>
           <div className="flex items-center justify-between mb-2 pr-10">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#6C4CF3]">
+              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#2a276e]">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
@@ -837,11 +837,11 @@ const Dashboard = () => {
             <BarChart data={patientStatsData} barGap={8}>
               <defs>
                 <linearGradient id="patientGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#6C4CF3" stopOpacity={0.8} />
+                  <stop offset="0%" stopColor="#2a276e" stopOpacity={0.8} />
                   <stop offset="100%" stopColor="#9B8CFF" stopOpacity={0.6} />
                 </linearGradient>
                 <linearGradient id="inpatientGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#6C4CF3" stopOpacity={0.7} />
+                  <stop offset="0%" stopColor="#2a276e" stopOpacity={0.7} />
                   <stop offset="100%" stopColor="#9B8CFF" stopOpacity={0.5} />
                 </linearGradient>
               </defs>
@@ -862,14 +862,14 @@ const Dashboard = () => {
           {/* AI Sparkle Icon */}
           <button
             onClick={() => setShowChatPanel(true)}
-            className="absolute top-3 right-3 p-1.5 bg-white border border-[#6C4CF3]/20 rounded-full hover:bg-[#6C4CF3]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
+            className="absolute top-3 right-3 p-1.5 bg-white border border-[#2a276e]/20 rounded-full hover:bg-[#2a276e]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
             title="Ask AI Assistant"
           >
             <AISparkleIcon className="w-3 h-3" />
           </button>
           <div className="flex items-center justify-between w-full mb-2 pr-10">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#6C4CF3]">
+              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#2a276e]">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
@@ -940,14 +940,14 @@ const Dashboard = () => {
           {/* AI Sparkle Icon */}
           <button
             onClick={() => setShowChatPanel(true)}
-            className="absolute top-3 right-3 p-1.5 bg-white border border-[#6C4CF3]/20 rounded-full hover:bg-[#6C4CF3]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
+            className="absolute top-3 right-3 p-1.5 bg-white border border-[#2a276e]/20 rounded-full hover:bg-[#2a276e]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
             title="Ask AI Assistant"
           >
             <AISparkleIcon className="w-3 h-3" />
           </button>
           <div className="flex items-center justify-between mb-2 pr-10">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#6C4CF3]">
+              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#2a276e]">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -1030,10 +1030,10 @@ const Dashboard = () => {
               <Line 
                 type="monotone" 
                 dataKey="revenue" 
-                stroke="#6C4CF3" 
+                stroke="#2a276e" 
                 strokeWidth={3} 
-                dot={{ fill: '#6C4CF3', strokeWidth: 2, r: 4 }}
-                activeDot={{ r: 6, stroke: '#6C4CF3', strokeWidth: 2 }}
+                dot={{ fill: '#2a276e', strokeWidth: 2, r: 4 }}
+                activeDot={{ r: 6, stroke: '#2a276e', strokeWidth: 2 }}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -1047,14 +1047,14 @@ const Dashboard = () => {
           {/* AI Sparkle Icon */}
           <button
             onClick={() => setShowChatPanel(true)}
-            className="absolute top-3 right-3 p-1.5 bg-white border border-[#6C4CF3]/20 rounded-full hover:bg-[#6C4CF3]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
+            className="absolute top-3 right-3 p-1.5 bg-white border border-[#2a276e]/20 rounded-full hover:bg-[#2a276e]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
             title="Ask AI Assistant"
           >
             <AISparkleIcon className="w-3 h-3" />
           </button>
           <div className="flex items-center justify-between mb-2 pr-10">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#6C4CF3]">
+              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#2a276e]">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
@@ -1079,10 +1079,10 @@ const Dashboard = () => {
               <defs>
                 <linearGradient id="capacityAreaGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#9B8CFF" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="#6C4CF3" stopOpacity={0.1} />
+                  <stop offset="100%" stopColor="#2a276e" stopOpacity={0.1} />
                 </linearGradient>
                 <linearGradient id="bookingsAreaGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#6C4CF3" stopOpacity={0.4} />
+                  <stop offset="0%" stopColor="#2a276e" stopOpacity={0.4} />
                   <stop offset="100%" stopColor="#9B8CFF" stopOpacity={0.15} />
                 </linearGradient>
               </defs>
@@ -1107,7 +1107,7 @@ const Dashboard = () => {
               <Area 
                 type="monotone" 
                 dataKey="bookings" 
-                stroke="#6C4CF3" 
+                stroke="#2a276e" 
                 strokeWidth={2.5}
                 fill="url(#bookingsAreaGradient)" 
                 fillOpacity={1}
@@ -1124,21 +1124,21 @@ const Dashboard = () => {
           {/* AI Sparkle Icon */}
           <button
             onClick={() => setShowChatPanel(true)}
-            className="absolute top-3 right-3 p-1.5 bg-white border border-[#6C4CF3]/20 rounded-full hover:bg-[#6C4CF3]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
+            className="absolute top-3 right-3 p-1.5 bg-white border border-[#2a276e]/20 rounded-full hover:bg-[#2a276e]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
             title="Ask AI Assistant"
           >
             <AISparkleIcon className="w-3 h-3" />
           </button>
           <div className="flex items-center justify-between w-full mb-4 pr-10">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#6C4CF3]">
+              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#2a276e]">
                 <ChairIcon />
               </div>
               <span className="font-semibold text-gray-800">Dental Chairs</span>
             </div>
             <button className="flex items-center gap-1 text-xs border rounded px-2 py-1">
               Live
-              <div className="w-2 h-2 bg-[#6C4CF3] rounded-full animate-pulse"></div>
+              <div className="w-2 h-2 bg-[#2a276e] rounded-full animate-pulse"></div>
             </button>
           </div>
           
@@ -1149,7 +1149,7 @@ const Dashboard = () => {
               return (
                 <div key={chairNum} className="flex flex-col items-center gap-1">
                   <div className={`w-12 h-12 rounded-lg flex items-center justify-center transition ${
-                    isOccupied ? 'bg-[#6C4CF3] text-white' : 'bg-gray-100 text-gray-400'
+                    isOccupied ? 'bg-[#2a276e] text-white' : 'bg-gray-100 text-gray-400'
                   }`}>
                     <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M7 11V13H17V11H19V13C19 14.1 18.1 15 17 15V19H15V15H9V19H7V15C5.9 15 5 14.1 5 13V11H7M7 7C7 5.9 7.9 5 9 5H15C16.1 5 17 5.9 17 7V9H7V7Z"/>
@@ -1165,7 +1165,7 @@ const Dashboard = () => {
           <div className="w-full bg-gray-50 rounded-lg p-3">
             <div className="flex justify-between items-center text-sm">
               <div className="flex items-center gap-2">
-                <span className="inline-block w-3 h-3 rounded-full bg-[#6C4CF3]"></span>
+                <span className="inline-block w-3 h-3 rounded-full bg-[#2a276e]"></span>
                 <span className="text-gray-700">Occupied</span>
               </div>
               <span className="font-semibold text-gray-900">{Math.floor((capacityDataState[0]?.value || 0) / 20)}/5</span>
@@ -1207,10 +1207,10 @@ const Dashboard = () => {
               <div className="bg-gradient-to-r from-[#9B8CFF]/10 to-[#9B8CFF]/20 rounded-lg p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-700">Active</span>
-                  <span className="text-2xl font-bold text-[#6C4CF3]">{chairDetailsData.utilization_percent}%</span>
+                  <span className="text-2xl font-bold text-[#2a276e]">{chairDetailsData.utilization_percent}%</span>
                 </div>
                 <div className="w-full bg-white rounded-full h-2 mt-2">
-                  <div className="bg-[#6C4CF3] h-2 rounded-full transition-all" style={{ width: `${chairDetailsData.utilization_percent}%` }}></div>
+                  <div className="bg-[#2a276e] h-2 rounded-full transition-all" style={{ width: `${chairDetailsData.utilization_percent}%` }}></div>
                 </div>
               </div>
               
@@ -1231,7 +1231,7 @@ const Dashboard = () => {
                   <div className="flex items-center justify-center gap-1 mb-1">
                     <ClockIcon />
                   </div>
-                  <div className="text-lg font-bold text-[#6C4CF3]">{chairDetailsData.active_hours}h</div>
+                  <div className="text-lg font-bold text-[#2a276e]">{chairDetailsData.active_hours}h</div>
                   <div className="text-xs text-gray-600">Active Time</div>
                 </div>
                 <div className="bg-gray-50 rounded-lg p-2 text-center">
@@ -1253,7 +1253,7 @@ const Dashboard = () => {
           {/* AI Sparkle Icon */}
           <button
             onClick={() => setShowChatPanel(true)}
-            className="absolute top-3 right-3 p-1.5 bg-white border border-[#6C4CF3]/20 rounded-full hover:bg-[#6C4CF3]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
+            className="absolute top-3 right-3 p-1.5 bg-white border border-[#2a276e]/20 rounded-full hover:bg-[#2a276e]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
             title="Ask AI Assistant"
           >
             <AISparkleIcon className="w-3 h-3" />
@@ -1307,7 +1307,7 @@ const Dashboard = () => {
           {/* AI Sparkle Icon */}
           <button
             onClick={() => setShowChatPanel(true)}
-            className="absolute top-3 right-3 p-1.5 bg-white border border-[#6C4CF3]/20 rounded-full hover:bg-[#6C4CF3]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
+            className="absolute top-3 right-3 p-1.5 bg-white border border-[#2a276e]/20 rounded-full hover:bg-[#2a276e]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
             title="Ask AI Assistant"
           >
             <AISparkleIcon className="w-3 h-3" />
@@ -1340,7 +1340,7 @@ const Dashboard = () => {
                   <span className="text-gray-700">Completion Rate</span>
                   <div className="flex items-center gap-2">
                     <div className="w-20 bg-gray-200 rounded-full h-1.5">
-                      <div className="bg-[#6C4CF3] h-1.5 rounded-full" style={{ width: `${appointmentQualityData.completion_rate}%` }}></div>
+                      <div className="bg-[#2a276e] h-1.5 rounded-full" style={{ width: `${appointmentQualityData.completion_rate}%` }}></div>
                     </div>
                     <span className="font-semibold text-gray-900 w-10 text-right">{appointmentQualityData.completion_rate}%</span>
                   </div>
@@ -1360,7 +1360,7 @@ const Dashboard = () => {
                   <span className="text-gray-700">Satisfaction</span>
                   <div className="flex items-center gap-2">
                     <div className="w-20 bg-gray-200 rounded-full h-1.5">
-                      <div className="bg-[#6C4CF3] h-1.5 rounded-full" style={{ width: `${appointmentQualityData.satisfaction_rate}%` }}></div>
+                      <div className="bg-[#2a276e] h-1.5 rounded-full" style={{ width: `${appointmentQualityData.satisfaction_rate}%` }}></div>
                     </div>
                     <span className="font-semibold text-gray-900 w-10 text-right">{appointmentQualityData.satisfaction_rate}%</span>
                   </div>
@@ -1377,7 +1377,7 @@ const Dashboard = () => {
           {/* AI Sparkle Icon */}
           <button
             onClick={() => setShowChatPanel(true)}
-            className="absolute top-3 right-10 p-1.5 bg-white border border-[#6C4CF3]/20 rounded-full hover:bg-[#6C4CF3]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
+            className="absolute top-3 right-10 p-1.5 bg-white border border-[#2a276e]/20 rounded-full hover:bg-[#2a276e]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
             title="Ask AI Assistant"
           >
             <AISparkleIcon className="w-3 h-3" />
@@ -1408,7 +1408,7 @@ const Dashboard = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="text-center">
-                    <div className="font-semibold text-[#6C4CF3]">{clinicPerformanceData.current_clinic.metrics.appointments_count}</div>
+                    <div className="font-semibold text-[#2a276e]">{clinicPerformanceData.current_clinic.metrics.appointments_count}</div>
                     <div className="text-gray-500">Appointments</div>
                   </div>
                   <div className="text-center">
@@ -1435,7 +1435,7 @@ const Dashboard = () => {
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="text-center">
-                      <div className="font-semibold text-[#6C4CF3]">{clinic.metrics.appointments_count}</div>
+                      <div className="font-semibold text-[#2a276e]">{clinic.metrics.appointments_count}</div>
                       <div className="text-gray-500">Appointments</div>
                     </div>
                     <div className="text-center">
@@ -1463,7 +1463,7 @@ const Dashboard = () => {
           {/* AI Sparkle Icon */}
           <button
             onClick={() => setShowChatPanel(true)}
-            className="absolute top-3 right-3 p-1.5 bg-white border border-[#6C4CF3]/20 rounded-full hover:bg-[#6C4CF3]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
+            className="absolute top-3 right-3 p-1.5 bg-white border border-[#2a276e]/20 rounded-full hover:bg-[#2a276e]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
             title="Ask AI Assistant"
           >
             <AISparkleIcon className="w-3 h-3" />
@@ -1580,7 +1580,7 @@ const Dashboard = () => {
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#6C4CF3]">
+                            <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#2a276e]">
                               <CalendarCheckIcon />
                             </div>
                             <div>
@@ -1603,7 +1603,7 @@ const Dashboard = () => {
                 <div>
                   <div className="grid grid-cols-2 gap-4 mb-6">
                     <div className="bg-[#9B8CFF]/10 rounded-lg p-4 text-center">
-                      <div className="text-3xl font-bold text-[#6C4CF3]">{drawerData.chairs_occupied}</div>
+                      <div className="text-3xl font-bold text-[#2a276e]">{drawerData.chairs_occupied}</div>
                       <div className="text-sm text-gray-600 mt-1">Occupied Chairs</div>
                     </div>
                     <div className="bg-gray-50 rounded-lg p-4 text-center">
@@ -1617,7 +1617,7 @@ const Dashboard = () => {
                         chair.status === 'occupied' ? 'bg-[#9B8CFF]/10 border border-[#9B8CFF]' : 'bg-gray-50 border border-gray-200'
                       }`}>
                         <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-lg ${chair.status === 'occupied' ? 'bg-[#6C4CF3] text-white' : 'bg-gray-200 text-gray-500'}`}>
+                          <div className={`p-2 rounded-lg ${chair.status === 'occupied' ? 'bg-[#2a276e] text-white' : 'bg-gray-200 text-gray-500'}`}>
                             <ChairIcon />
                           </div>
                           <div>
@@ -1626,7 +1626,7 @@ const Dashboard = () => {
                           </div>
                         </div>
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          chair.status === 'occupied' ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' : 'bg-gray-100 text-gray-600'
+                          chair.status === 'occupied' ? 'bg-[#9B8CFF]/20 text-[#2a276e]' : 'bg-gray-100 text-gray-600'
                         }`}>
                           {chair.status === 'occupied' ? 'Occupied' : 'Available'}
                         </span>
@@ -1643,7 +1643,7 @@ const Dashboard = () => {
                           <h4 className="font-semibold text-gray-900">Report #{item.id}</h4>
                           <div className="grid grid-cols-2 gap-2 mt-2 text-sm text-gray-600">
                             <div><span className="font-medium">Patient ID:</span> {item.patient_id}</div>
-                            <div><span className="font-medium">Status:</span> <span className={`px-2 py-1 rounded text-xs ${item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : item.status === 'completed' ? 'bg-[#9B8CFF]/20 text-[#6C4CF3]' : 'bg-gray-100 text-gray-800'}`}>{item.status}</span></div>
+                            <div><span className="font-medium">Status:</span> <span className={`px-2 py-1 rounded text-xs ${item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : item.status === 'completed' ? 'bg-[#9B8CFF]/20 text-[#2a276e]' : 'bg-gray-100 text-gray-800'}`}>{item.status}</span></div>
                           </div>
                           {item.created_at && (
                             <div className="text-xs text-gray-500 mt-2">
@@ -1710,7 +1710,7 @@ const Dashboard = () => {
                       onChange={() => toggleWidget('patientStats')}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#2a276e]"></div>
                   </label>
                 </div>
 
@@ -1730,14 +1730,14 @@ const Dashboard = () => {
                       onChange={() => toggleWidget('demographics')}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#2a276e]"></div>
                   </label>
                 </div>
 
                 {/* Revenue Analytics Toggle */}
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
                   <div className="flex items-center gap-3">
-                    <i className="fi fi-sr-chart-line-up text-xl text-[#6C4CF3]"></i>
+                    <i className="fi fi-sr-chart-line-up text-xl text-[#2a276e]"></i>
                     <div>
                       <div className="font-semibold text-gray-900">Revenue Analytics</div>
                       <div className="text-xs text-gray-600">Weekly revenue line chart</div>
@@ -1750,7 +1750,7 @@ const Dashboard = () => {
                       onChange={() => toggleWidget('revenue')}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#2a276e]"></div>
                   </label>
                 </div>
 
@@ -1770,7 +1770,7 @@ const Dashboard = () => {
                       onChange={() => toggleWidget('appointments')}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#2a276e]"></div>
                   </label>
                 </div>
 
@@ -1790,7 +1790,7 @@ const Dashboard = () => {
                       onChange={() => toggleWidget('dentalChairs')}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#2a276e]"></div>
                   </label>
                 </div>
 
@@ -1810,7 +1810,7 @@ const Dashboard = () => {
                       onChange={() => toggleWidget('chairUtilization')}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#2a276e]"></div>
                   </label>
                 </div>
 
@@ -1830,7 +1830,7 @@ const Dashboard = () => {
                       onChange={() => toggleWidget('treatments')}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#2a276e]"></div>
                   </label>
                 </div>
 
@@ -1850,7 +1850,7 @@ const Dashboard = () => {
                       onChange={() => toggleWidget('quality')}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#2a276e]"></div>
                   </label>
                 </div>
 
@@ -1870,7 +1870,7 @@ const Dashboard = () => {
                       onChange={() => toggleWidget('clinicPerformance')}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#2a276e]"></div>
                   </label>
                 </div>
 
@@ -1890,7 +1890,7 @@ const Dashboard = () => {
                       onChange={() => toggleWidget('patientMap')}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C4CF3]"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#2a276e]"></div>
                   </label>
                 </div>
               </div>
@@ -1900,7 +1900,7 @@ const Dashboard = () => {
             <div className="p-6 border-t border-gray-200">
               <button 
                 onClick={() => setShowCustomizeDrawer(false)} 
-                className="w-full px-6 py-3 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium"
+                className="w-full px-6 py-3 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition font-medium"
               >
                 Done
               </button>
@@ -1912,7 +1912,7 @@ const Dashboard = () => {
       {/* Floating AI Chat Button */}
       <button
         onClick={() => setShowChatPanel(true)}
-        className="fixed bottom-6 right-6 bg-gradient-to-r from-[#6C4CF3] to-[#9B8CFF] hover:from-[#5b3dd9] hover:to-[#9B8CFF] text-white rounded-full p-4 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 z-40 group"
+        className="fixed bottom-6 right-6 bg-gradient-to-r from-[#2a276e] to-[#9B8CFF] hover:from-[#1a1548] hover:to-[#9B8CFF] text-white rounded-full p-4 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 z-40 group"
         title="AI Dental Assistant"
       >
         <div className="relative">
@@ -1946,7 +1946,7 @@ const Dashboard = () => {
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-[#9B8CFF]/10 to-blue-50">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-r from-[#6C4CF3] to-[#9B8CFF] rounded-full flex items-center justify-center">
+                <div className="w-10 h-10 bg-gradient-to-r from-[#2a276e] to-[#9B8CFF] rounded-full flex items-center justify-center">
                   <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 2C10.34 2 9 3.34 9 5C9 5.87 9.32 6.67 9.84 7.28C8.78 8.13 8 9.46 8 11C8 11.7 8.13 12.36 8.37 12.97C7.55 13.23 6.87 13.77 6.42 14.47C5.97 15.17 5.76 16 5.76 16.84C5.76 18.58 7.18 20 8.92 20C10.2 20 11.3 19.23 11.78 18.13C11.92 18.21 12.07 18.26 12.22 18.26C12.37 18.26 12.52 18.21 12.66 18.13C13.14 19.23 14.24 20 15.52 20C17.26 20 18.68 18.58 18.68 16.84C18.68 16 18.47 15.17 18.02 14.47C17.57 13.77 16.89 13.23 16.07 12.97C16.31 12.36 16.44 11.7 16.44 11C16.44 9.46 15.66 8.13 14.6 7.28C15.12 6.67 15.44 5.87 15.44 5C15.44 3.34 14.1 2 12.44 2H12Z"/>
                   </svg>
@@ -1976,7 +1976,7 @@ const Dashboard = () => {
                   <div
                     className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
                       message.type === 'user'
-                        ? 'bg-gradient-to-r from-[#6C4CF3] to-[#9B8CFF] text-white'
+                        ? 'bg-gradient-to-r from-[#2a276e] to-[#9B8CFF] text-white'
                         : 'bg-gray-100 text-gray-900'
                     }`}
                   >
@@ -2013,12 +2013,12 @@ const Dashboard = () => {
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyPress={handleKeyPress}
                   placeholder="Ask me about dental care, treatments, or clinic data..."
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                 />
                 <button
                   onClick={sendMessage}
                   disabled={!chatInput.trim()}
-                  className="px-4 py-2 bg-gradient-to-r from-[#6C4CF3] to-[#9B8CFF] text-white rounded-full hover:from-[#5b3dd9] hover:to-[#9B8CFF] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  className="px-4 py-2 bg-gradient-to-r from-[#2a276e] to-[#9B8CFF] text-white rounded-full hover:from-[#1a1548] hover:to-[#9B8CFF] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />

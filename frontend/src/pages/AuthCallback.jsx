@@ -42,7 +42,7 @@ const LoadingActions = () => {
   }, [actions.length]);
   
   return (
-    <div className="text-[#6C4CF3] font-medium text-left">
+    <div className="text-[#2a276e] font-medium text-left">
       {actions.map((action, index) => (
         <div
           key={index}

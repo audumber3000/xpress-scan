@@ -247,7 +247,7 @@ const WhatsAppTest = () => {
                 <button
                   onClick={initializeSession}
                   disabled={loading}
-                  className="px-4 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition disabled:opacity-50 flex items-center gap-2"
+                  className="px-4 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition disabled:opacity-50 flex items-center gap-2"
                 >
                   {loading ? (
                     <>
@@ -370,7 +370,7 @@ const WhatsAppTest = () => {
                     value={sendPhone}
                     onChange={(e) => setSendPhone(e.target.value)}
                     placeholder="e.g., 919876543210 or +91 9876543210"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Enter number with country code (e.g., 91 for India)
@@ -386,7 +386,7 @@ const WhatsAppTest = () => {
                     onChange={(e) => setSendMessage(e.target.value)}
                     placeholder="Type your test message here..."
                     rows={4}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6C4CF3] focus:border-transparent"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                   />
                 </div>
 

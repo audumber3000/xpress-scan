@@ -47,7 +47,7 @@ const Reports = () => {
 
   const getStatusBadge = (status) => {
     const statusConfig = {
-      final: { color: "bg-[#9B8CFF]/20 text-[#6C4CF3] border-[#9B8CFF]", dot: "bg-[#9B8CFF]/100" },
+      final: { color: "bg-[#9B8CFF]/20 text-[#2a276e] border-[#9B8CFF]", dot: "bg-[#9B8CFF]/100" },
       draft: { color: "bg-yellow-100 text-yellow-800 border-yellow-200", dot: "bg-yellow-500" },
       pending: { color: "bg-orange-100 text-orange-800 border-orange-200", dot: "bg-orange-500" }
     };
@@ -65,7 +65,7 @@ const Reports = () => {
   const getWhatsAppStatus = (report) => {
     if (report.whatsapp_sent_count && report.whatsapp_sent_count > 0) {
       return (
-        <div className="flex items-center gap-1 bg-[#9B8CFF]/20 text-[#6C4CF3] px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap">
+        <div className="flex items-center gap-1 bg-[#9B8CFF]/20 text-[#2a276e] px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap">
           <FaWhatsapp className="w-3 h-3 flex-shrink-0" />
           <span>Sent ({report.whatsapp_sent_count})</span>
         </div>
@@ -218,7 +218,7 @@ const Reports = () => {
               placeholder="Search reports..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
             />
           </div>
           {/* Status Filter */}
@@ -226,7 +226,7 @@ const Reports = () => {
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
             >
               <option value="all">All Status</option>
               <option value="draft">Draft</option>
@@ -318,7 +318,7 @@ const Reports = () => {
                             <button
                               onClick={() => handleSendWhatsApp(report)}
                               disabled={sendingWhatsApp.has(report.id)}
-                              className="text-gray-400 hover:text-[#6C4CF3] transition-colors duration-150 disabled:opacity-50"
+                              className="text-gray-400 hover:text-[#2a276e] transition-colors duration-150 disabled:opacity-50"
                               title="Send WhatsApp"
                             >
                               <FaWhatsapp className="w-4 h-4" />
@@ -391,7 +391,7 @@ const Reports = () => {
                     onClick={() => setPage(pageNum)}
                     className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
                       page === pageNum
-                        ? 'z-10 bg-[#9B8CFF]/10 border-[#6C4CF3] text-[#6C4CF3]'
+                        ? 'z-10 bg-[#9B8CFF]/10 border-[#2a276e] text-[#2a276e]'
                         : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
                     }`}
                   >

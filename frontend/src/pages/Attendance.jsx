@@ -5,18 +5,32 @@ import EmployeeDetailsPanel from "../components/attendance/EmployeeDetailsPanel"
 import { useHeader } from "../contexts/HeaderContext";
 import { api } from "../utils/api";
 import { startOfWeek, endOfWeek, addWeeks, subWeeks, format, eachDayOfInterval, isSameDay } from "date-fns";
+import { useNavigate } from 'react-router-dom';
+import { ChevronLeft, Search } from 'lucide-react';
 
 const Attendance = () => {
   const { setTitle } = useHeader();
+  const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    setTitle('Attendance');
-  }, [setTitle]);
+    setTitle(
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => navigate('/admin')}
+          className="flex items-center gap-1 text-gray-600 hover:text-gray-900 transition"
+        >
+          <ChevronLeft className="w-5 h-5" />
+          <span className="text-sm font-medium">Admin Hub</span>
+        </button>
+      </div>
+    );
+  }, [setTitle, navigate]);
 
   // Fetch employees and attendance data
   useEffect(() => {
@@ -121,6 +135,16 @@ const Attendance = () => {
     setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }));
   };
 
+  // Filter employees based on search query
+  const filteredEmployees = useMemo(() => {
+    if (!searchQuery) return employees;
+    return employees.filter(emp => 
+      emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      emp.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      emp.role?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [employees, searchQuery]);
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       {/* Attendance Header (Date Selector & Legend) */}
@@ -132,19 +156,33 @@ const Attendance = () => {
         overallStats={statistics}
       />
 
+      {/* Search Bar */}
+      <div className="px-6 pt-4">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search employees..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-12 pr-4 py-3 bg-gray-100 border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2D9596]"
+          />
+        </div>
+      </div>
+
       {/* Attendance Grid */}
       <div className="flex-1 overflow-hidden">
-        <div className="h-full overflow-auto bg-white">
+        <div className="h-full overflow-auto">
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#6C4CF3] mx-auto"></div>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2a276e] mx-auto"></div>
                 <p className="mt-4 text-gray-600">Loading attendance data...</p>
               </div>
             </div>
           ) : (
             <AttendanceGrid
-              employees={employees}
+              employees={filteredEmployees}
               weekDays={weekDays}
               onEmployeeClick={handleEmployeeClick}
             />

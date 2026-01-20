@@ -13,7 +13,7 @@ const EmailPasswordForm = ({ email, setEmail, password, setPassword, onSubmit, l
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
           placeholder="Enter your email"
         />
       </div>
@@ -27,7 +27,7 @@ const EmailPasswordForm = ({ email, setEmail, password, setPassword, onSubmit, l
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
           placeholder="Enter your password"
         />
       </div>
@@ -41,7 +41,7 @@ const EmailPasswordForm = ({ email, setEmail, password, setPassword, onSubmit, l
       <LoadingButton
         type="submit"
         loading={loading}
-        className="w-full bg-[#6C4CF3] hover:bg-[#5b3dd9] text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+        className="w-full bg-[#2a276e] hover:bg-[#1a1548] text-white font-semibold py-2 px-4 rounded-lg transition-colors"
       >
         Login
       </LoadingButton>

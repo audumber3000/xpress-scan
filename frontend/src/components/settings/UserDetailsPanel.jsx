@@ -43,7 +43,7 @@ const UserDetailsPanel = ({
         {/* Panel Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white">
           <div className="flex items-center gap-4">
-            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#6C4CF3] to-[#9B8CFF] flex items-center justify-center text-white font-semibold text-lg">
+            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#2a276e] to-[#9B8CFF] flex items-center justify-center text-white font-semibold text-lg">
               {getUserInitials(selectedUser.name)}
             </div>
             <div>
@@ -68,7 +68,7 @@ const UserDetailsPanel = ({
               onClick={() => setUserPanelTab("accounts")}
               className={`px-6 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
                 userPanelTab === "accounts"
-                  ? "border-[#6C4CF3] text-[#6C4CF3]"
+                  ? "border-[#2a276e] text-[#2a276e]"
                   : "border-transparent text-gray-600 hover:text-gray-900"
               }`}
             >
@@ -78,7 +78,7 @@ const UserDetailsPanel = ({
               onClick={() => setUserPanelTab("devices")}
               className={`px-6 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
                 userPanelTab === "devices"
-                  ? "border-[#6C4CF3] text-[#6C4CF3]"
+                  ? "border-[#2a276e] text-[#2a276e]"
                   : "border-transparent text-gray-600 hover:text-gray-900"
               }`}
             >
@@ -88,7 +88,7 @@ const UserDetailsPanel = ({
               onClick={() => setUserPanelTab("activity")}
               className={`px-6 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
                 userPanelTab === "activity"
-                  ? "border-[#6C4CF3] text-[#6C4CF3]"
+                  ? "border-[#2a276e] text-[#2a276e]"
                   : "border-transparent text-gray-600 hover:text-gray-900"
               }`}
             >
@@ -100,7 +100,7 @@ const UserDetailsPanel = ({
                   onClick={() => onEditUser(selectedUser)}
                   className={`px-6 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
                     userPanelTab === "edit"
-                      ? "border-[#6C4CF3] text-[#6C4CF3]"
+                      ? "border-[#2a276e] text-[#2a276e]"
                       : "border-transparent text-gray-600 hover:text-gray-900"
                   }`}
                 >
@@ -110,7 +110,7 @@ const UserDetailsPanel = ({
                   onClick={() => onManagePermissions(selectedUser)}
                   className={`px-6 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
                     userPanelTab === "permissions"
-                      ? "border-[#6C4CF3] text-[#6C4CF3]"
+                      ? "border-[#2a276e] text-[#2a276e]"
                       : "border-transparent text-gray-600 hover:text-gray-900"
                   }`}
                 >
@@ -172,7 +172,7 @@ const UserDetailsPanel = ({
                       {hasPermission("users:edit") && (
                         <button
                           onClick={() => onSetPassword(selectedUser)}
-                          className="text-sm text-[#6C4CF3] hover:text-[#5b3dd9] font-medium"
+                          className="text-sm text-[#2a276e] hover:text-[#1a1548] font-medium"
                         >
                           {selectedUser.has_password ? "Reset Password" : "Set Password"}
                         </button>
@@ -186,7 +186,7 @@ const UserDetailsPanel = ({
                 <div className="flex gap-3">
                   <button
                     onClick={() => onEditUser(selectedUser)}
-                    className="flex-1 px-4 py-2 bg-[#6C4CF3] text-white rounded-lg hover:bg-[#5b3dd9] transition font-medium"
+                    className="flex-1 px-4 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition font-medium"
                   >
                     Edit User
                   </button>

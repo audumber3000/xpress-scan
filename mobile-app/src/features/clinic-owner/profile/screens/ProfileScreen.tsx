@@ -68,7 +68,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
         <ProfileHeader
           name={userName}
           role="LEAD DENTIST"
-          clinic="SmileBright Clinic"
+          clinic="Clino Health"
           onEditPress={handleEditProfile}
         />
 
@@ -120,7 +120,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerTitle}>CLINTAL DENTAL MANAGEMENT</Text>
+          <Text style={styles.footerTitle}>MOLARPLUS DENTAL MANAGEMENT</Text>
           <Text style={styles.footerVersion}>Version 1.0.4 (Build 82)</Text>
         </View>
 

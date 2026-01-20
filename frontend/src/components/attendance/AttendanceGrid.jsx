@@ -47,42 +47,42 @@ const AttendanceGrid = ({ employees, weekDays, onEmployeeClick }) => {
   };
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse">
-        <thead className="bg-gray-50 sticky top-0 z-10">
-          <tr>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200 sticky left-0 bg-gray-50 z-20 min-w-[200px]">
-              Employee Profile
-            </th>
-            {weekDays.map((date, index) => (
-              <th
-                key={index}
-                className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200 min-w-[140px]"
-              >
-                {formatDayHeader(date)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {employees.map((employee) => (
+    <div className="p-6">
+      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead className="bg-gray-50 sticky top-0 z-10">
+              <tr>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-100 sticky left-0 bg-gray-50 z-20 min-w-[220px]">
+                  Employee Profile
+                </th>
+                {weekDays.map((date, index) => (
+                  <th
+                    key={index}
+                    className="px-4 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-100 min-w-[140px]"
+                  >
+                    {formatDayHeader(date)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="bg-white">
+          {employees.map((employee, empIndex) => (
             <tr
               key={employee.id}
-              className="hover:bg-gray-50 transition-colors cursor-pointer"
+              className="hover:bg-gray-50 transition-colors cursor-pointer border-t border-gray-100"
               onClick={() => onEmployeeClick(employee)}
             >
               {/* Employee Profile Cell */}
-              <td className="px-4 py-3 border-r border-gray-200 sticky left-0 bg-white z-10">
+              <td className="px-6 py-4 border-r border-gray-100 sticky left-0 bg-white hover:bg-gray-50 z-10">
                 <div className="flex items-center gap-3">
-                  <img
-                    src={employee.avatar || defaultAvatar(employee.name)}
-                    alt={employee.name}
-                    className="w-10 h-10 rounded-full object-cover"
-                  />
+                  <div className="w-11 h-11 rounded-full bg-[#E0F2F2] flex items-center justify-center text-[#2D9596] font-semibold text-sm">
+                    {employee.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                  </div>
                   <div>
                     <div className="font-semibold text-gray-900 text-sm">{employee.name}</div>
                     {employee.designation && (
-                      <div className="text-xs text-gray-500">{employee.designation}</div>
+                      <div className="text-xs text-gray-500 capitalize">{employee.designation}</div>
                     )}
                   </div>
                 </div>
@@ -106,8 +106,10 @@ const AttendanceGrid = ({ employees, weekDays, onEmployeeClick }) => {
               })}
             </tr>
           ))}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
+    </div>
     </div>
   );
 };

@@ -155,10 +155,10 @@ const LandingPage = () => {
   return (
     <div className="min-h-screen bg-white">
       <SEO 
-        title="BetterClinic - Best Clinic Management Software for Doctors, Dentists & Radiologists"
+        title="Clino Health - Best Clinic Management Software for Doctors, Dentists & Radiologists"
         description="Transform your medical practice with Better Clinic - India's leading clinic management software. Features patient management, WhatsApp integration, voice reporting, appointment scheduling, revenue analytics & more. Trusted by 250+ clinics. Start free trial!"
         keywords="better clinic, better clinic software, clinic management software, medical clinic software, healthcare management system, patient management system, doctor appointment software, radiology clinic software, dental clinic software, physiotherapy clinic software, clinic EHR software India, medical practice management, clinic scheduling software, patient records software, hospital management software India, clinic automation software, best clinic software, medical billing software India, clinic reporting software, WhatsApp clinic notifications, voice to text medical reporting"
-        url="https://betterclinic.app/"
+        url="https://clinohealth.app/"
         structuredData={faqStructuredData}
       />
       {/* Navigation */}
@@ -605,7 +605,7 @@ const LandingPage = () => {
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">Email Us</h3>
-                  <p className="text-gray-600">support@betterclinic.app</p>
+                  <p className="text-gray-600">support@clinohealth.app</p>
                 </div>
               </div>
 

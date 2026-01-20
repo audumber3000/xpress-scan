@@ -1,4 +1,5 @@
 const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+const API_BASE_PATH = "/api/v1";
 
 // Helper function to get auth headers
 const getAuthHeaders = () => {
@@ -16,7 +17,7 @@ export const authenticatedFetch = async (url, options = {}) => {
     ...options.headers
   };
 
-  let fullUrl = `${API_URL}${url}`;
+  let fullUrl = `${API_URL}${API_BASE_PATH}${url}`;
   
   // Handle query parameters
   if (options.params) {

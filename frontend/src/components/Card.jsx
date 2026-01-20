@@ -18,7 +18,7 @@ const Card = ({ title, value, change, changeType, menu, children }) => (
     )}
     {change && (
       <div className="flex items-center gap-1 text-xs">
-        <span className={changeType === "up" ? "text-[#6C4CF3]" : "text-red-500"}>
+        <span className={changeType === "up" ? "text-[#2a276e]" : "text-red-500"}>
           {changeType === "up" ? "▲" : "▼"} {change}
         </span>
       </div>

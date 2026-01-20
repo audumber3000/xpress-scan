@@ -1,0 +1,41 @@
+p, clinic_owner, *, users, view
+p, clinic_owner, *, users, edit
+p, clinic_owner, *, users, delete
+p, clinic_owner, *, patients, view
+p, clinic_owner, *, patients, edit
+p, clinic_owner, *, patients, delete
+p, clinic_owner, *, appointments, view
+p, clinic_owner, *, appointments, edit
+p, clinic_owner, *, appointments, delete
+p, clinic_owner, *, billing, view
+p, clinic_owner, *, billing, edit
+p, clinic_owner, *, treatments, view
+p, clinic_owner, *, treatments, edit
+p, clinic_owner, *, treatments, delete
+p, clinic_owner, *, clinic, view
+p, clinic_owner, *, clinic, edit
+p, clinic_owner, *, templates, view
+p, clinic_owner, *, templates, edit
+p, clinic_owner, *, doctors, view
+p, clinic_owner, *, doctors, edit
+p, clinic_owner, *, doctors, delete
+p, clinic_owner, *, attendance, view
+p, clinic_owner, *, attendance, edit
+p, clinic_owner, *, permissions, view
+p, clinic_owner, *, permissions, edit
+p, doctor, *, patients, view
+p, doctor, *, patients, edit
+p, doctor, *, patients, delete
+p, doctor, *, appointments, view
+p, doctor, *, appointments, edit
+p, doctor, *, billing, view
+p, doctor, *, treatments, view
+p, doctor, *, attendance, view
+p, receptionist, *, patients, view
+p, receptionist, *, patients, edit
+p, receptionist, *, appointments, view
+p, receptionist, *, appointments, edit
+p, receptionist, *, billing, view
+g, 1, clinic_owner, 1
+g, 13, receptionist, 1
+g, 13, doctor, 1

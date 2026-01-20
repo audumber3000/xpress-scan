@@ -67,7 +67,7 @@ const TrialBanner = ({ onActivate, onDismiss }) => {
               Activate License
             </button>
             <a
-              href="https://betterclinic.app/bdent/pricing"
+              href="https://clinohealth.app/bdent/pricing"
               target="_blank"
               rel="noopener noreferrer"
               className="block w-full py-3 px-6 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"

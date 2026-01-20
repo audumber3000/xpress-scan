@@ -162,7 +162,7 @@ const LicenseActivation = ({ onSuccess, onClose }) => {
         <div className="mt-6 pt-6 border-t border-gray-200 text-center">
           <p className="text-sm text-gray-600 mb-2">Don't have a license?</p>
           <a
-            href="https://betterclinic.app/bdent/pricing"
+            href="https://clinohealth.app/bdent/pricing"
             target="_blank"
             rel="noopener noreferrer"
             className="text-indigo-600 hover:text-indigo-700 font-medium text-sm"

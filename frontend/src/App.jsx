@@ -13,7 +13,6 @@ import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import Patients from "./pages/Patients";
 import PatientIntake from "./pages/PatientIntake";
-import Xray from "./pages/Xray";
 import Payments from "./pages/Payments";
 import DoctorProfile from "./pages/DoctorProfile";
 import Settings from "./pages/Settings";
@@ -31,6 +30,13 @@ import Features from "./pages/Features";
 import DentalChartDemo from "./pages/DentalChartDemo";
 import WhatsAppTest from "./pages/WhatsAppTest";
 import Subscription from "./pages/Subscription";
+import AdminHub from "./pages/AdminHub";
+import StaffManagement from "./pages/StaffManagement";
+import TreatmentsPricing from "./pages/TreatmentsPricing";
+import PermissionsManagement from "./pages/PermissionsManagement";
+import ClinicInfo from "./pages/ClinicInfo";
+import MessageTemplates from "./pages/MessageTemplates";
+import ReferringDoctors from "./pages/ReferringDoctors";
 
 // Components
 import Sidebar from "./components/Sidebar";
@@ -154,12 +160,18 @@ function AppContent() {
           <Route path="/patient-files" element={<ProtectedRoute><PatientFiles /></ProtectedRoute>} />
           <Route path="/patient-profile/:patientId" element={<ProtectedRoute><PatientProfile /></ProtectedRoute>} />
           <Route path="/patient-intake" element={<ProtectedRoute><PatientIntake /></ProtectedRoute>} />
-          <Route path="/xray" element={<ProtectedRoute><Xray /></ProtectedRoute>} />
           <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
           <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
           <Route path="/whatsapp-test" element={<ProtectedRoute><WhatsAppTest /></ProtectedRoute>} />
           <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute><AdminHub /></ProtectedRoute>} />
           <Route path="/admin/attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
+          <Route path="/admin/staff" element={<ProtectedRoute><StaffManagement /></ProtectedRoute>} />
+          <Route path="/admin/treatments" element={<ProtectedRoute><TreatmentsPricing /></ProtectedRoute>} />
+          <Route path="/admin/permissions" element={<ProtectedRoute><PermissionsManagement /></ProtectedRoute>} />
+          <Route path="/admin/clinic" element={<ProtectedRoute><ClinicInfo /></ProtectedRoute>} />
+          <Route path="/admin/templates" element={<ProtectedRoute><MessageTemplates /></ProtectedRoute>} />
+          <Route path="/admin/doctors" element={<ProtectedRoute><ReferringDoctors /></ProtectedRoute>} />
           <Route path="/user-management" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           <Route path="/doctor-profile" element={<ProtectedRoute><DoctorProfile /></ProtectedRoute>} />
           <Route path="/subscription" element={<ProtectedRoute><Subscription /></ProtectedRoute>} />

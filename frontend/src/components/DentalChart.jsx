@@ -133,7 +133,7 @@ const ToothUnit = ({ toothNum, isUpper, status, surfaces, isSelected, onToothPre
     <div className="flex flex-col items-center">
       <button
         onClick={() => onToothPress(toothNum)}
-        className={`relative transition-all hover:scale-105 ${isSelected ? 'ring-2 ring-[#6C4CF3] ring-offset-2' : ''}`}
+        className={`relative transition-all hover:scale-105 ${isSelected ? 'ring-2 ring-[#2a276e] ring-offset-2' : ''}`}
       >
         <div className="w-14 h-20 relative">
           <svg viewBox="0 0 40 60" className="w-full h-full drop-shadow-sm">
@@ -268,7 +268,7 @@ const SurfaceSelectionModal = ({
                   onClick={() => setSelectedSurface(key)}
                   className={`p-3 rounded-lg border-2 transition-all text-left ${
                     selectedSurface === key
-                      ? 'border-[#6C4CF3] bg-[#9B8CFF]/10'
+                      ? 'border-[#2a276e] bg-[#9B8CFF]/10'
                       : currentSurfaces[key] && currentSurfaces[key] !== 'none'
                       ? 'border-blue-300 bg-[#9B8CFF]/10'
                       : 'border-gray-200 hover:border-gray-300'
@@ -326,7 +326,7 @@ const SurfaceSelectionModal = ({
         <div className="p-6 border-t border-gray-200 bg-gray-50">
           <button
             onClick={onClose}
-            className="w-full px-6 py-3 bg-[#6C4CF3] text-white rounded-lg font-semibold hover:bg-[#5b3dd9] transition-colors"
+            className="w-full px-6 py-3 bg-[#2a276e] text-white rounded-lg font-semibold hover:bg-[#1a1548] transition-colors"
           >
             Done
           </button>

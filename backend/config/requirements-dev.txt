@@ -1,0 +1,29 @@
+# Development dependencies
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.0.0
+httpx>=0.24.0  # For async HTTP client testing
+faker>=15.0.0  # For generating test data
+
+# Main dependencies (from requirements.txt)
+fastapi
+uvicorn
+sqlalchemy
+firebase-admin
+boto3
+python-dotenv
+python-docx
+pdfkit
+reportlab
+requests
+psycopg2-binary
+html2text
+beautifulsoup4
+weasyprint
+qrcode[pil]
+Pillow
+playwright
+razorpay
+python-multipart
+python-jose[cryptography]
+pydantic

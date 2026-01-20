@@ -9,7 +9,7 @@
   --color-primary-base: #0E0B2D;        /* Deep Indigo Blue - Sidebar, dark backgrounds */
   
   /* Accent (Brand / Actions) */
-  --color-accent-primary: #6C4CF3;      /* Modern Medical Purple - Primary buttons, active states */
+  --color-accent-primary: #2a276e;      /* Modern Medical Purple - Primary buttons, active states */
   --color-accent-icon: #9B8CFF;         /* Icon color */
   
   /* Neutral (Content / Text) */
@@ -17,7 +17,7 @@
   
   /* Semantic Colors (derived from theme) */
   --color-primary-hover: #1A1640;       /* Slightly lighter for hover states */
-  --color-primary-active: #6C4CF3;      /* Same as accent for active states */
+  --color-primary-active: #2a276e;      /* Same as accent for active states */
   --color-primary-border: rgba(155, 140, 255, 0.2);  /* Subtle border color */
 }
 

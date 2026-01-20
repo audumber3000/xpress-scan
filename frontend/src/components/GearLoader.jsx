@@ -2,7 +2,7 @@ import React from 'react';
 
 const GearLoader = ({ size = "w-8 h-8", className = "" }) => (
   <svg 
-    className={`${size} text-[#6C4CF3] animate-spin ${className}`} 
+    className={`${size} text-[#2a276e] animate-spin ${className}`} 
     fill="currentColor" 
     viewBox="0 0 24 24"
     xmlns="http://www.w3.org/2000/svg"

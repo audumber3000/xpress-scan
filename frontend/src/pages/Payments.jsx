@@ -115,7 +115,7 @@ const Payments = () => {
               placeholder="Search invoices..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
             />
           </div>
         </div>
@@ -237,7 +237,7 @@ const Payments = () => {
                     onClick={() => setPage(pageNum)}
                     className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
                       page === pageNum
-                        ? 'z-10 bg-[#9B8CFF]/10 border-[#6C4CF3] text-[#6C4CF3]'
+                        ? 'z-10 bg-[#9B8CFF]/10 border-[#2a276e] text-[#2a276e]'
                         : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
                     }`}
                   >

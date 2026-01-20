@@ -65,45 +65,35 @@ const PatientFiles = () => {
     try {
       setLoading(true);
       const response = await api.get("/patients/");
+      console.log("PatientFiles API Response:", response);
+      console.log("Is Array?", Array.isArray(response));
+      console.log("Length:", response?.length);
       
-      // Fetch X-ray counts for each patient
-      const patientFilesWithXrays = await Promise.all(
-        response.map(async (patient) => {
-          let xrayCount = 0;
-          try {
-            const xrays = await api.get(`/xray/patient/${patient.id}`);
-            xrayCount = xrays?.length || 0;
-          } catch (error) {
-            // Ignore errors, just set count to 0
-            xrayCount = 0;
-          }
-          
-          return {
-            id: patient.id,
-            name: patient.name,
-            type: "folder",
-            date: new Date(patient.created_at).toLocaleString('en-US', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-              hour: 'numeric',
-              minute: '2-digit',
-              hour12: true
-            }),
-            starred: false,
-            patientId: `P${String(patient.id).padStart(3, '0')}`,
-            age: patient.age,
-            gender: patient.gender,
-            phone: patient.phone,
-            xrayCount: xrayCount
-          };
-        })
-      );
+      const patientFiles = response.map((patient) => ({
+        id: patient.id,
+        name: patient.name,
+        type: "folder",
+        date: new Date(patient.created_at).toLocaleString('en-US', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        }),
+        starred: false,
+        patientId: `P${String(patient.id).padStart(3, '0')}`,
+        age: patient.age,
+        gender: patient.gender,
+        phone: patient.phone
+      }));
       
-      setFiles(patientFilesWithXrays);
-      setFilteredFiles(patientFilesWithXrays);
+      console.log("Mapped patient files:", patientFiles);
+      setFiles(patientFiles);
+      setFilteredFiles(patientFiles);
     } catch (error) {
       console.error("Error fetching patients:", error);
+      console.error("Error details:", error.response?.data);
       setFiles([]);
       setFilteredFiles([]);
     } finally {
@@ -133,7 +123,7 @@ const PatientFiles = () => {
               placeholder="Search patient files..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6C4CF3]"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
             />
           </div>
         </div>
@@ -199,11 +189,6 @@ const PatientFiles = () => {
                     <p className="text-xs text-gray-500">
                       {file.date}
                     </p>
-                    {file.xrayCount > 0 && (
-                      <p className="text-xs text-[#6C4CF3] font-medium mt-1">
-                        {file.xrayCount} X-ray{file.xrayCount !== 1 ? 's' : ''}
-                      </p>
-                    )}
                   </div>
                 </div>
               ))}

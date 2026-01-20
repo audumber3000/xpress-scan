@@ -23,7 +23,7 @@ const Xray = () => {
         </p>
         <button
           onClick={() => window.open('#', '_blank')}
-          className="px-6 py-3 bg-[#6C4CF3] hover:bg-[#5b3dd9] text-white rounded-lg font-medium transition-colors"
+          className="px-6 py-3 bg-[#2a276e] hover:bg-[#1a1548] text-white rounded-lg font-medium transition-colors"
         >
           Download Desktop App for Windows
         </button>
