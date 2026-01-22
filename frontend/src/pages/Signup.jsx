@@ -104,7 +104,7 @@ const Signup = () => {
       <div className="hidden lg:flex lg:w-1/2 relative">
         <img 
           src={loginImage} 
-          alt="Clino Health" 
+          alt="MolarPlus" 
           className="w-full h-full object-cover"
         />
       </div>

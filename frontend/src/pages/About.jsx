@@ -8,14 +8,14 @@ const About = () => {
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "AboutPage",
-    "name": "About Clino Health",
-    "description": "Learn about Clino Health, India's leading clinic management software helping healthcare professionals streamline their practice management.",
+    "name": "About MolarPlus",
+    "description": "Learn about MolarPlus, India's leading dental practice management software helping dental professionals streamline their practice management.",
     "publisher": {
       "@type": "Organization",
-      "name": "Clino Health",
+      "name": "MolarPlus",
       "logo": {
         "@type": "ImageObject",
-        "url": "https://clinohealth.app/icons/icon-512x512.png"
+        "url": "https://molarplus.app/icons/icon-512x512.png"
       }
     }
   };
@@ -23,10 +23,10 @@ const About = () => {
   return (
     <div className="min-h-screen bg-white">
       <SEO
-        title="About Clino Health - Leading Clinic Management Software in India"
-        description="Discover how Clino Health is revolutionizing healthcare management for doctors, dentists, and radiologists across India. Learn about our mission to simplify clinic operations with innovative technology."
-        keywords="about better clinic, clinic management software company, healthcare software India, medical practice management, clinic software provider, healthcare technology India"
-        url="https://clinohealth.app/about"
+        title="About MolarPlus - Leading Dental Practice Management Software in India"
+        description="Discover how MolarPlus is revolutionizing dental practice management for dentists across India. Learn about our mission to simplify dental operations with innovative technology."
+        keywords="about molarplus, dental practice management software company, dental software India, dental practice management, dental software provider, dental technology India"
+        url="https://molarplus.app/about"
         type="website"
         structuredData={structuredData}
       />
@@ -64,10 +64,10 @@ const About = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-4xl mx-auto">
             <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
-              About <span className="text-[#2a276e]">Better Clinic</span>
+              About <span className="text-[#2a276e]">MolarPlus</span>
             </h1>
             <p className="text-xl text-gray-600 mb-8">
-              Making healthcare management simple, efficient, and accessible for medical professionals across India
+              Making dental practice management simple, efficient, and accessible for dental professionals across India
             </p>
           </div>
         </div>
@@ -82,32 +82,31 @@ const About = () => {
                 Our Mission
               </h2>
               <p className="text-lg text-gray-600 mb-6">
-                At Clino Health, we're on a mission to transform healthcare delivery in India by providing 
-                doctors, dentists, radiologists, and physiotherapists with the best clinic management software 
-                that simplifies their daily operations.
+                At MolarPlus, we're on a mission to transform dental practice management in India by providing 
+                dentists with the best practice management software that simplifies their daily operations.
               </p>
               <p className="text-lg text-gray-600 mb-6">
-                We understand the challenges healthcare professionals face - from managing patient records 
+                We understand the challenges dental professionals face - from managing patient records 
                 and appointments to handling payments and communications. That's why we built a comprehensive 
-                clinic management solution that addresses every aspect of practice management.
+                dental practice management solution that addresses every aspect of practice management.
               </p>
               <p className="text-lg text-gray-600">
                 Our platform combines cutting-edge technology with intuitive design, making it easy for 
-                medical professionals to focus on what matters most - providing excellent patient care.
+                dental professionals to focus on what matters most - providing excellent patient care.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-6">
               <div className="bg-[#9B8CFF]/10 rounded-xl p-6 text-center">
                 <div className="text-4xl font-bold text-[#2a276e] mb-2">250+</div>
-                <div className="text-gray-600">Clinics Trust Us</div>
+                <div className="text-gray-600">Dental Clinics Trust Us</div>
               </div>
               <div className="bg-[#9B8CFF]/10 rounded-xl p-6 text-center">
                 <div className="text-4xl font-bold text-[#9B8CFF] mb-2">10K+</div>
-                <div className="text-gray-600">Patients Managed</div>
+                <div className="text-gray-600">Dental Patients Managed</div>
               </div>
               <div className="bg-purple-50 rounded-xl p-6 text-center">
                 <div className="text-4xl font-bold text-purple-600 mb-2">50K+</div>
-                <div className="text-gray-600">Appointments Scheduled</div>
+                <div className="text-gray-600">Dental Appointments</div>
               </div>
               <div className="bg-orange-50 rounded-xl p-6 text-center">
                 <div className="text-4xl font-bold text-orange-600 mb-2">99.9%</div>
@@ -138,8 +137,8 @@ const About = () => {
                 Patient-Centric
               </h3>
               <p className="text-gray-600">
-                We believe in empowering healthcare providers to deliver exceptional patient care 
-                through better clinic management tools and efficient workflows.
+                We believe in empowering dental providers to deliver exceptional patient care 
+                through better dental practice management tools and efficient workflows.
               </p>
             </div>
             <div className="bg-white rounded-xl p-8 shadow-sm border border-gray-100">
@@ -150,8 +149,8 @@ const About = () => {
                 Simplicity First
               </h3>
               <p className="text-gray-600">
-                We design our clinic management software to be intuitive and easy to use, 
-                so healthcare professionals can focus on their patients, not on technology.
+                We design our dental practice management software to be intuitive and easy to use, 
+                so dental professionals can focus on their patients, not on technology.
               </p>
             </div>
             <div className="bg-white rounded-xl p-8 shadow-sm border border-gray-100">
@@ -162,8 +161,8 @@ const About = () => {
                 Innovation
               </h3>
               <p className="text-gray-600">
-                We continuously innovate with features like WhatsApp integration, voice reporting, 
-                and AI-powered analytics to stay ahead in healthcare technology.
+                We continuously innovate with features like mobile apps, advanced analytics, 
+                and automated reminders to stay ahead in dental practice technology.
               </p>
             </div>
           </div>
@@ -175,10 +174,10 @@ const About = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Why Healthcare Professionals Choose Clino Health
+              Why Dental Professionals Choose MolarPlus
             </h2>
             <p className="text-xl text-gray-600">
-              The better clinic software trusted by medical professionals across India
+              The better dental practice software trusted by dentists across India
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
@@ -186,10 +185,10 @@ const About = () => {
               <CheckCircle className="w-6 h-6 text-[#2a276e] flex-shrink-0 mt-1" />
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Complete Clinic Management Solution
+                  Complete Dental Practice Management Solution
                 </h3>
                 <p className="text-gray-600">
-                  Everything you need to run your clinic - from patient management to revenue tracking
+                  Everything you need to run your dental practice - from patient management to revenue tracking
                 </p>
               </div>
             </div>
@@ -197,7 +196,7 @@ const About = () => {
               <CheckCircle className="w-6 h-6 text-[#2a276e] flex-shrink-0 mt-1" />
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Built for Indian Healthcare
+                  Built for Indian Dental Practices
                 </h3>
                 <p className="text-gray-600">
                   Designed specifically for Indian clinics with local payment methods and WhatsApp integration
@@ -233,7 +232,7 @@ const About = () => {
                   Affordable Pricing
                 </h3>
                 <p className="text-gray-600">
-                  Starting at just ₹1,500/month - the best value clinic management software in India
+                  Starting at just ₹1,500/month - the best value dental practice management software in India
                 </p>
               </div>
             </div>

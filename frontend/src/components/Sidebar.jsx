@@ -231,7 +231,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
           {!collapsed && (
             <div className="flex flex-col min-w-0 flex-1">
               <span className="text-base font-bold text-white leading-tight">
-                {clinicData?.name || "Clino Health"}
+                {clinicData?.name || "MolarPlus"}
               </span>
             </div>
           )}

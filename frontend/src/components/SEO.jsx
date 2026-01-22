@@ -2,11 +2,11 @@ import React from 'react';
 import { Helmet } from 'react-helmet-async';
 
 const SEO = ({ title, description, keywords, url, image, structuredData, faqStructuredData }) => {
-  const defaultTitle = 'Clino Health - Healthcare Software Solutions';
-  const defaultDescription = 'Clino Health builds healthcare software for modern clinics. BDent for dental, BSono for sonography. Simple, affordable, and designed to work offline.';
-  const defaultKeywords = 'clino health, healthcare software, clinic management software, dental software, sonography software, medical practice management';
-  const defaultUrl = 'https://clinohealth.app';
-  const defaultImage = 'https://clinohealth.app/og-image.png';
+  const defaultTitle = 'MolarPlus - Dental Practice Management Software';
+  const defaultDescription = 'MolarPlus builds dental practice management software for modern clinics. Complete patient management, appointments, billing, and mobile apps. Simple, affordable, and HIPAA compliant.';
+  const defaultKeywords = 'molarplus, dental software, practice management, dental clinic software, patient management, appointment scheduling, dental billing, HIPAA compliance';
+  const defaultUrl = 'https://molarplus.app';
+  const defaultImage = 'https://molarplus.app/og-image.png';
 
   const pageTitle = title || defaultTitle;
   const pageDescription = description || defaultDescription;
@@ -20,7 +20,7 @@ const SEO = ({ title, description, keywords, url, image, structuredData, faqStru
       <title>{pageTitle}</title>
       <meta name="description" content={pageDescription} />
       <meta name="keywords" content={pageKeywords} />
-      <meta name="author" content="Clino Health" />
+      <meta name="author" content="MolarPlus" />
       <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
       <link rel="canonical" href={pageUrl} />
       
@@ -32,7 +32,7 @@ const SEO = ({ title, description, keywords, url, image, structuredData, faqStru
       <meta property="og:image" content={pageImage} />
       <meta property="og:image:width" content="1200" />
       <meta property="og:image:height" content="630" />
-      <meta property="og:site_name" content="Clino Health" />
+      <meta property="og:site_name" content="MolarPlus" />
       <meta property="og:locale" content="en_US" />
       
       {/* Twitter */}
