@@ -271,13 +271,13 @@ const Pricing = () => {
                   <tr key={index} className="border-b">
                     <td className="py-4 px-4 font-medium">{row.feature}</td>
                     <td className="text-center py-4 px-4">
-                      {row.starter ? <CheckCircle className="w-5 h-5 text-green-500 mx-auto" : <span className="text-gray-300">-</span>}
+                      {row.starter ? <CheckCircle className="w-5 h-5 text-green-500 mx-auto" /> : <span className="text-gray-300">-</span>}
                     </td>
                     <td className="text-center py-4 px-4">
-                      {row.professional ? <CheckCircle className="w-5 h-5 text-green-500 mx-auto" : <span className="text-gray-300">-</span>}
+                      {row.professional ? <CheckCircle className="w-5 h-5 text-green-500 mx-auto" /> : <span className="text-gray-300">-</span>}
                     </td>
                     <td className="text-center py-4 px-4">
-                      {row.enterprise ? <CheckCircle className="w-5 h-5 text-green-500 mx-auto" : <span className="text-gray-300">-</span>}
+                      {row.enterprise ? <CheckCircle className="w-5 h-5 text-green-500 mx-auto" /> : <span className="text-gray-300">-</span>}
                     </td>
                   </tr>
                 ))}
