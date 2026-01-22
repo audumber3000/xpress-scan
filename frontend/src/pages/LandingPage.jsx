@@ -1,53 +1,143 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Menu,
   X,
   ArrowRight,
+  Calendar,
+  Users,
+  FileText,
+  BarChart3,
+  MessageSquare,
+  Shield,
+  Smartphone,
+  Laptop,
+  Clock,
+  TrendingUp,
+  Heart,
   CheckCircle,
   Phone,
   Mail,
   MapPin,
-  Wifi,
-  DollarSign,
-  Headphones,
-  Shield,
-  Users,
-  Calendar,
-  FileText,
-  BarChart3,
-  MessageSquare,
-  Mic,
-  TrendingUp
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import SEO from '../components/SEO';
-import clinoHealthLogoFull from '../assets/clino-health-logo-full.svg';
-import dashboardPreview from '../assets/main dashboard.png';
-import appointmentsImg from '../assets/appointments.png';
-import patientFilesImg from '../assets/patients-files.png';
-import reportsImg from '../assets/reports.png';
-import voiceReportingImg from '../assets/voice-reporting.png';
-import paymentsImg from '../assets/payments.png';
-import whatsappSmsImg from '../assets/whatsapp and sms .png';
 
-const LandingPage = () => {
+const MolarPlusLanding = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartX, setDragStartX] = useState(0);
+  const [dragOffset, setDragOffset] = useState(0);
 
-  // Color palette
+  // Mobile app screenshots
+  const mobileScreens = [
+    {
+      src: '/mobileScreens/appoiment_screen.png',
+      title: 'Effortless Appointments',
+      description: 'Manage your schedule with ease and send automated reminders to patients'
+    },
+    {
+      src: '/mobileScreens/patient_list.png',
+      title: 'Patient Records',
+      description: 'Access complete patient histories and treatment plans securely'
+    },
+    {
+      src: '/mobileScreens/calender.png',
+      title: 'Smart Calendar',
+      description: 'View your schedule with intuitive monthly and daily calendar views'
+    },
+    {
+      src: '/mobileScreens/add_patietns.png',
+      title: 'Quick Onboarding',
+      description: 'Add new patients to your clinic in just a few simple steps'
+    },
+    {
+      src: '/mobileScreens/appoitment_details.png',
+      title: 'Appointment Details',
+      description: 'View comprehensive appointment information and patient notes'
+    },
+    {
+      src: '/mobileScreens/image.png',
+      title: 'Clean Interface',
+      description: 'Professional design built specifically for dental practices'
+    }
+  ];
+
+  // Auto-play functionality
+  useEffect(() => {
+    if (!isAutoPlaying || isDragging) return;
+    
+    const interval = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % mobileScreens.length);
+    }, 4000); // Change slide every 4 seconds
+
+    return () => clearInterval(interval);
+  }, [isAutoPlaying, isDragging, mobileScreens.length]);
+
+  // Drag handlers
+  const handleDragStart = (e) => {
+    setIsDragging(true);
+    setIsAutoPlaying(false);
+    setDragStartX(e.clientX || e.touches[0].clientX);
+  };
+
+  const handleDragMove = (e) => {
+    if (!isDragging) return;
+    const currentX = e.clientX || e.touches[0].clientX;
+    const diff = currentX - dragStartX;
+    setDragOffset(diff);
+  };
+
+  const handleDragEnd = () => {
+    if (!isDragging) return;
+    
+    const threshold = 50; // Minimum drag distance to change slide
+    if (Math.abs(dragOffset) > threshold) {
+      if (dragOffset > 0) {
+        setCurrentSlide((prev) => (prev - 1 + mobileScreens.length) % mobileScreens.length);
+      } else {
+        setCurrentSlide((prev) => (prev + 1) % mobileScreens.length);
+      }
+    }
+    
+    setIsDragging(false);
+    setDragOffset(0);
+    setTimeout(() => setIsAutoPlaying(true), 2000); // Resume auto-play after 2 seconds
+  };
+
+  // Slider navigation functions
+  const nextSlide = () => {
+    setCurrentSlide((prev) => (prev + 1) % mobileScreens.length);
+  };
+
+  const prevSlide = () => {
+    setCurrentSlide((prev) => (prev - 1 + mobileScreens.length) % mobileScreens.length);
+  };
+
+  const goToSlide = (index) => {
+    setCurrentSlide(index);
+  };
+
+  // Brand colors
   const colors = {
-    dark: '#143601',
-    medium: '#245501',
-    light: '#73a942'
+    primary: '#2a276e',
+    secondary: '#4a4694',
+    dark: '#1a1548',
+    light: '#f8f9fa',
+    accent: '#6366f1'
   };
 
   // Structured Data for SEO
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "Organization",
-    "name": "Clino Health",
-    "url": "https://clinohealth.app",
-    "logo": "https://clinohealth.app/clino-health-logo-full.svg",
-    "description": "Healthcare software solutions built for modern clinics in India. BDent for dental, BSono for sonography.",
+    "name": "MolarPlus",
+    "url": "https://molarplus.app",
+    "logo": "/molar-plus-logo-cropped.svg",
+    "description": "Smart practice management software for modern dental clinics. Available on web and mobile.",
     "address": {
       "@type": "PostalAddress",
       "addressLocality": "Pune",
@@ -58,192 +148,114 @@ const LandingPage = () => {
       "@type": "ContactPoint",
       "telephone": "+91-8766742410",
       "contactType": "Customer Service",
-      "email": "support@clinohealth.app",
+      "email": "support@molarplus.app",
       "availableLanguage": ["English", "Hindi"]
     }
   };
 
-  const faqStructuredData = {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    "mainEntity": [
-      {
-        "@type": "Question",
-        "name": "Does Clino Health software work offline?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes! Our software works 100% offline. All data is stored locally. Internet is only needed for cloud sync (optional) and updates."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "How affordable is Clino Health software?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "We offer one-time payment options with no expensive monthly fees. Our pricing is designed to be affordable for clinics of all sizes."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What kind of support do you provide?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "We offer 24/7 customer support via WhatsApp and phone in Hindi and English. Our team is always here to help."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Is my patient data secure?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Absolutely. With our desktop version, your data never leaves your computer. It's stored in an encrypted local database with complete privacy."
-        }
-      }
-    ]
-  };
-
-  const products = [
-    {
-      name: "BDent",
-      icon: "🦷",
-      description: "Dental practice management software",
-      status: "Available",
-      statusColor: "bg-[#73a942]/10 text-[#143601]",
-      link: "/bdent"
-    },
-    {
-      name: "BSono",
-      icon: "🔊",
-      description: "Sonography center management",
-      status: "Coming Soon",
-      statusColor: "bg-yellow-100 text-yellow-700",
-      link: "#"
-    },
-    {
-      name: "BPhysio",
-      icon: "💪",
-      description: "Physiotherapy clinic management",
-      status: "Coming Soon",
-      statusColor: "bg-gray-200 text-gray-600",
-      link: "#"
-    },
-    {
-      name: "BPath",
-      icon: "🔬",
-      description: "Pathology lab management",
-      status: "Coming Soon",
-      statusColor: "bg-gray-200 text-gray-600",
-      link: "#"
-    }
-  ];
-
   const features = [
     {
-      icon: <Wifi className="w-8 h-8" style={{ color: colors.medium }} />,
-      title: "Works Offline",
-      description: "No internet? No problem. Your clinic keeps running seamlessly."
+      icon: <Calendar className="w-8 h-8" />,
+      title: "Appointment Scheduling",
+      description: "Smart booking system with automated reminders and calendar integration"
     },
     {
-      icon: <DollarSign className="w-8 h-8" style={{ color: colors.medium }} />,
-      title: "Affordable",
-      description: "One-time payment. No expensive monthly fees or hidden charges."
+      icon: <Users className="w-8 h-8" />,
+      title: "Patient Management",
+      description: "Complete patient records with treatment history and documents"
     },
     {
-      icon: <Headphones className="w-8 h-8" style={{ color: colors.medium }} />,
-      title: "Local Support",
-      description: "WhatsApp & phone support in Hindi/English. Always here to help."
+      icon: <Shield className="w-8 h-8" />,
+      title: "Secure Records",
+      description: "HIPAA-compliant data storage with end-to-end encryption"
     },
     {
-      icon: <Shield className="w-8 h-8" style={{ color: colors.medium }} />,
-      title: "Your Data, Your Control",
-      description: "Data stored locally. Complete privacy and security guaranteed."
+      icon: <BarChart3 className="w-8 h-8" />,
+      title: "Clinic Analytics",
+      description: "Real-time insights into clinic performance and revenue"
+    },
+    {
+      icon: <MessageSquare className="w-8 h-8" />,
+      title: "Staff & Workflow",
+      description: "Team management with role-based access and task tracking"
+    },
+    {
+      icon: <Smartphone className="w-8 h-8" />,
+      title: "Mobile Access",
+      description: "Full-featured mobile app for iOS and Android"
     }
   ];
 
-  const whyUsFeatures = [
+  const benefits = [
     {
-      icon: <CheckCircle className="w-6 h-6" style={{ color: colors.medium }} />,
-      title: "Made for Indian Clinics",
-      description: "Designed with Indian healthcare workflows in mind. Supports local languages and payment methods."
+      icon: <Clock className="w-6 h-6" />,
+      title: "Save Time on Admin",
+      description: "Reduce paperwork by 80% with automated workflows"
     },
     {
-      icon: <CheckCircle className="w-6 h-6" style={{ color: colors.medium }} />,
-      title: "Easy to Use",
-      description: "Intuitive interface that your staff can learn in minutes. No complex training required."
+      icon: <TrendingUp className="w-6 h-6" />,
+      title: "Fewer Missed Appointments",
+      description: "Automated reminders reduce no-shows by 60%"
     },
     {
-      icon: <CheckCircle className="w-6 h-6" style={{ color: colors.medium }} />,
-      title: "Regular Updates",
-      description: "We continuously improve based on feedback from real clinics. Your software gets better over time."
-    }
-  ];
-
-  const faqs = [
-    {
-      question: "Does Clino Health software work offline?",
-      answer: "Yes! Our software works 100% offline. All data is stored locally. Internet is only needed for cloud sync (optional) and updates."
+      icon: <Heart className="w-6 h-6" />,
+      title: "Better Patient Experience",
+      description: "Digital forms and quick check-ins improve satisfaction"
     },
     {
-      question: "How affordable is Clino Health software?",
-      answer: "We offer one-time payment options with no expensive monthly fees. Our pricing is designed to be affordable for clinics of all sizes."
-    },
-    {
-      question: "What kind of support do you provide?",
-      answer: "We offer 24/7 customer support via WhatsApp and phone in Hindi and English. Our team is always here to help."
-    },
-    {
-      question: "Is my patient data secure?",
-      answer: "Absolutely. With our desktop version, your data never leaves your computer. It's stored in an encrypted local database with complete privacy."
+      icon: <BarChart3 className="w-6 h-6" />,
+      title: "Improved Clinic Visibility",
+      description: "Track performance metrics and grow your practice"
     }
   ];
 
   return (
     <div className="min-h-screen bg-white">
       <SEO 
-        title="Clino Health - Healthcare Software Solutions Built for India"
-        description="Clino Health builds healthcare software for modern clinics. BDent for dental, BSono for sonography. Simple, affordable, and designed to work offline. Trusted by 250+ clinics across India."
-        keywords="clino health, healthcare software, clinic management software, dental software, sonography software, medical practice management, patient management system, clinic software India, healthcare management system, medical software offline, clinic management India"
-        url="https://clinohealth.app/"
+        title="MolarPlus - Smart Practice Management for Modern Dentists"
+        description="MolarPlus is a comprehensive dental clinic management platform. Manage appointments, patient records, analytics, and workflows from web and mobile. Built for modern dental practices."
+        keywords="dental clinic software, practice management, dental software, patient management, appointment scheduling, clinic analytics, dental practice software, dental EHR"
+        url="https://molarplus.app/"
         structuredData={structuredData}
-        faqStructuredData={faqStructuredData}
       />
 
       {/* Navigation */}
       <nav className="fixed top-0 w-full bg-white/98 backdrop-blur-md border-b border-gray-100 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
-            <Link to="/" className="flex items-center space-x-3">
+            <Link to="/" className="flex items-center justify-center">
               <img 
-                src={clinoHealthLogoFull} 
-                alt="Clino Health" 
+                src="/moralplus-logo.svg" 
+                alt="MolarPlus" 
                 className="h-12 w-auto"
                 onError={(e) => {
                   e.target.style.display = 'none';
-                  if (e.target.nextSibling) {
-                    e.target.nextSibling.style.display = 'block';
-                  }
                 }}
               />
-              <span className="hidden text-2xl font-bold">
-                <span style={{ color: colors.light }}>Clino</span>{' '}
-                <span style={{ color: colors.dark }}>Health</span>
-              </span>
-              </Link>
+            </Link>
             <div className="hidden md:flex items-center space-x-10">
-              <a href="#products" className="text-gray-700 hover:text-[#245501] font-medium transition-colors">Products</a>
-              <a href="#features" className="text-gray-700 hover:text-[#245501] font-medium transition-colors">Features</a>
-              <a href="#why-us" className="text-gray-700 hover:text-[#245501] font-medium transition-colors">Why Us</a>
-              <a href="#contact" className="text-gray-700 hover:text-[#245501] font-medium transition-colors">Contact</a>
+              <Link to="/features" className="text-gray-700 hover:text-blue-600 font-medium transition-colors">Features</Link>
+              <Link to="/platform" className="text-gray-700 hover:text-blue-600 font-medium transition-colors">Platform</Link>
+              <Link to="/pricing" className="text-gray-700 hover:text-blue-600 font-medium transition-colors">Pricing</Link>
+              <Link to="/contact" className="text-gray-700 hover:text-blue-600 font-medium transition-colors">Contact</Link>
             </div>
+            <div className="hidden md:flex items-center space-x-4">
+              <Link 
+                to="/login" 
+                className="px-6 py-2 text-gray-700 hover:text-blue-600 font-medium transition-colors"
+              >
+                Login
+              </Link>
               <Link 
                 to="/signup" 
-              className="hidden md:flex items-center px-8 py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg"
-              style={{ backgroundColor: colors.medium, color: 'white' }}
-              onMouseEnter={(e) => e.target.style.backgroundColor = colors.dark}
-              onMouseLeave={(e) => e.target.style.backgroundColor = colors.medium}
+                className="px-8 py-3 rounded-lg font-semibold text-white shadow-lg hover:shadow-xl transition-all"
+                style={{ backgroundColor: colors.primary }}
+                onMouseEnter={(e) => e.target.style.backgroundColor = colors.dark}
+                onMouseLeave={(e) => e.target.style.backgroundColor = colors.primary}
               >
-              Get Started
+                Get Started
               </Link>
+            </div>
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               className="md:hidden p-2 rounded-lg hover:bg-gray-100"
@@ -257,140 +269,169 @@ const LandingPage = () => {
         {isMenuOpen && (
           <div className="md:hidden bg-white border-t border-gray-100">
             <div className="px-4 py-4 space-y-4">
-              <a href="#products" className="block text-gray-700 hover:text-[#245501] transition-colors" onClick={() => setIsMenuOpen(false)}>Products</a>
-              <a href="#features" className="block text-gray-700 hover:text-[#245501] transition-colors" onClick={() => setIsMenuOpen(false)}>Features</a>
-              <a href="#why-us" className="block text-gray-700 hover:text-[#245501] transition-colors" onClick={() => setIsMenuOpen(false)}>Why Us</a>
-              <a href="#contact" className="block text-gray-700 hover:text-[#245501] transition-colors" onClick={() => setIsMenuOpen(false)}>Contact</a>
-                <Link 
-                  to="/signup" 
-                className="block text-center px-6 py-3 rounded-lg font-semibold text-white"
-                style={{ backgroundColor: colors.medium }}
+              <Link to="/features" className="block text-gray-700 hover:text-blue-600 transition-colors" onClick={() => setIsMenuOpen(false)}>Features</Link>
+              <Link to="/platform" className="block text-gray-700 hover:text-blue-600 transition-colors" onClick={() => setIsMenuOpen(false)}>Platform</Link>
+              <Link to="/pricing" className="block text-gray-700 hover:text-blue-600 transition-colors" onClick={() => setIsMenuOpen(false)}>Pricing</Link>
+              <Link to="/contact" className="block text-gray-700 hover:text-blue-600 transition-colors" onClick={() => setIsMenuOpen(false)}>Contact</Link>
+              <Link 
+                to="/login" 
+                className="block text-center px-6 py-3 text-gray-700 hover:text-blue-600 font-medium"
                 onClick={() => setIsMenuOpen(false)}
-                >
-                  Get Started
-                </Link>
+              >
+                Login
+              </Link>
+              <Link 
+                to="/signup" 
+                className="block text-center px-6 py-3 rounded-lg font-semibold text-white"
+                style={{ backgroundColor: colors.primary }}
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Get Started
+              </Link>
             </div>
           </div>
         )}
       </nav>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-24 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #f0f9f0 0%, #ffffff 50%, #f0f9f0 100%)' }}>
+      <section className="pt-32 pb-24 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #f8f9ff 0%, #ffffff 50%, #f8f9ff 100%)' }}>
         <div className="absolute inset-0 opacity-5">
-          <div className="absolute top-20 left-10 w-72 h-72 rounded-full blur-3xl" style={{ backgroundColor: colors.light }}></div>
-          <div className="absolute bottom-20 right-10 w-96 h-96 rounded-full blur-3xl" style={{ backgroundColor: colors.medium }}></div>
+          <div className="absolute top-20 left-10 w-72 h-72 rounded-full blur-3xl" style={{ backgroundColor: colors.primary }}></div>
+          <div className="absolute bottom-20 right-10 w-96 h-96 rounded-full blur-3xl" style={{ backgroundColor: colors.secondary }}></div>
         </div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="text-center max-w-4xl mx-auto">
-            <div 
-              className="inline-flex items-center px-6 py-3 rounded-full text-sm font-semibold mb-8 border"
-              style={{ 
-                backgroundColor: `${colors.light}10`,
-                color: colors.dark,
-                borderColor: `${colors.light}20`
-              }}
-            >
-              <span className="mr-2">🏥</span>
-              Building the future of healthcare software
-            </div>
-            <h1 className="text-5xl md:text-7xl font-extrabold text-gray-900 mb-8 leading-tight">
-              Healthcare Software<br />
-              <span 
-                className="bg-gradient-to-r bg-clip-text text-transparent"
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div>
+              <div 
+                className="inline-flex items-center px-6 py-3 rounded-full text-sm font-semibold mb-8 border"
                 style={{ 
-                  backgroundImage: `linear-gradient(to right, ${colors.dark}, ${colors.medium})`,
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent'
+                  backgroundColor: `${colors.primary}10`,
+                  color: colors.primary,
+                  borderColor: `${colors.primary}20`
                 }}
               >
-                Built for India
-              </span>
-            </h1>
-            <p className="text-xl md:text-2xl text-gray-600 mb-12 max-w-3xl mx-auto leading-relaxed">
-              We build specialized clinic management software for healthcare professionals. 
-              Simple, affordable, and designed to work offline. Trusted by 250+ clinics across India.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
-              <a 
-                href="#products" 
-                className="px-10 py-4 rounded-xl text-lg font-semibold shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-1 text-white"
-                style={{ backgroundColor: colors.medium }}
-                onMouseEnter={(e) => e.target.style.backgroundColor = colors.dark}
-                onMouseLeave={(e) => e.target.style.backgroundColor = colors.medium}
-              >
-                Explore Products ↓
-              </a>
-              <a 
-                href="#contact" 
-                className="text-gray-700 hover:text-[#245501] px-10 py-4 font-semibold text-lg border-2 border-gray-300 rounded-xl hover:border-[#245501] transition-all"
-              >
-                Contact Sales →
-              </a>
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mt-20">
-              <div className="text-center">
-                <div className="text-5xl font-extrabold mb-2" style={{ color: colors.medium }}>250+</div>
-                <div className="text-gray-600 font-medium">Clinics</div>
+                <span className="mr-2">🦷</span>
+                Built specifically for dental practices
+              </div>
+              <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-8 leading-tight">
+                You take care of smiles.<br />
+                <span 
+                  className="bg-gradient-to-r bg-clip-text text-transparent"
+                  style={{ 
+                    backgroundImage: `linear-gradient(to right, ${colors.primary}, ${colors.secondary})`,
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent'
+                  }}
+                >
+                  We take care of everything else.
+                </span>
+              </h1>
+              <p className="text-xl text-gray-600 mb-8 leading-relaxed">
+                MolarPlus brings appointments, patient records, and daily clinic operations together in one simple platform - helping dentists spend less time on administration and more time doing what they do best: caring for patients
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 mb-8">
+                <Link 
+                  to="/signup" 
+                  className="px-8 py-4 rounded-xl text-lg font-semibold shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-1 text-white inline-flex items-center justify-center"
+                  style={{ backgroundColor: colors.primary }}
+                  onMouseEnter={(e) => e.target.style.backgroundColor = colors.dark}
+                  onMouseLeave={(e) => e.target.style.backgroundColor = colors.primary}
+                >
+                  Get Started <ArrowRight className="ml-2 w-5 h-5" />
+                </Link>
+                <a 
+                  href="#contact" 
+                  className="px-8 py-4 font-semibold text-lg border-2 border-gray-300 rounded-xl hover:border-blue-500 transition-all inline-flex items-center justify-center"
+                >
+                  Book a Demo
+                </a>
+              </div>
+              
+              {/* App Store Buttons */}
+              <div className="flex flex-col sm:flex-row gap-4 mb-12">
+                <a 
+                  href="#" 
+                  className="inline-flex items-center justify-center px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors min-w-[160px]"
+                >
+                  <svg className="w-6 h-6 mr-3" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+                  </svg>
+                  <div className="text-left">
+                    <div className="text-xs font-medium">Download on the</div>
+                    <div className="text-sm font-semibold">App Store</div>
                   </div>
-              <div className="text-center">
-                <div className="text-5xl font-extrabold mb-2" style={{ color: colors.medium }}>50K+</div>
-                <div className="text-gray-600 font-medium">Patients</div>
+                </a>
+                <a 
+                  href="#" 
+                  className="inline-flex items-center justify-center px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors min-w-[160px]"
+                >
+                  <svg className="w-6 h-6 mr-3" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3,20.5V3.5C3,2.91 3.34,2.39 3.84,2.15L13.69,12L3.84,21.85C3.34,21.6 3,21.09 3,20.5M16.81,15.12L6.05,21.34L14.54,12.85L16.81,15.12M20.16,10.81C20.5,11.08 20.75,11.5 20.75,12C20.75,12.5 20.53,12.9 20.18,13.18L17.89,14.5L15.39,12L17.89,9.5L20.16,10.81M6.05,2.66L16.81,8.88L14.54,11.15L6.05,2.66Z"/>
+                  </svg>
+                  <div className="text-left">
+                    <div className="text-xs font-medium">GET IT ON</div>
+                    <div className="text-sm font-semibold">Google Play</div>
+                  </div>
+                </a>
+              </div>
+
+              </div>
+            <div className="relative">
+              {/* Mockup Image */}
+              <div className="relative z-10 lg:translate-x-8">
+                <img 
+                  src="/mockup-hero.png" 
+                  alt="MolarPlus App Mockup" 
+                  className="w-full h-auto lg:w-[120%] lg:max-w-none"
+                  onError={(e) => {
+                    console.error('Mockup image failed to load');
+                    e.target.style.display = 'none';
+                  }}
+                />
+              </div>
+              {/* Background elements */}
+              <div className="absolute inset-0 flex items-center justify-center opacity-10">
+                <div className="text-center">
+                  <div className="text-8xl mb-4">🦷</div>
+                  <div className="text-6xl">👨‍⚕️</div>
                 </div>
-              <div className="text-center">
-                <div className="text-5xl font-extrabold mb-2" style={{ color: colors.medium }}>99.9%</div>
-                <div className="text-gray-600 font-medium">Uptime</div>
-                </div>
-              <div className="text-center">
-                <div className="text-5xl font-extrabold mb-2" style={{ color: colors.medium }}>24/7</div>
-                <div className="text-gray-600 font-medium">Support</div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Products Section */}
-      <section id="products" className="py-24 bg-white">
+      {/* Platform Overview */}
+      <section id="platform" className="py-24 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-20">
-            <h2 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-6">Our Products</h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">Specialized software solutions for different healthcare practices</p>
+            <h2 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-6">Complete Platform Solution</h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              MolarPlus works seamlessly across all your devices. Manage your clinic from anywhere, anytime.
+            </p>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
-            {products.map((product, index) => (
-              <a
-                key={index}
-                href={product.link}
-                className="group border-2 rounded-2xl p-8 hover:shadow-2xl transition-all transform hover:-translate-y-2 bg-white"
-                style={{ 
-                  borderColor: product.status === 'Available' ? `${colors.light}30` : '#e5e7eb',
-                  ...(product.status === 'Available' && {
-                    ':hover': { borderColor: colors.medium }
-                  })
-                }}
-              >
-                <div 
-                  className="w-20 h-20 rounded-2xl flex items-center justify-center mb-6 transition-colors"
-                  style={{ 
-                    backgroundColor: product.status === 'Available' ? `${colors.light}10` : '#f3f4f6'
-                  }}
-                >
-                  <span className="text-4xl">{product.icon}</span>
+          <div className="grid lg:grid-cols-3 gap-8">
+            <div className="text-center p-8 rounded-2xl border border-gray-200 hover:shadow-lg transition-shadow">
+              <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6" style={{ backgroundColor: `${colors.primary}10` }}>
+                <Laptop className="w-10 h-10" style={{ color: colors.primary }} />
               </div>
-                <span className={`inline-block px-4 py-2 rounded-full text-sm font-semibold mb-4 ${product.statusColor}`}>
-                  {product.status}
-                </span>
-                <h3 className="text-2xl font-bold text-gray-900 mb-3">{product.name}</h3>
-                <p className="text-gray-600 mb-6 leading-relaxed">{product.description}</p>
-                {product.status === 'Available' && (
-                  <span className="font-semibold" style={{ color: colors.medium }}>
-                    Learn more →
-                  </span>
-                )}
-              </a>
-            ))}
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">Web Dashboard</h3>
+              <p className="text-gray-600">Full-featured desktop interface for comprehensive clinic management</p>
+            </div>
+            <div className="text-center p-8 rounded-2xl border border-gray-200 hover:shadow-lg transition-shadow">
+              <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6" style={{ backgroundColor: `${colors.secondary}10` }}>
+                <Smartphone className="w-10 h-10" style={{ color: colors.secondary }} />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">Mobile Apps</h3>
+              <p className="text-gray-600">Native iOS and Android apps for on-the-go access</p>
+            </div>
+            <div className="text-center p-8 rounded-2xl border border-gray-200 hover:shadow-lg transition-shadow">
+              <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6" style={{ backgroundColor: `${colors.accent}10` }}>
+                <Shield className="w-10 h-10" style={{ color: colors.accent }} />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">Secure Sync</h3>
+              <p className="text-gray-600">Real-time synchronization across all your devices</p>
+            </div>
           </div>
         </div>
       </section>
@@ -400,9 +441,9 @@ const LandingPage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-20">
             <h2 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-6">Powerful Features</h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">Everything you need to run your clinic efficiently</p>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">Everything you need to run your dental practice efficiently</p>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {features.map((feature, index) => (
               <div 
                 key={index} 
@@ -410,9 +451,11 @@ const LandingPage = () => {
               >
                 <div 
                   className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6"
-                  style={{ backgroundColor: `${colors.light}10` }}
+                  style={{ backgroundColor: `${colors.primary}10` }}
                 >
-                  {feature.icon}
+                  <div style={{ color: colors.primary }}>
+                    {feature.icon}
+                  </div>
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-3">{feature.title}</h3>
                 <p className="text-gray-600 leading-relaxed">{feature.description}</p>
@@ -422,164 +465,310 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* Screenshots Section */}
-      <section className="py-16 bg-white">
+      {/* Mobile App Gallery */}
+      <section className="py-24 bg-gradient-to-b from-white to-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">See Clino Health in Action</h2>
+          <div className="text-center mb-20">
+            <h2 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-6">Mobile App Experience</h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Discover how our simple and powerful features can transform your clinic management
+              Professional-grade mobile app designed for dental professionals. Intuitive, fast, and reliable.
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[
-              { img: patientFilesImg, title: "Patient Files" },
-              { img: appointmentsImg, title: "Appointments" },
-              { img: paymentsImg, title: "Payments" },
-              { img: reportsImg, title: "Reports" },
-              { img: voiceReportingImg, title: "Voice Reporting" },
-              { img: whatsappSmsImg, title: "WhatsApp & SMS" }
-            ].map((item, index) => (
-              <div key={index} className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-shadow">
-                <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                  <h3 className="text-lg font-semibold text-gray-900">{item.title}</h3>
+          
+          <div className="relative max-w-6xl mx-auto">
+            {/* Feature Cards - Left Side */}
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-64 space-y-4 opacity-0 animate-fade-in-left">
+              {currentSlide >= 2 && (
+                <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 transform transition-all duration-700">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ backgroundColor: `${colors.primary}10` }}>
+                    <Calendar className="w-6 h-6" style={{ color: colors.primary }} />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    {mobileScreens[(currentSlide - 2 + mobileScreens.length) % mobileScreens.length].title}
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    {mobileScreens[(currentSlide - 2 + mobileScreens.length) % mobileScreens.length].description}
+                  </p>
                 </div>
-                <div className="overflow-hidden">
-                  <img src={item.img} alt={item.title} className="w-full h-auto object-cover" />
+              )}
+            </div>
+            
+            {/* Feature Cards - Right Side */}
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-64 space-y-4 opacity-0 animate-fade-in-right">
+              {currentSlide < mobileScreens.length - 2 && (
+                <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 transform transition-all duration-700">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ backgroundColor: `${colors.secondary}10` }}>
+                    <Users className="w-6 h-6" style={{ color: colors.secondary }} />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    {mobileScreens[(currentSlide + 2) % mobileScreens.length].title}
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    {mobileScreens[(currentSlide + 2) % mobileScreens.length].description}
+                  </p>
                 </div>
+              )}
+            </div>
+            
+            {/* Center Phone Mockup */}
+            <div className="relative mx-auto w-80 h-[640px]">
+              {/* Phone Frame - Modern iPhone-like Design */}
+              <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-[2.5rem] shadow-2xl border border-gray-700 overflow-hidden">
+                {/* Glass Effect Overlay */}
+                <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent rounded-[2.5rem]"></div>
+                
+                {/* Phone Screen */}
+                <div className="absolute inset-1 bg-black rounded-[2.2rem] overflow-hidden">
+                  {/* Dynamic Island Notch */}
+                  <div className="absolute top-2 left-1/2 -translate-x-1/2 w-32 h-7 bg-black rounded-full z-20 shadow-lg">
+                    <div className="absolute inset-0 bg-gradient-to-b from-gray-900 to-black rounded-full"></div>
+                  </div>
+                  
+                  {/* Status Bar */}
+                  <div className="absolute top-3 left-0 right-0 flex items-center justify-between px-8 z-10">
+                    <div className="text-white text-xs font-semibold">9:41</div>
+                    <div className="flex items-center space-x-1">
+                      <div className="w-4 h-3 border border-white/60 rounded-sm"></div>
+                      <div className="w-1 h-2 bg-white rounded-full"></div>
+                      <div className="w-4 h-3 bg-white rounded-sm"></div>
+                    </div>
+                  </div>
+                  
+                  {/* App Screens Slider */}
+                  <div 
+                    className="absolute inset-0 pt-8"
+                    onMouseDown={handleDragStart}
+                    onMouseMove={handleDragMove}
+                    onMouseUp={handleDragEnd}
+                    onMouseLeave={handleDragEnd}
+                    onTouchStart={handleDragStart}
+                    onTouchMove={handleDragMove}
+                    onTouchEnd={handleDragEnd}
+                    style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+                  >
+                    <div 
+                      className="flex h-full transition-transform duration-700 ease-out"
+                      style={{ 
+                        transform: `translateX(calc(-${currentSlide * 100}% + ${dragOffset}px))`,
+                        transition: isDragging ? 'none' : 'transform 0.7s ease-out'
+                      }}
+                    >
+                      {mobileScreens.map((screen, index) => (
+                        <div key={index} className="w-full h-full flex-shrink-0 bg-white flex items-center justify-center">
+                          <img 
+                            src={screen.src}
+                            alt={screen.title}
+                            className="w-full h-full object-cover"
+                            draggable={false}
+                            onError={(e) => {
+                              console.error(`Failed to load image: ${screen.src}`);
+                              e.target.style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Home Indicator Bar */}
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-32 h-1 bg-white/60 rounded-full"></div>
+                </div>
+                
+                {/* Side Buttons */}
+                <div className="absolute right-0 top-24 w-1 h-12 bg-gray-700 rounded-l-full"></div>
+                <div className="absolute right-0 top-40 w-1 h-12 bg-gray-700 rounded-l-full"></div>
+                <div className="absolute right-0 top-56 w-1 h-8 bg-gray-700 rounded-l-full"></div>
+                <div className="absolute left-0 top-48 w-1 h-16 bg-gray-700 rounded-r-full"></div>
+                
+                {/* Camera Lenses */}
+                <div className="absolute top-8 left-8 w-2 h-2 bg-gray-900 rounded-full border border-gray-700"></div>
+                <div className="absolute top-8 left-12 w-2 h-2 bg-gray-800 rounded-full border border-gray-600"></div>
+                <div className="absolute top-10 left-10 w-3 h-3 bg-gray-900 rounded-full border-2 border-gray-700"></div>
+              </div>
+              
+              {/* Current Feature Info */}
+              <div className="absolute -bottom-24 left-1/2 -translate-x-1/2 text-center w-80">
+                <h3 className="text-2xl font-bold text-gray-900 mb-2 transition-all duration-500">
+                  {mobileScreens[currentSlide].title}
+                </h3>
+                <p className="text-gray-600 transition-all duration-500">
+                  {mobileScreens[currentSlide].description}
+                </p>
+              </div>
+            </div>
+            
+            {/* Navigation Dots */}
+            <div className="flex justify-center space-x-2 mt-36">
+              {mobileScreens.map((_, index) => (
+                <button
+                  key={index}
+                  onClick={() => {
+                    setCurrentSlide(index);
+                    setIsAutoPlaying(false);
+                    setTimeout(() => setIsAutoPlaying(true), 3000);
+                  }}
+                  className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                    index === currentSlide 
+                      ? 'w-8' 
+                      : 'hover:w-4'
+                  }`}
+                  style={{ 
+                    backgroundColor: index === currentSlide ? colors.primary : '#d1d5db',
+                    transition: 'all 0.3s ease'
+                  }}
+                  aria-label={`Go to slide ${index + 1}`}
+                />
+              ))}
+            </div>
+            
+            {/* Auto-play Indicator */}
+            <div className="flex justify-center mt-6">
+              <button
+                onClick={() => setIsAutoPlaying(!isAutoPlaying)}
+                className="flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <div className={`w-2 h-2 rounded-full mr-2 ${isAutoPlaying ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
+                {isAutoPlaying ? 'Auto-playing' : 'Paused'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <style jsx>{`
+        @keyframes fade-in-left {
+          from {
+            opacity: 0;
+            transform: translateX(-20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
+        
+        @keyframes fade-in-right {
+          from {
+            opacity: 0;
+            transform: translateX(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
+        
+        .animate-fade-in-left {
+          animation: fade-in-left 0.7s ease-out forwards;
+        }
+        
+        .animate-fade-in-right {
+          animation: fade-in-right 0.7s ease-out forwards;
+        }
+      `}</style>
+
+      {/* Benefits Section */}
+      <section className="py-24 bg-gradient-to-b from-gray-50 to-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-20">
+            <h2 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-6">Benefits for Dentists</h2>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">Focus on what matters most - your patients</p>
+          </div>
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+            {benefits.map((benefit, index) => (
+              <div key={index} className="text-center">
+                <div 
+                  className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6"
+                  style={{ backgroundColor: `${colors.primary}10` }}
+                >
+                  <div style={{ color: colors.primary }}>
+                    {benefit.icon}
+                  </div>
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-3">{benefit.title}</h3>
+                <p className="text-gray-600">{benefit.description}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Why Us Section */}
-      <section id="why-us" className="py-24 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-20">
-            <h2 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-6">Why Clino Health?</h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">Built specifically for Indian healthcare providers</p>
-          </div>
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div>
-            <div className="space-y-8">
-                {whyUsFeatures.map((feature, index) => (
-                  <div key={index} className="flex items-start space-x-4">
-                    <div 
-                      className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center"
-                      style={{ backgroundColor: `${colors.medium}20` }}
-                    >
-                      {feature.icon}
-                </div>
-                <div>
-                      <h3 className="text-xl font-bold text-gray-900 mb-2">{feature.title}</h3>
-                      <p className="text-gray-600">{feature.description}</p>
-                </div>
-              </div>
-                ))}
-              </div>
-            </div>
-            <div 
-              className="rounded-3xl p-12 border"
-              style={{ 
-                background: `linear-gradient(to bottom right, ${colors.light}10, ${colors.medium}10)`,
-                borderColor: `${colors.light}20`
-              }}
+      {/* CTA Section */}
+      <section className="py-24 relative overflow-hidden" style={{ background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)` }}>
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-10 left-10 w-32 h-32 rounded-full bg-white"></div>
+          <div className="absolute bottom-10 right-10 w-48 h-48 rounded-full bg-white"></div>
+        </div>
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
+          <h2 className="text-4xl md:text-5xl font-extrabold text-white mb-6">
+            Ready to Transform Your Practice?
+          </h2>
+          <p className="text-xl text-white/90 mb-12 max-w-2xl mx-auto">
+            Join hundreds of dental practices already using MolarPlus to streamline their operations and improve patient care.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-6 justify-center">
+            <Link 
+              to="/signup" 
+              className="px-10 py-4 rounded-xl text-lg font-semibold bg-white text-blue-600 shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-1 inline-flex items-center justify-center"
             >
-              <div className="text-center">
-                <div className="text-6xl font-extrabold mb-4" style={{ color: colors.medium }}>250+</div>
-                <div className="text-2xl font-semibold text-gray-900 mb-8">Clinics Trust Us</div>
-                <div className="space-y-4 text-left">
-                  {[
-                    "50,000+ patients managed",
-                    "99.9% uptime guarantee",
-                    "24/7 customer support"
-                  ].map((item, index) => (
-                    <div key={index} className="flex items-center space-x-3">
-                      <CheckCircle className="w-6 h-6" style={{ color: colors.medium }} />
-                      <span className="text-gray-700">{item}</span>
-                </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-                  </div>
-                </div>
-      </section>
-
-      {/* Contact Section */}
-      <section id="contact" className="py-24 bg-gradient-to-b from-gray-50 to-white">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-6">Get in Touch</h2>
-          <p className="text-xl text-gray-600 mb-12">Ready to transform your practice? Let's talk.</p>
-          <div className="grid md:grid-cols-3 gap-6 mb-12">
+              Start Free Trial <ArrowRight className="ml-2 w-5 h-5" />
+            </Link>
             <a 
-              href="https://wa.me/918766742410" 
-              className="flex flex-col items-center justify-center space-y-3 px-8 py-6 rounded-2xl font-semibold transition-all border-2 transform hover:-translate-y-1"
-              style={{ 
-                backgroundColor: `${colors.light}10`,
-                color: colors.dark,
-                borderColor: `${colors.light}20`
-              }}
+              href="#contact" 
+              className="px-10 py-4 rounded-xl text-lg font-semibold text-white border-2 border-white hover:bg-white hover:text-blue-600 transition-all inline-flex items-center justify-center"
             >
-              <span className="text-4xl">📱</span>
-              <span>WhatsApp</span>
+              Schedule Demo
             </a>
-            <a 
-              href="mailto:support@clinohealth.app" 
-              className="flex flex-col items-center justify-center space-y-3 px-8 py-6 rounded-2xl font-semibold transition-all border-2 transform hover:-translate-y-1"
-              style={{ 
-                backgroundColor: `${colors.medium}10`,
-                color: colors.dark,
-                borderColor: `${colors.medium}20`
-              }}
-            >
-              <span className="text-4xl">✉️</span>
-              <span>Email</span>
-            </a>
-            <a 
-              href="tel:+918766742410" 
-              className="flex flex-col items-center justify-center space-y-3 px-8 py-6 rounded-2xl font-semibold transition-all border-2 transform hover:-translate-y-1"
-              style={{ 
-                backgroundColor: `${colors.dark}10`,
-                color: colors.dark,
-                borderColor: `${colors.dark}20`
-              }}
-            >
-              <span className="text-4xl">📞</span>
-              <span>+91 8766742410</span>
-            </a>
-            </div>
-          <div className="bg-white rounded-2xl p-8 shadow-lg border border-gray-100">
-            <p className="text-gray-700 font-medium mb-2">📍 Based in Pune, Maharashtra</p>
-            <p className="text-gray-600">Serving clinics across India</p>
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="py-16 text-white" style={{ backgroundColor: colors.dark }}>
+      <footer className="py-16 bg-gray-900 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center mb-12">
-            <div className="mb-6 md:mb-0">
-              <img 
-                src={clinoHealthLogoFull} 
-                alt="Clino Health" 
-                className="h-12 w-auto brightness-0 invert"
-                onError={(e) => {
-                  e.target.style.display = 'none';
-                }}
-              />
+          <div className="grid md:grid-cols-4 gap-8 mb-12">
+            <div className="col-span-2">
+              <div className="flex items-center justify-center mb-4">
+                <img 
+                  src="/moralplus-logo.svg" 
+                  alt="MolarPlus" 
+                  className="h-10 w-auto"
+                />
+              </div>
+              <p className="text-gray-400 mb-4 max-w-md">
+                Smart practice management software for modern dental clinics. 
+                Available on web and mobile platforms.
+              </p>
+              <div className="flex space-x-4">
+                <a href="#" className="text-gray-400 hover:text-white transition-colors">
+                  <Mail className="w-5 h-5" />
+                </a>
+                <a href="#" className="text-gray-400 hover:text-white transition-colors">
+                  <Phone className="w-5 h-5" />
+                </a>
+              </div>
             </div>
-            <div className="flex flex-wrap justify-center gap-8 text-gray-300">
-              <a href="#products" className="hover:text-white transition-colors font-medium">Products</a>
-              <a href="#features" className="hover:text-white transition-colors font-medium">Features</a>
-              <a href="#why-us" className="hover:text-white transition-colors font-medium">Why Us</a>
-              <a href="#contact" className="hover:text-white transition-colors font-medium">Contact</a>
+            <div>
+              <h3 className="font-semibold mb-4">Product</h3>
+              <ul className="space-y-2 text-gray-400">
+                <li><Link to="/features" className="hover:text-white transition-colors">Features</Link></li>
+                <li><Link to="/platform" className="hover:text-white transition-colors">Platform</Link></li>
+                <li><Link to="/pricing" className="hover:text-white transition-colors">Pricing</Link></li>
+                <li><Link to="/signup" className="hover:text-white transition-colors">Free Trial</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-4">Company</h3>
+              <ul className="space-y-2 text-gray-400">
+                <li><Link to="/contact" className="hover:text-white transition-colors">Contact</Link></li>
+                <li><a href="#" className="hover:text-white transition-colors">About</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Privacy Policy</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Terms of Service</a></li>
+              </ul>
             </div>
           </div>
-          <div className="pt-8 border-t border-gray-700 text-center text-gray-400 text-sm">
-            © 2024 Clino Health. Made with ❤️ in India.
+          <div className="pt-8 border-t border-gray-800 text-center text-gray-400 text-sm">
+            © 2024 MolarPlus. All rights reserved. Made with ❤️ for dental professionals.
           </div>
         </div>
       </footer>
@@ -587,4 +776,4 @@ const LandingPage = () => {
   );
 };
 
-export default LandingPage;
+export default MolarPlusLanding;

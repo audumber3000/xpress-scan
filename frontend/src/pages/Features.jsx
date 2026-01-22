@@ -17,15 +17,23 @@ import {
 import SEO from '../components/SEO';
 import betterClinicLogo from '../assets/betterclinic-logo.png';
 
+const colors = {
+  primary: '#2a276e',
+  secondary: '#4a4694',
+  dark: '#1a1548',
+  light: '#f8f9fa',
+  accent: '#6366f1'
+};
+
 const Features = () => {
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "Product",
-    "name": "Clino Health Clinic Management Software",
-    "description": "Comprehensive clinic management software with patient management, appointments, WhatsApp integration, voice reporting, and more",
+    "name": "MolarPlus Dental Practice Management Software",
+    "description": "Comprehensive dental practice management software with patient management, appointments, mobile apps, analytics, and more",
     "brand": {
       "@type": "Brand",
-      "name": "Clino Health"
+      "name": "MolarPlus"
     },
     "offers": {
       "@type": "AggregateOffer",
@@ -37,11 +45,11 @@ const Features = () => {
 
   const features = [
     {
-      icon: <Users className="w-12 h-12 text-[#2a276e]" />,
+      icon: <Users className="w-12 h-12" style={{ color: colors.primary }} />,
       title: "Patient Management System",
-      description: "Comprehensive patient management with digital records, medical history tracking, and profile management. Store all patient information securely in one centralized system.",
+      description: "Comprehensive dental patient management with digital records, treatment history, and profile management. Store all patient information securely in one centralized system.",
       benefits: [
-        "Complete patient profiles with medical history",
+        "Complete patient profiles with dental history",
         "Digital patient records management",
         "Quick patient search and filtering",
         "Patient demographics and contact info",
@@ -49,9 +57,9 @@ const Features = () => {
       ]
     },
     {
-      icon: <Calendar className="w-12 h-12 text-[#2a276e]" />,
-      title: "Appointment Scheduling",
-      description: "Smart appointment scheduling system that helps manage your clinic calendar efficiently. Book, reschedule, and track appointments with ease.",
+      icon: <Calendar className="w-12 h-12" style={{ color: colors.primary }} />,
+      title: "Dental Appointment Scheduling",
+      description: "Smart appointment scheduling system designed for dental practices. Book, reschedule, and track appointments with automated reminders.",
       benefits: [
         "Visual calendar interface",
         "Automated appointment reminders",
@@ -61,45 +69,33 @@ const Features = () => {
       ]
     },
     {
-      icon: <MessageSquare className="w-12 h-12 text-[#2a276e]" />,
-      title: "WhatsApp Integration",
-      description: "Send automated WhatsApp notifications for appointments, test results, and important updates directly to your patients' phones.",
+      icon: <MessageSquare className="w-12 h-12" style={{ color: colors.primary }} />,
+      title: "Patient Communication",
+      description: "Send automated notifications for appointments, treatment reminders, and important updates directly to your patients' phones.",
       benefits: [
-        "Appointment reminders via WhatsApp",
-        "Report delivery through WhatsApp",
+        "Appointment reminders via SMS",
+        "Treatment follow-ups",
         "Bulk messaging capabilities",
         "Two-way communication",
         "Template message support"
       ]
     },
     {
-      icon: <Mic className="w-12 h-12 text-[#2a276e]" />,
-      title: "Voice Reporting & Transcription",
-      description: "Revolutionary voice-to-text technology for medical reporting. Record consultations and generate reports automatically, saving hours of documentation time.",
-      benefits: [
-        "Voice-to-text transcription",
-        "Medical terminology recognition",
-        "Automatic report generation",
-        "Edit and refine transcriptions",
-        "Multiple language support"
-      ]
-    },
-    {
-      icon: <DollarSign className="w-12 h-12 text-[#2a276e]" />,
-      title: "Payment & Billing Management",
-      description: "Complete billing solution with invoice generation, payment tracking, and revenue management. Support for multiple payment methods including UPI, cards, and cash.",
+      icon: <DollarSign className="w-12 h-12" style={{ color: colors.primary }} />,
+      title: "Dental Billing & Payments",
+      description: "Complete billing solution for dental practices with invoice generation, payment tracking, and insurance claims management.",
       benefits: [
         "Digital invoice generation",
         "Payment tracking and receipts",
         "Multiple payment methods",
-        "Outstanding payment reminders",
-        "Expense tracking"
+        "Insurance claims processing",
+        "Treatment cost estimates"
       ]
     },
     {
-      icon: <BarChart3 className="w-12 h-12 text-[#2a276e]" />,
-      title: "Analytics & Reporting",
-      description: "Powerful analytics dashboard with insights into patient flow, revenue trends, appointment patterns, and clinic performance metrics.",
+      icon: <BarChart3 className="w-12 h-12" style={{ color: colors.primary }} />,
+      title: "Dental Practice Analytics",
+      description: "Powerful analytics dashboard with insights into patient flow, revenue trends, appointment patterns, and dental practice performance.",
       benefits: [
         "Real-time dashboard",
         "Revenue analytics and trends",
@@ -109,21 +105,21 @@ const Features = () => {
       ]
     },
     {
-      icon: <FileText className="w-12 h-12 text-[#2a276e]" />,
-      title: "Treatment & Prescription Management",
-      description: "Manage patient treatments, prescriptions, and follow-ups efficiently. Create treatment plans and track patient progress over time.",
+      icon: <FileText className="w-12 h-12" style={{ color: colors.primary }} />,
+      title: "Treatment Planning & Charts",
+      description: "Manage dental treatments, prescriptions, and follow-ups efficiently. Create comprehensive treatment plans and track patient progress.",
       benefits: [
-        "Digital prescription creation",
-        "Treatment plan management",
-        "Medication history tracking",
+        "Digital treatment planning",
+        "Dental charting tools",
+        "Prescription management",
         "Follow-up scheduling",
         "Clinical notes and observations"
       ]
     },
     {
-      icon: <Shield className="w-12 h-12 text-[#2a276e]" />,
-      title: "Security & Compliance",
-      description: "Enterprise-grade security with encrypted data storage, role-based access control, and compliance with Indian data protection standards.",
+      icon: <Shield className="w-12 h-12" style={{ color: colors.primary }} />,
+      title: "HIPAA Security & Compliance",
+      description: "Enterprise-grade security with encrypted data storage, role-based access control, and HIPAA compliance for dental practices.",
       benefits: [
         "HIPAA compliant infrastructure",
         "Encrypted data storage",
@@ -133,9 +129,9 @@ const Features = () => {
       ]
     },
     {
-      icon: <Clock className="w-12 h-12 text-[#2a276e]" />,
+      icon: <Clock className="w-12 h-12" style={{ color: colors.primary }} />,
       title: "Staff Management",
-      description: "Manage your clinic staff, assign roles, track performance, and maintain team schedules all in one place.",
+      description: "Manage your dental practice staff, assign roles, track performance, and maintain team schedules all in one place.",
       benefits: [
         "Staff profiles and roles",
         "Performance tracking",
@@ -145,7 +141,7 @@ const Features = () => {
       ]
     },
     {
-      icon: <Zap className="w-12 h-12 text-[#2a276e]" />,
+      icon: <Zap className="w-12 h-12" style={{ color: colors.primary }} />,
       title: "Quick & Easy Setup",
       description: "Get started in under 24 hours with our simple onboarding process. No technical knowledge required - we handle everything for you.",
       benefits: [
@@ -161,10 +157,10 @@ const Features = () => {
   return (
     <div className="min-h-screen bg-white">
       <SEO
-        title="Features - Clino Health Clinic Management Software | Complete Healthcare Solution"
-        description="Explore Clino Health's comprehensive features: patient management, appointment scheduling, WhatsApp integration, voice reporting, payment tracking, analytics & more. Best clinic management software for doctors, dentists & radiologists in India."
-        keywords="clinic management features, patient management system, appointment scheduling software, WhatsApp clinic integration, voice reporting software, medical billing software, clinic analytics, healthcare software features, clinic automation, medical practice management features"
-        url="https://clinohealth.app/features"
+        title="Features - MolarPlus Dental Practice Management Software | Complete Dental Solution"
+        description="Explore MolarPlus comprehensive features: patient management, appointment scheduling, mobile apps, payment processing, analytics & more. Best dental practice management software for dentists."
+        keywords="dental software features, practice management, appointment scheduling, patient records, dental analytics, mobile dental app, HIPAA compliance, dental billing"
+        url="https://molarplus.app/features"
         structuredData={structuredData}
       />
 
