@@ -27,6 +27,9 @@ import PatientFiles from "./pages/PatientFiles";
 import PatientProfile from "./pages/PatientProfile";
 import About from "./pages/About";
 import Features from "./pages/Features";
+import Platform from "./pages/Platform";
+import Pricing from "./pages/Pricing";
+import Contact from "./pages/Contact";
 import DentalChartDemo from "./pages/DentalChartDemo";
 import WhatsAppTest from "./pages/WhatsAppTest";
 import Subscription from "./pages/Subscription";
@@ -94,7 +97,7 @@ function AppContent() {
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/onboarding' || location.pathname === '/auth/callback';
   const isLandingPage = location.pathname === '/';
   const isBookingPage = location.pathname === '/booking';
-  const isPublicPage = location.pathname === '/about' || location.pathname === '/features';
+  const isPublicPage = location.pathname === '/about' || location.pathname === '/features' || location.pathname === '/platform' || location.pathname === '/pricing' || location.pathname === '/contact';
 
   // Don't block rendering while loading - let ProtectedRoute handle it
   // if (loading) return <div>Loading...</div>;
@@ -112,6 +115,9 @@ function AppContent() {
           <Route path="/booking" element={<BookingPage />} />
           <Route path="/about" element={<About />} />
           <Route path="/features" element={<Features />} />
+          <Route path="/platform" element={<Platform />} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/contact" element={<Contact />} />
           <Route path="/dental-demo" element={<DentalChartDemo />} />
         </Routes>
         <ToastContainer
