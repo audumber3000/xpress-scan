@@ -45,8 +45,8 @@
       "destination": "/browserconfig.xml"
     },
     {
-      "source": "/(.*)",
-      "destination": "/"
+      "source": "/((?!assets/|.*\\..*).*)",
+      "destination": "/index.html"
     }
   ]
 } 
