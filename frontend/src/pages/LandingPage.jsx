@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { 
+import {
   Menu,
   X,
   ArrowRight,
@@ -69,7 +69,7 @@ const MolarPlusLanding = () => {
   // Auto-play functionality
   useEffect(() => {
     if (!isAutoPlaying || isDragging) return;
-    
+
     const interval = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % mobileScreens.length);
     }, 4000); // Change slide every 4 seconds
@@ -93,7 +93,7 @@ const MolarPlusLanding = () => {
 
   const handleDragEnd = () => {
     if (!isDragging) return;
-    
+
     const threshold = 50; // Minimum drag distance to change slide
     if (Math.abs(dragOffset) > threshold) {
       if (dragOffset > 0) {
@@ -102,7 +102,7 @@ const MolarPlusLanding = () => {
         setCurrentSlide((prev) => (prev + 1) % mobileScreens.length);
       }
     }
-    
+
     setIsDragging(false);
     setDragOffset(0);
     setTimeout(() => setIsAutoPlaying(true), 2000); // Resume auto-play after 2 seconds
@@ -135,7 +135,7 @@ const MolarPlusLanding = () => {
     "@context": "https://schema.org",
     "@type": "Organization",
     "name": "MolarPlus",
-    "url": "https://molarplus.app",
+    "url": "https://www.molarplus.com",
     "logo": "/molar-plus-logo-cropped.svg",
     "description": "Smart practice management software for modern dental clinics. Available on web and mobile.",
     "address": {
@@ -148,7 +148,7 @@ const MolarPlusLanding = () => {
       "@type": "ContactPoint",
       "telephone": "+91-8766742410",
       "contactType": "Customer Service",
-      "email": "support@molarplus.app",
+      "email": "support@molarplus.com",
       "availableLanguage": ["English", "Hindi"]
     }
   };
@@ -211,11 +211,11 @@ const MolarPlusLanding = () => {
 
   return (
     <div className="min-h-screen bg-white">
-      <SEO 
+      <SEO
         title="MolarPlus - Smart Practice Management for Modern Dentists"
         description="MolarPlus is a comprehensive dental clinic management platform. Manage appointments, patient records, analytics, and workflows from web and mobile. Built for modern dental practices."
         keywords="dental clinic software, practice management, dental software, patient management, appointment scheduling, clinic analytics, dental practice software, dental EHR"
-        url="https://molarplus.app/"
+        url="https://www.molarplus.com/"
         structuredData={structuredData}
       />
 
@@ -224,9 +224,9 @@ const MolarPlusLanding = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             <Link to="/" className="flex items-center justify-center">
-              <img 
-                src="/moralplus-logo.svg" 
-                alt="MolarPlus" 
+              <img
+                src="/moralplus-logo.svg"
+                alt="MolarPlus"
                 className="h-12 w-auto"
                 onError={(e) => {
                   e.target.style.display = 'none';
@@ -240,14 +240,14 @@ const MolarPlusLanding = () => {
               <Link to="/contact" className="text-gray-700 hover:text-blue-600 font-medium transition-colors">Contact</Link>
             </div>
             <div className="hidden md:flex items-center space-x-4">
-              <Link 
-                to="/login" 
+              <Link
+                to="/login"
                 className="px-6 py-2 text-gray-700 hover:text-blue-600 font-medium transition-colors"
               >
                 Login
               </Link>
-              <Link 
-                to="/signup" 
+              <Link
+                to="/signup"
                 className="px-8 py-3 rounded-lg font-semibold text-white shadow-lg hover:shadow-xl transition-all"
                 style={{ backgroundColor: colors.primary }}
                 onMouseEnter={(e) => e.target.style.backgroundColor = colors.dark}
@@ -273,15 +273,15 @@ const MolarPlusLanding = () => {
               <Link to="/platform" className="block text-gray-700 hover:text-blue-600 transition-colors" onClick={() => setIsMenuOpen(false)}>Platform</Link>
               <Link to="/pricing" className="block text-gray-700 hover:text-blue-600 transition-colors" onClick={() => setIsMenuOpen(false)}>Pricing</Link>
               <Link to="/contact" className="block text-gray-700 hover:text-blue-600 transition-colors" onClick={() => setIsMenuOpen(false)}>Contact</Link>
-              <Link 
-                to="/login" 
+              <Link
+                to="/login"
                 className="block text-center px-6 py-3 text-gray-700 hover:text-blue-600 font-medium"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Login
               </Link>
-              <Link 
-                to="/signup" 
+              <Link
+                to="/signup"
                 className="block text-center px-6 py-3 rounded-lg font-semibold text-white"
                 style={{ backgroundColor: colors.primary }}
                 onClick={() => setIsMenuOpen(false)}
@@ -302,9 +302,9 @@ const MolarPlusLanding = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
-              <div 
+              <div
                 className="inline-flex items-center px-6 py-3 rounded-full text-sm font-semibold mb-8 border"
-                style={{ 
+                style={{
                   backgroundColor: `${colors.primary}10`,
                   color: colors.primary,
                   borderColor: `${colors.primary}20`
@@ -315,9 +315,9 @@ const MolarPlusLanding = () => {
               </div>
               <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-8 leading-tight">
                 You take care of smiles.<br />
-                <span 
+                <span
                   className="bg-gradient-to-r bg-clip-text text-transparent"
-                  style={{ 
+                  style={{
                     backgroundImage: `linear-gradient(to right, ${colors.primary}, ${colors.secondary})`,
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent'
@@ -330,8 +330,8 @@ const MolarPlusLanding = () => {
                 MolarPlus brings appointments, patient records, and daily clinic operations together in one simple platform - helping dentists spend less time on administration and more time doing what they do best: caring for patients
               </p>
               <div className="flex flex-col sm:flex-row gap-4 mb-8">
-                <Link 
-                  to="/signup" 
+                <Link
+                  to="/signup"
                   className="px-8 py-4 rounded-xl text-lg font-semibold shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-1 text-white inline-flex items-center justify-center"
                   style={{ backgroundColor: colors.primary }}
                   onMouseEnter={(e) => e.target.style.backgroundColor = colors.dark}
@@ -339,34 +339,34 @@ const MolarPlusLanding = () => {
                 >
                   Get Started <ArrowRight className="ml-2 w-5 h-5" />
                 </Link>
-                <a 
-                  href="#contact" 
+                <a
+                  href="#contact"
                   className="px-8 py-4 font-semibold text-lg border-2 border-gray-300 rounded-xl hover:border-blue-500 transition-all inline-flex items-center justify-center"
                 >
                   Book a Demo
                 </a>
               </div>
-              
+
               {/* App Store Buttons */}
               <div className="flex flex-col sm:flex-row gap-4 mb-12">
-                <a 
-                  href="#" 
+                <a
+                  href="#"
                   className="inline-flex items-center justify-center px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors min-w-[160px]"
                 >
                   <svg className="w-6 h-6 mr-3" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+                    <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
                   </svg>
                   <div className="text-left">
                     <div className="text-xs font-medium">Download on the</div>
                     <div className="text-sm font-semibold">App Store</div>
                   </div>
                 </a>
-                <a 
-                  href="#" 
+                <a
+                  href="#"
                   className="inline-flex items-center justify-center px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors min-w-[160px]"
                 >
                   <svg className="w-6 h-6 mr-3" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M3,20.5V3.5C3,2.91 3.34,2.39 3.84,2.15L13.69,12L3.84,21.85C3.34,21.6 3,21.09 3,20.5M16.81,15.12L6.05,21.34L14.54,12.85L16.81,15.12M20.16,10.81C20.5,11.08 20.75,11.5 20.75,12C20.75,12.5 20.53,12.9 20.18,13.18L17.89,14.5L15.39,12L17.89,9.5L20.16,10.81M6.05,2.66L16.81,8.88L14.54,11.15L6.05,2.66Z"/>
+                    <path d="M3,20.5V3.5C3,2.91 3.34,2.39 3.84,2.15L13.69,12L3.84,21.85C3.34,21.6 3,21.09 3,20.5M16.81,15.12L6.05,21.34L14.54,12.85L16.81,15.12M20.16,10.81C20.5,11.08 20.75,11.5 20.75,12C20.75,12.5 20.53,12.9 20.18,13.18L17.89,14.5L15.39,12L17.89,9.5L20.16,10.81M6.05,2.66L16.81,8.88L14.54,11.15L6.05,2.66Z" />
                   </svg>
                   <div className="text-left">
                     <div className="text-xs font-medium">GET IT ON</div>
@@ -375,13 +375,13 @@ const MolarPlusLanding = () => {
                 </a>
               </div>
 
-              </div>
+            </div>
             <div className="relative">
               {/* Mockup Image */}
               <div className="relative z-10 lg:translate-x-8">
-                <img 
-                  src="/mockup-hero.png" 
-                  alt="MolarPlus App Mockup" 
+                <img
+                  src="/mockup-hero.png"
+                  alt="MolarPlus App Mockup"
                   className="w-full h-auto lg:w-[120%] lg:max-w-none"
                   onError={(e) => {
                     console.error('Mockup image failed to load');
@@ -445,11 +445,11 @@ const MolarPlusLanding = () => {
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {features.map((feature, index) => (
-              <div 
-                key={index} 
+              <div
+                key={index}
                 className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all transform hover:-translate-y-1 border border-gray-100"
               >
-                <div 
+                <div
                   className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6"
                   style={{ backgroundColor: `${colors.primary}10` }}
                 >
@@ -474,7 +474,7 @@ const MolarPlusLanding = () => {
               Professional-grade mobile app designed for dental professionals. Intuitive, fast, and reliable.
             </p>
           </div>
-          
+
           <div className="relative max-w-6xl mx-auto">
             {/* Feature Cards - Left Side */}
             <div className="absolute left-0 top-1/2 -translate-y-1/2 w-64 space-y-4 opacity-0 animate-fade-in-left">
@@ -492,7 +492,7 @@ const MolarPlusLanding = () => {
                 </div>
               )}
             </div>
-            
+
             {/* Feature Cards - Right Side */}
             <div className="absolute right-0 top-1/2 -translate-y-1/2 w-64 space-y-4 opacity-0 animate-fade-in-right">
               {currentSlide < mobileScreens.length - 2 && (
@@ -509,21 +509,21 @@ const MolarPlusLanding = () => {
                 </div>
               )}
             </div>
-            
+
             {/* Center Phone Mockup */}
             <div className="relative mx-auto w-80 h-[640px]">
               {/* Phone Frame - Modern iPhone-like Design */}
               <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-[2.5rem] shadow-2xl border border-gray-700 overflow-hidden">
                 {/* Glass Effect Overlay */}
                 <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent rounded-[2.5rem]"></div>
-                
+
                 {/* Phone Screen */}
                 <div className="absolute inset-1 bg-black rounded-[2.2rem] overflow-hidden">
                   {/* Dynamic Island Notch */}
                   <div className="absolute top-2 left-1/2 -translate-x-1/2 w-32 h-7 bg-black rounded-full z-20 shadow-lg">
                     <div className="absolute inset-0 bg-gradient-to-b from-gray-900 to-black rounded-full"></div>
                   </div>
-                  
+
                   {/* Status Bar */}
                   <div className="absolute top-3 left-0 right-0 flex items-center justify-between px-8 z-10">
                     <div className="text-white text-xs font-semibold">9:41</div>
@@ -533,9 +533,9 @@ const MolarPlusLanding = () => {
                       <div className="w-4 h-3 bg-white rounded-sm"></div>
                     </div>
                   </div>
-                  
+
                   {/* App Screens Slider */}
-                  <div 
+                  <div
                     className="absolute inset-0 pt-8"
                     onMouseDown={handleDragStart}
                     onMouseMove={handleDragMove}
@@ -546,16 +546,16 @@ const MolarPlusLanding = () => {
                     onTouchEnd={handleDragEnd}
                     style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
                   >
-                    <div 
+                    <div
                       className="flex h-full transition-transform duration-700 ease-out"
-                      style={{ 
+                      style={{
                         transform: `translateX(calc(-${currentSlide * 100}% + ${dragOffset}px))`,
                         transition: isDragging ? 'none' : 'transform 0.7s ease-out'
                       }}
                     >
                       {mobileScreens.map((screen, index) => (
                         <div key={index} className="w-full h-full flex-shrink-0 bg-white flex items-center justify-center">
-                          <img 
+                          <img
                             src={screen.src}
                             alt={screen.title}
                             className="w-full h-full object-cover"
@@ -569,23 +569,23 @@ const MolarPlusLanding = () => {
                       ))}
                     </div>
                   </div>
-                  
+
                   {/* Home Indicator Bar */}
                   <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-32 h-1 bg-white/60 rounded-full"></div>
                 </div>
-                
+
                 {/* Side Buttons */}
                 <div className="absolute right-0 top-24 w-1 h-12 bg-gray-700 rounded-l-full"></div>
                 <div className="absolute right-0 top-40 w-1 h-12 bg-gray-700 rounded-l-full"></div>
                 <div className="absolute right-0 top-56 w-1 h-8 bg-gray-700 rounded-l-full"></div>
                 <div className="absolute left-0 top-48 w-1 h-16 bg-gray-700 rounded-r-full"></div>
-                
+
                 {/* Camera Lenses */}
                 <div className="absolute top-8 left-8 w-2 h-2 bg-gray-900 rounded-full border border-gray-700"></div>
                 <div className="absolute top-8 left-12 w-2 h-2 bg-gray-800 rounded-full border border-gray-600"></div>
                 <div className="absolute top-10 left-10 w-3 h-3 bg-gray-900 rounded-full border-2 border-gray-700"></div>
               </div>
-              
+
               {/* Current Feature Info */}
               <div className="absolute -bottom-24 left-1/2 -translate-x-1/2 text-center w-80">
                 <h3 className="text-2xl font-bold text-gray-900 mb-2 transition-all duration-500">
@@ -596,7 +596,7 @@ const MolarPlusLanding = () => {
                 </p>
               </div>
             </div>
-            
+
             {/* Navigation Dots */}
             <div className="flex justify-center space-x-2 mt-36">
               {mobileScreens.map((_, index) => (
@@ -607,12 +607,11 @@ const MolarPlusLanding = () => {
                     setIsAutoPlaying(false);
                     setTimeout(() => setIsAutoPlaying(true), 3000);
                   }}
-                  className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                    index === currentSlide 
-                      ? 'w-8' 
-                      : 'hover:w-4'
-                  }`}
-                  style={{ 
+                  className={`w-2 h-2 rounded-full transition-all duration-300 ${index === currentSlide
+                    ? 'w-8'
+                    : 'hover:w-4'
+                    }`}
+                  style={{
                     backgroundColor: index === currentSlide ? colors.primary : '#d1d5db',
                     transition: 'all 0.3s ease'
                   }}
@@ -620,7 +619,7 @@ const MolarPlusLanding = () => {
                 />
               ))}
             </div>
-            
+
             {/* Auto-play Indicator */}
             <div className="flex justify-center mt-6">
               <button
@@ -677,7 +676,7 @@ const MolarPlusLanding = () => {
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
             {benefits.map((benefit, index) => (
               <div key={index} className="text-center">
-                <div 
+                <div
                   className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6"
                   style={{ backgroundColor: `${colors.primary}10` }}
                 >
@@ -707,14 +706,14 @@ const MolarPlusLanding = () => {
             Join hundreds of dental practices already using MolarPlus to streamline their operations and improve patient care.
           </p>
           <div className="flex flex-col sm:flex-row gap-6 justify-center">
-            <Link 
-              to="/signup" 
+            <Link
+              to="/signup"
               className="px-10 py-4 rounded-xl text-lg font-semibold bg-white text-blue-600 shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-1 inline-flex items-center justify-center"
             >
               Start Free Trial <ArrowRight className="ml-2 w-5 h-5" />
             </Link>
-            <a 
-              href="#contact" 
+            <a
+              href="#contact"
               className="px-10 py-4 rounded-xl text-lg font-semibold text-white border-2 border-white hover:bg-white hover:text-blue-600 transition-all inline-flex items-center justify-center"
             >
               Schedule Demo
@@ -729,14 +728,14 @@ const MolarPlusLanding = () => {
           <div className="grid md:grid-cols-4 gap-8 mb-12">
             <div className="col-span-2">
               <div className="flex items-center justify-center mb-4">
-                <img 
-                  src="/moralplus-logo.svg" 
-                  alt="MolarPlus" 
+                <img
+                  src="/moralplus-logo.svg"
+                  alt="MolarPlus"
                   className="h-10 w-auto"
                 />
               </div>
               <p className="text-gray-400 mb-4 max-w-md">
-                Smart practice management software for modern dental clinics. 
+                Smart practice management software for modern dental clinics.
                 Available on web and mobile platforms.
               </p>
               <div className="flex space-x-4">

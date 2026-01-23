@@ -33,6 +33,6 @@ Allow: /pricing
 Crawl-delay: 1
 
 # Sitemap location
-Sitemap: https://betterclinic.app/sitemap.xml
+Sitemap: https://www.molarplus.com/sitemap.xml
 
 
