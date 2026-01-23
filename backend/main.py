@@ -64,11 +64,18 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS setup - Allow all origins for development
+# CORS setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
-    allow_credentials=False,  # Must be False when using "*"
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "https://www.molarplus.com",
+        "https://app.molarplus.com",
+        "https://molarplus.com"
+    ],
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
     expose_headers=["*"]
