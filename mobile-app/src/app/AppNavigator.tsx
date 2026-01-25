@@ -48,6 +48,7 @@ export const AppNavigator = () => {
   return (
     <NavigationContainer>
       <Stack.Navigator
+        id="root"
         screenOptions={{
           headerShown: false,
         }}

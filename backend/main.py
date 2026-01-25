@@ -13,7 +13,7 @@ from domains.infrastructure.services.cache_service import cache_service
 from core.permissions import permission_manager
 # Domain imports (using clean architecture routes)
 from domains.patient.routes import patients_clean as patients
-from domains.patient.routes import treatment_types, referring_doctors
+from domains.patient.routes import treatment_types, referring_doctors, treatment_plans, patient_files, patient_duplicate_check
 from domains.auth.routes import auth_clean as auth
 from domains.auth.routes import clinic_users, permissions
 from domains.clinic.routes import clinics
@@ -24,6 +24,7 @@ from domains.medical.routes import reports, xray
 from domains.analytics.routes import dashboard
 from domains.infrastructure.routes import devices, sync, templates
 from domains.infrastructure.services.template_service import TemplateService
+from domains.gmail.routes import gmail_routes
 
 # Get the base path for PyInstaller bundled app
 def get_base_path():
@@ -67,14 +68,7 @@ app = FastAPI(
 # CORS setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://localhost:8000",
-        "https://www.molarplus.com",
-        "https://app.molarplus.com",
-        "https://molarplus.com"
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
@@ -93,6 +87,9 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(clinic_users.router, prefix="/api/v1/clinic-users", tags=["clinic_users"])
 app.include_router(permissions.router, prefix="/api/v1/permissions", tags=["permissions"])
 app.include_router(patients.router, prefix="/api/v1/patients", tags=["patients"])
+app.include_router(treatment_plans.router, prefix="/api/v1/patients", tags=["treatment_plans"])
+app.include_router(patient_files.router, prefix="/api/v1/patients", tags=["patient_files"])
+app.include_router(patient_duplicate_check.router, prefix="/api/v1/patients", tags=["patient_duplicate_check"])
 app.include_router(treatment_types.router, prefix="/api/v1/treatment-types", tags=["treatment_types"])
 app.include_router(referring_doctors.router, prefix="/api/v1/referring-doctors", tags=["referring_doctors"])
 app.include_router(clinics.router, prefix="/api/v1/clinics", tags=["clinics"])
@@ -114,6 +111,7 @@ app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["dashboar
 app.include_router(devices.router, prefix="/api/v1/devices", tags=["devices"])
 app.include_router(sync.router, prefix="/api/v1/sync", tags=["sync"])
 app.include_router(templates.router, prefix="/api/v1/templates", tags=["templates"])
+app.include_router(gmail_routes.router, prefix="/api/v1/gmail", tags=["gmail"])
 
 @app.get("/")
 def root():

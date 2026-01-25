@@ -5,7 +5,11 @@ import { transactionsApiService, Transaction } from '../../../../../services/api
 import { analyticsApiService, Analytics } from '../../../../../services/api/analytics.api';
 import { RecentTransactions } from '../../../../../shared/components/home/RecentTransactions';
 import { NotificationsScreen } from '../NotificationsScreen';
-import { WelcomeHeader } from './components/WelcomeHeader';
+import {
+  WelcomeHeaderBackground,
+  WelcomeHeaderTopPart,
+  WelcomeHeaderBottomPocket
+} from './components/WelcomeHeader';
 import { PatientVisitsSection } from './components/PatientVisitsSection';
 import { ErrorBanner } from './components/ErrorBanner';
 import { colors } from '../../../../../shared/constants/colors';
@@ -70,6 +74,7 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
       await Promise.all([loadAnalytics(), loadTransactions()]);
       setError(null);
     } catch (err) {
+      console.error('Error loading dashboard data:', err);
       setError('Failed to load dashboard data');
     } finally {
       setLoading(false);
@@ -89,38 +94,49 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
     }
   };
 
-  const dailyRevenue = 2450;
-  const totalAppointments = 12;
+  const dailyRevenue = analytics?.dailyRevenue || 0;
+  const totalPatients = analytics?.totalPatients || 0;
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      <WelcomeHeader
-        userName={userName}
-        onNotificationPress={() => setShowNotifications(true)}
-        dailyRevenue={dailyRevenue}
-        totalAppointments={totalAppointments}
-      />
+      {/* Layer 1: Global backdrop */}
+      <WelcomeHeaderBackground />
 
       <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[0]} // Sticky Top Piece (UserInfo + Cards)
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={colors.primary}
-            colors={[colors.primary]}
+            tintColor="#FFFFFF"
+            colors={['#2E2A85']}
             progressBackgroundColor="#F3F4F6"
           />
         }
       >
-        <PatientVisitsSection
-          analytics={analytics}
-          selectedPeriod={selectedPeriod}
-          onPeriodChange={setSelectedPeriod}
+        {/* Layer 3: Sticky Opaque Part 1 */}
+        <WelcomeHeaderTopPart
+          userName={userName}
+          onNotificationPress={() => setShowNotifications(true)}
+          dailyRevenue={dailyRevenue}
+          totalPatients={totalPatients}
         />
+
+        {/* Part 2: Tiny Rounded Bottom component */}
+        <WelcomeHeaderBottomPocket />
+
+        {/* Graph card overlapping Part 2, sliding under Part 1 */}
+        <View style={styles.chartWrapper}>
+          <PatientVisitsSection
+            analytics={analytics}
+            selectedPeriod={selectedPeriod}
+            onPeriodChange={setSelectedPeriod}
+          />
+        </View>
 
         <ErrorBanner error={error} onRetry={loadData} />
 
@@ -130,7 +146,7 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
           loading={loading}
         />
 
-        <View style={{ height: 20 }} />
+        <View style={{ height: 40 }} />
       </ScrollView>
 
       <NotificationsScreen
@@ -148,5 +164,11 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  chartWrapper: {
+    marginTop: -80, // Overlap the BottomPocket (Part 2)
+    zIndex: 5,       // Above pocket but below TopPart
+    elevation: 2,   // Below TopPart (80)
+    marginBottom: 20,
   },
 });

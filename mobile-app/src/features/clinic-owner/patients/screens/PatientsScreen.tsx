@@ -28,60 +28,12 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation }) =>
   const loadPatients = async () => {
     setLoading(true);
     try {
-      // Dummy data for testing
-      const dummyPatients = [
-        {
-          id: '1',
-          name: 'John Doe',
-          phone: '(555) 012-3456',
-          status: 'Active' as const,
-          lastVisit: 'Oct 12, 2023',
-          initials: 'JD',
-          avatarColor: '#C4B5FD',
-        },
-        {
-          id: '2',
-          name: 'Jane Smith',
-          phone: '(555) 987-6543',
-          status: 'Active' as const,
-          lastVisit: 'Sep 28, 2023',
-          initials: 'JS',
-          avatarColor: '#10B981',
-        },
-        {
-          id: '3',
-          name: 'Robert Wilson',
-          phone: '(555) 456-7890',
-          status: 'Inactive' as const,
-          lastVisit: 'Jan 04, 2023',
-          initials: 'RW',
-          avatarColor: '#D1D5DB',
-        },
-        {
-          id: '4',
-          name: 'Sarah Lee',
-          phone: '(555) 234-5678',
-          status: 'Active' as const,
-          lastVisit: 'Today, 10:30 AM',
-          initials: 'SL',
-          avatarColor: '#C4B5FD',
-        },
-        {
-          id: '5',
-          name: 'Michael Chen',
-          phone: '(555) 678-1234',
-          status: 'Active' as const,
-          lastVisit: 'Oct 20, 2023',
-          initials: 'MC',
-          avatarColor: '#C4B5FD',
-        },
-      ];
-      setPatients(dummyPatients);
-      
-      // Uncomment to use real API
-      // const data = await patientsApiService.getPatients();
-      // setPatients(data);
-    } catch (err) {
+      // Real API call
+      const data = await patientsApiService.getPatients();
+      setPatients(data);
+    } catch (err: any) {
+      console.error('Error loading patients:', err);
+      Alert.alert('Error', `Failed to load patients: ${err.message}`);
       setPatients([]);
     } finally {
       setLoading(false);
@@ -101,7 +53,7 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation }) =>
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(p => 
+      filtered = filtered.filter(p =>
         p.name.toLowerCase().includes(query) ||
         p.phone.includes(query) ||
         p.id.includes(query)
@@ -120,11 +72,16 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation }) =>
     Linking.openURL(`tel:${phoneNumber}`);
   };
 
-  const handleDeletePatient = (patient: any) => {
+  const handleDeletePatient = async (patient: any) => {
     setPatients(prevPatients => prevPatients.filter(p => p.id !== patient.id));
-    // Uncomment to use real API
-    // await patientsApiService.deletePatient(patient.id);
-    // loadPatients();
+    // Real API call
+    try {
+      await patientsApiService.deletePatient(patient.id);
+      loadPatients();
+    } catch (error) {
+      console.error('Error deleting patient:', error);
+      Alert.alert('Error', 'Failed to delete patient');
+    }
   };
 
   const handleAddPatient = () => {
@@ -174,7 +131,7 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation }) =>
       />
 
       {/* Floating Add Button */}
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.fab}
         onPress={handleAddPatient}
         activeOpacity={0.8}

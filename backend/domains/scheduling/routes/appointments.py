@@ -64,6 +64,7 @@ class AppointmentOut(BaseModel):
     duration: int
     status: str
     notes: Optional[str]
+    visit_number: Optional[int] = None
     created_at: datetime
     updated_at: datetime
     synced_at: Optional[datetime] = None
@@ -86,6 +87,18 @@ async def create_appointment(
             "%Y-%m-%d %H:%M"
         )
         
+        # Calculate visit number for this patient
+        visit_number = 1
+        if appointment.patient_id:
+            # Get max visit number for this patient
+            max_visit = db.query(Appointment).filter(
+                Appointment.patient_id == appointment.patient_id,
+                Appointment.visit_number.isnot(None)
+            ).order_by(Appointment.visit_number.desc()).first()
+            
+            if max_visit and max_visit.visit_number:
+                visit_number = max_visit.visit_number + 1
+        
         # Create appointment
         db_appointment = Appointment(
             clinic_id=current_user.clinic_id,
@@ -101,6 +114,7 @@ async def create_appointment(
             duration=appointment.duration,
             status=appointment.status,
             notes=appointment.notes,
+            visit_number=visit_number,
             created_by=current_user.id
         )
         
@@ -276,6 +290,7 @@ async def create_public_appointment(
             duration=appointment.duration,
             status=appointment.status,
             notes=appointment.notes,
+            visit_number=1,  # Public bookings start at visit 1
             created_by=None  # No logged-in user for public booking
         )
 

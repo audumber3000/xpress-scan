@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  ScrollView, 
-  StyleSheet, 
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
   Alert,
   Modal,
   Animated
@@ -17,22 +17,32 @@ import { GearLoader } from '../../../../shared/components/GearLoader';
 import { colors } from '../../../../shared/constants/colors';
 import { patientsApiService } from '../../../../services/api/patients.api';
 import { treatmentApiService } from '../../../../services/api/treatment.api';
+import { appointmentsApiService } from '../../../../services/api/appointments.api';
 
 interface AddPatientScreenProps {
   visible: boolean;
   onClose: () => void;
-  onPatientAdded: () => void;
+  onPatientAdded: (patient: any) => void;
+  initialData?: Partial<{
+    name: string;
+    phone: string;
+    gender: string;
+    treatmentType: string;
+    notes: string;
+    appointmentId: string;
+  }>;
 }
 
 export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
   visible,
   onClose,
   onPatientAdded,
+  initialData,
 }) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const slideAnim = new Animated.Value(300);
-  
+
   // Form state
   const [formData, setFormData] = useState({
     name: '',
@@ -59,9 +69,21 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
         duration: 300,
         useNativeDriver: false,
       }).start();
-      
+
       // Load dropdown data
       loadDropdownData();
+
+      // Pre-fill with initial data
+      if (initialData) {
+        setFormData(prev => ({
+          ...prev,
+          name: initialData.name || prev.name,
+          phone: initialData.phone || prev.phone,
+          gender: initialData.gender || prev.gender,
+          treatmentType: initialData.treatmentType || prev.treatmentType,
+          notes: initialData.notes || prev.notes,
+        }));
+      }
     } else {
       Animated.timing(slideAnim, {
         toValue: 300,
@@ -110,7 +132,7 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
     if (!formData.treatmentType.trim()) {
       newErrors.treatmentType = 'Treatment type is required';
     }
-    
+
     // referred_by is optional, so no validation needed
 
     setErrors(newErrors);
@@ -125,10 +147,10 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
     setLoading(true);
     try {
       console.log('🔄 [PATIENT] Creating new patient...');
-      
+
       const ageNumber = Number(formData.age);
       console.log('🔢 [PATIENT] Age conversion:', formData.age, '->', ageNumber, 'type:', typeof ageNumber);
-      
+
       const patientData = {
         name: formData.name.trim(),
         age: ageNumber,
@@ -142,9 +164,22 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
       };
 
       console.log('📋 [PATIENT] Patient data being sent:', JSON.stringify(patientData, null, 2));
-      await patientsApiService.createPatient(patientData);
-      console.log('✅ [PATIENT] Patient created successfully');
-      
+      const data = await patientsApiService.createPatient(patientData);
+      console.log('✅ [PATIENT] Patient created successfully', data);
+
+      // Link to appointment if appointmentId provided
+      if (initialData?.appointmentId) {
+        try {
+          console.log('🔗 [PATIENT] Linking to appointment:', initialData.appointmentId);
+          await appointmentsApiService.updateAppointment(initialData.appointmentId, {
+            patientId: data.id.toString(),
+            status: 'Registered' // Update status to Registered once file is created
+          });
+        } catch (linkError) {
+          console.error('❌ [PATIENT] Failed to link to appointment:', linkError);
+        }
+      }
+
       Alert.alert(
         'Success',
         'Patient registered successfully!',
@@ -152,7 +187,7 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
           {
             text: 'OK',
             onPress: () => {
-              onPatientAdded();
+              onPatientAdded(data);
               handleClose();
             },
           },
@@ -209,191 +244,191 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
       onRequestClose={handleClose}
     >
       <SafeAreaView style={styles.container}>
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-              <X size={24} color={colors.gray700} />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Register New Patient</Text>
-            <View style={styles.placeholder} />
-          </View>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+            <X size={24} color={colors.gray700} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Register New Patient</Text>
+          <View style={styles.placeholder} />
+        </View>
 
-          {/* Form Content */}
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            {loading ? (
-              <View style={styles.loadingContainer}>
-                <GearLoader text="Registering patient..." />
+        {/* Form Content */}
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <GearLoader text="Registering patient..." />
+            </View>
+          ) : (
+            <View style={styles.form}>
+              {/* Patient Name */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Patient Name *</Text>
+                <TextInput
+                  style={[styles.input, errors.name && styles.inputError]}
+                  value={formData.name}
+                  onChangeText={(value) => updateFormData('name', value)}
+                  placeholder="Enter patient name"
+                  placeholderTextColor={colors.gray400}
+                />
+                {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
               </View>
-            ) : (
-              <View style={styles.form}>
-                {/* Patient Name */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Patient Name *</Text>
-                  <TextInput
-                    style={[styles.input, errors.name && styles.inputError]}
-                    value={formData.name}
-                    onChangeText={(value) => updateFormData('name', value)}
-                    placeholder="Enter patient name"
-                    placeholderTextColor={colors.gray400}
-                  />
-                  {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
-                </View>
 
-                {/* Age */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Age *</Text>
-                  <TextInput
-                    style={[styles.input, errors.age && styles.inputError]}
-                    value={formData.age}
-                    onChangeText={(value) => updateFormData('age', value)}
-                    placeholder="Enter age"
-                    placeholderTextColor={colors.gray400}
-                    keyboardType="numeric"
-                    maxLength={3}
-                  />
-                  {errors.age && <Text style={styles.errorText}>{errors.age}</Text>}
-                </View>
+              {/* Age */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Age *</Text>
+                <TextInput
+                  style={[styles.input, errors.age && styles.inputError]}
+                  value={formData.age}
+                  onChangeText={(value) => updateFormData('age', value)}
+                  placeholder="Enter age"
+                  placeholderTextColor={colors.gray400}
+                  keyboardType="numeric"
+                  maxLength={3}
+                />
+                {errors.age && <Text style={styles.errorText}>{errors.age}</Text>}
+              </View>
 
-                {/* Gender */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Gender *</Text>
-                  <View style={styles.genderContainer}>
-                    {['Male', 'Female', 'Other'].map((gender) => (
-                      <TouchableOpacity
-                        key={gender}
-                        style={[
-                          styles.genderOption,
-                          formData.gender === gender && styles.genderOptionSelected
-                        ]}
-                        onPress={() => updateFormData('gender', gender)}
-                      >
-                        <Text style={[
-                          styles.genderText,
-                          formData.gender === gender && styles.genderTextSelected
-                        ]}>
-                          {gender}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                  {errors.gender && <Text style={styles.errorText}>{errors.gender}</Text>}
+              {/* Gender */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Gender *</Text>
+                <View style={styles.genderContainer}>
+                  {['Male', 'Female', 'Other'].map((gender) => (
+                    <TouchableOpacity
+                      key={gender}
+                      style={[
+                        styles.genderOption,
+                        formData.gender === gender && styles.genderOptionSelected
+                      ]}
+                      onPress={() => updateFormData('gender', gender)}
+                    >
+                      <Text style={[
+                        styles.genderText,
+                        formData.gender === gender && styles.genderTextSelected
+                      ]}>
+                        {gender}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
+                {errors.gender && <Text style={styles.errorText}>{errors.gender}</Text>}
+              </View>
 
-                {/* Village */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Village *</Text>
-                  <TextInput
-                    style={[styles.input, errors.village && styles.inputError]}
-                    value={formData.village}
-                    onChangeText={(value) => updateFormData('village', value)}
-                    placeholder="Enter village"
-                    placeholderTextColor={colors.gray400}
-                  />
-                  {errors.village && <Text style={styles.errorText}>{errors.village}</Text>}
-                </View>
+              {/* Village */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Village *</Text>
+                <TextInput
+                  style={[styles.input, errors.village && styles.inputError]}
+                  value={formData.village}
+                  onChangeText={(value) => updateFormData('village', value)}
+                  placeholder="Enter village"
+                  placeholderTextColor={colors.gray400}
+                />
+                {errors.village && <Text style={styles.errorText}>{errors.village}</Text>}
+              </View>
 
-                {/* Phone Number */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Phone Number *</Text>
-                  <TextInput
-                    style={[styles.input, errors.phone && styles.inputError]}
-                    value={formData.phone}
-                    onChangeText={(value) => updateFormData('phone', value)}
-                    placeholder="Enter phone number"
-                    placeholderTextColor={colors.gray400}
-                    keyboardType="phone-pad"
-                  />
-                  {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
-                </View>
+              {/* Phone Number */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Phone Number *</Text>
+                <TextInput
+                  style={[styles.input, errors.phone && styles.inputError]}
+                  value={formData.phone}
+                  onChangeText={(value) => updateFormData('phone', value)}
+                  placeholder="Enter phone number"
+                  placeholderTextColor={colors.gray400}
+                  keyboardType="phone-pad"
+                />
+                {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
+              </View>
 
-                {/* Referred By */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Referred By (Doctor)</Text>
-                  <TouchableOpacity
-                    style={[styles.input, styles.dropdownInput]}
-                    onPress={() => setShowDoctorDropdown(true)}
-                  >
-                    <Text style={[styles.dropdownText, !formData.referredBy && styles.placeholderText]}>
-                      {formData.referredBy || 'Select referring doctor (optional)'}
-                    </Text>
-                    <Text style={styles.dropdownArrow}>▼</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Treatment Type */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Treatment Type *</Text>
-                  <TouchableOpacity
-                    style={[styles.input, styles.dropdownInput, errors.treatmentType && styles.inputError]}
-                    onPress={() => setShowTreatmentDropdown(true)}
-                  >
-                    <Text style={[styles.dropdownText, !formData.treatmentType && styles.placeholderText]}>
-                      {formData.treatmentType || 'Select treatment type'}
-                    </Text>
-                    <Text style={styles.dropdownArrow}>▼</Text>
-                  </TouchableOpacity>
-                  {errors.treatmentType && <Text style={styles.errorText}>{errors.treatmentType}</Text>}
-                </View>
-
-                {/* Payment Type */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Payment Type</Text>
-                  <View style={styles.paymentContainer}>
-                    {['Cash', 'Card', 'Insurance'].map((type) => (
-                      <TouchableOpacity
-                        key={type}
-                        style={[
-                          styles.paymentOption,
-                          formData.paymentType === type && styles.paymentOptionSelected
-                        ]}
-                        onPress={() => updateFormData('paymentType', type)}
-                      >
-                        <Text style={[
-                          styles.paymentText,
-                          formData.paymentType === type && styles.paymentTextSelected
-                        ]}>
-                          {type}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                {/* Notes */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Notes</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    value={formData.notes}
-                    onChangeText={(value) => updateFormData('notes', value)}
-                    placeholder="Enter additional notes"
-                    placeholderTextColor={colors.gray400}
-                    multiline
-                    numberOfLines={4}
-                    textAlignVertical="top"
-                  />
-                </View>
-
-                {/* Submit Button */}
-                <TouchableOpacity 
-                  style={[styles.submitButton, loading && styles.submitButtonDisabled]} 
-                  onPress={handleSubmit}
-                  disabled={loading}
+              {/* Referred By */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Referred By (Doctor)</Text>
+                <TouchableOpacity
+                  style={[styles.input, styles.dropdownInput]}
+                  onPress={() => setShowDoctorDropdown(true)}
                 >
-                  {loading ? (
-                    <View style={styles.submitButtonContent}>
-                      <GearLoader size={20} color={colors.white} />
-                      <Text style={styles.submitButtonText}>Registering...</Text>
-                    </View>
-                  ) : (
-                    <Text style={styles.submitButtonText}>Register Patient</Text>
-                  )}
+                  <Text style={[styles.dropdownText, !formData.referredBy && styles.placeholderText]}>
+                    {formData.referredBy || 'Select referring doctor (optional)'}
+                  </Text>
+                  <Text style={styles.dropdownArrow}>▼</Text>
                 </TouchableOpacity>
-
-                <View style={{ height: 20 }} />
               </View>
-            )}
-          </ScrollView>
+
+              {/* Treatment Type */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Treatment Type *</Text>
+                <TouchableOpacity
+                  style={[styles.input, styles.dropdownInput, errors.treatmentType && styles.inputError]}
+                  onPress={() => setShowTreatmentDropdown(true)}
+                >
+                  <Text style={[styles.dropdownText, !formData.treatmentType && styles.placeholderText]}>
+                    {formData.treatmentType || 'Select treatment type'}
+                  </Text>
+                  <Text style={styles.dropdownArrow}>▼</Text>
+                </TouchableOpacity>
+                {errors.treatmentType && <Text style={styles.errorText}>{errors.treatmentType}</Text>}
+              </View>
+
+              {/* Payment Type */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Payment Type</Text>
+                <View style={styles.paymentContainer}>
+                  {['Cash', 'Card', 'Insurance'].map((type) => (
+                    <TouchableOpacity
+                      key={type}
+                      style={[
+                        styles.paymentOption,
+                        formData.paymentType === type && styles.paymentOptionSelected
+                      ]}
+                      onPress={() => updateFormData('paymentType', type)}
+                    >
+                      <Text style={[
+                        styles.paymentText,
+                        formData.paymentType === type && styles.paymentTextSelected
+                      ]}>
+                        {type}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Notes */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Notes</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={formData.notes}
+                  onChangeText={(value) => updateFormData('notes', value)}
+                  placeholder="Enter additional notes"
+                  placeholderTextColor={colors.gray400}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                />
+              </View>
+
+              {/* Submit Button */}
+              <TouchableOpacity
+                style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+                onPress={handleSubmit}
+                disabled={loading}
+              >
+                {loading ? (
+                  <View style={styles.submitButtonContent}>
+                    <GearLoader size={20} color={colors.white} />
+                    <Text style={styles.submitButtonText}>Registering...</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.submitButtonText}>Register Patient</Text>
+                )}
+              </TouchableOpacity>
+
+              <View style={{ height: 20 }} />
+            </View>
+          )}
+        </ScrollView>
 
         {/* Treatment Type Dropdown Modal */}
         <Modal
@@ -402,7 +437,7 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
           animationType="fade"
           onRequestClose={() => setShowTreatmentDropdown(false)}
         >
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.dropdownOverlay}
             activeOpacity={1}
             onPress={() => setShowTreatmentDropdown(false)}
@@ -456,7 +491,7 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
           animationType="fade"
           onRequestClose={() => setShowDoctorDropdown(false)}
         >
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.dropdownOverlay}
             activeOpacity={1}
             onPress={() => setShowDoctorDropdown(false)}

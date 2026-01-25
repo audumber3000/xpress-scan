@@ -28,10 +28,8 @@ class PatientService(PatientServiceProtocol):
         if not clinic or clinic.status != 'active':
             raise ValueError("Invalid or inactive clinic")
 
-        # Check for duplicate phone number in clinic
-        existing_patient = self.patient_repo.get_by_phone(clinic_id, patient_data['phone'])
-        if existing_patient:
-            raise ValueError(f"Patient with phone number {patient_data['phone']} already exists in this clinic")
+        # Note: Phone duplicate check removed to allow multiple patients with same phone
+        # This is needed for appointment workflow where duplicates are handled separately
 
         # Validate treatment type exists in clinic
         if 'treatment_type' in patient_data:

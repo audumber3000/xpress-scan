@@ -7,15 +7,21 @@ interface AppointmentCardProps {
 }
 
 const getStatusColor = (status: string) => {
-  switch (status.toUpperCase()) {
-    case 'FINISHED':
+  switch (status.toLowerCase()) {
+    case 'finished':
       return { border: '#10B981', bg: '#D1FAE5', text: '#065F46' };
-    case 'ENCOUNTER':
+    case 'encounter':
       return { border: '#F59E0B', bg: '#FEF3C7', text: '#92400E' };
-    case 'REGISTERED':
+    case 'registered':
       return { border: '#6B7280', bg: '#F3F4F6', text: '#374151' };
-    case 'CANCELLED':
+    case 'cancelled':
       return { border: '#EF4444', bg: '#FEE2E2', text: '#991B1B' };
+    case 'confirmed':
+      return { border: '#F59E0B', bg: '#FEF3C7', text: '#92400E' }; // Orange for Pending
+    case 'accepted':
+      return { border: '#10B981', bg: '#D1FAE5', text: '#065F46' }; // Green for Accepted
+    case 'rejected':
+      return { border: '#EF4444', bg: '#FEE2E2', text: '#991B1B' }; // Red for Rejected
     default:
       return { border: '#6B7280', bg: '#F3F4F6', text: '#374151' };
   }
@@ -45,7 +51,7 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({ appointment, o
         <View style={styles.appointmentRight}>
           <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
             <Text style={[styles.statusText, { color: statusColors.text }]}>
-              {appointment.status.toUpperCase()}
+              {appointment.status.toLowerCase() === 'confirmed' ? 'PENDING' : appointment.status.toUpperCase()}
             </Text>
           </View>
           <View style={[styles.statusDot, { backgroundColor: statusColors.border }]} />

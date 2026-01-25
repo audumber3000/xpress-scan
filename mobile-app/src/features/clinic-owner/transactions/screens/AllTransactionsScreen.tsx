@@ -28,6 +28,9 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = ({ na
       console.log('✅ [TRANSACTIONS] Loaded', data.length, 'transactions');
     } catch (err: any) {
       console.error('❌ [TRANSACTIONS] Load error:', err);
+      // Alert the user
+      const { Alert } = require('react-native');
+      Alert.alert('Error', `Failed to load transactions: ${err.message}`);
       // Set empty data on error to prevent infinite loading
       setTransactions([]);
     } finally {
@@ -67,59 +70,54 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = ({ na
           <GearLoader text="Loading transactions..." />
         </View>
       ) : (
-        <ScrollView 
-            style={styles.content} 
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor={colors.primary}
-                colors={[colors.primary]}
-                progressBackgroundColor={colors.gray100}
-              />
-            }
-          >
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+              progressBackgroundColor={colors.gray100}
+            />
+          }
+        >
           <View style={styles.transactionsList}>
-            {transactions.map((transaction) => (
-              <View key={transaction.id} style={styles.transactionCard}>
-                <View style={[
-                  styles.transactionIcon,
-                  { backgroundColor: transaction.type === 'visit' ? colors.successLight : colors.infoLight }
-                ]}>
-                  {transaction.type === 'visit' ? (
-                    <ArrowUpRight size={20} color={colors.success} />
-                  ) : (
-                    <ArrowDownLeft size={20} color={colors.info} />
-                  )}
-                </View>
-                
-                <View style={styles.transactionInfo}>
-                  <Text style={styles.transactionName}>{transaction.patientName}</Text>
-                  <Text style={styles.transactionDate}>{transaction.date}</Text>
-                </View>
+            {transactions.map((transaction) => {
+              const statusBgColor = transaction.status.toLowerCase() === 'completed' || transaction.status.toLowerCase() === 'success'
+                ? '#E6F9F1'
+                : '#FFFBEB';
+              const statusTextColor = transaction.status.toLowerCase() === 'completed' || transaction.status.toLowerCase() === 'success'
+                ? '#10B981'
+                : '#F59E0B';
 
-                <View style={styles.transactionRight}>
-                  <Text style={[
-                    styles.transactionAmount,
-                    { color: transaction.type === 'visit' ? colors.success : colors.info }
-                  ]}>
-                    ${transaction.amount}
-                  </Text>
-                  <View style={[
-                    styles.statusBadge,
-                    { backgroundColor: transaction.status === 'completed' ? colors.successLight : colors.warningLight }
-                  ]}>
-                    <Text style={[
-                      styles.statusText,
-                      { color: transaction.status === 'completed' ? colors.success : colors.warning }
-                    ]}>
-                      {transaction.status}
+              return (
+                <View key={transaction.id} style={styles.transactionCard}>
+                  <View style={styles.iconCircle}>
+                    <ArrowDownLeft size={24} color="#2E2A85" strokeWidth={2.5} />
+                  </View>
+
+                  <View style={styles.transactionInfo}>
+                    <Text style={styles.transactionName}>{transaction.patientName}</Text>
+                    <Text style={styles.transactionDate}>
+                      {transaction.time || '10:30 AM'} • {transaction.treatment || 'Treatment'}
                     </Text>
                   </View>
+
+                  <View style={styles.transactionRight}>
+                    <Text style={styles.transactionAmount}>
+                      ${transaction.amount.toLocaleString()}
+                    </Text>
+                    <View style={[styles.statusBadge, { backgroundColor: statusBgColor }]}>
+                      <Text style={[styles.statusText, { color: statusTextColor }]}>
+                        {transaction.status.toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
 
           {transactions.length === 0 && (
@@ -128,7 +126,7 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = ({ na
             </View>
           )}
 
-          <View style={{ height: 20 }} />
+          <View style={{ height: 40 }} />
         </ScrollView>
       )}
     </SafeAreaView>
@@ -138,27 +136,31 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = ({ na
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.gray50,
+    backgroundColor: '#F9FAFB',
   },
   header: {
-    backgroundColor: colors.primary,
+    backgroundColor: '#2E2A85',
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingTop: 40,
+    paddingBottom: 24,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: '600',
-    color: colors.white,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
   loadingContainer: {
     flex: 1,
@@ -167,24 +169,24 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingTop: 20,
   },
   transactionsList: {
     paddingHorizontal: 20,
-    gap: 12,
+    paddingTop: 24,
+    gap: 16,
   },
   transactionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  transactionIcon: {
-    width: 48,
-    height: 48,
+    backgroundColor: '#FFFFFF',
     borderRadius: 24,
+    padding: 16,
+  },
+  iconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#F3F4FE',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -193,14 +195,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   transactionName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.gray900,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#111827',
     marginBottom: 4,
   },
   transactionDate: {
     fontSize: 13,
-    color: colors.gray500,
+    color: '#9CA3AF',
+    fontWeight: '500',
   },
   transactionRight: {
     alignItems: 'flex-end',
@@ -208,17 +211,18 @@ const styles = StyleSheet.create({
   transactionAmount: {
     fontSize: 16,
     fontWeight: 'bold',
+    color: '#111827',
     marginBottom: 6,
   },
   statusBadge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
   },
   statusText: {
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'capitalize',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
   },
   emptyState: {
     flex: 1,
@@ -228,6 +232,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: colors.gray500,
+    color: '#6B7280',
   },
 });

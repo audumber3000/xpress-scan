@@ -18,7 +18,7 @@ export type AuthContextType = {
 
 export const AuthContext = createContext<AuthContextType | null>(null)
 
-export interface AuthProviderProps {}
+export interface AuthProviderProps { }
 
 export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
@@ -31,7 +31,7 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
     try {
       // Get Firebase ID token
       const idToken = await firebaseUser.getIdToken()
-      
+
       // Try to get stored user info first
       const storedUser = await authApiService.getUserInfo()
       if (storedUser) {
@@ -44,8 +44,15 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
         // Fetch fresh user info from backend
         const userInfo = await authApiService.getCurrentUser()
         setBackendUser(userInfo)
-      } catch (backendError) {
+      } catch (backendError: any) {
         console.warn('Backend sync failed:', backendError)
+        // Alert the user so they know something is wrong
+        const { Alert } = require('react-native');
+        Alert.alert(
+          'Connection Issue',
+          'Could not connect to the server. Some features may not work.\n' + (backendError.message || '')
+        );
+
         // If backend sync fails, try to use stored user info
         if (!storedUser) {
           // If no stored user, try to fetch from backend with existing token
@@ -67,7 +74,7 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
     // Listen to auth state changes
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser)
-      
+
       if (firebaseUser) {
         // Fetch backend user info when Firebase user is available
         await fetchBackendUser(firebaseUser)
@@ -78,7 +85,7 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
         await authApiService.clearTokens()
         setAuthEmail("")
       }
-      
+
       setIsLoading(false)
     })
 

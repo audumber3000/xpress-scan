@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        path:hover {
+            fill: red !important;
+            cursor: pointer;
+        }
+
+        .label {
+            font-size: 10px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="container"></div>
+    <script>
+        fetch('dental_chart.svg')
+            .then(r => r.text())
+            .then(svgText => {
+                const container = document.getElementById('container');
+                container.innerHTML = svgText;
+                const svg = container.querySelector('svg');
+                const paths = svg.querySelectorAll('path');
+
+                paths.forEach((p, i) => {
+                    const rect = p.getBBox();
+                    // Just a simple heuristic for now to show indexes
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    text.setAttribute('x', rect.x + rect.width / 2);
+                    text.setAttribute('y', rect.y + rect.height / 2);
+                    text.setAttribute('class', 'label');
+                    text.textContent = i;
+                    svg.appendChild(text);
+
+                    p.addEventListener('click', () => {
+                        console.log('Clicked path index:', i, 'Transform:', p.getAttribute('transform'));
+                    });
+                });
+            });
+    </script>
+</body>
+
+</html>

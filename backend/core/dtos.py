@@ -1,7 +1,7 @@
 """
 Data Transfer Objects for API requests and responses
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -10,13 +10,21 @@ from datetime import datetime
 class PatientBaseDTO(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     age: int = Field(..., ge=0, le=150)
-    gender: str = Field(..., pattern="^(male|female|other)$")
+    gender: str = Field(..., pattern="^(male|female|other|Male|Female|Other)$")
     village: str = Field(..., min_length=1, max_length=100)
     phone: str = Field(..., min_length=10, max_length=15)
     referred_by: str = Field(..., min_length=1, max_length=100)
     treatment_type: str = Field(..., min_length=1, max_length=100)
     notes: Optional[str] = None
     payment_type: str = Field(default="Cash", pattern="^(Cash|Card|UPI|Online)$")
+    
+    @field_validator('gender', mode='before')
+    @classmethod
+    def normalize_gender(cls, v):
+        """Normalize gender values to lowercase for validation and storage"""
+        if isinstance(v, str):
+            return v.lower()
+        return v
 
 
 class PatientCreateDTO(PatientBaseDTO):
@@ -33,6 +41,10 @@ class PatientUpdateDTO(BaseModel):
     treatment_type: Optional[str] = Field(None, min_length=1, max_length=100)
     notes: Optional[str] = None
     payment_type: Optional[str] = Field(None, pattern="^(Cash|Card|UPI|Online)$")
+    dental_chart: Optional[Dict[str, Any]] = None
+    tooth_notes: Optional[Dict[str, Any]] = None
+    treatment_plan: Optional[List[Dict[str, Any]]] = None
+    prescriptions: Optional[List[Dict[str, Any]]] = None
 
 
 class PatientResponseDTO(PatientBaseDTO):
@@ -42,6 +54,10 @@ class PatientResponseDTO(PatientBaseDTO):
     updated_at: datetime
     synced_at: Optional[datetime] = None
     sync_status: str = "local"
+    dental_chart: Optional[Dict[str, Any]] = None
+    tooth_notes: Optional[Dict[str, Any]] = None
+    treatment_plan: Optional[List[Dict[str, Any]]] = None
+    prescriptions: Optional[List[Dict[str, Any]]] = None
 
     class Config:
         from_attributes = True

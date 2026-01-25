@@ -12,6 +12,7 @@ interface ScreenHeaderProps {
   textColor?: string;
   iconColor?: string;
   variant?: 'default' | 'admin';
+  subtitle?: string;
 }
 
 export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
@@ -22,6 +23,7 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   textColor,
   iconColor,
   variant = 'default',
+  subtitle,
 }) => {
   const bgColor = backgroundColor || (variant === 'admin' ? '#FFFFFF' : '#FFFFFF');
   const txtColor = textColor || (variant === 'admin' ? '#111827' : '#111827');
@@ -30,7 +32,7 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   return (
     <View style={[styles.header, { backgroundColor: bgColor }]}>
       {onBackPress ? (
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.backButton}
           onPress={onBackPress}
           activeOpacity={0.7}
@@ -40,9 +42,12 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
       ) : (
         <View style={styles.backButton} />
       )}
-      
-      <Text style={[styles.headerTitle, { color: txtColor }]}>{title}</Text>
-      
+
+      <View style={styles.titleContainer}>
+        <Text style={[styles.headerTitle, { color: txtColor }]}>{title}</Text>
+        {subtitle && <Text style={styles.headerSubtitle}>{subtitle}</Text>}
+      </View>
+
       {rightComponent ? (
         <View style={styles.rightContainer}>
           {rightComponent}
@@ -69,12 +74,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  titleContainer: {
+    flex: 1,
+    justifyContent: 'center',
+  },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#111827',
-    flex: 1,
-    textAlign: 'left',
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
   },
   rightContainer: {
     width: 40,

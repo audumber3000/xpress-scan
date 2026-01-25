@@ -13,7 +13,9 @@ import {
   Phone, 
   Mail, 
   ExternalLink,
-  X
+  X,
+  FileText,
+  AlertTriangle
 } from "lucide-react";
 
 const Calendar = () => {
@@ -35,6 +37,8 @@ const Calendar = () => {
     sunday: { open: '08:00', close: '20:00', closed: true }
   });
   const [showPatientForm, setShowPatientForm] = useState(false);
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+  const [duplicatePatients, setDuplicatePatients] = useState([]);
   const [viewMode, setViewMode] = useState('week'); // 'week' or 'today'
   const [patientFormData, setPatientFormData] = useState({
     name: '',
@@ -47,6 +51,7 @@ const Calendar = () => {
     notes: '',
     payment_type: 'Cash'
   });
+  const [treatmentTypes, setTreatmentTypes] = useState([]);
   const [newAppointment, setNewAppointment] = useState({
     patientName: '',
     patientEmail: '',
@@ -59,63 +64,66 @@ const Calendar = () => {
   });
 
   // Fetch appointments from API
-  useEffect(() => {
-    const fetchAppointments = async () => {
-      try {
-        setLoading(true);
-        // Get date range for current month
-        const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-        const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+  const fetchAppointments = async () => {
+    try {
+      setLoading(true);
+      // Get date range for current month
+      const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+      
+      const dateFrom = firstDay.toISOString().split('T')[0];
+      const dateTo = lastDay.toISOString().split('T')[0];
+      
+      const response = await api.get('/appointments', {
+        params: { date_from: dateFrom, date_to: dateTo }
+      });
+      
+      // Transform API response to match calendar format
+      const transformedAppointments = response.map(apt => {
+        // Generate color based on status or treatment
+        const colors = [
+          "bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#2a276e]",
+          "bg-purple-100 border-purple-200 text-purple-800",
+          "bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#2a276e]",
+          "bg-pink-100 border-pink-200 text-pink-800",
+          "bg-yellow-100 border-yellow-200 text-yellow-800"
+        ];
+        const colorIndex = apt.id % colors.length;
         
-        const dateFrom = firstDay.toISOString().split('T')[0];
-        const dateTo = lastDay.toISOString().split('T')[0];
-        
-        const response = await api.get('/appointments', {
-          params: { date_from: dateFrom, date_to: dateTo }
-        });
-        
-        // Transform API response to match calendar format
-        const transformedAppointments = response.map(apt => {
-          // Generate color based on status or treatment
-          const colors = [
-            "bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#2a276e]",
-            "bg-purple-100 border-purple-200 text-purple-800",
-            "bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#2a276e]",
-            "bg-pink-100 border-pink-200 text-pink-800",
-            "bg-yellow-100 border-yellow-200 text-yellow-800"
-          ];
-          const colorIndex = apt.id % colors.length;
-          
-          return {
-            id: apt.id,
-            patientId: apt.patient_id || null,
-            patientName: apt.patient_name,
-            patientEmail: apt.patient_email || '',
-            patientPhone: apt.patient_phone || '',
-            patientAvatar: apt.patient_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
-            treatment: apt.treatment,
-            doctor: apt.doctor_name || 'Unassigned',
-            startTime: apt.start_time,
-            endTime: apt.end_time,
-            date: apt.appointment_date,
-            status: apt.status,
-            color: colors[colorIndex],
-            notes: apt.notes || ''
-          };
-        });
-        
-        console.log('✅ Fetched appointments from API:', response.length);
-        console.log('📊 Transformed appointments:', transformedAppointments);
-        setAppointments(transformedAppointments);
-      } catch (error) {
-        console.error('Error fetching appointments:', error);
-        setAppointments([]);
-      } finally {
-        setLoading(false);
-      }
-    };
+        return {
+          id: apt.id,
+          patientId: apt.patient_id || null,
+          patientName: apt.patient_name,
+          patientEmail: apt.patient_email || '',
+          patientPhone: apt.patient_phone || '',
+          patientAvatar: apt.patient_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+          treatment: apt.treatment,
+          doctor: apt.doctor_name || 'Unassigned',
+          startTime: apt.start_time,
+          endTime: apt.end_time,
+          date: apt.appointment_date,
+          status: apt.status,
+          color: colors[colorIndex],
+          notes: apt.notes || '',
+          visitNumber: apt.visit_number || null
+        };
+      });
+      
+      console.log('✅ Fetched appointments from API:', response.length);
+      console.log('📊 Transformed appointments:', transformedAppointments);
+      setAppointments(transformedAppointments);
+    } catch (error) {
+      console.error('Error fetching appointments:', error);
+      setAppointments([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchAppointments();
+    fetchClinicData();
+    fetchTreatmentTypes();
   }, [currentDate]);
 
   // Get relative date label (Today, Yesterday, Tomorrow)
@@ -328,27 +336,27 @@ const Calendar = () => {
   };
 
   // Fetch clinic data
-  useEffect(() => {
-    const fetchClinicData = async () => {
-      try {
-        const response = await api.get("/auth/me");
-        console.log("API Response:", response);
-        console.log("Clinic Data:", response.clinic);
-        setClinicData(response.clinic);
-        
-        // Set clinic timings if available
-        if (response.clinic && response.clinic.timings) {
-          setClinicTimings(response.clinic.timings);
-        }
-      } catch (error) {
-        console.error("Error fetching clinic data:", error);
+  const fetchClinicData = async () => {
+    try {
+      const response = await api.get('/clinics/me');
+      setClinicData(response);
+      if (response.timings) {
+        setClinicTimings(response.timings);
       }
-    };
-    
-    if (user) {
-      fetchClinicData();
+    } catch (error) {
+      console.error('Error fetching clinic data:', error);
     }
-  }, [user]);
+  };
+
+  const fetchTreatmentTypes = async () => {
+    try {
+      const response = await api.get('/treatment-types/');
+      setTreatmentTypes(response);
+    } catch (error) {
+      console.error('Error fetching treatment types:', error);
+      setTreatmentTypes([]);
+    }
+  };
 
   // Fetch full appointment details when selectedAppointment changes to ensure we have latest patient_id
   useEffect(() => {
@@ -721,20 +729,20 @@ const Calendar = () => {
       treatment: '',
       time: '',
       duration: '1',
-        date: new Date().toISOString().split('T')[0],
+      date: new Date().toISOString().split('T')[0],
       status: 'confirmed'
     });
     setShowAddForm(false);
     
     alert('✅ Appointment created successfully!');
-    } catch (error) {
-      console.error('Error creating appointment:', error);
-      const errorMessage = error.response?.data?.detail || error.message || 'Unknown error';
-      alert(`Failed to create appointment: ${errorMessage}`);
-    }
-  };
+  } catch (error) {
+    console.error('Error creating appointment:', error);
+    const errorMessage = error.response?.data?.detail || error.message || 'Unknown error';
+    alert(`Failed to create appointment: ${errorMessage}`);
+  }
+};
 
-  // Handle appointment acceptance
+  // Handle appointment acceptance (NO auto-create patient file)
   const handleAcceptAppointment = async () => {
     try {
       const response = await api.put(`/appointments/${selectedAppointment.id}`, {
@@ -748,28 +756,14 @@ const Calendar = () => {
           : apt
       ));
       
-      // Update selected appointment with new status and patient_id if available
+      // Update selected appointment - patient_id stays null until file created manually
       setSelectedAppointment({ 
         ...selectedAppointment, 
         status: 'accepted',
-        patientId: response.patient_id || selectedAppointment.patientId || null
+        patientId: null  // No auto-create patient file
       });
       
-      // Prefill patient form with appointment data
-      setPatientFormData({
-        name: selectedAppointment.patientName,
-        age: '',
-        gender: '',
-        village: '',
-        phone: selectedAppointment.patientPhone || '',
-        referred_by: 'Walk-in',
-        treatment_type: selectedAppointment.treatment,
-        notes: selectedAppointment.notes || '',
-        payment_type: 'Cash'
-      });
-      
-      // Show patient registration form
-      setShowPatientForm(true);
+      alert('Appointment accepted! You can now create a patient file from the appointment details.');
     } catch (error) {
       console.error('Error accepting appointment:', error);
       alert('Failed to accept appointment. Please try again.');
@@ -806,6 +800,53 @@ const Calendar = () => {
     }
   };
 
+  // Handle creating patient file - check for duplicates first
+  const handleCreatePatientFile = async () => {
+    try {
+      console.log('🔍 Checking for duplicates with data:', {
+        name: selectedAppointment.patientName,
+        phone: selectedAppointment.patientPhone,
+        email: selectedAppointment.patientEmail
+      });
+      
+      // Check for duplicate patients
+      const duplicateCheck = await api.post('/patients/check-duplicates', {
+        name: selectedAppointment.patientName,
+        phone: selectedAppointment.patientPhone,
+        email: selectedAppointment.patientEmail
+      });
+      
+      console.log('✅ Duplicate check response:', duplicateCheck);
+      
+      if (duplicateCheck && duplicateCheck.length > 0) {
+        // Found duplicates - show warning modal
+        console.log(`⚠️ Found ${duplicateCheck.length} duplicate(s)`);
+        setDuplicatePatients(duplicateCheck);
+        setShowDuplicateWarning(true);
+      } else {
+        // No duplicates - show patient form to create new file
+        console.log('✅ No duplicates found, showing patient form');
+        setPatientFormData({
+          name: selectedAppointment.patientName,
+          age: '',
+          gender: '',
+          village: '',
+          phone: selectedAppointment.patientPhone || '',
+          referred_by: 'Walk-in',
+          treatment_type: selectedAppointment.treatment,
+          notes: selectedAppointment.notes || '',
+          payment_type: 'Cash'
+        });
+        setShowPatientForm(true);
+      }
+    } catch (error) {
+      console.error('❌ Error checking duplicates:', error);
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      alert(`Failed to check for duplicate patients: ${error.response?.data?.detail || error.message}`);
+    }
+  };
+
   // Handle patient registration after accepting appointment
   const handlePatientRegistration = async (e) => {
     e.preventDefault();
@@ -835,6 +876,31 @@ const Calendar = () => {
       await api.put(`/appointments/${selectedAppointment.id}`, {
         patient_id: patientResponse.id
       });
+
+      // Add appointment to patient's treatment plan
+      try {
+        const appointmentDate = new Date(selectedAppointment.date);
+        const treatmentPlanData = {
+          procedure: selectedAppointment.treatment,
+          date: appointmentDate.toISOString().split('T')[0],
+          time: selectedAppointment.startTime,
+          visit_number: 1, // First visit for new patient
+          status: 'scheduled',
+          cost: 0,
+          notes: selectedAppointment.notes || `Appointment from calendar`,
+          doctor_id: null,
+          duration: 60,
+          create_appointment: false // Don't create another appointment, just add to treatment plan
+        };
+        
+        console.log('📋 Creating treatment plan entry:', treatmentPlanData);
+        const treatmentPlanResponse = await api.post(`/patients/${patientResponse.id}/treatment-plans`, treatmentPlanData);
+        console.log('✅ Added appointment to treatment plan:', treatmentPlanResponse);
+      } catch (error) {
+        console.error('⚠️ Failed to add to treatment plan:', error);
+        console.error('⚠️ Treatment plan error details:', error.message);
+        // Continue even if treatment plan fails
+      }
       
       // Update selected appointment with patient_id and refresh appointments list
       const updatedAppointment = { 
@@ -936,13 +1002,106 @@ const Calendar = () => {
       
     } catch (error) {
       console.error('❌ Error registering patient:', error);
-      console.error('❌ Error response:', error.response?.data);
-      console.error('❌ Error status:', error.response?.status);
-      console.error('❌ Full error:', JSON.stringify(error.response, null, 2));
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Full error object:', error);
       
       // Show more detailed error message
-      const errorMessage = error.response?.data?.detail || error.message || 'Unknown error';
+      const errorMessage = error.message || 'Unknown error';
       alert(`Failed to register patient.\n\nError: ${errorMessage}\n\nPlease check the console for more details.`);
+    }
+  };
+
+  // Handle creating new patient with suffix
+  const handleCreateNewPatientWithSuffix = async () => {
+    try {
+      // Find highest suffix number for this name
+      const baseName = selectedAppointment.patientName;
+      const existingWithSuffix = duplicatePatients.filter(p => p.name.startsWith(baseName));
+      let suffix = 2;
+      
+      existingWithSuffix.forEach(p => {
+        const match = p.name.match(/\((\d+)\)$/);
+        if (match) {
+          const num = parseInt(match[1]);
+          if (num >= suffix) suffix = num + 1;
+        }
+      });
+      
+      const newName = `${baseName} (${suffix})`;
+      
+      // Pre-fill form with new name
+      setPatientFormData({
+        name: newName,
+        age: '',
+        gender: '',
+        village: '',
+        phone: selectedAppointment.patientPhone || '',
+        referred_by: 'Walk-in',
+        treatment_type: selectedAppointment.treatment,
+        notes: selectedAppointment.notes || '',
+        payment_type: 'Cash'
+      });
+      
+      setShowDuplicateWarning(false);
+      setShowPatientForm(true);
+    } catch (error) {
+      console.error('Error creating new patient:', error);
+      alert('Failed to create new patient. Please try again.');
+    }
+  };
+
+  // Handle linking to existing patient
+  const handleLinkToExistingPatient = async (patientId) => {
+    try {
+      // Link appointment to existing patient
+      await api.put(`/appointments/${selectedAppointment.id}`, {
+        patient_id: patientId
+      });
+
+      // Add appointment to existing patient's treatment plan
+      try {
+        // First, get existing patient's treatment plans to determine visit number
+        const existingPlans = await api.get(`/patients/${patientId}/treatment-plans`);
+        const nextVisitNumber = existingPlans.length + 1;
+
+        const appointmentDate = new Date(selectedAppointment.date);
+        const treatmentPlanData = {
+          procedure: selectedAppointment.treatment,
+          date: appointmentDate.toISOString().split('T')[0],
+          time: selectedAppointment.startTime,
+          visit_number: nextVisitNumber,
+          status: 'scheduled',
+          cost: 0,
+          notes: selectedAppointment.notes || `Appointment from calendar`,
+          doctor_id: null,
+          duration: 60,
+          create_appointment: false // Don't create another appointment, just add to treatment plan
+        };
+        
+        await api.post(`/patients/${patientId}/treatment-plans`, treatmentPlanData);
+        console.log(`✅ Added appointment to treatment plan as visit #${nextVisitNumber}`);
+      } catch (error) {
+        console.error('⚠️ Failed to add to treatment plan:', error);
+        // Continue even if treatment plan fails
+      }
+      
+      // Update local state
+      setAppointments(prev => prev.map(apt => 
+        apt.id === selectedAppointment.id 
+          ? { ...apt, patientId: patientId }
+          : apt
+      ));
+      
+      setSelectedAppointment({ 
+        ...selectedAppointment, 
+        patientId: patientId
+      });
+      
+      setShowDuplicateWarning(false);
+      alert('✅ Appointment linked to existing patient successfully!');
+    } catch (error) {
+      console.error('Error linking to existing patient:', error);
+      alert('Failed to link appointment. Please try again.');
     }
   };
 
@@ -1358,6 +1517,13 @@ const Calendar = () => {
                           }}
                         >
                           <div className="p-2 h-full flex flex-col justify-center relative">
+                            {/* File icon indicator - show if patient file exists */}
+                            {appointment.patientId && (
+                              <div className="absolute top-1 left-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center z-10" title="Patient file exists">
+                                <FileText className="w-3 h-3 text-white" />
+                              </div>
+                            )}
+                            
                             {/* Status indicator badge */}
                             {appointment.status === 'accepted' && (
                               <div className="absolute top-1 right-1 w-5 h-5 bg-[#2a276e] rounded-full flex items-center justify-center z-10">
@@ -1409,13 +1575,23 @@ const Calendar = () => {
             </div>
             <div className="flex-1 overflow-y-auto p-6">
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 bg-[#9B8CFF]/20 rounded-full flex items-center justify-center text-xl font-semibold text-[#2a276e]">
+                <div className="w-16 h-16 bg-[#9B8CFF]/20 rounded-full flex items-center justify-center text-xl font-semibold text-[#2a276e] relative">
                   {selectedAppointment.patientAvatar}
+                  {selectedAppointment.patientId && (
+                    <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center" title="Patient file exists">
+                      <FileText className="w-3 h-3 text-white" />
+                    </div>
+                  )}
                 </div>
                 <div>
                   <h4 className="text-lg font-semibold text-gray-900">
                     {selectedAppointment.patientName}
                   </h4>
+                  {selectedAppointment.patientId && (
+                    <div className="text-xs text-green-600 font-medium mb-1">
+                      ✓ Patient file exists
+                    </div>
+                  )}
                   <div className="flex items-center gap-4 text-sm text-gray-600">
                     <div className="flex items-center gap-1">
                       <Phone className="w-3 h-3" />
@@ -1439,6 +1615,14 @@ const Calendar = () => {
                   <span className="text-sm font-medium text-gray-600">Doctor:</span>
                   <span className="ml-2 text-sm text-gray-900">{selectedAppointment.doctor}</span>
                 </div>
+                {selectedAppointment.visitNumber && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Visit Number:</span>
+                    <span className="ml-2 inline-flex items-center justify-center px-3 py-1 rounded-lg bg-gradient-to-br from-[#2a276e] to-[#4c449c] text-white font-bold text-sm shadow-md">
+                      Visit #{selectedAppointment.visitNumber}
+                    </span>
+                  </div>
+                )}
                 <div>
                   <span className="text-sm font-medium text-gray-600">Status:</span>
                   <span className={`ml-2 text-sm font-semibold ${
@@ -1505,28 +1689,33 @@ const Calendar = () => {
                 </div>
               )}
               
-              {/* See Patient Details button - only show for accepted appointments with patient_id */}
-              {(() => {
-                const isAccepted = selectedAppointment.status === 'accepted';
-                const hasPatientId = selectedAppointment.patientId !== null && selectedAppointment.patientId !== undefined;
-                console.log('🔍 Button visibility check:', {
-                  isAccepted,
-                  hasPatientId,
-                  patientId: selectedAppointment.patientId,
-                  status: selectedAppointment.status
-                });
-                return isAccepted && hasPatientId;
-              })() && (
-                <button 
-                  onClick={() => {
-                    navigate(`/patient-profile/${selectedAppointment.patientId}`);
-                    setSelectedAppointment(null); // Close modal
-                  }}
-                  className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
-                >
-                  <span>See Patient Details</span>
-                  <ExternalLink className="w-4 h-4" />
-                </button>
+              {/* Patient File Actions - Show based on appointment status and patient_id */}
+              {selectedAppointment.status === 'accepted' && (
+                <>
+                  {selectedAppointment.patientId ? (
+                    // Has patient file - show View button
+                    <button 
+                      onClick={() => {
+                        navigate(`/patient-profile/${selectedAppointment.patientId}?tab=timeline`);
+                        setSelectedAppointment(null);
+                      }}
+                      className="w-full bg-[#2a276e] text-white py-3 rounded-lg hover:bg-[#1a1548] transition-colors flex items-center justify-center gap-2 font-semibold shadow-lg"
+                    >
+                      <FileText className="w-4 h-4" />
+                      <span>View Patient File</span>
+                      <ExternalLink className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    // No patient file - show Create button
+                    <button 
+                      onClick={handleCreatePatientFile}
+                      className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-semibold shadow-lg"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Create Patient File</span>
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -1642,19 +1831,24 @@ const Calendar = () => {
                   />
                 </div>
 
-                {/* Treatment Type (pre-filled from appointment) */}
+                {/* Treatment Type (dropdown from clinic's treatment types) */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Treatment Type *
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={patientFormData.treatment_type}
                     onChange={(e) => setPatientFormData({ ...patientFormData, treatment_type: e.target.value })}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent bg-gray-50"
-                    placeholder="Treatment type"
-                  />
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent bg-white"
+                  >
+                    <option value="">Select treatment type</option>
+                    {treatmentTypes.map((type) => (
+                      <option key={type.id} value={type.name}>
+                        {type.name} - ₹{type.price}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Payment Type */}
@@ -1669,9 +1863,9 @@ const Calendar = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                   >
                     <option value="Cash">Cash</option>
-                    <option value="Credit Card">Credit Card</option>
-                    <option value="Insurance">Insurance</option>
-                    <option value="Other">Other</option>
+                    <option value="Card">Card</option>
+                    <option value="UPI">UPI</option>
+                    <option value="Online">Online</option>
                   </select>
                 </div>
 
@@ -1908,6 +2102,86 @@ const Calendar = () => {
                   Add Appointment
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Patient Warning Modal */}
+      {showDuplicateWarning && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 backdrop-blur-sm bg-black/30" onClick={() => setShowDuplicateWarning(false)}></div>
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <div className="flex items-center gap-3 p-6 border-b border-gray-200 bg-yellow-50">
+              <AlertTriangle className="w-6 h-6 text-yellow-600" />
+              <h3 className="text-xl font-semibold text-gray-900">Similar Patient Found</h3>
+            </div>
+            <div className="p-6 max-h-96 overflow-y-auto">
+              <p className="text-gray-700 mb-4">
+                We found {duplicatePatients.length} patient(s) with similar details in your records:
+              </p>
+              
+              {duplicatePatients.map((patient) => (
+                <div key={patient.id} className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-900">{patient.name}</h4>
+                      <div className="mt-2 space-y-1 text-sm text-gray-600">
+                        {patient.phone && (
+                          <div className="flex items-center gap-2">
+                            <Phone className="w-4 h-4" />
+                            <span>{patient.phone}</span>
+                          </div>
+                        )}
+                        {patient.email && (
+                          <div className="flex items-center gap-2">
+                            <Mail className="w-4 h-4" />
+                            <span>{patient.email}</span>
+                          </div>
+                        )}
+                        {patient.age && <span>Age: {patient.age}</span>}
+                        {patient.gender && <span> • Gender: {patient.gender}</span>}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => window.open(`/patient-profile/${patient.id}`, '_blank')}
+                      className="ml-4 px-3 py-1.5 text-sm bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition-colors flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      View Records
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => handleLinkToExistingPatient(patient.id)}
+                    className="mt-3 w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                  >
+                    Link to This Patient
+                  </button>
+                </div>
+              ))}
+              
+              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-900 font-medium mb-2">What would you like to do?</p>
+                <p className="text-sm text-blue-700">
+                  • <strong>Link to Existing Patient:</strong> Click the button above to merge this appointment with an existing patient record<br/>
+                  • <strong>Create New Patient:</strong> Click below to create a separate patient file (name will have a suffix like "(2)")
+                </p>
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 flex gap-3">
+              <button
+                onClick={() => setShowDuplicateWarning(false)}
+                className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateNewPatientWithSuffix}
+                className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Create New Patient File
+              </button>
             </div>
           </div>
         </div>

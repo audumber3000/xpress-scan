@@ -4,6 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
 import GearLoader from "../components/GearLoader";
 import { api } from "../utils/api";
+import { patientService } from '../services/patientService';
 
 const PatientFiles = () => {
   const { user } = useAuth();
@@ -64,7 +65,7 @@ const PatientFiles = () => {
   const fetchPatients = async () => {
     try {
       setLoading(true);
-      const response = await api.get("/patients/");
+      const response = await patientService.getPatients();
       console.log("PatientFiles API Response:", response);
       console.log("Is Array?", Array.isArray(response));
       console.log("Length:", response?.length);

@@ -23,7 +23,7 @@ def get_db():
     finally:
         db.close()
 
-@router.get("/", response_model=List[PatientResponse])
+@router.get("/", response_model=List[PatientOut])
 def get_patients(
     skip: int = 0, 
     limit: int = 100, 
@@ -31,32 +31,14 @@ def get_patients(
     current_user = Depends(require_patients_view)
 ):
     """Get all patients for current clinic"""
-    # Check if user has a clinic_id
     if not current_user.clinic_id:
-        return []  # Return empty list if user doesn't have a clinic
+        return []
     
     patients = db.query(Patient).filter(
         Patient.clinic_id == current_user.clinic_id
     ).offset(skip).limit(limit).all()
     
-    return [
-        PatientResponse(
-            id=patient.id,
-            clinic_id=patient.clinic_id,
-            name=patient.name,
-            age=patient.age,
-            gender=patient.gender,
-            village=patient.village,
-            phone=patient.phone,
-            referred_by=patient.referred_by,
-            treatment_type=patient.treatment_type,
-            notes=patient.notes,
-            created_at=patient.created_at,
-            updated_at=getattr(patient, 'updated_at', patient.created_at),  # Use created_at as fallback
-            synced_at=getattr(patient, 'synced_at', None),
-            sync_status=getattr(patient, 'sync_status', 'local')
-        ) for patient in patients
-    ]
+    return patients
 
 @router.post("/", response_model=PatientOut, status_code=status.HTTP_201_CREATED)
 def create_patient(
@@ -70,8 +52,6 @@ def create_patient(
         patient_data = patient.dict()
         patient_data['clinic_id'] = current_user.clinic_id
         
-
-        
         # Create patient first
         db_patient = Patient(**patient_data)
         db.add(db_patient)
@@ -83,11 +63,9 @@ def create_patient(
             TreatmentType.name == patient.treatment_type
         ).first()
         
-        # Calculate amount (use treatment type price if found, otherwise default)
-        # All amounts are in INR (Indian Rupees)
-        amount = treatment_type.price if treatment_type else 2000.0  # Default amount in INR if treatment type not found
+        amount = treatment_type.price if treatment_type else 2000.0
         
-        # Generate invoice number (INV-YYYY-XXXX format)
+        # Generate invoice number
         year = datetime.utcnow().year
         last_invoice = db.query(Invoice).filter(
             Invoice.clinic_id == current_user.clinic_id,
@@ -105,7 +83,7 @@ def create_patient(
         
         invoice_number = f"INV-{year}-{new_num:04d}"
         
-        # Create invoice with draft status (instead of payment)
+        # Create invoice with draft status
         invoice = Invoice(
             clinic_id=current_user.clinic_id,
             patient_id=db_patient.id,
@@ -141,7 +119,7 @@ def create_patient(
         db.commit()
         db.refresh(db_patient)
         
-        # Send welcome message via WhatsApp if patient has phone number
+        # Welcome message flow... (keep it as is)
         if db_patient.phone:
             try:
                 from routes.message_templates import get_template_for_scenario, render_template
@@ -149,20 +127,12 @@ def create_patient(
                 import re
                 import os
                 
-                # Get clinic info
                 from models import Clinic
                 clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
                 
-                # Get welcome template or use default
                 default_welcome = f"Welcome to {clinic.name if clinic else 'our clinic'}, {db_patient.name}! We're glad to have you as our patient. If you have any questions, please don't hesitate to reach out."
-                welcome_message = get_template_for_scenario(
-                    db, 
-                    current_user.clinic_id, 
-                    "welcome",
-                    default_welcome
-                )
+                welcome_message = get_template_for_scenario(db, current_user.clinic_id, "welcome", default_welcome)
                 
-                # Render template with variables
                 template_vars = {
                     "patient_name": db_patient.name,
                     "clinic_name": clinic.name if clinic else "our clinic",
@@ -171,61 +141,24 @@ def create_patient(
                 }
                 rendered_message = render_template(welcome_message, template_vars)
                 
-                # Clean phone number
                 clean_phone = re.sub(r'\D', '', str(db_patient.phone))
                 if len(clean_phone) == 10:
                     clean_phone = "91" + clean_phone
                 
-                # Send via WhatsApp service
                 WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://localhost:3001")
-                try:
-                    response = requests.post(
-                        f"{WHATSAPP_SERVICE_URL}/api/send/{current_user.id}",
-                        json={
-                            "phone": clean_phone,
-                            "message": rendered_message
-                        },
-                        timeout=30
-                    )
-                    if response.status_code == 200:
-                        print(f"✅ Welcome message sent to {db_patient.name} ({clean_phone})")
-                    else:
-                        print(f"⚠️ Failed to send welcome message: {response.status_code}")
-                except Exception as whatsapp_error:
-                    # Don't fail patient creation if WhatsApp fails
-                    print(f"⚠️ Error sending welcome message: {whatsapp_error}")
+                requests.post(
+                    f"{WHATSAPP_SERVICE_URL}/api/send/{current_user.id}",
+                    json={"phone": clean_phone, "message": rendered_message},
+                    timeout=30
+                )
             except Exception as e:
-                # Don't fail patient creation if welcome message fails
-                print(f"⚠️ Error in welcome message flow: {e}")
+                print(f"⚠️ Welcome message error: {e}")
         
-        return PatientOut(
-            id=db_patient.id,
-            clinic_id=db_patient.clinic_id,
-            name=db_patient.name,
-            age=db_patient.age,
-            gender=db_patient.gender,
-            village=db_patient.village,
-            phone=db_patient.phone,
-            referred_by=db_patient.referred_by,
-            treatment_type=db_patient.treatment_type,
-            notes=db_patient.notes,
-            payment_type=db_patient.payment_type,
-            created_at=db_patient.created_at
-        )
-    except HTTPException:
-        # Re-raise HTTP exceptions as-is
-        raise
+        return db_patient
     except Exception as e:
         db.rollback()
-
-        
-        # Check if it's a unique constraint violation
         if "duplicate key value violates unique constraint" in str(e):
-            raise HTTPException(
-                status_code=409, 
-                detail="A patient with this information already exists. Please check the details and try again."
-            )
-        
+            raise HTTPException(status_code=409, detail="A patient with this information already exists.")
         raise HTTPException(status_code=500, detail=f"Failed to create patient: {str(e)}")
 
 @router.get("/{patient_id}", response_model=PatientOut)
@@ -243,23 +176,7 @@ def get_patient(
     if not db_patient:
         raise HTTPException(status_code=404, detail="Patient not found")
     
-    return PatientOut(
-        id=db_patient.id,
-        clinic_id=db_patient.clinic_id,
-        name=db_patient.name,
-        age=db_patient.age,
-        gender=db_patient.gender,
-        village=db_patient.village,
-        phone=db_patient.phone,
-        referred_by=db_patient.referred_by,
-        treatment_type=db_patient.treatment_type,
-        notes=db_patient.notes,
-        payment_type=db_patient.payment_type,
-        created_at=db_patient.created_at,
-        updated_at=getattr(db_patient, 'updated_at', db_patient.created_at),
-        synced_at=getattr(db_patient, 'synced_at', None),
-        sync_status=getattr(db_patient, 'sync_status', 'local')
-    )
+    return db_patient
 
 @router.put("/{patient_id}", response_model=PatientOut)
 def update_patient(

@@ -77,6 +77,12 @@ class PatientBase(BaseModel):
     treatment_type: str
     notes: Optional[str] = None
     payment_type: str = "Cash"
+    
+    # Dental specific data
+    dental_chart: Optional[Dict[str, Any]] = None
+    tooth_notes: Optional[Dict[str, Any]] = None
+    treatment_plan: Optional[List[Any]] = None
+    prescriptions: Optional[List[Any]] = None
 
 class PatientCreate(PatientBase):
     clinic_id: Optional[int] = None

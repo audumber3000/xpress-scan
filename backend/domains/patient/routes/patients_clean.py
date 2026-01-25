@@ -147,6 +147,13 @@ async def update_patient(
         # Filter out None values
         update_data = {k: v for k, v in patient_data.dict().items() if v is not None}
 
+        print(f"📝 [UPDATE PATIENT] Patient ID: {patient_id}")
+        print(f"📝 [UPDATE PATIENT] Update data keys: {list(update_data.keys())}")
+        print(f"📝 [UPDATE PATIENT] Has dental_chart: {'dental_chart' in update_data}")
+        print(f"📝 [UPDATE PATIENT] Has tooth_notes: {'tooth_notes' in update_data}")
+        print(f"📝 [UPDATE PATIENT] Has treatment_plan: {'treatment_plan' in update_data}")
+        print(f"📝 [UPDATE PATIENT] Has prescriptions: {'prescriptions' in update_data}")
+
         if not update_data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -158,6 +165,7 @@ async def update_patient(
             update_data,
             current_user.clinic_id
         )
+        print(f"✅ [UPDATE PATIENT] Patient updated successfully")
 
         if not patient:
             raise HTTPException(

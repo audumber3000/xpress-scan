@@ -86,6 +86,13 @@ class Patient(Base):
     treatment_type = Column(String, nullable=False)
     notes = Column(Text)
     payment_type = Column(String, nullable=False, default="Cash")
+    
+    # Dental History & Planning data (stored as JSON for flexibility)
+    dental_chart = Column(JSON, nullable=True)  # Stores teethData
+    tooth_notes = Column(JSON, nullable=True)   # Stores tooth-specific notes
+    treatment_plan = Column(JSON, nullable=True) # Stores the proposed treatment sequence
+    prescriptions = Column(JSON, nullable=True)  # Stores clinical prescriptions
+    
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     synced_at = Column(DateTime, nullable=True)
@@ -177,6 +184,7 @@ class Appointment(Base):
     duration = Column(Integer, nullable=False, default=60)  # Duration in minutes
     status = Column(String, default='confirmed')  # confirmed, completed, cancelled, no-show
     notes = Column(Text, nullable=True)  # Additional notes
+    visit_number = Column(Integer, nullable=True)  # Visit number from treatment plan
     created_by = Column(Integer, ForeignKey('users.id'), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)

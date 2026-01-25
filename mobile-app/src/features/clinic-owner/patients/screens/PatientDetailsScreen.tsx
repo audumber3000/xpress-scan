@@ -1,82 +1,131 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Phone, Mail, MapPin, Calendar } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
 import { GearLoader } from '../../../../shared/components/GearLoader';
 import { patientsApiService, Patient } from '../../../../services/api/patients.api';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
+import { DentalChart } from '../components/DentalChart';
+import { TimelineView } from '../components/TimelineView';
+import { BillingView } from '../components/BillingView';
+import { PatientInfoView } from '../components/PatientInfoView';
+import { PrescriptionsView } from '../components/PrescriptionsView';
+
+import { appointmentsApiService } from '../../../../services/api/appointments.api';
+import { transactionsApiService } from '../../../../services/api/transactions.api';
 
 interface PatientDetailsScreenProps {
   navigation: any;
   route: {
     params: {
       patientId: string;
+      initialTab?: string;
     };
   };
 }
 
+type TabType = 'chart' | 'timeline' | 'billing' | 'profile' | 'prescriptions';
+
+import { Phone, MessageCircle } from 'lucide-react-native';
+
 export const PatientDetailsScreen: React.FC<PatientDetailsScreenProps> = ({ navigation, route }) => {
-  const { patientId } = route.params;
+  const { patientId, initialTab } = route.params;
   const [patient, setPatient] = useState<Patient | null>(null);
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'chart' | 'timeline' | 'billing' | 'profile' | 'prescriptions'>('chart');
-  const [appointments, setAppointments] = useState([]);
-  const [payments, setPayments] = useState([]);
+  const [activeTab, setActiveTab] = useState<TabType>((initialTab as TabType) || 'chart');
 
-  const tabs = [
-    { id: 'chart', name: 'Dental Chart' },
-    { id: 'timeline', name: 'Timeline' },
-    { id: 'billing', name: 'Billing' },
-    { id: 'profile', name: 'Patient Info' },
-    { id: 'prescriptions', name: 'Prescriptions' }
+  const tabs: { id: TabType; name: string; icon: string }[] = [
+    { id: 'chart', name: 'Chart', icon: '🦷' },
+    { id: 'timeline', name: 'Timeline', icon: '📅' },
+    { id: 'billing', name: 'Billing', icon: '💰' },
+    { id: 'profile', name: 'Info', icon: '👤' },
+    { id: 'prescriptions', name: 'Scripts', icon: '💊' }
   ];
 
   useEffect(() => {
-    loadPatientDetails();
+    loadPatientData();
   }, [patientId]);
 
-  const loadPatientDetails = async () => {
+  const loadPatientData = async () => {
     setLoading(true);
     setError(null);
     try {
-      console.log('🔄 [PATIENT_DETAILS] Loading patient:', patientId);
-      const data = await patientsApiService.getPatientDetails(patientId);
-      
-      if (!data) {
+      const [details, apts, trans] = await Promise.all([
+        patientsApiService.getPatientDetails(patientId),
+        appointmentsApiService.getAppointments(), // Ideally getByPatientId
+        transactionsApiService.getPatientTransactions(patientId)
+      ]);
+
+      if (!details) {
         setError('Patient not found');
       } else {
-        setPatient(data);
-        console.log('✅ [PATIENT_DETAILS] Patient loaded:', data.name);
+        setPatient(details);
+        // Filter appointments for this patient
+        const patientApts = apts.filter((a: any) => a.patientId === patientId);
+        setAppointments(patientApts);
+        setPayments(trans);
       }
-      
-      // TODO: Load appointments and payments when backend endpoints are ready
-      // const [appointmentsData, paymentsData] = await Promise.all([
-      //   apiService.getAppointmentsForPatient(patientId),
-      //   apiService.getPaymentsForPatient(patientId)
-      // ]);
-      // setAppointments(appointmentsData);
-      // setPayments(paymentsData);
-      
     } catch (err: any) {
       console.error('❌ [PATIENT_DETAILS] Load error:', err);
-      setError('Failed to load patient details. Please try again.');
+      setError('Failed to load patient details');
     } finally {
       setLoading(false);
     }
   };
 
-  
+  const handleToothUpdate = async (toothNum: number, toothData: any) => {
+    if (!patient) return;
+
+    // Optimistic update
+    const newDentalChart = { ...patient.dentalChart, [toothNum]: toothData };
+    setPatient({ ...patient, dentalChart: newDentalChart });
+
+    try {
+      await patientsApiService.updatePatient(patientId, { dental_chart: newDentalChart });
+    } catch (err) {
+      console.error('❌ [PATIENT_DETAILS] Update error:', err);
+      Alert.alert('Error', 'Failed to save tooth update');
+      // Rollback if needed
+      loadPatientData();
+    }
+  };
+
+  const handleCall = () => {
+    if (patient?.phone) {
+      // Logic to open dialer
+    }
+  };
+
+  const handleWhatsApp = () => {
+    if (patient?.phone) {
+      // Logic for WhatsApp
+    }
+  };
+
+  const handleAddTimelineStep = async (step: any) => {
+    if (!patient) return;
+
+    const newPlan = [...(patient.treatmentPlan || []), { ...step, id: Date.now().toString() }];
+    setPatient({ ...patient, treatmentPlan: newPlan });
+
+    try {
+      await patientsApiService.updatePatient(patientId, { treatment_plan: newPlan });
+    } catch (err) {
+      console.error('❌ [PATIENT_DETAILS] Timeline error:', err);
+      Alert.alert('Error', 'Failed to save treatment step');
+      loadPatientData();
+    }
+  };
+
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <ScreenHeader
-          title="Patient Details"
-          onBackPress={() => navigation.goBack()}
-        />
-        <View style={styles.loadingContainer}>
-          <GearLoader text="Loading patient data..." />
+      <SafeAreaView style={styles.container}>
+        <ScreenHeader title="Patient File" onBackPress={() => navigation.goBack()} />
+        <View style={styles.centerContainer}>
+          <GearLoader text="Opening patient file..." />
         </View>
       </SafeAreaView>
     );
@@ -84,24 +133,13 @@ export const PatientDetailsScreen: React.FC<PatientDetailsScreenProps> = ({ navi
 
   if (!patient || error) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <ScreenHeader
-          title="Patient Details"
-          onBackPress={() => navigation.goBack()}
-        />
-        
-        {/* Error Message */}
-        {error && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity onPress={loadPatientDetails} style={styles.retryButton}>
-              <Text style={styles.retryText}>Retry</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>{error || 'Patient not found'}</Text>
+      <SafeAreaView style={styles.container}>
+        <ScreenHeader title="Error" onBackPress={() => navigation.goBack()} />
+        <View style={styles.centerContainer}>
+          <Text style={styles.errorText}>{error || 'Patient not found'}</Text>
+          <TouchableOpacity onPress={loadPatientData} style={styles.retryButton}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -110,534 +148,186 @@ export const PatientDetailsScreen: React.FC<PatientDetailsScreenProps> = ({ navi
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader
-        title="Patient Details"
+        title={patient.name}
+        subtitle={`${patient.age} yrs • ${patient.gender}`}
         onBackPress={() => navigation.goBack()}
+        rightComponent={
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={handleCall} style={styles.headerActionBtn}>
+              <Phone size={20} color={colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleWhatsApp} style={styles.headerActionBtn}>
+              <MessageCircle size={20} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+        }
       />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Patient Info Card */}
-        <View style={styles.patientCard}>
-          <View style={styles.patientAvatar}>
-            <Text style={styles.patientInitials}>
-              {patient.name.split(' ').map(n => n[0]).join('')}
-            </Text>
-          </View>
-          <Text style={styles.patientName}>{patient.name}</Text>
-          <Text style={styles.patientMeta}>{patient.age} yrs • {patient.gender}</Text>
-          <View style={[
-            styles.statusBadge,
-            { backgroundColor: patient.status === 'Active' ? colors.successLight : colors.gray200 }
-          ]}>
-            <View style={[
-              styles.statusDot,
-              { backgroundColor: patient.status === 'Active' ? colors.success : colors.gray400 }
-            ]} />
-            <Text style={[
-              styles.statusText,
-              { color: patient.status === 'Active' ? colors.success : colors.gray400 }
-            ]}>
-              {patient.status}
-            </Text>
-          </View>
-        </View>
-
-        {/* Contact Info */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Contact Information</Text>
-          <View style={styles.infoCard}>
-            <View style={styles.infoRow}>
-              <Phone size={20} color={colors.primary} />
-              <Text style={styles.infoText}>{patient.phone}</Text>
-            </View>
-            {patient.email && (
-              <View style={styles.infoRow}>
-                <Mail size={20} color={colors.primary} />
-                <Text style={styles.infoText}>{patient.email}</Text>
-              </View>
-            )}
-            {patient.address && (
-              <View style={styles.infoRow}>
-                <MapPin size={20} color={colors.primary} />
-                <Text style={styles.infoText}>{patient.address}</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Visit Info */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Visit Information</Text>
-          <View style={styles.infoCard}>
-            <View style={styles.visitRow}>
-              <Text style={styles.visitLabel}>Last Visit</Text>
-              <Text style={styles.visitValue}>{patient.lastVisit}</Text>
-            </View>
-            {patient.nextAppointment && (
-              <View style={styles.visitRow}>
-                <Text style={styles.visitLabel}>Next Appointment</Text>
-                <Text style={styles.visitValue}>{patient.nextAppointment}</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Tabs - Same as Web Platform */}
-        <View style={styles.tabs}>
+      {/* Tabs - Mobile Optimized Scrollable */}
+      <View style={styles.tabBarWrapper}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabBar}
+        >
           {tabs.map((tab) => (
             <TouchableOpacity
               key={tab.id}
               style={[styles.tab, activeTab === tab.id && styles.tabActive]}
-              onPress={() => setActiveTab(tab.id as any)}
+              onPress={() => setActiveTab(tab.id)}
             >
+              <Text style={styles.tabIcon}>{tab.icon}</Text>
               <Text style={[styles.tabText, activeTab === tab.id && styles.tabTextActive]}>
                 {tab.name}
               </Text>
+              {activeTab === tab.id && <View style={styles.activeIndicator} />}
             </TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
+      </View>
 
-        {/* Tab Content - Web Platform Layout */}
+      <View style={styles.content}>
         {activeTab === 'chart' && (
-          <View style={styles.tabContent}>
-            <View style={styles.chartContainer}>
-              <Text style={styles.chartTitle}>Dental Chart</Text>
-              <Text style={styles.chartSubtitle}>Interactive dental chart coming soon...</Text>
-              <View style={styles.placeholderBox}>
-                <Text style={styles.placeholderText}>🦷 Dental Chart View</Text>
-              </View>
-            </View>
-          </View>
+          <DentalChart
+            teethData={patient.dentalChart}
+            onToothUpdate={handleToothUpdate}
+          />
         )}
 
         {activeTab === 'timeline' && (
-          <View style={styles.tabContent}>
-            <View style={styles.timelineContainer}>
-              <Text style={styles.sectionTitle}>Appointment Timeline</Text>
-              {appointments.length > 0 ? (
-                appointments.map((apt, index) => (
-                  <View key={index} style={styles.timelineItem}>
-                    <Text style={styles.timelineDate}>{apt.date}</Text>
-                    <Text style={styles.timelineProcedure}>{apt.procedure}</Text>
-                    <Text style={styles.timelineStatus}>{apt.status}</Text>
-                  </View>
-                ))
-              ) : (
-                <Text style={styles.emptyTabText}>No appointments found</Text>
-              )}
-            </View>
-          </View>
+          <TimelineView
+            history={appointments.filter(a => a.status === 'completed' || a.status === 'Finished').map(a => ({
+              id: a.id,
+              procedure: a.treatment || 'Treatment',
+              date: a.date,
+              status: 'completed'
+            }))}
+            plan={patient.treatmentPlan || []}
+            onAddStep={handleAddTimelineStep}
+          />
         )}
 
         {activeTab === 'billing' && (
-          <View style={styles.tabContent}>
-            <View style={styles.billingContainer}>
-              <Text style={styles.sectionTitle}>Billing History</Text>
-              {payments.length > 0 ? (
-                payments.map((payment, index) => (
-                  <View key={index} style={styles.billingCard}>
-                    <View style={styles.billingHeader}>
-                      <Text style={styles.billingDate}>{payment.date}</Text>
-                      <Text style={[
-                        styles.billingStatus,
-                        { color: payment.status === 'paid' ? colors.success : payment.status === 'pending' ? colors.warning : colors.error }
-                      ]}>
-                        {payment.status.toUpperCase()}
-                      </Text>
-                    </View>
-                    <Text style={styles.billingService}>{payment.procedure}</Text>
-                    <Text style={styles.billingAmount}>${payment.amount}</Text>
-                  </View>
-                ))
-              ) : (
-                <Text style={styles.emptyTabText}>No billing history available</Text>
-              )}
-            </View>
-          </View>
+          <BillingView
+            payments={payments.map(p => ({
+              id: p.id,
+              date: p.date,
+              procedure: p.treatment || 'Treatment',
+              amount: p.amount,
+              status: p.status === 'success' ? 'paid' : 'pending'
+            }))}
+          />
         )}
 
         {activeTab === 'profile' && (
-          <View style={styles.tabContent}>
-            <View style={styles.profileContainer}>
-              <Text style={styles.sectionTitle}>Patient Information</Text>
-              
-              {/* Contact Info */}
-              <View style={styles.infoSection}>
-                <Text style={styles.infoSectionTitle}>Contact Information</Text>
-                <View style={styles.infoCard}>
-                  <View style={styles.infoRow}>
-                    <Phone size={20} color={colors.primary} />
-                    <Text style={styles.infoText}>{patient.phone}</Text>
-                  </View>
-                  {patient.email && (
-                    <View style={styles.infoRow}>
-                      <Mail size={20} color={colors.primary} />
-                      <Text style={styles.infoText}>{patient.email}</Text>
-                    </View>
-                  )}
-                  {patient.address && (
-                    <View style={styles.infoRow}>
-                      <MapPin size={20} color={colors.primary} />
-                      <Text style={styles.infoText}>{patient.address}</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-
-              {/* Visit Info */}
-              <View style={styles.infoSection}>
-                <Text style={styles.infoSectionTitle}>Visit Information</Text>
-                <View style={styles.infoCard}>
-                  <View style={styles.visitRow}>
-                    <Text style={styles.visitLabel}>Last Visit</Text>
-                    <Text style={styles.visitValue}>{patient.lastVisit}</Text>
-                  </View>
-                  {patient.nextAppointment && (
-                    <View style={styles.visitRow}>
-                      <Text style={styles.visitLabel}>Next Appointment</Text>
-                      <Text style={styles.visitValue}>{patient.nextAppointment}</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </View>
-          </View>
+          <PatientInfoView patient={patient} />
         )}
 
         {activeTab === 'prescriptions' && (
-          <View style={styles.tabContent}>
-            <View style={styles.prescriptionsContainer}>
-              <Text style={styles.sectionTitle}>Prescriptions</Text>
-              <View style={styles.placeholderBox}>
-                <Text style={styles.placeholderText}>💊 Prescriptions coming soon...</Text>
-              </View>
-            </View>
-          </View>
+          <PrescriptionsView prescriptions={patient.prescriptions || []} />
         )}
-
-        <View style={{ height: 20 }} />
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
+};
+
+const tabIconStyles = {
+  chart: { fontSize: 16 },
+  timeline: { fontSize: 16 },
+  billing: { fontSize: 16 },
+  profile: { fontSize: 16 },
+  prescriptions: { fontSize: 16 },
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.gray50,
+    backgroundColor: '#F9FAFB',
   },
-  loadingContainer: {
+  centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: colors.gray600,
-    marginTop: 8,
-  },
-  errorContainer: {
-    backgroundColor: '#FEE2E2',
-    borderLeftWidth: 4,
-    borderLeftColor: '#EF4444',
-    padding: 16,
-    marginHorizontal: 20,
-    marginTop: 16,
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  errorText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#991B1B',
-    marginRight: 12,
-  },
-  retryButton: {
-    backgroundColor: '#EF4444',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
-  },
-  retryText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.white,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 16,
-    color: colors.gray500,
+    padding: 20,
   },
   content: {
     flex: 1,
   },
-  patientCard: {
-    backgroundColor: colors.white,
-    marginHorizontal: 20,
-    marginTop: 20,
-    borderRadius: 12,
-    padding: 24,
-    alignItems: 'center',
-  },
-  patientAvatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: colors.primaryBgLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  patientInitials: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: colors.primary,
-  },
-  patientName: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: colors.gray900,
-    marginBottom: 4,
-  },
-  patientMeta: {
-    fontSize: 14,
-    color: colors.gray500,
-    marginBottom: 12,
-  },
-  statusBadge: {
+  headerActions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 6,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  section: {
-    marginTop: 20,
-    paddingHorizontal: 20,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.gray900,
-    marginBottom: 12,
-  },
-  infoCard: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    padding: 16,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  infoText: {
-    fontSize: 15,
-    color: colors.gray700,
-    marginLeft: 12,
-  },
-  visitRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  visitLabel: {
-    fontSize: 14,
-    color: colors.gray500,
-  },
-  visitValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.gray900,
-  },
-  tabs: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginTop: 20,
     gap: 8,
   },
-  tab: {
-    flex: 1,
+  headerActionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(155, 140, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tabBarWrapper: {
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  tabBar: {
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 8,
-    backgroundColor: colors.white,
-    alignItems: 'center',
+    gap: 12,
   },
-  tabActive: {
-    backgroundColor: colors.primary,
-  },
-  tabText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.gray700,
-  },
-  tabTextActive: {
-    color: colors.white,
-  },
-  tabContent: {
-    paddingHorizontal: 20,
-    marginTop: 16,
-  },
-  overviewText: {
-    fontSize: 15,
-    color: colors.gray700,
-    lineHeight: 22,
-  },
-  recordCard: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  recordHeader: {
+  tab: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  recordDate: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.gray900,
-  },
-  recordDoctor: {
-    fontSize: 13,
-    color: colors.gray500,
-  },
-  recordDiagnosis: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.gray900,
-    marginBottom: 4,
-  },
-  recordTreatment: {
-    fontSize: 14,
-    color: colors.gray700,
-    marginBottom: 4,
-  },
-  recordNotes: {
-    fontSize: 13,
-    color: colors.gray500,
-    fontStyle: 'italic',
-  },
-  billingCard: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  billingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  billingDate: {
-    fontSize: 13,
-    color: colors.gray500,
-  },
-  billingStatus: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  billingService: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.gray900,
-    marginBottom: 4,
-  },
-  billingAmount: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.primary,
-  },
-  emptyTabText: {
-    fontSize: 15,
-    color: colors.gray500,
-    textAlign: 'center',
-    paddingVertical: 40,
-  },
-  // Web Platform Layout Styles
-  chartContainer: {
-    padding: 20,
-  },
-  chartTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.gray900,
-    marginBottom: 8,
-  },
-  chartSubtitle: {
-    fontSize: 14,
-    color: colors.gray500,
-    marginBottom: 20,
-  },
-  placeholderBox: {
-    backgroundColor: colors.gray100,
-    borderRadius: 12,
-    padding: 40,
     alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    position: 'relative',
+    minWidth: 100,
     justifyContent: 'center',
   },
-  placeholderText: {
+  tabActive: {
+    backgroundColor: 'rgba(155, 140, 255, 0.1)',
+    borderColor: 'rgba(155, 140, 255, 0.2)',
+  },
+  tabIcon: {
     fontSize: 16,
-    color: colors.gray500,
+    marginRight: 6,
   },
-  timelineContainer: {
-    padding: 20,
-  },
-  timelineItem: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  timelineDate: {
+  tabText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.gray900,
-    marginBottom: 4,
+    color: '#667085',
   },
-  timelineProcedure: {
-    fontSize: 15,
-    color: colors.gray700,
-    marginBottom: 4,
+  tabTextActive: {
+    color: colors.primary,
   },
-  timelineStatus: {
-    fontSize: 13,
-    color: colors.gray500,
+  activeIndicator: {
+    position: 'absolute',
+    bottom: -12,
+    left: 16,
+    right: 16,
+    height: 3,
+    backgroundColor: colors.primary,
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3,
   },
-  billingContainer: {
-    padding: 20,
-  },
-  profileContainer: {
-    padding: 20,
-  },
-  infoSection: {
-    marginBottom: 24,
-  },
-  infoSectionTitle: {
+  errorText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: colors.gray900,
-    marginBottom: 12,
+    color: '#EF4444',
+    marginBottom: 16,
+    textAlign: 'center',
   },
-  prescriptionsContainer: {
-    padding: 20,
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  retryText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
 });

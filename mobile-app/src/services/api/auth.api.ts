@@ -35,7 +35,7 @@ export class AuthApiService extends BaseApiService {
       const headers = await this.getAuthHeaders();
       console.log('🔑 [API] Headers:', JSON.stringify(headers, null, 2));
 
-      const response = await fetch(`${this.baseURL}/auth/mobile/me`, {
+      const response = await fetch(`${this.baseURL}/auth/me`, {
         method: 'GET',
         headers,
       });
@@ -80,7 +80,7 @@ export class AuthApiService extends BaseApiService {
 
   async oauthLogin(idToken: string): Promise<{ user: BackendUser | null; error?: string }> {
     try {
-      const response = await fetch(`${this.baseURL}/auth/mobile/oauth`, {
+      const response = await fetch(`${this.baseURL}/auth/oauth`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -103,8 +103,8 @@ export class AuthApiService extends BaseApiService {
       const data = await response.json();
 
       // Store tokens
-      if (data.access_token) {
-        await AsyncStorage.setItem('access_token', data.access_token);
+      if (data.token) {
+        await AsyncStorage.setItem('access_token', data.token);
       }
       if (data.refresh_token) {
         await AsyncStorage.setItem('refresh_token', data.refresh_token);

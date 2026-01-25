@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiBaseUrl } from '../../config/api.config';
 
 export class BaseApiService {
-  protected baseURL = getApiBaseUrl();
+  protected baseURL = `${getApiBaseUrl()}/api/v1`;
 
   protected async getAuthHeaders(): Promise<HeadersInit> {
     const token = await AsyncStorage.getItem('access_token');

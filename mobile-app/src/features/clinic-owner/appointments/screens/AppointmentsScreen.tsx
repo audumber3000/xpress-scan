@@ -10,6 +10,13 @@ import { MonthNavigationHeader } from '../components/MonthNavigationHeader';
 import { AppointmentsList } from '../components/AppointmentsList';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
 
+const formatLocalDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 interface AppointmentsScreenProps {
   navigation: any;
 }
@@ -29,61 +36,23 @@ export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigati
   const loadAppointments = async () => {
     setLoading(true);
     try {
-      // Dummy data for testing
-      const dummyAppointments: any[] = [
-        {
-          id: '1',
-          patientName: 'John Doe',
-          date: selectedDate.toISOString().split('T')[0],
-          startTime: '09:00',
-          endTime: '09:30',
-          status: 'Finished',
-          treatment: 'Root Canal Treatment',
-        },
-        {
-          id: '2',
-          patientName: 'Sarah Smith',
-          date: selectedDate.toISOString().split('T')[0],
-          startTime: '10:30',
-          endTime: '11:00',
-          status: 'Encounter',
-          treatment: 'Routine Check-up',
-        },
-        {
-          id: '3',
-          patientName: 'Mike Ross',
-          date: selectedDate.toISOString().split('T')[0],
-          startTime: '11:15',
-          endTime: '12:00',
-          status: 'Encounter',
-          treatment: 'Teeth Whitening',
-        },
-        {
-          id: '4',
-          patientName: 'Emily Davis',
-          date: selectedDate.toISOString().split('T')[0],
-          startTime: '14:00',
-          endTime: '14:45',
-          status: 'Registered',
-          treatment: 'Dental Cleaning',
-        },
-        {
-          id: '5',
-          patientName: 'James Wilson',
-          date: selectedDate.toISOString().split('T')[0],
-          startTime: '15:30',
-          endTime: '16:15',
-          status: 'Cancelled',
-          treatment: 'Cavity Filling',
-        },
-      ];
-      setAppointments(dummyAppointments);
-      
-      // Uncomment below to use real API
-      // const dateStr = selectedDate.toISOString().split('T')[0];
-      // const data = await appointmentsApiService.getAppointments(dateStr, 'week');
-      // setAppointments(data);
-    } catch (err) {
+      // Fetch for a window around the selected date so we have data for calendar indicators
+      const dateFrom = new Date(selectedDate);
+      dateFrom.setDate(dateFrom.getDate() - 15);
+      const dateTo = new Date(selectedDate);
+      dateTo.setDate(dateTo.getDate() + 15);
+
+      const dateFromStr = formatLocalDate(dateFrom);
+      const dateToStr = formatLocalDate(dateTo);
+
+      console.log(`🔄 [APPOINTMENTS] Fetching from ${dateFromStr} to ${dateToStr}`);
+      const data = await appointmentsApiService.getAppointments(dateFromStr, dateToStr);
+      setAppointments(data);
+      console.log(`✅ [APPOINTMENTS] Received ${data.length} appointments`);
+    } catch (err: any) {
+      console.error('Error loading appointments:', err);
+      const { Alert } = require('react-native');
+      Alert.alert('Error', `Failed to load appointments: ${err.message}`);
       setAppointments([]);
     } finally {
       setLoading(false);
@@ -109,10 +78,10 @@ export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigati
 
     for (let i = 0; i < startingDayOfWeek; i++) {
       const prevMonthDay = new Date(year, month, -startingDayOfWeek + i + 1);
-      days.push({ 
-        type: 'empty', 
+      days.push({
+        type: 'empty',
         day: prevMonthDay.getDate(),
-        date: prevMonthDay 
+        date: prevMonthDay
       });
     }
 
@@ -120,8 +89,10 @@ export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigati
       const date = new Date(year, month, day);
       const isToday = today.toDateString() === date.toDateString();
       const isSelected = selectedDate.toDateString() === date.toDateString();
-      const hasAppointments = [1, 2, 4, 8, 15, 22].includes(day);
-      
+
+      const dateStr = formatLocalDate(date);
+      const hasAppointments = appointments.some(apt => apt.date === dateStr);
+
       days.push({
         type: 'day',
         day,
@@ -148,13 +119,16 @@ export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigati
       const date = new Date(startOfWeek);
       date.setDate(startOfWeek.getDate() + i);
       const isSelected = selectedDate.toDateString() === date.toDateString();
-      
+
+      const dateStr = formatLocalDate(date);
+      const hasAppointments = appointments.some(apt => apt.date === dateStr);
+
       weekDays.push({
         date,
         dayName: dayNames[i],
         dayNumber: date.getDate(),
         isSelected,
-        hasAppointments: true,
+        hasAppointments,
       });
     }
 
@@ -168,9 +142,15 @@ export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigati
   };
 
   const filteredAppointments = appointments.filter(apt => {
-    const aptDate = new Date(apt.date);
-    return aptDate.toDateString() === selectedDate.toDateString();
+    // Compare YYYY-MM-DD strings to avoid timezone issues with new Date(str)
+    const selectedDateStr = formatLocalDate(selectedDate);
+    return apt.date === selectedDateStr;
   });
+
+  console.log(`[APPOINTMENTS] Total: ${appointments.length}, Filtered (for ${formatLocalDate(selectedDate)}): ${filteredAppointments.length}`);
+  if (appointments.length > 0 && filteredAppointments.length === 0) {
+    console.log('[APPOINTMENTS] First item date:', appointments[0].date);
+  }
 
   const handleAppointmentPress = (appointment: any) => {
     navigation.navigate('AppointmentDetails', { appointment });
@@ -192,7 +172,7 @@ export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigati
         }
       />
 
-      <ScrollView 
+      <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={

@@ -1,174 +1,187 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Camera, Mail, Phone, MapPin, ChevronRight, Monitor, Smartphone } from 'lucide-react-native';
+import { Camera, Mail, Phone, MapPin, ChevronRight, Monitor, Smartphone, Building2, Briefcase, Info, Clock, IndianRupee } from 'lucide-react-native';
 import { adminColors } from '../../../../shared/constants/adminColors';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
+import { adminApiService, ClinicInfo } from '../../../../services/api/admin.api';
+import { GearLoader } from '../../../../shared/components/GearLoader';
+import { colors } from '../../../../shared/constants/colors';
 
 interface ClinicSettingsScreenProps {
   navigation: any;
 }
 
 export const ClinicSettingsScreen: React.FC<ClinicSettingsScreenProps> = ({ navigation }) => {
+  const [clinic, setClinic] = useState<ClinicInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadClinic = async () => {
+    setLoading(true);
+    try {
+      const data = await adminApiService.getClinicInfo();
+      setClinic(data);
+    } catch (err) {
+      console.error('❌ [CLINIC] Load error:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadClinic();
+  }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadClinic();
+  };
+
+  if (loading && !refreshing) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScreenHeader title="Clinic Info" onBackPress={() => navigation.goBack()} variant="admin" />
+        <View style={styles.center}>
+          <GearLoader text="Retrieving clinic profile..." />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader
-        title="Clinic Settings"
+        title="Clinic Profile"
         onBackPress={() => navigation.goBack()}
         variant="admin"
         rightComponent={
-          <TouchableOpacity>
-            <Text style={styles.saveButton}>Save</Text>
+          <TouchableOpacity onPress={() => Alert.alert('Edit Mode', 'Use the web portal to edit clinic master records.')}>
+            <Text style={styles.saveButton}>Edit</Text>
           </TouchableOpacity>
         }
       />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Clinic Logo */}
-        <View style={styles.logoSection}>
-          <View style={styles.logoContainer}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
+        {/* Clinic Identity Card */}
+        <View style={styles.identityCard}>
+          <View style={styles.logoWrapper}>
             <View style={styles.logo}>
-              <Text style={styles.logoText}>🏥</Text>
+              <Building2 size={40} color="#FFFFFF" strokeWidth={2} />
             </View>
-            <View style={styles.cameraButton}>
-              <Camera size={18} color="#FFFFFF" />
+            <View style={styles.cameraBtn}>
+              <Camera size={14} color="#FFFFFF" />
             </View>
           </View>
-          <Text style={styles.clinicName}>HealthFirst Clinic</Text>
-          <Text style={styles.clinicLocation}>San Francisco, CA</Text>
-          <TouchableOpacity style={styles.updateLogoButton}>
-            <Text style={styles.updateLogoText}>Update Logo</Text>
-          </TouchableOpacity>
+          <Text style={styles.clinicNameMain}>{clinic?.name || 'Clinic Name'}</Text>
+          <Text style={styles.clinicEmailSub}>{clinic?.email || 'No email set'}</Text>
         </View>
 
-        {/* Clinic Profile */}
+        {/* Vital Information */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>CLINIC PROFILE</Text>
-          
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>CLINIC NAME</Text>
-            <Text style={styles.infoValue}>HealthFirst Clinic</Text>
+          <View style={styles.sectionHeading}>
+            <Info size={14} color="#9CA3AF" />
+            <Text style={styles.sectionTitleCap}>CORE DETAILS</Text>
           </View>
 
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>CLINIC ID</Text>
+          <View style={styles.infoGroup}>
             <View style={styles.infoRow}>
-              <Text style={styles.infoValue}>HF-9921-SF</Text>
-              <TouchableOpacity style={styles.infoButton}>
-                <View style={styles.infoDot} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        {/* Contact Details */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>CONTACT DETAILS</Text>
-          
-          <TouchableOpacity style={styles.contactItem}>
-            <View style={[styles.contactIcon, { backgroundColor: '#E0F2F2' }]}>
-              <Mail size={20} color={adminColors.primary} />
-            </View>
-            <View style={styles.contactInfo}>
-              <Text style={styles.contactLabel}>EMAIL ADDRESS</Text>
-              <Text style={styles.contactValue}>admin@healthfirst.com</Text>
-            </View>
-            <ChevronRight size={20} color="#D1D5DB" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.contactItem}>
-            <View style={[styles.contactIcon, { backgroundColor: '#E0F2F2' }]}>
-              <Phone size={20} color={adminColors.primary} />
-            </View>
-            <View style={styles.contactInfo}>
-              <Text style={styles.contactLabel}>PHONE NUMBER</Text>
-              <Text style={styles.contactValue}>+1(555) 0123-4567</Text>
-            </View>
-            <ChevronRight size={20} color="#D1D5DB" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.contactItem}>
-            <View style={[styles.contactIcon, { backgroundColor: '#E0F2F2' }]}>
-              <MapPin size={20} color={adminColors.primary} />
-            </View>
-            <View style={styles.contactInfo}>
-              <Text style={styles.contactLabel}>PHYSICAL ADDRESS</Text>
-              <Text style={styles.contactValue}>221B Baker St, San Francisco</Text>
-            </View>
-            <ChevronRight size={20} color="#D1D5DB" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Business Hours */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>BUSINESS HOURS</Text>
-            <TouchableOpacity>
-              <Text style={styles.editButton}>EDIT SCHEDULE</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.hoursCard}>
-            <View style={styles.hourRow}>
-              <Text style={styles.dayText}>Mon — Fri</Text>
-              <Text style={styles.timeText}>09:00 AM — 06:00 PM</Text>
-            </View>
-            <View style={styles.hourRow}>
-              <Text style={styles.dayText}>Saturday</Text>
-              <Text style={styles.timeText}>10:00 AM — 02:00 PM</Text>
-            </View>
-            <View style={styles.hourRow}>
-              <Text style={[styles.dayText, { color: '#EF4444' }]}>Sunday</Text>
-              <Text style={[styles.timeText, { color: '#9CA3AF' }]}>Closed</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Device Management */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>DEVICE MANAGEMENT</Text>
-
-          <View style={styles.deviceCard}>
-            <View style={[styles.deviceIcon, { backgroundColor: '#E0F2F2' }]}>
-              <Monitor size={24} color={adminColors.primary} />
-            </View>
-            <View style={styles.deviceInfo}>
-              <View style={styles.deviceHeader}>
-                <Text style={styles.deviceName}>Admin Desktop...</Text>
-                <View style={styles.activeBadge}>
-                  <Text style={styles.activeBadgeText}>ACTIVE</Text>
-                </View>
+              <View style={styles.iconCircle}>
+                <Building2 size={18} color={adminColors.primary} />
               </View>
-              <Text style={styles.deviceLocation}>San Francisco, CA • 192.168.1.1</Text>
-              <Text style={styles.deviceStatus}>• ONLINE</Text>
+              <View style={styles.infoContent}>
+                <Text style={styles.labelSmall}>OFFICIAL NAME</Text>
+                <Text style={styles.valueLarge}>{clinic?.name}</Text>
+              </View>
             </View>
-            <TouchableOpacity style={styles.revokeButton}>
-              <Text style={styles.revokeText}>REVOKE</Text>
-            </TouchableOpacity>
-          </View>
 
-          <View style={styles.deviceCard}>
-            <View style={[styles.deviceIcon, { backgroundColor: '#E0F2F2' }]}>
-              <Smartphone size={24} color={adminColors.primary} />
+            <View style={styles.infoRow}>
+              <View style={styles.iconCircle}>
+                <MapPin size={18} color={adminColors.primary} />
+              </View>
+              <View style={styles.infoContent}>
+                <Text style={styles.labelSmall}>ADDRESS</Text>
+                <Text style={styles.valueLarge} numberOfLines={2}>{clinic?.address || 'Address not provided'}</Text>
+              </View>
             </View>
-            <View style={styles.deviceInfo}>
-              <Text style={styles.deviceName}>iPhone 15 Pro Max</Text>
-              <Text style={styles.deviceLocation}>Los Angeles, CA • 172.20.10.4</Text>
-              <Text style={styles.deviceLastSeen}>LAST: YESTERDAY, 4:30 PM</Text>
-            </View>
-            <TouchableOpacity style={styles.revokeButton}>
-              <Text style={styles.revokeText}>REVOKE</Text>
-            </TouchableOpacity>
-          </View>
 
-          <TouchableOpacity style={styles.logoutAllButton}>
-            <Text style={styles.logoutAllText}>🚪 Logout from all devices</Text>
-          </TouchableOpacity>
+            <View style={styles.infoRow}>
+              <View style={styles.iconCircle}>
+                <IndianRupee size={18} color={adminColors.primary} />
+              </View>
+              <View style={styles.infoContent}>
+                <Text style={styles.labelSmall}>GST NUMBER</Text>
+                <Text style={styles.valueLarge}>{clinic?.gst_number || 'N/A'}</Text>
+              </View>
+            </View>
+          </View>
         </View>
 
-        <Text style={styles.versionText}>VERSION 2.4.0 (BUILD 847)</Text>
+        {/* Communication Channels */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeading}>
+            <Phone size={14} color="#9CA3AF" />
+            <Text style={styles.sectionTitleCap}>CONNECTIVITY</Text>
+          </View>
 
-        <View style={{ height: 40 }} />
+          <View style={styles.infoGroup}>
+            <TouchableOpacity style={styles.channelRow}>
+              <View style={[styles.channelIcon, { backgroundColor: '#E0F2F2' }]}>
+                <Mail size={20} color={adminColors.primary} />
+              </View>
+              <View style={styles.channelInfo}>
+                <Text style={styles.labelSmall}>ADMIN EMAIL</Text>
+                <Text style={styles.valueLarge}>{clinic?.email}</Text>
+              </View>
+              <ChevronRight size={18} color="#D1D5DB" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.channelRow}>
+              <View style={[styles.channelIcon, { backgroundColor: '#E0F2F2' }]}>
+                <Phone size={20} color={adminColors.primary} />
+              </View>
+              <View style={styles.channelInfo}>
+                <Text style={styles.labelSmall}>CONTACT PHONE</Text>
+                <Text style={styles.valueLarge}>{clinic?.phone}</Text>
+              </View>
+              <ChevronRight size={18} color="#D1D5DB" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Operating Hours - Professional List */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeading}>
+            <Clock size={14} color="#9CA3AF" />
+            <Text style={styles.sectionTitleCap}>OPERATING HOURS</Text>
+          </View>
+
+          <View style={styles.hoursPlate}>
+            {clinic?.timings ? (
+              Object.entries(clinic.timings).map(([day, time]: [string, any]) => (
+                <View key={day} style={styles.dayRow}>
+                  <Text style={styles.dayLabel}>{day.toUpperCase()}</Text>
+                  <View style={styles.timeCluster}>
+                    {time.closed ? (
+                      <Text style={styles.closedText}>CLOSED</Text>
+                    ) : (
+                      <Text style={styles.timeText}>{time.open} - {time.close}</Text>
+                    )}
+                  </View>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.noHours}>Hours not configured.</Text>
+            )}
+          </View>
+        </View>
+
+        <View style={{ height: 60 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -179,6 +192,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   saveButton: {
     fontSize: 16,
     fontWeight: '600',
@@ -187,257 +205,153 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  logoSection: {
+  identityCard: {
     alignItems: 'center',
     paddingVertical: 32,
     backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
-  logoContainer: {
+  logoWrapper: {
     position: 'relative',
     marginBottom: 16,
   },
   logo: {
-    width: 100,
-    height: 100,
-    borderRadius: 24,
+    width: 80,
+    height: 80,
+    borderRadius: 20,
     backgroundColor: adminColors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  logoText: {
-    fontSize: 48,
-  },
-  cameraButton: {
+  cameraBtn: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    bottom: -4,
+    right: -4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: adminColors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: '#FFFFFF',
   },
-  clinicName: {
-    fontSize: 20,
+  clinicNameMain: {
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#111827',
     marginBottom: 4,
   },
-  clinicLocation: {
+  clinicEmailSub: {
     fontSize: 14,
     color: '#6B7280',
-    marginBottom: 16,
-  },
-  updateLogoButton: {
-    backgroundColor: adminColors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  updateLogoText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
   },
   section: {
     marginTop: 24,
     paddingHorizontal: 20,
   },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#9CA3AF',
-    letterSpacing: 0.5,
-    marginBottom: 12,
-  },
-  sectionHeader: {
+  sectionHeading: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
     marginBottom: 12,
   },
-  editButton: {
+  sectionTitleCap: {
     fontSize: 12,
-    fontWeight: '600',
-    color: adminColors.primary,
-    letterSpacing: 0.5,
-  },
-  infoItem: {
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  infoLabel: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontWeight: 'bold',
     color: '#9CA3AF',
-    letterSpacing: 0.5,
-    marginBottom: 8,
+    letterSpacing: 1,
   },
-  infoValue: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#111827',
+  infoGroup: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
   },
   infoRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  infoButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  infoDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#9CA3AF',
-  },
-  contactItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
     padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+    gap: 16,
   },
-  contactIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
     alignItems: 'center',
-    marginRight: 12,
+    justifyContent: 'center',
   },
-  contactInfo: {
+  infoContent: {
     flex: 1,
   },
-  contactLabel: {
-    fontSize: 11,
-    fontWeight: '600',
+  labelSmall: {
+    fontSize: 10,
+    fontWeight: 'bold',
     color: '#9CA3AF',
-    letterSpacing: 0.5,
-    marginBottom: 4,
+    marginBottom: 2,
   },
-  contactValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#111827',
+  valueLarge: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#344054',
   },
-  hoursCard: {
-    backgroundColor: '#FFFFFF',
+  channelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 16,
-    borderRadius: 12,
+    gap: 12,
   },
-  hourRow: {
+  channelIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  channelInfo: {
+    flex: 1,
+  },
+  hoursPlate: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  dayRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F9FAFB',
   },
-  dayText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#111827',
+  dayLabel: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#6B7280',
+    width: 100,
+  },
+  timeCluster: {
+    alignItems: 'flex-end',
   },
   timeText: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#6B7280',
-  },
-  deviceCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  deviceIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  deviceInfo: {
-    flex: 1,
-  },
-  deviceHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  deviceName: {
-    fontSize: 15,
     fontWeight: '600',
-    color: '#111827',
-    marginRight: 8,
+    color: '#344054',
   },
-  activeBadge: {
-    backgroundColor: '#D1FAE5',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  activeBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#065F46',
-    letterSpacing: 0.5,
-  },
-  deviceLocation: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  deviceStatus: {
+  closedText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: adminColors.primary,
-  },
-  deviceLastSeen: {
-    fontSize: 12,
-    color: '#9CA3AF',
-  },
-  revokeButton: {
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  revokeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#EF4444',
-    letterSpacing: 0.5,
-  },
-  logoutAllButton: {
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  logoutAllText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontWeight: 'bold',
     color: '#EF4444',
   },
-  versionText: {
-    fontSize: 11,
-    color: '#D1D5DB',
+  noHours: {
     textAlign: 'center',
-    marginTop: 24,
-    letterSpacing: 0.5,
-  },
+    padding: 20,
+    color: '#9CA3AF',
+    fontStyle: 'italic',
+  }
 });

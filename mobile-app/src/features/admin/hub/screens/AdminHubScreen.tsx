@@ -1,16 +1,76 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronLeft, Briefcase, Calendar, Users, DollarSign, Monitor, Settings, Lock, Clock } from 'lucide-react-native';
+import { ChevronLeft, Briefcase, Calendar, Users, DollarSign, Monitor, Settings, Lock, MapPin, Clock } from 'lucide-react-native';
 import { AdminModuleCard } from '../components/AdminModuleCard';
 import { adminColors } from '../../../../shared/constants/adminColors';
+import { adminApiService, ClinicInfo, StaffMember } from '../../../../services/api/admin.api';
+import { GearLoader } from '../../../../shared/components/GearLoader';
+import { format } from 'date-fns';
 
 interface AdminHubScreenProps {
   navigation: any;
 }
 
 export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) => {
+  const [clinic, setClinic] = useState<ClinicInfo | null>(null);
+  const [staffCount, setStaffCount] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadData = async () => {
+    try {
+      const [clinicData, staffData] = await Promise.all([
+        adminApiService.getClinicInfo(),
+        adminApiService.getStaff()
+      ]);
+      setClinic(clinicData);
+      setStaffCount(staffData.length);
+    } catch (err) {
+      console.error('❌ [ADMIN HUB] Load error:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const isOpen = useMemo(() => {
+    if (!clinic?.timings) return true;
+    const now = new Date();
+    const dayName = format(now, 'EEEE').toLowerCase();
+    const hours = clinic.timings[dayName];
+
+    if (!hours || hours.closed) return false;
+
+    const [nowH, nowM] = [now.getHours(), now.getMinutes()];
+    const [openH, openM] = hours.open.split(':').map(Number);
+    const [closeH, closeM] = hours.close.split(':').map(Number);
+
+    const nowTotal = nowH * 60 + nowM;
+    const openTotal = openH * 60 + openM;
+    const closeTotal = closeH * 60 + closeM;
+
+    return nowTotal >= openTotal && nowTotal <= closeTotal;
+  }, [clinic]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadData();
+  };
+
+  if (loading && !refreshing) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <GearLoader text="Opening Admin Hub..." />
+      </View>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <LinearGradient
@@ -18,28 +78,32 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
         style={styles.header}
       >
         <View style={styles.headerTop}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
             <ChevronLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>All clinics</Text>
+          <Text style={styles.headerTitle}>System Settings</Text>
           <View style={styles.placeholder} />
         </View>
 
         <View style={styles.clinicInfo}>
           <View style={styles.clinicTextSection}>
-            <Text style={styles.clinicName}>BrightSmile Clinic</Text>
-            <Text style={styles.clinicLocation}>📍 London, Marylebone NW1</Text>
+            <Text style={styles.clinicName} numberOfLines={1}>
+              {clinic?.name || 'Clinic Profile'}
+            </Text>
+            <Text style={styles.clinicLocation} numberOfLines={1}>
+              <MapPin size={14} color="rgba(255, 255, 255, 0.8)" /> {clinic?.address || 'Address not set'}
+            </Text>
             <View style={styles.clinicBadges}>
-              <View style={styles.badge}>
-                <View style={styles.greenDot} />
-                <Text style={styles.badgeText}>Open</Text>
+              <View style={[styles.badge, !isOpen && { backgroundColor: 'rgba(239, 68, 68, 0.25)' }]}>
+                <View style={[styles.statusDot, { backgroundColor: isOpen ? '#10B981' : '#EF4444' }]} />
+                <Text style={styles.badgeText}>{isOpen ? 'Open' : 'Closed'}</Text>
               </View>
               <View style={styles.badge}>
                 <Users size={14} color="#FFFFFF" />
-                <Text style={styles.badgeText}>12 Staff</Text>
+                <Text style={styles.badgeText}>{staffCount} Staff</Text>
               </View>
             </View>
           </View>
@@ -47,19 +111,22 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
             <View style={styles.clinicIcon}>
               <Briefcase size={28} color="#FFFFFF" />
             </View>
-            <View style={styles.onlineIndicator} />
+            <View style={[styles.onlineIndicator, { backgroundColor: isOpen ? '#10B981' : '#EF4444' }]} />
           </View>
         </View>
       </LinearGradient>
 
-      <ScrollView 
+      <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={adminColors.primary} />
+        }
       >
         {/* Admin Hub Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Admin Hub</Text>
+            <Text style={styles.sectionTitle}>Main Hub</Text>
             <Text style={styles.sectionSubtitle}>MANAGEMENT</Text>
           </View>
 
@@ -120,6 +187,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
+  center: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   header: {
     paddingHorizontal: 20,
     paddingTop: 16,
@@ -154,17 +225,20 @@ const styles = StyleSheet.create({
   },
   clinicTextSection: {
     flex: 1,
+    marginRight: 16,
   },
   clinicName: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   clinicLocation: {
-    fontSize: 15,
+    fontSize: 14,
     color: 'rgba(255, 255, 255, 0.9)',
     marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   clinicBadges: {
     flexDirection: 'row',
@@ -177,13 +251,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
-    gap: 4,
+    gap: 6,
   },
-  greenDot: {
+  statusDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#10B981',
   },
   badgeText: {
     fontSize: 12,
@@ -208,7 +281,6 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: '#10B981',
     borderWidth: 3,
     borderColor: '#FFFFFF',
   },

@@ -39,3 +39,4 @@ p, receptionist, *, billing, view
 g, 1, clinic_owner, 1
 g, 13, receptionist, 1
 g, 13, doctor, 1
+g, 14, doctor, 1

@@ -28,8 +28,11 @@ export interface Patient {
   lastVisit: string;
   nextAppointment?: string;
   status: 'Active' | 'Inactive';
-  medicalHistory?: MedicalRecord[];
   billingHistory?: BillingRecord[];
+  dentalChart?: any;
+  toothNotes?: any;
+  treatmentPlan?: any[];
+  prescriptions?: any[];
 }
 
 export class PatientsApiService extends BaseApiService {
@@ -123,6 +126,10 @@ export class PatientsApiService extends BaseApiService {
         }) : 'N/A',
         nextAppointment: data.next_appointment,
         status: data.sync_status === 'synced' || data.created_at ? 'Active' : 'Inactive',
+        dentalChart: data.dental_chart || {},
+        toothNotes: data.tooth_notes || {},
+        treatmentPlan: data.treatment_plan || [],
+        prescriptions: data.prescriptions || [],
       };
 
       console.log('✅ [API] Transformed patient details:', patient);
@@ -144,7 +151,7 @@ export class PatientsApiService extends BaseApiService {
     treatment_type: string;
     notes?: string;
     payment_type: string;
-  }): Promise<void> {
+  }): Promise<any> {
     try {
       console.log('👥 [API] Creating patient...');
       console.log('📋 [API] Patient data:', JSON.stringify(patientData, null, 2));
@@ -165,22 +172,43 @@ export class PatientsApiService extends BaseApiService {
       });
 
       console.log('📡 [API] Create patient response status:', response.status);
-      console.log('📡 [API] Response headers:', response.headers);
 
       if (!response.ok) {
         const errorText = await response.text();
         console.error('❌ [API] Create patient error response:', errorText);
-        console.error('❌ [API] Response status:', response.status);
-        console.error('❌ [API] Headers:', Object.fromEntries(response.headers.entries()));
         throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
       }
 
       const data = await response.json();
       console.log('✅ [API] Patient created successfully:', data);
+      return data;
     } catch (error: any) {
       console.error('❌ [API] Error creating patient:', error);
-      console.error('❌ [API] Error message:', error.message);
-      console.error('❌ [API] Error stack:', error.stack);
+      throw error;
+    }
+  }
+
+  async updatePatient(patientId: string, updateData: Partial<any>): Promise<any> {
+    try {
+      console.log('👥 [API] Updating patient:', patientId);
+      const headers = await this.getAuthHeaders();
+      const response = await fetch(`${this.baseURL}/patients/${patientId}`, {
+        method: 'PUT',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      console.error('❌ [API] Error updating patient:', error);
       throw error;
     }
   }
