@@ -7,7 +7,7 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 // Pages
-import LandingPage from "./pages/LandingPage";
+import RedirectToMarketing from "./pages/RedirectToMarketing";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
@@ -27,11 +27,6 @@ import Calendar from "./pages/Calendar";
 import BookingPage from "./pages/BookingPage";
 import PatientFiles from "./pages/PatientFiles";
 import PatientProfile from "./pages/PatientProfile";
-import About from "./pages/About";
-import Features from "./pages/Features";
-import Platform from "./pages/Platform";
-import Pricing from "./pages/Pricing";
-import Contact from "./pages/Contact";
 import DentalChartDemo from "./pages/DentalChartDemo";
 import WhatsAppTest from "./pages/WhatsAppTest";
 import Subscription from "./pages/Subscription";
@@ -96,33 +91,26 @@ function AppContent() {
     }
   }, [location.pathname, loading, user, navigate]);
 
-  // Check if current route is auth page, landing page, or booking page
+  // Check if current route is auth page, root redirect, booking, or dental-demo (no sidebar)
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/onboarding' || location.pathname === '/auth/callback';
-  const isLandingPage = location.pathname === '/';
+  const isRootRedirect = location.pathname === '/';
   const isBookingPage = location.pathname === '/booking';
-  const isPublicPage = location.pathname === '/about' || location.pathname === '/features' || location.pathname === '/platform' || location.pathname === '/pricing' || location.pathname === '/contact';
-
-  // Don't block rendering while loading - let ProtectedRoute handle it
-  // if (loading) return <div>Loading...</div>;
+  const isNoSidebarRoute = isAuthPage || isRootRedirect || isBookingPage || location.pathname === '/dental-demo';
 
   // Render layout based on route type
   const renderContent = () => {
-    // For auth pages, landing page, booking page, and public pages - render without sidebar
-    if (isAuthPage || isLandingPage || isBookingPage || isPublicPage) {
+    // For auth pages, root (redirect to marketing), booking, dental-demo - render without sidebar
+    if (isNoSidebarRoute) {
       return (
         <Routes>
-          <Route path="/" element={<LandingPage />} />
+          <Route path="/" element={<RedirectToMarketing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/onboarding" element={<ClinicOnboarding />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/booking" element={<BookingPage />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/features" element={<Features />} />
-          <Route path="/platform" element={<Platform />} />
-          <Route path="/pricing" element={<Pricing />} />
-          <Route path="/contact" element={<Contact />} />
           <Route path="/dental-demo" element={<DentalChartDemo />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       );
     }
