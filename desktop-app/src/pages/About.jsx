@@ -2,7 +2,6 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, CheckCircle, Users, Target, Award, Heart } from 'lucide-react';
 import SEO from '../components/SEO';
-import betterClinicLogo from '../assets/betterclinic-logo.png';
 
 const About = () => {
   const structuredData = {
@@ -38,8 +37,8 @@ const About = () => {
             <div className="flex items-center">
               <Link to="/" className="flex items-center overflow-hidden" style={{ height: '50px' }}>
                 <img 
-                  src={betterClinicLogo} 
-                  alt="Better Clinic Logo" 
+                  src="/molarplus-logo.svg" 
+                  alt="MolarPlus" 
                   className="h-22 w-auto"
                 />
               </Link>

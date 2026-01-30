@@ -78,7 +78,7 @@ export class AuthApiService extends BaseApiService {
     }
   }
 
-  async oauthLogin(idToken: string): Promise<{ user: BackendUser | null; error?: string }> {
+  async oauthLogin(idToken: string, role?: string): Promise<{ user: BackendUser | null; error?: string }> {
     try {
       const response = await fetch(`${this.baseURL}/auth/oauth`, {
         method: 'POST',
@@ -87,6 +87,7 @@ export class AuthApiService extends BaseApiService {
         },
         body: JSON.stringify({
           id_token: idToken,
+          role,
           device: {
             device_name: 'Mobile App',
             device_type: 'mobile',

@@ -65,14 +65,27 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS setup
+# CORS setup: with allow_credentials=True, origins must be explicit (not "*")
+_CORS_ORIGINS = [
+    "https://app.molarplus.com",
+    "https://www.molarplus.com",
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+]
+# Allow extra origins from env (comma-separated), e.g. CORS_ORIGINS=https://staging.example.com
+_env_origins = os.getenv("CORS_ORIGINS", "").strip()
+if _env_origins:
+    _CORS_ORIGINS.extend(o.strip() for o in _env_origins.split(",") if o.strip())
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
-    expose_headers=["*"]
+    expose_headers=["*"],
 )
 
 # Mount static files for template assets (handle PyInstaller bundling)

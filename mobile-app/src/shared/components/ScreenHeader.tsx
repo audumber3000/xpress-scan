@@ -13,6 +13,7 @@ interface ScreenHeaderProps {
   iconColor?: string;
   variant?: 'default' | 'admin';
   subtitle?: string;
+  titleIcon?: React.ReactNode;
 }
 
 export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
@@ -24,6 +25,7 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   iconColor,
   variant = 'default',
   subtitle,
+  titleIcon,
 }) => {
   const bgColor = backgroundColor || (variant === 'admin' ? '#FFFFFF' : '#FFFFFF');
   const txtColor = textColor || (variant === 'admin' ? '#111827' : '#111827');
@@ -31,7 +33,7 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
 
   return (
     <View style={[styles.header, { backgroundColor: bgColor }]}>
-      {onBackPress ? (
+      {onBackPress && (
         <TouchableOpacity
           style={styles.backButton}
           onPress={onBackPress}
@@ -39,21 +41,20 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
         >
           <ChevronLeft size={24} color={icnColor} />
         </TouchableOpacity>
-      ) : (
-        <View style={styles.backButton} />
       )}
 
-      <View style={styles.titleContainer}>
-        <Text style={[styles.headerTitle, { color: txtColor }]}>{title}</Text>
+      <View style={[styles.titleContainer, !onBackPress && { marginLeft: 0 }]}>
+        <View style={styles.headerTitleRow}>
+          {titleIcon && <View style={styles.titleIconContainer}>{titleIcon}</View>}
+          <Text style={[styles.headerTitle, { color: txtColor }]}>{title}</Text>
+        </View>
         {subtitle && <Text style={styles.headerSubtitle}>{subtitle}</Text>}
       </View>
 
-      {rightComponent ? (
+      {rightComponent && (
         <View style={styles.rightContainer}>
           {rightComponent}
         </View>
-      ) : (
-        <View style={styles.backButton} />
       )}
     </View>
   );
@@ -63,7 +64,6 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
     backgroundColor: '#FFFFFF',
@@ -73,10 +73,19 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 8,
+    marginLeft: -10, // Adjust to bring icon closer to edge
   },
   titleContainer: {
     flex: 1,
     justifyContent: 'center',
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  titleIconContainer: {
+    marginRight: 8,
   },
   headerTitle: {
     fontSize: 18,

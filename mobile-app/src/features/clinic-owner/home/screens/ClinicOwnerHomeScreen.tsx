@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, SafeAreaView, ScrollView, Pressable, StatusBar, StyleSheet } from 'react-native';
 import { Home, FileText, Users, Calendar, ClipboardList, Heart, FileCheck, Shield } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../../app/AppNavigator';
 import { useAuth } from '../../../../app/AuthContext';
+import { AppSkeleton } from '../../../../shared/components/Skeleton';
 
-type ClinicOwnerHomeScreenProps = NativeStackScreenProps<RootStackParamList, 'ClinicOwnerHome'>;
+type ClinicOwnerHomeScreenProps = NativeStackScreenProps<RootStackParamList, 'ClinicOwnerTabs'>;
 
 interface MenuCard {
   id: string;
@@ -16,7 +17,7 @@ interface MenuCard {
 }
 
 export const ClinicOwnerHomeScreen: React.FC<ClinicOwnerHomeScreenProps> = ({ navigation }) => {
-  const { logout, backendUser } = useAuth();
+  const { logout, backendUser, isLoading } = useAuth();
 
   const menuCards: MenuCard[] = [
     {
@@ -24,70 +25,70 @@ export const ClinicOwnerHomeScreen: React.FC<ClinicOwnerHomeScreenProps> = ({ na
       title: 'Visits',
       icon: <Home size={32} color="#F97316" />,
       bgColor: '#FFF7ED',
-      onPress: () => {},
+      onPress: () => { },
     },
     {
       id: '2',
       title: 'P&P Chart',
       icon: <FileText size={32} color="#EC4899" />,
       bgColor: '#FDF2F8',
-      onPress: () => {},
+      onPress: () => { },
     },
     {
       id: '3',
       title: 'About me',
       icon: <Users size={32} color="#10B981" />,
       bgColor: '#F0FDF4',
-      onPress: () => {},
+      onPress: () => { },
     },
     {
       id: '4',
       title: 'Detail',
       icon: <ClipboardList size={32} color="#8B5CF6" />,
       bgColor: '#F5F3FF',
-      onPress: () => {},
+      onPress: () => { },
     },
     {
       id: '5',
       title: 'Care package',
       icon: <Heart size={32} color="#3B82F6" />,
       bgColor: '#EFF6FF',
-      onPress: () => {},
+      onPress: () => { },
     },
     {
       id: '6',
       title: 'Communication',
       icon: <Calendar size={32} color="#F59E0B" />,
       bgColor: '#FFFBEB',
-      onPress: () => {},
+      onPress: () => { },
     },
     {
       id: '7',
       title: 'Documents',
       icon: <FileCheck size={32} color="#14B8A6" />,
       bgColor: '#F0FDFA',
-      onPress: () => {},
+      onPress: () => { },
     },
     {
       id: '8',
       title: 'Medical history',
       icon: <ClipboardList size={32} color="#8B5CF6" />,
       bgColor: '#FAF5FF',
-      onPress: () => {},
+      onPress: () => { },
     },
     {
       id: '9',
       title: 'OpenPass',
       icon: <Shield size={32} color="#3B82F6" />,
       bgColor: '#EFF6FF',
-      onPress: () => {},
+      onPress: () => { },
     },
   ];
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#7C3AED" />
-      
+
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View style={styles.headerInfo}>
@@ -107,7 +108,7 @@ export const ClinicOwnerHomeScreen: React.FC<ClinicOwnerHomeScreenProps> = ({ na
               </View>
             </View>
           </View>
-          
+
           <View style={styles.profileCircle}>
             <Text style={styles.profileEmoji}>👤</Text>
           </View>
@@ -132,7 +133,7 @@ export const ClinicOwnerHomeScreen: React.FC<ClinicOwnerHomeScreenProps> = ({ na
             </View>
           ))}
         </View>
-        
+
         <View style={styles.logoutContainer}>
           <Pressable
             onPress={logout}

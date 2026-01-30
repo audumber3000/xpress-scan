@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   Modal,
+  Animated,
+  Easing,
 } from 'react-native';
 import { ChevronDown } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,6 +23,54 @@ interface PatientVisitsChartProps {
   selectedPeriod: 'Week' | 'Month' | 'Year';
   onPeriodChange: (period: 'Week' | 'Month' | 'Year') => void;
 }
+
+const AnimatedBar: React.FC<{
+  value: number;
+  maxVisits: number;
+  index: number;
+  isSelected: boolean;
+  onPress: () => void;
+  label: string;
+}> = ({ value, maxVisits, index, isSelected, onPress, label }) => {
+  const animatedHeight = useRef(new Animated.Value(0)).current;
+  const targetHeight = maxVisits > 0 ? Math.max(10, (value / maxVisits) * 100) : 10;
+
+  useEffect(() => {
+    // Reset and animate
+    animatedHeight.setValue(0);
+    Animated.timing(animatedHeight, {
+      toValue: targetHeight,
+      duration: 600,
+      delay: index * 50, // Stagger effect
+      easing: Easing.out(Easing.exp),
+      useNativeDriver: false, // Height cannot be animated with native driver
+    }).start();
+  }, [targetHeight, index]);
+
+  return (
+    <TouchableOpacity
+      style={styles.barWrapper}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
+      <Animated.View
+        style={[
+          styles.bar,
+          {
+            height: animatedHeight.interpolate({
+              inputRange: [0, 100],
+              outputRange: ['0%', '100%'],
+            }),
+            backgroundColor: isSelected ? '#2E2A85' : '#E0E0F0',
+          },
+        ]}
+      />
+      <Text style={[styles.xAxisLabel, isSelected && styles.xAxisLabelActive]}>
+        {label.toUpperCase()}
+      </Text>
+    </TouchableOpacity>
+  );
+};
 
 export const PatientVisitsChart: React.FC<PatientVisitsChartProps> = ({
   chartData,
@@ -102,31 +152,17 @@ export const PatientVisitsChart: React.FC<PatientVisitsChartProps> = ({
       <View style={styles.chartArea}>
         <View style={styles.barsContainer}>
           {chartData.hasData && displayData.length > 0 ? (
-            displayData.map((value, index) => {
-              const isSelected = selectedBar === index;
-
-              return (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.barWrapper}
-                  onPress={() => setSelectedBar(index)}
-                  activeOpacity={0.8}
-                >
-                  <View
-                    style={[
-                      styles.bar,
-                      {
-                        height: maxVisits > 0 ? `${Math.max(10, (value / maxVisits) * 100)}%` : '10%',
-                        backgroundColor: isSelected ? '#2E2A85' : '#E0E0F0',
-                      },
-                    ]}
-                  />
-                  <Text style={[styles.xAxisLabel, isSelected && styles.xAxisLabelActive]}>
-                    {chartData.labels[index].toUpperCase()}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })
+            displayData.map((value, index) => (
+              <AnimatedBar
+                key={`${selectedPeriod}-${index}`}
+                value={value}
+                maxVisits={maxVisits}
+                index={index}
+                isSelected={selectedBar === index}
+                onPress={() => setSelectedBar(index)}
+                label={chartData.labels[index]}
+              />
+            ))
           ) : null}
         </View>
       </View>

@@ -21,7 +21,7 @@ const getWebClientId = () => {
   if (process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID) {
     return process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
   }
-  
+
   // TODO: Add your Google Web Client ID here
   // Get it from: Firebase Console → Project Settings → Your apps → Web app → OAuth 2.0 Client IDs
   // For betterclinic-f1179 project, it should look like: 101419773058-xxxxxxxxxxxxx.apps.googleusercontent.com
@@ -41,11 +41,11 @@ const getWebClientId = () => {
   // 3. Go to APIs & Services → Credentials
   // 4. Find OAuth 2.0 Client IDs
   // 5. Look for "Web client" and copy the Client ID
-  
+
   // Google Web Client ID for betterclinic-f1179 project
   // This is the OAuth 2.0 Web client ID for Google Sign-In
   const WEB_CLIENT_ID = '101419773058-lq31dfucchaiaqcfnovd50dimut6tu2k.apps.googleusercontent.com'
-  
+
   // Return the Web Client ID
   return WEB_CLIENT_ID
 }
@@ -70,19 +70,19 @@ try {
 /**
  * Sign up a new user with email and password
  */
-export const signUpWithEmail = async (email: string, password: string) => {
+export const signUpWithEmail = async (email: string, password: string, role?: string) => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password)
-    
+
     // Get Firebase ID token and sync with backend
     const firebaseIdToken = await userCredential.user.getIdToken()
     try {
-      await authApiService.oauthLogin(firebaseIdToken)
+      await authApiService.oauthLogin(firebaseIdToken, role)
     } catch (backendError) {
       console.warn('Backend sync failed:', backendError)
       // Continue even if backend sync fails - user is still logged in to Firebase
     }
-    
+
     return {
       user: userCredential.user,
       error: null,
@@ -101,7 +101,7 @@ export const signUpWithEmail = async (email: string, password: string) => {
 export const signInWithEmail = async (email: string, password: string) => {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password)
-    
+
     // Get Firebase ID token and sync with backend
     const firebaseIdToken = await userCredential.user.getIdToken()
     try {
@@ -110,7 +110,7 @@ export const signInWithEmail = async (email: string, password: string) => {
       console.warn('Backend sync failed:', backendError)
       // Continue even if backend sync fails - user is still logged in to Firebase
     }
-    
+
     return {
       user: userCredential.user,
       error: null,
@@ -175,7 +175,7 @@ export const changePassword = async (newPassword: string) => {
 /**
  * Sign in with Google
  */
-export const signInWithGoogle = async () => {
+export const signInWithGoogle = async (role?: string) => {
   try {
     if (!isGoogleSignInConfigured) {
       const webClientId = getWebClientId()
@@ -204,56 +204,64 @@ export const signInWithGoogle = async () => {
     if (Platform.OS === 'android') {
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true })
     }
-    
+
+    // Force account selection by signing out first (if session exists)
+    // This solves the issue where it automatically picks the last used account
+    try {
+      await GoogleSignin.signOut();
+    } catch (e) {
+      // Ignore if not signed in
+    }
+
     // Sign in with Google - this opens the native Google Sign-In UI
     // signIn() returns user data if successful
     await GoogleSignin.signIn()
-    
+
     // After signIn(), we need to ensure the user is the current user
     // Get the current user to verify sign-in was successful
     const currentUser = await GoogleSignin.getCurrentUser()
-    
+
     if (!currentUser) {
       return {
         user: null,
         error: 'Failed to sign in with Google. User not found after sign-in.',
       }
     }
-    
+
     // Now that we have a current user, we can get tokens
     // getTokens() requires a signed-in user, which we now have
     const tokens = await GoogleSignin.getTokens()
     const idToken = tokens.idToken
-    
+
     if (!idToken) {
       return {
         user: null,
         error: 'Failed to get ID token from Google Sign-In',
       }
     }
-    
+
     // Create a Google credential with the token
     const googleCredential = GoogleAuthProvider.credential(idToken)
-    
+
     // Sign-in the user with the credential
     const userCredential = await signInWithCredential(auth, googleCredential)
-    
+
     // Get Firebase ID token and sync with backend
     const firebaseIdToken = await userCredential.user.getIdToken()
     try {
-      await authApiService.oauthLogin(firebaseIdToken)
+      await authApiService.oauthLogin(firebaseIdToken, role)
     } catch (backendError) {
       console.warn('Backend sync failed:', backendError)
       // Continue even if backend sync fails - user is still logged in to Firebase
     }
-    
+
     return {
       user: userCredential.user,
       error: null,
     }
   } catch (error: any) {
     let errorMessage = 'Failed to sign in with Google'
-    
+
     if (error.code === statusCodes.SIGN_IN_CANCELLED) {
       errorMessage = 'Sign in was cancelled'
       return {
@@ -265,7 +273,7 @@ export const signInWithGoogle = async () => {
     } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
       errorMessage = 'Google Play Services not available'
     }
-    
+
     return {
       user: null,
       error: error.message || errorMessage,

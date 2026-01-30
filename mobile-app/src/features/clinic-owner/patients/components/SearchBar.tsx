@@ -8,10 +8,10 @@ interface SearchBarProps {
   placeholder?: string;
 }
 
-export const SearchBar: React.FC<SearchBarProps> = ({ 
-  value, 
-  onChangeText, 
-  placeholder = 'Search by name, ID or phone...' 
+export const SearchBar: React.FC<SearchBarProps> = ({
+  value,
+  onChangeText,
+  placeholder = 'Search by name, ID or phone...'
 }) => {
   return (
     <View style={styles.searchContainer}>
@@ -31,12 +31,14 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     marginHorizontal: 20,
     marginVertical: 16,
     paddingHorizontal: 16,
     paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB', // Gray-200
   },
   searchIcon: {
     marginRight: 12,

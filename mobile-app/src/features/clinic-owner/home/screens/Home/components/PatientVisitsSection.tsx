@@ -1,11 +1,14 @@
 import React from 'react';
+import { View } from 'react-native';
 import { PatientVisitsChart } from '../../../../../../shared/components/home/PatientVisitsChart';
 import type { Analytics } from '../../../../../../services/api/analytics.api';
+import { AppSkeleton } from '../../../../../../shared/components/Skeleton';
 
 interface PatientVisitsSectionProps {
   analytics: Analytics | null;
   selectedPeriod: 'Week' | 'Month' | 'Year';
   onPeriodChange: (period: 'Week' | 'Month' | 'Year') => void;
+  loading?: boolean;
 }
 
 // Data prep for the chart. PatientVisitsChart is not modified; it receives chartData, selectedPeriod, onPeriodChange.
@@ -58,17 +61,17 @@ function getChartData(analytics: Analytics | null, selectedPeriod: 'Week' | 'Mon
     case 'Year': {
       const yearlyData = patientVisitsData.length >= 12
         ? [
-            patientVisitsData.slice(0, 3).reduce((a, b) => a + b, 0),
-            patientVisitsData.slice(3, 6).reduce((a, b) => a + b, 0),
-            patientVisitsData.slice(6, 9).reduce((a, b) => a + b, 0),
-            patientVisitsData.slice(9, 12).reduce((a, b) => a + b, 0),
-          ]
+          patientVisitsData.slice(0, 3).reduce((a, b) => a + b, 0),
+          patientVisitsData.slice(3, 6).reduce((a, b) => a + b, 0),
+          patientVisitsData.slice(6, 9).reduce((a, b) => a + b, 0),
+          patientVisitsData.slice(9, 12).reduce((a, b) => a + b, 0),
+        ]
         : [
-            patientVisitsData.slice(0, Math.min(3, patientVisitsData.length)).reduce((a, b) => a + b, 0),
-            patientVisitsData.slice(3, Math.min(6, patientVisitsData.length)).reduce((a, b) => a + b, 0),
-            patientVisitsData.slice(6, 9).reduce((a, b) => a + b, 0),
-            patientVisitsData.slice(9, Math.min(12, patientVisitsData.length)).reduce((a, b) => a + b, 0),
-          ];
+          patientVisitsData.slice(0, Math.min(3, patientVisitsData.length)).reduce((a, b) => a + b, 0),
+          patientVisitsData.slice(3, Math.min(6, patientVisitsData.length)).reduce((a, b) => a + b, 0),
+          patientVisitsData.slice(6, 9).reduce((a, b) => a + b, 0),
+          patientVisitsData.slice(9, Math.min(12, patientVisitsData.length)).reduce((a, b) => a + b, 0),
+        ];
       return {
         data: yearlyData,
         labels: yearLabels,
@@ -84,8 +87,17 @@ export const PatientVisitsSection: React.FC<PatientVisitsSectionProps> = ({
   analytics,
   selectedPeriod,
   onPeriodChange,
+  loading = false,
 }) => {
   const chartData = getChartData(analytics, selectedPeriod);
+
+  if (loading) {
+    return (
+      <View style={{ paddingHorizontal: 20 }}>
+        <AppSkeleton show={true} width="100%" height={380} radius={32} />
+      </View>
+    );
+  }
 
   return (
     <PatientVisitsChart

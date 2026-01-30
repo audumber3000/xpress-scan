@@ -1,12 +1,15 @@
 """
 Auth routes using clean architecture
 """
+import os
+import requests
 from fastapi import APIRouter, HTTPException, status, Request, Depends
 from typing import Optional
 from core.dtos import (
     LoginRequestDTO,
     RegisterRequestDTO,
     OAuthRequestDTO,
+    OAuthCodeRequestDTO,
     ChangePasswordRequestDTO,
     AuthResponseDTO,
     UserResponseDTO,
@@ -122,7 +125,11 @@ async def oauth_login(
     """
     try:
         # Verify OAuth token and get/create user
-        user = auth_service.handle_oauth_login(oauth_data.id_token, oauth_data.device)
+        user = auth_service.handle_oauth_login(
+            oauth_data.id_token, 
+            oauth_data.device,
+            getattr(oauth_data, 'role', None)
+        )
 
         # Register device if device info provided
         if oauth_data.device:
@@ -147,6 +154,86 @@ async def oauth_login(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"OAuth login failed: {str(e)}"
+        )
+
+
+@router.post(
+    "/oauth/code",
+    response_model=AuthResponseDTO,
+    summary="OAuth login (desktop: exchange code)",
+    description="Exchange Google OAuth code for JWT. Used by desktop app when using system browser flow."
+)
+async def oauth_code_login(
+    request: Request,
+    oauth_data: OAuthCodeRequestDTO,
+    auth_service = Depends(get_auth_service)
+):
+    """
+    Exchange authorization code with Google, verify id_token, then same as /oauth.
+    Requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (same OAuth client as frontend).
+    """
+    client_id = os.getenv("GOOGLE_CLIENT_ID") or os.getenv("VITE_GOOGLE_OAUTH_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google OAuth not configured (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET)"
+        )
+    try:
+        resp = requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": oauth_data.code,
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "redirect_uri": oauth_data.redirect_uri,
+                "grant_type": "authorization_code",
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        id_token = data.get("id_token")
+        if not id_token:
+            raise ValueError("Google did not return an id_token")
+        user = auth_service.handle_oauth_login(
+            id_token,
+            oauth_data.device,
+            getattr(oauth_data, "role", None),
+        )
+        if oauth_data.device:
+            device_info = auth_service.detect_device_info(
+                request,
+                oauth_data.device if isinstance(oauth_data.device, dict) else oauth_data.device.dict(),
+            )
+            auth_service.register_device(user.id, device_info)
+        token = auth_service.create_jwt_token(user.id)
+        return AuthResponseDTO(
+            message="OAuth login successful",
+            user=UserResponseDTO.from_orm(user),
+            token=token,
+        )
+    except requests.RequestException as e:
+        err_detail = str(e)
+        if hasattr(e, "response") and e.response is not None:
+            try:
+                err_detail = e.response.json().get("error_description", e.response.text)
+            except Exception:
+                err_detail = getattr(e.response, "text", None) or err_detail
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Google token exchange failed: {err_detail}",
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"OAuth code login failed: {str(e)}",
         )
 
 

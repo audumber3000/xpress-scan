@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Bell } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '../../../../../../shared/constants/colors';
+import { AppSkeleton } from '../../../../../../shared/components/Skeleton';
 
 interface WelcomeHeaderProps {
   userName: string;
@@ -11,6 +12,7 @@ interface WelcomeHeaderProps {
   onNotificationPress: () => void;
   dailyRevenue: number;
   totalPatients: number;
+  loading?: boolean;
 }
 
 // 1. Background backdrop (lowest layer)
@@ -31,7 +33,8 @@ export const WelcomeHeaderTopPart: React.FC<WelcomeHeaderProps> = ({
   specialization = 'Endo Dentist',
   onNotificationPress,
   dailyRevenue,
-  totalPatients
+  totalPatients,
+  loading = false
 }) => {
   return (
     <LinearGradient

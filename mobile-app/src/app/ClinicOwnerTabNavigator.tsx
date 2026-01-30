@@ -26,9 +26,11 @@ export const ClinicOwnerTabNavigator = () => {
 
   return (
     <Tab.Navigator
+      id="clinic-owner-tabs"
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
+        lazy: true,
       }}
     >
       <Tab.Screen

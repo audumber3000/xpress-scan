@@ -1,175 +1,145 @@
 import React from 'react';
-import { View, Text, SafeAreaView, StatusBar, Pressable, StyleSheet } from 'react-native';
+import { View, Text, StatusBar, Pressable, StyleSheet, ImageBackground, Dimensions, Platform } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { ChevronRight } from 'lucide-react-native';
 import { RootStackParamList } from '../../../app/AppNavigator';
+import { colors } from '../../../shared/constants/colors';
 
 type GetStartedScreenProps = NativeStackScreenProps<RootStackParamList, 'GetStarted'>;
 
+const { width } = Dimensions.get('window');
+
 export const GetStartedScreen: React.FC<GetStartedScreenProps> = ({ navigation }) => {
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
-      <View style={styles.content}>
-        <View style={styles.heroSection}>
-          <View style={styles.illustrationContainer}>
-            <View style={styles.toothCircle}>
-              <Text style={styles.toothEmoji}>🦷</Text>
-            </View>
-            <View style={styles.badgeLeft}>
-              <Text style={styles.badgeText}>Your Smile</Text>
-            </View>
-            <View style={styles.badgeRight}>
-              <Text style={styles.badgeText}>Your Confidence</Text>
-            </View>
-          </View>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-          <View style={styles.titleContainer}>
-            <Text style={styles.title}>
-              Smile Brightly{'\n'}With Confidence!
-            </Text>
-            <Text style={styles.subtitle}>
-              Good oral health is the key to overall well-being
-            </Text>
-          </View>
-        </View>
+      <ImageBackground
+        source={require('../../../../assets/getstarted_picture.png')}
+        style={styles.backgroundImage}
+        resizeMode="cover"
+      >
+        <LinearGradient
+          colors={['transparent', 'rgba(42, 39, 110, 0.6)', 'rgba(42, 39, 110, 0.95)']}
+          style={styles.gradient}
+          locations={[0.45, 0.7, 1]}
+        >
+          <SafeAreaView style={styles.content}>
+            <View style={styles.textContainer}>
+              <Text style={styles.title}>
+                Supporting <Text style={styles.highlight}>dentistry</Text>{'\n'}beyond the chair !
+              </Text>
+              <Text style={styles.subtitle}>
+                Less Stress. More Smiles.
+              </Text>
+            </View>
 
-        <View style={styles.buttonContainer}>
-          <Pressable
-            onPress={() => navigation.navigate('Signup')}
-            style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
-          >
-            <Text style={styles.primaryButtonText}>Get Started</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => navigation.navigate('Login')}
-            style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
-          >
-            <Text style={styles.secondaryButtonText}>Continue with Guest</Text>
-          </Pressable>
-        </View>
-      </View>
-    </SafeAreaView>
+            <View style={styles.buttonContainer}>
+              {/* Primary "Swipe/Get Started" Button */}
+              <Pressable
+                onPress={() => navigation.navigate('Login')}
+                style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
+              >
+                <Text style={styles.primaryButtonText}>Get Started</Text>
+                <View style={styles.iconContainer}>
+                  <ChevronRight size={24} color={colors.white} />
+                </View>
+              </Pressable>
+            </View>
+          </SafeAreaView>
+        </LinearGradient>
+      </ImageBackground>
+    </View >
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.primary,
+  },
+  backgroundImage: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  gradient: {
+    flex: 1,
+    justifyContent: 'flex-end',
   },
   content: {
-    flex: 1,
     paddingHorizontal: 24,
-    justifyContent: 'space-between',
-    paddingVertical: 40,
-  },
-  heroSection: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  illustrationContainer: {
+    paddingBottom: 40,
     width: '100%',
-    maxHeight: 384,
-    aspectRatio: 1,
-    backgroundColor: '#F3E8FF',
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 32,
-    position: 'relative',
   },
-  toothCircle: {
-    width: 192,
-    height: 192,
-    backgroundColor: '#ffffff',
-    borderRadius: 96,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  toothEmoji: {
-    fontSize: 60,
-  },
-  badgeLeft: {
-    position: 'absolute',
-    top: 80,
-    left: 40,
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  badgeRight: {
-    position: 'absolute',
-    bottom: 128,
-    right: 40,
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  badgeText: {
-    color: '#7C3AED',
-    fontWeight: '600',
-  },
-  titleContainer: {
-    alignItems: 'center',
-    paddingHorizontal: 16,
+  textContainer: {
+    marginBottom: 40,
   },
   title: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#111827',
-    textAlign: 'center',
+    fontSize: 32,
+    fontWeight: '400', // Regular weight for the main text
+    color: colors.white,
     marginBottom: 12,
+    lineHeight: 40,
+    letterSpacing: -0.5,
+  },
+  highlight: {
+    fontWeight: '800', // Bold/Heavy weight for "dentistry"
+    color: colors.white, // Keep it white
   },
   subtitle: {
-    color: '#6B7280',
-    textAlign: 'center',
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: 18,
+    color: colors.gray100,
+    fontWeight: '500',
+    opacity: 0.9,
   },
   buttonContainer: {
-    gap: 12,
+    gap: 16,
   },
   primaryButton: {
-    backgroundColor: '#3B82F6',
-    paddingVertical: 16,
-    borderRadius: 24,
+    backgroundColor: colors.primary, // Changed to primary brand color
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    borderRadius: 32,
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  secondaryButton: {
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 16,
-    borderRadius: 24,
-    alignItems: 'center',
-  },
-  buttonPressed: {
-    opacity: 0.8,
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)', // Add subtle border for contrast against gradient
   },
   primaryButtonText: {
-    color: '#ffffff',
-    fontWeight: '600',
+    color: colors.white, // Changed to white
+    fontWeight: '700',
     fontSize: 18,
+    letterSpacing: 0.5,
+  },
+  iconContainer: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 20,
+    padding: 4,
+  },
+  secondaryButton: {
+    paddingVertical: 16,
+    borderRadius: 32,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   secondaryButtonText: {
-    color: '#374151',
+    color: colors.white,
     fontWeight: '600',
-    fontSize: 18,
+    fontSize: 16,
+  },
+  buttonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.99 }],
   },
 });

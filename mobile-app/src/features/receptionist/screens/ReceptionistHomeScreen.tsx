@@ -4,6 +4,7 @@ import { Calendar, Users, FileText, ClipboardList, Phone, MessageSquare } from '
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../app/AppNavigator';
 import { useAuth } from '../../../app/AuthContext';
+import { AppSkeleton } from '../../../shared/components/Skeleton';
 
 type ReceptionistHomeScreenProps = NativeStackScreenProps<RootStackParamList, 'ReceptionistHome'>;
 
@@ -16,7 +17,7 @@ interface MenuCard {
 }
 
 export const ReceptionistHomeScreen: React.FC<ReceptionistHomeScreenProps> = ({ navigation }) => {
-  const { logout, backendUser } = useAuth();
+  const { logout, backendUser, isLoading } = useAuth();
 
   const menuCards: MenuCard[] = [
     {
@@ -24,52 +25,52 @@ export const ReceptionistHomeScreen: React.FC<ReceptionistHomeScreenProps> = ({ 
       title: 'Appointments',
       icon: <Calendar size={32} color="#8B5CF6" />,
       bgColor: '#F5F3FF',
-      onPress: () => {},
+      onPress: () => { },
     },
     {
       id: '2',
       title: 'Patients',
       icon: <Users size={32} color="#3B82F6" />,
       bgColor: '#EFF6FF',
-      onPress: () => {},
+      onPress: () => { },
     },
     {
       id: '3',
       title: 'Reports',
       icon: <FileText size={32} color="#10B981" />,
       bgColor: '#F0FDF4',
-      onPress: () => {},
+      onPress: () => { },
     },
     {
       id: '4',
       title: 'Tasks',
       icon: <ClipboardList size={32} color="#F59E0B" />,
       bgColor: '#FFFBEB',
-      onPress: () => {},
+      onPress: () => { },
     },
     {
       id: '5',
       title: 'Calls',
       icon: <Phone size={32} color="#EC4899" />,
       bgColor: '#FDF2F8',
-      onPress: () => {},
+      onPress: () => { },
     },
     {
       id: '6',
       title: 'Messages',
       icon: <MessageSquare size={32} color="#14B8A6" />,
       bgColor: '#F0FDFA',
-      onPress: () => {},
+      onPress: () => { },
     },
   ];
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#7C3AED" />
-      
+
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Reception Desk</Text>
-        
+
         <View style={styles.headerContent}>
           <View style={styles.headerInfo}>
             <Text style={styles.welcomeText}>
@@ -81,7 +82,7 @@ export const ReceptionistHomeScreen: React.FC<ReceptionistHomeScreenProps> = ({ 
               </Text>
             )}
           </View>
-          
+
           <View style={styles.profileCircle}>
             <Text style={styles.profileEmoji}>👤</Text>
           </View>
@@ -106,7 +107,7 @@ export const ReceptionistHomeScreen: React.FC<ReceptionistHomeScreenProps> = ({ 
             </View>
           ))}
         </View>
-        
+
         <View style={styles.logoutContainer}>
           <Pressable
             onPress={logout}

@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { api } from "../utils/api";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
-const navItems = [
+const mainNavItems = [
   {
     name: "Dashboard",
     path: "/dashboard",
@@ -62,20 +63,16 @@ const navItems = [
   {
     name: "Inbox",
     path: "/inbox",
+    hasSubmenu: true,
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
       </svg>
     ),
-  },
-  {
-    name: "Admin",
-    path: "/admin/attendance",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-      </svg>
-    ),
+    submenu: [
+      { name: "WhatsApp", path: "/inbox", icon: <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg> },
+      { name: "Mail", path: "/mail", icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg> }
+    ]
   },
   {
     name: "Settings",
@@ -89,12 +86,25 @@ const navItems = [
   },
 ];
 
+const adminNavItems = [
+  {
+    name: "Admin",
+    path: "/admin",
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+      </svg>
+    ),
+  },
+];
+
 const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [isMobile, setIsMobile] = useState(false);
   const [clinicData, setClinicData] = useState(null);
+  const [inboxExpanded, setInboxExpanded] = useState(false);
 
   // Use external state if provided, otherwise use internal state
   const [internalCollapsed, setInternalCollapsed] = useState(false);
@@ -210,7 +220,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
 
         {/* Branding */}
         <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'} h-16 mb-4 ${collapsed ? 'px-2' : ''} relative`}>
-          {/* Logo: Show clinic logo if available, otherwise tooth icon */}
+          {/* Logo: Show clinic logo if available, otherwise MolarPlus logo */}
           {clinicData?.logo ? (
             <img 
               src={clinicData.logo} 
@@ -218,10 +228,11 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
               className={`${collapsed ? 'w-10 h-10' : 'w-12 h-12'} rounded-full object-cover flex-shrink-0 border-2 border-white/20 transition-all`}
             />
           ) : (
-            <div className={`${collapsed ? 'w-10 h-10' : 'w-16 h-16'} flex items-center justify-center bg-[#1A1640] text-[#9B8CFF] rounded-full flex-shrink-0 border-2 border-[rgba(155,140,255,0.2)] transition-all`}>
-              {/* Line Awesome Tooth Icon - Same as Dashboard */}
-              <i className={`las la-tooth ${collapsed ? 'text-2xl' : 'text-4xl'}`}></i>
-            </div>
+            <img 
+              src="/molarplus-logo.svg" 
+              alt="MolarPlus" 
+              className={`${collapsed ? 'w-10 h-10' : 'w-12 h-12'} flex-shrink-0 object-contain transition-all`}
+            />
           )}
           {!collapsed && (
             <div className="flex flex-col min-w-0 flex-1">
@@ -276,10 +287,62 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
           )}
         </div>
 
-        {/* Main Nav with Scroll - More space */}
-        <nav className="flex-1 overflow-y-auto flex flex-col gap-2 mb-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
-          {navItems.map((item) => {
+        {/* Main Menu */}
+        {!collapsed && (
+          <div className="mb-3">
+            <span className="text-xs font-semibold text-white/50 uppercase tracking-wider px-4">Main Menu</span>
+          </div>
+        )}
+
+        <nav className="flex-1 overflow-y-auto flex flex-col gap-1.5 mb-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+          {mainNavItems.map((item) => {
             const isActive = location.pathname === item.path;
+            const isSubmenuActive = item.submenu?.some(sub => location.pathname === sub.path);
+
+            if (item.hasSubmenu) {
+              return (
+                <div key={item.name}>
+                  <button
+                    onClick={() => setInboxExpanded(!inboxExpanded)}
+                    className={`w-full ${linkClass(item.path)} ${collapsed ? 'group' : ''} ${isSubmenuActive ? 'bg-white/8 text-white' : ''}`}
+                    title={collapsed ? item.name : ''}
+                  >
+                    <div className={`${collapsed ? 'w-6 h-6' : 'w-5 h-5'} flex items-center justify-center transition-all ${isSubmenuActive ? 'text-white' : 'text-[#9B8CFF]'}`}>
+                      {item.icon}
+                    </div>
+                    {!collapsed && (
+                      <>
+                        <span className="text-sm flex-1 text-left">{item.name}</span>
+                        {inboxExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      </>
+                    )}
+                    {collapsed && (
+                      <span className="absolute left-full ml-2 px-2 py-1 bg-[#1A1640] text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 border border-[rgba(155,140,255,0.2)]">
+                        {item.name}
+                      </span>
+                    )}
+                  </button>
+                  {item.submenu && inboxExpanded && !collapsed && (
+                    <div className="ml-8 mt-1 flex flex-col gap-1">
+                      {item.submenu.map((subItem) => {
+                        const isSubActive = location.pathname === subItem.path;
+                        return (
+                          <Link
+                            key={subItem.name}
+                            to={subItem.path}
+                            className={`flex items-center gap-2 py-2 px-3 rounded-lg transition-all text-sm ${isSubActive ? 'bg-white/20 text-white font-medium' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}
+                          >
+                            <div className="w-4 h-4 flex items-center justify-center">{subItem.icon}</div>
+                            <span>{subItem.name}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
             return (
               <Link 
                 key={item.name} 
@@ -290,8 +353,35 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
                 <div className={`${collapsed ? 'w-6 h-6' : 'w-5 h-5'} flex items-center justify-center transition-all ${isActive ? 'text-white' : 'text-[#9B8CFF]'} ${collapsed && isActive ? 'scale-110' : ''}`}>
                   {item.icon}
                 </div>
-                {!collapsed && item.name}
-                {/* Tooltip for collapsed state */}
+                {!collapsed && <span className="text-sm">{item.name}</span>}
+                {collapsed && (
+                  <span className="absolute left-full ml-2 px-2 py-1 bg-[#1A1640] text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 border border-[rgba(155,140,255,0.2)]">
+                    {item.name}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+
+          {/* Admin section */}
+          {!collapsed && (
+            <div className="mt-4 mb-3">
+              <span className="text-xs font-semibold text-white/50 uppercase tracking-wider px-4">Admin</span>
+            </div>
+          )}
+          {adminNavItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <Link 
+                key={item.name} 
+                to={item.path} 
+                className={`${linkClass(item.path)} ${collapsed ? 'group' : ''}`}
+                title={collapsed ? item.name : ''}
+              >
+                <div className={`${collapsed ? 'w-6 h-6' : 'w-5 h-5'} flex items-center justify-center transition-all ${isActive ? 'text-white' : 'text-[#9B8CFF]'}`}>
+                  {item.icon}
+                </div>
+                {!collapsed && <span className="text-sm">{item.name}</span>}
                 {collapsed && (
                   <span className="absolute left-full ml-2 px-2 py-1 bg-[#1A1640] text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 border border-[rgba(155,140,255,0.2)]">
                     {item.name}

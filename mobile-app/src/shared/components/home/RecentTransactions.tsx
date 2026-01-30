@@ -9,6 +9,7 @@ import {
 import { ArrowUpRight, ArrowDownLeft } from 'lucide-react-native';
 import { colors } from '../../constants/colors';
 import { Transaction } from '../../../services/api/transactions.api';
+import { AppSkeleton } from '../Skeleton';
 
 interface RecentTransactionsProps {
   transactions: Transaction[];
@@ -45,21 +46,6 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
     return `$${amount.toLocaleString()}`;
   };
 
-  if (loading) {
-    return (
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Transactions</Text>
-          <TouchableOpacity onPress={onViewAll}>
-            <Text style={styles.viewAllText}>View All</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading transactions...</Text>
-        </View>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.section}>
@@ -71,7 +57,25 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
       </View>
 
       <View style={styles.transactionsList}>
-        {transactions.length > 0 ? (
+        {loading ? (
+          <>
+            {[1, 2, 3].map((i) => (
+              <View key={i} style={styles.transactionCard}>
+                <AppSkeleton width={60} height={60} radius={30} />
+                <View style={[styles.transactionInfo, { marginLeft: 16 }]}>
+                  <AppSkeleton width={120} height={18} radius={4} />
+                  <View style={{ height: 8 }} />
+                  <AppSkeleton width={80} height={14} radius={4} />
+                </View>
+                <View style={styles.transactionRight}>
+                  <AppSkeleton width={60} height={18} radius={4} />
+                  <View style={{ height: 8 }} />
+                  <AppSkeleton width={50} height={14} radius={4} />
+                </View>
+              </View>
+            ))}
+          </>
+        ) : transactions.length > 0 ? (
           transactions.slice(0, 5).map((transaction) => {
             const statusColor = getStatusColor(transaction.status);
             const statusBgColor = transaction.status.toLowerCase() === 'completed' || transaction.status.toLowerCase() === 'success'

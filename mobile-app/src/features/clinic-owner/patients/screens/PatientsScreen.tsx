@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Plus } from 'lucide-react-native';
+import { Plus, Users } from 'lucide-react-native';
 import { patientsApiService, Patient } from '../../../../services/api/patients.api';
 import { SearchBar } from '../components/SearchBar';
 import { FilterTabs } from '../components/FilterTabs';
@@ -9,6 +9,7 @@ import { PatientsList } from '../components/PatientsList';
 import { AddPatientScreen } from './AddPatientScreen';
 import { colors } from '../../../../shared/constants/colors';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
+import { AppSkeleton } from '../../../../shared/components/Skeleton';
 
 interface PatientsScreenProps {
   navigation: any;
@@ -19,18 +20,46 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation }) =>
   const [selectedTab, setSelectedTab] = useState('all');
   const [patients, setPatients] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [showAddPatient, setShowAddPatient] = useState(false);
 
   useEffect(() => {
     loadPatients();
   }, []);
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadPatients();
+    setRefreshing(false);
+  };
+
+  const getInitials = (name: string) => {
+    if (!name) return '??';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  const getAvatarColor = () => {
+    return colors.primary;
+  };
+
   const loadPatients = async () => {
     setLoading(true);
     try {
       // Real API call
       const data = await patientsApiService.getPatients();
-      setPatients(data);
+
+      // Augment data with UI components (initials, colors)
+      const augmentedData = data.map(p => ({
+        ...p,
+        initials: getInitials(p.name),
+        avatarColor: getAvatarColor()
+      }));
+
+      setPatients(augmentedData);
     } catch (err: any) {
       console.error('Error loading patients:', err);
       Alert.alert('Error', `Failed to load patients: ${err.message}`);
@@ -107,6 +136,7 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation }) =>
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader
         title="Patients"
+        titleIcon={<Users size={22} color="#111827" />}
       />
 
       {/* Search Bar */}
@@ -128,6 +158,9 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation }) =>
         onPatientPress={handlePatientPress}
         onPhonePress={handlePhonePress}
         onDelete={handleDeletePatient}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        loading={loading}
       />
 
       {/* Floating Add Button */}

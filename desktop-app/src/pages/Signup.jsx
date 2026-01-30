@@ -2,148 +2,152 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { toast } from 'react-toastify';
 import { api } from '../utils/api';
-import { isTauri } from '../tauri';
+import { useAuth } from '../contexts/AuthContext';
 import LoadingButton from '../components/LoadingButton';
-import betterClinicLogo from '../assets/betterclinic-logo.png';
-import { startSystemBrowserOAuth, constructFirebaseOAuthUrl, parseOAuthCallback, exchangeCodeForFirebaseToken } from '../utils/oauth';
+import loginImage from '../assets/login-page-left-side.png';
+import { isTauri } from '../tauri';
+import {
+  startSystemBrowserOAuth,
+  constructFirebaseOAuthUrl,
+  parseOAuthCallback,
+  OAUTH_DESKTOP_REDIRECT_URI,
+} from '../utils/oauth';
 
 const Signup = () => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [role, setRole] = useState("clinic_owner");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { setUser, setToken } = useAuth();
 
-
-  const handleGoogleSignup = async () => {
+  const handleSignup = async (e) => {
+    e.preventDefault();
     setError("");
     setLoading(true);
     
     try {
-      console.log('🔵 [SIGNUP] Starting Google signup...');
-      console.log('🔵 [SIGNUP] Is Tauri:', isTauri());
+      const data = await api.post('/auth/signup', {
+        email,
+        password,
+        first_name: firstName,
+        last_name: lastName,
+        role
+      });
+      
+      localStorage.setItem('auth_token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      setToken(data.token);
+      setUser(data.user);
+      
+      toast.success('Account created successfully!');
+      
+      if (!data.user.clinic_id) {
+        navigate("/onboarding", { replace: true });
+      } else {
+        navigate("/dashboard", { replace: true });
+      }
+    } catch (error) {
+      setError(error.response?.data?.detail || error.message || "Network error. Please try again.");
+      toast.error(error.response?.data?.detail || error.message);
+    }
+    
+    setLoading(false);
+  };
 
+  const handleGoogleSignup = async () => {
+    setError("");
+    setLoading(true);
+    try {
       if (isTauri()) {
-        // For Tauri: use system browser OAuth flow
-        console.log('🔵 [SIGNUP] Using system browser OAuth for desktop app...');
-        
         const authDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN;
         const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
-        const redirectUri = 'http://localhost:8080';
-        
-        // Construct Firebase OAuth URL
-        const oauthUrl = constructFirebaseOAuthUrl(authDomain, apiKey, redirectUri);
-        console.log('🔵 [SIGNUP] OAuth URL constructed, starting flow...');
-        
-        // Start OAuth flow (opens browser, waits for callback)
+        const oauthUrl = constructFirebaseOAuthUrl(authDomain, apiKey, OAUTH_DESKTOP_REDIRECT_URI);
         const fragment = await startSystemBrowserOAuth(oauthUrl);
-        console.log('🔵 [SIGNUP] OAuth callback received');
-        
-        // Parse the callback - might be code or token
-        const callbackData = parseOAuthCallback(fragment);
-        console.log('🔵 [SIGNUP] Callback data parsed:', callbackData.type);
-        
-        let idToken;
-        if (callbackData.type === 'code') {
-          // Need to exchange code for token
-          console.log('🔵 [SIGNUP] Exchanging authorization code for Firebase token...');
-          const tokenData = await exchangeCodeForFirebaseToken(callbackData.code, redirectUri, apiKey);
-          idToken = tokenData.idToken;
-          console.log('🔵 [SIGNUP] ID token obtained from code exchange');
+        const parsed = parseOAuthCallback(fragment);
+        let data;
+        if (parsed.type === 'code') {
+          data = await api.post('/auth/oauth/code', {
+            code: parsed.code,
+            redirect_uri: OAUTH_DESKTOP_REDIRECT_URI,
+          });
         } else {
-          // Already have token
-          idToken = callbackData.idToken;
-          console.log('🔵 [SIGNUP] ID token extracted from callback');
+          data = await api.post('/auth/oauth', { id_token: parsed.idToken });
         }
-        
-        // Send to backend for verification and JWT generation
-        const data = await api.post('/auth/oauth', { id_token: idToken });
-
-        // Store the JWT token
         localStorage.setItem('auth_token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
-
+        setToken(data.token);
+        setUser(data.user);
         toast.success('Signup successful!');
+        const redirectPath = !data.user.clinic_id ? '/onboarding' : '/dashboard';
+        navigate(redirectPath, { replace: true });
+        return;
+      }
 
-        // Redirect based on user state
+      const { signInWithPopup, GoogleAuthProvider } = await import('firebase/auth');
+      const { auth } = await import('../firebaseClient');
+      const provider = new GoogleAuthProvider();
+      provider.addScope('email');
+      provider.addScope('profile');
+      const result = await signInWithPopup(auth, provider);
+
+      if (result.user) {
+        const idToken = await result.user.getIdToken();
+        const data = await api.post('/auth/oauth', { id_token: idToken });
+        localStorage.setItem('auth_token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        setToken(data.token);
+        setUser(data.user);
+        toast.success('Signup successful!');
         const redirectPath = !data.user.clinic_id ? '/onboarding' : '/dashboard';
         navigate(redirectPath, { replace: true });
       } else {
-        // For web: use popup (works fine in browsers)
-        console.log('🔵 [SIGNUP] Using POPUP for web...');
-        
-        const { signInWithPopup, GoogleAuthProvider } = await import('firebase/auth');
-        const { auth } = await import('../firebaseClient');
-
-        const provider = new GoogleAuthProvider();
-        provider.addScope('email');
-        provider.addScope('profile');
-        provider.setCustomParameters({
-          prompt: 'select_account'
-        });
-      
-        const result = await signInWithPopup(auth, provider);
-        console.log('🔵 [SIGNUP] Popup result received:', !!result);
-
-        if (result.user) {
-          console.log('🔵 [SIGNUP] User authenticated:', result.user.email);
-
-          // Get the ID token
-          const idToken = await result.user.getIdToken();
-
-          // Send to backend for verification and JWT generation
-          const data = await api.post('/auth/oauth', { id_token: idToken });
-
-          // Store the JWT token
-          localStorage.setItem('auth_token', data.token);
-          localStorage.setItem('user', JSON.stringify(data.user));
-
-          toast.success('Signup successful!');
-
-          // Redirect based on user state
-          const redirectPath = !data.user.clinic_id ? '/onboarding' : '/dashboard';
-          navigate(redirectPath, { replace: true });
-        } else {
-          throw new Error('No user data received from Google');
-        }
+        throw new Error('No user data received from Google');
       }
-
     } catch (error) {
-      console.error('🔵 [SIGNUP] Google signup error:', error);
-      console.error('🔵 [SIGNUP] Error message:', error.message);
-      console.error('🔵 [SIGNUP] Full error:', error);
-
-      const errorMessage = error.message || error.toString() || 'Google signup failed. Please try again.';
+      console.error('Google signup error:', error);
+      const errorMessage = error.message || 'Google signup failed. Please try again.';
       setError(errorMessage);
       toast.error(errorMessage);
+    } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="bg-white p-8 rounded shadow-md w-full max-w-md space-y-4">
-        {/* Better Clinic Logo */}
-        <div className="flex justify-center mb-6 overflow-hidden">
-          <img 
-            src={betterClinicLogo} 
-            alt="Better Clinic Logo" 
-            className="w-full h-32"
-            style={{ 
-              transform: 'scale(1.1)',
-              objectFit: 'contain'
-            }}
-          />
-        </div>
-        
-        <h2 className="text-2xl font-bold mb-4 text-center">Sign Up</h2>
-        {error && <div className="text-red-600 text-center mb-4">{error}</div>}
-        
-        {/* Google OAuth Button */}
-        <div className="space-y-4">
+    <div className="h-screen flex overflow-hidden">
+      {/* Left Side - Image */}
+      <div className="hidden lg:flex lg:w-1/2 relative">
+        <img 
+          src={loginImage} 
+          alt="MolarPlus" 
+          className="w-full h-full object-cover"
+        />
+      </div>
+
+      {/* Right Side - Form */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center bg-white p-8 overflow-y-auto">
+        <div className="w-full max-w-md space-y-6 py-8">
+          <div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-2">Create your account</h2>
+            <p className="text-gray-600">Start managing your clinic efficiently</p>
+          </div>
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
+              {error}
+            </div>
+          )}
+          
+          {/* Google OAuth Button */}
           <LoadingButton 
             onClick={handleGoogleSignup}
             loading={loading}
             disabled={loading}
-            className="w-full bg-white border-2 border-gray-300 rounded-lg px-4 py-3 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors font-medium shadow-sm"
+            className="w-full bg-white border-2 border-gray-200 rounded-lg px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors font-medium flex items-center justify-center gap-3"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -153,26 +157,103 @@ const Signup = () => {
             </svg>
             Continue with Google
           </LoadingButton>
-          <p className="text-xs text-gray-500 text-center">
-            {isTauri() 
-              ? "You'll be redirected to Google to sign up"
-              : "Sign up with your Google account to get started"
-            }
-          </p>
-        </div>
-        
-        <p className="text-center text-sm text-gray-600 mt-6">
-          Already have an account?{" "}
-          <Link to="/login" className="text-[#6C4CF3] hover:text-[#5b3dd9] font-medium">
-            Log in
-          </Link>
-        </p>
-        
-        {/* Branding */}
-        <div className="text-center pt-4 border-t border-gray-200">
-          <p className="text-xs text-gray-400">
-            Powered by <span className="text-[#6C4CF3] font-medium">Clino Health</span>
-          </p>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-white text-gray-500 font-medium">Or continue with email</span>
+            </div>
+          </div>
+
+          {/* Email/Password Form */}
+          <form onSubmit={handleSignup} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  First Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="John"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Last Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="Doe"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
+                  required
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Email address
+              </label>
+              <input
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Password
+              </label>
+              <input
+                type="password"
+                placeholder="Create a password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Role
+              </label>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
+              >
+                <option value="clinic_owner">Clinic Owner</option>
+                <option value="doctor">Doctor</option>
+                <option value="receptionist">Receptionist</option>
+              </select>
+            </div>
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="w-full bg-[#2a276e] text-white py-3 px-4 rounded-lg hover:bg-[#1a1548] focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:ring-offset-2 disabled:opacity-50 font-medium transition-colors"
+            >
+              {loading ? "Creating account..." : "Create account"}
+            </button>
+          </form>
+          
+          <div className="text-center">
+            <p className="text-sm text-gray-600">
+              Already have an account?{' '}
+              <Link to="/login" className="text-[#2a276e] hover:text-[#1a1548] font-semibold">
+                Sign in
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ApiProvider } from "./contexts/ApiContext";
 import { HeaderProvider } from "./contexts/HeaderContext";
@@ -24,20 +24,26 @@ import BookingPage from "./pages/BookingPage";
 import PatientFiles from "./pages/PatientFiles";
 import PatientProfile from "./pages/PatientProfile";
 import Attendance from "./pages/Attendance";
-import About from "./pages/About";
-import Features from "./pages/Features";
-import SetupWizard from "./pages/SetupWizard";
 import Reports from "./pages/Reports";
+import AdminHub from "./pages/AdminHub";
+import StaffManagement from "./pages/StaffManagement";
+import TreatmentsPricing from "./pages/TreatmentsPricing";
+import PermissionsManagement from "./pages/PermissionsManagement";
+import ClinicInfo from "./pages/ClinicInfo";
+import MessageTemplates from "./pages/MessageTemplates";
+import ReferringDoctors from "./pages/ReferringDoctors";
+import Subscription from "./pages/Subscription";
+import InboxPlaceholder from "./pages/InboxPlaceholder";
+import MailPlaceholder from "./pages/MailPlaceholder";
 
 // Components
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
 import ServerStatus from "./components/ServerStatus";
-import StartupScreen from "./components/StartupScreen";
 import SyncIndicator from "./components/SyncIndicator";
 
 // Tauri utilities
-import { isFirstRun, isTauri } from "./tauri";
+import { isTauri } from "./tauri";
 
 // License utilities
 import { startTrial, getAppStatus } from "./utils/license";
@@ -62,39 +68,31 @@ function ProtectedRoute({ children }) {
 }
 
 function AppContent() {
-  const { user, loading } = useAuth();
+  const { user, loading, setUser, setToken } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [showSetupWizard, setShowSetupWizard] = useState(false);
-  const [showStartupScreen, setShowStartupScreen] = useState(false);
   const [checkingFirstRun, setCheckingFirstRun] = useState(true);
   const [showLicenseModal, setShowLicenseModal] = useState(false);
   const [licenseStatus, setLicenseStatus] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncComplete, setSyncComplete] = useState(false);
 
-  // Check if this is first run (Tauri only)
+  // Tauri: on 401, api.js dispatches this instead of full-page redirect (avoids "Load failed")
   useEffect(() => {
-    const checkFirstRun = async () => {
-      if (isTauri()) {
-        try {
-          const firstRun = await isFirstRun();
-          if (firstRun) {
-            setShowSetupWizard(true);
-          } else {
-            // Not first run - show startup screen
-            setShowStartupScreen(true);
-          }
-        } catch (err) {
-          console.error('Failed to check first run:', err);
-        }
-      }
-      setCheckingFirstRun(false);
+    const onUnauthorized = () => {
+      setUser(null);
+      setToken(null);
+      navigate('/login', { replace: true });
     };
-    checkFirstRun();
-    
-    // Initialize background sync
+    window.addEventListener('auth:unauthorized', onUnauthorized);
+    return () => window.removeEventListener('auth:unauthorized', onUnauthorized);
+  }, [navigate, setUser, setToken]);
+
+  // Desktop app: online-only, no setup/startup checks — go straight to app
+  useEffect(() => {
+    setCheckingFirstRun(false);
     initializeSync();
   }, []);
 
@@ -102,7 +100,7 @@ function AppContent() {
   useEffect(() => {
     const performStartupSync = async () => {
       // Only sync if user is authenticated and not in setup/setup wizard
-      if (user && !loading && !checkingFirstRun && !showSetupWizard && !showStartupScreen && !syncComplete) {
+      if (user && !loading && !checkingFirstRun && !syncComplete) {
         setSyncing(true);
         try {
           const result = await performFullSync();
@@ -121,17 +119,17 @@ function AppContent() {
     };
 
     performStartupSync();
-  }, [user, loading, checkingFirstRun, showSetupWizard, showStartupScreen, syncComplete]);
+  }, [user, loading, checkingFirstRun, syncComplete]);
 
   // Check license status and start trial if needed
   useEffect(() => {
-    if (!checkingFirstRun && !showSetupWizard) {
+    if (!checkingFirstRun) {
       // Start trial on first use
       startTrial();
       // Get current license status
       setLicenseStatus(getAppStatus());
     }
-  }, [checkingFirstRun, showSetupWizard]);
+  }, [checkingFirstRun]);
 
   const handleLicenseActivated = () => {
     setShowLicenseModal(false);
@@ -150,26 +148,9 @@ function AppContent() {
     );
   }
 
-  if (showSetupWizard) {
-    return <SetupWizard onComplete={() => {
-      setShowSetupWizard(false);
-      // After setup, show startup screen
-      if (isTauri()) {
-        setShowStartupScreen(true);
-      }
-    }} />;
-  }
-
-  // Show startup screen for Tauri app (system checks)
-  if (showStartupScreen && isTauri()) {
-    return <StartupScreen onComplete={() => setShowStartupScreen(false)} />;
-  }
-
-  // Check if current route is auth page, landing page, or booking page
+  // Check if current route is auth page or booking page (no sidebar)
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/onboarding' || location.pathname === '/auth/callback';
-  const isLandingPage = false; // Landing page removed - redirect to login
   const isBookingPage = location.pathname === '/booking';
-  const isPublicPage = location.pathname === '/about' || location.pathname === '/features';
 
   if (loading || (user && syncing && !syncComplete)) {
     return (
@@ -182,8 +163,8 @@ function AppContent() {
     );
   }
 
-  // For auth pages, landing page, and booking page, render without sidebar
-  if (isAuthPage || isLandingPage || isBookingPage || isPublicPage) {
+  // For auth pages and booking page, render without sidebar
+  if (isAuthPage || isBookingPage) {
     return (
       <>
         <Routes>
@@ -193,8 +174,7 @@ function AppContent() {
           <Route path="/onboarding" element={<ClinicOnboarding />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/booking" element={<BookingPage />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/features" element={<Features />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
         <ToastContainer
           position="top-right"
@@ -269,7 +249,17 @@ function AppContent() {
             <Route path="/xray" element={<ProtectedRoute><Xray /></ProtectedRoute>} />
             <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
             <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute><AdminHub /></ProtectedRoute>} />
             <Route path="/admin/attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
+            <Route path="/admin/staff" element={<ProtectedRoute><StaffManagement /></ProtectedRoute>} />
+            <Route path="/admin/treatments" element={<ProtectedRoute><TreatmentsPricing /></ProtectedRoute>} />
+            <Route path="/admin/permissions" element={<ProtectedRoute><PermissionsManagement /></ProtectedRoute>} />
+            <Route path="/admin/clinic" element={<ProtectedRoute><ClinicInfo /></ProtectedRoute>} />
+            <Route path="/admin/templates" element={<ProtectedRoute><MessageTemplates /></ProtectedRoute>} />
+            <Route path="/admin/doctors" element={<ProtectedRoute><ReferringDoctors /></ProtectedRoute>} />
+            <Route path="/subscription" element={<ProtectedRoute><Subscription /></ProtectedRoute>} />
+            <Route path="/inbox" element={<ProtectedRoute><InboxPlaceholder /></ProtectedRoute>} />
+            <Route path="/mail" element={<ProtectedRoute><MailPlaceholder /></ProtectedRoute>} />
             <Route path="/user-management" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="/doctor-profile" element={<ProtectedRoute><DoctorProfile /></ProtectedRoute>} />
             <Route path="/loading-test" element={<LoadingTest />} />

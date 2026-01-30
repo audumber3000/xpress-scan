@@ -73,21 +73,22 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
   useEffect(() => {
     // Listen to auth state changes
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser)
+      setIsLoading(true);
+      setUser(firebaseUser);
 
       if (firebaseUser) {
         // Fetch backend user info when Firebase user is available
-        await fetchBackendUser(firebaseUser)
-        setAuthEmail(firebaseUser.email || "")
+        await fetchBackendUser(firebaseUser);
+        setAuthEmail(firebaseUser.email || "");
       } else {
         // Clear backend user when Firebase user logs out
-        setBackendUser(null)
-        await authApiService.clearTokens()
-        setAuthEmail("")
+        setBackendUser(null);
+        await authApiService.clearTokens();
+        setAuthEmail("");
       }
 
-      setIsLoading(false)
-    })
+      setIsLoading(false);
+    });
 
     return () => unsubscribe()
   }, [fetchBackendUser])

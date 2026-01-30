@@ -198,6 +198,15 @@ class RegisterRequestDTO(BaseModel):
 class OAuthRequestDTO(BaseModel):
     id_token: str = Field(..., min_length=1)
     device: Optional[Dict[str, Any]] = None
+    role: Optional[str] = Field(None, pattern="^(clinic_owner|doctor|receptionist)$")
+
+
+class OAuthCodeRequestDTO(BaseModel):
+    """Used by desktop app: exchange Google OAuth code for JWT (backend exchanges code with Google)."""
+    code: str = Field(..., min_length=1)
+    redirect_uri: str = Field(..., min_length=1)
+    device: Optional[Dict[str, Any]] = None
+    role: Optional[str] = Field(None, pattern="^(clinic_owner|doctor|receptionist)$")
 
 
 class ChangePasswordRequestDTO(BaseModel):

@@ -84,6 +84,8 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
   const onRefresh = async () => {
     try {
       setRefreshing(true);
+      setAnalyticsLoading(true);
+      setLoading(true);
       await Promise.all([loadAnalytics(), loadTransactions()]);
       setError(null);
     } catch (err) {
@@ -91,6 +93,8 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
       setTransactions([]);
     } finally {
       setRefreshing(false);
+      setAnalyticsLoading(false);
+      setLoading(false);
     }
   };
 
@@ -135,6 +139,7 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
             analytics={analytics}
             selectedPeriod={selectedPeriod}
             onPeriodChange={setSelectedPeriod}
+            loading={analyticsLoading}
           />
         </View>
 

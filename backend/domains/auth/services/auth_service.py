@@ -269,7 +269,7 @@ class AuthService(AuthServiceProtocol):
             "location": location
         }
 
-    def handle_oauth_login(self, id_token: str, device_data: dict = None) -> User:
+    def handle_oauth_login(self, id_token: str, device_data: dict = None, role: str = None) -> User:
         """Handle OAuth login with Firebase/Google token"""
         if not FIREBASE_AVAILABLE:
             raise ValueError("Firebase authentication is not configured")
@@ -283,9 +283,13 @@ class AuthService(AuthServiceProtocol):
                     raise ValueError("Firebase service account credentials not found")
 
                 import json
-                creds_dict = json.loads(firebase_creds_json)
-                creds = credentials.Certificate(creds_dict)
-                firebase_admin.initialize_app(creds)
+                try:
+                    creds_dict = json.loads(firebase_creds_json)
+                    creds = credentials.Certificate(creds_dict)
+                    firebase_admin.initialize_app(creds)
+                except Exception as e:
+                    print(f"Firebase init error: {e}")
+                    raise ValueError(f"Failed to initialize Firebase: {str(e)}")
 
             # Verify the Firebase ID token
             decoded_token = firebase_auth.verify_id_token(id_token)
@@ -297,8 +301,7 @@ class AuthService(AuthServiceProtocol):
             firebase_uid = decoded_token.get("uid")
             email = decoded_token.get("email")
             name = decoded_token.get("name", "")
-            picture = decoded_token.get("picture")
-
+            
             if not email or not firebase_uid:
                 raise ValueError("Email and Firebase UID are required")
 
@@ -320,7 +323,7 @@ class AuthService(AuthServiceProtocol):
                     "email": email,
                     "first_name": first_name,
                     "last_name": last_name,
-                    "role": "clinic_owner",  # Default role for OAuth users
+                    "role": role if role else "clinic_owner",  # Use passed role or default to clinic_owner
                     "supabase_user_id": firebase_uid,  # Store Firebase UID
                 }
 
