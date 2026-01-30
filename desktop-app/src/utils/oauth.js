@@ -18,7 +18,7 @@ export const startSystemBrowserOAuth = async (oauthUrl) => {
   try {
     // Call the Rust command to start OAuth flow
     // This will:
-    // 1. Start a local HTTP server on localhost:8080
+    // 1. Start a local HTTP server on localhost:4646
     // 2. Open the OAuth URL in the system browser
     // 3. Wait for the callback
     // 4. Return the token/fragment from the callback

@@ -26,18 +26,13 @@ import PatientProfile from "./pages/PatientProfile";
 import Attendance from "./pages/Attendance";
 import About from "./pages/About";
 import Features from "./pages/Features";
-import SetupWizard from "./pages/SetupWizard";
 import Reports from "./pages/Reports";
 
 // Components
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
 import ServerStatus from "./components/ServerStatus";
-import StartupScreen from "./components/StartupScreen";
 import SyncIndicator from "./components/SyncIndicator";
-
-// Tauri utilities
-import { isFirstRun, isTauri } from "./tauri";
 
 // License utilities
 import { startTrial, getAppStatus } from "./utils/license";
@@ -66,53 +61,28 @@ function AppContent() {
   const location = useLocation();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [showSetupWizard, setShowSetupWizard] = useState(false);
-  const [showStartupScreen, setShowStartupScreen] = useState(false);
-  const [checkingFirstRun, setCheckingFirstRun] = useState(true);
   const [showLicenseModal, setShowLicenseModal] = useState(false);
   const [licenseStatus, setLicenseStatus] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncComplete, setSyncComplete] = useState(false);
 
-  // Check if this is first run (Tauri only)
+  // Initialize background sync on mount
   useEffect(() => {
-    const checkFirstRun = async () => {
-      if (isTauri()) {
-        try {
-          const firstRun = await isFirstRun();
-          if (firstRun) {
-            setShowSetupWizard(true);
-          } else {
-            // Not first run - show startup screen
-            setShowStartupScreen(true);
-          }
-        } catch (err) {
-          console.error('Failed to check first run:', err);
-        }
-      }
-      setCheckingFirstRun(false);
-    };
-    checkFirstRun();
-    
-    // Initialize background sync
     initializeSync();
   }, []);
 
   // Perform startup sync after authentication
   useEffect(() => {
     const performStartupSync = async () => {
-      // Only sync if user is authenticated and not in setup/setup wizard
-      if (user && !loading && !checkingFirstRun && !showSetupWizard && !showStartupScreen && !syncComplete) {
+      if (user && !loading && !syncComplete) {
         setSyncing(true);
         try {
           const result = await performFullSync();
           if (result.success || result.skip) {
             setSyncComplete(true);
           }
-          // Continue even if sync fails (work with local data)
         } catch (error) {
           console.error('Startup sync error:', error);
-          // Continue even if sync fails
           setSyncComplete(true);
         } finally {
           setSyncing(false);
@@ -121,49 +91,18 @@ function AppContent() {
     };
 
     performStartupSync();
-  }, [user, loading, checkingFirstRun, showSetupWizard, showStartupScreen, syncComplete]);
+  }, [user, loading, syncComplete]);
 
-  // Check license status and start trial if needed
+  // Check license status and start trial on mount
   useEffect(() => {
-    if (!checkingFirstRun && !showSetupWizard) {
-      // Start trial on first use
-      startTrial();
-      // Get current license status
-      setLicenseStatus(getAppStatus());
-    }
-  }, [checkingFirstRun, showSetupWizard]);
+    startTrial();
+    setLicenseStatus(getAppStatus());
+  }, []);
 
   const handleLicenseActivated = () => {
     setShowLicenseModal(false);
     setLicenseStatus(getAppStatus());
   };
-
-  // Show setup wizard for first-time Tauri users
-  if (checkingFirstRun) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Initializing...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (showSetupWizard) {
-    return <SetupWizard onComplete={() => {
-      setShowSetupWizard(false);
-      // After setup, show startup screen
-      if (isTauri()) {
-        setShowStartupScreen(true);
-      }
-    }} />;
-  }
-
-  // Show startup screen for Tauri app (system checks)
-  if (showStartupScreen && isTauri()) {
-    return <StartupScreen onComplete={() => setShowStartupScreen(false)} />;
-  }
 
   // Check if current route is auth page, landing page, or booking page
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/onboarding' || location.pathname === '/auth/callback';

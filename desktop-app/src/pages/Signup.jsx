@@ -27,7 +27,7 @@ const Signup = () => {
         
         const authDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN;
         const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
-        const redirectUri = 'http://localhost:8080';
+        const redirectUri = 'http://localhost:4646';
         
         // Construct Firebase OAuth URL
         const oauthUrl = constructFirebaseOAuthUrl(authDomain, apiKey, redirectUri);
