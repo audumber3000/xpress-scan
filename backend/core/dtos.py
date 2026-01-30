@@ -210,7 +210,6 @@ class AuthResponseDTO(BaseModel):
     message: str
     user: UserResponseDTO
     token: str
-    clinic: Optional[ClinicResponseDTO] = None
 
 
 class DeviceInfoDTO(BaseModel):

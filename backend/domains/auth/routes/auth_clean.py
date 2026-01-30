@@ -10,15 +10,12 @@ from core.dtos import (
     ChangePasswordRequestDTO,
     AuthResponseDTO,
     UserResponseDTO,
-    ClinicResponseDTO,
     DeviceInfoDTO,
+    ClinicResponseDTO,
     SuccessResponseDTO
 )
 from core.dependencies import get_auth_service, get_user_service
 from core.auth_utils import require_role
-from database import get_db
-from sqlalchemy.orm import Session, joinedload
-from models import Clinic, User
 
 router = APIRouter()
 
@@ -61,14 +58,6 @@ async def register_user(
         )
 
 
-def _get_clinic_for_user(db: Session, user) -> Optional[ClinicResponseDTO]:
-    """Return clinic DTO if user has clinic_id, else None."""
-    if not getattr(user, "clinic_id", None):
-        return None
-    clinic = db.query(Clinic).filter(Clinic.id == user.clinic_id).first()
-    return ClinicResponseDTO.from_orm(clinic) if clinic else None
-
-
 @router.post(
     "/login",
     response_model=AuthResponseDTO,
@@ -78,13 +67,12 @@ def _get_clinic_for_user(db: Session, user) -> Optional[ClinicResponseDTO]:
 async def login_user(
     request: Request,
     login_data: LoginRequestDTO,
-    auth_service=Depends(get_auth_service),
-    db: Session = Depends(get_db),
+    auth_service = Depends(get_auth_service)
 ):
     """
     Authenticate user with email and password.
 
-    Returns JWT token, user information, and clinic details (if onboarded) on success.
+    Returns JWT token and user information on successful authentication.
     """
     try:
         user = auth_service.authenticate_user(login_data.email, login_data.password)
@@ -101,13 +89,11 @@ async def login_user(
             auth_service.register_device(user.id, device_info)
 
         token = auth_service.create_jwt_token(user.id)
-        clinic = _get_clinic_for_user(db, user)
 
         return AuthResponseDTO(
             message="Login successful",
             user=UserResponseDTO.from_orm(user),
-            token=token,
-            clinic=clinic
+            token=token
         )
 
     except HTTPException:
@@ -128,34 +114,33 @@ async def login_user(
 async def oauth_login(
     request: Request,
     oauth_data: OAuthRequestDTO,
-    auth_service=Depends(get_auth_service),
-    db: Session = Depends(get_db),
+    auth_service = Depends(get_auth_service)
 ):
     """
     Handle OAuth authentication flow.
 
     Verifies the OAuth token and creates/logs in the user.
-    Returns user and clinic details (if onboarded) on success.
     """
     try:
+        # Verify OAuth token and get/create user
         user = auth_service.handle_oauth_login(
-            oauth_data.id_token,
+            oauth_data.id_token, 
             oauth_data.device,
             getattr(oauth_data, 'role', None)
         )
 
+        # Register device if device info provided
         if oauth_data.device:
             device_info = auth_service.detect_device_info(request, oauth_data.device.dict() if hasattr(oauth_data.device, 'dict') else oauth_data.device)
             auth_service.register_device(user.id, device_info)
 
+        # Generate JWT token
         token = auth_service.create_jwt_token(user.id)
-        clinic = _get_clinic_for_user(db, user)
 
         return AuthResponseDTO(
             message="OAuth login successful",
             user=UserResponseDTO.from_orm(user),
-            token=token,
-            clinic=clinic
+            token=token
         )
 
     except ValueError as e:
@@ -170,106 +155,22 @@ async def oauth_login(
         )
 
 
-@router.post(
-    "/oauth/code",
-    response_model=AuthResponseDTO,
-    summary="OAuth login (desktop: exchange code)",
-    description="Exchange Google OAuth code for JWT. Used by desktop app when using system browser flow."
-)
-async def oauth_code_login(
-    request: Request,
-    oauth_data: OAuthCodeRequestDTO,
-    auth_service=Depends(get_auth_service),
-    db: Session = Depends(get_db),
-):
-    """
-    Exchange authorization code with Google, verify id_token, then same as /oauth.
-    Requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (same OAuth client as frontend).
-    """
-    client_id = os.getenv("GOOGLE_CLIENT_ID") or os.getenv("VITE_GOOGLE_OAUTH_CLIENT_ID")
-    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-    if not client_id or not client_secret:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Google OAuth not configured (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET)"
-        )
-    try:
-        resp = requests.post(
-            "https://oauth2.googleapis.com/token",
-            data={
-                "code": oauth_data.code,
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "redirect_uri": oauth_data.redirect_uri,
-                "grant_type": "authorization_code",
-            },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        id_token = data.get("id_token")
-        if not id_token:
-            raise ValueError("Google did not return an id_token")
-        user = auth_service.handle_oauth_login(
-            id_token,
-            oauth_data.device,
-            getattr(oauth_data, "role", None),
-        )
-        if oauth_data.device:
-            device_info = auth_service.detect_device_info(
-                request,
-                oauth_data.device if isinstance(oauth_data.device, dict) else oauth_data.device.dict(),
-            )
-            auth_service.register_device(user.id, device_info)
-        token = auth_service.create_jwt_token(user.id)
-        clinic = _get_clinic_for_user(db, user)
-        return AuthResponseDTO(
-            message="OAuth login successful",
-            user=UserResponseDTO.from_orm(user),
-            token=token,
-            clinic=clinic,
-        )
-    except requests.RequestException as e:
-        err_detail = str(e)
-        if hasattr(e, "response") and e.response is not None:
-            try:
-                err_detail = e.response.json().get("error_description", e.response.text)
-            except Exception:
-                err_detail = getattr(e.response, "text", None) or err_detail
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Google token exchange failed: {err_detail}",
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"OAuth code login failed: {str(e)}",
-        )
-
-
 @router.get(
     "/me",
     summary="Get current user",
-    description="Retrieve information about the currently authenticated user including clinic details"
+    description="Retrieve information about the currently authenticated user"
 )
 async def get_current_user(
     request: Request,
-    auth_service=Depends(get_auth_service),
-    db: Session = Depends(get_db),
+    auth_service = Depends(get_auth_service)
 ):
     """
     Get information about the currently authenticated user.
-    Includes clinic details when the user has completed onboarding (has clinic_id).
 
     Requires valid JWT token in Authorization header.
     """
     try:
+        # Extract token from header
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
             raise HTTPException(
@@ -286,30 +187,43 @@ async def get_current_user(
                 detail="Invalid or expired token"
             )
 
-        # Re-load user with clinic in this session so clinic is always available when user has clinic_id
-        user_with_clinic = (
-            db.query(User)
-            .options(joinedload(User.clinic))
-            .filter(User.id == user.id, User.is_active == True)
-            .first()
-        )
-        if not user_with_clinic:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token"
-            )
-        user = user_with_clinic
+        user_with_clinic = auth_service.auth_repo.get_user_with_clinic(user.id)
+        clinic = user_with_clinic["clinic"] if user_with_clinic else None
 
-        user_data = UserResponseDTO.from_orm(user).model_dump()
         clinic_info = None
-        if user.clinic_id and user.clinic:
-            clinic_info = ClinicResponseDTO.from_orm(user.clinic).model_dump()
-        elif user.clinic_id:
-            clinic = db.query(Clinic).filter(Clinic.id == user.clinic_id).first()
-            if clinic:
-                clinic_info = ClinicResponseDTO.from_orm(clinic).model_dump()
-        user_data["clinic"] = clinic_info
-        return user_data
+        if clinic:
+            clinic_info = {
+                "id": clinic.id,
+                "name": clinic.name,
+                "address": clinic.address,
+                "phone": clinic.phone,
+                "email": clinic.email,
+                "specialization": clinic.specialization,
+                "subscription_plan": clinic.subscription_plan,
+                "logo": clinic.logo_url,
+                "logo_url": clinic.logo_url,
+                "created_at": clinic.created_at.isoformat() if clinic.created_at else None,
+                "updated_at": getattr(clinic, 'updated_at', clinic.created_at).isoformat() if getattr(clinic, 'updated_at', clinic.created_at) else None,
+                "synced_at": getattr(clinic, 'synced_at', None).isoformat() if getattr(clinic, 'synced_at', None) else None,
+                "sync_status": getattr(clinic, 'sync_status', 'local')
+            }
+
+        return {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "role": user.role,
+            "clinic_id": user.clinic_id,
+            "is_active": user.is_active,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+            "updated_at": getattr(user, 'updated_at', user.created_at).isoformat() if getattr(user, 'updated_at', user.created_at) else None,
+            "synced_at": getattr(user, 'synced_at', None).isoformat() if getattr(user, 'synced_at', None) else None,
+            "sync_status": getattr(user, 'sync_status', 'local'),
+            "permissions": user.permissions,
+            "clinic": clinic_info
+        }
 
     except HTTPException:
         raise

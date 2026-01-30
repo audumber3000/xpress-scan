@@ -14,9 +14,9 @@ const DoctorProfile = () => {
     "User";
   const userEmail = user?.email || "";
   
-  // User and clinic data state (use user.clinic from context when present, e.g. after login)
+  // User and clinic data state
   const [userData, setUserData] = useState(null);
-  const [clinicData, setClinicData] = useState(user?.clinic ?? null);
+  const [clinicData, setClinicData] = useState(null);
   const [loadingUserData, setLoadingUserData] = useState(true);
   const [userDataError, setUserDataError] = useState("");
 

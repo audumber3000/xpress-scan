@@ -253,13 +253,16 @@ const AuthCallback = () => {
               return;
             }
             
-            const userWithClinic = data.clinic ? { ...data.user, clinic: data.clinic } : data.user;
+            // Web callback - normal flow
+            // Store auth data
             localStorage.setItem('auth_token', data.token);
-            localStorage.setItem('user', JSON.stringify(userWithClinic));
+            localStorage.setItem('user', JSON.stringify(data.user));
             console.log('✅ [AUTH CALLBACK] Stored token and user in localStorage');
-
+            
+            // Update auth context IMMEDIATELY before navigation
+            console.log('🔄 [AUTH CALLBACK] Updating AuthContext...');
             setToken(data.token);
-            setUser(userWithClinic);
+            setUser(data.user);
             console.log('✅ [AUTH CALLBACK] AuthContext updated');
             
             toast.success('Authentication successful!');
@@ -300,12 +303,11 @@ const AuthCallback = () => {
                 id_token: idToken
               });
               
-              const userWithClinic = data.clinic ? { ...data.user, clinic: data.clinic } : data.user;
               localStorage.setItem('auth_token', data.token);
-              localStorage.setItem('user', JSON.stringify(userWithClinic));
+              localStorage.setItem('user', JSON.stringify(data.user));
               setToken(data.token);
-              setUser(userWithClinic);
-
+              setUser(data.user);
+              
               toast.success('Authentication successful!');
               
               // Small delay to ensure context is updated
