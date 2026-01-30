@@ -13,11 +13,15 @@ from core.dtos import (
     ChangePasswordRequestDTO,
     AuthResponseDTO,
     UserResponseDTO,
+    ClinicResponseDTO,
     DeviceInfoDTO,
     SuccessResponseDTO
 )
 from core.dependencies import get_auth_service
 from core.auth_utils import require_role
+from database import get_db
+from sqlalchemy.orm import Session, joinedload
+from models import Clinic, User
 
 router = APIRouter()
 
@@ -60,6 +64,14 @@ async def register_user(
         )
 
 
+def _get_clinic_for_user(db: Session, user) -> Optional[ClinicResponseDTO]:
+    """Return clinic DTO if user has clinic_id, else None."""
+    if not getattr(user, "clinic_id", None):
+        return None
+    clinic = db.query(Clinic).filter(Clinic.id == user.clinic_id).first()
+    return ClinicResponseDTO.from_orm(clinic) if clinic else None
+
+
 @router.post(
     "/login",
     response_model=AuthResponseDTO,
@@ -69,12 +81,13 @@ async def register_user(
 async def login_user(
     request: Request,
     login_data: LoginRequestDTO,
-    auth_service = Depends(get_auth_service)
+    auth_service=Depends(get_auth_service),
+    db: Session = Depends(get_db),
 ):
     """
     Authenticate user with email and password.
 
-    Returns JWT token and user information on successful authentication.
+    Returns JWT token, user information, and clinic details (if onboarded) on success.
     """
     try:
         user = auth_service.authenticate_user(login_data.email, login_data.password)
@@ -91,11 +104,13 @@ async def login_user(
             auth_service.register_device(user.id, device_info)
 
         token = auth_service.create_jwt_token(user.id)
+        clinic = _get_clinic_for_user(db, user)
 
         return AuthResponseDTO(
             message="Login successful",
             user=UserResponseDTO.from_orm(user),
-            token=token
+            token=token,
+            clinic=clinic
         )
 
     except HTTPException:
@@ -116,33 +131,34 @@ async def login_user(
 async def oauth_login(
     request: Request,
     oauth_data: OAuthRequestDTO,
-    auth_service = Depends(get_auth_service)
+    auth_service=Depends(get_auth_service),
+    db: Session = Depends(get_db),
 ):
     """
     Handle OAuth authentication flow.
 
     Verifies the OAuth token and creates/logs in the user.
+    Returns user and clinic details (if onboarded) on success.
     """
     try:
-        # Verify OAuth token and get/create user
         user = auth_service.handle_oauth_login(
-            oauth_data.id_token, 
+            oauth_data.id_token,
             oauth_data.device,
             getattr(oauth_data, 'role', None)
         )
 
-        # Register device if device info provided
         if oauth_data.device:
             device_info = auth_service.detect_device_info(request, oauth_data.device.dict() if hasattr(oauth_data.device, 'dict') else oauth_data.device)
             auth_service.register_device(user.id, device_info)
 
-        # Generate JWT token
         token = auth_service.create_jwt_token(user.id)
+        clinic = _get_clinic_for_user(db, user)
 
         return AuthResponseDTO(
             message="OAuth login successful",
             user=UserResponseDTO.from_orm(user),
-            token=token
+            token=token,
+            clinic=clinic
         )
 
     except ValueError as e:
@@ -166,7 +182,8 @@ async def oauth_login(
 async def oauth_code_login(
     request: Request,
     oauth_data: OAuthCodeRequestDTO,
-    auth_service = Depends(get_auth_service)
+    auth_service=Depends(get_auth_service),
+    db: Session = Depends(get_db),
 ):
     """
     Exchange authorization code with Google, verify id_token, then same as /oauth.
@@ -209,10 +226,12 @@ async def oauth_code_login(
             )
             auth_service.register_device(user.id, device_info)
         token = auth_service.create_jwt_token(user.id)
+        clinic = _get_clinic_for_user(db, user)
         return AuthResponseDTO(
             message="OAuth login successful",
             user=UserResponseDTO.from_orm(user),
             token=token,
+            clinic=clinic,
         )
     except requests.RequestException as e:
         err_detail = str(e)
@@ -239,21 +258,21 @@ async def oauth_code_login(
 
 @router.get(
     "/me",
-    response_model=UserResponseDTO,
     summary="Get current user",
-    description="Retrieve information about the currently authenticated user"
+    description="Retrieve information about the currently authenticated user including clinic details"
 )
 async def get_current_user(
     request: Request,
-    auth_service = Depends(get_auth_service)
+    auth_service=Depends(get_auth_service),
+    db: Session = Depends(get_db),
 ):
     """
     Get information about the currently authenticated user.
+    Includes clinic details when the user has completed onboarding (has clinic_id).
 
     Requires valid JWT token in Authorization header.
     """
     try:
-        # Extract token from header
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
             raise HTTPException(
@@ -270,7 +289,30 @@ async def get_current_user(
                 detail="Invalid or expired token"
             )
 
-        return UserResponseDTO.from_orm(user)
+        # Re-load user with clinic in this session so clinic is always available when user has clinic_id
+        user_with_clinic = (
+            db.query(User)
+            .options(joinedload(User.clinic))
+            .filter(User.id == user.id, User.is_active == True)
+            .first()
+        )
+        if not user_with_clinic:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        user = user_with_clinic
+
+        user_data = UserResponseDTO.from_orm(user).model_dump()
+        clinic_info = None
+        if user.clinic_id and user.clinic:
+            clinic_info = ClinicResponseDTO.from_orm(user.clinic).model_dump()
+        elif user.clinic_id:
+            clinic = db.query(Clinic).filter(Clinic.id == user.clinic_id).first()
+            if clinic:
+                clinic_info = ClinicResponseDTO.from_orm(clinic).model_dump()
+        user_data["clinic"] = clinic_info
+        return user_data
 
     except HTTPException:
         raise
