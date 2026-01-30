@@ -117,6 +117,9 @@ const ClinicOnboarding = () => {
     setLoading(true);
     
     try {
+      if (formData.clinic_phone && formData.clinic_phone.replace(/\D/g, '').length < 10) {
+        throw new Error("Phone number must be at least 10 digits.");
+      }
       const result = await api.post('/auth/onboarding', formData);
       
       // Update user data in localStorage
@@ -195,6 +198,9 @@ const ClinicOnboarding = () => {
                     name="clinic_phone"
                     value={formData.clinic_phone}
                     onChange={handleInputChange}
+                  minLength={10}
+                  pattern="[0-9]{10,}"
+                  title="Enter at least 10 digits"
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#2a276e] focus:border-[#2a276e]"
                   />
                 </div>

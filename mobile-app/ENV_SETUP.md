@@ -31,7 +31,7 @@ Depending on where you're running the app, you may need different URLs:
 | **iOS Simulator** | `http://localhost:8000` | Running on Mac iOS Simulator |
 | **Android Emulator** | `http://10.0.2.2:8000` | Running on Android Emulator |
 | **Physical Device** | `http://192.168.x.x:8000` | Running on real phone (use your computer's IP) |
-| **Production** | `https://xpress-scan.onrender.com` | Deployed backend |
+| **Production** | `https://xpress-scan-backend-test-env.onrender.com` | Deployed backend |
 
 ### How to Change the Backend URL
 
@@ -119,7 +119,7 @@ When ready to use the production backend:
 ```typescript
 // In src/config/api.config.ts
 export const API_CONFIG = {
-  BASE_URL: 'https://xpress-scan.onrender.com',
+  BASE_URL: 'https://xpress-scan-backend-test-env.onrender.com',
 };
 ```
 

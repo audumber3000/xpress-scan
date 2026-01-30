@@ -8,8 +8,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::oneshot;
 
-// Use a port unlikely to conflict with dev servers (8080, 5173, 3000, etc.)
-const OAUTH_CALLBACK_PORT: u16 = 4646;
+const OAUTH_CALLBACK_PORT: u16 = 8080;
 
 #[derive(Debug, Deserialize)]
 struct TokenPayload {
@@ -101,7 +100,7 @@ pub async fn start_oauth_flow(
             if (fullParams) {
                 console.log('🔵 [CALLBACK] Sending params to server...');
                 // Send the fragment/params to our server
-                fetch('http://localhost:4646/token', {
+                fetch('http://localhost:8080/token', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

@@ -1,39 +1,75 @@
 {
-  "name": "MolarPlus - Dental Clinic Management",
-  "short_name": "MolarPlus",
-  "description": "Dental clinic management software for dentists. Appointments, patients, WhatsApp, reports & more.",
+  "name": "BetterClinic - Best Clinic Management Software for Healthcare Professionals",
+  "short_name": "BetterClinic",
+  "description": "India's leading clinic management software for doctors, dentists, radiologists & physiotherapists. Features patient management, WhatsApp integration, voice reporting, payments & analytics. Better clinic software for better healthcare.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#2B296F",
+  "theme_color": "#22c55e",
   "orientation": "portrait-primary",
   "scope": "/",
   "lang": "en",
   "categories": ["medical", "business", "productivity"],
   "icons": [
     {
-      "src": "/favicon-16x16.png",
+      "src": "/icons/icon-16x16.png",
       "sizes": "16x16",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/favicon-32x32.png",
+      "src": "/icons/icon-32x32.png",
       "sizes": "32x32",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-192x192.png",
-      "sizes": "192x192",
+      "src": "/icons/icon-72x72.png",
+      "sizes": "72x72",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/icon-512x512.png",
+      "src": "/icons/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "maskable any"
     }
   ]
 }

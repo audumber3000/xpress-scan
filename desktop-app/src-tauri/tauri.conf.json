@@ -36,6 +36,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "externalBin": [
+      "sidecars/backend"
+    ],
+    "resources": [
+      "sidecars/postgresql/**/*"
+    ],
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",

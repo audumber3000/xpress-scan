@@ -57,14 +57,14 @@ export const authenticatedFetch = async (url, options = {}) => {
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
       if (response.status === 401) {
         // Token might be expired, clear storage but don't redirect here
         // Let React router handle navigation through AuthContext
         localStorage.removeItem('auth_token');
         localStorage.removeItem('user');
-        throw new Error('Authentication failed');
+        throw new Error(errorData.detail || 'Authentication failed');
       }
-      const errorData = await response.json().catch(() => ({}));
       console.error('API Error Response:', errorData);
       
       // Handle validation errors from FastAPI

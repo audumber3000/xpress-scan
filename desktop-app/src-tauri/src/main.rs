@@ -2,8 +2,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod server;
 mod config;
 mod oauth;
+
+use tauri::Manager;
 
 fn main() {
     tauri::Builder::default()
@@ -25,6 +28,20 @@ fn main() {
             commands::complete_setup,
             commands::start_google_oauth,
         ])
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+            
+            // Check if this is server mode and auto-start services
+            tauri::async_runtime::spawn(async move {
+                if let Ok(mode) = commands::get_app_mode_internal(&app_handle).await {
+                    if mode == "server" {
+                        let _ = server::start_services(&app_handle).await;
+                    }
+                }
+            });
+            
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -3,7 +3,7 @@
  * 
  * Update the API_BASE_URL based on your environment:
  * - Development (local): http://localhost:8000
- * - Production: https://xpress-scan.onrender.com
+ * - Production: https://xpress-scan-backend-test-env.onrender.com
  * 
  * Note: For iOS simulator, use http://localhost:8000
  * For Android emulator, use http://10.0.2.2:8000
@@ -17,7 +17,7 @@ export const API_CONFIG = {
   // Alternative URLs for different platforms
   LOCALHOST: 'http://localhost:8000',
   ANDROID_EMULATOR: 'http://10.0.2.2:8000',
-  PRODUCTION: 'https://xpress-scan.onrender.com',
+  PRODUCTION: 'https://xpress-scan-backend-test-env.onrender.com',
   
   // Timeout settings
   TIMEOUT: 30000, // 30 seconds

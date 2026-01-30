@@ -1,5 +1,4 @@
 const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
-const API_BASE_PATH = "/api/v1";
 
 // Helper function to get auth headers
 const getAuthHeaders = () => {
@@ -19,7 +18,7 @@ export const authenticatedFetch = async (url, options = {}) => {
     ...options.headers
   };
 
-  let fullUrl = `${API_URL}${API_BASE_PATH}${url}`;
+  let fullUrl = `${API_URL}${url}`;
   
   // Handle query parameters
   if (options.params) {
@@ -47,12 +46,7 @@ export const authenticatedFetch = async (url, options = {}) => {
       // Token might be expired, redirect to login
       localStorage.removeItem('auth_token');
       localStorage.removeItem('user');
-      // In Tauri, full page redirect breaks the webview; use event so app can soft-navigate
-      if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
-        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
-      } else {
-        window.location.href = '/login';
-      }
+      window.location.href = '/login';
       throw new Error('Authentication failed');
     }
     const errorData = await response.json().catch(() => ({}));

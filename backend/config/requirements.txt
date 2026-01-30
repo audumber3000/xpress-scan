@@ -19,14 +19,6 @@ razorpay
 python-multipart
 python-jose[cryptography]
 pydantic
-email_validator>=2.0.0
 redis>=4.5.0
 fastapi-cache2>=0.2.0
-casbin>=1.17.0
-# Gmail / Google API (domains/gmail)
-google-auth>=2.0.0
-google-auth-oauthlib>=1.0.0
-google-api-python-client>=2.0.0
-
-# Supabase (config/supabase_client.py - optional, used when SUPABASE_* env set)
-supabase>=2.0.0
+casbin>=1.17.0 

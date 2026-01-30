@@ -7,7 +7,6 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 // Pages
-import RedirectToMarketing from "./pages/RedirectToMarketing";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
@@ -91,26 +90,27 @@ function AppContent() {
     }
   }, [location.pathname, loading, user, navigate]);
 
-  // Check if current route is auth page, root redirect, booking, or dental-demo (no sidebar)
+  // Check if current route is auth page, booking page, or public page
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/onboarding' || location.pathname === '/auth/callback';
-  const isRootRedirect = location.pathname === '/';
   const isBookingPage = location.pathname === '/booking';
-  const isNoSidebarRoute = isAuthPage || isRootRedirect || isBookingPage || location.pathname === '/dental-demo';
+  const isPublicPage = location.pathname === '/dental-demo';
+
+  // Don't block rendering while loading - let ProtectedRoute handle it
+  // if (loading) return <div>Loading...</div>;
 
   // Render layout based on route type
   const renderContent = () => {
-    // For auth pages, root (redirect to marketing), booking, dental-demo - render without sidebar
-    if (isNoSidebarRoute) {
+    // For auth pages, booking page, and public pages - render without sidebar
+    if (isAuthPage || isBookingPage || isPublicPage) {
       return (
         <Routes>
-          <Route path="/" element={<RedirectToMarketing />} />
+          <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/onboarding" element={<ClinicOnboarding />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/booking" element={<BookingPage />} />
           <Route path="/dental-demo" element={<DentalChartDemo />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       );
     }

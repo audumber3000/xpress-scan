@@ -41,7 +41,7 @@ export const AuthProvider = ({ children }) => {
             
             // Token is valid, now set the state
             // Use the user data from the API response if available, otherwise use stored
-            const user = userData.user || JSON.parse(storedUser);
+            const user = userData.user || userData || JSON.parse(storedUser);
             setToken(storedToken);
             setUser(user);
             // Update localStorage with fresh user data

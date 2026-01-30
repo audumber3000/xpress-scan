@@ -15,6 +15,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import SEO from '../components/SEO';
+import betterClinicLogo from '../assets/betterclinic-logo.png';
 
 const Features = () => {
   const structuredData = {
@@ -174,8 +175,8 @@ const Features = () => {
             <div className="flex items-center">
               <Link to="/" className="flex items-center overflow-hidden" style={{ height: '50px' }}>
                 <img 
-                  src="/molarplus-logo.svg" 
-                  alt="MolarPlus" 
+                  src={betterClinicLogo} 
+                  alt="Better Clinic Logo" 
                   className="h-22 w-auto"
                 />
               </Link>

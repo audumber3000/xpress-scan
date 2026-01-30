@@ -1,9 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
 
-// Redirect URI for desktop app system-browser OAuth (Tauri callback server).
-// Port 4646 to avoid conflict with dev servers (8080, 5173, 3000). Add this exact URI in Google Cloud Console → Credentials → Your OAuth client → Authorized redirect URIs.
-export const OAUTH_DESKTOP_REDIRECT_URI = 'http://localhost:4646/';
-
 // Check if running in Tauri environment
 const isTauri = () => {
   return typeof window !== 'undefined' && window.__TAURI_INTERNALS__ !== undefined;

@@ -114,7 +114,7 @@ getProfileStats() → Backend /metrics Endpoint → Display Stats
 
 To fully utilize the backend integration:
 
-1. Ensure backend is running at `https://xpress-scan.onrender.com`
+1. Ensure backend is running at `https://xpress-scan-backend-test-env.onrender.com`
 2. Test login flow with Firebase authentication
 3. Verify token storage and retrieval
 4. Test profile data loading
@@ -126,7 +126,7 @@ To fully utilize the backend integration:
 
 Backend URL is configured in `apiService.ts`:
 ```typescript
-private baseURL = 'https://xpress-scan.onrender.com';
+private baseURL = 'https://xpress-scan-backend-test-env.onrender.com';
 ```
 
 Update this URL if your backend is hosted elsewhere.

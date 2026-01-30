@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { checkServerStatus, getAppMode } from '../tauri';
+import { checkServerStatus } from '../tauri';
 import { performFullSync } from '../utils/sync';
+import betterClinicLogo from '../assets/betterclinic-logo.png';
 
 const StartupScreen = ({ onComplete }) => {
   const [currentStep, setCurrentStep] = useState(0);
@@ -24,20 +25,14 @@ const StartupScreen = ({ onComplete }) => {
 
   const runStartupChecks = async () => {
     try {
-      const mode = await getAppMode().catch(() => 'client');
-      const isClientMode = mode === 'client';
-
-      // Step 1: Check Database (only required in server mode; skip in client/cloud mode)
+      // Step 1: Check Database
       updateStepStatus('database', 'running');
       await new Promise(resolve => setTimeout(resolve, 800));
       
       const status = await checkServerStatus();
       
-      if (isClientMode) {
-        // Client mode: no local database; use cloud API. Mark step complete.
-        updateStepStatus('database', 'complete');
-      } else if (!status.postgres_running) {
-        // Server mode: wait for PostgreSQL to start
+      if (!status.postgres_running) {
+        // Wait for PostgreSQL to start (it starts automatically)
         let retries = 0;
         while (retries < 10) {
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -50,20 +45,15 @@ const StartupScreen = ({ onComplete }) => {
         if (!finalStatus.postgres_running) {
           throw new Error('Database failed to start. Please restart the application.');
         }
-        updateStepStatus('database', 'complete');
-      } else {
-        updateStepStatus('database', 'complete');
       }
+      updateStepStatus('database', 'complete');
       setCurrentStep(1);
 
-      // Step 2: Check API (in client mode we use cloud API, so don't block on local backend)
+      // Step 2: Check API Server
       updateStepStatus('api', 'running');
       await new Promise(resolve => setTimeout(resolve, 600));
       
-      if (isClientMode) {
-        // Client mode: app uses VITE_BACKEND_URL (cloud). No local API required.
-        updateStepStatus('api', 'complete');
-      } else if (!status.backend_running) {
+      if (!status.backend_running) {
         let retries = 0;
         while (retries < 10) {
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -76,10 +66,8 @@ const StartupScreen = ({ onComplete }) => {
         if (!finalStatus.backend_running) {
           throw new Error('API server failed to start. Please restart the application.');
         }
-        updateStepStatus('api', 'complete');
-      } else {
-        updateStepStatus('api', 'complete');
       }
+      updateStepStatus('api', 'complete');
       setCurrentStep(2);
 
       // Step 3: Sync with Cloud
@@ -165,8 +153,8 @@ const StartupScreen = ({ onComplete }) => {
         {/* Logo */}
         <div className="flex justify-center mb-8">
           <img 
-            src="/molarplus-logo.svg" 
-            alt="MolarPlus" 
+            src={betterClinicLogo} 
+            alt="BDent" 
             className="h-16 w-auto"
           />
         </div>
