@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Camera, Mail, Phone, MapPin, ChevronRight, Monitor, Smartphone, Building2, Briefcase, Info, Clock, IndianRupee } from 'lucide-react-native';
 import { adminColors } from '../../../../shared/constants/adminColors';
@@ -57,7 +58,7 @@ export const ClinicSettingsScreen: React.FC<ClinicSettingsScreenProps> = ({ navi
         onBackPress={() => navigation.goBack()}
         variant="admin"
         rightComponent={
-          <TouchableOpacity onPress={() => Alert.alert('Edit Mode', 'Use the web portal to edit clinic master records.')}>
+          <TouchableOpacity onPress={() => showAlert('Edit Mode', 'Use the web portal to edit clinic master records.')}>
             <Text style={styles.saveButton}>Edit</Text>
           </TouchableOpacity>
         }

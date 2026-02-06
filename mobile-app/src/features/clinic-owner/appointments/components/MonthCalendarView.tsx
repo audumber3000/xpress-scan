@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { colors } from '../../../../shared/constants/colors';
 
 interface CalendarDay {
@@ -17,35 +17,53 @@ interface MonthCalendarViewProps {
 }
 
 export const MonthCalendarView: React.FC<MonthCalendarViewProps> = ({ calendarDays, onDateSelect }) => {
+  const { width } = useWindowDimensions();
+  const paddingHorizontal = 20;
+  const availableWidth = width - paddingHorizontal * 2;
+  const cellSize = Math.floor(availableWidth / 7);
+
+  const handleDayPress = (dayInfo: CalendarDay) => {
+    if (dayInfo.type === 'day' && dayInfo.date) {
+      onDateSelect(dayInfo.date);
+    }
+  };
+
+  const isDay = (d: CalendarDay) => d.type === 'day';
+  const isEmpty = (d: CalendarDay) => d.type === 'empty';
+
   return (
     <View style={styles.calendar}>
       {/* Day Headers */}
       <View style={styles.dayHeaders}>
         {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map((day) => (
-          <Text key={day} style={styles.dayHeader}>{day}</Text>
+          <Text key={day} style={[styles.dayHeader, { width: cellSize, textAlign: 'center' as const }]}>{day}</Text>
         ))}
       </View>
 
       {/* Calendar Days */}
-      <View style={styles.calendarGrid}>
+      <View style={[styles.calendarGrid, { width: availableWidth }]}>
         {calendarDays.map((dayInfo, index) => (
           <TouchableOpacity
             key={index}
             style={[
               styles.calendarDay,
+              { width: cellSize, height: cellSize },
               dayInfo.isSelected && styles.calendarDaySelected,
+              dayInfo.isToday && !dayInfo.isSelected && styles.calendarDayToday,
             ]}
-            onPress={() => dayInfo.type === 'day' && onDateSelect(dayInfo.date)}
-            disabled={dayInfo.type === 'empty'}
+            onPress={() => handleDayPress(dayInfo)}
+            activeOpacity={isDay(dayInfo) ? 0.6 : 1}
+            disabled={isEmpty(dayInfo)}
           >
             <Text style={[
               styles.calendarDayText,
-              dayInfo.type === 'empty' && styles.calendarDayTextEmpty,
+              isEmpty(dayInfo) && styles.calendarDayTextEmpty,
               dayInfo.isSelected && styles.calendarDayTextSelected,
+              dayInfo.isToday && !dayInfo.isSelected && styles.calendarDayTextToday,
             ]}>
-              {dayInfo.day}
+              {isEmpty(dayInfo) ? '' : dayInfo.day}
             </Text>
-            {dayInfo.hasAppointments && dayInfo.type === 'day' && (
+            {dayInfo.hasAppointments && isDay(dayInfo) && (
               <View style={styles.appointmentDots}>
                 <View style={[styles.dot, { backgroundColor: '#10B981' }]} />
                 <View style={[styles.dot, { backgroundColor: '#F59E0B' }]} />
@@ -79,14 +97,16 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   calendarDay: {
-    width: '14.28%',
-    aspectRatio: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 8,
   },
   calendarDaySelected: {
     backgroundColor: colors.primary,
+    borderRadius: 12,
+  },
+  calendarDayToday: {
+    borderWidth: 2,
+    borderColor: colors.primary,
     borderRadius: 12,
   },
   calendarDayText: {
@@ -95,7 +115,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   calendarDayTextEmpty: {
-    color: '#D1D5DB',
+    color: 'transparent',
+  },
+  calendarDayTextToday: {
+    color: colors.primary,
+    fontWeight: '700',
   },
   calendarDayTextSelected: {
     color: '#FFFFFF',

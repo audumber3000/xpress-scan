@@ -6,10 +6,10 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Alert,
   Modal,
   Animated
 } from 'react-native';
+import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, ChevronLeft } from 'lucide-react-native';
 import { useAuth } from '../../../../app/AuthContext';
@@ -180,26 +180,18 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
         }
       }
 
-      Alert.alert(
-        'Success',
-        'Patient registered successfully!',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              onPatientAdded(data);
-              handleClose();
-            },
+      showAlert('Success', 'Patient registered successfully!', [
+        {
+          text: 'OK',
+          onPress: () => {
+            onPatientAdded(data);
+            handleClose();
           },
-        ]
-      );
+        },
+      ]);
     } catch (error: any) {
       console.error('❌ [PATIENT] Create error:', error);
-      Alert.alert(
-        'Error',
-        'Failed to register patient. Please try again.',
-        [{ text: 'OK' }]
-      );
+      showAlert('Error', 'Failed to register patient. Please try again.');
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Modal, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Modal, Dimensions } from 'react-native';
+import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Shield, Check, Lock, ChevronRight, X, UserCircle2, Mail, Users, UserCheck } from 'lucide-react-native';
 import { adminColors } from '../../../../shared/constants/adminColors';
@@ -62,12 +63,12 @@ export const PermissionsScreen: React.FC<{ navigation: any }> = ({ navigation })
         setStaff(updatedStaff);
         setSelectedStaff({ ...selectedStaff, role: newRole });
         handleStaffSelect({ ...selectedStaff, role: newRole });
-        Alert.alert('Success', `Role updated to ${newRole.toUpperCase()}`);
+        showAlert('Success', `Role updated to ${newRole.toUpperCase()}`);
       } else {
-        Alert.alert('Error', 'Failed to update role');
+        showAlert('Error', 'Failed to update role');
       }
     } catch (err) {
-      Alert.alert('Error', 'An unexpected error occurred');
+      showAlert('Error', 'An unexpected error occurred');
     } finally {
       setSaving(false);
     }

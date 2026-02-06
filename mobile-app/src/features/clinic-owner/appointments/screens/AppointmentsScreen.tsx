@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, Calendar as CalendarIcon, SlidersHorizontal } from 'lucide-react-native';
 import { appointmentsApiService, Appointment } from '../../../../services/api/appointments.api';
@@ -85,18 +85,26 @@ export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigati
   const getMonthCalendar = () => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
+    const today = new Date();
 
     const firstDayOfMonth = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-    const days = [];
+    const days: Array<{
+      type: 'day' | 'empty';
+      day: number;
+      date: Date;
+      isToday?: boolean;
+      isSelected?: boolean;
+      hasAppointments?: boolean;
+    }> = [];
 
     // Alignment for week starting Mon (1)
     const offset = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
 
-    // Previous month filler
+    // Previous month filler (empty cells)
     for (let i = 0; i < offset; i++) {
-      days.push({ day: 0, currentMonth: false });
+      days.push({ type: 'empty', day: 0, date: new Date(0) });
     }
 
     for (let i = 1; i <= daysInMonth; i++) {
@@ -104,13 +112,15 @@ export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigati
       const dateStr = formatLocalDate(date);
       const hasAppointments = appointments.some(apt => apt.date === dateStr);
       const isSelected = selectedDate.toDateString() === date.toDateString();
+      const isToday = date.toDateString() === today.toDateString();
 
       days.push({
+        type: 'day',
         day: i,
-        currentMonth: true,
-        hasAppointments,
+        date,
+        isToday,
         isSelected,
-        date
+        hasAppointments,
       });
     }
 
@@ -134,16 +144,18 @@ export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigati
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
       <ScreenHeader
+        variant="primary"
         title="Appointments"
-        titleIcon={<CalendarIcon size={22} color="#111827" />}
+        titleIcon={<CalendarIcon size={22} />}
         rightComponent={
           <View style={styles.headerRight}>
             <TouchableOpacity
-              style={styles.iconButton}
+              style={styles.iconButtonPrimary}
               onPress={() => navigation.navigate('SearchAppointments')}
             >
-              <Search size={22} color="#6B7280" />
+              <Search size={22} color={colors.white} />
             </TouchableOpacity>
           </View>
         }
@@ -242,6 +254,14 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconButtonPrimary: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.25)',
     justifyContent: 'center',
     alignItems: 'center',
   },

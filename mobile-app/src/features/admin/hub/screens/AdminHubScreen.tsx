@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronLeft, Briefcase, Calendar, Users, DollarSign, Monitor, Settings, Lock, MapPin, Clock } from 'lucide-react-native';
 import { AdminModuleCard } from '../components/AdminModuleCard';
@@ -39,6 +40,16 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
     loadData();
   }, []);
 
+  // Keep status bar teal whenever Admin Hub is focused (e.g. after switching tabs)
+  useFocusEffect(
+    useCallback(() => {
+      StatusBar.setBarStyle('light-content');
+      if (StatusBar.setBackgroundColor) {
+        StatusBar.setBackgroundColor(adminColors.gradientStart);
+      }
+    }, [])
+  );
+
   const isOpen = useMemo(() => {
     if (!clinic?.timings) return true;
     const now = new Date();
@@ -66,6 +77,7 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
   if (loading && !refreshing) {
     return (
       <View style={[styles.container, styles.center]}>
+        <StatusBar barStyle="light-content" backgroundColor={adminColors.gradientStart} />
         <GearLoader text="Opening Admin Hub..." />
       </View>
     );
@@ -73,6 +85,7 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor={adminColors.gradientStart} />
       <LinearGradient
         colors={[adminColors.gradientStart, adminColors.gradientEnd]}
         style={styles.header}

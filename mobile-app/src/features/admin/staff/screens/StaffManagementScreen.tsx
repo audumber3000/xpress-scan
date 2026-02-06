@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Search, Menu, Plus, UserCircle2, Mail, Shield, UserCheck } from 'lucide-react-native';
 import { StaffMemberCard } from '../components/StaffMemberCard';
@@ -133,7 +134,7 @@ export const StaffManagementScreen: React.FC<StaffManagementScreenProps> = ({ na
       {/* FAB */}
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => Alert.alert('Coming Soon', 'Staff onboarding via mobile is coming in the next update.')}
+        onPress={() => showAlert('Coming Soon', 'Staff onboarding via mobile is coming in the next update.')}
       >
         <Plus size={28} color="#FFFFFF" strokeWidth={3} />
       </TouchableOpacity>

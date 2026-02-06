@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, RefreshControl, Modal, Dimensions, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, RefreshControl, Modal, Dimensions } from 'react-native';
+import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Search, MoreVertical, Plus, Stethoscope, Sparkles, X, Smile, Calendar, IndianRupee, Trash2, Edit3, ChevronRight } from 'lucide-react-native';
 import { adminColors } from '../../../../shared/constants/adminColors';
@@ -62,7 +63,7 @@ export const TreatmentsPricingScreen: React.FC<{ navigation: any }> = ({ navigat
 
   const handleSave = async () => {
     if (!formData.name || !formData.price) {
-      Alert.alert('Error', 'Please fill all fields');
+      showAlert('Error', 'Please fill all fields');
       return;
     }
 
@@ -77,10 +78,10 @@ export const TreatmentsPricingScreen: React.FC<{ navigation: any }> = ({ navigat
         setIsModalVisible(false);
         loadData();
       } else {
-        Alert.alert('Error', 'Failed to save treatment');
+        showAlert('Error', 'Failed to save treatment');
       }
     } catch (err) {
-      Alert.alert('Error', 'An unexpected error occurred');
+      showAlert('Error', 'An unexpected error occurred');
     } finally {
       setSaving(false);
     }
@@ -93,7 +94,7 @@ export const TreatmentsPricingScreen: React.FC<{ navigation: any }> = ({ navigat
   };
 
   const handleDelete = async (id: string) => {
-    Alert.alert('Delete Treatment', 'Are you sure you want to remove this service from your catalog?', [
+    showAlert('Delete Treatment', 'Are you sure you want to remove this service from your catalog?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -101,9 +102,9 @@ export const TreatmentsPricingScreen: React.FC<{ navigation: any }> = ({ navigat
         onPress: async () => {
           const success = await adminApiService.deleteTreatmentType(id);
           if (success) loadData();
-          else Alert.alert('Error', 'Failed to delete treatment');
-        }
-      }
+          else showAlert('Error', 'Failed to delete treatment');
+        },
+      },
     ]);
   };
 

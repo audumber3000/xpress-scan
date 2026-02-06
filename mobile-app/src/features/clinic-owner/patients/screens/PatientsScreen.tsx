@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, StatusBar } from 'react-native';
+import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Plus, Users } from 'lucide-react-native';
 import { patientsApiService, Patient } from '../../../../services/api/patients.api';
@@ -62,7 +63,7 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation }) =>
       setPatients(augmentedData);
     } catch (err: any) {
       console.error('Error loading patients:', err);
-      Alert.alert('Error', `Failed to load patients: ${err.message}`);
+      showAlert('Error', `Failed to load patients: ${err.message}`);
       setPatients([]);
     } finally {
       setLoading(false);
@@ -109,7 +110,7 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation }) =>
       loadPatients();
     } catch (error) {
       console.error('Error deleting patient:', error);
-      Alert.alert('Error', 'Failed to delete patient');
+      showAlert('Error', 'Failed to delete patient');
     }
   };
 
@@ -134,9 +135,11 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation }) =>
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
       <ScreenHeader
+        variant="primary"
         title="Patients"
-        titleIcon={<Users size={22} color="#111827" />}
+        titleIcon={<Users size={22} />}
       />
 
       {/* Search Bar */}

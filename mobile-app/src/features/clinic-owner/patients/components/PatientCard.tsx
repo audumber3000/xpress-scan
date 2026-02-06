@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, PanResponder, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, PanResponder } from 'react-native';
+import { showAlert } from '../../../../shared/components/alertService';
 import { Phone, Trash2 } from 'lucide-react-native';
 
 interface PatientCardProps {
@@ -51,24 +52,20 @@ export const PatientCard: React.FC<PatientCardProps> = ({ patient, onPress, onPh
   ).current;
 
   const handleDelete = () => {
-    Alert.alert(
-      'Delete Patient',
-      `Are you sure you want to delete ${patient.name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            Animated.spring(translateX, {
-              toValue: 0,
-              useNativeDriver: true,
-            }).start();
-            onDelete();
-          },
+    showAlert('Delete Patient', `Are you sure you want to delete ${patient.name}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          Animated.spring(translateX, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+          onDelete();
         },
-      ]
-    );
+      },
+    ]);
   };
 
   return (

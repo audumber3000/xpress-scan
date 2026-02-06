@@ -1,12 +1,15 @@
 """
 Auth routes using clean architecture
 """
+import os
+import requests
 from fastapi import APIRouter, HTTPException, status, Request, Depends
 from typing import Optional
 from core.dtos import (
     LoginRequestDTO,
     RegisterRequestDTO,
     OAuthRequestDTO,
+    OAuthCodeRequestDTO,
     ChangePasswordRequestDTO,
     AuthResponseDTO,
     UserResponseDTO,

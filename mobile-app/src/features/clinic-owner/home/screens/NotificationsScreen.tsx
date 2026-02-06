@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,21 +7,22 @@ import {
   TouchableOpacity,
   Animated,
   Dimensions,
-  SafeAreaView,
+  RefreshControl,
 } from 'react-native';
-import { SafeAreaView as SafeAreaViewInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Bell, CheckCircle, AlertCircle, Info, X } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { ChevronLeft, Bell, Calendar, X } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
+import { getAllScheduledNotifications } from '../../../../services/notifications';
+import { format } from 'date-fns';
 
 const { width: screenWidth } = Dimensions.get('window');
 
-interface Notification {
+interface NotificationItem {
   id: string;
   title: string;
   message: string;
-  timestamp: string;
-  type: 'info' | 'success' | 'warning' | 'error';
-  read: boolean;
+  scheduledAt?: string;
+  type: 'appointment' | 'reminder' | 'info';
 }
 
 interface NotificationsScreenProps {
@@ -34,76 +35,59 @@ export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
   onClose,
 }) => {
   const [slideAnim] = useState(new Animated.Value(screenWidth));
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Mock data - replace with actual API call
+  const loadNotifications = useCallback(async () => {
+    try {
+      const scheduled = await getAllScheduledNotifications();
+      const items: NotificationItem[] = scheduled.map((req) => {
+        const content = req.content;
+        const trigger = req.trigger as any;
+        let scheduledAt: string | undefined;
+        const triggerDate = trigger?.date ?? trigger?.timestamp;
+        if (triggerDate) {
+          try {
+            scheduledAt = format(new Date(triggerDate), 'MMM d, h:mm a');
+          } catch {
+            scheduledAt = undefined;
+          }
+        }
+        const data = content.data || {};
+        const type = data.type === 'appointment_reminder' ? 'appointment' : 'reminder';
+        return {
+          id: req.identifier,
+          title: content.title || 'Notification',
+          message: content.body || '',
+          scheduledAt,
+          type,
+        };
+      });
+      setNotifications(items);
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+      setNotifications([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (visible) {
       loadNotifications();
     }
-  }, [visible]);
-
-  const loadNotifications = async () => {
-    setLoading(true);
-    try {
-      // TODO: Replace with actual API call
-      // const data = await apiService.getNotifications();
-      
-      // Mock data for demonstration
-      const mockNotifications: Notification[] = [
-        {
-          id: '1',
-          title: 'New Patient Registered',
-          message: 'John Doe has been successfully registered in your clinic.',
-          timestamp: '2 minutes ago',
-          type: 'success',
-          read: false,
-        },
-        {
-          id: '2',
-          title: 'Appointment Reminder',
-          message: 'You have an appointment with Sarah Smith in 30 minutes.',
-          timestamp: '25 minutes ago',
-          type: 'info',
-          read: false,
-        },
-        {
-          id: '3',
-          title: 'Payment Received',
-          message: 'Payment of ₹2000 received from Michael Johnson.',
-          timestamp: '1 hour ago',
-          type: 'success',
-          read: true,
-        },
-        {
-          id: '4',
-          title: 'System Update',
-          message: 'New features have been added to your clinic dashboard.',
-          timestamp: '3 hours ago',
-          type: 'info',
-          read: true,
-        },
-      ];
-
-      setNotifications(mockNotifications);
-    } catch (error) {
-      console.error('Error loading notifications:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [visible, loadNotifications]);
 
   useEffect(() => {
     if (visible) {
-      // Slide in animation
       Animated.timing(slideAnim, {
         toValue: 0,
         duration: 300,
         useNativeDriver: true,
       }).start();
     } else {
-      // Slide out animation
       Animated.timing(slideAnim, {
         toValue: screenWidth,
         duration: 250,
@@ -112,48 +96,17 @@ export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
     }
   }, [visible]);
 
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadNotifications();
+  };
+
   const handleClose = () => {
     Animated.timing(slideAnim, {
       toValue: screenWidth,
       duration: 250,
       useNativeDriver: true,
-    }).start(() => {
-      onClose();
-    });
-  };
-
-  const getNotificationIcon = (type: Notification['type']) => {
-    switch (type) {
-      case 'success':
-        return <CheckCircle size={20} color={colors.success} />;
-      case 'warning':
-        return <AlertCircle size={20} color={colors.warning} />;
-      case 'error':
-        return <AlertCircle size={20} color={colors.error} />;
-      default:
-        return <Info size={20} color={colors.primary} />;
-    }
-  };
-
-  const getNotificationColor = (type: Notification['type']) => {
-    switch (type) {
-      case 'success':
-        return colors.successLight;
-      case 'warning':
-        return colors.warningLight;
-      case 'error':
-        return colors.errorLight;
-      default:
-        return colors.primaryLight;
-    }
-  };
-
-  const markAsRead = (id: string) => {
-    setNotifications(prev =>
-      prev.map(notification =>
-        notification.id === id ? { ...notification, read: true } : notification
-      )
-    );
+    }).start(() => onClose());
   };
 
   if (!visible) return null;
@@ -162,28 +115,26 @@ export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
     <Animated.View
       style={[
         styles.overlay,
-        {
-          transform: [{ translateX: slideAnim }],
-        },
+        { transform: [{ translateX: slideAnim }] },
       ]}
     >
-      <SafeAreaViewInsets style={styles.container} edges={['top', 'bottom']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
-            style={styles.backButton}
+            style={styles.headerButton}
             onPress={handleClose}
             activeOpacity={0.7}
           >
-            <ChevronLeft size={24} color={colors.gray700} />
+            <ChevronLeft size={24} color={colors.white} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Notifications</Text>
           <TouchableOpacity
-            style={styles.backButton}
+            style={styles.headerButton}
             onPress={handleClose}
             activeOpacity={0.7}
           >
-            <X size={24} color={colors.gray700} />
+            <X size={22} color={colors.white} />
           </TouchableOpacity>
         </View>
 
@@ -191,65 +142,58 @@ export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
         <ScrollView
           style={styles.content}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.contentContainer}
+          contentContainerStyle={[
+            styles.contentContainer,
+            notifications.length === 0 && !loading && styles.emptyContainer,
+          ]}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+            />
+          }
         >
           {loading ? (
-            <View style={styles.loadingContainer}>
+            <View style={styles.loadingState}>
+              <View style={styles.loadingDot} />
               <Text style={styles.loadingText}>Loading notifications...</Text>
             </View>
           ) : notifications.length === 0 ? (
             <View style={styles.emptyState}>
-              <Bell size={48} color={colors.gray300} />
-              <Text style={styles.emptyTitle}>No notifications yet</Text>
+              <View style={styles.emptyIconWrap}>
+                <Bell size={40} color={colors.gray400} />
+              </View>
+              <Text style={styles.emptyTitle}>You don't have any notifications</Text>
               <Text style={styles.emptyMessage}>
-                You'll see your notifications here when they arrive
+                Appointment reminders and updates will appear here when scheduled.
               </Text>
             </View>
           ) : (
-            notifications.map((notification) => (
-              <TouchableOpacity
-                key={notification.id}
-                style={[
-                  styles.notificationCard,
-                  !notification.read && styles.unreadCard,
-                ]}
-                onPress={() => markAsRead(notification.id)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.notificationIcon}>
-                  {getNotificationIcon(notification.type)}
+            notifications.map((item) => (
+              <View key={item.id} style={styles.card}>
+                <View style={[
+                  styles.cardIcon,
+                  item.type === 'appointment' && styles.cardIconAppointment,
+                ]}>
+                  <Calendar size={20} color={colors.primary} />
                 </View>
-                <View style={styles.notificationContent}>
-                  <View style={styles.notificationHeader}>
-                    <Text
-                      style={[
-                        styles.notificationTitle,
-                        !notification.read && styles.unreadTitle,
-                      ]}
-                    >
-                      {notification.title}
-                    </Text>
-                    {!notification.read && (
-                      <View style={styles.unreadDot} />
-                    )}
-                  </View>
-                  <Text
-                    style={[
-                      styles.notificationMessage,
-                      !notification.read && styles.unreadMessage,
-                    ]}
-                  >
-                    {notification.message}
+                <View style={styles.cardContent}>
+                  <Text style={styles.cardTitle} numberOfLines={1}>
+                    {item.title}
                   </Text>
-                  <Text style={styles.notificationTimestamp}>
-                    {notification.timestamp}
+                  <Text style={styles.cardMessage} numberOfLines={2}>
+                    {item.message}
                   </Text>
+                  {item.scheduledAt ? (
+                    <Text style={styles.cardTime}>{item.scheduledAt}</Text>
+                  ) : null}
                 </View>
-              </TouchableOpacity>
+              </View>
             ))
           )}
         </ScrollView>
-      </SafeAreaViewInsets>
+      </SafeAreaView>
     </Animated.View>
   );
 };
@@ -261,13 +205,13 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.white,
     zIndex: 1000,
   },
   container: {
     flex: 1,
-    backgroundColor: colors.white,
     width: screenWidth,
+    backgroundColor: colors.gray50,
   },
   header: {
     flexDirection: 'row',
@@ -275,10 +219,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray100,
+    backgroundColor: colors.primary,
   },
-  backButton: {
+  headerButton: {
     width: 40,
     height: 40,
     justifyContent: 'center',
@@ -287,22 +230,33 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: colors.gray900,
+    fontWeight: '700',
+    color: colors.white,
   },
   content: {
     flex: 1,
   },
   contentContainer: {
-    padding: 16,
+    padding: 20,
   },
-  loadingContainer: {
+  emptyContainer: {
+    flex: 1,
+  },
+  loadingState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
+    marginBottom: 16,
   },
   loadingText: {
-    fontSize: 16,
+    fontSize: 15,
     color: colors.gray500,
   },
   emptyState: {
@@ -310,76 +264,72 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
+    paddingVertical: 60,
   },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: colors.gray700,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyMessage: {
-    fontSize: 16,
-    color: colors.gray500,
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  notificationCard: {
-    flexDirection: 'row',
-    padding: 16,
-    marginBottom: 12,
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.gray100,
-  },
-  unreadCard: {
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.primary,
-  },
-  notificationIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  emptyIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.gray100,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginBottom: 20,
   },
-  notificationContent: {
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.gray800,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptyMessage: {
+    fontSize: 15,
+    color: colors.gray500,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  card: {
+    flexDirection: 'row',
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.gray100,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  cardIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: colors.primaryBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  cardIconAppointment: {
+    backgroundColor: colors.primaryBg,
+  },
+  cardContent: {
     flex: 1,
   },
-  notificationHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  notificationTitle: {
+  cardTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.gray900,
-    flex: 1,
+    marginBottom: 4,
   },
-  unreadTitle: {
-    color: colors.primary,
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.primary,
-    marginLeft: 8,
-  },
-  notificationMessage: {
+  cardMessage: {
     fontSize: 14,
     color: colors.gray600,
     lineHeight: 20,
     marginBottom: 4,
   },
-  unreadMessage: {
-    color: colors.gray700,
-  },
-  notificationTimestamp: {
+  cardTime: {
     fontSize: 12,
     color: colors.gray400,
   },

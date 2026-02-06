@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stethoscope, Clock, Check, X, UserPlus, FileText as FileIcon } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
@@ -40,40 +41,36 @@ export const AppointmentDetailsScreen: React.FC<AppointmentDetailsScreenProps> =
     try {
       const updated = await appointmentsApiService.updateAppointment(appointment.id, { status: 'accepted' });
       setAppointment(updated);
-      Alert.alert('Success', 'Appointment accepted successfully!');
+      showAlert('Success', 'Appointment accepted successfully!');
     } catch (error) {
       console.error('Error accepting appointment:', error);
-      Alert.alert('Error', 'Failed to accept appointment');
+      showAlert('Error', 'Failed to accept appointment');
     } finally {
       setLoading(false);
     }
   };
 
   const handleReject = async () => {
-    Alert.alert(
-      'Confirm Reject',
-      'Are you sure you want to reject this appointment?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reject',
-          style: 'destructive',
-          onPress: async () => {
-            setLoading(true);
-            try {
-              const updated = await appointmentsApiService.updateAppointment(appointment.id, { status: 'rejected' });
-              setAppointment(updated);
-              Alert.alert('Success', 'Appointment rejected');
-            } catch (error) {
-              console.error('Error rejecting appointment:', error);
-              Alert.alert('Error', 'Failed to reject appointment');
-            } finally {
-              setLoading(false);
-            }
+    showAlert('Confirm Reject', 'Are you sure you want to reject this appointment?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reject',
+        style: 'destructive',
+        onPress: async () => {
+          setLoading(true);
+          try {
+            const updated = await appointmentsApiService.updateAppointment(appointment.id, { status: 'rejected' });
+            setAppointment(updated);
+            showAlert('Success', 'Appointment rejected');
+          } catch (error) {
+            console.error('Error rejecting appointment:', error);
+            showAlert('Error', 'Failed to reject appointment');
+          } finally {
+            setLoading(false);
           }
-        }
-      ]
-    );
+        },
+      },
+    ]);
   };
 
   const handlePatientAdded = (patient: any) => {
