@@ -11,7 +11,7 @@ interface ScreenHeaderProps {
   backgroundColor?: string;
   textColor?: string;
   iconColor?: string;
-  variant?: 'default' | 'admin';
+  variant?: 'default' | 'admin' | 'primary';
   subtitle?: string;
   titleIcon?: React.ReactNode;
 }
@@ -27,9 +27,18 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   subtitle,
   titleIcon,
 }) => {
-  const bgColor = backgroundColor || (variant === 'admin' ? '#FFFFFF' : '#FFFFFF');
-  const txtColor = textColor || (variant === 'admin' ? '#111827' : '#111827');
-  const icnColor = iconColor || (variant === 'admin' ? adminColors.primary : colors.primary);
+  const bgColor = backgroundColor || (
+    variant === 'primary' ? colors.primary :
+    variant === 'admin' ? '#FFFFFF' : '#FFFFFF'
+  );
+  const txtColor = textColor || (
+    variant === 'primary' ? colors.white :
+    variant === 'admin' ? '#111827' : '#111827'
+  );
+  const icnColor = iconColor || (
+    variant === 'primary' ? colors.white :
+    variant === 'admin' ? adminColors.primary : colors.primary
+  );
 
   return (
     <View style={[styles.header, { backgroundColor: bgColor }]}>
@@ -45,17 +54,25 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
 
       <View style={[styles.titleContainer, !onBackPress && { marginLeft: 0 }]}>
         <View style={styles.headerTitleRow}>
-          {titleIcon && <View style={styles.titleIconContainer}>{titleIcon}</View>}
+          {titleIcon && (
+            <View style={styles.titleIconContainer}>
+              {React.isValidElement(titleIcon)
+                ? React.cloneElement(titleIcon as React.ReactElement<{ color?: string }>, { color: icnColor })
+                : titleIcon}
+            </View>
+          )}
           <Text style={[styles.headerTitle, { color: txtColor }]}>{title}</Text>
         </View>
-        {subtitle && <Text style={styles.headerSubtitle}>{subtitle}</Text>}
+        {subtitle && (
+          <Text style={[styles.headerSubtitle, variant === 'primary' && { color: 'rgba(255,255,255,0.9)' }]}>
+            {subtitle}
+          </Text>
+        )}
       </View>
 
-      {rightComponent && (
-        <View style={styles.rightContainer}>
-          {rightComponent}
-        </View>
-      )}
+      <View style={styles.rightContainer}>
+        {rightComponent || null}
+      </View>
     </View>
   );
 };

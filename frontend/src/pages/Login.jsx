@@ -72,20 +72,18 @@ const Login = () => {
         device: deviceInfo
       });
       
-      // Store the JWT token
+      // Merge clinic from response so app has clinic info immediately
+      const userWithClinic = data.clinic ? { ...data.user, clinic: data.clinic } : data.user;
       localStorage.setItem('auth_token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      
-      // Update auth context
+      localStorage.setItem('user', JSON.stringify(userWithClinic));
+
       setToken(data.token);
-      setUser(data.user);
-      
+      setUser(userWithClinic);
+
       toast.success('Login successful!');
-      
-      // Small delay to ensure context is updated before navigation
+
       await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Redirect based on user state
+
       const redirectPath = !data.user.clinic_id ? '/onboarding' : '/dashboard';
       navigate(redirectPath, { replace: true });
     } catch (error) {
@@ -188,15 +186,14 @@ const Login = () => {
           email: data.user?.email
         });
 
-        // Store the JWT token
+        // Merge clinic from response so app has clinic info immediately
+        const userWithClinic = data.clinic ? { ...data.user, clinic: data.clinic } : data.user;
         localStorage.setItem('auth_token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user));
+        localStorage.setItem('user', JSON.stringify(userWithClinic));
         console.log('🔵 [LOGIN] Stored token and user in localStorage');
 
-        // Update auth context
-        console.log('🔵 [LOGIN] Updating AuthContext...');
         setToken(data.token);
-        setUser(data.user);
+        setUser(userWithClinic);
         console.log('🔵 [LOGIN] AuthContext updated');
 
         toast.success('Login successful!');

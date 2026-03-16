@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, type LayoutChangeEvent } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BottomTabBarHeightCallbackContext, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Shield } from 'lucide-react-native';
 import { colors } from '../shared/constants/colors';
@@ -15,9 +14,7 @@ const TAB_LABELS: Record<string, string> = {
   Profile: 'Profile',
 };
 
-export function CustomTabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
-  const safeInsets = useSafeAreaInsets();
-  const bottomInset = insets?.bottom ?? safeInsets.bottom;
+export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const onHeightChange = React.useContext(BottomTabBarHeightCallbackContext);
   
   // Check if we're in admin section
@@ -39,7 +36,7 @@ export function CustomTabBar({ state, descriptors, navigation, insets }: BottomT
   };
 
   return (
-    <View style={[styles.outer, { paddingBottom: bottomInset }]} onLayout={handleLayout}>
+    <View style={styles.outer} onLayout={handleLayout}>
       <View style={styles.bar}>
         <View style={styles.row}>
           {state.routes.map((route, index) => {
@@ -128,7 +125,7 @@ export function CustomTabBar({ state, descriptors, navigation, insets }: BottomT
 }
 
 const styles = StyleSheet.create({
-  outer: { overflow: 'visible'},
+  outer: { overflow: 'visible' },
   bar: {
     backgroundColor: colors.white,
     borderTopWidth: 1,
@@ -147,7 +144,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'flex-end',
-    paddingBottom: 2,
+    paddingBottom: 12,
   },
   iconWrap: {
     marginBottom: 4,
@@ -160,7 +157,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'flex-end',
-    paddingBottom: 0,
+    paddingBottom: 12,
     overflow: 'visible',
   },
   adminButton: {

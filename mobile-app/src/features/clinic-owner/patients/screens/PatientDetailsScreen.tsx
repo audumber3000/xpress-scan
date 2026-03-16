@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../../../shared/constants/colors';
 import { GearLoader } from '../../../../shared/components/GearLoader';
@@ -87,7 +88,7 @@ export const PatientDetailsScreen: React.FC<PatientDetailsScreenProps> = ({ navi
       await patientsApiService.updatePatient(patientId, { dental_chart: newDentalChart });
     } catch (err) {
       console.error('❌ [PATIENT_DETAILS] Update error:', err);
-      Alert.alert('Error', 'Failed to save tooth update');
+      showAlert('Error', 'Failed to save tooth update');
       // Rollback if needed
       loadPatientData();
     }
@@ -115,7 +116,7 @@ export const PatientDetailsScreen: React.FC<PatientDetailsScreenProps> = ({ navi
       await patientsApiService.updatePatient(patientId, { treatment_plan: newPlan });
     } catch (err) {
       console.error('❌ [PATIENT_DETAILS] Timeline error:', err);
-      Alert.alert('Error', 'Failed to save treatment step');
+      showAlert('Error', 'Failed to save treatment step');
       loadPatientData();
     }
   };

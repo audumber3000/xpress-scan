@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput } from 'react-native';
+import { showAlert } from '../../../../shared/components/alertService';
 import { Calendar, CheckCircle2, Clock, Plus, X, ListTodo, IndianRupee, PencilLine } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
 
@@ -35,7 +36,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ history, plan, onAdd
 
     const handleSave = () => {
         if (!formData.procedure) {
-            Alert.alert('Error', 'Please enter a procedure name');
+            showAlert('Error', 'Please enter a procedure name');
             return;
         }
 

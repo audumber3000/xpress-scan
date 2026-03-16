@@ -73,12 +73,10 @@ const Signup = () => {
 
         console.log('🔵 [SIGNUP] Backend response received');
 
-        // Store the JWT token
+        const userWithClinic = data.clinic ? { ...data.user, clinic: data.clinic } : data.user;
         localStorage.setItem('auth_token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user));
+        localStorage.setItem('user', JSON.stringify(userWithClinic));
 
-        // Update auth context
-        // Note: Signup doesn't have access to setToken/setUser, so we navigate directly
         toast.success('Signup successful!');
 
         // Redirect based on user state

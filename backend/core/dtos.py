@@ -201,6 +201,14 @@ class OAuthRequestDTO(BaseModel):
     role: Optional[str] = Field(None, pattern="^(clinic_owner|doctor|receptionist)$")
 
 
+class OAuthCodeRequestDTO(BaseModel):
+    """Used by desktop app: exchange authorization code for id_token."""
+    code: str = Field(..., min_length=1)
+    redirect_uri: str = Field(..., min_length=1)
+    device: Optional[Dict[str, Any]] = None
+    role: Optional[str] = Field(None, pattern="^(clinic_owner|doctor|receptionist)$")
+
+
 class ChangePasswordRequestDTO(BaseModel):
     current_password: str = Field(..., min_length=1)
     new_password: str = Field(..., min_length=8)
@@ -210,6 +218,7 @@ class AuthResponseDTO(BaseModel):
     message: str
     user: UserResponseDTO
     token: str
+    clinic: Optional[ClinicResponseDTO] = None
 
 
 class DeviceInfoDTO(BaseModel):

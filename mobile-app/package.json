@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "fix-adaptive-icon": "node scripts/fix-adaptive-icon.js"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
@@ -37,6 +38,7 @@
   "devDependencies": {
     "@types/react": "^19.2.8",
     "babel-preset-expo": "~54.0.0",
+    "sharp": "^0.34.5",
     "typescript": "^5.9.3"
   }
 }

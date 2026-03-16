@@ -1,5 +1,9 @@
 # Environment files
 .env
+
+# Firebase service account (contains private keys - never commit)
+**/betterclinic-*-firebase-adminsdk-*.json
+**/firebase-service-account*.json
 .env.local
 .env.*.local
 **/.env

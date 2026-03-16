@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl } from 'react-native';
+import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowUpRight, ArrowDownLeft, ChevronLeft } from 'lucide-react-native';
 import { GearLoader } from '../../../../shared/components/GearLoader';
@@ -28,9 +29,7 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = ({ na
       console.log('✅ [TRANSACTIONS] Loaded', data.length, 'transactions');
     } catch (err: any) {
       console.error('❌ [TRANSACTIONS] Load error:', err);
-      // Alert the user
-      const { Alert } = require('react-native');
-      Alert.alert('Error', `Failed to load transactions: ${err.message}`);
+      showAlert('Error', `Failed to load transactions: ${err.message}`);
       // Set empty data on error to prevent infinite loading
       setTransactions([]);
     } finally {

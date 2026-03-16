@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
+import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MoreVertical, Building2, Bell, CreditCard, LogOut, BellRing, User } from 'lucide-react-native';
 import { useAuth } from '../../../../app/AuthContext';
@@ -22,34 +23,26 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
   const { user, logout, isLoading } = useAuth();
 
   const handleEditProfile = () => {
-    Alert.alert('Edit Profile', 'Edit profile functionality coming soon!');
+    showAlert('Edit Profile', 'Edit profile functionality coming soon!');
   };
 
   const handleClinicInfo = () => {
-    Alert.alert('Clinic Information', 'Clinic information screen coming soon!');
+    navigation.navigate('ClinicInformation');
   };
 
   const handleNotificationSettings = () => {
-    Alert.alert('Notification Settings', 'Notification settings coming soon!');
+    navigation.navigate('NotificationSettings');
   };
 
   const handleSubscription = () => {
-    Alert.alert('Subscription & Billing', 'Subscription management coming soon!');
+    showAlert('Subscription & Billing', 'Subscription management coming soon!');
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: () => logout(),
-        },
-      ]
-    );
+    showAlert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Logout', style: 'destructive', onPress: () => logout() },
+    ]);
   };
 
   const handleTestNotification = async () => {
@@ -75,10 +68,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
       });
 
       console.log('✅ Notification sent with ID:', notificationId);
-      Alert.alert('Success', 'Notification sent! Check your notification tray.');
+      showAlert('Success', 'Notification sent! Check your notification tray.');
     } catch (error) {
       console.error('❌ Notification error:', error);
-      Alert.alert('Error', `Failed to send notification: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      showAlert('Error', `Failed to send notification: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -86,12 +79,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
       <ScreenHeader
+        variant="primary"
         title="Settings"
-        titleIcon={<User size={22} color="#111827" />}
+        titleIcon={<User size={22} />}
         rightComponent={
-          <TouchableOpacity style={styles.menuButton}>
-            <MoreVertical size={24} color="#111827" />
+          <TouchableOpacity style={styles.menuButtonPrimary}>
+            <MoreVertical size={24} color={colors.white} />
           </TouchableOpacity>
         }
       />
@@ -197,6 +192,14 @@ const styles = StyleSheet.create({
   menuButton: {
     width: 40,
     height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuButtonPrimary: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.25)',
     justifyContent: 'center',
     alignItems: 'center',
   },

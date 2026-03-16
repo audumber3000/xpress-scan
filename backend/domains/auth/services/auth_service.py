@@ -277,19 +277,31 @@ class AuthService(AuthServiceProtocol):
         try:
             # Initialize Firebase app if not already initialized
             if not firebase_admin._apps:
-                # Get Firebase credentials from environment
+                # Get Firebase credentials from environment (JSON string or file path)
                 firebase_creds_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
-                if not firebase_creds_json:
-                    raise ValueError("Firebase service account credentials not found")
+                firebase_creds_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH")
 
-                import json
-                try:
-                    creds_dict = json.loads(firebase_creds_json)
-                    creds = credentials.Certificate(creds_dict)
-                    firebase_admin.initialize_app(creds)
-                except Exception as e:
-                    print(f"Firebase init error: {e}")
-                    raise ValueError(f"Failed to initialize Firebase: {str(e)}")
+                if firebase_creds_json:
+                    import json
+                    try:
+                        creds_dict = json.loads(firebase_creds_json)
+                        creds = credentials.Certificate(creds_dict)
+                        firebase_admin.initialize_app(creds)
+                    except Exception as e:
+                        print(f"Firebase init error: {e}")
+                        raise ValueError(f"Failed to initialize Firebase: {str(e)}")
+                elif firebase_creds_path and os.path.exists(firebase_creds_path):
+                    try:
+                        creds = credentials.Certificate(firebase_creds_path)
+                        firebase_admin.initialize_app(creds)
+                    except Exception as e:
+                        print(f"Firebase init error: {e}")
+                        raise ValueError(f"Failed to initialize Firebase: {str(e)}")
+                else:
+                    raise ValueError(
+                        "Firebase service account credentials not found. "
+                        "Set FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_PATH in .env"
+                    )
 
             # Verify the Firebase ID token
             decoded_token = firebase_auth.verify_id_token(id_token)

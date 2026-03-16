@@ -19,6 +19,8 @@ import { TreatmentsPricingScreen } from '../features/admin/treatments/screens/Tr
 import { PermissionsScreen } from '../features/admin/permissions/screens/PermissionsScreen';
 import { ClinicSettingsScreen } from '../features/admin/settings/screens/ClinicSettingsScreen';
 import { SubscriptionScreen } from '../features/admin/subscription/screens/SubscriptionScreen';
+import { ClinicInformationScreen } from '../features/clinic-owner/profile/screens/ClinicInformationScreen';
+import { NotificationSettingsScreen } from '../features/clinic-owner/profile/screens/NotificationSettingsScreen';
 import { ConnectingScreen } from '../shared/components/ConnectingScreen';
 
 export type RootStackParamList = {
@@ -37,6 +39,8 @@ export type RootStackParamList = {
   Permissions: undefined;
   ClinicSettings: undefined;
   Subscription: undefined;
+  ClinicInformation: undefined;
+  NotificationSettings: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -94,6 +98,8 @@ export const AppNavigator = () => {
               <Stack.Screen name="Permissions" component={PermissionsScreen} />
               <Stack.Screen name="ClinicSettings" component={ClinicSettingsScreen} />
               <Stack.Screen name="Subscription" component={SubscriptionScreen} />
+              <Stack.Screen name="ClinicInformation" component={ClinicInformationScreen} />
+              <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
               <Stack.Screen name="ReceptionistHome" component={ReceptionistHomeScreen} />
             </>
           )

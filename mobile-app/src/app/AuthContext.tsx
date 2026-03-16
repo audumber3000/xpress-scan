@@ -3,6 +3,7 @@ import { User, onAuthStateChanged } from "firebase/auth"
 import { auth } from "../config/firebase"
 import { signOutUser } from "../services/auth/authService"
 import { authApiService, type BackendUser } from "../services/api/auth.api"
+import { showAlert } from "../shared/components/alertService"
 
 export type AuthContextType = {
   isAuthenticated: boolean
@@ -47,8 +48,7 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
       } catch (backendError: any) {
         console.warn('Backend sync failed:', backendError)
         // Alert the user so they know something is wrong
-        const { Alert } = require('react-native');
-        Alert.alert(
+        showAlert(
           'Connection Issue',
           'Could not connect to the server. Some features may not work.\n' + (backendError.message || '')
         );

@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
-import { Platform, Alert, Linking } from 'react-native';
+import { Platform, Linking } from 'react-native';
+import { showAlert } from '../../shared/components/alertService';
 
 export interface NotificationPermissionStatus {
     granted: boolean;
@@ -75,7 +76,7 @@ export async function requestNotificationPermissionsWithUI(): Promise<boolean> {
         const { canAskAgain } = await Notifications.getPermissionsAsync();
 
         if (!canAskAgain) {
-            Alert.alert(
+            showAlert(
                 'Notifications Disabled',
                 'Please enable notifications in your device settings to receive important updates.',
                 [
