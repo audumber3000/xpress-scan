@@ -23,3 +23,6 @@ redis>=4.5.0
 fastapi-cache2>=0.2.0
 casbin>=1.17.0
 email-validator
+google-auth
+google-auth-oauthlib
+google-api-python-client
