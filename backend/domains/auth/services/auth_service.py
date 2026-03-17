@@ -290,13 +290,25 @@ class AuthService(AuthServiceProtocol):
                     except Exception as e:
                         print(f"Firebase init error: {e}")
                         raise ValueError(f"Failed to initialize Firebase: {str(e)}")
-                elif firebase_creds_path and os.path.exists(firebase_creds_path):
-                    try:
-                        creds = credentials.Certificate(firebase_creds_path)
-                        firebase_admin.initialize_app(creds)
-                    except Exception as e:
-                        print(f"Firebase init error: {e}")
-                        raise ValueError(f"Failed to initialize Firebase: {str(e)}")
+                elif firebase_creds_path:
+                    # Resolve relative path if necessary
+                    if not os.path.isabs(firebase_creds_path):
+                        # Get the base directory (where main.py is)
+                        from main import BASE_DIR
+                        firebase_creds_path = os.path.join(BASE_DIR, firebase_creds_path)
+
+                    if os.path.exists(firebase_creds_path):
+                        try:
+                            creds = credentials.Certificate(firebase_creds_path)
+                            firebase_admin.initialize_app(creds)
+                        except Exception as e:
+                            print(f"Firebase init error: {e}")
+                            raise ValueError(f"Failed to initialize Firebase: {str(e)}")
+                    else:
+                        raise ValueError(
+                            f"Firebase service account file not found at: {firebase_creds_path}. "
+                            "Check FIREBASE_SERVICE_ACCOUNT_PATH in .env"
+                        )
                 else:
                     raise ValueError(
                         "Firebase service account credentials not found. "
