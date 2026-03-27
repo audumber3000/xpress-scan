@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+// Dental Clinic Software Features Page
 import Link from 'next/link';
 import {
   Users,

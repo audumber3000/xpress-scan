@@ -114,11 +114,11 @@ export default function PrivacyPolicyPage() {
               <h2 className="text-2xl font-bold text-gray-900 mb-4">9. Contact Us</h2>
               <p>If you have any questions about this Privacy Policy, please contact us at:</p>
               <p className="mt-2">
-                <strong>Email:</strong> privacy@molarplus.com
+                <strong>Email:</strong> support@molarplus.com
                 <br />
                 <strong>Phone:</strong> +91 8766742410
                 <br />
-                <strong>Address:</strong> Pune, Maharashtra, India
+                <strong>Address:</strong> Sky Loft, opposite Golf Course, Shastrinagar, Yerawada, Pune, Maharashtra 411006, India
               </p>
             </section>
           </div>

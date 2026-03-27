@@ -1,36 +1,39 @@
 import { MetadataRoute } from 'next';
 import { SITE_URL } from '@/lib/seo';
-import { getAllSlugs } from '@/lib/articles';
+import { getBlogSlugs } from '@/lib/mdx';
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = SITE_URL;
   const lastModified = new Date();
 
+  // Define static routes with their specific change frequencies and priorities
   const staticRoutes = [
-    '',
-    '/features',
-    '/pricing',
-    '/about',
-    '/contact',
-    '/platform',
-    '/privacy-policy',
-    '/articles',
+    { url: '', changeFrequency: 'daily', priority: 1.0 },
+    { url: '/features', changeFrequency: 'weekly', priority: 0.9 },
+    { url: '/pricing', changeFrequency: 'weekly', priority: 0.9 },
+    { url: '/find-dentist', changeFrequency: 'daily', priority: 0.9 },
+    { url: '/blog', changeFrequency: 'daily', priority: 0.85 },
+    { url: '/about', changeFrequency: 'monthly', priority: 0.7 },
+    { url: '/contact', changeFrequency: 'monthly', priority: 0.7 },
+    { url: '/platform', changeFrequency: 'monthly', priority: 0.7 },
+    { url: '/privacy-policy', changeFrequency: 'yearly', priority: 0.3 },
   ];
 
   const staticEntries: MetadataRoute.Sitemap = staticRoutes.map((route) => ({
-    url: `${baseUrl}${route}`,
+    url: `${baseUrl}${route.url}`,
     lastModified,
-    changeFrequency: route === '' ? 'daily' as const : route === '/privacy-policy' ? 'monthly' as const : 'weekly' as const,
-    priority: route === '' ? 1.0 : route === '/features' || route === '/pricing' ? 0.9 : route === '/articles' ? 0.85 : 0.8,
+    changeFrequency: route.changeFrequency as any,
+    priority: route.priority,
   }));
 
-  const articleSlugs = getAllSlugs();
-  const articleEntries: MetadataRoute.Sitemap = articleSlugs.map((slug) => ({
-    url: `${baseUrl}/articles/${slug}`,
+  // Generate dynamic blog entries from MDX files
+  const blogSlugs = getBlogSlugs();
+  const blogEntries: MetadataRoute.Sitemap = blogSlugs.map((slug) => ({
+    url: `${baseUrl}/blog/${slug.replace(/\.mdx$/, '')}`,
     lastModified,
-    changeFrequency: 'monthly' as const,
+    changeFrequency: 'weekly' as const,
     priority: 0.8,
   }));
 
-  return [...staticEntries, ...articleEntries];
+  return [...staticEntries, ...blogEntries];
 }

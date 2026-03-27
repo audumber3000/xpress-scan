@@ -31,10 +31,10 @@ const contactJsonLd = {
     url: SITE_URL,
     address: {
       '@type': 'PostalAddress',
-      streetAddress: '123 Dental Tower, MG Road',
-      addressLocality: 'Bangalore',
-      addressRegion: 'Karnataka',
-      postalCode: '560001',
+      streetAddress: 'Sky Loft, opposite Golf Course, Shastrinagar',
+      addressLocality: 'Yerawada, Pune',
+      addressRegion: 'Maharashtra',
+      postalCode: '411006',
       addressCountry: 'IN',
     },
     contactPoint: {
@@ -48,15 +48,13 @@ const contactJsonLd = {
 };
 
 const contactInfo = [
-  { icon: Phone, title: 'Phone', details: ['+91-8766742410', 'Mon-Fri: 9AM-6PM IST'], action: 'tel:+918766742410' },
+  { icon: Phone, title: 'Phone', details: ['+91 8766742410', 'Mon-Fri: 9AM-6PM IST'], action: 'tel:+918766742410' },
   { icon: Mail, title: 'Email', details: ['support@molarplus.com', 'sales@molarplus.com'], action: 'mailto:support@molarplus.com' },
-  { icon: MapPin, title: 'Office', details: ['123 Dental Tower, MG Road', 'Bangalore, Karnataka 560001'], action: '#' },
+  { icon: MapPin, title: 'Office', details: ['Sky Loft, opposite Golf Course, Shastrinagar', 'Yerawada, Pune, Maharashtra 411006'], action: '#' },
 ];
 
 const offices = [
-  { city: 'Bangalore', address: '123 Dental Tower, MG Road, Bangalore, Karnataka 560001', phone: '+91-8766742410', email: 'bangalore@molarplus.com' },
-  { city: 'Mumbai', address: '456 Dental Plaza, Andheri West, Mumbai, Maharashtra 400053', phone: '+91-8766742411', email: 'mumbai@molarplus.com' },
-  { city: 'Delhi', address: '789 Dental Center, Connaught Place, New Delhi 110001', phone: '+91-8766742412', email: 'delhi@molarplus.com' },
+  { city: 'Pune (HQ)', address: 'Sky Loft, opposite Golf Course, Shastrinagar, Yerawada, Pune, Maharashtra 411006', phone: '+91 8766742410', email: 'support@molarplus.com' },
 ];
 
 const faqs = [
