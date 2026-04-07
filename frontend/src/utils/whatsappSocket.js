@@ -3,7 +3,7 @@
  */
 import { io } from 'socket.io-client';
 
-const WHATSAPP_SERVICE_URL = import.meta.env.VITE_WHATSAPP_SERVICE_URL || 'http://localhost:3001';
+const NEXUS_SERVICES_URL = import.meta.env.VITE_NEXUS_SERVICES_URL || 'http://localhost:8001';
 
 class WhatsAppSocket {
   constructor(userId) {
@@ -19,9 +19,9 @@ class WhatsAppSocket {
       return;
     }
 
-    console.log(`Connecting to WhatsApp Socket.IO at ${WHATSAPP_SERVICE_URL}`);
+    console.log(`Connecting to WhatsApp Socket.IO at ${NEXUS_SERVICES_URL}`);
     
-    this.socket = io(WHATSAPP_SERVICE_URL, {
+    this.socket = io(NEXUS_SERVICES_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 1000,

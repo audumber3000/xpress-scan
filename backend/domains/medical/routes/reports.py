@@ -1,11 +1,17 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel
 from domains.infrastructure.services.pdf_service import html_template_to_pdf, generate_pdf_filename, cleanup_temp_file
-from domains.infrastructure.services.supabase_storage import upload_pdf_to_supabase, create_bucket_if_not_exists
+from domains.infrastructure.services.r2_storage import upload_pdf_to_r2, StorageCategory, get_presigned_url
 from domains.infrastructure.services.template_service import TemplateService
 from sqlalchemy.orm import Session
 from database import get_db
-from models import Report, Patient
+from core.dtos import (
+    PrescriptionRequestDTO, 
+    PrescriptionPDFResponseDTO
+)
+from domains.medical.services.prescription_service import PrescriptionService
+from domains.infrastructure.services.r2_storage import upload_pdf_to_r2, StorageCategory, get_presigned_url
+from models import Report, Patient, Clinic, Prescription, Appointment
 from typing import List, Optional
 from datetime import datetime
 from core.auth_utils import get_current_user
@@ -13,7 +19,6 @@ from core.auth_utils import get_current_user
 import os
 
 router = APIRouter()
-
 class PatientInfo(BaseModel):
     name: str
     age: int
@@ -44,7 +49,7 @@ class ReportResponse(BaseModel):
     class Config:
         from_attributes = True
 
-@router.get("/", response_model=List[ReportResponse])
+@router.get("", response_model=List[ReportResponse])
 def get_all_reports(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Get all reports with patient information from database - scoped by clinic"""
     # Check if user has permission to view reports
@@ -72,7 +77,7 @@ def get_all_reports(db: Session = Depends(get_db), current_user = Depends(get_cu
                     scan_type=patient.scan_type,
                     referred_by=patient.referred_by,
                     docx_url=report.docx_url,
-                    pdf_url=report.pdf_url,
+                    pdf_url=get_presigned_url(report.pdf_url) if report.pdf_url else None,
                     status=report.status,
                     whatsapp_sent_count=report.whatsapp_sent_count or 0,
                     created_at=report.created_at if report.created_at else datetime.utcnow(),
@@ -334,11 +339,14 @@ def finalize_report(report_id: int, final_data: dict, db: Session = Depends(get_
         # Generate filename
         filename = generate_pdf_filename(patient.name, patient.scan_type)
         
-        # Ensure bucket exists
-        create_bucket_if_not_exists("betterclinic-bdent")
-        
-        # Upload to R2 Storage in patient-medical-reports folder
-        pdf_url = upload_pdf_to_supabase(pdf_path, filename, "betterclinic-bdent")
+        # Upload to R2 Storage with standardized clinic/patient path
+        pdf_url = upload_pdf_to_r2(
+            file_path=pdf_path,
+            filename=filename,
+            clinic_id=current_user.clinic_id,
+            patient_id=patient.id,
+            category=StorageCategory.MEDICAL_REPORTS
+        )
         
         # Clean up temporary file
         cleanup_temp_file(pdf_path)
@@ -458,3 +466,171 @@ def update_draft_report(report_id: int, draft_data: dict, db: Session = Depends(
 
 # Template endpoints moved to main.py as public endpoints
 # These are now accessible via /public/templates and /public/templates/{template_name} 
+
+@router.post("/{patient_id}/prescriptions/generate-pdf", response_model=PrescriptionPDFResponseDTO)
+def generate_prescription_pdf(
+    patient_id: int,
+    prescription_data: PrescriptionRequestDTO,
+    appointment_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Generate a prescription PDF and save it to the prescriptions table.
+    Pass ?appointment_id=X to link to a specific visit.
+    """
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.clinic_id == current_user.clinic_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clinic not found")
+
+    try:
+        service = PrescriptionService(db)
+        pdf_key, file_name = service.generate_prescription_pdf(patient, clinic, prescription_data)
+        signed_url = get_presigned_url(pdf_key)
+
+        # Determine visit number from appointment if provided
+        visit_num = None
+        if appointment_id:
+            appt = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+            if appt:
+                visit_num = appt.visit_number
+
+        # Save to prescriptions table
+        rx = Prescription(
+            clinic_id=current_user.clinic_id,
+            patient_id=patient_id,
+            appointment_id=appointment_id,
+            visit_number=visit_num,
+            items=[item.dict() for item in prescription_data.items],
+            notes=prescription_data.notes or "",
+            pdf_url=pdf_key
+        )
+        db.add(rx)
+        db.commit()
+        db.refresh(rx)
+
+        return PrescriptionPDFResponseDTO(pdf_url=signed_url, file_name=file_name)
+    except Exception as e:
+        print(f"Error in generate_prescription_pdf: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{patient_id}/prescriptions/save")
+def save_prescription(
+    patient_id: int,
+    prescription_data: PrescriptionRequestDTO,
+    appointment_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Save prescription items without generating PDF.
+    Pass ?appointment_id=X to link to a specific visit.
+    """
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.clinic_id == current_user.clinic_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    try:
+        # Determine visit number
+        visit_num = None
+        if appointment_id:
+            appt = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+            if appt:
+                visit_num = appt.visit_number
+
+        rx = Prescription(
+            clinic_id=current_user.clinic_id,
+            patient_id=patient_id,
+            appointment_id=appointment_id,
+            visit_number=visit_num,
+            items=[item.dict() for item in prescription_data.items],
+            notes=prescription_data.notes or "",
+            pdf_url=None
+        )
+        db.add(rx)
+        db.commit()
+        db.refresh(rx)
+
+        return {"status": "success", "message": "Prescription saved", "id": rx.id}
+    except Exception as e:
+        print(f"Error in save_prescription: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{patient_id}/prescriptions")
+def list_prescriptions(patient_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    """List all prescriptions for a patient, newest first."""
+    rxs = db.query(Prescription).filter(
+        Prescription.patient_id == patient_id,
+        Prescription.clinic_id == current_user.clinic_id
+    ).order_by(Prescription.created_at.desc()).all()
+
+    result = []
+    for rx in rxs:
+        pdf_url = get_presigned_url(rx.pdf_url) if rx.pdf_url else None
+        result.append({
+            "id": rx.id,
+            "appointment_id": rx.appointment_id,
+            "visit_number": rx.visit_number,
+            "items": rx.items,
+            "notes": rx.notes,
+            "pdf_url": pdf_url,
+            "has_pdf": bool(rx.pdf_url),
+            "created_at": rx.created_at,
+            "updated_at": rx.updated_at
+        })
+    return result
+
+
+@router.put("/prescriptions/{prescription_id}")
+def update_prescription(
+    prescription_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Update items/notes of an existing prescription."""
+    rx = db.query(Prescription).filter(
+        Prescription.id == prescription_id,
+        Prescription.clinic_id == current_user.clinic_id
+    ).first()
+    if not rx:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+
+    if "items" in body:
+        rx.items = body["items"]
+    if "notes" in body:
+        rx.notes = body["notes"]
+    db.commit()
+    db.refresh(rx)
+    return {"status": "success", "id": rx.id}
+
+
+@router.delete("/prescriptions/{prescription_id}")
+def delete_prescription(
+    prescription_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Delete a prescription."""
+    rx = db.query(Prescription).filter(
+        Prescription.id == prescription_id,
+        Prescription.clinic_id == current_user.clinic_id
+    ).first()
+    if not rx:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+
+    db.delete(rx)
+    db.commit()
+    return {"status": "success", "message": "Prescription deleted"}

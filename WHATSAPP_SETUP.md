@@ -166,7 +166,7 @@ PORT=3001
 Create `backend/.env`:
 
 ```env
-WHATSAPP_SERVICE_URL=http://localhost:3001
+NEXUS_SERVICES_URL=http://localhost:3001
 # ... other backend env vars
 ```
 
@@ -175,7 +175,7 @@ WHATSAPP_SERVICE_URL=http://localhost:3001
 Create `frontend/.env`:
 
 ```env
-VITE_WHATSAPP_SERVICE_URL=http://localhost:3001
+VITE_NEXUS_SERVICES_URL=http://localhost:3001
 VITE_API_URL=http://localhost:8000
 # ... other frontend env vars
 ```

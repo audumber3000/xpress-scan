@@ -6,80 +6,52 @@ import { AppSkeleton } from '../../../../../../shared/components/Skeleton';
 
 interface PatientVisitsSectionProps {
   analytics: Analytics | null;
-  selectedPeriod: 'Week' | 'Month' | 'Year';
-  onPeriodChange: (period: 'Week' | 'Month' | 'Year') => void;
+  selectedPeriod: 'Today' | 'Last 7 Days' | 'This Month';
+  onPeriodChange: (period: 'Today' | 'Last 7 Days' | 'This Month') => void;
   loading?: boolean;
 }
 
-// Data prep for the chart. PatientVisitsChart is not modified; it receives chartData, selectedPeriod, onPeriodChange.
-function getChartData(analytics: Analytics | null, selectedPeriod: 'Week' | 'Month' | 'Year') {
-  const weekLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const yearLabels = ['2021', '2022', '2023', '2024'];
-
-  if (!analytics) return { data: [], labels: weekLabels, hasData: false };
+function getChartData(analytics: Analytics | null, selectedPeriod: 'Today' | 'Last 7 Days' | 'This Month') {
+  if (!analytics) return { data: [], labels: [], hasData: false };
 
   const patientVisitsData = analytics.patientVisits || [];
 
   if (patientVisitsData.length === 0) {
-    let labels = weekLabels;
-    switch (selectedPeriod) {
-      case 'Week':
-        labels = weekLabels;
-        break;
-      case 'Month':
-        labels = monthLabels;
-        break;
-      case 'Year':
-        labels = yearLabels;
-        break;
-    }
-    return { data: [], labels, hasData: false };
+    return { data: [], labels: [], hasData: false };
   }
 
   switch (selectedPeriod) {
-    case 'Week': {
-      const weeklyData = patientVisitsData.slice(-7).length >= 7
-        ? patientVisitsData.slice(-7)
-        : patientVisitsData.slice(-Math.max(0, patientVisitsData.length));
+    case 'Today': {
+      const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'short' });
       return {
-        data: weeklyData,
-        labels: weekLabels,
-        hasData: weeklyData.length > 0 && weeklyData.some(v => v > 0),
+        data: patientVisitsData,
+        labels: [todayLabel],
+        hasData: patientVisitsData.length > 0 && patientVisitsData.some(v => v > 0),
       };
     }
-    case 'Month': {
-      const monthlyData = patientVisitsData.length >= 12
-        ? patientVisitsData.slice(0, 12)
-        : patientVisitsData.slice(0, Math.min(12, patientVisitsData.length));
+    case 'Last 7 Days': {
+      const labels = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        labels.push(d.toLocaleDateString('en-US', { weekday: 'short' }));
+      }
       return {
-        data: monthlyData,
-        labels: monthLabels,
-        hasData: monthlyData.length > 0 && monthlyData.some(v => v > 0),
+        data: patientVisitsData,
+        labels: labels,
+        hasData: patientVisitsData.length > 0 && patientVisitsData.some(v => v > 0),
       };
     }
-    case 'Year': {
-      const yearlyData = patientVisitsData.length >= 12
-        ? [
-          patientVisitsData.slice(0, 3).reduce((a, b) => a + b, 0),
-          patientVisitsData.slice(3, 6).reduce((a, b) => a + b, 0),
-          patientVisitsData.slice(6, 9).reduce((a, b) => a + b, 0),
-          patientVisitsData.slice(9, 12).reduce((a, b) => a + b, 0),
-        ]
-        : [
-          patientVisitsData.slice(0, Math.min(3, patientVisitsData.length)).reduce((a, b) => a + b, 0),
-          patientVisitsData.slice(3, Math.min(6, patientVisitsData.length)).reduce((a, b) => a + b, 0),
-          patientVisitsData.slice(6, 9).reduce((a, b) => a + b, 0),
-          patientVisitsData.slice(9, Math.min(12, patientVisitsData.length)).reduce((a, b) => a + b, 0),
-        ];
+    case 'This Month': {
+      const labels = ['1-5', '6-10', '11-15', '16-20', '21-25', '26+'];
       return {
-        data: yearlyData,
-        labels: yearLabels,
-        hasData: yearlyData.length > 0 && yearlyData.some(v => v > 0),
+        data: patientVisitsData,
+        labels: labels,
+        hasData: patientVisitsData.length > 0 && patientVisitsData.some(v => v > 0),
       };
     }
     default:
-      return { data: [], labels: weekLabels, hasData: false };
+      return { data: [], labels: [], hasData: false };
   }
 }
 

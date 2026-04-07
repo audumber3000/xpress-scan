@@ -1,12 +1,36 @@
 import React from "react";
 import GearLoader from "../GearLoader";
 
-const InvoiceActions = ({ invoice, onMarkAsPaid, onDownloadPDF, onSendWhatsApp, canEdit, downloadingPDF, sendingWhatsApp }) => {
+const InvoiceActions = ({
+  invoice,
+  onFinalize,
+  onMarkAsPaid,
+  onDownloadPDF,
+  onSendWhatsApp,
+  canEdit,
+  downloadingPDF,
+  sendingWhatsApp,
+  finalizing
+}) => {
   if (!invoice) return null;
+
+  const canFinalize = invoice.status === 'draft' && canEdit;
+  const canTakePayment = ['finalized', 'partially_paid'].includes(invoice.status);
+  const canSendWhatsApp = invoice.status !== 'draft' && invoice.patient_phone;
 
   return (
     <div className="border-t border-gray-200 pt-4 flex gap-3">
-      {canEdit && invoice.status === 'draft' && (
+      {canFinalize && (
+        <button
+          onClick={onFinalize}
+          disabled={finalizing}
+          className="flex-1 px-4 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1e1c4f] transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {finalizing ? 'Generating Final Invoice...' : 'Generate Final Invoice'}
+        </button>
+      )}
+
+      {canTakePayment && (
         <button
           onClick={onMarkAsPaid}
           className="flex-1 px-4 py-2 bg-[#25D366] text-white rounded-lg hover:bg-[#20BA5A] transition font-medium"
@@ -37,7 +61,7 @@ const InvoiceActions = ({ invoice, onMarkAsPaid, onDownloadPDF, onSendWhatsApp, 
             )}
           </button>
           
-          {invoice.patient_phone && (
+          {canSendWhatsApp && (
             <button
               onClick={onSendWhatsApp}
               disabled={sendingWhatsApp}

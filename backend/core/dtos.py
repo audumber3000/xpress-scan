@@ -9,14 +9,15 @@ from datetime import datetime
 # Patient DTOs
 class PatientBaseDTO(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
-    age: int = Field(..., ge=0, le=150)
-    gender: str = Field(..., pattern="^(male|female|other|Male|Female|Other)$")
-    village: str = Field(..., min_length=1, max_length=100)
+    age: Optional[int] = Field(None, ge=0, le=150)
+    gender: Optional[str] = Field(None, pattern="^(male|female|other|Male|Female|Other)$")
+    village: Optional[str] = Field(None, min_length=1, max_length=100)
     phone: str = Field(..., min_length=10, max_length=15)
-    referred_by: str = Field(..., min_length=1, max_length=100)
-    treatment_type: str = Field(..., min_length=1, max_length=100)
+    email: Optional[str] = Field(None, pattern=r"^[^@]+@[^@]+\.[^@]+$")
+    referred_by: Optional[str] = Field(None, min_length=1, max_length=100)
+    treatment_type: Optional[str] = Field(None, min_length=1, max_length=100)
     notes: Optional[str] = None
-    payment_type: str = Field(default="Cash", pattern="^(Cash|Card|UPI|Online)$")
+    payment_type: Optional[str] = Field(default="Cash", pattern="^(Cash|Card|UPI|Online)$")
     
     @field_validator('gender', mode='before')
     @classmethod
@@ -37,6 +38,7 @@ class PatientUpdateDTO(BaseModel):
     gender: Optional[str] = Field(None, pattern="^(male|female|other)$")
     village: Optional[str] = Field(None, min_length=1, max_length=100)
     phone: Optional[str] = Field(None, min_length=10, max_length=15)
+    email: Optional[str] = Field(None, pattern=r"^[^@]+@[^@]+\.[^@]+$")
     referred_by: Optional[str] = Field(None, min_length=1, max_length=100)
     treatment_type: Optional[str] = Field(None, min_length=1, max_length=100)
     notes: Optional[str] = None
@@ -84,6 +86,7 @@ class ClinicBaseDTO(BaseModel):
     subscription_plan: str = "free"
     logo_url: Optional[str] = None
     primary_color: str = "#10B981"
+    number_of_chairs: int = 1
 
 
 class ClinicCreateDTO(ClinicBaseDTO):
@@ -100,6 +103,7 @@ class ClinicUpdateDTO(BaseModel):
     subscription_plan: Optional[str] = None
     logo_url: Optional[str] = None
     primary_color: Optional[str] = None
+    number_of_chairs: Optional[int] = None
     timings: Optional[dict] = None
 
 
@@ -140,11 +144,14 @@ class UserResponseDTO(UserBaseDTO):
     id: int
     name: str  # computed field
     clinic_id: Optional[int] = None
+    permissions: Dict[str, Any] = {}
     is_active: bool = True
     created_at: datetime
     updated_at: datetime
     synced_at: Optional[datetime] = None
     sync_status: str = "local"
+    signature_url: Optional[str] = None
+    clinics: List[ClinicResponseDTO] = []
 
     class Config:
         from_attributes = True
@@ -250,3 +257,229 @@ class ErrorResponseDTO(BaseModel):
 class SuccessResponseDTO(BaseModel):
     message: str
     data: Optional[Any] = None
+
+# Vendor DTOs
+class VendorBaseDTO(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    contact_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    gst_number: Optional[str] = None
+    category: Optional[str] = "General"
+    last_order_date: Optional[datetime] = None
+
+class VendorCreateDTO(VendorBaseDTO):
+    pass
+
+class VendorUpdateDTO(BaseModel):
+    name: Optional[str] = None
+    contact_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    gst_number: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class VendorResponseDTO(VendorBaseDTO):
+    id: int
+    clinic_id: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Inventory DTOs
+class InventoryItemBaseDTO(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    category: Optional[str] = None
+    quantity: float = 0.0
+    unit: Optional[str] = None
+    min_stock_level: float = 0.0
+    price_per_unit: float = 0.0
+
+class InventoryItemCreateDTO(InventoryItemBaseDTO):
+    vendor_id: Optional[int] = None
+
+class InventoryItemUpdateDTO(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    min_stock_level: Optional[float] = None
+    price_per_unit: Optional[float] = None
+    vendor_id: Optional[int] = None
+
+class InventoryItemResponseDTO(InventoryItemBaseDTO):
+    id: int
+    clinic_id: int
+    vendor_id: Optional[int] = None
+    vendor_name: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Consent DTOs
+class ConsentTemplateBaseDTO(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    content: str = Field(..., min_length=1)
+
+class ConsentTemplateCreateDTO(ConsentTemplateBaseDTO):
+    pass
+
+class ConsentTemplateUpdateDTO(BaseModel):
+    name: Optional[str] = None
+    content: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class ConsentTemplateResponseDTO(ConsentTemplateBaseDTO):
+    id: int
+    clinic_id: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class PatientConsentCreateDTO(BaseModel):
+    template_id: int
+    signed_content: str
+    signature_url: Optional[str] = None
+
+class PatientConsentResponseDTO(BaseModel):
+    id: int
+    patient_id: int
+    template_id: int
+    template_name: str
+    signed_content: str
+    signature_url: Optional[str] = None
+    signed_at: datetime
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Document DTOs
+class PatientDocumentResponseDTO(BaseModel):
+    id: int
+    patient_id: int
+    clinic_id: int
+    case_paper_id: Optional[int] = None
+    file_name: str
+    file_path: str
+    file_size: int
+    file_type: str
+    uploader_name: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class ExternalDocumentRequestDTO(BaseModel):
+    clinic_id: int
+    file_name: str
+    file_path: str
+    file_size: Optional[int] = 0
+    file_type: Optional[str] = "pdf"
+
+class UnifiedFileResponseDTO(BaseModel):
+    id: int
+    patient_id: int
+    clinic_id: int
+    case_paper_id: Optional[int] = None
+    file_name: str
+    file_path: str
+    file_size: Optional[int] = 0
+    file_type: str
+    uploader_name: Optional[str] = "System"
+    created_at: datetime
+    category: str  # 'document' or 'report'
+
+    class Config:
+        from_attributes = True
+
+
+# Prescription DTOs
+class PrescriptionItemDTO(BaseModel):
+    medicine_name: str
+    dosage: str  # e.g., "1-0-1"
+    duration: str  # e.g., "5 days"
+    quantity: str
+    notes: Optional[str] = None
+
+
+class PrescriptionRequestDTO(BaseModel):
+    items: List[PrescriptionItemDTO]
+    notes: Optional[str] = None
+
+
+class PrescriptionPDFResponseDTO(BaseModel):
+    pdf_url: str
+    file_name: str
+
+
+# Medication DTOs
+class MedicationBaseDTO(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    dosage: Optional[str] = None
+    duration: Optional[str] = None
+    quantity: Optional[str] = None
+    notes: Optional[str] = None
+    category: str = "General"
+
+class MedicationCreateDTO(MedicationBaseDTO):
+    pass
+
+class MedicationUpdateDTO(BaseModel):
+    name: Optional[str] = None
+    dosage: Optional[str] = None
+    duration: Optional[str] = None
+    quantity: Optional[str] = None
+    notes: Optional[str] = None
+    category: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class MedicationResponseDTO(MedicationBaseDTO):
+    id: int
+    clinic_id: Optional[int] = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Template Configuration DTOs
+class TemplateConfigBase(BaseModel):
+    category: str
+    template_id: str
+    logo_url: Optional[str] = None
+    footer_text: Optional[str] = None
+    primary_color: Optional[str] = None
+    secondary_color: Optional[str] = None
+    config_json: Optional[Dict[str, Any]] = None
+
+class TemplateConfigCreate(TemplateConfigBase):
+    pass
+
+class TemplateConfigUpdate(BaseModel):
+    template_id: Optional[str] = None
+    logo_url: Optional[str] = None
+    footer_text: Optional[str] = None
+    primary_color: Optional[str] = None
+    secondary_color: Optional[str] = None
+    config_json: Optional[Dict[str, Any]] = None
+
+class TemplateConfigResponse(TemplateConfigBase):
+    id: Optional[int] = None
+    clinic_id: int
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

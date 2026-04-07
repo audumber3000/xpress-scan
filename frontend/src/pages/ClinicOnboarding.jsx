@@ -2,91 +2,70 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from 'react-toastify';
 import { api } from '../utils/api';
+import { 
+  Building2, 
+  Phone, 
+  Stethoscope, 
+  CreditCard, 
+  CheckCircle2, 
+  ChevronRight, 
+  ChevronLeft,
+  Plus,
+  Trash2,
+  Check,
+  Zap,
+  ShieldCheck,
+  User,
+  GraduationCap,
+  MapPin,
+  Users
+} from 'lucide-react';
 
 const ClinicOnboarding = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
+  const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
+    full_name: "",
+    specialty: "",
     clinic_name: "",
     clinic_address: "",
     clinic_phone: "",
     clinic_email: "",
-    specialization: "dental",
+    number_of_chairs: "1",
+    category: "General Dentistry",
     subscription_plan: "free",
     scan_types: [
       { name: "Consultation", price: 300 },
       { name: "Teeth Cleaning", price: 800 },
-      { name: "Filling", price: 1200 },
-      { name: "Root Canal Treatment", price: 3500 },
-      { name: "Tooth Extraction", price: 1500 }
+      { name: "X-Ray (OPG)", price: 1200 }
     ]
   });
 
   useEffect(() => {
-    // Get current user from localStorage
     const userData = localStorage.getItem('user');
     if (userData) {
       const userObj = JSON.parse(userData);
       setUser(userObj);
-      
-      // Pre-fill clinic email with user's email
       setFormData(prev => ({
         ...prev,
-        clinic_email: userObj.email
+        clinic_email: userObj.email,
+        full_name: userObj.name || userObj.full_name || ""
       }));
     }
   }, []);
 
+  const steps = [
+    { id: 1, title: 'Profile', icon: <User className="w-5 h-5" /> },
+    { id: 2, title: 'Clinic', icon: <Building2 className="w-5 h-5" /> },
+    { id: 3, title: 'Insights', icon: <Users className="w-5 h-5" /> },
+    { id: 4, title: 'Plan', icon: <CreditCard className="w-5 h-5" /> },
+  ];
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    
-    if (name === 'specialization') {
-      // Update treatment types based on specialization
-      const treatmentTypes = getDefaultTreatmentTypes(value);
-      setFormData(prev => ({
-        ...prev,
-        [name]: value,
-        scan_types: treatmentTypes
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: value
-      }));
-    }
-  };
-
-  const getDefaultTreatmentTypes = (specialization) => {
-    const treatmentTypes = {
-      'dentist': [
-        { name: 'Dental Cleaning', price: 1500 },
-        { name: 'Tooth Extraction', price: 2000 },
-        { name: 'Root Canal Treatment', price: 8000 },
-        { name: 'Dental Crown', price: 12000 },
-        { name: 'Teeth Whitening', price: 5000 }
-      ],
-      'physiotherapist': [
-        { name: 'Physiotherapy Session', price: 800 },
-        { name: 'Massage Therapy', price: 1000 },
-        { name: 'Exercise Therapy', price: 600 },
-        { name: 'Electrotherapy', price: 500 },
-        { name: 'Manual Therapy', price: 1200 }
-      ],
-      'dental': [
-        { name: 'Consultation', price: 300 },
-        { name: 'Teeth Cleaning', price: 800 },
-        { name: 'Filling', price: 1200 },
-        { name: 'Root Canal Treatment', price: 3500 },
-        { name: 'Tooth Extraction', price: 1500 },
-        { name: 'Crown & Bridge', price: 5000 },
-        { name: 'Dental Implant', price: 25000 },
-        { name: 'Teeth Whitening', price: 4000 },
-        { name: 'Orthodontics (Braces)', price: 35000 },
-        { name: 'Scaling & Polishing', price: 1000 }
-      ]
-    };
-    return treatmentTypes[specialization] || treatmentTypes['dental'];
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleScanTypeChange = (index, field, value) => {
@@ -112,194 +91,394 @@ const ClinicOnboarding = () => {
     }));
   };
 
+  const isValidStep = () => {
+    if (currentStep === 1) return formData.full_name && formData.specialty;
+    if (currentStep === 2) return formData.clinic_name && formData.clinic_address && formData.clinic_phone;
+    if (currentStep === 3) return formData.number_of_chairs && formData.category;
+    return true;
+  };
+
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    e && e.preventDefault();
     setLoading(true);
-    
     try {
-      if (formData.clinic_phone && formData.clinic_phone.replace(/\D/g, '').length < 10) {
-        throw new Error("Phone number must be at least 10 digits.");
-      }
-      const result = await api.post('/auth/onboarding', formData);
-      
-      // Update user data in localStorage
+      const cleanPhone = formData.clinic_phone.replace(/\D/g, '');
+      if (cleanPhone.length < 10) throw new Error("Phone number must be at least 10 digits.");
+
+      const result = await api.post('/auth/onboarding', {
+        ...formData,
+        number_of_chairs: parseInt(formData.number_of_chairs) || 1,
+        specialization: formData.category 
+      });
+
       localStorage.setItem('user', JSON.stringify(result.user));
-      
-      toast.success("Clinic setup completed successfully!");
+      toast.success("Welcome aboard, Dr.! MolarPlus is ready.");
       navigate("/dashboard");
-      
     } catch (error) {
-      console.error("Onboarding error:", error);
-      toast.error(error.message || "Failed to setup clinic. Please try again.");
+      toast.error(error.message || "Onboarding failed.");
     } finally {
       setLoading(false);
     }
   };
 
-  if (!user) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  }
+  if (!user) return <div className="min-h-screen flex items-center justify-center bg-white">
+    <div className="flex flex-col items-center gap-6">
+      <img src="/molarplus-logo.svg" alt="MolarPlus" className="h-12 w-auto animate-pulse" />
+      <div className="w-12 h-1 bg-[#2a276e]/10 rounded-full overflow-hidden">
+        <div className="w-1/2 h-full bg-[#2a276e] animate-[shimmer_1.5s_infinite]" />
+      </div>
+    </div>
+  </div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-2xl w-full space-y-8">
-        <div className="text-center">
-          <h2 className="text-3xl font-bold text-gray-900">Welcome, {user.name}!</h2>
-          <p className="mt-2 text-gray-600">Let's set up your clinic</p>
+    <div className="min-h-screen bg-white flex font-sans overflow-hidden text-[#111827]">
+      {/* Sidebar - Elegant & Illustrated */}
+      <div className="w-[380px] bg-[#F8F9FF] border-r border-gray-100 hidden lg:flex flex-col relative overflow-hidden">
+        {/* Abstract pattern bg */}
+        <div className="absolute top-0 left-0 w-full h-full opacity-[0.03] pointer-events-none">
+          <svg width="100%" height="100%"><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#2a276e" strokeWidth="1"/></pattern><rect width="100%" height="100%" fill="url(#grid)" /></svg>
         </div>
 
-        <div className="bg-white shadow rounded-lg p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Personal Info Section */}
-            <div className="bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg p-4 mb-6">
-              <h3 className="text-lg font-medium text-[#2a276e] mb-2">Your Information</h3>
-              <p className="text-[#2a276e]">
-                <strong>Name:</strong> {user.name}<br/>
-                <strong>Email:</strong> {user.email}
+        <div className="p-12 relative z-10 flex-1 flex flex-col justify-between">
+          <div>
+            <div className="mb-16">
+              <img src="/molarplus-logo.svg" alt="MolarPlus" className="h-10 w-auto" />
+            </div>
+
+            <nav className="space-y-10">
+              {steps.map((step) => (
+                <div key={step.id} className="relative flex items-center gap-6 group">
+                  {step.id < steps.length && (
+                    <div className={`absolute left-[19px] top-10 w-0.5 h-10 ${currentStep > step.id ? 'bg-[#9B8CFF]' : 'bg-gray-200'}`} />
+                  )}
+                  <div className={`
+                    w-10 h-10 rounded-full flex items-center justify-center z-10 transition-all duration-700
+                    ${currentStep === step.id ? 'bg-[#2a276e] text-white scale-110 shadow-xl' : 
+                      currentStep > step.id ? 'bg-[#9B8CFF] text-white' : 'bg-white border-2 border-gray-100 text-gray-300'}
+                  `}>
+                    {currentStep > step.id ? <Check className="w-6 h-6" /> : step.icon}
+                  </div>
+                  <div className="flex flex-col">
+                    <span className={`text-sm font-black transition-colors duration-300 ${currentStep === step.id ? 'text-[#2a276e]' : 'text-gray-400'}`}>
+                      {step.title}
+                    </span>
+                    {currentStep === step.id && <span className="text-[10px] font-bold text-[#9B8CFF] animate-pulse">Setting Up</span>}
+                  </div>
+                </div>
+              ))}
+            </nav>
+          </div>
+
+          <div className="mt-auto pt-10">
+            <div className="flex items-center gap-3 text-[10px] text-[#2a276e]/50 font-black">
+               <ShieldCheck className="w-4 h-4" /> HIPAA Compliant System
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col p-8 md:p-24 relative overflow-y-auto">
+        <div className="max-w-3xl w-full mx-auto flex-1 flex flex-col justify-between">
+          <div>
+            {/* Elegant Header */}
+            <div className="mb-20 animate-in slide-in-from-top-4 duration-700">
+              <div className="flex items-center gap-6 mb-8">
+                <div className="w-16 h-16 rounded-[24px] bg-[#f0f2ff] flex items-center justify-center text-[#2a276e]">
+                  {React.cloneElement(steps[currentStep-1].icon, { className: "w-8 h-8" })}
+                </div>
+                <div>
+                  <div className="text-[10px] font-black text-[#9B8CFF] mb-1">Section {currentStep}</div>
+                  <h2 className="text-4xl font-black text-[#2a276e] tracking-tight">{steps[currentStep-1].title} Details</h2>
+                </div>
+              </div>
+              <p className="text-xl text-gray-500 font-medium max-w-xl border-l-4 border-[#9B8CFF]/20 pl-6 py-1">
+                {currentStep === 1 && "Start by identifying your professional persona. These details will be displayed for patient confidence."}
+                {currentStep === 2 && "Enter your primary practice details. This information syncs with your official clinical headers."}
+                {currentStep === 3 && "Help us configure your digital clinic ecosystem by providing practice volume and services."}
+                {currentStep === 4 && "Finalize your infrastructure setup. Choose a plan or explore with our free foundational tier."}
               </p>
             </div>
 
-            {/* Clinic Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900">Clinic Information</h3>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Clinic Name *</label>
-                <input
-                  type="text"
-                  name="clinic_name"
-                  value={formData.clinic_name}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#2a276e] focus:border-[#2a276e]"
-                  placeholder="e.g., Sharma's Medical Clinic"
-                  required
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  Keep it to 3 words maximum (e.g., "Sharma's Medical Clinic")
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Address</label>
-                <textarea
-                  name="clinic_address"
-                  value={formData.clinic_address}
-                  onChange={handleInputChange}
-                  rows={3}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#2a276e] focus:border-[#2a276e]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Phone</label>
-                  <input
-                    type="tel"
-                    name="clinic_phone"
-                    value={formData.clinic_phone}
-                    onChange={handleInputChange}
-                  minLength={10}
-                  pattern="[0-9]{10,}"
-                  title="Enter at least 10 digits"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#2a276e] focus:border-[#2a276e]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Email</label>
-                  <input
-                    type="email"
-                    name="clinic_email"
-                    value={formData.clinic_email}
-                    onChange={handleInputChange}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#2a276e] focus:border-[#2a276e]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Specialization</label>
-                  <select
-                    name="specialization"
-                    value={formData.specialization}
-                    onChange={handleInputChange}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#2a276e] focus:border-[#2a276e]"
-                  >
-                    <option value="radiologist">Radiologist</option>
-                    <option value="dentist">Dentist</option>
-                    <option value="physiotherapist">Physiotherapist</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Subscription Plan</label>
-                  <select
-                    name="subscription_plan"
-                    value={formData.subscription_plan}
-                    onChange={handleInputChange}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#2a276e] focus:border-[#2a276e]"
-                  >
-                    <option value="free">Free Plan (50 patients/month)</option>
-                    <option value="professional">Professional ($29/month)</option>
-                    <option value="enterprise">Enterprise ($99/month)</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Treatment Types */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900">Default Treatment Types</h3>
-              <p className="text-sm text-gray-600">Set up your default treatment types and pricing</p>
-              
-              <div className="space-y-3">
-                {formData.scan_types.map((scan, index) => (
-                  <div key={index} className="flex space-x-2">
+            {/* Form Fields - Simple & Professional */}
+            <div className="space-y-12 animate-in slide-in-from-bottom-6 duration-700">
+              {currentStep === 1 && (
+                <div className="grid grid-cols-1 gap-12">
+                  <div className="group space-y-3">
+                    <label className="text-xs font-black text-[#2a276e] flex items-center gap-2 group-focus-within:text-[#9B8CFF] transition-colors">
+                      <User className="w-4 h-4" /> Full Professional Name
+                    </label>
                     <input
                       type="text"
-                      value={scan.name}
-                      onChange={(e) => handleScanTypeChange(index, 'name', e.target.value)}
-                      placeholder="Treatment name"
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#2a276e] focus:border-[#2a276e]"
+                      name="full_name"
+                      value={formData.full_name}
+                      onChange={handleInputChange}
+                      placeholder="e.g. Dr. Rajesh Kumar"
+                      className="w-full text-2xl font-bold bg-transparent border-b-2 border-gray-50 focus:border-[#9B8CFF] focus:outline-none py-4 placeholder-gray-200 transition-all font-sans"
                     />
+                  </div>
+                  <div className="group space-y-3">
+                    <label className="text-xs font-black text-[#2a276e] flex items-center gap-2 group-focus-within:text-[#9B8CFF] transition-colors">
+                      <GraduationCap className="w-4 h-4" /> Professional Degree / Specialty
+                    </label>
                     <input
-                      type="number"
-                      value={scan.price}
-                      onChange={(e) => handleScanTypeChange(index, 'price', parseFloat(e.target.value) || 0)}
-                      placeholder="Price"
-                      className="w-24 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#2a276e] focus:border-[#2a276e]"
+                      type="text"
+                      name="specialty"
+                      value={formData.specialty}
+                      onChange={handleInputChange}
+                      placeholder="e.g. BDS, MDS (Orthodontics)"
+                      className="w-full text-2xl font-bold bg-transparent border-b-2 border-gray-50 focus:border-[#9B8CFF] focus:outline-none py-4 placeholder-gray-200 transition-all font-sans"
                     />
-                    <button
-                      type="button"
-                      onClick={() => removeScanType(index)}
-                      className="px-3 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500"
-                    >
-                      ×
+                  </div>
+                </div>
+              )}
+
+              {currentStep === 2 && (
+                <div className="grid grid-cols-1 gap-12">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                    <div className="group space-y-3">
+                      <label className="text-xs font-black text-[#2a276e] flex items-center gap-2">
+                        <Building2 className="w-4 h-4" /> Clinic Brand Name
+                      </label>
+                      <input
+                        type="text"
+                        name="clinic_name"
+                        value={formData.clinic_name}
+                        onChange={handleInputChange}
+                        placeholder="e.g. MolarPlus Dental Care"
+                        className="w-full text-xl font-bold bg-transparent border-b-2 border-gray-50 focus:border-[#9B8CFF] focus:outline-none py-4 placeholder-gray-200 transition-all font-sans"
+                      />
+                    </div>
+                    <div className="group space-y-3">
+                      <label className="text-xs font-black text-[#2a276e] flex items-center gap-2">
+                        <Phone className="w-4 h-4" /> WhatsApp / Contact
+                      </label>
+                      <input
+                        type="tel"
+                        name="clinic_phone"
+                        value={formData.clinic_phone}
+                        onChange={handleInputChange}
+                        placeholder="+91 00000 00000"
+                        className="w-full text-xl font-bold bg-transparent border-b-2 border-gray-50 focus:border-[#9B8CFF] focus:outline-none py-4 placeholder-gray-200 transition-all font-sans"
+                      />
+                    </div>
+                  </div>
+                  <div className="group space-y-3">
+                    <label className="text-xs font-black text-[#2a276e] flex items-center gap-2">
+                      <MapPin className="w-4 h-4" /> Clinical Address
+                    </label>
+                    <textarea
+                      name="clinic_address"
+                      value={formData.clinic_address}
+                      onChange={handleInputChange}
+                      rows={2}
+                      placeholder="Suite #, Building Name, Street, City"
+                      className="w-full text-xl font-bold bg-transparent border-b-2 border-gray-50 focus:border-[#9B8CFF] focus:outline-none py-4 placeholder-gray-200 transition-all font-sans resize-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {currentStep === 3 && (
+                <div className="grid grid-cols-1 gap-12">
+                  <div className="space-y-6">
+                    <label className="text-xs font-black text-[#2a276e] block">Clinical Capacity (Chairs)</label>
+                    <div className="flex gap-4">
+                      {['1', '2', '3', '4+'].map(val => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, number_of_chairs: val }))}
+                          className={`
+                            h-14 w-20 rounded-2xl border-2 font-black transition-all duration-300
+                            ${formData.number_of_chairs === val ? 'bg-[#2a276e] border-[#2a276e] text-white shadow-xl scale-110' : 'bg-white border-gray-50 text-gray-400 hover:border-gray-200'}
+                          `}
+                        >
+                          {val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-6">
+                    <label className="text-xs font-black text-[#2a276e] block">Clinical Focus Area</label>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {['General Dentistry', 'Orthodontics', 'Pediatric', 'Implantology', 'Cosmetic', 'Periodontics'].map(cat => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, category: cat }))}
+                          className={`
+                            px-5 py-4 rounded-2xl border-2 text-sm font-bold transition-all text-left
+                            ${formData.category === cat ? 'bg-[#2a276e]/5 border-[#2a276e] text-[#2a276e] ring-4 ring-[#2a276e]/5' : 'bg-white border-gray-50 text-gray-400 hover:border-gray-200'}
+                          `}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <label className="text-xs font-black text-[#2a276e] block mb-4">Initial Product Catalog</label>
+                    <div className="space-y-5">
+                      {formData.scan_types.map((scan, index) => (
+                        <div key={index} className="flex gap-6 items-center">
+                          <input
+                            type="text"
+                            value={scan.name}
+                            onChange={(e) => handleScanTypeChange(index, 'name', e.target.value)}
+                            className="flex-1 text-lg font-bold bg-transparent border-b border-gray-50 focus:border-[#9B8CFF] focus:outline-none py-3"
+                          />
+                          <div className="w-32 relative">
+                            <span className="absolute left-0 top-1/2 -translate-y-1/2 text-[10px] font-black text-[#9B8CFF]">INR</span>
+                            <input
+                              type="number"
+                              value={scan.price}
+                              onChange={(e) => handleScanTypeChange(index, 'price', e.target.value)}
+                              className="w-full pl-8 text-lg font-bold bg-transparent border-b border-gray-50 focus:border-[#9B8CFF] focus:outline-none py-3 text-right"
+                            />
+                          </div>
+                          <button type="button" onClick={() => removeScanType(index)} className="text-gray-200 hover:text-red-500 transition-all p-2">
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <button type="button" onClick={addScanType} className="flex items-center gap-2 text-[10px] font-black text-[#9B8CFF] hover:text-[#2a276e] transition-colors mt-8">
+                      <Plus className="w-5 h-5" /> Expand Service Offering
                     </button>
                   </div>
-                ))}
-              </div>
-              
-              <button
-                type="button"
-                onClick={addScanType}
-                className="w-full py-2 border-2 border-dashed border-gray-300 rounded-md text-gray-600 hover:border-[#2a276e] hover:text-[#2a276e] focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
-              >
-                + Add Treatment Type
-              </button>
+                </div>
+              )}
+
+              {currentStep === 4 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div 
+                    onClick={() => setFormData(prev => ({ ...prev, subscription_plan: 'professional' }))}
+                    className={`
+                      p-10 rounded-[40px] border-2 cursor-pointer transition-all duration-500 relative group
+                      ${formData.subscription_plan === 'professional' ? 'bg-[#2a276e] border-[#2a276e] text-white shadow-2xl scale-[1.02]' : 'bg-[#F8F9FF] border-gray-50 hover:border-gray-200'}
+                    `}
+                  >
+                    <h4 className="text-xl font-black mb-2">Professional Plan</h4>
+                    <div className="mb-8 flex items-baseline gap-2">
+                      <span className="text-4xl font-black">₹2,499</span>
+                      <span className="text-[10px] font-bold opacity-60">Monthly</span>
+                    </div>
+                    <ul className="space-y-4 mb-12">
+                      {['WhatsApp Sync', 'Advanced BI', 'Unlimited Staff'].map(feat => (
+                        <li key={feat} className="flex items-center gap-3 text-xs font-bold opacity-80">
+                          <CheckCircle2 className="w-5 h-5" /> {feat}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className={`py-4 rounded-2xl text-center text-xs font-black transition-all ${formData.subscription_plan === 'professional' ? 'bg-white text-[#2a276e]' : 'bg-[#2a276e] text-white'}`}>
+                      Select Professional
+                    </div>
+                  </div>
+
+                  <div 
+                    onClick={() => setFormData(prev => ({ ...prev, subscription_plan: 'enterprise' }))}
+                    className={`
+                      p-10 rounded-[40px] border-2 cursor-pointer transition-all duration-500 relative group
+                      ${formData.subscription_plan === 'enterprise' ? 'bg-[#2a276e] border-[#2a276e] text-white shadow-2xl scale-[1.02]' : 'bg-[#F8F9FF] border-gray-50 hover:border-gray-200'}
+                    `}
+                  >
+                    <h4 className="text-xl font-black mb-2">Enterprise Plan</h4>
+                    <div className="mb-8 flex items-baseline gap-2">
+                      <span className="text-4xl font-black">₹9,999</span>
+                      <span className="text-[10px] font-bold opacity-60">Monthly</span>
+                    </div>
+                    <ul className="space-y-4 mb-12">
+                      {['Multi-Branch', 'Custom API', 'Priority SLA'].map(feat => (
+                        <li key={feat} className="flex items-center gap-3 text-xs font-bold opacity-80">
+                          <CheckCircle2 className="w-5 h-5" /> {feat}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className={`py-4 rounded-2xl text-center text-xs font-black transition-all ${formData.subscription_plan === 'enterprise' ? 'bg-white text-[#2a276e]' : 'bg-[#2a276e] text-white'}`}>
+                      Select Enterprise
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Nav & Attribution */}
+          <div className="pt-20 mt-12 border-t border-gray-50 flex flex-col items-center gap-10">
+            <div className="w-full flex gap-6">
+              {currentStep > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(prev => prev - 1)}
+                  className="w-16 h-16 bg-white border-2 border-gray-50 rounded-2xl flex items-center justify-center text-gray-300 hover:text-[#2a276e] hover:border-[#2a276e] transition-all group"
+                >
+                  <ChevronLeft className="w-8 h-8 group-hover:-translate-x-1 transition-transform" />
+                </button>
+              )}
+                <button
+                  type="button"
+                  onClick={currentStep < 4 ? () => setCurrentStep(prev => prev + 1) : handleSubmit}
+                  disabled={!isValidStep() || loading}
+                  className="flex-1 h-16 bg-[#2a276e] text-white rounded-[24px] font-black text-sm shadow-2xl shadow-[#2a276e]/30 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-30 transition-all flex items-center justify-center gap-4 group"
+                >
+                  {loading ? "Initializing Secure Vault..." : currentStep === 4 ? "Authorize Setup" : "Continue Integration"}
+                  <ChevronRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
+                </button>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-[#2a276e] text-white py-3 px-4 rounded-md hover:bg-[#1a1548] focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? "Setting up your clinic..." : "Complete Setup"}
-            </button>
-          </form>
+            {currentStep === 4 && (
+              <button
+                type="button"
+                onClick={() => { setFormData(prev => ({ ...prev, subscription_plan: 'free' })); handleSubmit(); }}
+                className="text-[11px] font-black text-[#9B8CFF] hover:text-[#2a276e] transition-colors"
+              >
+                Continue with Free foundational tier for now
+              </button>
+            )}
+
+            <div className="flex flex-col items-center gap-1 opacity-40">
+              <div className="text-[10px] font-black text-gray-400">
+                A product by Clino Health
+              </div>
+              <div className="text-[9px] font-bold text-gray-300">
+                Upclick labs (OPC)
+              </div>
+            </div>
+          </div>
         </div>
       </div>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+        
+        body, html { font-family: 'Inter', sans-serif; }
+        
+        @keyframes slide-in-from-bottom-6 {
+          from { transform: translateY(2rem); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes slide-in-from-top-4 {
+          from { transform: translateY(-1rem); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        .animate-in { animation: forwards ease-out; }
+        .slide-in-from-bottom-6 { animation-name: slide-in-from-bottom-6; }
+        .slide-in-from-top-4 { animation-name: slide-in-from-top-4; }
+        
+        @keyframes shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }
+      `}} />
     </div>
   );
 };
 
-export default ClinicOnboarding; 
+export default ClinicOnboarding;

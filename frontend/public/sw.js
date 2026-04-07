@@ -24,12 +24,10 @@ self.addEventListener('install', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   
-  // Skip service worker for API calls - always fetch from network
-  if (url.pathname.startsWith('/auth/') || 
-      url.pathname.startsWith('/api/') ||
-      url.hostname === 'localhost' && url.port === '8000') {
-    // For API calls, always fetch from network (don't cache)
-    event.respondWith(fetch(event.request));
+  // Skip service worker entirely for cross-origin requests (API calls to backend)
+  // DO NOT call event.respondWith() here — let the browser handle these natively
+  // so CORS headers and credentials are preserved correctly.
+  if (url.origin !== self.location.origin) {
     return;
   }
   

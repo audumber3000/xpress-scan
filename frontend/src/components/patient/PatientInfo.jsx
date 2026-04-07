@@ -1,10 +1,20 @@
 import React from 'react';
+import { Clock } from 'lucide-react';
+import PatientVisitHistory from './PatientVisitHistory';
 
 /**
  * PatientInfo - Renders detailed information about a patient
  * @param {object} patientData - The patient data object
+ * @param {array} appointments - List of appointments
+ * @param {array} prescriptions - List of prescriptions
+ * @param {array} invoices - List of invoices
  */
-const PatientInfo = ({ patientData }) => {
+const PatientInfo = ({ 
+  patientData, 
+  appointments = [], 
+  prescriptions = [], 
+  invoices = [] 
+}) => {
     if (!patientData) return null;
 
     // Get patient initials for avatar
@@ -73,48 +83,22 @@ const PatientInfo = ({ patientData }) => {
                 </div>
             </div>
 
-            {/* Treatment Information */}
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            {/* Visit History Timeline (Replaces Case Details) */}
+            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 flex flex-col">
                 <div className="flex items-center gap-2 mb-6 text-[#2a276e]">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                    </svg>
-                    <h3 className="text-lg font-semibold text-gray-900">Case Details</h3>
+                    <Clock className="w-5 h-5 text-[#1aa49a]" />
+                    <h3 className="text-lg font-bold text-gray-900 uppercase tracking-tight">Visit History</h3>
                 </div>
 
-                <div className="space-y-4">
-                    <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100">
-                        <p className="text-xs text-blue-600 font-bold uppercase tracking-wider mb-2">Initial Treatment Plan</p>
-                        <p className="text-gray-900 font-semibold">{patientData.treatment_type}</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Payment Scheme</p>
-                            <p className="text-gray-900 font-medium bg-gray-50 p-2 rounded-lg border border-gray-100 text-sm">
-                                {patientData.payment_type}
-                            </p>
-                        </div>
-                        {patientData.referred_by && (
-                            <div>
-                                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Referral Source</p>
-                                <p className="text-gray-900 font-medium bg-gray-50 p-2 rounded-lg border border-gray-100 text-sm">
-                                    {patientData.referred_by}
-                                </p>
-                            </div>
-                        )}
-                    </div>
-
-                    {patientData.notes && (
-                        <div className="pt-2">
-                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Clinical Notes</p>
-                            <div className="p-3 bg-yellow-50/50 rounded-lg border border-yellow-100 text-sm text-gray-700 italic leading-relaxed">
-                                {patientData.notes}
-                            </div>
-                        </div>
-                    )}
+                <div className="flex-1 overflow-y-auto max-h-[600px] pr-2 scrollbar-thin scrollbar-thumb-gray-200">
+                    <PatientVisitHistory 
+                        appointments={appointments}
+                        prescriptions={prescriptions}
+                        invoices={invoices}
+                    />
                 </div>
             </div>
+
         </div>
     );
 };

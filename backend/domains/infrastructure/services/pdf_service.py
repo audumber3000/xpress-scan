@@ -105,21 +105,35 @@ def html_to_pdf_fallback(html_content, patient_info=None):
     
     # Add patient information header if provided
     if patient_info:
-        # Title
-        story.append(Paragraph("RADIOLOGY REPORT", title_style))
+        # Determine Title
+        doc_title = "MEDICAL DOCUMENT"
+        if 'prescription_items' in patient_info:
+            doc_title = "PRESCRIPTION"
+        elif 'scan_type' in patient_info:
+            doc_title = "RADIOLOGY REPORT"
+            
+        story.append(Paragraph(doc_title, title_style))
         story.append(Spacer(1, 20))
         
-        # Patient information table
+        # Patient information table - support multiple key formats
+        p_name = patient_info.get('patient_name') or patient_info.get('name', 'N/A')
+        p_age = patient_info.get('patient_age') or patient_info.get('age', 'N/A')
+        p_gender = patient_info.get('patient_gender') or patient_info.get('gender', 'N/A')
+        p_phone = patient_info.get('patient_phone') or patient_info.get('phone', 'N/A')
+        p_id = patient_info.get('patient_id', 'N/A')
+        
         patient_data = [
-            ['Patient Name:', patient_info.get('name', 'N/A')],
-            ['Age:', f"{patient_info.get('age', 'N/A')} years"],
-            ['Gender:', patient_info.get('gender', 'N/A')],
-            ['Scan Type:', patient_info.get('scan_type', 'N/A')],
-            ['Referred By:', patient_info.get('referred_by', 'N/A')],
-            ['Village:', patient_info.get('village', 'N/A')],
-            ['Phone:', patient_info.get('phone', 'N/A')],
-            ['Date:', datetime.now().strftime('%B %d, %Y')]
+            ['Patient Name:', p_name],
+            ['ID:', f"#{p_id}"],
+            ['Age / Gender:', f"{p_age} / {p_gender}"],
+            ['Phone:', p_phone],
+            ['Date:', patient_info.get('current_date') or datetime.now().strftime('%B %d, %Y')]
         ]
+        
+        # Add scan-specific info if it's a radiology report
+        if 'scan_type' in patient_info:
+            patient_data.append(['Scan Type:', patient_info.get('scan_type', 'N/A')])
+            patient_data.append(['Referred By:', patient_info.get('referred_by', 'N/A')])
         
         patient_table = Table(patient_data, colWidths=[2*inch, 4*inch])
         patient_table.setStyle(TableStyle([
@@ -134,8 +148,9 @@ def html_to_pdf_fallback(html_content, patient_info=None):
         story.append(patient_table)
         story.append(Spacer(1, 20))
         
-        # Report content header
-        story.append(Paragraph("REPORT FINDINGS", header_style))
+        # Content header
+        content_header = "PRESCRIPTION DETAILS" if 'prescription_items' in patient_info else "REPORT FINDINGS"
+        story.append(Paragraph(content_header, header_style))
         story.append(Spacer(1, 10))
     
     # Convert HTML to plain text and format for PDF

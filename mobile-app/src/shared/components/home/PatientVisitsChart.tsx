@@ -20,8 +20,8 @@ interface ChartData {
 
 interface PatientVisitsChartProps {
   chartData: ChartData;
-  selectedPeriod: 'Week' | 'Month' | 'Year';
-  onPeriodChange: (period: 'Week' | 'Month' | 'Year') => void;
+  selectedPeriod: 'Today' | 'Last 7 Days' | 'This Month';
+  onPeriodChange: (period: 'Today' | 'Last 7 Days' | 'This Month') => void;
 }
 
 const AnimatedBar: React.FC<{
@@ -66,7 +66,7 @@ const AnimatedBar: React.FC<{
         ]}
       />
       <Text style={[styles.xAxisLabel, isSelected && styles.xAxisLabelActive]}>
-        {label.toUpperCase()}
+        {(label || '').toUpperCase()}
       </Text>
     </TouchableOpacity>
   );
@@ -98,19 +98,8 @@ export const PatientVisitsChart: React.FC<PatientVisitsChartProps> = ({
 
   const { total: totalVisits, change: percentageChange } = calculateRealMetrics();
 
-  // Helper to get day index shifted for Mon-Sun display
-  const getShuntedData = () => {
-    if (selectedPeriod === 'Week' && chartData.data.length === 7) {
-      // Data from API is Sun(0)..Sat(6). 
-      // Labels in UI are Mon..Sun.
-      // So index 0(Sun) is last, 1(Mon) is first.
-      const sun = chartData.data[0];
-      return [...chartData.data.slice(1), sun];
-    }
-    return chartData.data;
-  };
-
-  const displayData = getShuntedData();
+  // Removed shift logic. Chart labels are now passed directly in chartData.labels
+  const displayData = chartData.data;
 
   return (
     <View style={styles.chartSection}>
@@ -127,7 +116,7 @@ export const PatientVisitsChart: React.FC<PatientVisitsChartProps> = ({
       {/* Period Tabs */}
       <View style={styles.periodTabsContainer}>
         <View style={styles.periodTabs}>
-          {(['Week', 'Month', 'Year'] as const).map((period) => (
+          {(['Today', 'Last 7 Days', 'This Month'] as const).map((period) => (
             <TouchableOpacity
               key={period}
               style={[
@@ -141,7 +130,7 @@ export const PatientVisitsChart: React.FC<PatientVisitsChartProps> = ({
                 styles.periodTabText,
                 selectedPeriod === period && styles.periodTabTextActive
               ]}>
-                {period.toUpperCase()}
+                {period === 'Today' ? 'TODAY' : period === 'Last 7 Days' ? '7 DAYS' : 'MONTH'}
               </Text>
             </TouchableOpacity>
           ))}

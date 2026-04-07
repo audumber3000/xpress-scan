@@ -4,424 +4,356 @@ from sqlalchemy import func, and_, extract, case
 from datetime import datetime, timedelta
 from typing import Optional
 from database import get_db
-from models import Patient, Report, Payment, User, TreatmentType, Appointment, Clinic
+from models import Patient, Report, Payment, User, TreatmentType, Appointment, Clinic, Invoice
 from core.auth_utils import get_current_user
 
 router = APIRouter()
 
 @router.get("/metrics")
 def get_dashboard_metrics(
+    period: str = "month",  # today, yesterday, 7days, month
+    clinic_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """Get main dashboard metrics with trends - Dental clinic specific"""
-    clinic_id = current_user.clinic_id
+    """Get main dashboard metrics with period filtering - Dental clinic specific"""
+    # Use provided clinic_id if owner, else default to user's clinic
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
     
     # Calculate date ranges
     now = datetime.utcnow()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    yesterday_start = today_start - timedelta(days=1)
-    week_ago = now - timedelta(days=7)
-    two_weeks_ago = now - timedelta(days=14)
     
-    # Total Patients
-    total_patients = db.query(func.count(Patient.id)).filter(
-        Patient.clinic_id == clinic_id
-    ).scalar() or 0
-    
-    # Patients this week
-    patients_this_week = db.query(func.count(Patient.id)).filter(
-        and_(
-            Patient.clinic_id == clinic_id,
-            Patient.created_at >= week_ago
-        )
-    ).scalar() or 0
-    
-    # Patients last week
-    patients_last_week = db.query(func.count(Patient.id)).filter(
-        and_(
-            Patient.clinic_id == clinic_id,
-            Patient.created_at >= two_weeks_ago,
-            Patient.created_at < week_ago
-        )
-    ).scalar() or 0
-    
-    # Calculate patient trend
-    patient_change = 0
-    if patients_last_week > 0:
-        patient_change = ((patients_this_week - patients_last_week) / patients_last_week) * 100
-    elif patients_this_week > 0:
-        patient_change = 100
-    
-    # Total Reports
-    total_reports = db.query(func.count(Report.id)).filter(
-        Report.clinic_id == clinic_id
-    ).scalar() or 0
-    
-    # Reports this week
-    reports_this_week = db.query(func.count(Report.id)).filter(
-        and_(
-            Report.clinic_id == clinic_id,
-            Report.created_at >= week_ago
-        )
-    ).scalar() or 0
-    
-    # Reports last week
-    reports_last_week = db.query(func.count(Report.id)).filter(
-        and_(
-            Report.clinic_id == clinic_id,
-            Report.created_at >= two_weeks_ago,
-            Report.created_at < week_ago
-        )
-    ).scalar() or 0
-    
-    # Calculate report trend
-    report_change = 0
-    if reports_last_week > 0:
-        report_change = ((reports_this_week - reports_last_week) / reports_last_week) * 100
-    elif reports_this_week > 0:
-        report_change = 100
-    
-    # Pending Reports (status = 'pending' or 'draft')
-    pending_reports = db.query(func.count(Report.id)).filter(
-        and_(
-            Report.clinic_id == clinic_id,
-            Report.status.in_(['pending', 'draft'])
-        )
-    ).scalar() or 0
-    
-    # Pending reports this week
-    pending_this_week = db.query(func.count(Report.id)).filter(
-        and_(
-            Report.clinic_id == clinic_id,
-            Report.status.in_(['pending', 'draft']),
-            Report.created_at >= week_ago
-        )
-    ).scalar() or 0
-    
-    # Pending reports last week
-    pending_last_week = db.query(func.count(Report.id)).filter(
-        and_(
-            Report.clinic_id == clinic_id,
-            Report.status.in_(['pending', 'draft']),
-            Report.created_at >= two_weeks_ago,
-            Report.created_at < week_ago
-        )
-    ).scalar() or 0
-    
-    # Calculate pending trend
-    pending_change = 0
-    if pending_last_week > 0:
-        pending_change = ((pending_this_week - pending_last_week) / pending_last_week) * 100
-    elif pending_this_week > 0:
-        pending_change = 100
-    
-    # Appointments Today - count appointments scheduled FOR today
-    appointments_today = db.query(func.count(Appointment.id)).filter(
-        and_(
-            Appointment.clinic_id == clinic_id,
-            Appointment.appointment_date >= today_start,
-            Appointment.appointment_date < today_start + timedelta(days=1)
-        )
-    ).scalar() or 0
+    if period == "today":
+        start_date = today_start
+        end_date = today_start + timedelta(days=1)
+        prev_start = start_date - timedelta(days=1)
+        prev_end = start_date
+    elif period == "yesterday":
+        start_date = today_start - timedelta(days=1)
+        end_date = today_start
+        prev_start = start_date - timedelta(days=1)
+        prev_end = start_date
+    elif period == "7days":
+        start_date = today_start - timedelta(days=7)
+        end_date = today_start + timedelta(days=1)
+        prev_start = start_date - timedelta(days=7)
+        prev_end = start_date
+    else:  # month
+        start_date = today_start.replace(day=1)
+        end_date = today_start + timedelta(days=1)
+        # Previous month
+        last_day_prev_month = start_date - timedelta(days=1)
+        prev_start = last_day_prev_month.replace(day=1)
+        prev_end = start_date
 
-    appointments_yesterday = db.query(func.count(Appointment.id)).filter(
+    # 1. Total Patients (registered in this period)
+    patients_count = db.query(func.count(Patient.id)).filter(
         and_(
-            Appointment.clinic_id == clinic_id,
-            Appointment.appointment_date >= yesterday_start,
-            Appointment.appointment_date < today_start
+            Patient.clinic_id == final_clinic_id,
+            Patient.created_at >= start_date,
+            Patient.created_at < end_date
         )
     ).scalar() or 0
     
-    # Calculate appointment trend
-    appointment_change = 0
-    if appointments_yesterday > 0:
-        appointment_change = ((appointments_today - appointments_yesterday) / appointments_yesterday) * 100
-    elif appointments_today > 0:
-        appointment_change = 100
+    prev_patients = db.query(func.count(Patient.id)).filter(
+        and_(
+            Patient.clinic_id == final_clinic_id,
+            Patient.created_at >= prev_start,
+            Patient.created_at < prev_end
+        )
+    ).scalar() or 0
     
-    # Chair Capacity (configurable per clinic, default 5 chairs)
-    total_chairs = 5  # Can be made configurable via clinic settings
-    # Estimate chairs occupied based on concurrent appointments
-    # For simplicity, assume appointments are distributed throughout the day
-    chairs_occupied = min(max(1, appointments_today // 2), total_chairs) if appointments_today > 0 else 0
-    chair_utilization = int((chairs_occupied / total_chairs) * 100) if total_chairs > 0 else 0
+    patient_change = calculate_trend(patients_count, prev_patients)
+    
+    # 2. Appointments (total in this period)
+    appointments_count = db.query(func.count(Appointment.id)).filter(
+        and_(
+            Appointment.clinic_id == final_clinic_id,
+            Appointment.appointment_date >= start_date,
+            Appointment.appointment_date < end_date
+        )
+    ).scalar() or 0
+    
+    prev_appointments = db.query(func.count(Appointment.id)).filter(
+        and_(
+            Appointment.clinic_id == final_clinic_id,
+            Appointment.appointment_date >= prev_start,
+            Appointment.appointment_date < prev_end
+        )
+    ).scalar() or 0
+    
+    appointment_change = calculate_trend(appointments_count, prev_appointments)
+    
+    # 3. Checking (Appointments with status 'checking' in this period)
+    checking_count = db.query(func.count(Appointment.id)).filter(
+        and_(
+            Appointment.clinic_id == final_clinic_id,
+            Appointment.status == 'checking',
+            Appointment.appointment_date >= start_date,
+            Appointment.appointment_date < end_date
+        )
+    ).scalar() or 0
+    
+    prev_checking = db.query(func.count(Appointment.id)).filter(
+        and_(
+            Appointment.clinic_id == final_clinic_id,
+            Appointment.status == 'checking',
+            Appointment.appointment_date >= prev_start,
+            Appointment.appointment_date < prev_end
+        )
+    ).scalar() or 0
+    
+    checking_trend = calculate_trend(checking_count, prev_checking)
+
+    # 4. Revenue (Sum of payments in this period)
+    revenue_payments = db.query(func.sum(Payment.amount)).filter(
+        and_(
+            Payment.clinic_id == final_clinic_id,
+            Payment.status == "success",
+            Payment.created_at >= start_date,
+            Payment.created_at < end_date
+        )
+    ).scalar() or 0
+    
+    revenue_invoices = db.query(func.sum(Invoice.total)).filter(
+        and_(
+            Invoice.clinic_id == final_clinic_id,
+            Invoice.status.in_(["paid_verified", "paid_unverified"]),
+            Invoice.updated_at >= start_date,
+            Invoice.updated_at < end_date
+        )
+    ).scalar() or 0
+    
+    revenue = float(revenue_payments) + float(revenue_invoices)
+    
+    prev_revenue_payments = db.query(func.sum(Payment.amount)).filter(
+        and_(
+            Payment.clinic_id == final_clinic_id,
+            Payment.status == "success",
+            Payment.created_at >= prev_start,
+            Payment.created_at < prev_end
+        )
+    ).scalar() or 0
+    
+    prev_revenue_invoices = db.query(func.sum(Invoice.total)).filter(
+        and_(
+            Invoice.clinic_id == final_clinic_id,
+            Invoice.status.in_(["paid_verified", "paid_unverified"]),
+            Invoice.updated_at >= prev_start,
+            Invoice.updated_at < prev_end
+        )
+    ).scalar() or 0
+    
+    prev_revenue = float(prev_revenue_payments) + float(prev_revenue_invoices)
+    
+    revenue_trend = calculate_trend(revenue, prev_revenue)
     
     return {
         "total_patients": {
-            "value": total_patients,
-            "change": round(patient_change, 1),
-            "change_type": "up" if patient_change >= 0 else "down",
-            "this_week": patients_this_week,
-            "last_week": patients_last_week
+            "value": patients_count,
+            "change": patient_change,
+            "change_type": "up" if patient_change >= 0 else "down"
         },
-        "appointments_today": {
-            "value": appointments_today,
-            "change": round(abs(appointment_change), 1),
-            "change_type": "up" if appointment_change >= 0 else "down",
-            "today": appointments_today,
-            "yesterday": appointments_yesterday
+        "appointments": {
+            "value": appointments_count,
+            "change": appointment_change,
+            "change_type": "up" if appointment_change >= 0 else "down"
         },
-        "chair_capacity": {
-            "utilization": chair_utilization,
-            "chairs_occupied": chairs_occupied,
-            "total_chairs": total_chairs,
-            "chairs_available": total_chairs - chairs_occupied
+        "checking": {
+            "value": checking_count,
+            "change": checking_trend,
+            "change_type": "up" if checking_trend >= 0 else "down"
+        },
+        "revenue": {
+            "value": float(revenue),
+            "change": revenue_trend,
+            "change_type": "up" if revenue_trend >= 0 else "down"
         }
     }
 
+def calculate_trend(current, previous):
+    if not previous or previous == 0:
+        return 100 if current > 0 else 0
+    return round(((current - previous) / previous) * 100, 1)
+
 @router.get("/patient-stats")
 def get_patient_statistics(
-    period: str = "months",  # months, week, currentWeek
+    period: str = "month",  # today, yesterday, 7days, month
+    clinic_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """Get patient registration statistics by time period"""
-    clinic_id = current_user.clinic_id
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
     now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     
-    if period == "months":
-        # Last 12 months
-        data = []
-        for i in range(11, -1, -1):
-            month_start = (now.replace(day=1) - timedelta(days=i*30)).replace(day=1)
-            month_end = (month_start + timedelta(days=32)).replace(day=1)
-            
+    data = []
+    
+    if period == "today" or period == "yesterday":
+        start_date = today_start if period == "today" else today_start - timedelta(days=1)
+        # Hourly breakdown
+        for i in range(24):
+            hour_start = start_date + timedelta(hours=i)
+            hour_end = hour_start + timedelta(hours=1)
             count = db.query(func.count(Patient.id)).filter(
-                and_(
-                    Patient.clinic_id == clinic_id,
-                    Patient.created_at >= month_start,
-                    Patient.created_at < month_end
-                )
+                and_(Patient.clinic_id == final_clinic_id, Patient.created_at >= hour_start, Patient.created_at < hour_end)
             ).scalar() or 0
-            
-            data.append({
-                "month": month_start.strftime("%b"),
-                "patient": count,
-                "inpatient": 0  # Can be extended for inpatient tracking
-            })
+            data.append({"label": f"{i:02d}:00", "patient": count})
         return data
-    
-    elif period == "week":
-        # Last 7 days of the week (Sun-Sat)
-        data = []
-        days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-        for i in range(7):
-            day_start = (now - timedelta(days=6-i)).replace(hour=0, minute=0, second=0, microsecond=0)
-            day_end = day_start + timedelta(days=1)
-            
-            count = db.query(func.count(Patient.id)).filter(
-                and_(
-                    Patient.clinic_id == clinic_id,
-                    Patient.created_at >= day_start,
-                    Patient.created_at < day_end
-                )
-            ).scalar() or 0
-            
-            data.append({
-                "day": days[day_start.weekday() if day_start.weekday() != 6 else 0],
-                "patient": count,
-                "inpatient": 0
-            })
-        return data
-    
-    else:  # currentWeek
-        # Current week (Mon-Sun)
-        data = []
-        # Find Monday of current week
-        days_since_monday = now.weekday()
-        monday = (now - timedelta(days=days_since_monday)).replace(hour=0, minute=0, second=0, microsecond=0)
         
-        days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-        for i in range(7):
-            day_start = monday + timedelta(days=i)
+    elif period == "7days":
+        # Last 7 days
+        for i in range(6, -1, -1):
+            day_start = today_start - timedelta(days=i)
             day_end = day_start + timedelta(days=1)
-            
             count = db.query(func.count(Patient.id)).filter(
-                and_(
-                    Patient.clinic_id == clinic_id,
-                    Patient.created_at >= day_start,
-                    Patient.created_at < day_end
-                )
+                and_(Patient.clinic_id == final_clinic_id, Patient.created_at >= day_start, Patient.created_at < day_end)
             ).scalar() or 0
-            
-            data.append({
-                "day": days[i],
-                "patient": count,
-                "inpatient": 0
-            })
+            data.append({"label": day_start.strftime("%a"), "patient": count})
+        return data
+        
+    else:  # month
+        # Daily breakdown for current month
+        month_start = today_start.replace(day=1)
+        days_in_month = (today_start - month_start).days + 1
+        for i in range(days_in_month):
+            day_start = month_start + timedelta(days=i)
+            day_end = day_start + timedelta(days=1)
+            count = db.query(func.count(Patient.id)).filter(
+                and_(Patient.clinic_id == final_clinic_id, Patient.created_at >= day_start, Patient.created_at < day_end)
+            ).scalar() or 0
+            data.append({"label": day_start.strftime("%d %b"), "patient": count})
         return data
 
 @router.get("/demographics")
 def get_patient_demographics(
+    period: str = "month",  # today, yesterday, 7days, month
+    clinic_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """Get patient demographics (gender distribution)"""
-    clinic_id = current_user.clinic_id
+    """Get patient demographics (gender distribution) filtered by period"""
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     
-    # Count by gender
+    # Determine start date based on period
+    if period == "today":
+        start_date = today_start
+    elif period == "yesterday":
+        start_date = today_start - timedelta(days=1)
+    elif period == "7days":
+        start_date = today_start - timedelta(days=7)
+    else:  # month
+        start_date = today_start.replace(day=1)
+
+    # Count by gender within the period
     male_count = db.query(func.count(Patient.id)).filter(
         and_(
-            Patient.clinic_id == clinic_id,
-            Patient.gender == "Male"
+            Patient.clinic_id == final_clinic_id,
+            Patient.gender == "Male",
+            Patient.created_at >= start_date
         )
     ).scalar() or 0
     
     female_count = db.query(func.count(Patient.id)).filter(
         and_(
-            Patient.clinic_id == clinic_id,
-            Patient.gender == "Female"
+            Patient.clinic_id == final_clinic_id,
+            Patient.gender == "Female",
+            Patient.created_at >= start_date
         )
     ).scalar() or 0
     
     other_count = db.query(func.count(Patient.id)).filter(
         and_(
-            Patient.clinic_id == clinic_id,
-            Patient.gender.notin_(["Male", "Female"])
+            Patient.clinic_id == final_clinic_id,
+            Patient.gender.notin_(["Male", "Female"]),
+            Patient.created_at >= start_date
         )
     ).scalar() or 0
     
     return [
-        {"name": "Male", "value": male_count, "color": "#1d8a99"},
-        {"name": "Female", "value": female_count, "color": "#6ee7b7"},
-        {"name": "Others", "value": other_count, "color": "#d1fae5"}
+        {"name": "Male", "value": male_count, "color": "#2a276e"},     # Navy
+        {"name": "Female", "value": female_count, "color": "#9B8CFF"}, # Purple
+        {"name": "Others", "value": other_count, "color": "#e5e7eb"}   # Light Gray
     ]
 
 @router.get("/revenue")
 def get_revenue_analytics(
     period: str = "week",  # week, month, year
+    clinic_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """Get revenue analytics by time period - shows payments received during the period"""
-    clinic_id = current_user.clinic_id
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
     now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    if period == "week":
-        # Current week (Monday to Sunday)
-        data = []
-        days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    data = []
+    # Dynamic target: 10k default, or 20% more than average if data exists
+    avg_rev = db.query(func.avg(Payment.amount)).filter(
+        and_(Payment.clinic_id == final_clinic_id, Payment.status == "success")
+    ).scalar() or 0
+    target = max(10000.0, float(avg_rev) * 1.2)
 
-        # Find Monday of current week
-        days_since_monday = now.weekday()
-        monday = (now - timedelta(days=days_since_monday)).replace(hour=0, minute=0, second=0, microsecond=0)
+    if period == "today" or period == "yesterday":
+        start_date = today_start if period == "today" else today_start - timedelta(days=1)
+        # Hourly breakdown
+        for i in range(24):
+            hour_start = start_date + timedelta(hours=i)
+            hour_end = hour_start + timedelta(hours=1)
+            rev_p = db.query(func.sum(Payment.amount)).filter(
+                and_(Payment.clinic_id == final_clinic_id, Payment.status == "success", Payment.created_at >= hour_start, Payment.created_at < hour_end)
+            ).scalar() or 0
+            rev_i = db.query(func.sum(Invoice.total)).filter(
+                and_(Invoice.clinic_id == final_clinic_id, Invoice.status.in_(["paid_verified", "paid_unverified"]), Invoice.updated_at >= hour_start, Invoice.updated_at < hour_end)
+            ).scalar() or 0
+            data.append({"label": f"{i:02d}:00", "revenue": float(rev_p) + float(rev_i), "target": target / 24})
+        return data
 
-        for i in range(7):
-            day_start = monday + timedelta(days=i)
+    elif period == "7days":
+        # Last 7 days
+        for i in range(6, -1, -1):
+            day_start = today_start - timedelta(days=i)
             day_end = day_start + timedelta(days=1)
-
-            # Get payments received during this day (when they were actually paid)
-            revenue = db.query(func.sum(Payment.amount)).filter(
-                and_(
-                    Payment.clinic_id == clinic_id,
-                    Payment.status == "success",
-                    Payment.created_at >= day_start,
-                    Payment.created_at < day_end
-                )
+            rev_p = db.query(func.sum(Payment.amount)).filter(
+                and_(Payment.clinic_id == final_clinic_id, Payment.status == "success", Payment.created_at >= day_start, Payment.created_at < day_end)
             ).scalar() or 0
-
-            # Target can be configured per clinic (for now, use average)
-            target = 50000  # Default target
-
-            data.append({
-                "day": days[i],
-                "revenue": float(revenue),
-                "target": target
-            })
+            rev_i = db.query(func.sum(Invoice.total)).filter(
+                and_(Invoice.clinic_id == final_clinic_id, Invoice.status.in_(["paid_verified", "paid_unverified"]), Invoice.updated_at >= day_start, Invoice.updated_at < day_end)
+            ).scalar() or 0
+            data.append({"label": day_start.strftime("%a"), "revenue": float(rev_p) + float(rev_i), "target": target})
         return data
 
-    elif period == "month":
-        # Current month (daily breakdown)
-        data = []
-        # Get first day of current month
-        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        # Get last day of current month
-        next_month = (month_start + timedelta(days=32)).replace(day=1)
-        month_end = next_month - timedelta(days=1)
-
-        current_date = month_start
-        day_count = 1
-
-        while current_date <= month_end and current_date <= now:
-            day_end = current_date + timedelta(days=1)
-
-            # Get payments received during this day
-            revenue = db.query(func.sum(Payment.amount)).filter(
-                and_(
-                    Payment.clinic_id == clinic_id,
-                    Payment.status == "success",
-                    Payment.created_at >= current_date,
-                    Payment.created_at < day_end
-                )
+    else:  # month
+        # Daily breakdown for current month
+        month_start = today_start.replace(day=1)
+        days_in_month = (today_start - month_start).days + 1
+        for i in range(days_in_month):
+            day_start = month_start + timedelta(days=i)
+            day_end = day_start + timedelta(days=1)
+            rev_p = db.query(func.sum(Payment.amount)).filter(
+                and_(Payment.clinic_id == final_clinic_id, Payment.status == "success", Payment.created_at >= day_start, Payment.created_at < day_end)
             ).scalar() or 0
-
-            # Target scales with days in month
-            days_in_month = (month_end - month_start).days + 1
-            target = (50000 / 30) * days_in_month  # Scale target based on month length
-
-            data.append({
-                "day": f"{day_count}",
-                "revenue": float(revenue),
-                "target": target
-            })
-
-            current_date = day_end
-            day_count += 1
-
+            rev_i = db.query(func.sum(Invoice.total)).filter(
+                and_(Invoice.clinic_id == final_clinic_id, Invoice.status.in_(["paid_verified", "paid_unverified"]), Invoice.updated_at >= day_start, Invoice.updated_at < day_end)
+            ).scalar() or 0
+            data.append({"label": day_start.strftime("%d %b"), "revenue": float(rev_p) + float(rev_i), "target": target})
         return data
-
-    elif period == "year":
-        # Current year (monthly breakdown)
-        data = []
-        months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-
-        for i in range(12):
-            # Get first day of the month
-            if i == 0:  # Current month might be partial
-                month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            else:
-                # Go back i months from current month start
-                month_start = (now.replace(day=1) - timedelta(days=i*30)).replace(day=1)
-
-            # Get last day of the month
-            next_month = (month_start + timedelta(days=32)).replace(day=1)
-            month_end = next_month - timedelta(days=1)
-
-            # Don't go beyond current date for current month
-            if month_start.year == now.year and month_start.month == now.month:
-                month_end = min(month_end, now.replace(hour=23, minute=59, second=59, microsecond=999999))
-
-            # Get payments received during this month
-            revenue = db.query(func.sum(Payment.amount)).filter(
-                and_(
-                    Payment.clinic_id == clinic_id,
-                    Payment.status == "success",
-                    Payment.created_at >= month_start,
-                    Payment.created_at <= month_end
-                )
-            ).scalar() or 0
-
-            # Monthly target
-            target = 50000 * 30  # Rough monthly target
-
-            data.append({
-                "day": months[11-i],  # Reverse order so current month is last
-                "revenue": float(revenue),
-                "target": target
-            })
-
-        return data[::-1]  # Reverse to show chronological order
 
     return []
 
 @router.get("/capacity")
 def get_clinic_capacity(
+    clinic_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """Get current clinic capacity utilization based on scheduled appointments"""
-    clinic_id = current_user.clinic_id
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
 
     # Get today's appointments
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -429,7 +361,7 @@ def get_clinic_capacity(
 
     appointments_today = db.query(func.count(Appointment.id)).filter(
         and_(
-            Appointment.clinic_id == clinic_id,
+            Appointment.clinic_id == final_clinic_id,
             Appointment.appointment_date >= today_start,
             Appointment.appointment_date < today_end
         )
@@ -448,14 +380,15 @@ def get_clinic_capacity(
 @router.get("/patients/details")
 def get_patients_details(
     period: Optional[str] = None,  # today, week, month
+    clinic_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """Get detailed patient list for drawer view"""
-    clinic_id = current_user.clinic_id
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
     now = datetime.utcnow()
     
-    query = db.query(Patient).filter(Patient.clinic_id == clinic_id)
+    query = db.query(Patient).filter(Patient.clinic_id == final_clinic_id)
     
     if period == "today":
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -483,13 +416,14 @@ def get_patients_details(
 @router.get("/reports/details")
 def get_reports_details(
     status: Optional[str] = None,  # pending, completed, all
+    clinic_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """Get detailed report list for drawer view"""
-    clinic_id = current_user.clinic_id
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
     
-    query = db.query(Report).filter(Report.clinic_id == clinic_id)
+    query = db.query(Report).filter(Report.clinic_id == final_clinic_id)
     
     if status == "pending":
         query = query.filter(Report.status.in_(['pending', 'draft']))
@@ -508,11 +442,12 @@ def get_reports_details(
 
 @router.get("/appointments/today")
 def get_appointments_today(
+    clinic_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """Get today's appointments for drawer view"""
-    clinic_id = current_user.clinic_id
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
     now = datetime.utcnow()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start + timedelta(days=1)
@@ -520,7 +455,7 @@ def get_appointments_today(
     # Get appointments scheduled for today
     appointments = db.query(Appointment).filter(
         and_(
-            Appointment.clinic_id == clinic_id,
+            Appointment.clinic_id == final_clinic_id,
             Appointment.appointment_date >= today_start,
             Appointment.appointment_date < today_end
         )
@@ -552,18 +487,19 @@ def get_appointments_today(
 
 @router.get("/chairs/status")
 def get_chairs_status(
+    clinic_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """Get dental chair status with detailed utilization metrics based on scheduled appointments"""
-    clinic_id = current_user.clinic_id
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
     now = datetime.utcnow()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # Get today's scheduled appointments
     appointments_today = db.query(func.count(Appointment.id)).filter(
         and_(
-            Appointment.clinic_id == clinic_id,
+            Appointment.clinic_id == final_clinic_id,
             Appointment.appointment_date >= today_start,
             Appointment.appointment_date < today_start + timedelta(days=1)
         )
@@ -610,11 +546,12 @@ def get_chairs_status(
 @router.get("/treatments/stats")
 def get_treatment_statistics(
     period: str = "week",  # week, month, year
+    clinic_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """Get treatment type statistics"""
-    clinic_id = current_user.clinic_id
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
     now = datetime.utcnow()
     
     # Calculate date range
@@ -631,7 +568,7 @@ def get_treatment_statistics(
         func.count(Patient.id).label('count')
     ).filter(
         and_(
-            Patient.clinic_id == clinic_id,
+            Patient.clinic_id == final_clinic_id,
             Patient.created_at >= start_date,
             Patient.scan_type.isnot(None)
         )
@@ -661,79 +598,104 @@ def get_treatment_statistics(
 
 @router.get("/appointments/trends")
 def get_appointment_trends(
+    period: str = "month",  # today, yesterday, 7days, month
+    clinic_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """Get appointment trends by time slots for today"""
-    clinic_id = current_user.clinic_id
+    """Get appointment trends by time slots or days based on period"""
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
     now = datetime.utcnow()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_end = today_start + timedelta(days=1)
     
-    # Get all appointments for today
-    appointments = db.query(Appointment).filter(
-        and_(
-            Appointment.clinic_id == clinic_id,
-            Appointment.appointment_date >= today_start,
-            Appointment.appointment_date < today_end
-        )
-    ).all()
-    
-    # Define time slots (hourly from 9 AM to 5 PM)
-    time_slots = [
-        ("9 AM", 9), ("10 AM", 10), ("11 AM", 11), ("12 PM", 12),
-        ("1 PM", 13), ("2 PM", 14), ("3 PM", 15), ("4 PM", 16), ("5 PM", 17)
-    ]
-    
-    # Initialize data structure
     trends_data = []
-    
-    for slot_label, hour in time_slots:
-        # Count bookings in this hour
-        bookings = 0
-        for apt in appointments:
-            # Parse start_time string (e.g., "09:00" or "14:30") to get hour
-            try:
-                if apt.start_time:
-                    # Parse time string like "09:00" or "14:30"
-                    time_parts = apt.start_time.split(":")
-                    if len(time_parts) >= 1:
-                        apt_hour = int(time_parts[0])
-                        if apt_hour == hour:
-                            bookings += 1
-            except (ValueError, AttributeError):
-                # Fallback to appointment_date hour if start_time parsing fails
+
+    if period == "today" or period == "yesterday":
+        start_date = today_start if period == "today" else today_start - timedelta(days=1)
+        end_date = start_date + timedelta(days=1)
+        
+        # Hourly breakdown: 8 AM to 9 PM
+        time_slots = [
+            ("8 AM", 8), ("9 AM", 9), ("10 AM", 10), ("11 AM", 11), ("12 PM", 12),
+            ("1 PM", 13), ("2 PM", 14), ("3 PM", 15), ("4 PM", 16), ("5 PM", 17),
+            ("6 PM", 18), ("7 PM", 19), ("8 PM", 20), ("9 PM", 21)
+        ]
+        
+        appointments = db.query(Appointment).filter(
+            and_(
+                Appointment.clinic_id == final_clinic_id,
+                Appointment.appointment_date >= start_date,
+                Appointment.appointment_date < end_date
+            )
+        ).all()
+        
+        for slot_label, hour in time_slots:
+            bookings = 0
+            for apt in appointments:
                 try:
-                    apt_hour = apt.appointment_date.hour
-                    if apt_hour == hour:
-                        bookings += 1
+                    if apt.start_time:
+                        time_parts = apt.start_time.split(":")
+                        if int(time_parts[0]) == hour:
+                            bookings += 1
                 except:
-                    pass
-        
-        # Estimate capacity (can be made configurable)
-        # For now, assume varying capacity based on time of day
-        if hour >= 9 and hour <= 11:  # Morning slots
-            capacity = 20
-        elif hour == 12:  # Lunch time
-            capacity = 12
-        else:  # Afternoon slots
-            capacity = 18
-        
-        trends_data.append({
-            "time": slot_label,
-            "bookings": bookings,
-            "capacity": capacity
-        })
-    
+                    if apt.appointment_date.hour == hour:
+                        bookings += 1
+            
+            # Dynamic capacity: Based on chairs or default
+            clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
+            # Simple heuristic: 4 slots per hour per chair, default 2 chairs
+            base_capacity = 8
+            capacity = base_capacity if hour != 13 else base_capacity // 2 # Less capacity during lunch
+            trends_data.append({"time": slot_label, "bookings": bookings, "capacity": capacity})
+            
+    elif period == "7days":
+        # Last 7 days
+        for i in range(6, -1, -1):
+            day_start = today_start - timedelta(days=i)
+            day_end = day_start + timedelta(days=1)
+            count = db.query(func.count(Appointment.id)).filter(
+                and_(
+                    Appointment.clinic_id == final_clinic_id,
+                    Appointment.appointment_date >= day_start,
+                    Appointment.appointment_date < day_end
+                )
+            ).scalar() or 0
+            trends_data.append({
+                "time": day_start.strftime("%a"),
+                "bookings": count,
+                "capacity": 100 # Daily capacity (approx 2 chairs * 12.5 active slots)
+            })
+            
+    else:  # month
+        # Daily breakdown for current month
+        month_start = today_start.replace(day=1)
+        days_in_month = (today_start - month_start).days + 1
+        for i in range(days_in_month):
+            day_start = month_start + timedelta(days=i)
+            day_end = day_start + timedelta(days=1)
+            count = db.query(func.count(Appointment.id)).filter(
+                and_(
+                    Appointment.clinic_id == final_clinic_id,
+                    Appointment.appointment_date >= day_start,
+                    Appointment.appointment_date < day_end
+                )
+            ).scalar() or 0
+            trends_data.append({
+                "time": day_start.strftime("%d %b"),
+                "bookings": count,
+                "capacity": 100
+            })
+            
     return trends_data
 
 @router.get("/appointments/quality")
 def get_appointment_quality(
+    clinic_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """Get appointment quality metrics"""
-    clinic_id = current_user.clinic_id
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
     now = datetime.utcnow()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_ago = now - timedelta(days=7)
@@ -741,13 +703,13 @@ def get_appointment_quality(
     
     # Total appointments (using patient registrations as proxy)
     total_appointments = db.query(func.count(Patient.id)).filter(
-        Patient.clinic_id == clinic_id
+        Patient.clinic_id == final_clinic_id
     ).scalar() or 0
     
     # This week's appointments
     appointments_this_week = db.query(func.count(Patient.id)).filter(
         and_(
-            Patient.clinic_id == clinic_id,
+            Patient.clinic_id == final_clinic_id,
             Patient.created_at >= week_ago
         )
     ).scalar() or 0
@@ -755,7 +717,7 @@ def get_appointment_quality(
     # This month's appointments
     appointments_this_month = db.query(func.count(Patient.id)).filter(
         and_(
-            Patient.clinic_id == clinic_id,
+            Patient.clinic_id == final_clinic_id,
             Patient.created_at >= month_ago
         )
     ).scalar() or 0
@@ -784,7 +746,7 @@ def get_dashboard_preferences(
     """Get user's dashboard preferences"""
     user = db.query(User).filter(User.id == current_user.id).first()
     
-    if user and user.dashboard_preferences:
+    if user and getattr(user, 'dashboard_preferences', None):
         return user.dashboard_preferences
     
     # Return default preferences if none exist
@@ -813,28 +775,33 @@ def save_dashboard_preferences(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    user.dashboard_preferences = preferences
-    db.commit()
+    try:
+        user.dashboard_preferences = preferences
+        db.commit()
+    except Exception:
+        db.rollback()
+        return {"message": "Preferences not persisted (column unavailable)", "preferences": preferences}
     
     return {"message": "Preferences saved successfully", "preferences": preferences}
 
 @router.get("/clinic-performance")
 def get_clinic_performance(
     compare_clinic_ids: str = None,  # Comma-separated clinic IDs to compare with
+    clinic_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """Get clinic performance metrics for comparison"""
-    current_clinic_id = current_user.clinic_id
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
     now = datetime.utcnow()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     # Get current clinic metrics
-    current_metrics = _calculate_clinic_metrics(db, current_clinic_id, month_start, now)
+    current_metrics = _calculate_clinic_metrics(db, final_clinic_id, month_start, now)
 
     result = {
         "current_clinic": {
-            "id": current_clinic_id,
+            "id": final_clinic_id,
             "name": current_metrics["name"],
             "metrics": current_metrics
         },
@@ -909,16 +876,17 @@ def _calculate_clinic_metrics(db, clinic_id, start_date, end_date):
 
 @router.get("/patient-locations")
 def get_patient_locations(
+    clinic_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """Get patient locations for map visualization"""
-    clinic_id = current_user.clinic_id
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
 
     # Get patients with location data (using village as location proxy)
     patients = db.query(Patient).filter(
         and_(
-            Patient.clinic_id == clinic_id,
+            Patient.clinic_id == final_clinic_id,
             Patient.village.isnot(None)
         )
     ).all()

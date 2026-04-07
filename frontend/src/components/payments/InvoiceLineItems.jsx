@@ -1,9 +1,14 @@
 import React, { useState } from "react";
 import InvoiceLineItemForm from "./InvoiceLineItemForm";
 
-const InvoiceLineItems = ({ lineItems, onAdd, onEdit, onDelete, canEdit }) => {
+const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdateInvoice, canEdit }) => {
   const [editingId, setEditingId] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
+
+  // Local discount state for toggling without immediately spamming API
+  const [localDiscount, setLocalDiscount] = useState(invoice?.discount || 0);
+  const [localDiscountType, setLocalDiscountType] = useState(invoice?.discount_type || 'amount');
+  const [discountEditing, setDiscountEditing] = useState(false);
 
   const handleEdit = (lineItem) => {
     setEditingId(lineItem.id);
@@ -25,11 +30,19 @@ const InvoiceLineItems = ({ lineItems, onAdd, onEdit, onDelete, canEdit }) => {
     }
   };
 
+  const handleApplyDiscount = () => {
+    onUpdateInvoice({
+      discount: parseFloat(localDiscount) || 0,
+      discount_type: localDiscountType
+    });
+    setDiscountEditing(false);
+  };
+
   const formatAmount = (amount) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
-    }).format(amount);
+    }).format(amount || 0);
   };
 
   return (
@@ -84,12 +97,14 @@ const InvoiceLineItems = ({ lineItems, onAdd, onEdit, onDelete, canEdit }) => {
               {lineItems.map((item) => (
                 <tr key={item.id}>
                   {editingId === item.id ? (
-                    <td colSpan={canEdit ? 5 : 4}>
-                      <InvoiceLineItemForm
-                        lineItem={item}
-                        onSave={handleSave}
-                        onCancel={handleCancel}
-                      />
+                    <td colSpan={canEdit ? 5 : 4} className="p-0">
+                      <div className="p-2 border-2 border-blue-400 m-1 rounded-lg">
+                        <InvoiceLineItemForm
+                          lineItem={item}
+                          onSave={handleSave}
+                          onCancel={handleCancel}
+                        />
+                      </div>
                     </td>
                   ) : (
                     <>
@@ -106,7 +121,7 @@ const InvoiceLineItems = ({ lineItems, onAdd, onEdit, onDelete, canEdit }) => {
                           <div className="flex justify-center gap-2">
                             <button
                               onClick={() => handleEdit(item)}
-                              className="p-1 text-blue-600 hover:text-blue-800 transition"
+                              className="text-blue-600 hover:bg-blue-50 p-1.5 rounded-md transition"
                               title="Edit"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -115,7 +130,7 @@ const InvoiceLineItems = ({ lineItems, onAdd, onEdit, onDelete, canEdit }) => {
                             </button>
                             <button
                               onClick={() => onDelete(item.id)}
-                              className="p-1 text-red-600 hover:text-red-800 transition"
+                              className="text-red-600 hover:bg-red-50 p-1.5 rounded-md transition"
                               title="Delete"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -133,38 +148,85 @@ const InvoiceLineItems = ({ lineItems, onAdd, onEdit, onDelete, canEdit }) => {
           </table>
         </div>
       ) : (
-        <div className="text-center py-8 text-gray-500">
-          <p>No line items. {canEdit && "Click 'Add Item' to add items to this invoice."}</p>
+        <div className="text-center py-8 text-gray-500 bg-gray-50 border border-dashed border-gray-300 rounded-lg">
+          <p>No line items found. {canEdit && "Click 'Add Item' to start building this invoice."}</p>
         </div>
       )}
 
-      <div className="border-t border-gray-200 pt-4">
-        <div className="flex justify-end space-x-6">
-          <div className="text-right">
-            <div className="text-sm text-gray-600 mb-1">Subtotal:</div>
-            <div className="text-sm text-gray-600 mb-1">Tax:</div>
-            <div className="text-lg font-semibold text-gray-900">Total:</div>
-          </div>
-          <div className="text-right min-w-[120px]">
-            <div className="text-sm font-medium text-gray-900 mb-1">
-              ₹{lineItems?.reduce((sum, item) => sum + (item.amount || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}
-            </div>
-            <div className="text-sm font-medium text-gray-900 mb-1">₹0.00</div>
-            <div className="text-lg font-bold text-[#25D366]">
-              ₹{lineItems?.reduce((sum, item) => sum + (item.amount || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}
+      {/* Backend-Calculated Totals Row */}
+      {invoice && (
+        <div className="border-t border-gray-200 pt-4 mt-6">
+          <div className="flex justify-end pr-4">
+            <div className="w-[300px] flex flex-col gap-2">
+              
+              <div className="flex justify-between text-sm text-gray-600">
+                <span>Subtotal:</span>
+                <span className="font-medium text-gray-900">{formatAmount(invoice.subtotal)}</span>
+              </div>
+
+              {/* Discount Row */}
+              {canEdit ? (
+                <div className="flex items-center justify-between group pt-1 pb-1">
+                  <span className="text-sm text-gray-600 flex items-center gap-1 cursor-pointer" onClick={() => setDiscountEditing(true)}>
+                    Discount:
+                    {!discountEditing && (
+                      <svg className="w-3 h-3 text-blue-500 opacity-0 group-hover:opacity-100 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                    )}
+                  </span>
+
+                  {discountEditing ? (
+                    <div className="flex items-center gap-2">
+                       <div className="flex items-center bg-gray-100 rounded-lg p-0.5 border border-gray-200">
+                        <button type="button" onClick={() => setLocalDiscountType('percentage')} className={`px-2 py-0.5 text-xs font-semibold rounded-md ${localDiscountType === 'percentage' ? 'bg-white shadow-sm text-[#2a276e]' : 'text-gray-500'}`}>%</button>
+                        <button type="button" onClick={() => setLocalDiscountType('amount')} className={`px-2 py-0.5 text-xs font-semibold rounded-md ${localDiscountType === 'amount' ? 'bg-white shadow-sm text-[#2a276e]' : 'text-gray-500'}`}>₹</button>
+                      </div>
+                      <input 
+                        type="number"
+                        min="0"
+                        className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500 text-right"
+                        value={localDiscount}
+                        onChange={(e) => setLocalDiscount(e.target.value)}
+                        autoFocus
+                      />
+                      <button onClick={handleApplyDiscount} className="text-xs bg-blue-100 text-blue-700 font-semibold px-2 py-1 rounded hover:bg-blue-200 transition">Apply</button>
+                    </div>
+                  ) : (
+                    <span 
+                      className="text-sm font-medium text-red-600 cursor-pointer hover:bg-gray-100 px-1 rounded transition"
+                      onClick={() => setDiscountEditing(true)}
+                    >
+                      - {formatAmount(invoice.discount_amount)}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                invoice.discount_amount > 0 && (
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>Discount:</span>
+                    <span className="font-medium text-red-600">- {formatAmount(invoice.discount_amount)}</span>
+                  </div>
+                )
+              )}
+
+              {invoice.tax > 0 && (
+                 <div className="flex justify-between text-sm text-gray-600">
+                  <span>Tax:</span>
+                  <span className="font-medium text-gray-900">{formatAmount(invoice.tax)}</span>
+                </div>
+              )}
+
+              <div className="flex justify-between text-lg font-bold border-t border-gray-200 pt-2 mt-1">
+                <span className="text-gray-900">Total:</span>
+                <span className="text-[#25D366]">{formatAmount(invoice.total)}</span>
+              </div>
+
             </div>
           </div>
         </div>
-      </div>
+      )}
+
     </div>
   );
 };
 
 export default InvoiceLineItems;
-
-
-
-
-
-
-

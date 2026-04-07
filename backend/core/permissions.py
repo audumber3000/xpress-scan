@@ -269,3 +269,38 @@ def require_permission(resource: str, action: str):
         
         return wrapper
     return decorator
+
+
+def has_permission(resource: str, action: str):
+    """
+    Dependency for checking permissions in FastAPI routes
+    
+    Usage:
+        @router.get("/users")
+        def get_users(current_user: User = Depends(has_permission("users", "view"))):
+            ...
+    """
+    from core.auth_utils import get_current_user
+    from fastapi import Depends
+    
+    def dependency(current_user=Depends(get_current_user)):
+        # Clinic owners always have permission
+        if current_user.role == "clinic_owner":
+            return current_user
+            
+        # Check permission via Casbin
+        allowed = permission_manager.check_permission(
+            str(current_user.id),
+            str(current_user.clinic_id),
+            resource,
+            action
+        )
+        
+        if not allowed:
+            raise HTTPException(
+                status_code=403,
+                detail=f"You don't have permission to {action} {resource}"
+            )
+        return current_user
+        
+    return dependency

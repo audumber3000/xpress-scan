@@ -172,7 +172,7 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
         try {
           console.log('🔗 [PATIENT] Linking to appointment:', initialData.appointmentId);
           await appointmentsApiService.updateAppointment(initialData.appointmentId, {
-            patientId: data.id.toString(),
+            patient_id: Number(data.id),
             status: 'Registered' // Update status to Registered once file is created
           });
         } catch (linkError) {

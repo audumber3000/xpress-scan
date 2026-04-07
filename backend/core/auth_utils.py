@@ -9,8 +9,9 @@ from typing import Optional
 import jwt
 import os
 
-# JWT Secret (in production, use environment variable)
-JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
+def get_jwt_secret():
+    """Get JWT secret from environment"""
+    return os.getenv("JWT_SECRET", "your-secret-key")
 
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> Optional[User]:
@@ -24,7 +25,7 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Optiona
         token = auth_header.split(" ")[1]
 
         # Decode JWT token
-        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=["HS256"])
         user_id = payload.get("user_id")
 
         if not user_id:
@@ -59,7 +60,19 @@ def check_permission(required_permission: str, resource: str = None):
         permissions = current_user.permissions or {}
         resource_permissions = permissions.get(resource, {})
 
-        if not resource_permissions.get(required_permission, False):
+        # Handle synonyms for common actions (to prevent 403 errors due to naming mismatch)
+        synonyms = {
+            "view": ["view", "read"],
+            "read": ["view", "read"],
+            "edit": ["edit", "write", "update"],
+            "update": ["edit", "write", "update"],
+            "delete": ["delete", "remove"]
+        }
+
+        search_keys = synonyms.get(required_permission, [required_permission])
+        has_perm = any(resource_permissions.get(key, False) for key in search_keys)
+
+        if not has_perm:
             raise HTTPException(
                 status_code=403,
                 detail=f"Insufficient permissions. Required: {resource}.{required_permission}"

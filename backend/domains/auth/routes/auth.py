@@ -256,14 +256,17 @@ async def login(
     try:
         # Get user from custom User table
         user = db.query(User).filter(User.email == email).first()
-        if not user or not user.is_active:
-            raise HTTPException(status_code=401, detail="Invalid credentials")
+        if not user:
+            raise HTTPException(status_code=401, detail="User does not exist. Please register first.")
+            
+        if not user.is_active:
+            raise HTTPException(status_code=401, detail="Your account is inactive. Please contact support.")
         
         # Check if user has a password_hash (local user or OAuth user who set password)
         if user.password_hash:
             # Verify password against stored hash
             if not verify_password(password, user.password_hash):
-                raise HTTPException(status_code=401, detail="Invalid credentials")
+                raise HTTPException(status_code=401, detail="Incorrect password.")
         else:
             # User doesn't have a password hash - they must use Firebase Auth
             # For email/password login, we need password_hash
@@ -485,7 +488,11 @@ async def get_current_user_info(
                 "sync_status": getattr(clinic, 'sync_status', 'local')
             }
     
-    # Return user with clinic info
+    # Get all clinics this user belongs to
+    from schemas import ClinicOut
+    clinics_list = [ClinicOut.from_orm(c) for c in user.clinics]
+    
+    # Return user with clinic info and all associated clinics
     return {
         "id": user.id,
         "email": user.email,
@@ -500,7 +507,8 @@ async def get_current_user_info(
         "synced_at": getattr(user, 'synced_at', None).isoformat() if getattr(user, 'synced_at', None) else None,
         "sync_status": getattr(user, 'sync_status', 'local'),
         "permissions": user.permissions,
-        "clinic": clinic_info
+        "clinic": clinic_info,
+        "clinics": clinics_list
     }
 
 @router.post("/onboarding")
@@ -538,7 +546,8 @@ async def complete_onboarding(
             "phone": data.get("clinic_phone", ""),
             "email": data.get("clinic_email", user.email),  # Default to user's email
             "specialization": data.get("specialization", "radiology"),
-            "subscription_plan": data.get("subscription_plan", "free")
+            "subscription_plan": data.get("subscription_plan", "free"),
+            "number_of_chairs": data.get("number_of_chairs", 1)
         }
         
         clinic = Clinic(**clinic_data)
@@ -548,6 +557,18 @@ async def complete_onboarding(
         
         # Update user with clinic_id
         user.clinic_id = clinic.id
+        
+        # Link this clinic to the owner via user_clinics (many-to-many)
+        from models import user_clinics
+        db.execute(
+            user_clinics.insert().values(
+                user_id=user.id,
+                clinic_id=clinic.id,
+                role='clinic_owner',
+                is_active=True,
+                created_at=datetime.utcnow()
+            )
+        )
         db.commit()
         db.refresh(user)
         

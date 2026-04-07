@@ -8,14 +8,17 @@ import {
   Animated,
   Dimensions,
   RefreshControl,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Bell, Calendar, X } from 'lucide-react-native';
+import { ChevronLeft, Bell as BellIcon, Calendar, X } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
 import { getAllScheduledNotifications } from '../../../../services/notifications';
 import { format } from 'date-fns';
 
 const { width: screenWidth } = Dimensions.get('window');
+const VIOLET = '#2E2A85';
 
 interface NotificationItem {
   id: string;
@@ -26,15 +29,18 @@ interface NotificationItem {
 }
 
 interface NotificationsScreenProps {
-  visible: boolean;
-  onClose: () => void;
+  visible?: boolean;
+  onClose?: () => void;
+  navigation?: any;
 }
 
 export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
-  visible,
+  visible = true,
   onClose,
+  navigation,
 }) => {
-  const [slideAnim] = useState(new Animated.Value(screenWidth));
+  const isNav = !!navigation;
+  const [slideAnim] = useState(new Animated.Value(isNav ? 0 : screenWidth));
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -81,20 +87,22 @@ export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
   }, [visible, loadNotifications]);
 
   useEffect(() => {
-    if (visible) {
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      Animated.timing(slideAnim, {
-        toValue: screenWidth,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
+    if (!isNav) {
+      if (visible) {
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      } else {
+        Animated.timing(slideAnim, {
+          toValue: screenWidth,
+          duration: 250,
+          useNativeDriver: true,
+        }).start();
+      }
     }
-  }, [visible]);
+  }, [visible, isNav]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -102,22 +110,27 @@ export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
   };
 
   const handleClose = () => {
-    Animated.timing(slideAnim, {
-      toValue: screenWidth,
-      duration: 250,
-      useNativeDriver: true,
-    }).start(() => onClose());
+    if (isNav) {
+      navigation.goBack();
+    } else {
+      Animated.timing(slideAnim, {
+        toValue: screenWidth,
+        duration: 250,
+        useNativeDriver: true,
+      }).start(() => onClose?.());
+    }
   };
 
-  if (!visible) return null;
+  if (!visible && !isNav) return null;
 
   return (
     <Animated.View
       style={[
         styles.overlay,
-        { transform: [{ translateX: slideAnim }] },
+        !isNav && { transform: [{ translateX: slideAnim }] },
       ]}
     >
+      <StatusBar barStyle="light-content" backgroundColor={VIOLET} />
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         {/* Header */}
         <View style={styles.header}>
@@ -126,16 +139,10 @@ export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
             onPress={handleClose}
             activeOpacity={0.7}
           >
-            <ChevronLeft size={24} color={colors.white} />
+            <ChevronLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Notifications</Text>
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={handleClose}
-            activeOpacity={0.7}
-          >
-            <X size={22} color={colors.white} />
-          </TouchableOpacity>
+          <View style={styles.headerButton} />
         </View>
 
         {/* Content */}
@@ -150,7 +157,7 @@ export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={colors.primary}
+              tintColor={VIOLET}
             />
           }
         >
@@ -162,11 +169,11 @@ export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
           ) : notifications.length === 0 ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconWrap}>
-                <Bell size={40} color={colors.gray400} />
+                <BellIcon size={40} color="#94A3B8" />
               </View>
-              <Text style={styles.emptyTitle}>You don't have any notifications</Text>
+              <Text style={styles.emptyTitle}>No notifications yet</Text>
               <Text style={styles.emptyMessage}>
-                Appointment reminders and updates will appear here when scheduled.
+                Your clinic updates and reminders will appear here.
               </Text>
             </View>
           ) : (
@@ -176,7 +183,7 @@ export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
                   styles.cardIcon,
                   item.type === 'appointment' && styles.cardIconAppointment,
                 ]}>
-                  <Calendar size={20} color={colors.primary} />
+                  <Calendar size={20} color={VIOLET} />
                 </View>
                 <View style={styles.cardContent}>
                   <Text style={styles.cardTitle} numberOfLines={1}>
@@ -200,38 +207,32 @@ export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
 
 const styles = StyleSheet.create({
   overlay: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: colors.white,
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#FFFFFF',
     zIndex: 1000,
   },
   container: {
     flex: 1,
-    width: screenWidth,
-    backgroundColor: colors.gray50,
+    backgroundColor: '#F8FAFC',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    backgroundColor: VIOLET,
   },
   headerButton: {
     width: 40,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 20,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: colors.white,
+    color: '#FFFFFF',
   },
   content: {
     flex: 1,
@@ -241,6 +242,7 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     flex: 1,
+    justifyContent: 'center',
   },
   loadingState: {
     flex: 1,
@@ -249,56 +251,56 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   loadingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.primary,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: VIOLET,
     marginBottom: 16,
   },
   loadingText: {
     fontSize: 15,
-    color: colors.gray500,
+    color: '#64748B',
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
-    paddingVertical: 60,
+    paddingVertical: 100,
   },
   emptyIconWrap: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: colors.gray100,
+    backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
   },
   emptyTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: colors.gray800,
+    fontWeight: '700',
+    color: '#1E293B',
     marginBottom: 8,
     textAlign: 'center',
   },
   emptyMessage: {
     fontSize: 15,
-    color: colors.gray500,
+    color: '#64748B',
     textAlign: 'center',
     lineHeight: 22,
   },
   card: {
     flexDirection: 'row',
-    backgroundColor: colors.white,
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: colors.gray100,
+    borderColor: '#E2E8F0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
   },
@@ -306,13 +308,13 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: colors.primaryBg,
+    backgroundColor: '#F5F3FF',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,
   },
   cardIconAppointment: {
-    backgroundColor: colors.primaryBg,
+    backgroundColor: '#F5F3FF',
   },
   cardContent: {
     flex: 1,
@@ -320,17 +322,17 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.gray900,
+    color: '#1E293B',
     marginBottom: 4,
   },
   cardMessage: {
     fontSize: 14,
-    color: colors.gray600,
+    color: '#64748B',
     lineHeight: 20,
     marginBottom: 4,
   },
   cardTime: {
     fontSize: 12,
-    color: colors.gray400,
+    color: '#94A3B8',
   },
 });

@@ -15,6 +15,10 @@ export type AuthContextType = {
   validationError: string
   isLoading: boolean
   refreshBackendUser: () => Promise<void>
+  isClinicSwitcherVisible: boolean
+  setIsClinicSwitcherVisible: (visible: boolean) => void
+  switchBranch: (clinicId: string) => Promise<void>
+  authProvider: 'google' | 'email' | 'apple' | null
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null)
@@ -26,72 +30,81 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
   const [backendUser, setBackendUser] = useState<BackendUser | null>(null)
   const [authEmail, setAuthEmail] = useState("")
   const [isLoading, setIsLoading] = useState(true)
+  const [isClinicSwitcherVisible, setIsClinicSwitcherVisible] = useState(false)
+  const [authProvider, setAuthProvider] = useState<'google' | 'email' | 'apple' | null>(null)
 
-  // Fetch backend user info
-  const fetchBackendUser = useCallback(async (firebaseUser: User) => {
+  // Background-sync with backend — does NOT block loading
+  const syncBackendUser = useCallback(async (firebaseUser: User, storedUser: BackendUser | null) => {
     try {
-      // Get Firebase ID token
       const idToken = await firebaseUser.getIdToken()
 
-      // Try to get stored user info first
-      const storedUser = await authApiService.getUserInfo()
-      if (storedUser) {
-        setBackendUser(storedUser)
-      }
+      // Race against a 12-second timeout so fetch never hangs indefinitely
+      const makeTimeout = () => new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Backend timeout')), 12000)
+      )
 
-      // Sync with backend - this will create/update user and get tokens
-      try {
-        await authApiService.oauthLogin(idToken)
-        // Fetch fresh user info from backend
-        const userInfo = await authApiService.getCurrentUser()
+      await Promise.race([authApiService.oauthLogin(idToken), makeTimeout()])
+      const userInfo = await Promise.race([authApiService.getCurrentUser(), makeTimeout()])
+
+      if (userInfo) {
         setBackendUser(userInfo)
-      } catch (backendError: any) {
-        console.warn('Backend sync failed:', backendError)
-        // Alert the user so they know something is wrong
+      } else if (!storedUser) {
+        // Backend returned nothing AND no cached session — force re-login
         showAlert(
           'Connection Issue',
-          'Could not connect to the server. Some features may not work.\n' + (backendError.message || '')
-        );
-
-        // If backend sync fails, try to use stored user info
-        if (!storedUser) {
-          // If no stored user, try to fetch from backend with existing token
-          try {
-            const userInfo = await authApiService.getCurrentUser()
-            setBackendUser(userInfo)
-          } catch {
-            // If that also fails, user might not exist in backend yet
-            // This is okay - they'll be created on next successful login
-          }
-        }
+          'Could not reach the server. Please check your connection and try again.'
+        )
+        await signOutUser()
       }
-    } catch (error) {
-      console.error('Error fetching backend user:', error)
+      // If userInfo is null but storedUser was already set, keep storedUser — do not overwrite with null
+    } catch (err: any) {
+      console.warn('[Auth] Backend sync failed:', err.message)
+      if (!storedUser) {
+        showAlert(
+          'Connection Issue',
+          'Could not reach the server. Please check your connection and try again.'
+        )
+        await signOutUser()
+      }
     }
   }, [])
 
   useEffect(() => {
-    // Listen to auth state changes
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setIsLoading(true);
-      setUser(firebaseUser);
+      setIsLoading(true)
+      setUser(firebaseUser)
 
       if (firebaseUser) {
-        // Fetch backend user info when Firebase user is available
-        await fetchBackendUser(firebaseUser);
-        setAuthEmail(firebaseUser.email || "");
-      } else {
-        // Clear backend user when Firebase user logs out
-        setBackendUser(null);
-        await authApiService.clearTokens();
-        setAuthEmail("");
-      }
+        // Determine provider
+        const providerId = firebaseUser.providerData[0]?.providerId
+        if (providerId === 'google.com') setAuthProvider('google')
+        else if (providerId === 'apple.com') setAuthProvider('apple')
+        else setAuthProvider('email')
 
-      setIsLoading(false);
-    });
+        setAuthEmail(firebaseUser.email || '')
+
+        // 1. Load cached user from AsyncStorage immediately (fast, local)
+        const storedUser = await authApiService.getUserInfo()
+        if (storedUser) {
+          setBackendUser(storedUser)
+        }
+
+        // 2. Unblock the loading screen — app can now navigate
+        setIsLoading(false)
+
+        // 3. Background-sync with backend (non-blocking)
+        syncBackendUser(firebaseUser, storedUser)
+      } else {
+        setBackendUser(null)
+        await authApiService.clearTokens()
+        setAuthEmail('')
+        setAuthProvider(null)
+        setIsLoading(false)
+      }
+    })
 
     return () => unsubscribe()
-  }, [fetchBackendUser])
+  }, [syncBackendUser])
 
   const logout = useCallback(async () => {
     await signOutUser()
@@ -102,9 +115,22 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
 
   const refreshBackendUser = useCallback(async () => {
     if (user) {
-      await fetchBackendUser(user)
+      const storedUser = await authApiService.getUserInfo()
+      await syncBackendUser(user, storedUser)
     }
-  }, [user, fetchBackendUser])
+  }, [user, syncBackendUser])
+
+  const switchBranch = useCallback(async (clinicId: string) => {
+    try {
+      const updatedUser = await authApiService.switchClinic(clinicId);
+      if (updatedUser) {
+        setBackendUser(updatedUser);
+      }
+    } catch (error) {
+      console.error('Error in switchBranch:', error);
+      throw error;
+    }
+  }, []);
 
   const validationError = useMemo(() => {
     if (!authEmail || authEmail.length === 0) return "can't be blank"
@@ -123,6 +149,10 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
     validationError,
     isLoading,
     refreshBackendUser,
+    isClinicSwitcherVisible,
+    setIsClinicSwitcherVisible,
+    switchBranch,
+    authProvider,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

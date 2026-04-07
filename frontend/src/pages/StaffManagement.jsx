@@ -3,7 +3,7 @@ import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { useHeader } from "../contexts/HeaderContext";
 import { useAuth } from "../contexts/AuthContext";
-import { api } from "../utils/api";
+import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import { ChevronLeft } from 'lucide-react';
 import StaffTable from "../components/settings/StaffTable";
 import StaffTableHeader from "../components/settings/StaffTableHeader";
@@ -11,6 +11,7 @@ import UserDetailsPanel from "../components/settings/UserDetailsPanel";
 import EditUserTab from "../components/settings/EditUserTab";
 import PermissionsTab from "../components/settings/PermissionsTab";
 import GearLoader from "../components/GearLoader";
+import FeatureLock from "../components/FeatureLock";
 
 const StaffManagement = () => {
   const { setTitle } = useHeader();
@@ -73,7 +74,11 @@ const StaffManagement = () => {
       setUsers(data);
     } catch (error) {
       console.error("Error fetching users:", error);
-      toast.error("Failed to load users");
+      toast.error(getPermissionAwareErrorMessage(
+        error,
+        "Failed to load users",
+        "You don't have permission to view staff users."
+      ));
     } finally {
       setLoading(false);
     }
@@ -138,6 +143,25 @@ const StaffManagement = () => {
     setSelectedUser(null);
   };
 
+  const handleToggleActive = async (targetUser) => {
+    if (targetUser.role === 'clinic_owner') {
+      toast.error('Cannot deactivate the clinic owner');
+      return;
+    }
+    try {
+      const newState = !targetUser.is_active;
+      await api.put(`/clinic-users/${targetUser.id}`, { is_active: newState });
+      toast.success(`${targetUser.name} marked as ${newState ? 'active' : 'inactive'}`);
+      fetchUsers();
+    } catch (err) {
+      toast.error(getPermissionAwareErrorMessage(
+        err,
+        'Failed to update status',
+        "You don't have permission to update user status."
+      ));
+    }
+  };
+
   const handleSaveEditUser = async (userId, updateData) => {
     try {
       setSavingEditUser(true);
@@ -150,7 +174,11 @@ const StaffManagement = () => {
       }
     } catch (error) {
       console.error("Error updating user:", error);
-      toast.error("Failed to update user");
+      toast.error(getPermissionAwareErrorMessage(
+        error,
+        "Failed to update user",
+        "You don't have permission to update this user."
+      ));
     } finally {
       setSavingEditUser(false);
     }
@@ -164,7 +192,11 @@ const StaffManagement = () => {
       await fetchUsers();
     } catch (error) {
       console.error("Error updating permissions:", error);
-      toast.error("Failed to update permissions");
+      toast.error(getPermissionAwareErrorMessage(
+        error,
+        "Failed to update permissions",
+        "You don't have permission to update user permissions."
+      ));
     } finally {
       setSavingPermissions(false);
     }
@@ -189,8 +221,42 @@ const StaffManagement = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      <div className="flex-1 flex overflow-hidden">
+    <div className="flex flex-col h-full bg-transparent overflow-y-auto custom-scrollbar p-6 lg:p-8 pb-10">
+      
+      {/* Header */}
+      <div className="mb-6 flex justify-between items-end">
+        <div className="flex items-center gap-2 text-sm font-medium text-gray-500">
+          <span>Admin</span>
+          <span>/</span>
+          <span className="text-gray-900">Staff</span>
+        </div>
+      </div>
+
+      {/* Team Tabs Header */}
+      <div className="mb-6 border-b border-gray-200">
+        <div className="flex gap-6 -mb-px">
+          <button 
+            className="pb-3 text-sm font-medium border-b-2 border-[#29828a] text-[#29828a]"
+          >
+            Staff
+          </button>
+          <button 
+            onClick={() => navigate('/admin/permissions')}
+            className="pb-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-900 transition-colors"
+          >
+            Permissions
+          </button>
+          <button 
+            onClick={() => navigate('/admin/attendance')}
+            className="pb-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-900 transition-colors"
+          >
+            Attendance
+          </button>
+        </div>
+      </div>
+
+      <FeatureLock featureName="Staff Management & Roles">
+        <div className="flex-1 flex overflow-hidden bg-white rounded-xl shadow-sm border border-gray-100">
         <div className={`flex-1 overflow-y-auto transition-all duration-300 ${showUserPanel ? 'mr-96' : ''}`}>
           <div className="p-6">
             <StaffTableHeader
@@ -222,6 +288,8 @@ const StaffManagement = () => {
               users={filteredUsers}
               onUserClick={handleUserClick}
               searchQuery={searchQuery}
+              onToggleActive={handleToggleActive}
+              currentUserId={user?.id}
             />
           </div>
         </div>
@@ -346,6 +414,7 @@ const StaffManagement = () => {
           </div>
         </div>
       )}
+      </FeatureLock>
     </div>
   );
 };

@@ -12,6 +12,8 @@ import {
   Info
 } from "lucide-react";
 
+const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+
 const BookingPage = () => {
   const [searchParams] = useSearchParams();
   const [currentStep, setCurrentStep] = useState(1);
@@ -46,7 +48,6 @@ const BookingPage = () => {
     age: '',
     gender: '',
     village: '',
-    treatment: '',
     time: '',
     duration: '1',
     date: new Date().toISOString().split('T')[0],
@@ -161,7 +162,7 @@ const BookingPage = () => {
     try {
       console.log(`🎯 Getting next available slot for ${date}, duration: ${durationHours} hours, clinic: ${clinicId}`);
       const response = await fetch(
-        `http://localhost:8000/appointments/public/next-slot?clinic_id=${clinicId}&date=${date}&duration=${durationHours * 60}`,
+        `${BASE_URL}/appointments/public/next-slot?clinic_id=${clinicId}&date=${date}&duration=${durationHours * 60}`,
         {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' }
@@ -297,7 +298,6 @@ const BookingPage = () => {
         patient_name: formData.patientName,
         patient_email: formData.patientEmail,
         patient_phone: formData.patientPhone,
-        treatment: formData.treatment,
         appointment_date: selectedDate,
         start_time: finalStartTime,
         end_time: finalEndTime,
@@ -308,7 +308,7 @@ const BookingPage = () => {
 
       console.log('📤 Creating appointment:', appointmentData);
 
-      const response = await fetch('http://localhost:8000/appointments/public', {
+      const response = await fetch(`${BASE_URL}/appointments/public`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -339,19 +339,6 @@ const BookingPage = () => {
     { value: '2', label: '2 hours' }
   ];
 
-  const treatmentOptions = [
-    'Root Canal',
-    'Implants',
-    'Whitening',
-    'Dentures',
-    'Checkup',
-    'Cleaning',
-    'Filling',
-    'Extraction',
-    'Consultation',
-    'Follow-up'
-  ];
-
   // Fetch existing appointments for the clinic and date (public endpoint)
   const fetchExistingAppointments = async (date) => {
     const clinicId = searchParams.get('clinic');
@@ -365,7 +352,7 @@ const BookingPage = () => {
       console.log('🔄 Fetching appointments for date:', date, 'clinic:', clinicId);
 
       // Use public endpoint (no authentication required) - now by clinic instead of doctor
-      const response = await fetch(`http://localhost:8000/appointments/public?date_from=${date}&date_to=${date}&clinic_id=${clinicId}`, {
+      const response = await fetch(`${BASE_URL}/appointments/public?date_from=${date}&date_to=${date}&clinic_id=${clinicId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -490,7 +477,6 @@ const BookingPage = () => {
               <p><strong>Date:</strong> {new Date(formData.date).toLocaleDateString()}</p>
               <p><strong>Time:</strong> {formData.time}</p>
               <p><strong>Duration:</strong> {durationOptions.find(opt => opt.value === formData.duration)?.label}</p>
-              <p><strong>Treatment:</strong> {formData.treatment}</p>
             </div>
           </div>
           <button
@@ -503,7 +489,6 @@ const BookingPage = () => {
                 age: '',
                 gender: '',
                 village: '',
-                treatment: '',
                 time: '',
                 duration: '1',
                 date: new Date().toISOString().split('T')[0],
@@ -679,26 +664,6 @@ const BookingPage = () => {
                 <Calendar className="w-5 h-5 mr-2 text-[#2a276e]" />
                 Appointment Details
               </h3>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Treatment Type *
-                </label>
-                <select
-                  name="treatment"
-                  value={formData.treatment}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent transition-colors"
-                >
-                  <option value="">Select treatment type</option>
-                  {treatmentOptions.map((treatment) => (
-                    <option key={treatment} value={treatment}>
-                      {treatment}
-                    </option>
-                  ))}
-                </select>
-              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

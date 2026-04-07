@@ -55,6 +55,46 @@ const Settings = () => {
   // Tab management
   const [activeTab, setActiveTab] = useState("profile");
   const [profileSubTab, setProfileSubTab] = useState("users"); // 'users', 'clinic', or 'devices'
+
+  // New Sidebar Navigation States
+  const [sidebarTab, setSidebarTab] = useState("general");
+  const [practiceTab, setPracticeTab] = useState("procedures");
+  const [teamTab, setTeamTab] = useState("staff");
+  const [practiceExpanded, setPracticeExpanded] = useState(true);
+
+  // Helper for Sidebar items
+  const SidebarItem = ({ id, icon, label, current, setter, hasChildren, isExpanded, toggleExpand }) => (
+    <div className="mb-1">
+      <button
+        onClick={() => {
+            setter(id);
+            if (hasChildren && toggleExpand) toggleExpand();
+            
+            // Map clicks to legacy state to preserve existing component logic
+            if (id === 'general') {
+              setActiveTab('profile');
+              setProfileSubTab('clinic');
+            } else if (id === 'team') {
+              setActiveTab('profile');
+              setProfileSubTab('users');
+            } else if (id === 'daily_admin') {
+              setActiveTab('daily_admin'); // We'll modify the layout below to catch this
+            }
+        }}
+        className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg transition-all duration-200 ${current === id ? 'bg-[#2a276e] text-white font-medium shadow-md translate-x-1' : 'text-gray-600 hover:bg-gray-100/80 hover:text-gray-900 border border-transparent hover:border-gray-200/60'}`}
+      >
+        <div className="flex items-center gap-3">
+            <span className="text-xl drop-shadow-sm">{icon}</span>
+            <span className="font-medium tracking-wide text-[15px]">{label}</span>
+        </div>
+        {hasChildren && (
+            <svg className={`w-4 h-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+        )}
+      </button>
+    </div>
+  );
   
   // Device management state
   const [userDevices, setUserDevices] = useState({}); // { userId: [devices] }
@@ -1192,60 +1232,71 @@ const Settings = () => {
   };
 
   return (
-    <div className="p-6">
-      {/* Header - Removed, now in global Header */}
-
-      {/* Tabbed Section */}
-      <div className="border-b border-gray-200 mb-6">
-        <div className="flex overflow-x-auto">
-          <button
-            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "profile" ? "border-[#2a276e] text-[#2a276e]" : "border-transparent text-gray-600 hover:text-gray-900"}`}
-            onClick={() => setActiveTab("profile")}
-          >
-            👤 Profile
-          </button>
-          <button
-            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "billing" ? "border-blue-600 text-blue-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
-            onClick={() => setActiveTab("billing")}
-          >
-            Billing
-          </button>
-          <button
-            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "templates" ? "border-blue-600 text-blue-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
-            onClick={() => setActiveTab("templates")}
-          >
-            📝 Message Templates
-          </button>
-          <button
-            className={`px-6 py-3 font-medium text-sm focus:outline-none transition border-b-2 whitespace-nowrap ${activeTab === "other" ? "border-blue-600 text-blue-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}
-            onClick={() => setActiveTab("other")}
-          >
-            Other
-          </button>
+    <div className="flex h-[calc(100vh-50px)] w-full bg-[#f8fafc] overflow-hidden -m-6 animate-fade-in rounded-xl border border-gray-200 shadow-sm relative z-0">
+      {/* Secondary Sidebar Navigation */}
+      <div className="w-72 bg-white/60 backdrop-blur-xl border-r border-gray-200/60 flex flex-col h-full shrink-0 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.1)] z-10 relative">
+        <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent pointer-events-none"></div>
+        <div className="p-6 border-b border-gray-100/80 relative">
+          <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#1a1548] to-[#2a276e] tracking-tight">Practice Hub</h2>
+          <p className="text-xs text-gray-400 mt-1 uppercase tracking-wider font-semibold">Configuration</p>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-0.5 custom-scrollbar relative">
+          <SidebarItem id="general" icon="⚙️" label="General" current={sidebarTab} setter={setSidebarTab} />
+          <SidebarItem id="branches" icon="🏥" label="Branches" current={sidebarTab} setter={setSidebarTab} />
+          <SidebarItem id="team" icon="👥" label="Team" current={sidebarTab} setter={setSidebarTab} />
+          <SidebarItem 
+            id="practice_settings" 
+            icon="🩺" 
+            label="Practice Settings" 
+            current={sidebarTab} 
+            setter={setSidebarTab} 
+            hasChildren
+            isExpanded={practiceExpanded}
+            toggleExpand={() => setPracticeExpanded(!practiceExpanded)}
+          />
+          <SidebarItem id="daily_admin" icon="🏢" label="Daily Admin" current={sidebarTab} setter={setSidebarTab} />
+          <SidebarItem id="notifications" icon="🔔" label="Notifications" current={sidebarTab} setter={setSidebarTab} />
+          <SidebarItem id="review" icon="⭐" label="Review Settings" current={sidebarTab} setter={setSidebarTab} />
+          <SidebarItem id="prescription" icon="💊" label="Prescription Settings" current={sidebarTab} setter={setSidebarTab} />
+          <SidebarItem id="account" icon="🔐" label="Account Settings" current={sidebarTab} setter={setSidebarTab} />
         </div>
       </div>
-      <div className="max-h-[calc(100vh-250px)] overflow-y-auto">
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+        {/* Subtle background pattern */}
+        <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#2a276e 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
+        <div className="flex-1 overflow-y-auto p-8 md:p-10 xl:p-12 custom-scrollbar relative z-10">
+          <div className="max-w-6xl mx-auto min-h-full">
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-gray-900 tracking-tight capitalize">
+                {sidebarTab.replace('_', ' ')}
+              </h1>
+              
+              {sidebarTab === "practice_settings" && (
+                <div className="mt-6 border-b border-gray-200 overflow-x-auto pb-px">
+                  <div className="flex gap-1 min-w-max">
+                    {["procedures", "patient_complaints", "medical_history", "advices", "on_examination", "dental_history", "diagnosis", "allergies", "ongoing_medication", "additional_fees"].map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setPracticeTab(tab)}
+                        className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-all duration-200 ${
+                          practiceTab === tab 
+                            ? "border-[#2a276e] text-[#2a276e]" 
+                            : "border-transparent text-gray-500 hover:text-gray-900 hover:border-gray-300"
+                        }`}
+                      >
+                        {tab.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
           {activeTab === "profile" && (
             <div>
-              <h3 className="text-lg font-semibold mb-4">Profile Settings</h3>
-              
-              {/* Sub-tabs for Users and Clinic */}
-              <div className="flex border-b border-gray-200 mb-6">
-                <button
-                  className={`px-4 py-2 font-medium text-sm focus:outline-none transition border-b-2 ${profileSubTab === "users" ? "border-[#2a276e] text-[#2a276e]" : "border-transparent text-gray-600 hover:text-gray-900"}`}
-                  onClick={() => setProfileSubTab("users")}
-                >
-                  👥 Users (Staff)
-                </button>
-                <button
-                  className={`px-4 py-2 font-medium text-sm focus:outline-none transition border-b-2 ${profileSubTab === "clinic" ? "border-[#2a276e] text-[#2a276e]" : "border-transparent text-gray-600 hover:text-gray-900"}`}
-                  onClick={() => setProfileSubTab("clinic")}
-                >
-                  🏥 Clinic
-                </button>
-              </div>
 
-              {/* User Profile Sub-tab */}
               {profileSubTab === "users" && (
                 <div>
                   <h3 className="text-lg font-semibold mb-4">Staff Management</h3>
@@ -1471,8 +1522,8 @@ const Settings = () => {
             </div>
           )}
 
-          {activeTab === "billing" && (
-            <div>
+          {(activeTab === "billing" || sidebarTab === "daily_admin") && (
+            <div className="mb-12">
               <h3 className="text-lg font-semibold mb-4">Treatment Types and Pricing</h3>
               {treatmentTypesError && <div className="text-red-500 mb-2">{treatmentTypesError}</div>}
               {!hasPermission("billing:view") ? (
@@ -1744,8 +1795,8 @@ const Settings = () => {
           )}
 
 
-          {activeTab === "templates" && (
-            <div>
+          {(activeTab === "templates" || sidebarTab === "daily_admin") && (
+            <div className="mb-12 border-t pt-8 mt-8 border-gray-200">
               <h3 className="text-lg font-semibold mb-4">Message Templates</h3>
               <p className="text-sm text-gray-600 mb-6">
                 Customize automated messages sent to patients. Use variables like {"{patient_name}"}, {"{clinic_name}"}, etc.
@@ -1811,8 +1862,8 @@ const Settings = () => {
             </div>
           )}
 
-          {activeTab === "other" && (
-            <div>
+          {(activeTab === "other" || sidebarTab === "notifications") && (
+            <div className="mb-12">
               <h3 className="text-lg font-semibold mb-4">Other Settings</h3>
               
               {/* Email Notification Testing */}
@@ -1876,8 +1927,6 @@ const Settings = () => {
               </div>
             </div>
           )}
-      </div>
-
       {/* Add User Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50">
@@ -2538,6 +2587,9 @@ const Settings = () => {
           savingPermissions={savingPermissions}
         />
       )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

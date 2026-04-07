@@ -35,7 +35,21 @@ class PatientService(PatientServiceProtocol):
         if 'treatment_type' in patient_data:
             treatment_type = self._validate_treatment_type(patient_data['treatment_type'], clinic_id)
             if not treatment_type:
-                raise ValueError(f"Treatment type '{patient_data['treatment_type']}' not found in clinic")
+                # Auto-create the treatment type with default price instead of failing
+                try:
+                    from models import TreatmentType
+                    db = getattr(self.patient_repo, 'db', None)
+                    if db:
+                        new_tf = TreatmentType(
+                            clinic_id=clinic_id,
+                            name=patient_data['treatment_type'],
+                            price=2000.0,
+                            is_active=True
+                        )
+                        db.add(new_tf)
+                        db.flush()
+                except Exception as e:
+                    print(f"Warning: Could not auto-create treatment type: {e}")
 
         # Create patient
         patient_dict = patient_data.copy()
@@ -77,7 +91,21 @@ class PatientService(PatientServiceProtocol):
         if 'treatment_type' in updates:
             treatment_type = self._validate_treatment_type(updates['treatment_type'], clinic_id)
             if not treatment_type:
-                raise ValueError(f"Treatment type '{updates['treatment_type']}' not found in clinic")
+                # Auto-create the treatment type with default price instead of failing
+                try:
+                    from models import TreatmentType
+                    db = getattr(self.patient_repo, 'db', None)
+                    if db:
+                        new_tf = TreatmentType(
+                            clinic_id=clinic_id,
+                            name=updates['treatment_type'],
+                            price=2000.0,
+                            is_active=True
+                        )
+                        db.add(new_tf)
+                        db.flush()
+                except Exception as e:
+                    print(f"Warning: Could not auto-create treatment type during update: {e}")
 
         return self.patient_repo.update(patient_id, updates)
 
@@ -105,6 +133,10 @@ class PatientService(PatientServiceProtocol):
             return []
 
         return self.patient_repo.search_by_name(clinic_id, query.strip(), skip, limit)
+
+    def check_duplicates(self, clinic_id: int, name: Optional[str] = None, phone: Optional[str] = None, email: Optional[str] = None) -> List[Patient]:
+        """Check for potential duplicate patients"""
+        return self.patient_repo.search_duplicates(clinic_id, name, phone, email)
 
     def get_patient_with_payment_summary(self, patient_id: int, clinic_id: int) -> Optional[Dict[str, Any]]:
         """Get patient with payment summary"""
@@ -208,7 +240,7 @@ class PatientService(PatientServiceProtocol):
         else:
             new_num = 1
 
-        return "04d"
+        return f"INV-{year}-{new_num:04d}"
 
     def _calculate_outstanding_balance(self, patient: Patient, total_paid: float) -> float:
         """Calculate outstanding balance for patient"""

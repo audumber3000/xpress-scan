@@ -14,8 +14,8 @@ from pydantic import BaseModel
 
 router = APIRouter(tags=["WhatsApp Advanced Messages"])
 
-# WhatsApp Service URL (Node.js service)
-WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://localhost:3001")
+# MolarPlus Nexus Service URL
+NEXUS_SERVICES_URL = os.getenv("NEXUS_SERVICES_URL", "http://localhost:8001")
 
 
 # Pydantic schemas
@@ -87,7 +87,7 @@ async def send_button_message(
             payload["mediaType"] = request.mediaType or "image/jpeg"
         
         response = requests.post(
-            f"{WHATSAPP_SERVICE_URL}/api/send-button/{current_user.id}",
+            f"{NEXUS_SERVICES_URL}/api/send-button/{current_user.id}",
             json=payload,
             timeout=60
         )
@@ -125,7 +125,7 @@ async def send_list_message(
             })
         
         response = requests.post(
-            f"{WHATSAPP_SERVICE_URL}/api/send-list/{current_user.id}",
+            f"{NEXUS_SERVICES_URL}/api/send-list/{current_user.id}",
             json={
                 "phone": request.phone,
                 "title": request.title,
@@ -161,7 +161,7 @@ async def send_contact_message(
     """Send a contact card message"""
     try:
         response = requests.post(
-            f"{WHATSAPP_SERVICE_URL}/api/send-contact/{current_user.id}",
+            f"{NEXUS_SERVICES_URL}/api/send-contact/{current_user.id}",
             json={
                 "phone": request.phone,
                 "contact": {

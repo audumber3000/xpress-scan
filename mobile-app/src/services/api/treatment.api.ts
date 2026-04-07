@@ -6,7 +6,7 @@ export class TreatmentApiService extends BaseApiService {
       console.log('🏥 [API] Fetching treatment types...');
 
       const headers = await this.getAuthHeaders();
-      const response = await fetch(`${this.baseURL}/treatment-types`, {
+      const response = await fetch(`${this.baseURL}/treatment-types/`, {
         method: 'GET',
         headers,
       });
@@ -38,7 +38,7 @@ export class TreatmentApiService extends BaseApiService {
       console.log('👨‍⚕️ [API] Fetching referring doctors...');
 
       const headers = await this.getAuthHeaders();
-      const response = await fetch(`${this.baseURL}/referring-doctors`, {
+      const response = await fetch(`${this.baseURL}/referring-doctors/`, {
         method: 'GET',
         headers,
       });

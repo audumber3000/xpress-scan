@@ -6,7 +6,8 @@ class TemplateService:
     def __init__(self):
         # Use absolute path to templates directory
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        self.templates_dir = os.path.join(current_dir, "..", "templates")
+        # Path from backend/domains/infrastructure/services/ to backend/templates/
+        self.templates_dir = os.path.join(current_dir, "..", "..", "..", "templates")
     
     def load_template(self, template_name: str) -> str:
         """

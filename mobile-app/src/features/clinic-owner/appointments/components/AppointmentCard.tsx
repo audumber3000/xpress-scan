@@ -7,24 +7,21 @@ interface AppointmentCardProps {
 }
 
 const getStatusColor = (status: string) => {
-  switch (status.toLowerCase()) {
-    case 'finished':
-      return { border: '#10B981', bg: '#D1FAE5', text: '#065F46' };
-    case 'encounter':
-      return { border: '#F59E0B', bg: '#FEF3C7', text: '#92400E' };
-    case 'registered':
-      return { border: '#6B7280', bg: '#F3F4F6', text: '#374151' };
-    case 'cancelled':
-      return { border: '#EF4444', bg: '#FEE2E2', text: '#991B1B' };
-    case 'confirmed':
-      return { border: '#F59E0B', bg: '#FEF3C7', text: '#92400E' }; // Orange for Pending
-    case 'accepted':
-      return { border: '#10B981', bg: '#D1FAE5', text: '#065F46' }; // Green for Accepted
-    case 'rejected':
-      return { border: '#EF4444', bg: '#FEE2E2', text: '#991B1B' }; // Red for Rejected
-    default:
-      return { border: '#6B7280', bg: '#F3F4F6', text: '#374151' };
+  const s = (status || 'booked').toLowerCase();
+  if (s === 'finished') {
+    return { border: '#0694a2', bg: '#e1effe', text: '#1e429f' }; // Teal/Greenish
   }
+  if (s === 'accepted') {
+    return { border: '#E29312', bg: '#FFF4E5', text: '#B45309' }; // Light Orange
+  }
+  if (s === 'checked in' || s === 'checking' || s === 'encounter') {
+    return { border: '#10B981', bg: '#D1FAE5', text: '#065F46' }; // Green
+  }
+  if (s === 'cancelled' || s === 'rejected') {
+    return { border: '#EF4444', bg: '#FEE2E2', text: '#991B1B' }; // Red
+  }
+  // Default/Booked/Confirmed
+  return { border: '#6B7280', bg: '#F3F4F6', text: '#374151' }; // Grey
 };
 
 export const AppointmentCard: React.FC<AppointmentCardProps> = ({ appointment, onPress }) => {
@@ -40,18 +37,18 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({ appointment, o
       <View style={styles.appointmentContent}>
         <View style={styles.appointmentLeft}>
           <Text style={styles.appointmentTime}>
-            {appointment.startTime.substring(0, 5)}
+            {(appointment.startTime || '10:00').substring(0, 5)}
           </Text>
           <Text style={styles.appointmentPeriod}>AM</Text>
         </View>
         <View style={styles.appointmentMiddle}>
-          <Text style={styles.appointmentPatient}>{appointment.patientName}</Text>
-          <Text style={styles.appointmentTreatment}>{appointment.treatment || 'Treatment'}</Text>
+          <Text style={styles.appointmentPatient}>{appointment.patientName || 'Anonymous'}</Text>
+          <Text style={styles.appointmentTreatment}>{appointment.doctor || appointment.notes || 'General Visit'}</Text>
         </View>
         <View style={styles.appointmentRight}>
           <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
             <Text style={[styles.statusText, { color: statusColors.text }]}>
-              {appointment.status.toLowerCase() === 'confirmed' ? 'PENDING' : appointment.status.toUpperCase()}
+              {(appointment.status || 'booked').toLowerCase() === 'confirmed' ? 'PENDING' : (appointment.status || 'booked').toUpperCase()}
             </Text>
           </View>
           <View style={[styles.statusDot, { backgroundColor: statusColors.border }]} />

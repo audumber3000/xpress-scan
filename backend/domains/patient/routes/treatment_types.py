@@ -8,7 +8,7 @@ from core.auth_utils import get_current_user
 
 router = APIRouter()
 
-@router.get("/", response_model=List[TreatmentTypeOut])
+@router.get("", response_model=List[TreatmentTypeOut])
 def list_treatment_types(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Get all treatment types for current clinic"""
     # Check if user has permission to view billing
@@ -20,7 +20,7 @@ def list_treatment_types(db: Session = Depends(get_db), current_user = Depends(g
     
     return db.query(TreatmentType).filter(TreatmentType.clinic_id == current_user.clinic_id).all()
 
-@router.post("/", response_model=TreatmentTypeOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=TreatmentTypeOut, status_code=status.HTTP_201_CREATED)
 def create_treatment_type(treatment_type: TreatmentTypeCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Create a new treatment type for current clinic"""
     # Check if user has permission to edit billing

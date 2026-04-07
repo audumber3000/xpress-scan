@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Path, Request
 from sqlalchemy.orm import Session
 from database import SessionLocal
-from models import Patient, Payment, TreatmentType, Invoice, InvoiceLineItem, InvoiceAuditLog
+from models import Patient, Payment, TreatmentType, Invoice, InvoiceLineItem, InvoiceAuditLog, PatientDocument
 from schemas import PatientCreate, PatientOut
 from typing import List
 from schemas import PatientResponse
@@ -23,7 +23,7 @@ def get_db():
     finally:
         db.close()
 
-@router.get("/", response_model=List[PatientOut])
+@router.get("", response_model=List[PatientOut])
 def get_patients(
     skip: int = 0, 
     limit: int = 100, 
@@ -38,9 +38,14 @@ def get_patients(
         Patient.clinic_id == current_user.clinic_id
     ).offset(skip).limit(limit).all()
     
+    # Enrich patients with last_visit
+    for p in patients:
+        last_report = db.query(Invoice).filter(Invoice.patient_id == p.id).order_by(Invoice.created_at.desc()).first()
+        p.last_visit = last_report.created_at if last_report else p.created_at
+        
     return patients
 
-@router.post("/", response_model=PatientOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=PatientOut, status_code=status.HTTP_201_CREATED)
 def create_patient(
     patient: PatientCreate, 
     db: Session = Depends(get_db),
@@ -48,14 +53,18 @@ def create_patient(
 ):
     """Create a new patient for current clinic and automatically create draft invoice"""
     try:
-        # Set clinic_id from current user
+        # Set clinic_id and display_id
         patient_data = patient.dict()
         patient_data['clinic_id'] = current_user.clinic_id
         
+        # Generate 6-digit display ID
+        count = db.query(Patient).filter(Patient.clinic_id == current_user.clinic_id).count()
+        patient_data['display_id'] = str(100000 + count + 1)
+
         # Create patient first
         db_patient = Patient(**patient_data)
         db.add(db_patient)
-        db.flush()  # Flush to get the patient ID without committing
+        db.flush()
         
         # Find treatment type to get price
         treatment_type = db.query(TreatmentType).filter(
@@ -145,14 +154,18 @@ def create_patient(
                 if len(clean_phone) == 10:
                     clean_phone = "91" + clean_phone
                 
-                WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://localhost:3001")
+                # WhatsApp Service URL (MolarPlus Nexus)
+                NEXUS_SERVICES_URL = os.getenv("NEXUS_SERVICES_URL", "http://localhost:8001")
                 requests.post(
-                    f"{WHATSAPP_SERVICE_URL}/api/send/{current_user.id}",
+                    f"{NEXUS_SERVICES_URL}/api/send/{current_user.id}",
                     json={"phone": clean_phone, "message": rendered_message},
                     timeout=30
                 )
             except Exception as e:
                 print(f"⚠️ Welcome message error: {e}")
+        
+        # Enrich for response
+        db_patient.last_visit = db_patient.created_at
         
         return db_patient
     except Exception as e:
@@ -236,4 +249,86 @@ def get_unique_villages(
     # Extract village names from the query result
     village_list = [village[0] for village in villages if village[0]]
     
-    return {"villages": village_list} 
+    return {"villages": village_list}
+
+@router.post("/import")
+async def import_patients(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_patients_edit)
+):
+    """Import patients from a CSV file"""
+    import csv
+    import io
+    
+    try:
+        form = await request.form()
+        file = form.get("file")
+        if not file:
+            raise HTTPException(status_code=400, detail="No file uploaded")
+            
+        content = await file.read()
+        decoded = content.decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(decoded))
+        
+        imported_count = 0
+        errors = []
+        
+        for row in csv_reader:
+            try:
+                # Map CSV columns to Patient model
+                # Expected: name, age, gender, phone, village, treatment_type, referred_by, blood_group, patient_history, notes, display_id
+                patient_data = {
+                    "clinic_id": current_user.clinic_id,
+                    "name": (row.get("name") or "").strip(),
+                    "age": int(row.get("age")) if row.get("age") and str(row.get("age")).isdigit() else 0,
+                    "gender": (row.get("gender") or "Other").strip(),
+                    "phone": (row.get("phone") or "").strip(),
+                    "village": (row.get("village") or "").strip(),
+                    "treatment_type": (row.get("treatment_type") or "General").strip(),
+                    "referred_by": (row.get("referred_by") or "").strip(),
+                    "blood_group": (row.get("blood_group") or "").strip(),
+                    "patient_history": (row.get("patient_history") or "").strip(),
+                    "notes": (row.get("notes") or "").strip(),
+                    "display_id": str(100000 + imported_count + 1 + db.query(Patient).filter(Patient.clinic_id == current_user.clinic_id).count())
+                }
+                
+                if not patient_data["name"] or not patient_data["phone"]:
+                    errors.append(f"Row {imported_count + 1}: Name and phone are required")
+                    continue
+                    
+                db_patient = Patient(**patient_data)
+                db.add(db_patient)
+                imported_count += 1
+            except Exception as row_err:
+                errors.append(f"Row {imported_count + 1}: {str(row_err)}")
+                
+        db.commit()
+        return {
+            "status": "success",
+            "message": f"Successfully imported {imported_count} patients",
+            "imported_count": imported_count,
+            "errors": errors
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
+
+@router.post("/{patient_id}/documents/external")
+def add_external_document(
+    patient_id: int,
+    doc_data: dict,
+    db: Session = Depends(get_db)
+):
+    """Add a document reference from an external service (e.g. Consent PDF)"""
+    new_doc = PatientDocument(
+        patient_id=patient_id,
+        clinic_id=doc_data.get('clinic_id'),
+        file_name=doc_data.get('file_name'),
+        file_path=doc_data.get('file_path'),
+        file_type='pdf',
+        created_at=datetime.utcnow()
+    )
+    db.add(new_doc)
+    db.commit()
+    return {"status": "success", "id": new_doc.id}

@@ -9,7 +9,7 @@ export const patientService = {
    * Get all patients for the clinic
    */
   getPatients: async (params = {}) => {
-    return await api.get('/patients/', { params });
+    return await api.get('/patients', { params });
   },
 
   /**

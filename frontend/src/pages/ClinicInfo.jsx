@@ -16,6 +16,7 @@ const ClinicInfo = () => {
     address: '',
     phone: '',
     email: '',
+    logo_url: '',
     gst_number: '',
     timings: {
       monday: { open: '08:00', close: '20:00', closed: false },
@@ -29,6 +30,7 @@ const ClinicInfo = () => {
   });
   const [loadingClinicData, setLoadingClinicData] = useState(false);
   const [savingClinicData, setSavingClinicData] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
 
   useEffect(() => {
     setTitle(
@@ -54,6 +56,7 @@ const ClinicInfo = () => {
         address: data.address || '',
         phone: data.phone || '',
         email: data.email || '',
+        logo_url: data.logo_url || data.logo || '',
         gst_number: data.gst_number || '',
         timings: data.timings || clinicData.timings
       });
@@ -63,6 +66,33 @@ const ClinicInfo = () => {
     } finally {
       setLoadingClinicData(false);
     }
+  };
+
+  const handleLogoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/jpg", "image/webp"].includes(file.type)) {
+      toast.error('Please upload PNG/JPG/WEBP image');
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      toast.error('Logo must be under 1MB');
+      return;
+    }
+
+    setLogoUploading(true);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const base64 = ev.target?.result;
+      setClinicData((prev) => ({ ...prev, logo_url: base64 }));
+      setLogoUploading(false);
+      toast.success('Logo selected. Click Save Changes to apply.');
+    };
+    reader.onerror = () => {
+      setLogoUploading(false);
+      toast.error('Failed to read logo file');
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSaveClinicData = async () => {
@@ -116,6 +146,40 @@ const ClinicInfo = () => {
             {/* Basic Information */}
             <div>
               <h5 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">Basic Information</h5>
+              <div className="mb-5 p-4 rounded-lg border border-gray-200 bg-gray-50">
+                <label className="block text-sm font-medium text-gray-700 mb-3">Clinic Logo</label>
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="w-20 h-20 rounded-lg bg-white border border-gray-200 flex items-center justify-center overflow-hidden">
+                    {clinicData.logo_url ? (
+                      <img src={clinicData.logo_url} alt="Clinic Logo" className="w-full h-full object-contain" />
+                    ) : (
+                      <span className="text-[11px] text-gray-400 text-center px-1">No logo</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="px-4 py-2 bg-[#2D9596] text-white rounded-lg hover:bg-[#1F6B72] cursor-pointer text-sm font-medium transition-colors">
+                      {logoUploading ? 'Uploading...' : 'Upload Logo'}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={handleLogoUpload}
+                        className="hidden"
+                        disabled={logoUploading}
+                      />
+                    </label>
+                    {clinicData.logo_url && (
+                      <button
+                        type="button"
+                        onClick={() => setClinicData((prev) => ({ ...prev, logo_url: '' }))}
+                        className="px-3 py-2 text-sm border border-red-200 text-red-500 rounded-lg hover:bg-red-50 transition-colors"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">PNG/JPG/WEBP, max 1MB. Save changes after upload.</p>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Clinic Name */}
                 <div>

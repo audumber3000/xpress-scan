@@ -16,6 +16,8 @@ const InvoiceItem = ({ invoice, onSelect }) => {
   const getStatusBadge = (status, paymentMode) => {
     const statusConfig = {
       draft: { color: "bg-gray-100 text-gray-800 border-gray-200", dot: "bg-gray-500" },
+      finalized: { color: "bg-blue-100 text-blue-800 border-blue-200", dot: "bg-blue-500" },
+      partially_paid: { color: "bg-amber-100 text-amber-800 border-amber-200", dot: "bg-amber-500" },
       paid_unverified: { color: "bg-orange-100 text-orange-800 border-orange-200", dot: "bg-orange-500" },
       paid_verified: { color: "bg-green-100 text-green-800 border-green-200", dot: "bg-green-500" },
       cancelled: { color: "bg-red-100 text-red-800 border-red-200", dot: "bg-red-500" }
@@ -37,14 +39,14 @@ const InvoiceItem = ({ invoice, onSelect }) => {
   return (
     <tr 
       onClick={() => onSelect(invoice.id)}
-      className="hover:bg-gray-50 transition-colors duration-150 cursor-pointer"
+      className="hover:bg-gray-50 transition-colors duration-150 cursor-pointer group"
     >
-      <td className="px-4 py-4 whitespace-nowrap text-center">
+      <td className="px-6 py-4 whitespace-nowrap">
         <span className="text-gray-900 font-medium text-sm">
           {invoice.invoice_number}
         </span>
       </td>
-      <td className="px-6 py-4 whitespace-nowrap">
+      <td className="px-6 py-5 whitespace-nowrap">
         <div>
           <div className="font-semibold text-gray-900">{invoice.patient_name || 'Unknown Patient'}</div>
           <div className="text-sm text-gray-500">Patient</div>

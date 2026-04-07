@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from database import get_db
 from core.auth_utils import get_current_user
-from models import User, ScheduledMessage, Patient
+from models import User, ScheduledMessage, Patient, WhatsAppChat, WhatsAppMessage
 import os
 import requests
 from typing import Optional, List
@@ -11,8 +11,8 @@ from pydantic import BaseModel
 
 router = APIRouter(tags=["WhatsApp Inbox"])
 
-# WhatsApp Service URL (Node.js service)
-WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://localhost:3001")
+# WhatsApp Service URL (MolarPlus Nexus)
+NEXUS_SERVICES_URL = os.getenv("NEXUS_SERVICES_URL", "http://localhost:8001")
 
 
 @router.post("/initialize")
@@ -24,7 +24,7 @@ async def initialize_whatsapp_session(
     try:
         # Call Node.js WhatsApp service
         response = requests.post(
-            f"{WHATSAPP_SERVICE_URL}/api/initialize/{current_user.id}",
+            f"{NEXUS_SERVICES_URL}/api/initialize/{current_user.id}",
             timeout=30
         )
         
@@ -60,7 +60,7 @@ async def get_whatsapp_status(
     try:
         # Call Node.js WhatsApp service
         response = requests.get(
-            f"{WHATSAPP_SERVICE_URL}/api/status/{current_user.id}",
+            f"{NEXUS_SERVICES_URL}/api/status/{current_user.id}",
             timeout=10
         )
         
@@ -98,7 +98,7 @@ async def disconnect_whatsapp(
     try:
         # Call Node.js WhatsApp service
         response = requests.post(
-            f"{WHATSAPP_SERVICE_URL}/api/disconnect/{current_user.id}",
+            f"{NEXUS_SERVICES_URL}/api/disconnect/{current_user.id}",
             timeout=30
         )
         
@@ -165,7 +165,7 @@ async def send_whatsapp_message(
         # Call Node.js WhatsApp service
         try:
             response = requests.post(
-                f"{WHATSAPP_SERVICE_URL}/api/send/{current_user.id}",
+                f"{NEXUS_SERVICES_URL}/api/send/{current_user.id}",
                 json={"phone": clean_phone, "message": message},
                 timeout=60
             )
@@ -219,30 +219,26 @@ async def get_whatsapp_chats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get list of WhatsApp chats/conversations"""
+    """Get list of WhatsApp chats/conversations from Database"""
     try:
-        # Call Node.js WhatsApp service
-        response = requests.get(
-            f"{WHATSAPP_SERVICE_URL}/api/chats/{current_user.id}",
-            timeout=10
-        )
+        chats = db.query(WhatsAppChat).filter(
+            WhatsAppChat.clinic_id == current_user.clinic_id
+        ).order_by(WhatsAppChat.last_message_time.desc().nulls_last()).all()
         
-        if response.status_code == 200:
-            return response.json()
-        else:
-            error_data = response.json() if response.text else {}
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=error_data.get("error", f"Service returned status {response.status_code}")
-            )
-    except HTTPException:
-        raise
-    except requests.exceptions.RequestException as e:
-        error_msg = f"Failed to connect to WhatsApp service: {str(e)}"
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=error_msg
-        )
+        result = []
+        for c in chats:
+            result.append({
+                "phone": c.phone_number,
+                "chatId": c.chat_id_serialized,
+                "name": c.contact_name,
+                "lastMessage": c.last_message,
+                "lastMessageTime": int(c.last_message_time.timestamp() * 1000) if c.last_message_time else 0,
+                "unreadCount": c.unread_count,
+                "profilePicUrl": c.profile_pic_url
+            })
+            
+        return {"success": True, "chats": result, "totalChats": len(result)}
+        
     except Exception as e:
         error_msg = f"Error getting chats: {str(e)}"
         raise HTTPException(
@@ -257,30 +253,39 @@ async def get_whatsapp_messages(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get messages for a specific chat/phone number"""
+    """Get messages for a specific chat/phone number from Database"""
     try:
-        # Call Node.js WhatsApp service
-        response = requests.get(
-            f"{WHATSAPP_SERVICE_URL}/api/messages/{current_user.id}/{phone}",
-            timeout=10
-        )
+        chat = db.query(WhatsAppChat).filter(
+            WhatsAppChat.clinic_id == current_user.clinic_id,
+            WhatsAppChat.phone_number == phone
+        ).first()
         
-        if response.status_code == 200:
-            return response.json()
-        else:
-            error_data = response.json() if response.text else {}
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=error_data.get("error", f"Service returned status {response.status_code}")
-            )
-    except HTTPException:
-        raise
-    except requests.exceptions.RequestException as e:
-        error_msg = f"Failed to connect to WhatsApp service: {str(e)}"
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=error_msg
-        )
+        if not chat:
+            return {"success": True, "messages": []}
+            
+        messages = db.query(WhatsAppMessage).filter(
+            WhatsAppMessage.chat_id == chat.id
+        ).order_by(WhatsAppMessage.timestamp.asc()).all()
+        
+        result = []
+        for m in messages:
+            result.append({
+                "id": m.id,
+                "chatId": chat.chat_id_serialized,
+                "from": m.from_phone,
+                "fromName": m.from_name,
+                "body": m.body,
+                "timestamp": int(m.timestamp.timestamp() * 1000) if m.timestamp else 0,
+                "type": m.type,
+                "isGroup": m.is_group,
+                "hasMedia": m.has_media,
+                "mediaUrl": m.media_url,
+                "isSent": m.is_sent,
+                "status": m.status
+            })
+            
+        return {"success": True, "messages": result}
+        
     except Exception as e:
         error_msg = f"Error getting messages: {str(e)}"
         raise HTTPException(

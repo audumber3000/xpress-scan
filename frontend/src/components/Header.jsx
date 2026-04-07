@@ -1,18 +1,32 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useInboxActions } from "../contexts/InboxContext";
 import { useHeader } from "../contexts/HeaderContext";
+import { Gem, Crown, Search, X } from "lucide-react";
 import { FaSync } from "react-icons/fa";
+import { api } from "../utils/api";
 
 const Header = () => {
-  const { user, signOut } = useAuth();
+  const { user, signOut, switchClinic } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { inboxActions } = useInboxActions();
   const { title, refreshFunction, loading, handleRefresh } = useHeader();
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const [showClinicDropdown, setShowClinicDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
+
+  // Search state
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchRef = useRef(null);
+  const searchInputRef = useRef(null);
   
   const isInboxPage = location.pathname === '/inbox';
   const isDashboardPage = location.pathname === '/dashboard';
@@ -53,12 +67,239 @@ const Header = () => {
     navigate("/login");
   };
 
+  const handleClinicSwitch = async (clinicId) => {
+    setIsSwitching(true);
+    try {
+      await switchClinic(clinicId);
+      setShowClinicDropdown(false);
+      // Refresh current page to load new clinic data
+      window.location.reload();
+    } catch (error) {
+      console.error("Failed to switch clinic:", error);
+    } finally {
+      setIsSwitching(false);
+    }
+  };
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Fetch notifications
+  const fetchNotifications = useCallback(async () => {
+    setNotifLoading(true);
+    try {
+      const data = await api.get('/activity-log');
+      setNotifications(Array.isArray(data) ? data : []);
+    } catch { /* silent */ } finally {
+      setNotifLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
+
+  // Search patients
+  useEffect(() => {
+    if (!searchQuery.trim()) { setSearchResults([]); return; }
+    const t = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const data = await api.get(`/patients?search=${encodeURIComponent(searchQuery)}&limit=8`);
+        setSearchResults(Array.isArray(data) ? data : (data?.patients || []));
+      } catch { setSearchResults([]); } finally { setSearchLoading(false); }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  // Close search on outside click
+  useEffect(() => {
+    if (!showSearch) return;
+    const handler = (e) => { if (searchRef.current && !searchRef.current.contains(e.target)) { setShowSearch(false); setSearchQuery(''); setSearchResults([]); } };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showSearch]);
+
+  // Focus search input when opened
+  useEffect(() => {
+    if (showSearch) setTimeout(() => searchInputRef.current?.focus(), 50);
+  }, [showSearch]);
+  
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formatDate = (date) => {
+    const options = { weekday: 'long', month: 'long', day: 'numeric' };
+    return date.toLocaleDateString('en-US', options);
+  };
+
+  const formatTime = (date) => {
+    return date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true 
+    });
+  };
+
   return (
     <header className="bg-white border-b border-gray-200 h-14 flex items-center justify-between px-4 md:px-6 sticky top-0 z-30 shadow-sm">
+      {/* Inline search bar — expands over the left side of the header */}
+      {showSearch && (
+        <div className="absolute inset-0 bg-white z-40 flex items-center px-4 gap-3" ref={searchRef}>
+          <Search size={18} className="text-[#29828a] flex-shrink-0" />
+          <div className="flex-1 relative">
+            <input
+              ref={searchInputRef}
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search patient by name or phone…"
+              className="w-full text-sm outline-none text-gray-900 placeholder-gray-400 bg-transparent"
+            />
+            {/* Results dropdown */}
+            {(searchResults.length > 0 || searchLoading || searchQuery) && (
+              <div className="absolute top-full left-0 mt-2 w-full max-w-lg bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
+                {searchLoading && (
+                  <div className="px-4 py-3 text-sm text-gray-400 text-center">Searching…</div>
+                )}
+                {!searchLoading && searchQuery && searchResults.length === 0 && (
+                  <div className="px-4 py-3 text-sm text-gray-400 text-center">No patients found</div>
+                )}
+                {!searchLoading && searchResults.length > 0 && (
+                  <ul className="max-h-72 overflow-y-auto py-1">
+                    {searchResults.map(p => (
+                      <li key={p.id}>
+                        <button
+                          onClick={() => { navigate(`/patient-profile/${p.id}`); setShowSearch(false); setSearchQuery(''); setSearchResults([]); }}
+                          className="w-full text-left px-4 py-2.5 hover:bg-[#29828a]/5 flex items-center gap-3 transition-colors"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-[#29828a]/10 flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-bold text-[#29828a]">{(p.name || p.full_name || '?')[0]?.toUpperCase()}</span>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-900 truncate">{p.name || p.full_name}</p>
+                            <p className="text-xs text-gray-400">{p.phone || p.mobile || 'No phone'}</p>
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchResults([]); }}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors flex-shrink-0"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
       {/* Left side - Page title and refresh button */}
       <div className="flex items-center gap-4 flex-1">
+        {/* Clinic Switcher */}
+        <div className="relative">
+          <button
+            onClick={() => setShowClinicDropdown(!showClinicDropdown)}
+            className="flex items-center gap-3 pl-2 pr-3 py-1.5 rounded-xl bg-[#f0f0fd] hover:bg-[#e4e3f9] border border-[#c5c2f0] transition-all duration-200"
+            disabled={isSwitching}
+            title="Switch Clinic"
+          >
+            {/* Clinic thumbnail / avatar */}
+            <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 shadow-sm">
+              <img
+                src={user?.clinic?.logo_url || "https://images.unsplash.com/photo-1629909615184-74f495363b67?w=80&h=80&fit=crop&auto=format"}
+                alt={user?.clinic?.name || "Clinic"}
+                className="w-full h-full object-cover"
+                onError={(e) => { e.target.src = "https://images.unsplash.com/photo-1629909615184-74f495363b67?w=80&h=80&fit=crop&auto=format"; }}
+              />
+            </div>
+
+            {/* Name + subtitle */}
+            <div className="hidden md:flex flex-col items-start leading-tight min-w-0">
+              <span className="text-sm font-bold text-[#2a276e] truncate max-w-[140px]">
+                {user?.clinic?.name || "Select Clinic"}
+              </span>
+              <span className="text-xs text-gray-500 truncate max-w-[140px]">
+                {user?.clinic?.address?.split(",")[0] || user?.clinic?.email || "Clinic"}
+              </span>
+            </div>
+
+            {/* Chevron */}
+            <svg
+              className={`w-4 h-4 text-[#2a276e] flex-shrink-0 transition-transform duration-200 ${showClinicDropdown ? 'rotate-180' : ''}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {/* Dropdown */}
+          {showClinicDropdown && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setShowClinicDropdown(false)} />
+              <div className="absolute left-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-20">
+                {/* Label */}
+                <div className="px-4 py-2 border-b border-gray-100">
+                  <p className="text-xs font-semibold text-gray-400">Branches</p>
+                </div>
+
+                {/* Clinic list */}
+                {(user?.clinics?.length > 0 ? user.clinics : [user?.clinic]).filter(Boolean).map((clinic) => {
+                  const isActive = user?.clinic_id === clinic.id;
+                  return (
+                    <button
+                      key={clinic.id}
+                      onClick={() => handleClinicSwitch(clinic.id)}
+                      className={`w-full text-left px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition-colors ${isActive ? 'bg-gray-50' : ''}`}
+                      disabled={isSwitching || isActive}
+                    >
+                      <img
+                        src={clinic.logo_url || "https://images.unsplash.com/photo-1629909615184-74f495363b67?w=80&h=80&fit=crop&auto=format"}
+                        alt={clinic.name}
+                        className="w-9 h-9 rounded-lg object-cover flex-shrink-0"
+                        onError={(e) => { e.target.src = "https://images.unsplash.com/photo-1629909615184-74f495363b67?w=80&h=80&fit=crop&auto=format"; }}
+                      />
+                      <div className="flex flex-col min-w-0">
+                        <span className={`text-sm font-semibold truncate ${isActive ? 'text-[#2a276e]' : 'text-gray-800'}`}>
+                          {clinic.name}
+                        </span>
+                        <span className="text-xs text-gray-400 truncate">
+                          {clinic.address || clinic.email || "—"}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}  
+
+                {/* Add new branch */}
+                <div className="border-t border-gray-100 mt-1 px-4 py-2">
+                  <button
+                    onClick={() => { setShowClinicDropdown(false); navigate("/add-clinic"); }}
+                    className="w-full flex items-center justify-between py-1.5 text-sm font-semibold text-[#2a276e] hover:text-[#1a1548] transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                      </svg>
+                      Add new branch
+                    </div>
+                    {user?.clinic?.subscription_plan !== 'professional' && (
+                      <svg className="w-3.5 h-3.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
         {!isDashboardPage && title && (
           <>
+            <div className="h-6 w-px bg-gray-200 mx-1 hidden md:block"></div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold text-gray-900">{title}</h1>
               {refreshFunction && (
@@ -66,7 +307,7 @@ const Header = () => {
                   onClick={handleRefresh}
                   disabled={loading}
                   className="p-1 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
-                  title={`Refresh ${title.toLowerCase()}`}
+                  title={typeof title === 'string' ? `Refresh ${title.toLowerCase()}` : 'Refresh'}
                 >
                   <FaSync className={`w-4 h-4 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
                 </button>
@@ -137,60 +378,59 @@ const Header = () => {
         {/* Default icons - only show when NOT on inbox page */}
         {!isInboxPage && (
           <>
-            {/* Plus Icon - Create/Add */}
+            {/* Search Icon */}
             <button
-              onClick={() => {
-                // Add your create action here
-                console.log("Create clicked");
-              }}
-              className="p-2 rounded-lg bg-[#2a276e] hover:bg-[#1a1548] text-white transition-colors"
-              title="Create new"
+              onClick={() => setShowSearch(true)}
+              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+              title="Search patients"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
+              <Search size={20} />
             </button>
 
-            {/* Gift Icon */}
-            <button
-              onClick={() => {
-                // Add your gift/rewards action here
-                console.log("Gift clicked");
-              }}
-              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
-              title="Rewards"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
-              </svg>
-            </button>
-
-            {/* Support/Help Icon */}
-            <button
-              onClick={() => {
-                // Add your support action here
-                window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ', '_blank');
-              }}
-              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
-              title="Help & Support"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </button>
+            <div className="w-px h-6 bg-gray-300 hidden md:block mx-1"></div>
 
             {/* Notifications Icon */}
             <button
-              onClick={() => setShowNotifications(!showNotifications)}
-              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors relative"
-              title="Notifications"
+               onClick={() => { setShowNotifications(true); fetchNotifications(); }}
+               className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors relative"
+               title="Activity Feed"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-              {/* Notification badge */}
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+               <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+               </svg>
+               {notifications.length > 0 && (
+                 <span className="absolute top-1 right-1 min-w-[16px] h-4 px-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-white">
+                   {notifications.length}
+                 </span>
+               )}
             </button>
+
+            <div className="w-px h-6 bg-gray-300 hidden md:block mx-1"></div>
+
+            {/* Plan Indicator */}
+            <div className="flex items-center">
+              {user?.clinic?.subscription_plan === 'professional' ? (
+                <button
+                  onClick={() => navigate("/subscription")}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-100 via-amber-50 to-white border border-amber-200/50 shadow-sm hover:shadow transition-all"
+                  title="Professional Plan"
+                >
+                  <Crown size={18} className="text-amber-500 fill-amber-400" />
+                  <span className="text-[15px] font-semibold text-gray-800 tracking-wide">Pro</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => navigate("/subscription")}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#feedd5] border border-[#fdd2a4]/40 shadow-sm hover:shadow transition-all"
+                  title="Starter Plan"
+                >
+                  <Gem size={18} className="text-blue-500 fill-[#8b5cf6] opacity-90" />
+                  <span className="text-[15px] font-medium text-[#2d3748]">Starter</span>
+                </button>
+              )}
+            </div>
+
+            <div className="w-px h-6 bg-gray-300 hidden md:block mx-1"></div>
           </>
         )}
 
@@ -279,7 +519,95 @@ const Header = () => {
             </>
           )}
         </div>
+
       </div>
+
+      {/* Notification Activity Drawer */}
+      {showNotifications && (
+        <>
+          <div className="fixed inset-0 bg-black/30 z-[60]" onClick={() => setShowNotifications(false)} />
+          <div className="fixed inset-y-0 right-0 w-80 bg-white shadow-2xl z-[70] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Activity Feed</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Latest {notifications.length} activities</p>
+              </div>
+              <button onClick={() => setShowNotifications(false)} className="p-2 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {notifLoading ? (
+                <div className="flex flex-col items-center justify-center h-40 gap-2">
+                  <div className="w-6 h-6 border-2 border-[#29828a] border-t-transparent rounded-full animate-spin" />
+                  <p className="text-xs text-gray-400">Loading...</p>
+                </div>
+              ) : notifications.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-48 gap-3 px-6 text-center">
+                  <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                  </div>
+                  <p className="text-sm text-gray-400">No activity yet</p>
+                  <p className="text-xs text-gray-300">Actions like adding patients, saving prescriptions, and creating invoices will appear here.</p>
+                </div>
+              ) : (
+                <ul className="divide-y divide-gray-50">
+                  {notifications.map((n) => {
+                    const icons = {
+                      patient_added: '👤',
+                      appointment_booked: '📅',
+                      prescription_saved: '💊',
+                      invoice_created: '🧾',
+                      payment_received: '💳',
+                      general: '🔔',
+                    };
+                    const icon = icons[n.event_type] || icons.general;
+                    const timeAgo = (() => {
+                      const diff = Date.now() - new Date(n.created_at);
+                      const m = Math.floor(diff / 60000);
+                      if (m < 1) return 'Just now';
+                      if (m < 60) return `${m}m ago`;
+                      const h = Math.floor(m / 60);
+                      if (h < 24) return `${h}h ago`;
+                      return `${Math.floor(h / 24)}d ago`;
+                    })();
+                    return (
+                      <li
+                        key={n.id}
+                        className={`px-5 py-3.5 hover:bg-gray-50 transition-colors ${n.link ? 'cursor-pointer' : ''}`}
+                        onClick={() => n.link && navigate(n.link)}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="text-xl flex-shrink-0 mt-0.5">{icon}</span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm text-gray-800 leading-snug">{n.description}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              {n.actor_name && <span className="text-xs text-[#29828a] font-medium">{n.actor_name}</span>}
+                              <span className="text-xs text-gray-400">{timeAgo}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-gray-100">
+              <button
+                onClick={fetchNotifications}
+                className="w-full py-2 text-xs font-semibold text-[#29828a] hover:bg-[#29828a]/5 rounded-lg transition-colors"
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </header>
   );
 };

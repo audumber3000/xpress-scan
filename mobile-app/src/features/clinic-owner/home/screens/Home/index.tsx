@@ -12,16 +12,15 @@ import {
 } from './components/WelcomeHeader';
 import { PatientVisitsSection } from './components/PatientVisitsSection';
 import { ErrorBanner } from './components/ErrorBanner';
-import { colors } from '../../../../../shared/constants/colors';
 
 interface HomeScreenProps {
   navigation: any;
 }
 
 export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
-  const { user } = useAuth();
-  const [selectedPeriod, setSelectedPeriod] = useState<'Week' | 'Month' | 'Year'>('Week');
-  const [apiPeriod, setApiPeriod] = useState<'1W' | '1M' | '3M' | '6M' | 'All'>('1W');
+  const { user, backendUser, setIsClinicSwitcherVisible } = useAuth();
+  const [selectedPeriod, setSelectedPeriod] = useState<'Today' | 'Last 7 Days' | 'This Month'>('Today');
+  const [apiPeriod, setApiPeriod] = useState<'1D' | '1W' | '1M' | '3M' | '6M' | 'All'>('1D');
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,34 +31,38 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
 
   const userName = user?.displayName || user?.email?.split('@')[0] || 'Smith';
 
+  // Global Sync: Load data whenever the active clinic changes or period changes
   useEffect(() => {
     loadData();
-  }, []);
+  }, [backendUser?.clinic?.id]);
 
   useEffect(() => {
-    const periodMapping: Record<string, '1W' | '1M' | '3M' | '6M' | 'All'> = {
-      'Week': '1W',
-      'Month': '1M',
-      'Year': '6M',
+    const periodMapping: Record<string, '1D' | '1W' | '1M' | '3M' | '6M' | 'All'> = {
+      'Today': '1D',
+      'Last 7 Days': '1W',
+      'This Month': '1M',
     };
-    const newApiPeriod = periodMapping[selectedPeriod] || '1M';
+    const newApiPeriod = periodMapping[selectedPeriod] || '1D';
     setApiPeriod(newApiPeriod);
-    loadAnalytics();
+    loadAnalytics(newApiPeriod);
   }, [selectedPeriod]);
 
   const loadTransactions = async () => {
     try {
-      const transactionsData = await transactionsApiService.getTransactions(5);
+      const clinicId = backendUser?.clinic?.id;
+      const transactionsData = await transactionsApiService.getTransactions(5, clinicId);
       setTransactions(transactionsData);
     } catch (err) {
       setTransactions([]);
     }
   };
 
-  const loadAnalytics = async () => {
+  const loadAnalytics = async (periodOverride?: '1D' | '1W' | '1M' | '3M' | '6M' | 'All') => {
     try {
       setAnalyticsLoading(true);
-      const analyticsData = await analyticsApiService.getAnalytics(apiPeriod);
+      const clinicId = backendUser?.clinic?.id;
+      const periodToUse = periodOverride || apiPeriod;
+      const analyticsData = await analyticsApiService.getAnalytics(periodToUse, clinicId);
       setAnalytics(analyticsData);
     } catch (err) {
       setAnalytics(null);
@@ -84,17 +87,11 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
   const onRefresh = async () => {
     try {
       setRefreshing(true);
-      setAnalyticsLoading(true);
-      setLoading(true);
-      await Promise.all([loadAnalytics(), loadTransactions()]);
-      setError(null);
+      await loadData();
     } catch (err) {
-      setAnalytics(null);
-      setTransactions([]);
+      // handled in loadData
     } finally {
       setRefreshing(false);
-      setAnalyticsLoading(false);
-      setLoading(false);
     }
   };
 
@@ -111,7 +108,7 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
       <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[0]} // Sticky Top Piece (UserInfo + Cards)
+        stickyHeaderIndices={[0]} 
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -125,9 +122,14 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
         {/* Layer 3: Sticky Opaque Part 1 */}
         <WelcomeHeaderTopPart
           userName={userName}
+          clinicName={backendUser?.clinic?.name || ''}
           onNotificationPress={() => setShowNotifications(true)}
+          onClinicPress={() => setIsClinicSwitcherVisible(true)}
+          onProfilePress={() => navigation.navigate('Profile')}
           dailyRevenue={dailyRevenue}
           totalPatients={totalPatients}
+          subscriptionPlan={backendUser?.clinic?.subscription_plan}
+          onUpgradePress={() => navigation.navigate('Purchase')}
         />
 
         {/* Part 2: Tiny Rounded Bottom component */}

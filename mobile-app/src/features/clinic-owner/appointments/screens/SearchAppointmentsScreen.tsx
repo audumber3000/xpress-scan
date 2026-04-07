@@ -27,7 +27,7 @@ export const SearchAppointmentsScreen: React.FC<SearchAppointmentsScreenProps> =
         } else {
             const filtered = appointments.filter(apt =>
                 apt.patientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                apt.treatment.toLowerCase().includes(searchQuery.toLowerCase())
+                (apt.treatment && apt.treatment.toLowerCase().includes(searchQuery.toLowerCase()))
             );
             setFilteredAppointments(filtered);
         }
@@ -60,7 +60,7 @@ export const SearchAppointmentsScreen: React.FC<SearchAppointmentsScreenProps> =
         <SafeAreaView style={styles.container} edges={['top']}>
             <ScreenHeader
                 title="Search Appointments"
-                onBackPress={() => navigation.goBack()}
+                onBackPress={navigation.canGoBack() ? () => navigation.goBack() : undefined}
                 titleIcon={<Search size={22} color="#111827" />}
             />
 

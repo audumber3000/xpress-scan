@@ -1,150 +1,209 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Award, CreditCard, Download, HelpCircle, ChevronRight } from 'lucide-react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import {
+  Award, Zap, Gift, CreditCard, Calendar, Clock, CheckCircle2, ArrowRight, RefreshCw,
+} from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { adminColors } from '../../../../shared/constants/adminColors';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
+import { BaseApiService } from '../../../../services/api/base.api';
+
+const PLAN_META: Record<string, { label: string; color: string; bg: string; Icon: any; gradient: [string, string] }> = {
+  free:         { label: 'Free',         color: '#6B7280', bg: '#F3F4F6', Icon: Gift,  gradient: ['#374151', '#6B7280'] },
+  professional: { label: 'Professional', color: '#2D9596', bg: '#E0F2F2', Icon: Award, gradient: ['#1F6B72', '#2D9596'] },
+  enterprise:   { label: 'Enterprise',   color: '#7C3AED', bg: '#EDE9FE', Icon: Zap,   gradient: ['#5B21B6', '#7C3AED'] },
+};
+
+const PLAN_FEATURES: Record<string, string[]> = {
+  free:         ['Basic dental charting', 'Patient management', 'Simple reporting', 'Up to 250 patients'],
+  professional: ['Unlimited patients', 'Advanced analytics', 'WhatsApp notifications', 'Multi-clinic support', 'Priority support', 'Billing & invoicing'],
+  enterprise:   ['Everything in Professional', 'Dedicated account manager', 'Custom integrations', 'SLA guarantee', 'Advanced security'],
+};
+
+class SubApiService extends BaseApiService {
+  async getSubscription() {
+    try {
+      const h = await this.getAuthHeaders();
+      const r = await this.fetchWithTimeout(`${this.baseURL}/subscriptions`, { headers: h });
+      return r.ok ? await r.json() : null;
+    } catch { return null; }
+  }
+}
+
+const subApi = new SubApiService();
 
 interface SubscriptionScreenProps {
   navigation: any;
 }
 
+function daysUntil(dateStr: string | null | undefined): number | null {
+  if (!dateStr) return null;
+  const diff = new Date(dateStr).getTime() - Date.now();
+  return Math.ceil(diff / 86400000);
+}
+
+function fmtDate(d: string | null | undefined) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 export const SubscriptionScreen: React.FC<SubscriptionScreenProps> = ({ navigation }) => {
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [sub, setSub] = useState<any>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadSub();
+    }, [])
+  );
+
+  const loadSub = async () => {
+    setLoading(true);
+    const data = await subApi.getSubscription();
+    setSub(data);
+    setLoading(false);
+    setRefreshing(false);
+  };
+
+  const onRefresh = () => { setRefreshing(true); loadSub(); };
+
+  const plan = sub?.plan_name || 'free';
+  const meta = PLAN_META[plan] || PLAN_META.free;
+  const features = PLAN_FEATURES[plan] || PLAN_FEATURES.free;
+  const isFree = plan === 'free';
+  const days = daysUntil(sub?.current_end);
+  const status = sub?.status || 'active';
+
+  const StatusBadge = ({ status }: { status: string }) => {
+    const map: Record<string, { bg: string; text: string; label: string }> = {
+      active:    { bg: '#D1FAE5', text: '#065F46', label: 'Active' },
+      cancelled: { bg: '#FEE2E2', text: '#991B1B', label: 'Cancelled' },
+      paused:    { bg: '#FEF3C7', text: '#92400E', label: 'Paused' },
+      expired:   { bg: '#F3F4F6', text: '#374151', label: 'Expired' },
+    };
+    const c = map[status] || map.active;
+    return (
+      <View style={{ backgroundColor: c.bg, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8 }}>
+        <Text style={{ fontSize: 11, fontWeight: '700', color: c.text }}>{c.label}</Text>
+      </View>
+    );
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={s.container} edges={['top']}>
+        <ScreenHeader title="Subscription" onBackPress={() => navigation.goBack()} variant="admin" />
+        <View style={s.center}><ActivityIndicator size="large" color={adminColors.primary} /></View>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader
-        title="Subscription Management"
-        onBackPress={() => navigation.goBack()}
-        variant="admin"
-      />
+    <SafeAreaView style={s.container} edges={['top']}>
+      <ScreenHeader title="Subscription" onBackPress={() => navigation.goBack()} variant="admin" />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Current Plan */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>CURRENT PLAN</Text>
-            <View style={styles.activeBadge}>
-              <Text style={styles.activeBadgeText}>Active</Text>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={adminColors.primary} />}
+      >
+        {/* Plan Hero Card */}
+        <LinearGradient colors={meta.gradient} style={s.heroCard}>
+          <View style={s.heroTop}>
+            <View style={s.planIconWrap}>
+              <meta.Icon size={28} color="#fff" />
             </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.planLabel}>{meta.label} Plan</Text>
+              <Text style={s.planSub}>{isFree ? 'Free forever · No payment needed' : `via ${sub?.provider || 'MolarPlus'}`}</Text>
+            </View>
+            <StatusBadge status={status} />
           </View>
 
-          <View style={styles.planCard}>
-            <View style={styles.planHeader}>
-              <View style={styles.planIconContainer}>
-                <Award size={28} color={adminColors.primary} />
+          {/* Billing Period */}
+          {!isFree && (sub?.current_start || sub?.current_end) && (
+            <View style={s.billingRow}>
+              <View style={s.billingItem}>
+                <Calendar size={13} color="rgba(255,255,255,0.7)" />
+                <View>
+                  <Text style={s.billingItemLabel}>Started</Text>
+                  <Text style={s.billingItemValue}>{fmtDate(sub?.current_start)}</Text>
+                </View>
               </View>
-              <View style={styles.planInfo}>
-                <Text style={styles.planName}>Professional Plan</Text>
-                <Text style={styles.planPrice}>$99 / month • Renews Oct 12, 2023</Text>
-              </View>
-            </View>
-
-            {/* Patient Count */}
-            <View style={styles.usageSection}>
-              <View style={styles.usageHeader}>
-                <Text style={styles.usageLabel}>Patient Count</Text>
-                <Text style={styles.usageValue}>850 / 1,000</Text>
-              </View>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: '85%' }]} />
-              </View>
-              <Text style={styles.usageNote}>85% of monthly limit reached</Text>
-            </View>
-
-            {/* Cloud Storage */}
-            <View style={styles.usageSection}>
-              <View style={styles.usageHeader}>
-                <Text style={styles.usageLabel}>Cloud Storage</Text>
-                <Text style={styles.usageValue}>15GB / 50GB</Text>
-              </View>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: '30%' }]} />
+              <View style={s.billingDivider} />
+              <View style={s.billingItem}>
+                <Clock size={13} color="rgba(255,255,255,0.7)" />
+                <View>
+                  <Text style={s.billingItemLabel}>
+                    {days !== null && days > 0 ? 'Renews in' : 'Expires'}
+                  </Text>
+                  <Text style={[s.billingItemValue, days !== null && days <= 7 && days > 0 && { color: '#FCD34D' }]}>
+                    {days !== null
+                      ? (days > 0 ? `${days} days` : (days === 0 ? 'Today' : 'Expired'))
+                      : fmtDate(sub?.current_end)}
+                  </Text>
+                </View>
               </View>
             </View>
+          )}
+        </LinearGradient>
 
-            {/* Manage Button */}
-            <TouchableOpacity style={styles.manageButton}>
-              <CreditCard size={20} color="#FFFFFF" />
-              <Text style={styles.manageButtonText}>Manage Plan & Billing</Text>
+        {/* Features */}
+        <Text style={s.sectionTitle}>WHAT'S INCLUDED</Text>
+        <View style={s.card}>
+          {features.map((f, i) => (
+            <View key={i} style={[s.featureRow, i < features.length - 1 && s.featureRowBorder]}>
+              <CheckCircle2 size={16} color={adminColors.primary} />
+              <Text style={s.featureText}>{f}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Upgrade / Manage CTA */}
+        {isFree ? (
+          <>
+            <Text style={s.sectionTitle}>UPGRADE YOUR PLAN</Text>
+            <TouchableOpacity style={s.upgradeCta} onPress={() => navigation.navigate('Purchase')} activeOpacity={0.85}>
+              <LinearGradient colors={['#1F6B72', '#2D9596']} style={s.upgradeGradient}>
+                <View style={s.upgradeLeft}>
+                  <Award size={22} color="#fff" />
+                  <View>
+                    <Text style={s.upgradeTitle}>Go Professional</Text>
+                    <Text style={s.upgradePrice}>₹1,200 / month</Text>
+                  </View>
+                </View>
+                <ArrowRight size={20} color="#fff" />
+              </LinearGradient>
             </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Billing History */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>BILLING HISTORY</Text>
-            <TouchableOpacity>
-              <Text style={styles.viewAllButton}>View All</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.billingCard}>
-            <View style={styles.invoiceItem}>
-              <View style={[styles.invoiceIcon, { backgroundColor: '#E0F2F2' }]}>
-                <CreditCard size={20} color={adminColors.primary} />
-              </View>
-              <View style={styles.invoiceInfo}>
-                <Text style={styles.invoiceDate}>Sep 12, 2023</Text>
-                <Text style={styles.invoiceNumber}>INV-0042 • $99.00</Text>
-              </View>
-              <View style={styles.paidBadge}>
-                <Text style={styles.paidText}>PAID</Text>
-              </View>
-              <TouchableOpacity style={styles.downloadButton}>
-                <Download size={18} color="#9CA3AF" />
+          </>
+        ) : (
+          <>
+            <Text style={s.sectionTitle}>MANAGE</Text>
+            <View style={s.card}>
+              {sub?.provider_subscription_id && (
+                <View style={s.manageRow}>
+                  <CreditCard size={16} color="#6B7280" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.manageLabel}>Subscription ID</Text>
+                    <Text style={s.manageValue} numberOfLines={1}>{sub.provider_subscription_id}</Text>
+                  </View>
+                </View>
+              )}
+              <TouchableOpacity
+                style={s.refreshBtn}
+                onPress={onRefresh}
+                activeOpacity={0.75}
+              >
+                <RefreshCw size={15} color={adminColors.primary} />
+                <Text style={s.refreshBtnText}>Refresh Subscription Status</Text>
               </TouchableOpacity>
             </View>
-
-            <View style={styles.separator} />
-
-            <View style={styles.invoiceItem}>
-              <View style={[styles.invoiceIcon, { backgroundColor: '#E0F2F2' }]}>
-                <CreditCard size={20} color={adminColors.primary} />
-              </View>
-              <View style={styles.invoiceInfo}>
-                <Text style={styles.invoiceDate}>Aug 12, 2023</Text>
-                <Text style={styles.invoiceNumber}>INV-0039 • $99.00</Text>
-              </View>
-              <View style={styles.paidBadge}>
-                <Text style={styles.paidText}>PAID</Text>
-              </View>
-              <TouchableOpacity style={styles.downloadButton}>
-                <Download size={18} color="#9CA3AF" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.separator} />
-
-            <View style={styles.invoiceItem}>
-              <View style={[styles.invoiceIcon, { backgroundColor: '#E0F2F2' }]}>
-                <CreditCard size={20} color={adminColors.primary} />
-              </View>
-              <View style={styles.invoiceInfo}>
-                <Text style={styles.invoiceDate}>Jul 12, 2023</Text>
-                <Text style={styles.invoiceNumber}>INV-0035 • $99.00</Text>
-              </View>
-              <View style={styles.paidBadge}>
-                <Text style={styles.paidText}>PAID</Text>
-              </View>
-              <TouchableOpacity style={styles.downloadButton}>
-                <Download size={18} color="#9CA3AF" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        {/* Upgrade Prompt */}
-        <View style={styles.upgradeCard}>
-          <View style={styles.upgradeIcon}>
-            <HelpCircle size={24} color={adminColors.primary} />
-          </View>
-          <View style={styles.upgradeContent}>
-            <Text style={styles.upgradeTitle}>Need to upgrade your plan?</Text>
-            <Text style={styles.upgradeText}>Chat with our team for custom clinic solutions.</Text>
-          </View>
-          <ChevronRight size={20} color="#9CA3AF" />
-        </View>
+          </>
+        )}
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -152,214 +211,38 @@ export const SubscriptionScreen: React.FC<SubscriptionScreenProps> = ({ navigati
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  content: {
-    flex: 1,
-  },
-  section: {
-    marginTop: 24,
-    paddingHorizontal: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#9CA3AF',
-    letterSpacing: 0.5,
-  },
-  activeBadge: {
-    backgroundColor: '#D1FAE5',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  activeBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#065F46',
-  },
-  viewAllButton: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: adminColors.primary,
-  },
-  planCard: {
-    backgroundColor: '#FFFFFF',
-    padding: 20,
-    borderRadius: 16,
-  },
-  planHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  planIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#E0F2F2',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  planInfo: {
-    flex: 1,
-  },
-  planName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  planPrice: {
-    fontSize: 13,
-    color: '#6B7280',
-  },
-  usageSection: {
-    marginBottom: 20,
-  },
-  usageHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  usageLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  usageValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  progressBar: {
-    height: 8,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginBottom: 6,
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: adminColors.primary,
-    borderRadius: 4,
-  },
-  usageNote: {
-    fontSize: 12,
-    color: '#9CA3AF',
-  },
-  manageButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: adminColors.primary,
-    paddingVertical: 14,
-    borderRadius: 12,
-    gap: 8,
-    marginTop: 8,
-  },
-  manageButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  billingCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  invoiceItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-  },
-  invoiceIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  invoiceInfo: {
-    flex: 1,
-  },
-  invoiceDate: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  invoiceNumber: {
-    fontSize: 13,
-    color: '#6B7280',
-  },
-  paidBadge: {
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    marginRight: 12,
-  },
-  paidText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#6B7280',
-    letterSpacing: 0.5,
-  },
-  downloadButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F9FAFB',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  separator: {
-    height: 1,
-    backgroundColor: '#F3F4F6',
-    marginLeft: 72,
-  },
-  upgradeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E0F2F2',
-    padding: 20,
-    borderRadius: 16,
-    marginHorizontal: 20,
-    marginTop: 24,
-  },
-  upgradeIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  upgradeContent: {
-    flex: 1,
-  },
-  upgradeTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  upgradeText: {
-    fontSize: 13,
-    color: '#6B7280',
-    lineHeight: 18,
-  },
+const s = StyleSheet.create({
+  container:     { flex: 1, backgroundColor: '#F9FAFB' },
+  center:        { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
+  heroCard:      { marginHorizontal: 16, marginTop: 16, borderRadius: 20, padding: 20 },
+  heroTop:       { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  planIconWrap:  { width: 52, height: 52, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.22)', justifyContent: 'center', alignItems: 'center' },
+  planLabel:     { fontSize: 20, fontWeight: '800', color: '#fff' },
+  planSub:       { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
+
+  billingRow:    { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12, padding: 14, gap: 12 },
+  billingItem:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  billingDivider:{ width: 1, backgroundColor: 'rgba(255,255,255,0.2)' },
+  billingItemLabel: { fontSize: 10, color: 'rgba(255,255,255,0.65)', fontWeight: '500' },
+  billingItemValue: { fontSize: 13, fontWeight: '700', color: '#fff', marginTop: 1 },
+
+  sectionTitle:  { fontSize: 11, fontWeight: '700', color: '#9CA3AF', letterSpacing: 1, paddingHorizontal: 20, marginTop: 24, marginBottom: 10 },
+
+  card:          { backgroundColor: '#fff', marginHorizontal: 16, borderRadius: 16, padding: 4, borderWidth: 1, borderColor: '#F3F4F6' },
+  featureRow:    { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12 },
+  featureRowBorder: { borderBottomWidth: 1, borderBottomColor: '#F9FAFB' },
+  featureText:   { fontSize: 14, color: '#374151', fontWeight: '500', flex: 1 },
+
+  upgradeCta:    { marginHorizontal: 16, borderRadius: 16, overflow: 'hidden' },
+  upgradeGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18 },
+  upgradeLeft:   { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  upgradeTitle:  { fontSize: 16, fontWeight: '700', color: '#fff' },
+  upgradePrice:  { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 1 },
+
+  manageRow:     { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' },
+  manageLabel:   { fontSize: 11, color: '#9CA3AF', fontWeight: '500' },
+  manageValue:   { fontSize: 13, color: '#374151', fontWeight: '600', marginTop: 1 },
+  refreshBtn:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 13, justifyContent: 'center' },
+  refreshBtnText:{ fontSize: 14, fontWeight: '600', color: adminColors.primary },
 });

@@ -15,6 +15,8 @@ const InvoiceHeader = ({ invoice }) => {
   const getStatusBadge = (status) => {
     const statusConfig = {
       draft: { color: "bg-gray-100 text-gray-800 border-gray-200", dot: "bg-gray-500" },
+      finalized: { color: "bg-blue-100 text-blue-800 border-blue-200", dot: "bg-blue-500" },
+      partially_paid: { color: "bg-amber-100 text-amber-800 border-amber-200", dot: "bg-amber-500" },
       paid_unverified: { color: "bg-orange-100 text-orange-800 border-orange-200", dot: "bg-orange-500" },
       paid_verified: { color: "bg-green-100 text-green-800 border-green-200", dot: "bg-green-500" },
       cancelled: { color: "bg-red-100 text-red-800 border-red-200", dot: "bg-red-500" }
@@ -61,8 +63,14 @@ const InvoiceHeader = ({ invoice }) => {
           <div className="text-sm text-gray-900 space-y-1">
             <div>Invoice #: {invoice.invoice_number}</div>
             <div>Date: {formatDate(invoice.created_at)}</div>
+            {invoice.finalized_at && (
+              <div>Finalized: {formatDate(invoice.finalized_at)}</div>
+            )}
             {invoice.paid_at && (
               <div>Paid: {formatDate(invoice.paid_at)}</div>
+            )}
+            {typeof invoice.due_amount === 'number' && (
+              <div>Due: ₹{Number(invoice.due_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
             )}
           </div>
         </div>

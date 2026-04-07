@@ -6,6 +6,7 @@ import { api } from '../utils/api';
 import { toast } from 'react-toastify';
 import { ChevronLeft } from 'lucide-react';
 import GearLoader from '../components/GearLoader';
+import FeatureLock from "../components/FeatureLock";
 
 const ReferringDoctors = () => {
   const { setTitle } = useHeader();
@@ -111,7 +112,8 @@ const ReferringDoctors = () => {
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="max-w-6xl mx-auto">
+      <FeatureLock featureName="Referring Doctor Management">
+        <div className="max-w-6xl mx-auto">
         {/* Header with teal theme */}
         <div className="bg-gradient-to-r from-[#2D9596] to-[#1F6B72] rounded-lg p-6 mb-6 text-white">
           <h2 className="text-2xl font-bold mb-2">Referring Doctors</h2>
@@ -286,7 +288,8 @@ const ReferringDoctors = () => {
             </div>
           </div>
         )}
-      </div>
+        </div>
+      </FeatureLock>
     </div>
   );
 };

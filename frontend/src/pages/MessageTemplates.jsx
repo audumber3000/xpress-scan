@@ -6,6 +6,7 @@ import { api } from '../utils/api';
 import { toast } from 'react-toastify';
 import { ChevronLeft } from 'lucide-react';
 import GearLoader from '../components/GearLoader';
+import FeatureLock from "../components/FeatureLock";
 
 const MessageTemplates = () => {
   const { setTitle } = useHeader();
@@ -97,7 +98,8 @@ const MessageTemplates = () => {
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="max-w-6xl mx-auto">
+      <FeatureLock featureName="Custom WhatsApp Templates">
+        <div className="max-w-6xl mx-auto">
         {/* Header with teal theme */}
         <div className="bg-gradient-to-r from-[#2D9596] to-[#1F6B72] rounded-lg p-6 mb-6 text-white">
           <div className="flex justify-between items-center">
@@ -244,7 +246,8 @@ const MessageTemplates = () => {
             </div>
           </div>
         )}
-      </div>
+        </div>
+      </FeatureLock>
     </div>
   );
 };

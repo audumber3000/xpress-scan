@@ -1,202 +1,251 @@
 import React, { useState, useRef } from 'react';
 import {
   TextInput,
-  Alert,
   ActivityIndicator,
   View,
   ScrollView,
   TouchableOpacity,
-  Pressable,
   Text,
   SafeAreaView,
   StatusBar,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
-  Dimensions
+  Dimensions,
+  Alert
 } from 'react-native';
-import { Mail, Lock, Eye, EyeOff, Mail as GoogleIcon } from 'lucide-react-native'; // Using Mail as temp Google icon or similar
+import { 
+  LogIn, 
+  ChevronRight, 
+  ArrowLeft, 
+  Mail, 
+  Lock,
+  Eye,
+  EyeOff
+} from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../app/AppNavigator';
 import { signInWithEmail, signInWithGoogle } from '../../../services/auth/authService';
 import { colors } from '../../../shared/constants/colors';
+import { GoogleIcon } from '../../../shared/components/icons/GoogleIcon';
+import { AppleIcon } from '../../../shared/components/icons/AppleIcon';
 
 const { width } = Dimensions.get('window');
 
 type LoginScreenProps = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
+  const [viewMode, setViewMode] = useState<'gateway' | 'email'>('gateway');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isPasswordHidden, setIsPasswordHidden] = useState(true);
   const passwordInputRef = useRef<TextInput>(null);
 
-  const handleEmailSignIn = async () => {
+  const handleGoogleLogin = async () => {
+    setIsLoading(true);
+    try {
+      const { user, error } = await signInWithGoogle();
+      if (error) {
+        if (error.includes('User does not exist')) {
+          Alert.alert('Register Required', 'User does not exist. Please register first to continue.', [
+            { text: 'Register', onPress: () => navigation.navigate('GetStarted') },
+            { text: 'Cancel', style: 'cancel' }
+          ]);
+        } else {
+          Alert.alert('Login Failed', error);
+        }
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAppleLogin = () => {
+    if (Platform.OS === 'android') {
+      Alert.alert('Not Supported', 'Apple Sign-In is only supported on iOS devices.');
+    } else {
+      Alert.alert('Coming Soon', 'Apple Sign-In for iOS is being finalized.');
+    }
+  };
+
+  const handleEmailLogin = async () => {
     if (!email || !password) {
-      setError("Please enter both email and password");
+      Alert.alert('Missing Fields', 'Please enter both email and password');
       return;
     }
 
     setIsLoading(true);
-    setError("");
-
     try {
-      const { user, error: signInError } = await signInWithEmail(email, password);
-      if (signInError) {
-        setError(signInError);
+      const { user, error } = await signInWithEmail(email, password);
+      if (error) {
+        if (error.includes('User does not exist')) {
+          Alert.alert('Register Required', 'User does not exist. Please register first to continue.', [
+            { text: 'Register', onPress: () => setViewMode('gateway') }, // or navigation.navigate('GetStarted')
+            { text: 'Cancel', style: 'cancel' }
+          ]);
+        } else {
+          Alert.alert('Login Failed', error);
+        }
       }
     } catch (err: any) {
-      setError(err.message || "An unexpected error occurred");
+      Alert.alert('Error', err.message);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    setIsLoading(true);
-    setError("");
+  // 2/3 of total horizontal width (with 28 padding on each side)
+  const googleCardWidth = (width - 56) * 2 / 3;
 
-    try {
-      const { user, error: signInError } = await signInWithGoogle();
-      if (signInError) {
-        setError(signInError);
-      }
-    } catch (err: any) {
-      setError(err.message || "An unexpected error occurred");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const renderGateway = () => (
+    <ScrollView 
+      style={{ flex: 1 }}
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Header Icon & Title */}
+      <View style={styles.header}>
+        <View style={styles.iconCircle}>
+          <LogIn size={40} color={colors.primary} />
+        </View>
+        <Text style={styles.title}>Login</Text>
+        
+        <TouchableOpacity 
+          style={styles.subtitleRow}
+          onPress={() => navigation.navigate('GetStarted')}
+        >
+          <Text style={styles.subtitleText}>New here? </Text>
+          <Text style={styles.linkText}>Register here</Text>
+          <ChevronRight size={16} color={colors.info} style={styles.chevron} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Auth Cards */}
+      <View style={styles.cardsContainer}>
+        {/* Row 1: Large Google Square (2/3 width) */}
+        <TouchableOpacity 
+          style={[styles.googleCard, { width: googleCardWidth, height: googleCardWidth }]}
+          onPress={handleGoogleLogin}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator size="large" color={colors.primary} />
+          ) : (
+            <>
+              <View style={styles.googleIconContainer}>
+                <GoogleIcon size={48} />
+              </View>
+              <View style={styles.cardLabelContainer}>
+                <Text style={styles.withText}>with</Text>
+                <Text style={styles.providerName}>Google</Text>
+              </View>
+            </>
+          )}
+        </TouchableOpacity>
+
+        {/* Row 2: Apple and Email horizontal */}
+        <View style={styles.horizontalRow}>
+          <TouchableOpacity 
+            style={styles.smallCard}
+            onPress={handleAppleLogin}
+          >
+            <AppleIcon size={24} color={colors.gray900} />
+            <View style={styles.smallCardLabels}>
+              <Text style={styles.withTextSmall}>with</Text>
+              <Text style={styles.providerNameSmall}>Apple</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.smallCard}
+            onPress={() => setViewMode('email')}
+          >
+            <Mail size={24} color="#EF4444" />
+            <View style={styles.smallCardLabels}>
+              <Text style={styles.withTextSmall}>with</Text>
+              <Text style={styles.providerNameSmall}>Email</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </ScrollView>
+  );
+
+  const renderEmailForm = () => (
+    <ScrollView 
+      style={styles.content}
+      contentContainerStyle={{ paddingBottom: 40 }}
+    >
+      <TouchableOpacity 
+        style={[styles.iconCircle, { width: 56, height: 56, marginBottom: 32 }]}
+        onPress={() => setViewMode('gateway')}
+      >
+        <ArrowLeft size={24} color={colors.gray900} />
+      </TouchableOpacity>
+
+      <Text style={[styles.title, { fontSize: 36, marginBottom: 40 }]}>Login with Email</Text>
+
+      <View style={styles.formCard}>
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Email Address</Text>
+          <View style={styles.inputWrapper}>
+            <Mail size={20} color={colors.primary} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="doctor@molarplus.com"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              onSubmitEditing={() => passwordInputRef.current?.focus()}
+            />
+          </View>
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Password</Text>
+          <View style={styles.inputWrapper}>
+            <Lock size={20} color={colors.primary} style={styles.inputIcon} />
+            <TextInput
+              ref={passwordInputRef}
+              style={[styles.input, { letterSpacing: 2 }]}
+              placeholder="........"
+              secureTextEntry={isPasswordHidden}
+              value={password}
+              onChangeText={setPassword}
+            />
+            <TouchableOpacity onPress={() => setIsPasswordHidden(!isPasswordHidden)}>
+              {isPasswordHidden ? <EyeOff size={18} color={colors.gray400} /> : <Eye size={18} color={colors.gray400} />}
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <TouchableOpacity 
+          style={styles.loginBtn}
+          onPress={handleEmailLogin}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.loginBtnText}>Login</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.keyboardView}
+        style={{ flex: 1 }}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.header}>
-            <Text style={styles.welcomeTitle}>Welcome back</Text>
-            <Text style={styles.welcomeSubtitle}>Log in to your clinic management dashboard.</Text>
-          </View>
-
-          <View style={styles.form}>
-            {/* Email Input */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email Address</Text>
-              <View style={styles.inputWrapper}>
-                <Mail size={20} color={colors.gray400} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="name@clinic.com"
-                  placeholderTextColor={colors.gray400}
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  autoCorrect={false}
-                  returnKeyType="next"
-                  onSubmitEditing={() => passwordInputRef.current?.focus()}
-                />
-              </View>
-            </View>
-
-            {/* Password Input */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.inputWrapper}>
-                <Lock size={20} color={colors.gray400} style={styles.inputIcon} />
-                <TextInput
-                  ref={passwordInputRef}
-                  style={[styles.input, styles.passwordInput]}
-                  placeholder="........"
-                  placeholderTextColor={colors.gray400}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={isPasswordHidden}
-                  autoCorrect={false}
-                  returnKeyType="done"
-                  onSubmitEditing={handleEmailSignIn}
-                />
-                <TouchableOpacity
-                  style={styles.eyeIcon}
-                  onPress={() => setIsPasswordHidden(!isPasswordHidden)}
-                >
-                  {isPasswordHidden ? (
-                    <EyeOff size={20} color={colors.gray400} />
-                  ) : (
-                    <Eye size={20} color={colors.gray400} />
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Error Message */}
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-            {/* Forgot Password */}
-            <TouchableOpacity style={styles.forgotPassword}>
-              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-            </TouchableOpacity>
-
-            {/* Login Button */}
-            <Pressable
-              onPress={handleEmailSignIn}
-              disabled={isLoading}
-              style={({ pressed }) => [
-                styles.loginButton,
-                { backgroundColor: colors.primary },
-                pressed && styles.buttonPressed,
-                isLoading && styles.buttonDisabled
-              ]}
-            >
-              {isLoading ? (
-                <ActivityIndicator color={colors.white} />
-              ) : (
-                <Text style={styles.loginButtonText}>Login</Text>
-              )}
-            </Pressable>
-
-            {/* Divider */}
-            <View style={styles.dividerContainer}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>Or continue with</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {/* Google Button */}
-            <Pressable
-              onPress={handleGoogleSignIn}
-              disabled={isLoading}
-              style={({ pressed }) => [
-                styles.googleButton,
-                pressed && styles.buttonPressed
-              ]}
-            >
-              <View style={styles.googleButtonContent}>
-                <View style={styles.googleIconPlaceholder}>
-                  <Text style={styles.googleG}>G</Text>
-                </View>
-                <Text style={styles.googleButtonText}>Sign in with Google</Text>
-              </View>
-            </Pressable>
-          </View>
-
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate("Signup")}>
-              <Text style={styles.footerLink}>Create Account</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
+        {viewMode === 'gateway' ? renderGateway() : renderEmailForm()}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -205,47 +254,147 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.white,
-  },
-  keyboardView: {
-    flex: 1,
+    backgroundColor: '#F9FAFB',
   },
   scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 28,
     paddingTop: 40,
-    paddingBottom: 24,
+    paddingBottom: 60,
+    flexGrow: 1,
+    justifyContent: 'flex-end',
+  },
+  content: {
+    paddingHorizontal: 28,
+    paddingTop: 60,
   },
   header: {
-    marginBottom: 40,
+    marginBottom: 48,
   },
-  welcomeTitle: {
-    fontSize: 32,
-    fontWeight: '800',
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  title: {
+    fontSize: 48,
+    fontWeight: '900',
     color: colors.gray900,
+    letterSpacing: -1,
     marginBottom: 8,
   },
-  welcomeSubtitle: {
+  subtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  subtitleText: {
     fontSize: 16,
     color: colors.gray500,
-    lineHeight: 22,
+    fontWeight: '500',
   },
-  form: {
+  linkText: {
+    fontSize: 16,
+    color: colors.info,
+    fontWeight: '700',
+  },
+  chevron: {
+    marginLeft: 4,
+    marginTop: 2,
+  },
+  cardsContainer: {
+    gap: 16,
+    marginBottom: 40,
+  },
+  googleCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 32,
+    padding: 24,
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.05,
+    shadowRadius: 20,
+    elevation: 4,
+  },
+  googleIconContainer: {
+    width: 48,
+    height: 48,
+  },
+  cardLabelContainer: {
+    marginTop: 'auto',
+  },
+  withText: {
+    fontSize: 14,
+    color: colors.gray500,
+    fontWeight: '500',
+  },
+  providerName: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: colors.gray900,
+  },
+  horizontalRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  smallCard: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    aspectRatio: 1, // Small square
+    padding: 24,
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 15,
+    elevation: 3,
+  },
+  smallCardLabels: {
+    marginTop: 'auto',
+  },
+  withTextSmall: {
+    fontSize: 12,
+    color: colors.gray500,
+    fontWeight: '500',
+  },
+  providerNameSmall: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.gray900,
+  },
+  formCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
   },
   inputGroup: {
     marginBottom: 20,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.gray900,
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.gray500,
     marginBottom: 8,
+    marginLeft: 4,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB', // Very light grey
+    backgroundColor: '#F9FAFB',
     borderRadius: 16,
     paddingHorizontal: 16,
     height: 56,
@@ -257,116 +406,26 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     color: colors.gray900,
+    fontWeight: '500',
   },
-  passwordInput: {
-    letterSpacing: 2, // For dots
-  },
-  eyeIcon: {
-    padding: 8,
-  },
-  errorText: {
-    color: colors.error,
-    fontSize: 14,
-    marginBottom: 16,
-  },
-  forgotPassword: {
-    alignSelf: 'flex-end',
-    marginBottom: 24,
-  },
-  forgotPasswordText: {
-    color: colors.primary,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  loginButton: {
+  loginBtn: {
+    backgroundColor: colors.primary,
     height: 56,
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 32,
+    marginTop: 12,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
   },
-  loginButtonText: {
-    color: colors.white,
+  loginBtnText: {
+    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
-  },
-  buttonPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.98 }],
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.gray200,
-  },
-  dividerText: {
-    marginHorizontal: 16,
-    color: colors.gray400,
-    fontSize: 14,
-  },
-  googleButton: {
-    height: 56,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: colors.gray200,
-    backgroundColor: colors.white,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  googleButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  googleIconPlaceholder: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.white,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-    // Add custom styling for Google G if needed
-  },
-  googleG: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#4285F4', // Google blue
-  },
-  googleButtonText: {
-    color: colors.gray900,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 40,
-    paddingBottom: 20,
-  },
-  footerText: {
-    color: colors.gray500,
-    fontSize: 14,
-  },
-  footerLink: {
-    color: colors.primary,
-    fontWeight: '700',
-    fontSize: 14,
   },
 });
-

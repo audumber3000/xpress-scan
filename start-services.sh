@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Start all services for Better Clinic Application
-# This script starts: Node.js WhatsApp service, Python FastAPI backend, and React frontend
+# Fix for macOS fork safety issues
+export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
 
 echo "🚀 Starting all services for Better Clinic Application..."
 echo ""
@@ -11,6 +12,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
+
+# Create logs directory if it doesn't exist
+mkdir -p logs
 
 # Function to check if a port is in use
 check_port() {
@@ -32,28 +36,45 @@ kill_port() {
 
 # Check and kill existing processes
 echo "Checking for existing processes..."
-kill_port 3001  # WhatsApp Service
 kill_port 8000  # Python Backend
+kill_port 8001  # MolarPlus Nexus
 kill_port 5173  # React Frontend (Vite default)
 
 echo ""
 echo "Starting services..."
 echo ""
 
-# Start WhatsApp Service (Node.js)
-echo -e "${GREEN}📱 Starting WhatsApp Service (Node.js) on port 3001...${NC}"
-cd whatsapp-service
-if [ ! -d "node_modules" ]; then
-    echo "Installing WhatsApp service dependencies..."
-    npm install
+# ── Step 0: Start Docker containers (PostgreSQL + Redis) ──
+echo -e "${GREEN}🐘 Starting Docker containers (PostgreSQL + Redis)...${NC}"
+if ! command -v docker &> /dev/null; then
+    echo -e "${RED}❌ Docker is not installed or not in PATH${NC}"
+    exit 1
 fi
-npm start > ../logs/whatsapp-service.log 2>&1 &
-WHATSAPP_PID=$!
-echo "WhatsApp Service PID: $WHATSAPP_PID"
-cd ..
 
-# Wait a bit for WhatsApp service to start
-sleep 3
+if ! docker info &> /dev/null; then
+    echo -e "${RED}❌ Docker daemon is not running. Please start Docker Desktop first.${NC}"
+    exit 1
+fi
+
+docker compose up -d db redis 2>&1 | tail -5
+
+# Wait for PostgreSQL to be healthy
+echo "Waiting for PostgreSQL to be ready..."
+for i in {1..30}; do
+    if docker compose exec -T db pg_isready -U postgres &> /dev/null; then
+        echo -e "${GREEN}✅ PostgreSQL is ready${NC}"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo -e "${RED}❌ PostgreSQL failed to start within 30 seconds${NC}"
+        echo "Check: docker compose logs db"
+        exit 1
+    fi
+    sleep 1
+done
+
+echo -e "${GREEN}✅ Redis is running${NC}"
+echo ""
 
 # Start Python Backend (FastAPI)
 echo -e "${GREEN}🐍 Starting Python Backend (FastAPI) on port 8000...${NC}"
@@ -73,6 +94,31 @@ BACKEND_PID=$!
 echo "Backend PID: $BACKEND_PID"
 cd ..
 
+# Start MolarPlus Nexus (FastAPI Microservice)
+echo -e "${GREEN}⚖️  Starting MolarPlus Nexus (FastAPI) on port 8001...${NC}"
+cd nexus-service
+if [ ! -d "venv" ]; then
+    echo "Creating Nexus virtual environment..."
+    python3 -m venv venv
+fi
+source venv/bin/activate
+if [ ! -f "venv/.installed" ]; then
+    echo "Installing Nexus dependencies..."
+    pip install -r requirements.txt
+    touch venv/.installed
+fi
+python -m uvicorn main:app --reload --host 0.0.0.0 --port 8001 > ../logs/nexus.log 2>&1 &
+NEXUS_PID=$!
+echo "Nexus PID: $NEXUS_PID"
+
+# Start Nexus Worker
+echo -e "${GREEN}👷 Starting Nexus Worker...${NC}"
+python worker.py > ../logs/nexus_worker.log 2>&1 &
+WORKER_PID=$!
+echo "Worker PID: $WORKER_PID"
+echo "$WORKER_PID" > ../logs/nexus_worker.pid
+cd ..
+
 # Wait a bit for backend to start
 sleep 3
 
@@ -88,47 +134,45 @@ FRONTEND_PID=$!
 echo "Frontend PID: $FRONTEND_PID"
 cd ..
 
-# Create logs directory if it doesn't exist
-mkdir -p logs
-
 # Save PIDs to file for easy cleanup
-echo "$WHATSAPP_PID" > logs/whatsapp.pid
 echo "$BACKEND_PID" > logs/backend.pid
+echo "$NEXUS_PID" > logs/nexus.pid
+echo "$WORKER_PID" > logs/nexus_worker.pid
 echo "$FRONTEND_PID" > logs/frontend.pid
 
 echo ""
 echo -e "${GREEN}✅ All services started!${NC}"
 echo ""
 echo "Service URLs:"
-echo "  📱 WhatsApp Service: http://localhost:3001"
 echo "  🐍 Python Backend:  http://localhost:8000"
+echo "  ⚖️  MolarPlus Nexus: http://localhost:8001"
 echo "  ⚛️  React Frontend:  http://localhost:5173"
 echo ""
 echo "Logs are available in the 'logs' directory:"
-echo "  - logs/whatsapp-service.log"
 echo "  - logs/backend.log"
+echo "  - logs/nexus.log"
 echo "  - logs/frontend.log"
 echo ""
 echo "To stop all services, run: ./stop-services.sh"
-echo "Or manually kill PIDs: $WHATSAPP_PID, $BACKEND_PID, $FRONTEND_PID"
+echo "Or manually kill PIDs: $BACKEND_PID, $NEXUS_PID, $WORKER_PID, $FRONTEND_PID"
 echo ""
 
 # Wait a moment and check if services are running
 sleep 5
 echo "Checking service status..."
 
-if check_port 3001; then
-    echo -e "${GREEN}✅ WhatsApp Service is running${NC}"
-else
-    echo -e "${RED}❌ WhatsApp Service failed to start${NC}"
-    echo "Check logs/whatsapp-service.log for errors"
-fi
-
 if check_port 8000; then
     echo -e "${GREEN}✅ Backend is running${NC}"
 else
     echo -e "${RED}❌ Backend failed to start${NC}"
     echo "Check logs/backend.log for errors"
+fi
+
+if check_port 8001; then
+    echo -e "${GREEN}✅ MolarPlus Nexus is running${NC}"
+else
+    echo -e "${RED}❌ MolarPlus Nexus failed to start${NC}"
+    echo "Check logs/nexus.log for errors"
 fi
 
 if check_port 5173; then
@@ -145,8 +189,9 @@ echo "Press Ctrl+C to stop all services (or run ./stop-services.sh)"
 cleanup() {
     echo ""
     echo "Stopping all services..."
-    kill $WHATSAPP_PID 2>/dev/null
     kill $BACKEND_PID 2>/dev/null
+    kill $NEXUS_PID 2>/dev/null
+    kill $WORKER_PID 2>/dev/null
     kill $FRONTEND_PID 2>/dev/null
     echo "Services stopped."
     exit 0

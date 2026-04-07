@@ -43,6 +43,25 @@ class PatientRepository(BaseRepository[Patient], PatientRepositoryProtocol):
             )
         ).offset(skip).limit(limit).all()
 
+    def search_duplicates(self, clinic_id: int, name: Optional[str] = None, phone: Optional[str] = None, email: Optional[str] = None) -> List[Patient]:
+        """Search for potential duplicate patients by name, phone, or email"""
+        filters = [Patient.clinic_id == clinic_id]
+        or_filters = []
+        
+        if name:
+            or_filters.append(Patient.name.ilike(f"%{name}%"))
+        if phone:
+            or_filters.append(Patient.phone == phone)
+        if email:
+            or_filters.append(Patient.email == email)
+            
+        if not or_filters:
+            return []
+            
+        return self.db.query(Patient).filter(
+            and_(*filters, or_(*or_filters))
+        ).limit(10).all()
+
     def get_patients_with_payment_summary(self, clinic_id: int, skip: int = 0, limit: int = 100) -> List[Dict[str, Any]]:
         """Get patients with their total payment amounts"""
         query = self.db.query(

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { AppointmentCard } from './AppointmentCard';
 import { colors } from '../../../../shared/constants/colors';
 
@@ -22,24 +22,27 @@ export const AppointmentsList: React.FC<AppointmentsListProps> = ({
     <View style={styles.appointmentsSection}>
       <View style={styles.appointmentsHeader}>
         <Text style={styles.appointmentsDate}>
-          {formatDate(selectedDate).toUpperCase()}
+          {(formatDate(selectedDate) || '').toUpperCase()}
         </Text>
         <Text style={styles.appointmentsCount}>
           {appointments.length} Appointments
         </Text>
       </View>
 
-      {appointments.length > 0 ? (
-        appointments.map((appointment) => (
+      <FlatList
+        data={appointments}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={({ item }) => (
           <AppointmentCard
-            key={appointment.id}
-            appointment={appointment}
-            onPress={() => onAppointmentPress(appointment)}
+            appointment={item}
+            onPress={() => onAppointmentPress(item)}
           />
-        ))
-      ) : (
-        <Text style={styles.noAppointments}>No more appointments today</Text>
-      )}
+        )}
+        scrollEnabled={false} // Nested inside ScrollView in parent
+        ListEmptyComponent={
+          <Text style={styles.noAppointments}>No more appointments today</Text>
+        }
+      />
     </View>
   );
 };

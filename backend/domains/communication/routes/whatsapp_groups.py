@@ -14,8 +14,8 @@ from pydantic import BaseModel
 
 router = APIRouter(tags=["WhatsApp Groups"])
 
-# WhatsApp Service URL (Node.js service)
-WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://localhost:3001")
+# MolarPlus Nexus Service URL
+NEXUS_SERVICES_URL = os.getenv("NEXUS_SERVICES_URL", "http://localhost:8001")
 
 
 # Pydantic schemas
@@ -45,7 +45,7 @@ async def create_group(
     """Create a new WhatsApp group"""
     try:
         response = requests.post(
-            f"{WHATSAPP_SERVICE_URL}/api/group/create/{current_user.id}",
+            f"{NEXUS_SERVICES_URL}/api/group/create/{current_user.id}",
             json={
                 "name": request.name,
                 "participants": request.participants
@@ -76,7 +76,7 @@ async def get_groups(
     """Get all groups for the current user"""
     try:
         response = requests.get(
-            f"{WHATSAPP_SERVICE_URL}/api/groups/{current_user.id}",
+            f"{NEXUS_SERVICES_URL}/api/groups/{current_user.id}",
             timeout=30
         )
         
@@ -113,7 +113,7 @@ async def get_group_info(
     """Get detailed information about a group"""
     try:
         response = requests.get(
-            f"{WHATSAPP_SERVICE_URL}/api/group/{current_user.id}/{groupId}",
+            f"{NEXUS_SERVICES_URL}/api/group/{current_user.id}/{groupId}",
             timeout=30
         )
         
@@ -142,7 +142,7 @@ async def invite_user_to_group(
     """Invite a user to a group"""
     try:
         response = requests.post(
-            f"{WHATSAPP_SERVICE_URL}/api/group/invite/{current_user.id}/{groupId}",
+            f"{NEXUS_SERVICES_URL}/api/group/invite/{current_user.id}/{groupId}",
             json={"participant": request.participant},
             timeout=60
         )
@@ -172,7 +172,7 @@ async def make_user_admin(
     """Make a user admin in a group"""
     try:
         response = requests.post(
-            f"{WHATSAPP_SERVICE_URL}/api/group/make-admin/{current_user.id}/{groupId}",
+            f"{NEXUS_SERVICES_URL}/api/group/make-admin/{current_user.id}/{groupId}",
             json={"participant": request.participant},
             timeout=60
         )
@@ -202,7 +202,7 @@ async def demote_admin(
     """Demote an admin in a group"""
     try:
         response = requests.post(
-            f"{WHATSAPP_SERVICE_URL}/api/group/demote-admin/{current_user.id}/{groupId}",
+            f"{NEXUS_SERVICES_URL}/api/group/demote-admin/{current_user.id}/{groupId}",
             json={"participant": request.participant},
             timeout=60
         )
@@ -231,7 +231,7 @@ async def leave_group(
     """Leave a group"""
     try:
         response = requests.post(
-            f"{WHATSAPP_SERVICE_URL}/api/group/leave/{current_user.id}/{groupId}",
+            f"{NEXUS_SERVICES_URL}/api/group/leave/{current_user.id}/{groupId}",
             timeout=60
         )
         
@@ -260,7 +260,7 @@ async def update_group_subject(
     """Update group subject/name"""
     try:
         response = requests.post(
-            f"{WHATSAPP_SERVICE_URL}/api/group/update-subject/{current_user.id}/{groupId}",
+            f"{NEXUS_SERVICES_URL}/api/group/update-subject/{current_user.id}/{groupId}",
             json={"subject": request.subject},
             timeout=60
         )
@@ -290,7 +290,7 @@ async def update_group_description(
     """Update group description"""
     try:
         response = requests.post(
-            f"{WHATSAPP_SERVICE_URL}/api/group/update-description/{current_user.id}/{groupId}",
+            f"{NEXUS_SERVICES_URL}/api/group/update-description/{current_user.id}/{groupId}",
             json={"description": request.description},
             timeout=60
         )
@@ -319,7 +319,7 @@ async def get_group_invite_code(
     """Get group invite code/link"""
     try:
         response = requests.get(
-            f"{WHATSAPP_SERVICE_URL}/api/group/invite-code/{current_user.id}/{groupId}",
+            f"{NEXUS_SERVICES_URL}/api/group/invite-code/{current_user.id}/{groupId}",
             timeout=30
         )
         

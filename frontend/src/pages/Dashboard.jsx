@@ -3,9 +3,8 @@ import Card from "../components/Card";
 import GearLoader from "../components/GearLoader";
 import { useAuth } from "../contexts/AuthContext";
 import { api } from "../utils/api";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid, ReferenceLine, Label, LineChart, Line, Area, AreaChart, RadialBarChart, RadialBar } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList, PieChart, Pie, Cell, CartesianGrid, ReferenceLine, Label, LineChart, Line, Area, AreaChart, RadialBarChart, RadialBar } from "recharts";
 
-const COLORS = ["#2a276e", "#9B8CFF", "#6ee7b7", "#f59e0b", "#ef4444", "#8b5cf6"];
 
 // Format number to k notation (e.g., 10000 -> 10k, 10200 -> 10.2k)
 const formatToK = (value) => {
@@ -16,95 +15,8 @@ const formatToK = (value) => {
   return value.toString();
 };
 
-// Week-wise data for metrics cards
-const weekData = [
-  { week: "4 weeks ago", value: 6000 },
-  { week: "3 weeks ago", value: 7000 },
-  { week: "2 weeks ago", value: 9000 },
-  { week: "1 week ago", value: 8000 },
-  { week: "Current", value: 10000 },
-];
 
-const patientStatsDataByMonth = [
-  { month: "Dec", patient: 6000, inpatient: 0 },
-  { month: "Jan", patient: 11000, inpatient: 0 },
-  { month: "Feb", patient: 7000, inpatient: 0 },
-  { month: "Mar", patient: 4000, inpatient: 0 },
-  { month: "Apr", patient: 12000, inpatient: 0 },
-  { month: "May", patient: 10000, inpatient: 7000 },
-  { month: "Jun", patient: 9000, inpatient: 0 },
-  { month: "Jul", patient: 8000, inpatient: 0 },
-  { month: "Aug", patient: 9500, inpatient: 0 },
-  { month: "Sep", patient: 10500, inpatient: 0 },
-  { month: "Oct", patient: 11500, inpatient: 0 },
-  { month: "Nov", patient: 7000, inpatient: 0 },
-];
-const patientStatsDataByWeek = [
-  { day: "Sun", patient: 1200, inpatient: 0 },
-  { day: "Mon", patient: 1500, inpatient: 0 },
-  { day: "Tue", patient: 1800, inpatient: 0 },
-  { day: "Wed", patient: 1700, inpatient: 0 },
-  { day: "Thu", patient: 1600, inpatient: 0 },
-  { day: "Fri", patient: 1400, inpatient: 0 },
-  { day: "Sat", patient: 1300, inpatient: 0 },
-];
-const patientStatsDataCurrentWeek = [
-  { day: "Mon", patient: 900, inpatient: 0 },
-  { day: "Tue", patient: 1100, inpatient: 0 },
-  { day: "Wed", patient: 1200, inpatient: 0 },
-  { day: "Thu", patient: 1000, inpatient: 0 },
-  { day: "Fri", patient: 950, inpatient: 0 },
-  { day: "Sat", patient: 1050, inpatient: 0 },
-  { day: "Sun", patient: 1150, inpatient: 0 },
-];
 
-// Hypothetical data for Venue Visitor
-const venueVisitorData = [
-  { name: "Male", value: 32000, color: COLORS[0] },
-  { name: "Female", value: 41000, color: COLORS[1] },
-  { name: "Others", value: 10943, color: COLORS[2] },
-];
-const totalVisitors = venueVisitorData.reduce((sum, d) => sum + d.value, 0);
-
-// Revenue Analytics Data
-const revenueData = [
-  { day: "Mon", revenue: 45000, target: 50000 },
-  { day: "Tue", revenue: 52000, target: 50000 },
-  { day: "Wed", revenue: 48000, target: 50000 },
-  { day: "Thu", revenue: 61000, target: 50000 },
-  { day: "Fri", revenue: 58000, target: 50000 },
-  { day: "Sat", revenue: 42000, target: 40000 },
-  { day: "Sun", revenue: 35000, target: 35000 },
-];
-
-// Appointment Booking Trends Data
-const appointmentData = [
-  { time: "9 AM", bookings: 12, capacity: 15 },
-  { time: "10 AM", bookings: 18, capacity: 20 },
-  { time: "11 AM", bookings: 15, capacity: 18 },
-  { time: "12 PM", bookings: 8, capacity: 12 },
-  { time: "2 PM", bookings: 20, capacity: 22 },
-  { time: "3 PM", bookings: 16, capacity: 18 },
-  { time: "4 PM", bookings: 14, capacity: 16 },
-  { time: "5 PM", bookings: 10, capacity: 15 },
-];
-
-// Clinic Capacity Utilization Data
-const capacityData = [
-  { name: "Utilization", value: 78, fill: "#2a276e" }
-];
-
-function getTodayString() {
-  const today = new Date();
-  const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-  return today.toLocaleDateString('en-US', options);
-}
-
-const patientStatsOptions = [
-  { label: "Last 12 Months", value: "months" },
-  { label: "This Week", value: "currentWeek" },
-  { label: "Week Days", value: "week" },
-];
 
 // Icons8 Line Awesome Icons for Dental Dashboard
 const ToothIcon = () => <i className="las la-tooth text-2xl"></i>;
@@ -142,8 +54,11 @@ const calculateYAxisDomain = (data, dataKeys, paddingPercent = 0.15) => {
   let domainMax = maxValue + padding;
 
   // Round to nice numbers
-  const niceMin = Math.floor(domainMin / getNiceStep(domainMin, domainMax)) * getNiceStep(domainMin, domainMax);
-  const niceMax = Math.ceil(domainMax / getNiceStep(domainMin, domainMax)) * getNiceStep(domainMin, domainMax);
+  const step = getNiceStep(domainMin, domainMax);
+  const niceMin = Math.floor(domainMin / step) * step;
+  // Reduce the floor to 2 steps for very small data to make it look "bigger"
+  const minSteps = domainMax > 10 ? 5 : 2;
+  const niceMax = Math.max(Math.ceil(domainMax / step) * step, domainMin + step * minSteps);
 
   return [niceMin, niceMax];
 };
@@ -167,7 +82,9 @@ const getNiceStep = (min, max) => {
     }
   }
 
-  return bestStep * magnitude;
+  const finalStep = bestStep * magnitude;
+  // For dashboard metrics (counts/currency), avoid fractional steps unless very small
+  return finalStep < 1 && range > 1 ? 1 : (finalStep || 1);
 };
 const CalendarCheckIcon = () => <i className="las la-calendar-check text-2xl"></i>;
 const ChairIcon = () => <i className="las la-procedures text-2xl"></i>;
@@ -175,6 +92,7 @@ const TreatmentIcon = () => <i className="las la-syringe text-2xl"></i>;
 const QualityIcon = () => <i className="las la-star text-2xl"></i>;
 const ClockIcon = () => <i className="las la-clock text-2xl"></i>;
 const ActivityIcon = () => <i className="las la-heartbeat text-2xl"></i>;
+const RevenueIcon = () => <i className="las la-money-bill-wave text-2xl opacity-80"></i>;
 
 // Purple AI Sparkle Icon Component (two four-pointed stars)
 const AISparkleIcon = ({ className = "w-3 h-3" }) => (
@@ -205,13 +123,61 @@ const AISparkleIcon = ({ className = "w-3 h-3" }) => (
     </defs>
   </svg>
 );
+// Standardized Chart Card Component for Dashboard Widgets
+const ChartCard = ({ 
+  title, 
+  icon, 
+  children, 
+  loading, 
+  isEmpty, 
+  onAISparkle, 
+  minWidth = "min-w-[300px]",
+  flexClass = "flex-1"
+}) => {
+  return (
+    <div className={`bg-white border border-gray-200 rounded-2xl p-6 flex flex-col ${flexClass} ${minWidth} relative shadow-sm hover:shadow-md transition-all duration-300`}>
+      {/* AI Sparkle Icon Button */}
+      {onAISparkle && (
+        <button
+          onClick={onAISparkle}
+          className="absolute top-5 right-5 p-2 bg-white border border-[#2a276e]/10 rounded-full hover:bg-[#201d5a] hover:text-white text-[#2a276e] transition-all duration-200 transform hover:scale-110 shadow-sm z-10"
+          title="Ask AI Assistant"
+        >
+          <AISparkleIcon className="w-3.5 h-3.5" />
+        </button>
+      )}
+      
+      {/* Standardized Header */}
+      <div className="flex items-center justify-between mb-6 pr-12">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-[#f0f0fd] rounded-xl text-[#2a276e] border border-[#c5c2f0]/30 shadow-sm">
+            {icon}
+          </div>
+          <h3 className="font-bold text-gray-900 tracking-tight text-lg">{title}</h3>
+        </div>
+        
+        {/* Removed Sync Status Badge */}
+      </div>
+
+      {/* Content Area */}
+      <div className="flex-1 relative min-h-[220px]">
+        {loading || isEmpty ? (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <GearLoader size="w-10 h-10" />
+          </div>
+        ) : children}
+      </div>
+    </div>
+  );
+};
 
 // Metric Card Component with dental icons
-const MetricCard = ({ title, value, change, changeType, sub, weekData, onClick, icon }) => {
+const MetricCard = ({ title, value, change, changeType, onClick, icon }) => {
   const getIcon = () => {
     if (icon === 'tooth') return <ToothIcon />;
     if (icon === 'calendar') return <CalendarCheckIcon />;
     if (icon === 'chair') return <ChairIcon />;
+    if (icon === 'revenue') return <RevenueIcon />;
     return <ToothIcon />;
   };
 
@@ -230,53 +196,43 @@ const MetricCard = ({ title, value, change, changeType, sub, weekData, onClick, 
           See Details
         </button>
       </div>
-      <div className="text-2xl font-bold text-gray-900 leading-tight">{value.toLocaleString()}</div>
+      <div className="text-2xl font-bold text-gray-900 leading-tight">
+        {icon === 'revenue' ? '₹' : ''}{value.toLocaleString()}
+      </div>
       <div className="flex items-center gap-1 text-xs">
         <span className={changeType === "up" ? "text-green-600" : "text-red-500"}>
-          {changeType === "up" ? "▲" : "▼"} {change}% vs last week
+          {changeType === "up" ? "▲" : "▼"} {Math.abs(change)}% vs last prev.
         </span>
       </div>
     </div>
   );
 };
 
+
 const Dashboard = () => {
-  const { user } = useAuth();
-  const [timeRange, setTimeRange] = useState("months");
-  const [weather, setWeather] = useState(null);
-  const [loading, setLoading] = useState(true);
+  useAuth();
+
+  const [globalPeriod, setGlobalPeriod] = useState("month"); // today, yesterday, 7days, month
   const [clinicData, setClinicData] = useState(null);
-  const [userData, setUserData] = useState(null);
   
   // Real metrics data from API - Dental specific
   const [metrics, setMetrics] = useState([
-    { title: "Total Patients", value: 0, change: "0%", changeType: "up", sub: "vs last week", weekData, icon: "tooth" },
-    { title: "Appointments Today", value: 0, change: "0%", changeType: "up", sub: "vs yesterday", weekData, icon: "calendar" },
-    { title: "Chair Capacity", value: 0, change: "0%", changeType: "up", sub: "utilization", weekData, icon: "chair" },
+    { title: "Total Patients", value: 0, change: 0, changeType: "up", icon: "tooth" },
+    { title: "Appointments", value: 0, change: 0, changeType: "up", icon: "calendar" },
+    { title: "Checking", value: 0, change: 0, changeType: "up", icon: "chair" },
+    { title: "Revenue", value: 0, change: 0, changeType: "up", icon: "revenue" },
   ]);
   const [patientStatsData, setPatientStatsData] = useState([]);
   const [venueVisitorDataState, setVenueVisitorDataState] = useState([]);
   const [revenueDataState, setRevenueDataState] = useState([]);
-  const [capacityDataState, setCapacityDataState] = useState([]);
   const [appointmentDataState, setAppointmentDataState] = useState([]);
-  const [treatmentStatsData, setTreatmentStatsData] = useState([]);
-  const [appointmentQualityData, setAppointmentQualityData] = useState(null);
-  const [chairDetailsData, setChairDetailsData] = useState(null);
-  const [clinicPerformanceData, setClinicPerformanceData] = useState(null);
-  const [patientMapData, setPatientMapData] = useState([]);
   
   // Loading states for each graph
   const [loadingPatientStats, setLoadingPatientStats] = useState(true);
   const [loadingDemographics, setLoadingDemographics] = useState(true);
   const [loadingRevenue, setLoadingRevenue] = useState(true);
   const [loadingAppointments, setLoadingAppointments] = useState(true);
-  const [loadingCapacity, setLoadingCapacity] = useState(true);
-  const [loadingTreatments, setLoadingTreatments] = useState(true);
-  const [loadingQuality, setLoadingQuality] = useState(true);
-  const [loadingChairs, setLoadingChairs] = useState(true);
-  const [compareClinicIds, setCompareClinicIds] = useState('');
-  const [revenuePeriod, setRevenuePeriod] = useState('week');
-  const [showRevenueDropdown, setShowRevenueDropdown] = useState(false);
+
 
   // Chat panel states
   const [chatMessages, setChatMessages] = useState([
@@ -296,58 +252,50 @@ const Dashboard = () => {
   const [drawerLoading, setDrawerLoading] = useState(false);
   
   // Dashboard customization states
-  const [isEditMode, setIsEditMode] = useState(false);
+
   const [showCustomizeDrawer, setShowCustomizeDrawer] = useState(false);
   const [showChatPanel, setShowChatPanel] = useState(false);
   const [visibleWidgets, setVisibleWidgets] = useState({
     patientStats: true,
     demographics: true,
     revenue: true,
-    appointments: true,
-    dentalChairs: true,
-    chairUtilization: true,
-    clinicPerformance: true,
-    patientMap: true,
-    treatments: true,
-    quality: true
+    appointments: true
   });
 
   // Fetch dashboard metrics
   useEffect(() => {
     const fetchDashboardMetrics = async () => {
       try {
-        const metricsData = await api.get("/dashboard/metrics");
+        const metricsData = await api.get(`/dashboard/metrics?period=${globalPeriod}`);
         
         setMetrics([
           { 
             title: "Total Patients", 
             value: metricsData.total_patients.value, 
-            change: `${metricsData.total_patients.change >= 0 ? '+' : ''}${metricsData.total_patients.change}%`, 
+            change: metricsData.total_patients.change, 
             changeType: metricsData.total_patients.change_type, 
-            sub: "vs last week", 
-            weekData,
-            icon: "tooth",
-            apiData: metricsData.total_patients
+            icon: "tooth"
           },
           { 
-            title: "Appointments Today", 
-            value: metricsData.appointments_today?.value || 0, 
-            change: `${metricsData.appointments_today?.change >= 0 ? '+' : ''}${metricsData.appointments_today?.change || 0}%`, 
-            changeType: metricsData.appointments_today?.change_type || "up", 
-            sub: "vs yesterday", 
-            weekData,
-            icon: "calendar",
-            apiData: metricsData.appointments_today
+            title: "Appointments", 
+            value: metricsData.appointments.value, 
+            change: metricsData.appointments.change, 
+            changeType: metricsData.appointments.change_type, 
+            icon: "calendar"
           },
           { 
-            title: "Chair Capacity", 
-            value: `${metricsData.chair_capacity?.utilization || 0}%`, 
-            change: `${metricsData.chair_capacity?.chairs_occupied || 0}/${metricsData.chair_capacity?.total_chairs || 0}`, 
-            changeType: "up", 
-            sub: "chairs occupied", 
-            weekData,
-            icon: "chair",
-            apiData: metricsData.chair_capacity
+            title: "Checking", 
+            value: metricsData.checking.value, 
+            change: metricsData.checking.change, 
+            changeType: metricsData.checking.change_type, 
+            icon: "chair"
+          },
+          { 
+            title: "Revenue", 
+            value: metricsData.revenue.value, 
+            change: metricsData.revenue.change, 
+            changeType: metricsData.revenue.change_type, 
+            icon: "revenue"
           },
         ]);
       } catch (error) {
@@ -356,14 +304,13 @@ const Dashboard = () => {
     };
     
     fetchDashboardMetrics();
-  }, []);
+  }, [globalPeriod]);
   
   // Fetch clinic and user data
   useEffect(() => {
     const fetchClinicData = async () => {
       try {
         const response = await api.get("/auth/me");
-        setUserData(response);
         setClinicData(response.clinic);
       } catch (error) {
         console.error("Error fetching clinic data:", error);
@@ -373,12 +320,12 @@ const Dashboard = () => {
     fetchClinicData();
   }, []);
   
-  // Fetch patient statistics when timeRange changes
+  // Fetch patient statistics when globalPeriod changes
   useEffect(() => {
     const fetchPatientStats = async () => {
       setLoadingPatientStats(true);
       try {
-        const data = await api.get(`/dashboard/patient-stats?period=${timeRange}`);
+        const data = await api.get(`/dashboard/patient-stats?period=${globalPeriod}`);
         setPatientStatsData(data);
       } catch (error) {
         console.error("Error fetching patient stats:", error);
@@ -389,14 +336,14 @@ const Dashboard = () => {
     };
     
     fetchPatientStats();
-  }, [timeRange]);
+  }, [globalPeriod]);
   
-  // Fetch demographics
+  // Fetch demographics when globalPeriod changes
   useEffect(() => {
     const fetchDemographics = async () => {
       setLoadingDemographics(true);
       try {
-        const data = await api.get("/dashboard/demographics");
+        const data = await api.get(`/dashboard/demographics?period=${globalPeriod}`);
         setVenueVisitorDataState(data);
       } catch (error) {
         console.error("Error fetching demographics:", error);
@@ -407,44 +354,16 @@ const Dashboard = () => {
     };
     
     fetchDemographics();
-  }, []);
+  }, [globalPeriod]);
 
-  // Fetch clinic performance data
-  useEffect(() => {
-    const fetchClinicPerformance = async () => {
-      try {
-        const data = await api.get("/dashboard/clinic-performance", {
-          params: compareClinicIds ? { compare_clinic_ids: compareClinicIds } : {}
-        });
-        setClinicPerformanceData(data);
-      } catch (error) {
-        console.error("Error fetching clinic performance:", error);
-      }
-    };
+  // Removed clinic performance and location sync as they are no longer needed
 
-    fetchClinicPerformance();
-  }, [compareClinicIds]);
-
-  // Fetch patient map data
-  useEffect(() => {
-    const fetchPatientLocations = async () => {
-      try {
-        const data = await api.get("/dashboard/patient-locations");
-        setPatientMapData(data);
-      } catch (error) {
-        console.error("Error fetching patient locations:", error);
-      }
-    };
-
-    fetchPatientLocations();
-  }, []);
-
-  // Fetch revenue data
+  // Fetch revenue data when globalPeriod changes
   useEffect(() => {
     const fetchRevenue = async () => {
       setLoadingRevenue(true);
       try {
-        const data = await api.get(`/dashboard/revenue?period=${revenuePeriod}`);
+        const data = await api.get(`/dashboard/revenue?period=${globalPeriod}`);
         setRevenueDataState(data);
       } catch (error) {
         console.error("Error fetching revenue:", error);
@@ -455,46 +374,21 @@ const Dashboard = () => {
     };
     
     fetchRevenue();
-  }, [revenuePeriod]);
+  }, [globalPeriod]);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (showRevenueDropdown && !event.target.closest('.revenue-dropdown')) {
-        setShowRevenueDropdown(false);
-      }
-    };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showRevenueDropdown]);
   
-  // Fetch capacity
-  useEffect(() => {
-    const fetchCapacity = async () => {
-      setLoadingCapacity(true);
-      try {
-        const data = await api.get("/dashboard/capacity");
-        setCapacityDataState([{ name: "Utilization", value: data.utilization, fill: "#2a276e" }]);
-      } catch (error) {
-        console.error("Error fetching capacity:", error);
-        setCapacityDataState([]);
-      } finally {
-        setLoadingCapacity(false);
-      }
-    };
-    
-    fetchCapacity();
-  }, []);
+
   
-  // Fetch appointment trends
+  // Fetch appointment trends when globalPeriod changes
   useEffect(() => {
     const fetchAppointmentTrends = async () => {
       setLoadingAppointments(true);
       try {
-        const data = await api.get("/dashboard/appointments/trends");
-        console.log("Appointment trends data received:", data);
-        if (data && Array.isArray(data) && data.length > 0) {
+        // Reuse the patient stats endpoint logic or similar for trends if needed, 
+        // but for now we follow the global period
+        const data = await api.get(`/dashboard/appointments/trends?period=${globalPeriod}`);
+        if (data && Array.isArray(data)) {
           setAppointmentDataState(data);
         } else {
           setAppointmentDataState([]);
@@ -508,61 +402,9 @@ const Dashboard = () => {
     };
     
     fetchAppointmentTrends();
-  }, []);
+  }, [globalPeriod]);
   
-  // Fetch treatment statistics
-  useEffect(() => {
-    const fetchTreatments = async () => {
-      setLoadingTreatments(true);
-      try {
-        const data = await api.get("/dashboard/treatments/stats?period=week");
-        setTreatmentStatsData(data.treatments || []);
-      } catch (error) {
-        console.error("Error fetching treatments:", error);
-        setTreatmentStatsData([]);
-      } finally {
-        setLoadingTreatments(false);
-      }
-    };
-    
-    fetchTreatments();
-  }, []);
-  
-  // Fetch appointment quality
-  useEffect(() => {
-    const fetchQuality = async () => {
-      setLoadingQuality(true);
-      try {
-        const data = await api.get("/dashboard/appointments/quality");
-        setAppointmentQualityData(data);
-      } catch (error) {
-        console.error("Error fetching appointment quality:", error);
-        setAppointmentQualityData(null);
-      } finally {
-        setLoadingQuality(false);
-      }
-    };
-    
-    fetchQuality();
-  }, []);
-  
-  // Fetch detailed chair data
-  useEffect(() => {
-    const fetchChairDetails = async () => {
-      setLoadingChairs(true);
-      try {
-        const data = await api.get("/dashboard/chairs/status");
-        setChairDetailsData(data);
-      } catch (error) {
-        console.error("Error fetching chair details:", error);
-        setChairDetailsData(null);
-      } finally {
-        setLoadingChairs(false);
-      }
-    };
-    
-    fetchChairDetails();
-  }, []);
+  // Removed treatments, quality and chair details fetch as they are no longer needed
   
   // Handle metric card click to open drawer
   const handleMetricClick = async (metric) => {
@@ -662,68 +504,6 @@ const Dashboard = () => {
     savePreferences(newWidgets);
   };
 
-  // Fetch weather data
-  useEffect(() => {
-    const fetchWeather = async () => {
-      try {
-        // Get user's location
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(async (position) => {
-            const { latitude, longitude } = position.coords;
-            
-            // Using OpenWeatherMap API (free tier)
-            const API_KEY = 'YOUR_API_KEY'; // You'll need to get a free API key from openweathermap.org
-            const response = await fetch(
-              `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${API_KEY}&units=imperial`
-            );
-            
-            if (response.ok) {
-              const data = await response.json();
-              setWeather({
-                temp: Math.round(data.main.temp),
-                condition: data.weather[0].main,
-                icon: data.weather[0].icon
-              });
-            } else {
-              // Fallback to default weather if API fails
-              setWeather({ temp: 72, condition: 'Sunny', icon: '01d' });
-            }
-            setLoading(false);
-          }, () => {
-            // Fallback if geolocation fails
-            setWeather({ temp: 72, condition: 'Sunny', icon: '01d' });
-            setLoading(false);
-          });
-        } else {
-          // Fallback if geolocation not supported
-          setWeather({ temp: 72, condition: 'Sunny', icon: '01d' });
-          setLoading(false);
-        }
-      } catch (error) {
-        console.error('Error fetching weather:', error);
-        setWeather({ temp: 72, condition: 'Sunny', icon: '01d' });
-        setLoading(false);
-      }
-    };
-
-    fetchWeather();
-  }, []);
-
-  // Weather icon mapping
-  const getWeatherIcon = (iconCode) => {
-    const iconMap = {
-      '01d': '☀️', '01n': '🌙',
-      '02d': '⛅', '02n': '☁️',
-      '03d': '☁️', '03n': '☁️',
-      '04d': '☁️', '04n': '☁️',
-      '09d': '🌧️', '09n': '🌧️',
-      '10d': '🌦️', '10n': '🌧️',
-      '11d': '⛈️', '11n': '⛈️',
-      '13d': '❄️', '13n': '❄️',
-      '50d': '🌫️', '50n': '🌫️'
-    };
-    return iconMap[iconCode] || '☀️';
-  };
 
   // Get clinic type description based on specialization
   const getClinicTypeDescription = (specialization) => {
@@ -735,64 +515,58 @@ const Dashboard = () => {
     return descriptions[specialization] || 'medical clinic';
   };
 
-  // Determine xKey based on data structure
-  let xKey = "month";
-  if (patientStatsData.length > 0 && patientStatsData[0].day) {
-    xKey = "day";
-  }
+  // Use label as the consistent X-axis key from backend
+  const xKey = "label";
   
-  // Calculate average
-  const avg = Math.round(
-    patientStatsData.reduce((sum, d) => sum + d.patient + (d.inpatient || 0), 0) /
-      (patientStatsData.length || 1)
-  );
+
 
   return (
     <div className="w-full h-full min-h-screen bg-gray-50 p-8 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
       {/* Heading and date */}
-      <div className="mb-6">
-        <div className="flex items-start justify-between">
+      <div className="mb-8">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              {clinicData?.name ? `${clinicData.name} Dashboard` : 'Dashboard'}
+            <h1 className="text-3xl font-bold text-[#2a276e] tracking-tight">
+              Dashboard
             </h1>
-            <div className="text-sm text-gray-600 mt-1">
-              Overview and analytics of your {getClinicTypeDescription(clinicData?.specialization)}
+            <div className="text-gray-500 font-medium mt-1">
+              Welcome back to your {getClinicTypeDescription(clinicData?.specialization || 'medical clinic')}
             </div>
           </div>
+          
           <div className="flex items-center gap-3">
-            <div className="text-right">
-              <div className="text-sm font-medium text-gray-900">{getTodayString()}</div>
-              <div className="text-xs text-gray-500 mt-1 flex items-center gap-2 justify-end">
-                {loading ? (
-                  <div className="animate-pulse">Loading weather...</div>
-                ) : weather ? (
-                  <>
-                    <span className="text-lg">{getWeatherIcon(weather.icon)}</span>
-                    <span>{weather.condition}, {weather.temp}°F</span>
-                  </>
-                ) : (
-                  <span>Weather unavailable</span>
-                )}
+            {/* Global Time Filter */}
+            <div className="relative group">
+              <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2.5 shadow-sm hover:shadow-md transition-all duration-200 group-hover:border-[#9B8CFF]/50">
+                <i className="las la-calendar text-[#9B8CFF] text-lg"></i>
+                <select 
+                  value={globalPeriod} 
+                  onChange={(e) => setGlobalPeriod(e.target.value)}
+                  className="text-sm font-bold text-gray-700 bg-transparent border-none focus:ring-0 cursor-pointer pr-8"
+                >
+                  <option value="today">Today</option>
+                  <option value="yesterday">Yesterday</option>
+                  <option value="7days">Last 7 Days</option>
+                  <option value="month">This Month</option>
+                </select>
               </div>
             </div>
-            
-            {/* Customize Dashboard Icon Button */}
+
+            {/* Customize Dashboard Button */}
             <button 
               onClick={() => setShowCustomizeDrawer(true)}
-              className="p-2.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              title="Customize Dashboard"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#f0f0fd] text-[#2a276e] font-bold text-sm border border-[#c5c2f0] rounded-xl hover:bg-[#e4e3f9] transition-all duration-200 shadow-sm"
             >
-              <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
+              <span>Edit Layout</span>
             </button>
           </div>
         </div>
-        <div className="border-b border-gray-200 mt-4"></div>
       </div>
-      {/* 3-metric cards in a single row, simple border, no shadow */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+      {/* 4-metric cards in a single row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
         {metrics.map((m) => (
           <MetricCard key={m.title} {...m} onClick={() => handleMetricClick(m)} />
         ))}
@@ -801,719 +575,210 @@ const Dashboard = () => {
       <div className="flex flex-wrap gap-6 mb-6">
         {/* Patient Statistics Bar Chart (2/3 width) */}
         {visibleWidgets.patientStats && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-2 flex flex-col flex-1 min-w-[500px] relative">
-          {/* AI Sparkle Icon */}
-          <button
-            onClick={() => setShowChatPanel(true)}
-            className="absolute top-3 right-3 p-1.5 bg-white border border-[#2a276e]/20 rounded-full hover:bg-[#2a276e]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
-            title="Ask AI Assistant"
+          <ChartCard
+            title="Patient Statistics"
+            minWidth="min-w-[500px]"
+            flexClass="flex-[2]"
+            onAISparkle={() => setShowChatPanel(true)}
+            loading={loadingPatientStats}
+            isEmpty={patientStatsData.length === 0}
+            icon={
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            }
           >
-            <AISparkleIcon className="w-3 h-3" />
-          </button>
-          <div className="flex items-center justify-between mb-2 pr-10">
-            <div className="flex items-center gap-2">
-              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#2a276e]">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-              <span className="font-semibold text-gray-800">Patient Statistics</span>
-            </div>
-            <select value={timeRange} onChange={e => setTimeRange(e.target.value)} className="border rounded px-2 py-1 text-xs">
-              {patientStatsOptions.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-          {loadingPatientStats || patientStatsData.length === 0 ? (
-            <div className="flex items-center justify-center h-[220px]">
-              <div className="flex flex-col items-center gap-2">
-                <GearLoader size="w-8 h-8" />
-                <span className="text-xs text-gray-500">Loading data...</span>
-              </div>
-            </div>
-          ) : (
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={patientStatsData} barGap={8}>
-              <defs>
-                <linearGradient id="patientGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#2a276e" stopOpacity={0.8} />
-                  <stop offset="100%" stopColor="#9B8CFF" stopOpacity={0.6} />
-                </linearGradient>
-                <linearGradient id="inpatientGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#2a276e" stopOpacity={0.7} />
-                  <stop offset="100%" stopColor="#9B8CFF" stopOpacity={0.5} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" vertical={false} />
-              <XAxis dataKey={xKey} axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} domain={calculateYAxisDomain(patientStatsData, 'patient')} tickFormatter={formatToK} />
-              <Tooltip contentStyle={{ borderRadius: 8, background: '#222', color: '#fff', fontSize: 13 }} cursor={{ fill: '#f3f4f6' }} formatter={(value, name) => [formatToK(value), name === 'patient' ? 'Patient' : 'Inpatient']} />
-              <ReferenceLine y={avg} stroke="#111" strokeDasharray="6 3" label={{ position: 'left', value: `Avg ${formatToK(avg)}`, fill: '#fff', fontSize: 12, fontWeight: 600, background: '#111', padding: 4 }} />
-              <Bar dataKey="patient" stackId="a" fill="url(#patientGradient)" radius={[8, 8, 0, 0]} />
-              <Bar dataKey="inpatient" stackId="a" fill="url(#inpatientGradient)" radius={[8, 8, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-          )}
-        </div>
-        )}
-        {/* Venue Visitor Semi-Donut Chart (1/3 width) */}
-        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-1 flex flex-col items-center justify-center relative flex-1 min-w-[300px]">
-          {/* AI Sparkle Icon */}
-          <button
-            onClick={() => setShowChatPanel(true)}
-            className="absolute top-3 right-3 p-1.5 bg-white border border-[#2a276e]/20 rounded-full hover:bg-[#2a276e]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
-            title="Ask AI Assistant"
-          >
-            <AISparkleIcon className="w-3 h-3" />
-          </button>
-          <div className="flex items-center justify-between w-full mb-2 pr-10">
-            <div className="flex items-center gap-2">
-              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#2a276e]">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-              </div>
-              <span className="font-semibold text-gray-800">Patient Demographics</span>
-            </div>
-            <button className="flex items-center gap-1 text-xs border rounded px-2 py-1">
-              All Time
-              <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" /></svg>
-            </button>
-          </div>
-          {loadingDemographics || venueVisitorDataState.length === 0 ? (
-            <div className="flex items-center justify-center h-[140px]">
-              <div className="flex flex-col items-center gap-2">
-                <GearLoader size="w-8 h-8" />
-                <span className="text-xs text-gray-500">Loading data...</span>
-              </div>
-            </div>
-          ) : (
-          <div className="relative flex items-center justify-center" style={{ width: 180, height: 140 }}>
-            {/* Dotted ring background */}
-            <svg width="140" height="140" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ zIndex: 0 }}>
-              <circle cx="70" cy="70" r="56" fill="none" stroke="#e5e7eb" strokeWidth="6" strokeDasharray="2,6" />
-            </svg>
-            <ResponsiveContainer width={140} height={140}>
-              <PieChart>
-                <Pie
-                  data={venueVisitorDataState}
-                  dataKey="value"
-                  startAngle={180}
-                  endAngle={-180}
-                  innerRadius={48}
-                  outerRadius={65}
-                  cx="50%"
-                  cy="50%"
-                  paddingAngle={2}
-                  stroke="none"
-                >
-                  {venueVisitorDataState.map((entry, idx) => (
-                    <Cell key={`cell-${idx}`} fill={entry.color} />
-                  ))}
-                </Pie>
-              </PieChart>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={patientStatsData} barGap={8} margin={{ left: -20 }}>
+                <defs>
+                  <linearGradient id="patientGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2a276e" stopOpacity={0.8} />
+                    <stop offset="100%" stopColor="#9B8CFF" stopOpacity={0.6} />
+                  </linearGradient>
+                  <linearGradient id="inpatientGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2a276e" stopOpacity={0.7} />
+                    <stop offset="100%" stopColor="#9B8CFF" stopOpacity={0.5} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                <XAxis dataKey={xKey} axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 500, fill: '#9ca3af' }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 500, fill: '#9ca3af' }} domain={calculateYAxisDomain(patientStatsData, 'patient')} tickFormatter={formatToK} />
+                <Tooltip 
+                  contentStyle={{ borderRadius: 12, border: 'none', background: '#111', color: '#fff', fontSize: 12, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} 
+                  cursor={{ fill: '#f3f4f6', radius: 8 }} 
+                  formatter={(value, name) => [formatToK(value), name === 'patient' ? 'Patient' : 'Inpatient']} 
+                />
+                <Bar dataKey="patient" stackId="a" fill="url(#patientGradient)" radius={[6, 6, 0, 0]} barSize={32} />
+                <Bar dataKey="inpatient" stackId="a" fill="url(#inpatientGradient)" radius={[6, 6, 0, 0]} barSize={32} />
+              </BarChart>
             </ResponsiveContainer>
-            {/* Center label */}
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center" style={{ zIndex: 1 }}>
-              <div className="text-xs text-gray-400">Total Patients</div>
-              <div className="text-2xl font-bold text-gray-900">{venueVisitorDataState.reduce((sum, d) => sum + d.value, 0).toLocaleString()}</div>
+          </ChartCard>
+        )}
+
+        {/* Patient Demographics Pie Chart (1/3 width) */}
+        {visibleWidgets.demographics && (
+          <ChartCard
+            title="Patient Demographics"
+            onAISparkle={() => setShowChatPanel(true)}
+            loading={loadingDemographics}
+            isEmpty={venueVisitorDataState.length === 0}
+            icon={
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+              </svg>
+            }
+          >
+            <div className="flex flex-col items-center">
+              <div className="relative flex items-center justify-center mb-4" style={{ width: 140, height: 140 }}>
+                {/* Dotted ring background */}
+                <svg width="140" height="140" className="absolute" style={{ zIndex: 0 }}>
+                  <circle cx="70" cy="70" r="56" fill="none" stroke="#f3f4f6" strokeWidth="6" strokeDasharray="2,6" />
+                </svg>
+                <ResponsiveContainer width={140} height={140}>
+                  <PieChart>
+                    <Pie
+                      data={venueVisitorDataState}
+                      dataKey="value"
+                      innerRadius={48}
+                      outerRadius={65}
+                      paddingAngle={2}
+                      stroke="none"
+                    >
+                      {venueVisitorDataState.map((entry, idx) => (
+                        <Cell key={`cell-${idx}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                {/* Center label */}
+                <div className="absolute flex flex-col items-center">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Total</span>
+                  <span className="text-xl font-black text-[#2a276e]">{venueVisitorDataState.reduce((sum, d) => sum + d.value, 0).toLocaleString()}</span>
+                </div>
+              </div>
+              <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-2">
+                {venueVisitorDataState.map((item) => (
+                  <div key={item.name} className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full shadow-sm" style={{ background: item.color }}></div>
+                    <span className="text-xs font-bold text-gray-600 tracking-tight">{item.name}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-          )}
-          <div className="flex gap-6 mt-4 text-sm">
-            {venueVisitorDataState.map((item, idx) => (
-              <span key={item.name} className="flex items-center gap-2">
-                <span className="inline-block w-3 h-3 rounded-full" style={{ background: item.color }}></span>
-                <span className="text-gray-700 font-medium">{item.name}</span>
-              </span>
-            ))}
-          </div>
-        </div>
+          </ChartCard>
+        )}
       </div>
 
       {/* Second row of charts */}
       <div className="flex flex-wrap gap-6 mb-6">
         {/* Revenue Analytics Line Chart */}
         {visibleWidgets.revenue && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-2 flex flex-col flex-1 min-w-[300px] relative">
-          {/* AI Sparkle Icon */}
-          <button
-            onClick={() => setShowChatPanel(true)}
-            className="absolute top-3 right-3 p-1.5 bg-white border border-[#2a276e]/20 rounded-full hover:bg-[#2a276e]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
-            title="Ask AI Assistant"
+          <ChartCard
+            title="Revenue Analytics"
+            onAISparkle={() => setShowChatPanel(true)}
+            loading={loadingRevenue}
+            isEmpty={revenueDataState.length === 0}
+            icon={
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            }
           >
-            <AISparkleIcon className="w-3 h-3" />
-          </button>
-          <div className="flex items-center justify-between mb-2 pr-10">
-            <div className="flex items-center gap-2">
-              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#2a276e]">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <span className="font-semibold text-gray-800">Revenue Analytics</span>
-            </div>
-            <div className="relative revenue-dropdown">
-              <button
-                onClick={() => setShowRevenueDropdown(!showRevenueDropdown)}
-                className="flex items-center gap-1 text-xs border rounded px-2 py-1 hover:bg-gray-50 transition-colors"
-              >
-                {revenuePeriod === 'week' ? 'This Week' :
-                 revenuePeriod === 'month' ? 'This Month' : 'This Year'}
-                <svg className={`w-4 h-4 ml-1 transition-transform ${showRevenueDropdown ? 'rotate-180' : ''}`}
-                     fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              {showRevenueDropdown && (
-                <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10 min-w-[100px]">
-                  <button
-                    onClick={() => {
-                      setRevenuePeriod('week');
-                      setShowRevenueDropdown(false);
-                    }}
-                    className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition-colors"
-                  >
-                    This Week
-                  </button>
-                  <button
-                    onClick={() => {
-                      setRevenuePeriod('month');
-                      setShowRevenueDropdown(false);
-                    }}
-                    className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition-colors"
-                  >
-                    This Month
-                  </button>
-                  <button
-                    onClick={() => {
-                      setRevenuePeriod('year');
-                      setShowRevenueDropdown(false);
-                    }}
-                    className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition-colors"
-                  >
-                    This Year
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-          {loadingRevenue || revenueDataState.length === 0 ? (
-            <div className="flex items-center justify-center h-[220px]">
-              <div className="flex flex-col items-center gap-2">
-                <GearLoader size="w-8 h-8" />
-                <span className="text-xs text-gray-500">Loading data...</span>
-              </div>
-            </div>
-          ) : (
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={revenueDataState}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" vertical={false} />
-              <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} domain={calculateYAxisDomain(revenueDataState, 'revenue')} tickFormatter={formatToK} />
-              <Tooltip 
-                contentStyle={{ borderRadius: 8, background: '#222', color: '#fff', fontSize: 13 }} 
-                formatter={(value, name) => [
-                  `₹${formatToK(value)}`, 
-                  name === 'revenue' ? 'Revenue' : 'Target'
-                ]} 
-              />
-              <Line 
-                type="monotone" 
-                dataKey="target" 
-                stroke="#e5e7eb" 
-                strokeWidth={2} 
-                strokeDasharray="5 5"
-                dot={false}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="revenue" 
-                stroke="#2a276e" 
-                strokeWidth={3} 
-                dot={{ fill: '#2a276e', strokeWidth: 2, r: 4 }}
-                activeDot={{ r: 6, stroke: '#2a276e', strokeWidth: 2 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-          )}
-        </div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={revenueDataState} margin={{ left: -20, right: 0, top: 20, bottom: 0 }}>
+                <XAxis 
+                  dataKey="label" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }} 
+                  interval="preserveStartEnd"
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }}
+                  tickFormatter={(val) => `₹${formatToK(val)}`}
+                  domain={calculateYAxisDomain(revenueDataState, ['revenue'], 0.15)} 
+                />
+                <Tooltip 
+                  contentStyle={{ borderRadius: 12, border: 'none', background: '#111', color: '#fff', fontSize: 12, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} 
+                  formatter={(value) => [`₹${formatToK(value)}`, 'Revenue']} 
+                />
+                <Bar 
+                  dataKey="revenue" 
+                  fill="#2a276e" 
+                  radius={[6, 6, 0, 0]}
+                  barSize={30}
+                  animationDuration={1500}
+                >
+                  <LabelList 
+                    dataKey="revenue" 
+                    position="top" 
+                    formatter={(val) => val > 0 ? `₹${formatToK(val)}` : ''}
+                    style={{ fontSize: 10, fontWeight: 700, fill: '#2a276e' }}
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
         )}
 
         {/* Appointment Booking Trends Bar Chart */}
         {visibleWidgets.appointments && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-2 flex flex-col flex-1 min-w-[300px] relative">
-          {/* AI Sparkle Icon */}
-          <button
-            onClick={() => setShowChatPanel(true)}
-            className="absolute top-3 right-3 p-1.5 bg-white border border-[#2a276e]/20 rounded-full hover:bg-[#2a276e]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
-            title="Ask AI Assistant"
+          <ChartCard
+            title="Appointment Trends"
+            onAISparkle={() => setShowChatPanel(true)}
+            loading={loadingAppointments}
+            isEmpty={appointmentDataState.length === 0}
+            icon={
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            }
           >
-            <AISparkleIcon className="w-3 h-3" />
-          </button>
-          <div className="flex items-center justify-between mb-2 pr-10">
-            <div className="flex items-center gap-2">
-              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#2a276e]">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-              <span className="font-semibold text-gray-800">Appointment Trends</span>
-            </div>
-            <button className="flex items-center gap-1 text-xs border rounded px-2 py-1">
-              Today
-              <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" /></svg>
-            </button>
-          </div>
-          {loadingAppointments || appointmentDataState.length === 0 ? (
-            <div className="flex items-center justify-center h-[220px]">
-              <div className="flex flex-col items-center gap-2">
-                <GearLoader size="w-8 h-8" />
-                <span className="text-xs text-gray-500">Loading data...</span>
-              </div>
-            </div>
-          ) : (
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={appointmentDataState}>
-              <defs>
-                <linearGradient id="capacityAreaGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#9B8CFF" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="#2a276e" stopOpacity={0.1} />
-                </linearGradient>
-                <linearGradient id="bookingsAreaGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#2a276e" stopOpacity={0.4} />
-                  <stop offset="100%" stopColor="#9B8CFF" stopOpacity={0.15} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" vertical={false} />
-              <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} domain={calculateYAxisDomain(appointmentDataState, ['bookings', 'capacity'])} tickFormatter={formatToK} />
-              <Tooltip 
-                contentStyle={{ borderRadius: 8, background: '#222', color: '#fff', fontSize: 13 }} 
-                formatter={(value, name) => [
-                  formatToK(value), 
-                  name === 'bookings' ? 'Bookings' : 'Capacity'
-                ]} 
-              />
-              <Area 
-                type="monotone" 
-                dataKey="capacity" 
-                stroke="#9B8CFF" 
-                strokeWidth={2}
-                fill="url(#capacityAreaGradient)" 
-                fillOpacity={1}
-              />
-              <Area 
-                type="monotone" 
-                dataKey="bookings" 
-                stroke="#2a276e" 
-                strokeWidth={2.5}
-                fill="url(#bookingsAreaGradient)" 
-                fillOpacity={1}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-          )}
-        </div>
-        )}
-
-        {/* Dental Chair Status Visualization */}
-        {visibleWidgets.dentalChairs && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-1 flex flex-col items-center justify-center relative flex-1 min-w-[300px]">
-          {/* AI Sparkle Icon */}
-          <button
-            onClick={() => setShowChatPanel(true)}
-            className="absolute top-3 right-3 p-1.5 bg-white border border-[#2a276e]/20 rounded-full hover:bg-[#2a276e]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
-            title="Ask AI Assistant"
-          >
-            <AISparkleIcon className="w-3 h-3" />
-          </button>
-          <div className="flex items-center justify-between w-full mb-4 pr-10">
-            <div className="flex items-center gap-2">
-              <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#2a276e]">
-                <ChairIcon />
-              </div>
-              <span className="font-semibold text-gray-800">Dental Chairs</span>
-            </div>
-            <button className="flex items-center gap-1 text-xs border rounded px-2 py-1">
-              Live
-              <div className="w-2 h-2 bg-[#2a276e] rounded-full animate-pulse"></div>
-            </button>
-          </div>
-          
-          {/* Chair Grid Visualization */}
-          <div className="grid grid-cols-5 gap-3 mb-4">
-            {[1, 2, 3, 4, 5].map((chairNum) => {
-              const isOccupied = chairNum <= (capacityDataState[0]?.value || 0) / 20; // Rough calculation
-              return (
-                <div key={chairNum} className="flex flex-col items-center gap-1">
-                  <div className={`w-12 h-12 rounded-lg flex items-center justify-center transition ${
-                    isOccupied ? 'bg-[#2a276e] text-white' : 'bg-gray-100 text-gray-400'
-                  }`}>
-                    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M7 11V13H17V11H19V13C19 14.1 18.1 15 17 15V19H15V15H9V19H7V15C5.9 15 5 14.1 5 13V11H7M7 7C7 5.9 7.9 5 9 5H15C16.1 5 17 5.9 17 7V9H7V7Z"/>
-                    </svg>
-                  </div>
-                  <span className="text-xs font-medium text-gray-600">#{chairNum}</span>
-                </div>
-              );
-            })}
-          </div>
-          
-          {/* Status Summary */}
-          <div className="w-full bg-gray-50 rounded-lg p-3">
-            <div className="flex justify-between items-center text-sm">
-              <div className="flex items-center gap-2">
-                <span className="inline-block w-3 h-3 rounded-full bg-[#2a276e]"></span>
-                <span className="text-gray-700">Occupied</span>
-              </div>
-              <span className="font-semibold text-gray-900">{Math.floor((capacityDataState[0]?.value || 0) / 20)}/5</span>
-            </div>
-            <div className="flex justify-between items-center text-sm mt-2">
-              <div className="flex items-center gap-2">
-                <span className="inline-block w-3 h-3 rounded-full bg-gray-100"></span>
-                <span className="text-gray-700">Available</span>
-              </div>
-              <span className="font-semibold text-gray-900">{5 - Math.floor((capacityDataState[0]?.value || 0) / 20)}/5</span>
-            </div>
-          </div>
-        </div>
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={appointmentDataState} margin={{ left: -20, right: 0, top: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorBookings" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.2}/>
+                  </linearGradient>
+                </defs>
+                <XAxis 
+                  dataKey="time" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }} 
+                  interval="preserveStartEnd"
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  hide={true}
+                  domain={calculateYAxisDomain(appointmentDataState, 'bookings', 0.05)} 
+                />
+                <Tooltip 
+                  contentStyle={{ borderRadius: 12, border: 'none', background: '#111', color: '#fff', fontSize: 12, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} 
+                  formatter={(value) => [value, 'Appointments']} 
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="bookings" 
+                  stroke="#3b82f6" 
+                  strokeWidth={3}
+                  fillOpacity={1} 
+                  fill="url(#colorBookings)" 
+                  animationDuration={1500}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </ChartCard>
         )}
       </div>
 
-      {/* Third row - New widgets for Chair Utilization, Treatments, and Quality */}
-      <div className="flex flex-wrap gap-6 mb-6">
-        {/* Chair Utilization Details */}
-        {visibleWidgets.chairUtilization && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-1 flex flex-col flex-1 min-w-[300px]">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="p-2 bg-[#9B8CFF]/10 rounded-lg text-[#9B8CFF]">
-              <ActivityIcon />
-            </div>
-            <span className="font-semibold text-gray-800">Chair Utilization</span>
-          </div>
-          
-          {loadingChairs ? (
-            <div className="flex items-center justify-center h-[200px]">
-              <div className="flex flex-col items-center gap-2">
-                <GearLoader size="w-8 h-8" />
-                <span className="text-xs text-gray-500">Loading data...</span>
-              </div>
-            </div>
-          ) : chairDetailsData ? (
-            <div className="space-y-3">
-              {/* Utilization Percentage */}
-              <div className="bg-gradient-to-r from-[#9B8CFF]/10 to-[#9B8CFF]/20 rounded-lg p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-700">Active</span>
-                  <span className="text-2xl font-bold text-[#2a276e]">{chairDetailsData.utilization_percent}%</span>
-                </div>
-                <div className="w-full bg-white rounded-full h-2 mt-2">
-                  <div className="bg-[#2a276e] h-2 rounded-full transition-all" style={{ width: `${chairDetailsData.utilization_percent}%` }}></div>
-                </div>
-              </div>
-              
-              {/* Idle Percentage */}
-              <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-700">Idle</span>
-                  <span className="text-2xl font-bold text-gray-600">{chairDetailsData.idle_percent}%</span>
-                </div>
-                <div className="w-full bg-white rounded-full h-2 mt-2">
-                  <div className="bg-gray-400 h-2 rounded-full transition-all" style={{ width: `${chairDetailsData.idle_percent}%` }}></div>
-                </div>
-              </div>
-              
-              {/* Time Breakdown */}
-              <div className="grid grid-cols-2 gap-2 mt-3">
-                <div className="bg-[#9B8CFF]/10 rounded-lg p-2 text-center">
-                  <div className="flex items-center justify-center gap-1 mb-1">
-                    <ClockIcon />
-                  </div>
-                  <div className="text-lg font-bold text-[#2a276e]">{chairDetailsData.active_hours}h</div>
-                  <div className="text-xs text-gray-600">Active Time</div>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-2 text-center">
-                  <div className="flex items-center justify-center gap-1 mb-1">
-                    <ClockIcon />
-                  </div>
-                  <div className="text-lg font-bold text-gray-600">{chairDetailsData.idle_hours}h</div>
-                  <div className="text-xs text-gray-600">Idle Time</div>
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </div>
-        )}
 
-        {/* Treatment Statistics */}
-        {visibleWidgets.treatments && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-2 flex flex-col flex-1 min-w-[300px] relative">
-          {/* AI Sparkle Icon */}
-          <button
-            onClick={() => setShowChatPanel(true)}
-            className="absolute top-3 right-3 p-1.5 bg-white border border-[#2a276e]/20 rounded-full hover:bg-[#2a276e]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
-            title="Ask AI Assistant"
-          >
-            <AISparkleIcon className="w-3 h-3" />
-          </button>
-          <div className="flex items-center justify-between mb-4 pr-10">
-            <div className="flex items-center gap-2">
-              <div className="p-2 bg-purple-50 rounded-lg text-purple-600">
-                <TreatmentIcon />
-              </div>
-              <span className="font-semibold text-gray-800">Treatments</span>
-            </div>
-            <button className="flex items-center gap-1 text-xs border rounded px-2 py-1">
-              This Week
-            </button>
-          </div>
-          
-          {loadingTreatments ? (
-            <div className="flex items-center justify-center h-[200px]">
-              <div className="flex flex-col items-center gap-2">
-                <GearLoader size="w-8 h-8" />
-                <span className="text-xs text-gray-500">Loading data...</span>
-              </div>
-            </div>
-          ) : (
-          <div className="space-y-2 flex-1">
-            {treatmentStatsData.slice(0, 5).map((treatment, idx) => (
-              <div key={idx} className="flex items-center justify-between">
-                <div className="flex items-center gap-2 flex-1">
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: treatment.color }}></div>
-                  <span className="text-sm text-gray-700 truncate">{treatment.name}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">{treatment.percentage}%</span>
-                  <span className="text-sm font-semibold text-gray-900">{treatment.count}</span>
-                </div>
-              </div>
-            ))}
-            {treatmentStatsData.length === 0 && (
-              <div className="text-center text-gray-500 text-sm py-8">
-                No treatment data available
-              </div>
-            )}
-          </div>
-          )}
-        </div>
-        )}
-
-        {/* Appointment Quality */}
-        {visibleWidgets.quality && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-2 flex flex-col flex-1 min-w-[300px] relative">
-          {/* AI Sparkle Icon */}
-          <button
-            onClick={() => setShowChatPanel(true)}
-            className="absolute top-3 right-3 p-1.5 bg-white border border-[#2a276e]/20 rounded-full hover:bg-[#2a276e]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
-            title="Ask AI Assistant"
-          >
-            <AISparkleIcon className="w-3 h-3" />
-          </button>
-          <div className="flex items-center gap-2 mb-4 pr-10">
-            <div className="p-2 bg-yellow-50 rounded-lg text-yellow-600">
-              <QualityIcon />
-            </div>
-            <span className="font-semibold text-gray-800">Appointment Quality</span>
-          </div>
-          
-          {loadingQuality ? (
-            <div className="flex items-center justify-center h-[200px]">
-              <div className="flex flex-col items-center gap-2">
-                <GearLoader size="w-8 h-8" />
-                <span className="text-xs text-gray-500">Loading data...</span>
-              </div>
-            </div>
-          ) : appointmentQualityData ? (
-            <div className="space-y-3">
-              {/* Overall Quality Score */}
-              <div className="bg-gradient-to-r from-yellow-50 to-yellow-100 rounded-lg p-3 text-center">
-                <div className="text-3xl font-bold text-yellow-600">{appointmentQualityData.quality_score}</div>
-                <div className="text-xs text-gray-600 mt-1">Overall Quality Score</div>
-              </div>
-              
-              {/* Quality Metrics */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-700">Completion Rate</span>
-                  <div className="flex items-center gap-2">
-                    <div className="w-20 bg-gray-200 rounded-full h-1.5">
-                      <div className="bg-[#2a276e] h-1.5 rounded-full" style={{ width: `${appointmentQualityData.completion_rate}%` }}></div>
-                    </div>
-                    <span className="font-semibold text-gray-900 w-10 text-right">{appointmentQualityData.completion_rate}%</span>
-                  </div>
-                </div>
-                
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-700">On-Time Rate</span>
-                  <div className="flex items-center gap-2">
-                    <div className="w-20 bg-gray-200 rounded-full h-1.5">
-                      <div className="bg-[#9B8CFF] h-1.5 rounded-full" style={{ width: `${appointmentQualityData.on_time_rate}%` }}></div>
-                    </div>
-                    <span className="font-semibold text-gray-900 w-10 text-right">{appointmentQualityData.on_time_rate}%</span>
-                  </div>
-                </div>
-                
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-700">Satisfaction</span>
-                  <div className="flex items-center gap-2">
-                    <div className="w-20 bg-gray-200 rounded-full h-1.5">
-                      <div className="bg-[#2a276e] h-1.5 rounded-full" style={{ width: `${appointmentQualityData.satisfaction_rate}%` }}></div>
-                    </div>
-                    <span className="font-semibold text-gray-900 w-10 text-right">{appointmentQualityData.satisfaction_rate}%</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </div>
-        )}
-
-        {/* Clinic Performance Comparison */}
-        {visibleWidgets.clinicPerformance && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-2 flex flex-col flex-1 min-w-[300px] relative">
-          {/* AI Sparkle Icon */}
-          <button
-            onClick={() => setShowChatPanel(true)}
-            className="absolute top-3 right-10 p-1.5 bg-white border border-[#2a276e]/20 rounded-full hover:bg-[#2a276e]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
-            title="Ask AI Assistant"
-          >
-            <AISparkleIcon className="w-3 h-3" />
-          </button>
-          <div className="flex items-center justify-between mb-4 pr-16">
-            <div className="flex items-center gap-2">
-              <div className="p-2 bg-purple-50 rounded-lg text-purple-600">
-                <i className="las la-trophy text-2xl"></i>
-              </div>
-              <span className="font-semibold text-gray-800">Clinic Performance</span>
-            </div>
-            <button
-              onClick={() => {/* Open settings for clinic comparison */}}
-              className="p-1 hover:bg-gray-100 rounded"
-              title="Compare with other clinics"
-            >
-              <i className="las la-cog text-gray-400"></i>
-            </button>
-          </div>
-
-          {clinicPerformanceData ? (
-            <div className="space-y-4">
-              {/* Current Clinic */}
-              <div className="border border-gray-200 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-900">Current Clinic</span>
-                  <span className="text-xs text-gray-500">{clinicPerformanceData.current_clinic.name}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="text-center">
-                    <div className="font-semibold text-[#2a276e]">{clinicPerformanceData.current_clinic.metrics.appointments_count}</div>
-                    <div className="text-gray-500">Appointments</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-semibold text-[#9B8CFF]">₹{clinicPerformanceData.current_clinic.metrics.revenue.toLocaleString()}</div>
-                    <div className="text-gray-500">Revenue</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-semibold text-yellow-600">{clinicPerformanceData.current_clinic.metrics.satisfaction_score}%</div>
-                    <div className="text-gray-500">Satisfaction</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-semibold text-purple-600">{clinicPerformanceData.current_clinic.metrics.chair_utilization}%</div>
-                    <div className="text-gray-500">Utilization</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Comparison Clinics */}
-              {clinicPerformanceData.comparisons.map((clinic, index) => (
-                <div key={clinic.id} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700">Clinic {index + 1}</span>
-                    <span className="text-xs text-gray-500">{clinic.name}</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="text-center">
-                      <div className="font-semibold text-[#2a276e]">{clinic.metrics.appointments_count}</div>
-                      <div className="text-gray-500">Appointments</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="font-semibold text-[#9B8CFF]">₹{clinic.metrics.revenue.toLocaleString()}</div>
-                      <div className="text-gray-500">Revenue</div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex items-center justify-center h-32 text-gray-500">
-              <div className="text-center">
-                <i className="las la-chart-line text-2xl mb-2"></i>
-                <div className="text-sm">Loading performance data...</div>
-              </div>
-            </div>
-          )}
-        </div>
-        )}
-
-        {/* Patient Location Map */}
-        {visibleWidgets.patientMap && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 pl-2 flex flex-col flex-1 min-w-[300px] relative">
-          {/* AI Sparkle Icon */}
-          <button
-            onClick={() => setShowChatPanel(true)}
-            className="absolute top-3 right-3 p-1.5 bg-white border border-[#2a276e]/20 rounded-full hover:bg-[#2a276e]/10 transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md z-10"
-            title="Ask AI Assistant"
-          >
-            <AISparkleIcon className="w-3 h-3" />
-          </button>
-          <div className="flex items-center gap-2 mb-4 pr-10">
-            <div className="p-2 bg-red-50 rounded-lg text-red-600">
-              <i className="las la-map-marked-alt text-2xl"></i>
-            </div>
-            <span className="font-semibold text-gray-800">Patient Locations</span>
-          </div>
-
-          {patientMapData && patientMapData.length > 0 ? (
-            <div className="space-y-3">
-              {/* Simple map representation */}
-              <div className="bg-gray-100 rounded-lg h-32 flex items-center justify-center text-gray-500 mb-4">
-                <div className="text-center">
-                  <i className="las la-map text-3xl mb-1"></i>
-                  <div className="text-xs">Patient Distribution Map</div>
-                </div>
-              </div>
-
-              {/* Location list */}
-              <div className="space-y-2 max-h-32 overflow-y-auto">
-                {patientMapData.slice(0, 5).map((location, index) => (
-                  <div key={index} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                      <span className="text-gray-700">{location.location}</span>
-                    </div>
-                    <span className="font-semibold text-gray-900">{location.count} patients</span>
-                  </div>
-                ))}
-                {patientMapData.length > 5 && (
-                  <div className="text-xs text-gray-500 text-center pt-1">
-                    +{patientMapData.length - 5} more locations
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center justify-center h-32 text-gray-500">
-              <div className="text-center">
-                <i className="las la-map-marker text-2xl mb-2"></i>
-                <div className="text-sm">Loading location data...</div>
-              </div>
-            </div>
-          )}
-        </div>
-        )}
-      </div>
+      <div className="h-10"></div>
 
       {/* Metric Details Drawer */}
       {selectedMetric && (
@@ -1573,7 +838,7 @@ const Dashboard = () => {
                     </div>
                   ))}
                 </div>
-              ) : selectedMetric.title === "Appointments Today" ? (
+              ) : (selectedMetric.title === "Appointments Today" || selectedMetric.title === "Appointments" || selectedMetric.title === "Checking") ? (
                 <div className="space-y-3">
                   {drawerData.map((item, idx) => (
                     <div key={item.id || idx} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition">
@@ -1599,61 +864,9 @@ const Dashboard = () => {
                     </div>
                   ))}
                 </div>
-              ) : selectedMetric.title === "Chair Capacity" && drawerData.chairs ? (
-                <div>
-                  <div className="grid grid-cols-2 gap-4 mb-6">
-                    <div className="bg-[#9B8CFF]/10 rounded-lg p-4 text-center">
-                      <div className="text-3xl font-bold text-[#2a276e]">{drawerData.chairs_occupied}</div>
-                      <div className="text-sm text-gray-600 mt-1">Occupied Chairs</div>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-4 text-center">
-                      <div className="text-3xl font-bold text-gray-600">{drawerData.chairs_available}</div>
-                      <div className="text-sm text-gray-600 mt-1">Available Chairs</div>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    {drawerData.chairs.map((chair) => (
-                      <div key={chair.chair_number} className={`rounded-lg p-4 flex items-center justify-between ${
-                        chair.status === 'occupied' ? 'bg-[#9B8CFF]/10 border border-[#9B8CFF]' : 'bg-gray-50 border border-gray-200'
-                      }`}>
-                        <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-lg ${chair.status === 'occupied' ? 'bg-[#2a276e] text-white' : 'bg-gray-200 text-gray-500'}`}>
-                            <ChairIcon />
-                          </div>
-                          <div>
-                            <div className="font-semibold text-gray-900">Chair #{chair.chair_number}</div>
-                            {chair.patient_name && <div className="text-sm text-gray-600">{chair.patient_name}</div>}
-                          </div>
-                        </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          chair.status === 'occupied' ? 'bg-[#9B8CFF]/20 text-[#2a276e]' : 'bg-gray-100 text-gray-600'
-                        }`}>
-                          {chair.status === 'occupied' ? 'Occupied' : 'Available'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
               ) : (
-                <div className="space-y-3">
-                  {drawerData.map((item, idx) => (
-                    <div key={item.id || idx} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-gray-900">Report #{item.id}</h4>
-                          <div className="grid grid-cols-2 gap-2 mt-2 text-sm text-gray-600">
-                            <div><span className="font-medium">Patient ID:</span> {item.patient_id}</div>
-                            <div><span className="font-medium">Status:</span> <span className={`px-2 py-1 rounded text-xs ${item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : item.status === 'completed' ? 'bg-[#9B8CFF]/20 text-[#2a276e]' : 'bg-gray-100 text-gray-800'}`}>{item.status}</span></div>
-                          </div>
-                          {item.created_at && (
-                            <div className="text-xs text-gray-500 mt-2">
-                              Created: {new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+                  <p className="text-lg font-medium">No detail view available</p>
                 </div>
               )}
             </div>
@@ -1774,124 +987,8 @@ const Dashboard = () => {
                   </label>
                 </div>
 
-                {/* Dental Chairs Toggle */}
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
-                  <div className="flex items-center gap-3">
-                    <ChairIcon />
-                    <div>
-                      <div className="font-semibold text-gray-900">Dental Chairs Grid</div>
-                      <div className="text-xs text-gray-600">Live chair status visualization</div>
-                    </div>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={visibleWidgets.dentalChairs}
-                      onChange={() => toggleWidget('dentalChairs')}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#2a276e]"></div>
-                  </label>
-                </div>
-
-                {/* Chair Utilization Toggle */}
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
-                  <div className="flex items-center gap-3">
-                    <ActivityIcon />
-                    <div>
-                      <div className="font-semibold text-gray-900">Chair Utilization</div>
-                      <div className="text-xs text-gray-600">Active vs idle time metrics</div>
-                    </div>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={visibleWidgets.chairUtilization}
-                      onChange={() => toggleWidget('chairUtilization')}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#2a276e]"></div>
-                  </label>
-                </div>
-
-                {/* Treatments Toggle */}
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
-                  <div className="flex items-center gap-3">
-                    <TreatmentIcon />
-                    <div>
-                      <div className="font-semibold text-gray-900">Treatment Statistics</div>
-                      <div className="text-xs text-gray-600">Treatment type breakdown</div>
-                    </div>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={visibleWidgets.treatments}
-                      onChange={() => toggleWidget('treatments')}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#2a276e]"></div>
-                  </label>
-                </div>
-
-                {/* Quality Toggle */}
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
-                  <div className="flex items-center gap-3">
-                    <QualityIcon />
-                    <div>
-                      <div className="font-semibold text-gray-900">Appointment Quality</div>
-                      <div className="text-xs text-gray-600">Quality metrics and scores</div>
-                    </div>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={visibleWidgets.quality}
-                      onChange={() => toggleWidget('quality')}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#2a276e]"></div>
-                  </label>
-                </div>
-
-                {/* Clinic Performance Toggle */}
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
-                  <div className="flex items-center gap-3">
-                    <i className="las la-trophy text-2xl text-purple-600"></i>
-                    <div>
-                      <div className="font-semibold text-gray-900">Clinic Performance</div>
-                      <div className="text-xs text-gray-600">Compare clinic metrics</div>
-                    </div>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={visibleWidgets.clinicPerformance}
-                      onChange={() => toggleWidget('clinicPerformance')}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#2a276e]"></div>
-                  </label>
-                </div>
-
-                {/* Patient Map Toggle */}
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
-                  <div className="flex items-center gap-3">
-                    <i className="las la-map-marked-alt text-2xl text-red-600"></i>
-                    <div>
-                      <div className="font-semibold text-gray-900">Patient Locations</div>
-                      <div className="text-xs text-gray-600">Geographic patient distribution</div>
-                    </div>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={visibleWidgets.patientMap}
-                      onChange={() => toggleWidget('patientMap')}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9B8CFF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#2a276e]"></div>
-                  </label>
+                <div className="text-center text-gray-500 py-8">
+                  No other customization options available
                 </div>
               </div>
             </div>
@@ -2036,4 +1133,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard; 
+export default Dashboard;

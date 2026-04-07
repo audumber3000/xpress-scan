@@ -84,12 +84,25 @@ const Login = () => {
 
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      const redirectPath = !data.user.clinic_id ? '/onboarding' : '/dashboard';
+      const redirectPath = !data.user.clinic_id 
+        ? '/onboarding' 
+        : (data.user.role === 'clinic_owner' && data.user.clinics?.length > 1)
+          ? '/select-clinic'
+          : '/dashboard';
       navigate(redirectPath, { replace: true });
     } catch (error) {
-      const errorMessage = error.message || "Network error. Please try again.";
+      const errorMessage = error.response?.data?.detail || error.message || "Network error. Please try again.";
       setError(errorMessage);
-      toast.error(errorMessage);
+      
+      if (errorMessage.includes('User does not exist')) {
+        toast.error(
+          <div>
+            User does not exist. <Link to="/signup" className="underline font-bold">Register here</Link>
+          </div>
+        );
+      } else {
+        toast.error(errorMessage);
+      }
       setLoading(false);
     }
   };
@@ -202,7 +215,11 @@ const Login = () => {
         await new Promise(resolve => setTimeout(resolve, 200));
 
         // Redirect based on user state
-        const redirectPath = !data.user.clinic_id ? '/onboarding' : '/dashboard';
+        const redirectPath = !data.user.clinic_id 
+          ? '/onboarding' 
+          : (data.user.role === 'clinic_owner' && data.user.clinics?.length > 1)
+            ? '/select-clinic'
+            : '/dashboard';
         console.log('🔵 [LOGIN] Redirecting to:', redirectPath);
         navigate(redirectPath, { replace: true });
       } else {
@@ -211,13 +228,18 @@ const Login = () => {
 
     } catch (error) {
       console.error('🔵 [LOGIN] Google login error:', error);
-      console.error('🔵 [LOGIN] Error code:', error.code);
-      console.error('🔵 [LOGIN] Error message:', error.message);
-      console.error('🔵 [LOGIN] Error stack:', error.stack);
-
-      const errorMessage = error.message || 'Google login failed. Please try again.';
+      const errorMessage = error.response?.data?.detail || error.message || 'Google login failed. Please try again.';
       setError(errorMessage);
-      toast.error(errorMessage);
+      
+      if (errorMessage.includes('User does not exist')) {
+        toast.error(
+          <div>
+            User does not exist. <Link to="/signup" className="underline font-bold">Register here</Link>
+          </div>
+        );
+      } else {
+        toast.error(errorMessage);
+      }
       setLoading(false);
     }
   };

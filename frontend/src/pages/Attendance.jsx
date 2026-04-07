@@ -2,11 +2,15 @@ import React, { useState, useMemo, useEffect } from "react";
 import AttendanceHeader from "../components/attendance/AttendanceHeader";
 import AttendanceGrid from "../components/attendance/AttendanceGrid";
 import EmployeeDetailsPanel from "../components/attendance/EmployeeDetailsPanel";
+import AttendanceMarkDrawer from "../components/attendance/AttendanceMarkDrawer";
+import AttendanceEmployeeDrawer from "../components/attendance/AttendanceEmployeeDrawer";
 import { useHeader } from "../contexts/HeaderContext";
 import { api } from "../utils/api";
-import { startOfWeek, endOfWeek, addWeeks, subWeeks, format, eachDayOfInterval, isSameDay } from "date-fns";
+import { startOfWeek, endOfWeek, addWeeks, subWeeks, format, eachDayOfInterval } from "date-fns";
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Search } from 'lucide-react';
+import FeatureLock from "../components/FeatureLock";
+import { toast } from 'react-toastify';
 
 const Attendance = () => {
   const { setTitle } = useHeader();
@@ -17,6 +21,9 @@ const Attendance = () => {
   const [loading, setLoading] = useState(true);
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [searchQuery, setSearchQuery] = useState('');
+  const [markDrawer, setMarkDrawer] = useState({ open: false, employee: null, date: null });
+  const [savingMark, setSavingMark] = useState(false);
+  const [profileEmployee, setProfileEmployee] = useState(null);
 
   useEffect(() => {
     setTitle(
@@ -104,23 +111,31 @@ const Attendance = () => {
     };
   }, [employees, weekDays]);
 
-  const handleEmployeeClick = (employee) => {
-    // Fetch full attendance history for the selected employee
-    const employeeWithHistory = {
-      ...employee,
-      attendanceHistory: Object.entries(employee.attendance || {})
-        .map(([date, data]) => ({
-          date: new Date(date),
-          status: data.status,
-          reason: data.reason || '',
-        }))
-        .sort((a, b) => new Date(b.date) - new Date(a.date))
-    };
-    setSelectedEmployee(employeeWithHistory);
-  };
-
   const handleClosePanel = () => {
     setSelectedEmployee(null);
+  };
+
+  const handleCellClick = (employee, date) => {
+    setMarkDrawer({ open: true, employee, date });
+  };
+
+  const handleMarkSave = async ({ employeeId, date, status, reason }) => {
+    try {
+      setSavingMark(true);
+      await api.post('/attendance', {
+        user_id: employeeId,
+        date: format(date, "yyyy-MM-dd"),
+        status,
+        reason: reason || null,
+      });
+      toast.success('Attendance marked');
+      setMarkDrawer({ open: false, employee: null, date: null });
+      fetchAttendanceData();
+    } catch (err) {
+      toast.error('Failed to mark attendance');
+    } finally {
+      setSavingMark(false);
+    }
   };
 
   const handlePreviousWeek = () => {
@@ -146,57 +161,109 @@ const Attendance = () => {
   }, [employees, searchQuery]);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
-      {/* Attendance Header (Date Selector & Legend) */}
-      <AttendanceHeader
-        currentWeekStart={currentWeekStart}
-        onPreviousWeek={handlePreviousWeek}
-        onNextWeek={handleNextWeek}
-        onToday={handleToday}
-        overallStats={statistics}
-      />
-
-      {/* Search Bar */}
-      <div className="px-6 pt-4">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search employees..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-gray-100 border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2D9596]"
-          />
+    <div className="flex flex-col h-full bg-transparent overflow-y-auto custom-scrollbar p-6 lg:p-8 pb-10">
+      
+      {/* Header */}
+      <div className="mb-6 flex justify-between items-end">
+        <div className="flex items-center gap-2 text-sm font-medium text-gray-500">
+          <span>Admin</span>
+          <span>/</span>
+          <span className="text-gray-900">Attendance</span>
         </div>
       </div>
 
-      {/* Attendance Grid */}
-      <div className="flex-1 overflow-hidden">
-        <div className="h-full overflow-auto">
-          {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2a276e] mx-auto"></div>
-                <p className="mt-4 text-gray-600">Loading attendance data...</p>
-              </div>
-            </div>
-          ) : (
-            <AttendanceGrid
-              employees={filteredEmployees}
-              weekDays={weekDays}
-              onEmployeeClick={handleEmployeeClick}
-            />
-          )}
+      {/* Team Tabs Header */}
+      <div className="mb-6 border-b border-gray-200">
+        <div className="flex gap-6 -mb-px">
+          <button 
+            onClick={() => navigate('/admin/staff')}
+            className="pb-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-900 transition-colors"
+          >
+            Staff
+          </button>
+          <button 
+            onClick={() => navigate('/admin/permissions')}
+            className="pb-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-900 transition-colors"
+          >
+            Permissions
+          </button>
+          <button 
+            className="pb-3 text-sm font-medium border-b-2 border-[#29828a] text-[#29828a]"
+          >
+            Attendance
+          </button>
         </div>
       </div>
 
-      {/* Employee Details Panel */}
-      {selectedEmployee && (
-        <EmployeeDetailsPanel
-          employee={selectedEmployee}
-          onClose={handleClosePanel}
+      <FeatureLock featureName="Staff Attendance Tracking">
+        <div className="flex-1 flex flex-col overflow-hidden bg-white rounded-xl shadow-sm border border-gray-100 p-2">
+        {/* Attendance Header (Date Selector & Legend) */}
+        <AttendanceHeader
+          currentWeekStart={currentWeekStart}
+          onPreviousWeek={handlePreviousWeek}
+          onNextWeek={handleNextWeek}
+          onToday={handleToday}
+          overallStats={statistics}
         />
-      )}
+
+        {/* Search Bar */}
+        <div className="px-6 pt-4">
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search employees..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 bg-gray-100 border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2D9596]"
+            />
+          </div>
+        </div>
+
+        {/* Attendance Grid */}
+        <div className="flex-1 overflow-hidden">
+          <div className="h-full overflow-auto">
+            {loading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2a276e] mx-auto"></div>
+                  <p className="mt-4 text-gray-600">Loading attendance data...</p>
+                </div>
+              </div>
+            ) : (
+              <AttendanceGrid
+                employees={filteredEmployees}
+                weekDays={weekDays}
+                onEmployeeProfileClick={setProfileEmployee}
+                onCellClick={handleCellClick}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Employee Attendance History Drawer */}
+        {profileEmployee && (
+          <AttendanceEmployeeDrawer
+            employee={profileEmployee}
+            onClose={() => setProfileEmployee(null)}
+          />
+        )}
+
+        {/* Mark Attendance Drawer */}
+        {markDrawer.open && (
+          <AttendanceMarkDrawer
+            employee={markDrawer.employee}
+            date={markDrawer.date}
+            currentAttendance={
+              markDrawer.employee?.attendance?.[format(markDrawer.date, 'yyyy-MM-dd')] || null
+            }
+            onClose={() => setMarkDrawer({ open: false, employee: null, date: null })}
+            onSave={handleMarkSave}
+            saving={savingMark}
+          />
+        )}
+        </div>
+      </FeatureLock>
     </div>
   );
 };

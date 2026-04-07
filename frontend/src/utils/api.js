@@ -59,11 +59,14 @@ export const authenticatedFetch = async (url, options = {}) => {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       if (response.status === 401) {
-        // Token might be expired, clear storage but don't redirect here
-        // Let React router handle navigation through AuthContext
+        // Only clear storage on a real 401 — token is genuinely invalid/expired
         localStorage.removeItem('auth_token');
         localStorage.removeItem('user');
-        throw new Error(errorData.detail || 'Authentication failed');
+        const err = new Error(errorData.detail || 'Authentication failed');
+        err.status = response.status;
+        err.detail = errorData.detail;
+        err.isAuthError = true;  // flag so callers can distinguish 401 from network errors
+        throw err;
       }
       console.error('API Error Response:', errorData);
       
@@ -72,10 +75,16 @@ export const authenticatedFetch = async (url, options = {}) => {
         const validationErrors = errorData.detail.map(err => 
           `${err.loc.join('.')}: ${err.msg}`
         ).join(', ');
-        throw new Error(`Validation Error: ${validationErrors}`);
+        const validationError = new Error(`Validation Error: ${validationErrors}`);
+        validationError.status = response.status;
+        validationError.detail = errorData.detail;
+        throw validationError;
       }
       
-      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      const apiError = new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      apiError.status = response.status;
+      apiError.detail = errorData.detail;
+      throw apiError;
     }
 
     // Try to parse JSON response
@@ -93,6 +102,19 @@ export const authenticatedFetch = async (url, options = {}) => {
     }
     throw error;
   }
+};
+
+export const getPermissionAwareErrorMessage = (error, fallbackMessage, permissionMessage) => {
+  const message = error?.message || '';
+  const isPermissionError =
+    error?.status === 403 ||
+    /insufficient permissions|don't have permission|permission/i.test(message);
+
+  if (isPermissionError) {
+    return permissionMessage || "You don't have permission to perform this action.";
+  }
+
+  return fallbackMessage;
 };
 
 // Common API methods

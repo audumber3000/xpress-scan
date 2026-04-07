@@ -15,7 +15,9 @@ import {
   ExternalLink,
   X,
   FileText,
-  AlertTriangle
+  AlertTriangle,
+  AlertCircle,
+  CheckCircle
 } from "lucide-react";
 
 const Calendar = () => {
@@ -56,12 +58,32 @@ const Calendar = () => {
     patientName: '',
     patientEmail: '',
     patientPhone: '',
-    treatment: '',
+    patientAge: '',
+    chair_number: '1',
     time: '',
     duration: '1',
     date: new Date().toISOString().split('T')[0], // Today's date as default
     status: 'confirmed'
   });
+  const [doctors, setDoctors] = useState([]);
+  const [showCheckInModal, setShowCheckInModal] = useState(false);
+  const [checkingInAppointment, setCheckingInAppointment] = useState(null);
+  const [checkInFormData, setCheckInFormData] = useState({
+    doctor_id: '',
+    chair_number: '',
+    notes: '',
+    patient_age: '',
+    patient_gender: 'Male',
+    patient_village: '',
+    patient_referred_by: 'Direct'
+  });
+  const [patientSearch, setPatientSearch] = useState('');
+  const [patientResults, setPatientResults] = useState([]);
+  const [searchingPatient, setSearchingPatient] = useState(false);
+  const [selectedMatch, setSelectedMatch] = useState(null);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicateMatches, setDuplicateMatches] = useState([]);
+  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
 
   // Fetch appointments from API
   const fetchAppointments = async () => {
@@ -105,6 +127,11 @@ const Calendar = () => {
           status: apt.status,
           color: colors[colorIndex],
           notes: apt.notes || '',
+          chair_number: apt.chair_number || '',
+          patientAge: apt.patient_age || '',
+          patientGender: apt.patient_gender || '',
+          patientVillage: apt.patient_village || '',
+          patientReferredBy: apt.patient_referred_by || '',
           visitNumber: apt.visit_number || null
         };
       });
@@ -120,10 +147,24 @@ const Calendar = () => {
     }
   };
 
+  const fetchDoctors = async () => {
+    try {
+      const response = await api.get('/clinic-users');
+      // Filter for roles that can treat patients
+      const filteredDoctors = response.filter(u => 
+        u.role === 'doctor' || u.role === 'clinic_owner'
+      );
+      setDoctors(filteredDoctors);
+    } catch (error) {
+      console.error('Error fetching doctors:', error);
+    }
+  };
+
   useEffect(() => {
     fetchAppointments();
     fetchClinicData();
     fetchTreatmentTypes();
+    fetchDoctors();
   }, [currentDate]);
 
   // Get relative date label (Today, Yesterday, Tomorrow)
@@ -435,8 +476,7 @@ const Calendar = () => {
             `⚠️ WARNING: Time Conflict Detected!\n\n` +
             `Selected time overlaps with:\n` +
             `Patient: ${conflictApt.patientName}\n` +
-            `Time: ${conflictApt.startTime} - ${conflictApt.endTime}\n` +
-            `Treatment: ${conflictApt.treatment}\n\n` +
+            `Time: ${conflictApt.startTime} - ${conflictApt.endTime}\n\n` +
             `Please choose a different time or leave empty for auto-assignment.`
           );
         }, 100);
@@ -660,7 +700,6 @@ const Calendar = () => {
           `This time overlaps with:\n` +
           `Patient: ${conflictApt.patientName}\n` +
           `Time: ${conflictApt.startTime} - ${conflictApt.endTime}\n` +
-          `Treatment: ${conflictApt.treatment}\n\n` +
           `Please choose a different time.`
         );
         return;
@@ -679,7 +718,8 @@ const Calendar = () => {
         patient_name: newAppointment.patientName,
         patient_email: newAppointment.patientEmail,
         patient_phone: newAppointment.patientPhone,
-        treatment: newAppointment.treatment,
+        patient_age: newAppointment.patientAge ? parseInt(newAppointment.patientAge) : null,
+        chair_number: newAppointment.chair_number,
         appointment_date: newAppointment.date,
         start_time: startTime,
         end_time: endTime,
@@ -722,16 +762,17 @@ const Calendar = () => {
       setAppointments(prev => [...prev, newApt]);
       
       // Reset form and close drawer
-    setNewAppointment({
-      patientName: '',
-      patientEmail: '',
-      patientPhone: '',
-      treatment: '',
-      time: '',
-      duration: '1',
-      date: new Date().toISOString().split('T')[0],
-      status: 'confirmed'
-    });
+      setNewAppointment({
+        patientName: '',
+        patientEmail: '',
+        patientPhone: '',
+        patientAge: '',
+        chair_number: '1',
+        time: '',
+        duration: '1',
+        date: new Date().toISOString().split('T')[0],
+        status: 'confirmed'
+      });
     setShowAddForm(false);
     
     alert('✅ Appointment created successfully!');
@@ -741,6 +782,144 @@ const Calendar = () => {
     alert(`Failed to create appointment: ${errorMessage}`);
   }
 };
+
+  const handleCheckIn = () => {
+    // Pre-fill check-in form with current appointment data
+    setCheckInFormData({
+      doctor_id: selectedAppointment.doctor_id || '',
+      chair_number: selectedAppointment.chair_number || '',
+      notes: selectedAppointment.notes || '',
+      patient_age: selectedAppointment.patientAge || '',
+      patient_gender: selectedAppointment.patientGender || 'Male',
+      patient_village: selectedAppointment.patientVillage || '',
+      patient_referred_by: selectedAppointment.patientReferredBy || 'Direct'
+    });
+    setPatientSearch(selectedAppointment.patientName || '');
+    setPatientResults([]);
+    setSelectedMatch(null);
+    setCheckingInAppointment(selectedAppointment);
+    setShowCheckInModal(true);
+  };
+
+  const searchPatients = async (query) => {
+    if (!query || query.length < 2) {
+      setPatientResults([]);
+      return;
+    }
+    setSearchingPatient(true);
+    try {
+      const response = await api.get('/appointments/search-patients', {
+        params: { q: query }
+      });
+      setPatientResults(response);
+    } catch (error) {
+      console.error('Error searching patients:', error);
+    } finally {
+      setSearchingPatient(false);
+    }
+  };
+
+  const handleSelectPatientMatch = (patient) => {
+    setSelectedMatch(patient);
+    setPatientSearch(patient.name);
+    setPatientResults([]);
+    setCheckInFormData(prev => ({
+      ...prev,
+      patient_age: patient.age || prev.patient_age,
+      patient_gender: patient.gender || prev.patient_gender,
+      patient_village: patient.village || prev.patient_village
+    }));
+  };
+
+  const handleConfirmCheckIn = async () => {
+    try {
+      setIsCheckingDuplicates(true);
+      console.log('🔍 Checking for potential duplicates...');
+      
+      // Check for duplicates before finalizing
+      const duplicates = await api.get('/patients/check-duplicates', {
+        params: {
+          name: checkingInAppointment.patientName,
+          phone: checkingInAppointment.patientPhone,
+          email: checkingInAppointment.patientEmail
+        }
+      });
+
+      if (duplicates && duplicates.length > 0) {
+        setDuplicateMatches(duplicates);
+        setShowDuplicateModal(true);
+        setIsCheckingDuplicates(false);
+        return; // Wait for user choice
+      }
+
+      // If no duplicates, proceed with finalize
+      await handleFinalizeCheckIn();
+    } catch (error) {
+      console.error('❌ Error during duplicate check:', error);
+      alert('Failed to verify patient records. Please try again.');
+      setIsCheckingDuplicates(false);
+    }
+  };
+
+  const handleFinalizeCheckIn = async (existingPatientId = null) => {
+    try {
+      console.log('📋 Finalizing check-in for appointment:', checkingInAppointment.id);
+      setIsCheckingDuplicates(true);
+      
+      // Sanitize integer fields to avoid validation errors with empty strings
+      const sanitizedData = {
+        ...checkInFormData,
+        doctor_id: checkInFormData.doctor_id ? parseInt(checkInFormData.doctor_id) : null,
+        patient_age: checkInFormData.patient_age ? parseInt(checkInFormData.patient_age) : null,
+        patient_id: existingPatientId || checkingInAppointment.patientId || null,
+        status: 'checking'
+      };
+
+      const response = await api.put(`/appointments/${checkingInAppointment.id}`, {
+        ...sanitizedData,
+        patient_name: checkingInAppointment.patientName,
+        patient_phone: checkingInAppointment.patientPhone,
+        patient_email: checkingInAppointment.patientEmail
+      });
+      
+      console.log('✅ Check-in response:', response);
+      
+      // Update local state
+      const updatedApt = { 
+        ...checkingInAppointment, 
+        ...checkInFormData,
+        patientAge: checkInFormData.patient_age,
+        patientGender: checkInFormData.patient_gender,
+        patientVillage: checkInFormData.patient_village,
+        patientReferredBy: checkInFormData.patient_referred_by,
+        status: 'checking',
+        doctor_id: response.doctor_id,
+        doctor: response.doctor_name || 'Unassigned',
+        patientId: response.patient_id || checkingInAppointment.patientId 
+      };
+      
+      // Update appointments list
+      setAppointments(prev => prev.map(apt => 
+        apt.id === checkingInAppointment.id ? updatedApt : apt
+      ));
+      
+      // Update selected appointment if it's the one we just checked in
+      if (selectedAppointment && selectedAppointment.id === checkingInAppointment.id) {
+        setSelectedAppointment(updatedApt);
+      }
+      
+      setShowCheckInModal(false);
+      setShowDuplicateModal(false);
+      setCheckingInAppointment(null);
+      alert(existingPatientId ? 'Patient linked and checked in!' : 'Patient checked in successfully! New file created.');
+      
+    } catch (error) {
+      console.error('❌ Error during check-in:', error);
+      alert(`Failed to check in: ${error.response?.data?.detail || error.message}`);
+    } finally {
+      setIsCheckingDuplicates(false);
+    }
+  };
 
   // Handle appointment acceptance (NO auto-create patient file)
   const handleAcceptAppointment = async () => {
@@ -823,21 +1002,6 @@ const Calendar = () => {
         console.log(`⚠️ Found ${duplicateCheck.length} duplicate(s)`);
         setDuplicatePatients(duplicateCheck);
         setShowDuplicateWarning(true);
-      } else {
-        // No duplicates - show patient form to create new file
-        console.log('✅ No duplicates found, showing patient form');
-        setPatientFormData({
-          name: selectedAppointment.patientName,
-          age: '',
-          gender: '',
-          village: '',
-          phone: selectedAppointment.patientPhone || '',
-          referred_by: 'Walk-in',
-          treatment_type: selectedAppointment.treatment,
-          notes: selectedAppointment.notes || '',
-          payment_type: 'Cash'
-        });
-        setShowPatientForm(true);
       }
     } catch (error) {
       console.error('❌ Error checking duplicates:', error);
@@ -876,31 +1040,6 @@ const Calendar = () => {
       await api.put(`/appointments/${selectedAppointment.id}`, {
         patient_id: patientResponse.id
       });
-
-      // Add appointment to patient's treatment plan
-      try {
-        const appointmentDate = new Date(selectedAppointment.date);
-        const treatmentPlanData = {
-          procedure: selectedAppointment.treatment,
-          date: appointmentDate.toISOString().split('T')[0],
-          time: selectedAppointment.startTime,
-          visit_number: 1, // First visit for new patient
-          status: 'scheduled',
-          cost: 0,
-          notes: selectedAppointment.notes || `Appointment from calendar`,
-          doctor_id: null,
-          duration: 60,
-          create_appointment: false // Don't create another appointment, just add to treatment plan
-        };
-        
-        console.log('📋 Creating treatment plan entry:', treatmentPlanData);
-        const treatmentPlanResponse = await api.post(`/patients/${patientResponse.id}/treatment-plans`, treatmentPlanData);
-        console.log('✅ Added appointment to treatment plan:', treatmentPlanResponse);
-      } catch (error) {
-        console.error('⚠️ Failed to add to treatment plan:', error);
-        console.error('⚠️ Treatment plan error details:', error.message);
-        // Continue even if treatment plan fails
-      }
       
       // Update selected appointment with patient_id and refresh appointments list
       const updatedAppointment = { 
@@ -1037,7 +1176,7 @@ const Calendar = () => {
         village: '',
         phone: selectedAppointment.patientPhone || '',
         referred_by: 'Walk-in',
-        treatment_type: selectedAppointment.treatment,
+        treatment_type: '',
         notes: selectedAppointment.notes || '',
         payment_type: 'Cash'
       });
@@ -1057,33 +1196,6 @@ const Calendar = () => {
       await api.put(`/appointments/${selectedAppointment.id}`, {
         patient_id: patientId
       });
-
-      // Add appointment to existing patient's treatment plan
-      try {
-        // First, get existing patient's treatment plans to determine visit number
-        const existingPlans = await api.get(`/patients/${patientId}/treatment-plans`);
-        const nextVisitNumber = existingPlans.length + 1;
-
-        const appointmentDate = new Date(selectedAppointment.date);
-        const treatmentPlanData = {
-          procedure: selectedAppointment.treatment,
-          date: appointmentDate.toISOString().split('T')[0],
-          time: selectedAppointment.startTime,
-          visit_number: nextVisitNumber,
-          status: 'scheduled',
-          cost: 0,
-          notes: selectedAppointment.notes || `Appointment from calendar`,
-          doctor_id: null,
-          duration: 60,
-          create_appointment: false // Don't create another appointment, just add to treatment plan
-        };
-        
-        await api.post(`/patients/${patientId}/treatment-plans`, treatmentPlanData);
-        console.log(`✅ Added appointment to treatment plan as visit #${nextVisitNumber}`);
-      } catch (error) {
-        console.error('⚠️ Failed to add to treatment plan:', error);
-        // Continue even if treatment plan fails
-      }
       
       // Update local state
       setAppointments(prev => prev.map(apt => 
@@ -1357,9 +1469,6 @@ const Calendar = () => {
                             </div>
                             <div className="flex items-center gap-4 ml-15">
                               <span className="text-sm text-gray-700">
-                                <strong>Treatment:</strong> {apt.treatment}
-                              </span>
-                              <span className="text-sm text-gray-700">
                                 <strong>Doctor:</strong> {apt.doctor}
                               </span>
                             </div>
@@ -1532,6 +1641,11 @@ const Calendar = () => {
                                 </svg>
                               </div>
                             )}
+                            {appointment.status === 'checking' && (
+                              <div className="absolute top-1 right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center z-10" title="Patient Checked In">
+                                <CheckCircle className="w-3 h-3 text-white" />
+                              </div>
+                            )}
                             {appointment.status === 'rejected' && (
                               <div className="absolute top-1 right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center z-10">
                                 <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -1543,7 +1657,7 @@ const Calendar = () => {
                               {appointment.patientName}
                             </div>
                             <div className="text-xs opacity-75 truncate">
-                              {appointment.treatment}
+                              {appointment.doctor}
                             </div>
                             <div className="text-xs opacity-75">
                               {formatTime(appointment.startTime)} - {formatTime(appointment.endTime)}
@@ -1608,13 +1722,27 @@ const Calendar = () => {
               {/* Appointment Details */}
               <div className="space-y-3 mb-6">
                 <div>
-                  <span className="text-sm font-medium text-gray-600">Type Treatments:</span>
-                  <span className="ml-2 text-sm text-gray-900">{selectedAppointment.treatment}</span>
-                </div>
-                <div>
                   <span className="text-sm font-medium text-gray-600">Doctor:</span>
                   <span className="ml-2 text-sm text-gray-900">{selectedAppointment.doctor}</span>
                 </div>
+                {selectedAppointment.chair_number && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Chair Number:</span>
+                    <span className="ml-2 text-sm text-gray-900">{selectedAppointment.chair_number}</span>
+                  </div>
+                )}
+                {selectedAppointment.patientAge && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Patient Age:</span>
+                    <span className="ml-2 text-sm text-gray-900">{selectedAppointment.patientAge} years</span>
+                  </div>
+                )}
+                {selectedAppointment.patientVillage && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Village:</span>
+                    <span className="ml-2 text-sm text-gray-900">{selectedAppointment.patientVillage}</span>
+                  </div>
+                )}
                 {selectedAppointment.visitNumber && (
                   <div>
                     <span className="text-sm font-medium text-gray-600">Visit Number:</span>
@@ -1628,12 +1756,14 @@ const Calendar = () => {
                   <span className={`ml-2 text-sm font-semibold ${
                     selectedAppointment.status === 'accepted' ? 'text-[#2a276e]' :
                     selectedAppointment.status === 'rejected' ? 'text-red-600' :
+                    selectedAppointment.status === 'checking' ? 'text-green-600' :
                     'text-yellow-600'
                   }`}>
                     {selectedAppointment.status === 'accepted' && '✓ Accepted'}
                     {selectedAppointment.status === 'rejected' && '✗ Rejected'}
+                    {selectedAppointment.status === 'checking' && '📋 Checking'}
                     {selectedAppointment.status === 'confirmed' && '⏳ Pending Confirmation'}
-                    {!['accepted', 'rejected', 'confirmed'].includes(selectedAppointment.status) && selectedAppointment.status}
+                    {!['accepted', 'rejected', 'confirmed', 'checking'].includes(selectedAppointment.status) && selectedAppointment.status}
                   </span>
                 </div>
               </div>
@@ -1688,35 +1818,48 @@ const Calendar = () => {
                   </button>
                 </div>
               )}
-              
-              {/* Patient File Actions - Show based on appointment status and patient_id */}
-              {selectedAppointment.status === 'accepted' && (
-                <>
+               {/* Patient File Actions - Show based on appointment status and patient_id */}
+               <div className="mt-6">
                   {selectedAppointment.patientId ? (
                     // Has patient file - show View button
-                    <button 
-                      onClick={() => {
-                        navigate(`/patient-profile/${selectedAppointment.patientId}?tab=timeline`);
-                        setSelectedAppointment(null);
-                      }}
-                      className="w-full bg-[#2a276e] text-white py-3 rounded-lg hover:bg-[#1a1548] transition-colors flex items-center justify-center gap-2 font-semibold shadow-lg"
-                    >
-                      <FileText className="w-4 h-4" />
-                      <span>View Patient File</span>
-                      <ExternalLink className="w-4 h-4" />
-                    </button>
+                    <div className="space-y-3">
+                      <button 
+                        onClick={() => {
+                          navigate(`/patient-profile/${selectedAppointment.patientId}?tab=timeline`);
+                          setSelectedAppointment(null);
+                        }}
+                        className="w-full bg-[#2a276e] text-white py-3 rounded-lg hover:bg-[#1a1548] transition-colors flex items-center justify-center gap-2 font-semibold shadow-lg"
+                      >
+                        <FileText className="w-4 h-4" />
+                        <span>View Patient File</span>
+                        <ExternalLink className="w-4 h-4" />
+                      </button>
+                      
+                      {/* NEW: Checked In Button - only show if status is accepted (not yet checking) */}
+                      {selectedAppointment.status === 'accepted' && (
+                        <button 
+                          onClick={handleCheckIn}
+                          className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-semibold shadow-lg"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          <span>Checked In</span>
+                        </button>
+                      )}
+                    </div>
                   ) : (
-                    // No patient file - show Create button
-                    <button 
-                      onClick={handleCreatePatientFile}
-                      className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-semibold shadow-lg"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>Create Patient File</span>
-                    </button>
+                    // No patient file - show "Checked In" button which will auto-create the file
+                    // But ONLY if status is accepted
+                    (selectedAppointment.status === 'accepted') && (
+                      <button 
+                        onClick={handleCheckIn}
+                        className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-semibold shadow-lg"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Checked In (Auto-create File)</span>
+                      </button>
+                    )
                   )}
-                </>
-              )}
+               </div>
             </div>
           </div>
         </div>
@@ -1960,29 +2103,22 @@ const Calendar = () => {
                 />
               </div>
 
-              {/* Treatment */}
+              {/* Patient Age */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Treatment *
+                  Patient Age
                 </label>
-                <select
-                  name="treatment"
-                  value={newAppointment.treatment}
+                <input
+                  type="number"
+                  name="patientAge"
+                  value={newAppointment.patientAge}
                   onChange={handleInputChange}
-                  required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-                >
-                  <option value="">Select treatment</option>
-                  <option value="Root Canal">Root Canal</option>
-                  <option value="Implants">Implants</option>
-                  <option value="Whitening">Whitening</option>
-                  <option value="Dentures">Dentures</option>
-                  <option value="Checkup">Checkup</option>
-                  <option value="Cleaning">Cleaning</option>
-                  <option value="Filling">Filling</option>
-                  <option value="Extraction">Extraction</option>
-                </select>
+                  placeholder="Enter patient age"
+                />
               </div>
+
+
 
               {/* Date */}
               <div>
@@ -2012,48 +2148,53 @@ const Calendar = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                   placeholder="Leave empty to auto-assign"
                 />
-                {newAppointment.date && (() => {
-                  const dateObj = new Date(newAppointment.date);
-                  const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-                  const dayTimings = clinicTimings[dayName];
-                  const nextSlot = findNextAvailableSlot(newAppointment.date, parseFloat(newAppointment.duration));
-
-                  return (
-                    <div className="mt-2 space-y-2">
-                      {/* Operating Hours Info */}
-                      <div className="p-2 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
-                        <p className="text-xs text-[#2a276e] flex items-center gap-2">
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-                          </svg>
-                          <span>
-                            {dayTimings && !dayTimings.closed ? (
-                              `Operating hours: ${dayTimings.open} - ${dayTimings.close}`
-                            ) : (
-                              `Clinic closed on ${dayName.charAt(0).toUpperCase() + dayName.slice(1)}`
-                            )}
-                          </span>
-                        </p>
-                      </div>
-
-                      {/* Next Available Slot */}
-                      <div className="p-2 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
-                        <p className="text-xs text-blue-700 flex items-center gap-2">
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 000 16zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                          </svg>
-                          <span>
-                            Next available slot: <strong>{nextSlot || 'No slots available'}</strong>
-                          </span>
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })()}
-                <p className="text-xs text-gray-500 mt-1">
-                  💡 Leave empty to automatically assign the next available time slot
-                </p>
               </div>
+
+
+
+              {/* Next Slot Info */}
+              {newAppointment.date && (() => {
+                const dateObj = new Date(newAppointment.date);
+                const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+                const dayTimings = clinicTimings[dayName];
+                const nextSlot = findNextAvailableSlot(newAppointment.date, parseFloat(newAppointment.duration));
+
+                return (
+                  <div className="mt-2 space-y-2">
+                    {/* Operating Hours Info */}
+                    <div className="p-2 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
+                      <p className="text-xs text-[#2a276e] flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                        </svg>
+                        <span>
+                          {dayTimings && !dayTimings.closed ? (
+                            `Operating hours: ${dayTimings.open} - ${dayTimings.close}`
+                          ) : (
+                            `Clinic closed on ${dayName.charAt(0).toUpperCase() + dayName.slice(1)}`
+                          )}
+                        </span>
+                      </p>
+                    </div>
+
+                    {/* Next Available Slot */}
+                    <div className="p-2 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
+                      <p className="text-xs text-blue-700 flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 000 16zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                        <span>
+                          Next available slot: <strong>{nextSlot || 'No slots available'}</strong>
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <p className="text-xs text-gray-500 mt-1">
+                💡 Leave empty to automatically assign the next available time slot
+              </p>
 
               {/* Duration */}
               <div>
@@ -2082,7 +2223,6 @@ const Calendar = () => {
                   ))}
                 </div>
               </div>
-
             </form>
             </div>
             <div className="p-6 border-t border-gray-200">
@@ -2181,6 +2321,260 @@ const Calendar = () => {
               >
                 <Plus className="w-4 h-4" />
                 Create New Patient File
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Check-in Details Modal */}
+      {showCheckInModal && (
+        <div className="fixed inset-0 z-[60] flex justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity" onClick={() => setShowCheckInModal(false)}></div>
+          <div className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-[#2a276e] text-white">
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <CheckCircle className="w-6 h-6" />
+                Patient Check-in
+              </h3>
+              <button 
+                onClick={() => setShowCheckInModal(false)}
+                className="p-1 hover:bg-white/20 rounded-full transition-colors"
+                id="close-checkin-modal"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Patient Basic Info (Editable for Check-in) */}
+              <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 space-y-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <User className="w-4 h-4 text-[#2a276e]" />
+                  <span className="text-xs font-bold text-[#2a276e] uppercase tracking-wider">Draft Patient File</span>
+                </div>
+                
+                <div className="grid grid-cols-1 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">Full Name</label>
+                    <input 
+                      type="text"
+                      className="w-full px-3 py-2 bg-white border border-blue-100 rounded-xl focus:ring-2 focus:ring-[#2a276e] outline-none text-sm font-semibold"
+                      value={checkingInAppointment?.patientName}
+                      onChange={(e) => setCheckingInAppointment({...checkingInAppointment, patientName: e.target.value})}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">Phone Number</label>
+                      <input 
+                        type="text"
+                        className="w-full px-3 py-2 bg-white border border-blue-100 rounded-xl focus:ring-2 focus:ring-[#2a276e] outline-none text-sm font-semibold"
+                        value={checkingInAppointment?.patientPhone}
+                        onChange={(e) => setCheckingInAppointment({...checkingInAppointment, patientPhone: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">Email (Optional)</label>
+                      <input 
+                        type="email"
+                        className="w-full px-3 py-2 bg-white border border-blue-100 rounded-xl focus:ring-2 focus:ring-[#2a276e] outline-none text-sm font-semibold"
+                        value={checkingInAppointment?.patientEmail}
+                        onChange={(e) => setCheckingInAppointment({...checkingInAppointment, patientEmail: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Indicator for ALREADY Linked Patients */}
+              {checkingInAppointment?.patientId && (
+                <div className="p-3 bg-green-50 border border-green-100 rounded-xl flex items-center gap-3">
+                  <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-green-600">
+                    <CheckCircle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-gray-900">Linked to existing file</div>
+                    <div className="text-xs text-green-600 font-medium tracking-wide uppercase">
+                      Patient ID: {checkingInAppointment.patientId}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <hr className="border-gray-100" />
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Assign Doctor</label>
+                <select 
+                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2a276e] focus:border-transparent outline-none transition-all"
+                  value={checkInFormData.doctor_id}
+                  onChange={(e) => setCheckInFormData({...checkInFormData, doctor_id: e.target.value})}
+                  id="checkin-doctor"
+                >
+                  <option value="">Select Doctor</option>
+                  {doctors.map(doc => (
+                    <option key={doc.id} value={doc.id}>{doc.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Chair Number</label>
+                  <select 
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2a276e] focus:border-transparent outline-none transition-all"
+                    value={checkInFormData.chair_number}
+                    onChange={(e) => setCheckInFormData({...checkInFormData, chair_number: e.target.value})}
+                    id="checkin-chair"
+                  >
+                    <option value="">Select Chair</option>
+                    {[...Array(clinicData?.number_of_chairs || 1)].map((_, i) => (
+                      <option key={i + 1} value={String(i + 1)}>
+                        Chair {i + 1}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Patient Age</label>
+                  <input 
+                    type="number"
+                    placeholder="Years"
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2a276e] focus:border-transparent outline-none transition-all"
+                    value={checkInFormData.patient_age}
+                    onChange={(e) => setCheckInFormData({...checkInFormData, patient_age: e.target.value})}
+                    id="checkin-age"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Gender</label>
+                  <select 
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2a276e] focus:border-transparent outline-none transition-all"
+                    value={checkInFormData.patient_gender}
+                    onChange={(e) => setCheckInFormData({...checkInFormData, patient_gender: e.target.value})}
+                    id="checkin-gender"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Village/Area</label>
+                  <input 
+                    type="text"
+                    placeholder="Village name"
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2a276e] focus:border-transparent outline-none transition-all"
+                    value={checkInFormData.patient_village}
+                    onChange={(e) => setCheckInFormData({...checkInFormData, patient_village: e.target.value})}
+                    id="checkin-village"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Referred By</label>
+                <input 
+                  type="text"
+                  placeholder="e.g. Dr. Sharma, Direct, Social Media"
+                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2a276e] focus:border-transparent outline-none transition-all"
+                  value={checkInFormData.patient_referred_by}
+                  onChange={(e) => setCheckInFormData({...checkInFormData, patient_referred_by: e.target.value})}
+                  id="checkin-referred"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Clinical Notes / Patient Concern</label>
+                <textarea 
+                  rows="2"
+                  placeholder="Enter any specific notes or complaints..."
+                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2a276e] focus:border-transparent outline-none transition-all resize-none"
+                  value={checkInFormData.notes}
+                  onChange={(e) => setCheckInFormData({...checkInFormData, notes: e.target.value})}
+                  id="checkin-notes"
+                ></textarea>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-3">
+              <button
+                onClick={() => setShowCheckInModal(false)}
+                className="flex-1 px-4 py-3 border border-gray-200 text-gray-600 rounded-xl font-semibold hover:bg-gray-100 transition-all font-inter"
+                id="checkin-cancel"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmCheckIn}
+                className="flex-[2] px-4 py-3 bg-[#2a276e] text-white rounded-xl font-bold hover:bg-[#1a1548] shadow-lg shadow-[#2a276e]/20 transition-all flex items-center justify-center gap-2 font-inter"
+                id="confirm-checkin-btn"
+              >
+                <CheckCircle className="w-5 h-5" />
+                Finish Check-in
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Duplicate Patient Modal */}
+      {showDuplicateModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-[#2a276e]/40 backdrop-blur-sm" onClick={() => setShowDuplicateModal(false)}></div>
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl relative overflow-hidden animate-in fade-in zoom-in duration-200 border border-white/20">
+            <div className="bg-[#2a276e] p-6 text-white">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-yellow-400 rounded-lg">
+                  <AlertCircle className="w-6 h-6 text-[#2a276e]" />
+                </div>
+                <h3 className="text-xl font-bold">Similar Patients Found</h3>
+              </div>
+              <p className="text-blue-100 text-sm">We found some existing files that match this patient. Would you like to use one or create a new one?</p>
+            </div>
+            
+            <div className="p-6 max-h-[60vh] overflow-y-auto space-y-3">
+              {duplicateMatches.map(patient => (
+                <div key={patient.id} className="p-4 bg-gray-50 hover:bg-blue-50 border border-gray-100 rounded-2xl transition-colors group">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="font-bold text-gray-900 group-hover:text-[#2a276e]">{patient.name}</div>
+                      <div className="text-sm text-gray-500">{patient.phone}</div>
+                      <div className="flex gap-2 mt-2">
+                        <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold uppercase">
+                          Patient ID: {patient.id}
+                        </span>
+                        {patient.village && (
+                          <span className="text-[10px] bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full font-bold uppercase">
+                            {patient.village}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => handleFinalizeCheckIn(patient.id)}
+                      className="px-4 py-2 bg-white border border-[#2a276e]/20 text-[#2a276e] rounded-xl font-bold text-sm hover:bg-[#2a276e] hover:text-white transition-all shadow-sm"
+                    >
+                      Select Match
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <div className="p-6 bg-gray-50 border-t border-gray-100 flex gap-3">
+              <button
+                onClick={() => setShowDuplicateModal(false)}
+                className="flex-1 px-4 py-3 bg-white border border-gray-200 text-gray-600 rounded-xl font-semibold hover:bg-gray-100 transition-all"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={() => handleFinalizeCheckIn(null)}
+                className="flex-1 px-4 py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 shadow-lg shadow-green-600/20 transition-all"
+              >
+                Create New Patient
               </button>
             </div>
           </div>

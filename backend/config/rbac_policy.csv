@@ -35,7 +35,15 @@ p, receptionist, *, patients, view
 p, receptionist, *, patients, edit
 p, receptionist, *, appointments, view
 p, receptionist, *, appointments, edit
-p, receptionist, *, billing, view
+p, clinic_owner, *, lab_orders, view
+p, clinic_owner, *, lab_orders, edit
+p, clinic_owner, *, lab_orders, delete
+p, doctor, *, lab_orders, view
+p, doctor, *, lab_orders, edit
+p, doctor, *, lab_orders, delete
+p, receptionist, *, lab_orders, view
+p, receptionist, *, lab_orders, edit
+p, receptionist, *, lab_orders, delete
 g, 1, clinic_owner, 1
 g, 13, receptionist, 1
 g, 13, doctor, 1

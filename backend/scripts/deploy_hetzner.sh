@@ -42,6 +42,7 @@ EOF
 
 # 2. Copy local .env and certificates if needed
 echo "📤 Transferring configuration files..."
+scp ./.env $SERVER_USER@$SERVER_IP:$TARGET_DIR/.env
 scp ./backend/.env $SERVER_USER@$SERVER_IP:$TARGET_DIR/backend/.env
 scp ./backend/betterclinic-f1179-firebase-adminsdk-fbsvc-89ea2e663e.json $SERVER_USER@$SERVER_IP:$TARGET_DIR/backend/
 

@@ -9,7 +9,7 @@ import datetime
 
 router = APIRouter()
 
-@router.get("/", response_model=List[UserOut])
+@router.get("", response_model=List[UserOut])
 def get_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -29,7 +29,7 @@ def get_users(
         print(f"[users GET] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def create_user(
     user_in: UserCreate, 
     db: Session = Depends(get_db),

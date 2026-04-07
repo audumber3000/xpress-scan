@@ -28,6 +28,9 @@ SCOPES = [
 # Store user credentials temporarily (in production, use database)
 user_credentials = {}
 
+# Temporary store for PKCE code_verifier keyed by state (user_id)
+pending_verifiers = {}
+
 
 class SendEmailRequest(BaseModel):
     to: str
@@ -78,6 +81,10 @@ async def get_gmail_auth_url(
             include_granted_scopes='true',
             state=str(current_user.id)
         )
+
+        # Store code_verifier for PKCE if present
+        if hasattr(flow, 'code_verifier') and flow.code_verifier:
+            pending_verifiers[str(current_user.id)] = flow.code_verifier
         
         return {"auth_url": authorization_url}
         
@@ -113,7 +120,12 @@ async def gmail_oauth_callback(
             scopes=SCOPES,
             redirect_uri=client_config["web"]["redirect_uris"][0]
         )
-        
+
+        # Restore code_verifier if PKCE was used
+        code_verifier = pending_verifiers.pop(state, None)
+        if code_verifier:
+            flow.code_verifier = code_verifier
+
         flow.fetch_token(code=code)
         credentials = flow.credentials
         

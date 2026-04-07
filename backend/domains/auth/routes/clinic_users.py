@@ -27,6 +27,7 @@ class ClinicUserUpdate(BaseModel):
     email: Optional[str] = None
     role: Optional[str] = None
     permissions: Optional[dict] = None
+    is_active: Optional[bool] = None
     password: Optional[str] = None  # Password for desktop app login
 
 class SetPasswordRequest(BaseModel):
@@ -46,7 +47,7 @@ class ClinicUserOut(BaseModel):
     class Config:
         from_attributes = True
 
-@router.get("/", response_model=List[ClinicUserOut])
+@router.get("", response_model=List[ClinicUserOut])
 def get_clinic_users(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Get all clinic users for current clinic"""
     # Check if user has permission to view users
@@ -77,7 +78,7 @@ def get_clinic_users(db: Session = Depends(get_db), current_user = Depends(get_c
 
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/", response_model=ClinicUserOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ClinicUserOut, status_code=status.HTTP_201_CREATED)
 def add_clinic_user(user_in: ClinicUserIn, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Add a new clinic user for current clinic"""
     # Check if user has permission to edit users
@@ -185,6 +186,10 @@ def update_clinic_user(user_id: int, user_update: ClinicUserUpdate, db: Session 
         user.role = user_update.role
     if user_update.permissions is not None:
         user.permissions = user_update.permissions
+    if user_update.is_active is not None:
+        if user.role == 'clinic_owner':
+            raise HTTPException(status_code=400, detail="Cannot deactivate the clinic owner")
+        user.is_active = user_update.is_active
     if user_update.password is not None:
         if len(user_update.password) < 8:
             raise HTTPException(status_code=400, detail="Password must be at least 8 characters")

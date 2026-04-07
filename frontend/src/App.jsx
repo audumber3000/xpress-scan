@@ -21,10 +21,10 @@ import LoadingTest from "./pages/LoadingTest";
 import Inbox from "./pages/Inbox";
 import Mail from "./pages/Mail";
 import MailCallback from "./pages/MailCallback";
+import LabHub from "./pages/lab/LabHub";
 import Attendance from "./pages/Attendance";
 import Calendar from "./pages/Calendar";
 import BookingPage from "./pages/BookingPage";
-import PatientFiles from "./pages/PatientFiles";
 import PatientProfile from "./pages/PatientProfile";
 import DentalChartDemo from "./pages/DentalChartDemo";
 import WhatsAppTest from "./pages/WhatsAppTest";
@@ -36,34 +36,50 @@ import PermissionsManagement from "./pages/PermissionsManagement";
 import ClinicInfo from "./pages/ClinicInfo";
 import MessageTemplates from "./pages/MessageTemplates";
 import ReferringDoctors from "./pages/ReferringDoctors";
+import Notifications from "./pages/admin/Notifications";
+import PracticeSettings from "./pages/admin/PracticeSettings";
+import Vendors from "./pages/Vendors";
+import ConsentForms from "./pages/ConsentForms";
+import Reports from "./pages/Reports";
+import AddClinic from "./pages/AddClinic";
+import ConsentSign from "./pages/ConsentSign";
+import SelectClinic from "./pages/SelectClinic";
+import GoogleReviews from "./pages/marketing/GoogleReviews";
+import MarketingPosters from "./pages/marketing/MarketingPosters";
+import SupportTickets from "./pages/SupportTickets";
+import TemplatesManager from "./pages/TemplatesManager";
+import Checkout from "./pages/Checkout";
 
 // Components
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
 import PWAInstall from "./components/PWAInstall";
 import ErrorBoundary from "./components/ErrorBoundary";
+import ConnectivityBanner from "./components/ConnectivityBanner";
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   
-  console.log('🛡️ [PROTECTED ROUTE] Checking access...', {
-    loading,
-    hasUser: !!user,
-    userId: user?.id,
-    path: window.location.pathname
-  });
-  
   if (loading) {
-    console.log('🛡️ [PROTECTED ROUTE] Still loading, showing loading screen');
-    return <div>Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-screen w-screen bg-gray-50">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-[#2a276e] border-t-transparent rounded-full animate-spin" />
+          <p className="text-gray-500 text-sm font-medium">Loading...</p>
+        </div>
+      </div>
+    );
   }
   
   if (!user) {
-    console.log('🛡️ [PROTECTED ROUTE] ❌ No user, redirecting to /login');
     return <Navigate to="/login" replace />;
   }
+
+  // Redirect to onboarding if clinic_owner hasn't completed it
+  if (user.role === 'clinic_owner' && !user.clinic_id && window.location.pathname !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />;
+  }
   
-  console.log('🛡️ [PROTECTED ROUTE] ✅ User authenticated, allowing access');
   return children;
 }
 
@@ -83,20 +99,39 @@ function AppContent() {
       userId: user?.id
     });
     
+    // Automatically collapse main sidebar on Settings/Admin pages
+    if (location.pathname === '/user-management' || location.pathname.startsWith('/admin')) {
+      setIsSidebarCollapsed(true);
+    }
+
     if (location.pathname === '/login' && !loading && user) {
-      console.log('🔄 [APP] User already logged in, redirecting to /dashboard');
-      // User is already logged in, redirect to dashboard
-      navigate('/dashboard', { replace: true });
+
+      if (user.role === 'clinic_owner' && !user.clinic_id) {
+        console.log('🔄 [APP] User authenticated but not onboarded, redirecting to /onboarding');
+        navigate('/onboarding', { replace: true });
+      } else {
+        console.log('🔄 [APP] User already logged in, redirecting to /dashboard');
+        navigate('/dashboard', { replace: true });
+      }
     }
   }, [location.pathname, loading, user, navigate]);
 
   // Check if current route is auth page, booking page, or public page
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/onboarding' || location.pathname === '/auth/callback';
   const isBookingPage = location.pathname === '/booking';
-  const isPublicPage = location.pathname === '/dental-demo';
+  const isPublicPage = location.pathname === '/dental-demo' || location.pathname.startsWith('/consent/sign/') || location.pathname === '/checkout';
 
-  // Don't block rendering while loading - let ProtectedRoute handle it
-  // if (loading) return <div>Loading...</div>;
+  // While auth is initializing, show a global loading screen to prevent false redirects
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen w-screen bg-gray-50">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-[#2a276e] border-t-transparent rounded-full animate-spin" />
+          <p className="text-gray-500 text-sm font-medium">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Render layout based on route type
   const renderContent = () => {
@@ -111,6 +146,9 @@ function AppContent() {
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/booking" element={<BookingPage />} />
           <Route path="/dental-demo" element={<DentalChartDemo />} />
+          <Route path="/consent/sign/:token" element={<ConsentSign />} />
+          <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
+          <Route path="/select-clinic" element={<ProtectedRoute><SelectClinic /></ProtectedRoute>} />
         </Routes>
       );
     }
@@ -142,8 +180,9 @@ function AppContent() {
             
             <Routes>
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+              <Route path="/lab" element={<ProtectedRoute><LabHub /></ProtectedRoute>} />
               <Route path="/patients" element={<ProtectedRoute><Patients /></ProtectedRoute>} />
-              <Route path="/patient-files" element={<ProtectedRoute><PatientFiles /></ProtectedRoute>} />
+              <Route path="/patient-files" element={<ProtectedRoute><Patients /></ProtectedRoute>} />
               <Route path="/patient-profile/:patientId" element={<ProtectedRoute><PatientProfile /></ProtectedRoute>} />
               <Route path="/patient-intake" element={<ProtectedRoute><PatientIntake /></ProtectedRoute>} />
               <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
@@ -152,17 +191,30 @@ function AppContent() {
               <Route path="/mail/callback" element={<ProtectedRoute><MailCallback /></ProtectedRoute>} />
               <Route path="/whatsapp-test" element={<ProtectedRoute><WhatsAppTest /></ProtectedRoute>} />
               <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
-              <Route path="/admin" element={<ProtectedRoute><AdminHub /></ProtectedRoute>} />
-              <Route path="/admin/attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
-              <Route path="/admin/staff" element={<ProtectedRoute><StaffManagement /></ProtectedRoute>} />
-              <Route path="/admin/treatments" element={<ProtectedRoute><TreatmentsPricing /></ProtectedRoute>} />
-              <Route path="/admin/permissions" element={<ProtectedRoute><PermissionsManagement /></ProtectedRoute>} />
-              <Route path="/admin/clinic" element={<ProtectedRoute><ClinicInfo /></ProtectedRoute>} />
-              <Route path="/admin/templates" element={<ProtectedRoute><MessageTemplates /></ProtectedRoute>} />
-              <Route path="/admin/doctors" element={<ProtectedRoute><ReferringDoctors /></ProtectedRoute>} />
+              <Route path="/marketing/reviews" element={<ProtectedRoute><GoogleReviews /></ProtectedRoute>} />
+              <Route path="/marketing/posters" element={<ProtectedRoute><MarketingPosters /></ProtectedRoute>} />
+              <Route path="/admin" element={<ProtectedRoute><AdminHub /></ProtectedRoute>}>
+                <Route index element={<Navigate to="attendance" replace />} />
+                <Route path="attendance" element={<Attendance />} />
+                <Route path="staff" element={<StaffManagement />} />
+                <Route path="treatments" element={<TreatmentsPricing />} />
+                <Route path="permissions" element={<PermissionsManagement />} />
+                <Route path="clinic" element={<ClinicInfo />} />
+                <Route path="templates" element={<MessageTemplates />} />
+                <Route path="doctors" element={<ReferringDoctors />} />
+                <Route path="templates-manager" element={<TemplatesManager />} />
+                <Route path="practice-settings/:category" element={<PracticeSettings />} />
+                <Route path="notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+                <Route path="subscription" element={<Subscription />} />
+              </Route>
+              <Route path="/subscription" element={<Navigate to="/admin/subscription" replace />} />
+              <Route path="/support-tickets" element={<ProtectedRoute><SupportTickets /></ProtectedRoute>} />
+              <Route path="/vendors" element={<ProtectedRoute><Vendors /></ProtectedRoute>} />
+              <Route path="/consent-forms" element={<ProtectedRoute><ConsentForms /></ProtectedRoute>} />
+              <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+              <Route path="/add-clinic" element={<ProtectedRoute><AddClinic /></ProtectedRoute>} />
               <Route path="/user-management" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
               <Route path="/doctor-profile" element={<ProtectedRoute><DoctorProfile /></ProtectedRoute>} />
-              <Route path="/subscription" element={<ProtectedRoute><Subscription /></ProtectedRoute>} />
               <Route path="/loading-test" element={<LoadingTest />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
@@ -175,6 +227,7 @@ function AppContent() {
 
   return (
     <>
+      <ConnectivityBanner />
       {renderContent()}
       <ToastContainer
         position="top-right"

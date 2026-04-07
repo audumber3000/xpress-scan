@@ -45,3 +45,6 @@ mobile/android/
 
 
 
+*.db
+*.sqlite3
+*.sqlite

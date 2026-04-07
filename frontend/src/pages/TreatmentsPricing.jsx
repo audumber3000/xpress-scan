@@ -3,25 +3,45 @@ import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { useHeader } from "../contexts/HeaderContext";
 import { useAuth } from "../contexts/AuthContext";
-import { api } from "../utils/api";
-import { ChevronLeft, Search, Plus } from 'lucide-react';
+import { api, getPermissionAwareErrorMessage } from "../utils/api";
+import { ChevronLeft, Search, Plus, Pill, Layers } from 'lucide-react';
 import GearLoader from "../components/GearLoader";
 
 const TreatmentsPricing = () => {
   const { setTitle } = useHeader();
   const { user } = useAuth();
   const navigate = useNavigate();
+  
+  // Tab State
+  const [activeTab, setActiveTab] = useState('services'); // 'services' or 'medications'
+  
+  // Services State
   const [treatmentTypes, setTreatmentTypes] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('All Services');
+  const serviceCategories = ['All Services', 'General', 'Orthodontics', 'Cosmetic'];
+  
+  // Medications State
+  const [medications, setMedications] = useState([]);
+  const [selectedMedCategory, setSelectedMedCategory] = useState('All');
+  const medCategories = ['All', 'General', 'Antibiotics', 'Analgesics', 'Gastrointestinal', 'Dental'];
+  
+  // Common UI State
   const [loading, setLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editingTreatment, setEditingTreatment] = useState(null);
-  const [formData, setFormData] = useState({ name: "", price: "", category: "General" });
-  const [saving, setSaving] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState('All Services');
+  const [editingItem, setEditingItem] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [saving, setSaving] = useState(false);
   
-  const categories = ['All Services', 'General', 'Orthodontics', 'Cosmetic'];
+  const [formData, setFormData] = useState({ 
+    name: "", 
+    price: "", 
+    category: "General",
+    dosage: "",
+    duration: "",
+    quantity: "",
+    notes: ""
+  });
 
   useEffect(() => {
     setTitle(
@@ -35,15 +55,20 @@ const TreatmentsPricing = () => {
         </button>
       </div>
     );
-    fetchTreatmentTypes();
-  }, [setTitle, navigate]);
+    fetchData();
+  }, [setTitle, navigate, activeTab]);
+
+  const fetchData = () => {
+    if (activeTab === 'services') {
+      fetchTreatmentTypes();
+    } else {
+      fetchMedications();
+    }
+  };
 
   const hasPermission = (permission) => {
     if (!user) return false;
-    // Clinic owners have all permissions
     if (user.role === "clinic_owner") return true;
-    
-    // Check specific permission
     if (!user.permissions) return false;
     const [section, action] = permission.split(":");
     return user.permissions[section]?.[action] === true;
@@ -56,89 +81,179 @@ const TreatmentsPricing = () => {
       setTreatmentTypes(data);
     } catch (error) {
       console.error("Error fetching treatment types:", error);
-      toast.error("Failed to load treatment types");
+      toast.error(getPermissionAwareErrorMessage(
+        error,
+        "Failed to load treatment types",
+        "You don't have permission to view treatment services."
+      ));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAddTreatment = async (e) => {
+  const fetchMedications = async () => {
+    try {
+      setLoading(true);
+      const data = await api.get("/medications");
+      setMedications(data);
+    } catch (error) {
+      console.error("Error fetching medications:", error);
+      toast.error(getPermissionAwareErrorMessage(
+        error,
+        "Failed to load medications",
+        "You don't have permission to view medications."
+      ));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddItem = async (e) => {
     e.preventDefault();
     try {
       setSaving(true);
-      await api.post("/treatment-types", formData);
-      toast.success("Treatment type added successfully");
-      setShowAddModal(false);
-      setFormData({ name: "", price: "", category: "General" });
-      fetchTreatmentTypes();
+      if (activeTab === 'services') {
+        await api.post("/treatment-types", {
+          name: formData.name,
+          price: formData.price,
+          category: formData.category
+        });
+        toast.success("Treatment type added successfully");
+        fetchTreatmentTypes();
+      } else {
+        await api.post("/medications", {
+          name: formData.name,
+          category: formData.category,
+          dosage: formData.dosage,
+          duration: formData.duration,
+          quantity: formData.quantity,
+          notes: formData.notes
+        });
+        toast.success("Medication added successfully");
+        fetchMedications();
+      }
+      closeModal();
     } catch (error) {
-      console.error("Error adding treatment:", error);
-      toast.error("Failed to add treatment type");
+      console.error("Error adding item:", error);
+      toast.error(`Failed to add ${activeTab === 'services' ? 'treatment' : 'medication'}`);
     } finally {
       setSaving(false);
     }
   };
 
-  const handleEditTreatment = async (e) => {
+  const handleEditItem = async (e) => {
     e.preventDefault();
     try {
       setSaving(true);
-      await api.put(`/treatment-types/${editingTreatment.id}`, formData);
-      toast.success("Treatment type updated successfully");
-      setShowEditModal(false);
-      setEditingTreatment(null);
-      setFormData({ name: "", price: "", category: "General" });
-      fetchTreatmentTypes();
+      if (activeTab === 'services') {
+        await api.put(`/treatment-types/${editingItem.id}`, {
+          name: formData.name,
+          price: formData.price,
+          category: formData.category
+        });
+        toast.success("Treatment type updated successfully");
+        fetchTreatmentTypes();
+      } else {
+        await api.put(`/medications/${editingItem.id}`, {
+          name: formData.name,
+          category: formData.category,
+          dosage: formData.dosage,
+          duration: formData.duration,
+          quantity: formData.quantity,
+          notes: formData.notes
+        });
+        toast.success("Medication updated successfully");
+        fetchMedications();
+      }
+      closeModal();
     } catch (error) {
-      console.error("Error updating treatment:", error);
-      toast.error("Failed to update treatment type");
+      console.error("Error updating item:", error);
+      toast.error(error.response?.data?.detail || "Failed to update item");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDeleteTreatment = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this treatment type?")) return;
+  const handleDeleteItem = async (id, clinic_id) => {
+    if (activeTab === 'medications' && clinic_id === null) {
+      toast.info("System medications cannot be deleted");
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete this ${activeTab === 'services' ? 'treatment' : 'medication'}?`)) return;
     
     try {
-      await api.delete(`/treatment-types/${id}`);
-      toast.success("Treatment type deleted successfully");
-      fetchTreatmentTypes();
+      if (activeTab === 'services') {
+        await api.delete(`/treatment-types/${id}`);
+        fetchTreatmentTypes();
+      } else {
+        await api.delete(`/medications/${id}`);
+        fetchMedications();
+      }
+      toast.success("Deleted successfully");
     } catch (error) {
-      console.error("Error deleting treatment:", error);
-      toast.error("Failed to delete treatment type");
+      console.error("Error deleting item:", error);
+      toast.error(error.response?.data?.detail || "Failed to delete");
     }
   };
 
-  const openEditModal = (treatment) => {
-    setEditingTreatment(treatment);
-    setFormData({ name: treatment.name, price: treatment.price, category: treatment.category || 'General' });
+  const openEditModal = (item) => {
+    setEditingItem(item);
+    setFormData({ 
+      name: item.name, 
+      price: item.price || "", 
+      category: item.category || 'General',
+      dosage: item.dosage || "",
+      duration: item.duration || "",
+      quantity: item.quantity || "",
+      notes: item.notes || ""
+    });
     setShowEditModal(true);
   };
 
-  // Group treatments by category
-  const groupedTreatments = treatmentTypes.reduce((acc, treatment) => {
-    const category = treatment.category || 'General';
-    if (!acc[category]) acc[category] = [];
-    acc[category].push(treatment);
-    return acc;
-  }, {});
+  const closeModal = () => {
+    setShowAddModal(false);
+    setShowEditModal(false);
+    setEditingItem(null);
+    setFormData({ 
+      name: "", 
+      price: "", 
+      category: "General",
+      dosage: "",
+      duration: "",
+      quantity: "",
+      notes: ""
+    });
+  };
 
-  // Filter treatments based on selected category and search
-  const filteredTreatments = treatmentTypes.filter(treatment => {
-    const matchesCategory = selectedCategory === 'All Services' || treatment.category === selectedCategory || (!treatment.category && selectedCategory === 'General');
-    const matchesSearch = treatment.name.toLowerCase().includes(searchQuery.toLowerCase());
+  // Filtering Logic
+  const filteredServices = treatmentTypes.filter(t => {
+    const matchesCategory = selectedCategory === 'All Services' || t.category === selectedCategory || (!t.category && selectedCategory === 'General');
+    const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
-  const filteredGrouped = filteredTreatments.reduce((acc, treatment) => {
+  const filteredMedications = medications.filter(m => {
+    const matchesCategory = selectedMedCategory === 'All' || m.category === selectedMedCategory;
+    const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
+  const groupedServices = filteredServices.reduce((acc, treatment) => {
     const category = treatment.category || 'General';
     if (!acc[category]) acc[category] = [];
     acc[category].push(treatment);
     return acc;
   }, {});
 
-  if (loading) {
+  const groupedMeds = filteredMedications.reduce((acc, med) => {
+    const category = med.category || 'General';
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(med);
+    return acc;
+  }, {});
+
+  if (loading && treatmentTypes.length === 0 && medications.length === 0) {
     return (
       <div className="flex items-center justify-center h-screen">
         <GearLoader />
@@ -146,107 +261,149 @@ const TreatmentsPricing = () => {
     );
   }
 
-  if (!hasPermission("billing:view")) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <p className="text-gray-500 text-lg">You don't have permission to view billing information.</p>
+  return (
+    <div className="flex flex-col h-full bg-[#f8fafc] overflow-y-auto custom-scrollbar p-6 lg:p-8 pb-10">
+      
+      {/* Header */}
+      <div className="mb-6 flex justify-between items-end">
+        <div className="flex items-center gap-2 text-sm font-medium text-gray-500">
+          <span>Admin</span>
+          <span>/</span>
+          <span className="text-gray-900">Treatment & Pricing</span>
         </div>
       </div>
-    );
-  }
 
-  return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="max-w-6xl mx-auto">
+      {/* Top Level Tabs */}
+      <div className="mb-6 border-b border-gray-200">
+          <div className="flex gap-6 -mb-px">
+            <button
+              onClick={() => setActiveTab('services')}
+              className={`pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'services' ? 'border-[#29828a] text-[#29828a]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+            >
+              Treatment & Pricing
+            </button>
+            <button
+              onClick={() => setActiveTab('medications')}
+              className={`pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'medications' ? 'border-[#29828a] text-[#29828a]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+            >
+              Medication
+            </button>
+          </div>
+        </div>
+
         {/* Search Bar */}
         <div className="mb-4">
           <div className="relative">
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search treatments..."
+              placeholder={`Search ${activeTab === 'services' ? 'treatments' : 'medications'}...`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-gray-100 border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2D9596]"
+              className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-[#2D9596]"
             />
           </div>
         </div>
 
-        {/* Category Tabs */}
-        <div className="flex gap-6 mb-6 border-b border-gray-200 overflow-x-auto">
-          {categories.map((category) => (
+        {/* Sub-Category Tabs */}
+        <div className="flex gap-6 mb-6 border-b border-gray-200 overflow-x-auto no-scrollbar">
+          {(activeTab === 'services' ? serviceCategories : medCategories).map((category) => (
             <button
               key={category}
-              onClick={() => setSelectedCategory(category)}
+              onClick={() => activeTab === 'services' ? setSelectedCategory(category) : setSelectedMedCategory(category)}
               className={`pb-3 px-1 font-semibold whitespace-nowrap transition relative ${
-                selectedCategory === category
+                (activeTab === 'services' ? selectedCategory : selectedMedCategory) === category
                   ? 'text-[#2D9596]'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
               {category}
-              {selectedCategory === category && (
+              {(activeTab === 'services' ? selectedCategory : selectedMedCategory) === category && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#2D9596] rounded-full" />
               )}
             </button>
           ))}
         </div>
 
-        {/* Treatments by Section */}
-        {Object.entries(filteredGrouped).map(([category, treatments]) => (
-          <div key={category} className="mb-6">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                {category === 'General' ? 'GENERAL DENTISTRY' : category.toUpperCase()}
+        {/* Content Table */}
+        {Object.entries(activeTab === 'services' ? groupedServices : groupedMeds).map(([category, items]) => (
+          <div key={category} className="mb-8">
+            <div className="flex items-center justify-between mb-3 px-1">
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">
+                {category.toUpperCase()}
               </h3>
-              <span className="text-xs font-semibold text-[#2D9596]">
-                {treatments.length} ITEMS
+              <span className="text-[10px] font-bold bg-[#E0F2F2] text-[#2D9596] px-2 py-0.5 rounded-full">
+                {items.length} {items.length === 1 ? 'ITEM' : 'ITEMS'}
               </span>
             </div>
 
-            <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
-              <table className="min-w-full">
-                <thead className="bg-gray-50">
+            <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
+              <table className="min-w-full divide-y divide-gray-100">
+                <thead className="bg-gray-50/50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Treatment Name
+                    <th className="px-6 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                      Name
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Price
-                    </th>
-                    {hasPermission("billing:edit") && (
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
+                    {activeTab === 'services' ? (
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                        Price
                       </th>
+                    ) : (
+                      <>
+                        <th className="px-6 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                          Dosage
+                        </th>
+                        <th className="px-6 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                          Duration
+                        </th>
+                      </>
                     )}
+                    <th className="px-6 py-3 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
-                <tbody>
-                  {treatments.map((treatment, index) => (
-                    <tr key={treatment.id} className="hover:bg-gray-50 transition">
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                        {treatment.name}
+                <tbody className="divide-y divide-gray-50">
+                  {items.map((item) => (
+                    <tr key={item.id} className="hover:bg-gray-50/50 transition">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          {activeTab === 'medications' && item.clinic_id === null && (
+                            <div className="w-1.5 h-1.5 rounded-full bg-blue-400" title="System Medication"></div>
+                          )}
+                          <span className="text-sm font-bold text-gray-900">{item.name}</span>
+                        </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        ₹{treatment.price}
-                      </td>
-                      {hasPermission("billing:edit") && (
-                        <td className="px-6 py-4 text-right text-sm font-medium">
+                      {activeTab === 'services' ? (
+                        <td className="px-6 py-4 text-sm font-mono text-[#2D9596] font-bold">
+                          ₹{item.price}
+                        </td>
+                      ) : (
+                        <>
+                          <td className="px-6 py-4 text-sm text-gray-600 font-medium">
+                            {item.dosage || '-'}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600 font-medium">
+                            {item.duration || '-'}
+                          </td>
+                        </>
+                      )}
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex justify-end gap-3">
                           <button
-                            onClick={() => openEditModal(treatment)}
-                            className="text-[#2D9596] hover:text-[#1F6B72] mr-4 transition"
+                            onClick={() => openEditModal(item)}
+                            className="text-[#2D9596] hover:text-[#1F6B72] text-[11px] font-bold uppercase tracking-wider"
                           >
                             Edit
                           </button>
                           <button
-                            onClick={() => handleDeleteTreatment(treatment.id)}
-                            className="text-red-600 hover:text-red-900 transition"
+                            onClick={() => handleDeleteItem(item.id, item.clinic_id)}
+                            className="text-red-400 hover:text-red-600 text-[11px] font-bold uppercase tracking-wider"
                           >
                             Delete
                           </button>
-                        </td>
-                      )}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -255,161 +412,155 @@ const TreatmentsPricing = () => {
           </div>
         ))}
 
-        {filteredTreatments.length === 0 && (
-          <div className="text-center py-12 bg-white rounded-2xl">
-            <p className="text-gray-500">No treatments found</p>
+        {((activeTab === 'services' && Object.keys(groupedServices).length === 0) || 
+          (activeTab === 'medications' && Object.keys(groupedMeds).length === 0)) && (
+          <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-gray-100">
+            <Search className="w-12 h-12 text-gray-200 mx-auto mb-4" />
+            <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">No items found</p>
           </div>
         )}
 
         {/* Floating Add Button */}
-        {hasPermission("billing:edit") && (
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="fixed bottom-6 right-6 w-14 h-14 bg-[#2D9596] text-white rounded-full shadow-lg hover:bg-[#1F6B72] transition flex items-center justify-center"
-          >
-            <Plus className="w-7 h-7" />
-          </button>
-        )}
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="fixed bottom-8 right-8 w-16 h-16 bg-[#2D9596] text-white rounded-2xl shadow-xl hover:bg-[#1F6B72] hover:-translate-y-1 transition-all flex items-center justify-center ring-4 ring-white"
+        >
+          <Plus className="w-8 h-8" />
+        </button>
 
-        {/* Add Modal */}
-        {showAddModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md">
-              <h3 className="text-lg font-semibold mb-4">Add Treatment Type</h3>
-              <form onSubmit={handleAddTreatment}>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Treatment Name
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2D9596]"
-                    required
-                  />
+        {/* Modal Template */}
+        {(showAddModal || showEditModal) && (
+          <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+              <div className="bg-[#2D9596] px-8 py-6">
+                <h3 className="text-xl font-bold text-white">
+                  {showAddModal ? `Add New ${activeTab === 'services' ? 'Service' : 'Medication'}` : `Edit ${activeTab === 'services' ? 'Service' : 'Medication'}`}
+                </h3>
+                <p className="text-white/80 text-sm mt-1">Fill in the details below</p>
+              </div>
+              
+              <form onSubmit={showAddModal ? handleAddItem : handleEditItem} className="p-8">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2 space-y-2">
+                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-1">
+                      {activeTab === 'services' ? 'Service Name' : 'Medicine Name'}
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2D9596] focus:bg-white transition-all text-sm font-bold"
+                      placeholder={activeTab === 'services' ? "eg. Root Canal" : "eg. Amoxicillin"}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-1">
+                      Category
+                    </label>
+                    <select
+                      value={formData.category}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2D9596] focus:bg-white transition-all text-sm font-bold"
+                    >
+                      {(activeTab === 'services' ? serviceCategories : medCategories).filter(c => c !== 'All Services' && c !== 'All').map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {activeTab === 'services' ? (
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-1">
+                        Price (₹)
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.price}
+                        onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2D9596] focus:bg-white transition-all text-sm font-bold font-mono"
+                        placeholder="0.00"
+                        required
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-2">
+                        <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-1">
+                          Dosage
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.dosage}
+                          onChange={(e) => setFormData({ ...formData, dosage: e.target.value })}
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2D9596] focus:bg-white transition-all text-sm font-bold"
+                          placeholder="1-0-1"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-1">
+                          Duration
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.duration}
+                          onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2D9596] focus:bg-white transition-all text-sm font-bold"
+                          placeholder="5 days"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-1">
+                          Default Qty
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.quantity}
+                          onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2D9596] focus:bg-white transition-all text-sm font-bold"
+                          placeholder="10"
+                        />
+                      </div>
+                      <div className="col-span-2 space-y-2">
+                        <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-1">
+                          Notes / Instructions
+                        </label>
+                        <textarea
+                          value={formData.notes}
+                          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2D9596] focus:bg-white transition-all text-sm font-medium"
+                          rows="2"
+                          placeholder="Special instructions..."
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Category
-                  </label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2D9596]"
-                  >
-                    <option value="General">General</option>
-                    <option value="Orthodontics">Orthodontics</option>
-                    <option value="Cosmetic">Cosmetic</option>
-                  </select>
-                </div>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Price (₹)
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2D9596]"
-                    required
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
+
+                <div className="flex gap-4 mt-8">
                   <button
                     type="button"
-                    onClick={() => {
-                      setShowAddModal(false);
-                      setFormData({ name: "", price: "", category: "General" });
-                    }}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                    onClick={closeModal}
+                    className="flex-1 px-6 py-3 text-gray-500 font-bold text-sm uppercase tracking-widest hover:bg-gray-100 rounded-xl transition-all"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={saving}
-                    className="px-4 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] disabled:opacity-50"
+                    className="flex-1 px-6 py-3 bg-[#2D9596] text-white rounded-xl text-sm font-bold uppercase tracking-widest shadow-lg hover:shadow-xl hover:bg-[#1F6B72] transition-all disabled:opacity-50"
                   >
-                    {saving ? "Adding..." : "Add"}
+                    {saving ? "Saving..." : "Save Changes"}
                   </button>
                 </div>
               </form>
             </div>
           </div>
         )}
-
-        {/* Edit Modal */}
-        {showEditModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md">
-              <h3 className="text-lg font-semibold mb-4">Edit Treatment Type</h3>
-              <form onSubmit={handleEditTreatment}>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Treatment Name
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2D9596]"
-                    required
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Category
-                  </label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2D9596]"
-                  >
-                    <option value="General">General</option>
-                    <option value="Orthodontics">Orthodontics</option>
-                    <option value="Cosmetic">Cosmetic</option>
-                  </select>
-                </div>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Price (₹)
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2D9596]"
-                    required
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowEditModal(false);
-                      setEditingTreatment(null);
-                      setFormData({ name: "", price: "", category: "General" });
-                    }}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="px-4 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] disabled:opacity-50"
-                  >
-                    {saving ? "Saving..." : "Save"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 };
 
 export default TreatmentsPricing;
+

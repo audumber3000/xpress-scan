@@ -3,6 +3,7 @@ Clinic routes using clean architecture
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List, Optional
+from sqlalchemy.orm import Session
 from core.dtos import (
     ClinicCreateDTO,
     ClinicUpdateDTO,
@@ -13,8 +14,79 @@ from core.dtos import (
 )
 from core.dependencies import get_clinic_service
 from core.auth_utils import get_current_user, require_role
+from core.nexus_notify import notify
+from database import get_db
+from models import Clinic, user_clinics, generate_clinic_code
+import datetime
 
 router = APIRouter()
+
+
+@router.post(
+    "/owner/add",
+    response_model=ClinicResponseDTO,
+    status_code=status.HTTP_201_CREATED,
+    summary="Owner adds a new branch clinic",
+    description="Creates a new clinic and links it to the authenticated clinic owner's account"
+)
+async def owner_add_clinic(
+    clinic_data: ClinicCreateDTO,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_role("clinic_owner"))
+):
+    """
+    Allows a clinic_owner to create a new branch under their account.
+    The new clinic gets its own unique clinic_code and is linked to the owner
+    via the user_clinics association table.
+    """
+    try:
+        # Create the new clinic
+        new_clinic = Clinic(
+            name=clinic_data.name,
+            address=getattr(clinic_data, 'address', None),
+            phone=getattr(clinic_data, 'phone', None),
+            email=getattr(clinic_data, 'email', None),
+            specialization=getattr(clinic_data, 'specialization', 'dental'),
+            clinic_code=generate_clinic_code(),
+            status='active',
+            created_at=datetime.datetime.utcnow(),
+            updated_at=datetime.datetime.utcnow(),
+        )
+        db.add(new_clinic)
+        db.flush()  # Get the new clinic ID without committing
+
+        # Link this clinic to the owner via user_clinics (many-to-many)
+        db.execute(
+            user_clinics.insert().values(
+                user_id=current_user.id,
+                clinic_id=new_clinic.id,
+                role='clinic_owner',
+                is_active=True,
+                created_at=datetime.datetime.utcnow()
+            )
+        )
+        db.commit()
+        db.refresh(new_clinic)
+
+        notify(
+            "branch_added", channel="email",
+            to_email=current_user.email,
+            to_name=getattr(current_user, 'first_name', '') or current_user.email,
+            template_data={
+                "owner_name": getattr(current_user, 'first_name', None) or current_user.email.split('@')[0],
+                "branch_name": new_clinic.name,
+            }
+        )
+
+        return ClinicResponseDTO.from_orm(new_clinic)
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create clinic: {str(e)}"
+        )
+
 
 
 @router.get(

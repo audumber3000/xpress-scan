@@ -1,6 +1,9 @@
 import os
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
+load_dotenv()
 
 # Check if running in desktop/offline mode or cloud mode
 # Desktop mode uses local PostgreSQL, cloud mode uses Render PostgreSQL

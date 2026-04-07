@@ -67,12 +67,18 @@ class UserRepository(BaseRepository[User], UserRepositoryProtocol):
         ).all()
 
     def transfer_user_to_clinic(self, user_id: int, clinic_id: int) -> bool:
-        """Transfer user to a different clinic"""
+        """Transfer user to a different clinic and add it to their association list"""
         user = self.get_by_id(user_id)
         if not user:
             return False
 
         user.clinic_id = clinic_id
+        
+        # Add to associated clinics if not already there
+        clinic = self.db.query(Clinic).filter(Clinic.id == clinic_id).first()
+        if clinic and clinic not in user.clinics:
+            user.clinics.append(clinic)
+            
         self.db.commit()
         return True
 

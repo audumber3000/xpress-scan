@@ -268,7 +268,11 @@ const AuthCallback = () => {
             await new Promise(resolve => setTimeout(resolve, 200));
             
             // Redirect based on user state
-            const redirectPath = !data.user.clinic_id ? '/onboarding' : '/dashboard';
+            const redirectPath = !data.user.clinic_id 
+              ? '/onboarding' 
+              : (data.user.role === 'clinic_owner' && data.user.clinics?.length > 1)
+                ? '/select-clinic'
+                : '/dashboard';
             navigate(redirectPath, { replace: true });
           } catch (backendError) {
             console.error('❌ [AUTH CALLBACK] Backend error:', backendError);
@@ -311,7 +315,11 @@ const AuthCallback = () => {
               // Small delay to ensure context is updated
               await new Promise(resolve => setTimeout(resolve, 200));
               
-              const redirectPath = !data.user.clinic_id ? '/onboarding' : '/dashboard';
+              const redirectPath = !data.user.clinic_id 
+                ? '/onboarding' 
+                : (data.user.role === 'clinic_owner' && data.user.clinics?.length > 1)
+                  ? '/select-clinic'
+                  : '/dashboard';
               navigate(redirectPath, { replace: true });
               clearTimeout(timeout);
               return;

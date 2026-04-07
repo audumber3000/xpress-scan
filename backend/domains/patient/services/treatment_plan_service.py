@@ -256,10 +256,6 @@ class TreatmentPlanService:
             appointment.appointment_date = appointment_datetime
             appointment.start_time = time_str
 
-        # Update treatment if procedure changed
-        if "procedure" in updates:
-            appointment.treatment = updates["procedure"]
-
         # Update notes if changed
         if "notes" in updates:
             appointment.notes = updates["notes"]

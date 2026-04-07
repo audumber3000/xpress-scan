@@ -60,13 +60,16 @@ def get_available_resources():
         {"key": "users", "label": "Staff Management", "actions": ["view", "edit", "delete"]},
         {"key": "patients", "label": "Patients", "actions": ["view", "edit", "delete"]},
         {"key": "appointments", "label": "Appointments", "actions": ["view", "edit", "delete"]},
+        {"key": "vendors", "label": "Vendors", "actions": ["view", "edit", "delete"]},
+        {"key": "inventory", "label": "Inventory", "actions": ["view", "edit", "delete"]},
         {"key": "billing", "label": "Billing", "actions": ["view", "edit"]},
         {"key": "treatments", "label": "Treatments", "actions": ["view", "edit", "delete"]},
         {"key": "clinic", "label": "Clinic Settings", "actions": ["view", "edit"]},
         {"key": "templates", "label": "Message Templates", "actions": ["view", "edit"]},
         {"key": "doctors", "label": "Referring Doctors", "actions": ["view", "edit", "delete"]},
         {"key": "attendance", "label": "Attendance", "actions": ["view", "edit"]},
-        {"key": "permissions", "label": "Permissions", "actions": ["view", "edit"]}
+        {"key": "permissions", "label": "Permissions", "actions": ["view", "edit"]},
+        {"key": "lab_orders", "label": "Lab Orders", "actions": ["view", "edit", "delete"]}
     ]
 
 @router.get("/users/{user_id}/permissions", response_model=UserPermissionsResponse)

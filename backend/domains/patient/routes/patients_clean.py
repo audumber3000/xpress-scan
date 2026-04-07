@@ -2,7 +2,10 @@
 Patient routes using clean architecture
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from typing import List, Optional
+from fastapi.encoders import jsonable_encoder
+from typing import List, Optional, Any
+from sqlalchemy.orm import Session
+from database import get_db
 from core.dtos import (
     PatientCreateDTO,
     PatientUpdateDTO,
@@ -14,12 +17,50 @@ from core.dtos import (
 )
 from core.dependencies import get_patient_service
 from core.auth_utils import get_current_user, require_patients_view, require_patients_edit, require_patients_delete
+from domains.activity.routes.activity_log import push_activity
 
 router = APIRouter()
 
 
 @router.get(
-    "/",
+    "/check-duplicates",
+    summary="Check for duplicate patients",
+    description="Search for potential duplicate patients by name, phone, or email within the current clinic"
+)
+async def check_duplicates(
+    name: Optional[str] = Query(None),
+    phone: Optional[str] = Query(None),
+    email: Optional[str] = Query(None),
+    current_user = Depends(require_patients_view),
+    patient_service = Depends(get_patient_service)
+):
+    """
+    Check for potential duplicate patients.
+    Returns a list of patients that match any of the provided criteria.
+    """
+    try:
+        patients = patient_service.check_duplicates(
+            current_user.clinic_id,
+            name=name,
+            phone=phone,
+            email=email
+        )
+        # Use jsonable_encoder to bypass strict Pydantic validation for the response
+        # This handles cases where SQLAlchemy objects might have slightly different data than DTO expects
+        from fastapi.encoders import jsonable_encoder
+        return jsonable_encoder(patients)
+    except Exception as e:
+        print(f"ERROR in check_duplicates: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to check for duplicates: {str(e)}"
+        )
+
+
+
+
+@router.get(
+    "",
     response_model=List[PatientResponseDTO],
     summary="Get patients for current clinic",
     description="Retrieve paginated list of patients for the authenticated user's clinic"
@@ -54,7 +95,7 @@ async def get_patients(
 
 
 @router.post(
-    "/",
+    "",
     response_model=PatientResponseDTO,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new patient",
@@ -63,7 +104,8 @@ async def get_patients(
 async def create_patient(
     patient_data: PatientCreateDTO,
     current_user = Depends(require_patients_edit),
-    patient_service = Depends(get_patient_service)
+    patient_service = Depends(get_patient_service),
+    db: Session = Depends(get_db)
 ):
     """
     Create a new patient.
@@ -76,6 +118,15 @@ async def create_patient(
             patient_data.dict(),
             current_user.clinic_id
         )
+        try:
+            actor = getattr(current_user, 'name', None) or getattr(current_user, 'email', 'Staff')
+            push_activity(db, current_user.clinic_id, 'patient_added',
+                f"New patient added: {patient.name}",
+                link=f"/patients/{patient.id}",
+                actor_name=actor)
+            db.commit()
+        except Exception:
+            pass
         return PatientResponseDTO.from_orm(patient)
 
     except ValueError as e:

@@ -1,6 +1,19 @@
 // Service Worker Registration
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
+  window.addEventListener('load', async () => {
+    const isLocalDev = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+
+    if (isLocalDev) {
+      try {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+        console.log('Service workers unregistered for local dev');
+      } catch (err) {
+        console.log('Failed to unregister service workers in dev:', err);
+      }
+      return;
+    }
+
     navigator.serviceWorker.register('/sw.js')
       .then((registration) => {
         console.log('SW registered: ', registration);

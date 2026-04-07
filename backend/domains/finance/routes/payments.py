@@ -18,7 +18,7 @@ def get_db():
 
 router = APIRouter()
 
-@router.post("/", response_model=PaymentOut)
+@router.post("", response_model=PaymentOut)
 async def create_payment(
     payment_data: PaymentCreate,
     db: Session = Depends(get_db),
@@ -69,7 +69,7 @@ async def create_payment(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error creating payment: {str(e)}")
 
-@router.get("/", response_model=List[PaymentOut])
+@router.get("", response_model=List[PaymentOut])
 async def get_payments(
     skip: int = Query(0, description="Number of records to skip"),
     limit: int = Query(100, description="Number of records to return"),

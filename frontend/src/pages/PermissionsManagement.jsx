@@ -3,9 +3,86 @@ import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { useHeader } from "../contexts/HeaderContext";
 import { useAuth } from "../contexts/AuthContext";
-import { api } from "../utils/api";
+import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import GearLoader from "../components/GearLoader";
-import { Shield, Users, UserCheck, Lock, ChevronLeft } from 'lucide-react';
+import FeatureLock from "../components/FeatureLock";
+import { ChevronLeft, X, Shield, ChevronRight, Search } from 'lucide-react';
+
+const MODULES = [
+  { key: 'dashboard',     label: 'Dashboard',     actions: ['read'] },
+  { key: 'appointments',  label: 'Appointments',   actions: ['read', 'write', 'edit', 'delete'] },
+  { key: 'patients',      label: 'Patients',       actions: ['read', 'write', 'edit', 'delete'] },
+  { key: 'finance',       label: 'Finance',        actions: ['read', 'write', 'edit', 'delete'] },
+  { key: 'vendors',       label: 'Vendors',        actions: ['read', 'write', 'edit', 'delete'] },
+  { key: 'inventory',     label: 'Inventory',      actions: ['read', 'write', 'edit', 'delete'] },
+  { key: 'inbox',         label: 'Inbox',          actions: ['read', 'write'] },
+  { key: 'reports',       label: 'Reports',        actions: ['read'] },
+  { key: 'marketing',     label: 'Marketing',      actions: ['read', 'write', 'edit'] },
+  { key: 'staff',         label: 'Staff / Admin',  actions: ['read', 'write', 'edit', 'delete'] },
+  { key: 'lab',           label: 'Lab',            actions: ['read', 'write', 'edit', 'delete'] },
+  { key: 'settings',      label: 'Settings',       actions: ['read', 'write', 'edit'] },
+  { key: 'consent',       label: 'Consent Forms',  actions: ['read', 'write', 'edit', 'delete'] },
+];
+
+const ALL_ACTIONS = ['read', 'write', 'edit', 'delete'];
+
+const ROLE_PRESETS = {
+  clinic_owner: Object.fromEntries(MODULES.map(m => [m.key, Object.fromEntries(m.actions.map(a => [a, true]))]) ),
+  doctor: {
+    dashboard:    { read: true },
+    appointments: { read: true, write: false, edit: true, delete: false },
+    patients:     { read: true, write: false, edit: true, delete: false },
+    finance:      { read: true, write: false, edit: false, delete: false },
+    inbox:        { read: true, write: true },
+    reports:      { read: true },
+    marketing:    { read: true, write: false, edit: false },
+    lab:          { read: true, write: true, edit: true, delete: false },
+    staff:        { read: false, write: false, edit: false, delete: false },
+    settings:     { read: false, write: false, edit: false },
+    consent:      { read: true, write: true, edit: true, delete: false },
+  },
+  receptionist: {
+    dashboard:    { read: true },
+    appointments: { read: true, write: true, edit: true, delete: false },
+    patients:     { read: true, write: true, edit: true, delete: false },
+    finance:      { read: true, write: true, edit: false, delete: false },
+    inbox:        { read: true, write: true },
+    reports:      { read: false },
+    marketing:    { read: false, write: false, edit: false },
+    lab:          { read: true, write: false, edit: false, delete: false },
+    staff:        { read: false, write: false, edit: false, delete: false },
+    settings:     { read: false, write: false, edit: false },
+    consent:      { read: true, write: true, edit: false, delete: false },
+  },
+};
+
+const ROLE_COLORS = {
+  clinic_owner: 'bg-[#E0F2F2] text-[#1F6B72]',
+  doctor:       'bg-indigo-50 text-indigo-700',
+  receptionist: 'bg-emerald-50 text-emerald-700',
+};
+
+const ROLE_LABELS = {
+  clinic_owner: 'Clinic Owner',
+  doctor:       'Doctor',
+  receptionist: 'Receptionist',
+};
+
+const Toggle = ({ checked, onChange }) => (
+  <button
+    type="button"
+    onClick={onChange}
+    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${
+      checked ? 'bg-[#2D9596]' : 'bg-gray-200'
+    }`}
+  >
+    <span
+      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+        checked ? 'translate-x-4' : 'translate-x-0'
+      }`}
+    />
+  </button>
+);
 
 const PermissionsManagement = () => {
   const { setTitle } = useHeader();
@@ -13,389 +90,300 @@ const PermissionsManagement = () => {
   const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [userPermissions, setUserPermissions] = useState(null);
-  const [availableRoles, setAvailableRoles] = useState([]);
-  const [availableResources, setAvailableResources] = useState([]);
+  const [drawerUser, setDrawerUser] = useState(null);
+  const [permissions, setPermissions] = useState({});
   const [saving, setSaving] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [pendingRole, setPendingRole] = useState(null);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     setTitle(
       <div className="flex items-center gap-2">
-        <button
-          onClick={() => navigate('/admin')}
-          className="flex items-center gap-1 text-gray-600 hover:text-gray-900 transition"
-        >
+        <button onClick={() => navigate('/admin')} className="flex items-center gap-1 text-gray-600 hover:text-gray-900 transition">
           <ChevronLeft className="w-5 h-5" />
           <span className="text-sm font-medium">Admin Hub</span>
         </button>
       </div>
     );
     fetchUsers();
-    fetchAvailableRoles();
-    fetchAvailableResources();
   }, [setTitle, navigate]);
-
-  const fetchAvailableRoles = async () => {
-    try {
-      const data = await api.get("/permissions/roles");
-      setAvailableRoles(data);
-    } catch (error) {
-      console.error("Error fetching roles:", error);
-    }
-  };
-
-  const fetchAvailableResources = async () => {
-    try {
-      const data = await api.get("/permissions/resources");
-      setAvailableResources(data);
-    } catch (error) {
-      console.error("Error fetching resources:", error);
-    }
-  };
-
-  const hasPermission = (permission) => {
-    if (!user) return false;
-    // Clinic owners have all permissions
-    if (user.role === "clinic_owner") return true;
-    
-    // Check specific permission
-    if (!user.permissions) return false;
-    const [section, action] = permission.split(":");
-    return user.permissions[section]?.[action] === true;
-  };
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
       const data = await api.get("/clinic-users");
       setUsers(data);
-    } catch (error) {
-      console.error("Error fetching users:", error);
-      toast.error("Failed to load users");
+    } catch (err) {
+      toast.error(getPermissionAwareErrorMessage(
+        err,
+        "Failed to load users",
+        "You don't have permission to view staff users."
+      ));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUserSelect = async (selectedUser) => {
-    // Check for unsaved changes
-    if (hasUnsavedChanges) {
-      const confirm = window.confirm("You have unsaved changes. Do you want to discard them?");
-      if (!confirm) return;
-    }
-    
-    setSelectedUser(selectedUser);
-    setPendingRole(null);
-    setHasUnsavedChanges(false);
-    
-    try {
-      const data = await api.get(`/permissions/users/${selectedUser.id}/permissions`);
-      setUserPermissions(data);
-      setPendingRole(data.role);
-    } catch (error) {
-      console.error("Error fetching user permissions:", error);
-      toast.error("Failed to load user permissions");
-    }
+  const openDrawer = (u) => {
+    setDrawerUser(u);
+    const saved = u.permissions || {};
+    const merged = {};
+    MODULES.forEach(m => {
+      merged[m.key] = {};
+      m.actions.forEach(a => {
+        // Only true if admin explicitly saved it as true — deny by default
+        merged[m.key][a] = saved[m.key]?.[a] === true;
+      });
+    });
+    setPermissions(merged);
   };
 
-  const handleRoleSelect = (newRole) => {
-    if (!selectedUser) return;
-    setPendingRole(newRole);
-    setHasUnsavedChanges(newRole !== userPermissions.role);
+  const applyPreset = (role) => {
+    const preset = ROLE_PRESETS[role] || {};
+    const merged = {};
+    MODULES.forEach(m => {
+      merged[m.key] = {};
+      m.actions.forEach(a => {
+        merged[m.key][a] = preset[m.key]?.[a] ?? false;
+      });
+    });
+    setPermissions(merged);
   };
 
-  const handleSaveChanges = async () => {
-    if (!selectedUser || !pendingRole) return;
-    
-    // If no changes, just show message
-    if (pendingRole === userPermissions.role) {
-      toast.info("No changes to save");
-      return;
-    }
-    
+  const togglePerm = (moduleKey, action) => {
+    setPermissions(prev => ({
+      ...prev,
+      [moduleKey]: { ...prev[moduleKey], [action]: !prev[moduleKey]?.[action] }
+    }));
+  };
+
+  const toggleAllForModule = (moduleKey, actions) => {
+    const allOn = actions.every(a => permissions[moduleKey]?.[a]);
+    setPermissions(prev => ({
+      ...prev,
+      [moduleKey]: Object.fromEntries(actions.map(a => [a, !allOn]))
+    }));
+  };
+
+  const handleSave = async () => {
+    if (!drawerUser) return;
     try {
       setSaving(true);
-      await api.post(`/permissions/users/${selectedUser.id}/role`, {
-        user_id: selectedUser.id,
-        role: pendingRole
-      });
-      toast.success("Role updated successfully");
-      setHasUnsavedChanges(false);
-      await fetchUsers();
-      
-      // Refresh user permissions
-      const data = await api.get(`/permissions/users/${selectedUser.id}/permissions`);
-      setUserPermissions(data);
-      setPendingRole(data.role);
-    } catch (error) {
-      console.error("Error updating role:", error);
-      toast.error("Failed to update role");
+      await api.put(`/clinic-users/${drawerUser.id}`, { permissions });
+      toast.success("Permissions updated");
+      setDrawerUser(null);
+      fetchUsers();
+    } catch (err) {
+      toast.error(getPermissionAwareErrorMessage(
+        err,
+        "Failed to save permissions",
+        "You don't have permission to update user permissions."
+      ));
     } finally {
       setSaving(false);
     }
   };
 
-  const handleSyncRoles = async () => {
-    try {
-      setSyncing(true);
-      const result = await api.post("/permissions/sync-user-roles");
-      toast.success(result.message);
-      await fetchUsers();
-    } catch (error) {
-      console.error("Error syncing roles:", error);
-      toast.error("Failed to sync roles");
-    } finally {
-      setSyncing(false);
-    }
-  };
+  const filteredUsers = users.filter(u =>
+    !searchQuery ||
+    u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    u.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  const getRoleColor = (role) => {
-    switch (role) {
-      case 'clinic_owner': return '#2D9596';
-      case 'doctor': return '#4F46E5';
-      case 'receptionist': return '#10B981';
-      default: return '#6B7280';
-    }
-  };
-
-  const getRoleIcon = (role) => {
-    switch (role) {
-      case 'clinic_owner': return Shield;
-      case 'doctor': return UserCheck;
-      case 'receptionist': return Users;
-      default: return Lock;
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <GearLoader />
-      </div>
-    );
-  }
-
-  if (!hasPermission("permissions:view")) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <p className="text-gray-500 text-lg">You don't have permission to view permissions.</p>
-        </div>
-      </div>
-    );
-  }
+  const initials = (name) => name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?';
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="max-w-7xl mx-auto">
-        {/* Header with teal theme */}
-        <div className="bg-gradient-to-r from-[#2D9596] to-[#1F6B72] rounded-lg p-6 mb-6 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold mb-2">Permissions Management</h2>
-              <p className="text-white/90">Manage user roles and permissions using Casbin RBAC</p>
-            </div>
-            {user.role === 'clinic_owner' && (
-              <button
-                onClick={handleSyncRoles}
-                disabled={syncing}
-                className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition disabled:opacity-50"
-              >
-                {syncing ? 'Syncing...' : 'Sync Roles to Casbin'}
-              </button>
-            )}
-          </div>
-        </div>
+    <div className="flex flex-col h-full bg-transparent overflow-y-auto custom-scrollbar p-6 lg:p-8 pb-10">
+      {/* Breadcrumb */}
+      <div className="mb-6 flex items-center gap-2 text-sm font-medium text-gray-500">
+        <span>Admin</span><span>/</span><span className="text-gray-900">Permissions</span>
+      </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Users List */}
-          <div className="bg-white rounded-lg shadow-sm">
-            <div className="p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Staff Members</h3>
-              <p className="text-sm text-gray-500 mt-1">{users.length} users</p>
-            </div>
-            <div className="p-4 space-y-2 max-h-[600px] overflow-y-auto">
-              {users.map((u) => {
-                const RoleIcon = getRoleIcon(u.role);
-                return (
-                  <button
-                    key={u.id}
-                    onClick={() => handleUserSelect(u)}
-                    className={`w-full text-left px-4 py-3 rounded-lg transition ${
-                      selectedUser?.id === u.id
-                        ? 'bg-[#2D9596] text-white shadow-md'
-                        : 'bg-gray-50 hover:bg-gray-100 text-gray-900'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`p-2 rounded-lg ${
-                          selectedUser?.id === u.id ? 'bg-white/20' : 'bg-white'
-                        }`}
-                        style={{
-                          color: selectedUser?.id === u.id ? 'white' : getRoleColor(u.role)
-                        }}
-                      >
-                        <RoleIcon className="w-5 h-5" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-medium">{u.name}</div>
-                        <div className={`text-sm ${
-                          selectedUser?.id === u.id ? 'text-white/80' : 'text-gray-500'
-                        }`}>
-                          {u.email}
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Permissions Editor */}
-          <div className="lg:col-span-2 bg-white rounded-lg shadow-sm">
-            {selectedUser && userPermissions ? (
-              <>
-                <div className="p-6 border-b border-gray-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-xl font-semibold text-gray-900">{userPermissions.user_name}</h3>
-                      <p className="text-sm text-gray-500">{userPermissions.user_email}</p>
-                    </div>
-                    <button
-                      onClick={handleSaveChanges}
-                      disabled={saving || !hasUnsavedChanges}
-                      className={`px-6 py-2 rounded-lg font-medium transition ${
-                        hasUnsavedChanges
-                          ? 'bg-[#2D9596] text-white hover:bg-[#1F6B72]'
-                          : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                      } disabled:opacity-50`}
-                    >
-                      {saving ? 'Saving...' : hasUnsavedChanges ? 'Save Changes' : 'No Changes'}
-                    </button>
-                  </div>
-                  {hasUnsavedChanges && (
-                    <div className="mt-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
-                      <p className="text-xs text-amber-800 flex items-center gap-2">
-                        <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span>
-                        You have unsaved changes. Click "Save Changes" to apply them.
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="p-6">
-                  {/* Role Selection */}
-                  <div className="mb-8">
-                    <h4 className="text-sm font-semibold text-gray-700 mb-4">ASSIGN ROLE</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {availableRoles.map((role) => {
-                        const RoleIcon = getRoleIcon(role.value);
-                        const isSelected = pendingRole === role.value;
-                        return (
-                          <button
-                            key={role.value}
-                            onClick={() => handleRoleSelect(role.value)}
-                            disabled={saving}
-                            className={`p-4 rounded-lg border-2 transition text-left ${
-                              isSelected
-                                ? 'border-[#2D9596] bg-[#E0F2F2]'
-                                : 'border-gray-200 hover:border-gray-300'
-                            }`}
-                          >
-                            <div className="flex items-center gap-3 mb-2">
-                              <div
-                                className="p-2 rounded-lg"
-                                style={{
-                                  backgroundColor: isSelected ? role.color : `${role.color}20`,
-                                  color: isSelected ? 'white' : role.color
-                                }}
-                              >
-                                <RoleIcon className="w-5 h-5" />
-                              </div>
-                              <div className="font-semibold text-gray-900">{role.label}</div>
-                            </div>
-                            <p className="text-xs text-gray-600">{role.description}</p>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Current Permissions */}
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-700 mb-4">CURRENT PERMISSIONS</h4>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {availableResources.map((resource) => {
-                          const resourcePermissions = userPermissions.permissions[resource.key] || [];
-                          const hasAnyPermission = resourcePermissions.length > 0;
-                          
-                          return (
-                            <div
-                              key={resource.key}
-                              className={`p-4 rounded-lg border ${
-                                hasAnyPermission
-                                  ? 'border-[#2D9596] bg-white'
-                                  : 'border-gray-200 bg-white opacity-50'
-                              }`}
-                            >
-                              <div className="font-medium text-gray-900 mb-2">{resource.label}</div>
-                              <div className="flex flex-wrap gap-2">
-                                {resource.actions.map((action) => {
-                                  const hasPermission = resourcePermissions.includes(action);
-                                  return (
-                                    <span
-                                      key={action}
-                                      className={`px-2 py-1 rounded text-xs font-medium ${
-                                        hasPermission
-                                          ? 'bg-[#2D9596] text-white'
-                                          : 'bg-gray-200 text-gray-500'
-                                      }`}
-                                    >
-                                      {action}
-                                    </span>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Info Box */}
-                  <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <div className="flex items-start gap-3">
-                      <Shield className="w-5 h-5 text-blue-600 mt-0.5" />
-                      <div>
-                        <h5 className="font-semibold text-sm text-blue-900 mb-1">Casbin RBAC System</h5>
-                        <p className="text-xs text-blue-700">
-                          Permissions are managed using Casbin with role-based access control. 
-                          Each role has predefined permissions. Changing a user's role will automatically 
-                          update their permissions across the entire system.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-16 text-gray-500">
-                <Lock className="w-16 h-16 mb-4 text-gray-300" />
-                <p className="text-lg font-medium">Select a user to manage permissions</p>
-                <p className="text-sm">Choose a staff member from the list to view and edit their role</p>
-              </div>
-            )}
-          </div>
+      {/* Tabs */}
+      <div className="mb-6 border-b border-gray-200">
+        <div className="flex gap-6 -mb-px">
+          <button onClick={() => navigate('/admin/staff')} className="pb-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-900 transition-colors">Staff</button>
+          <button className="pb-3 text-sm font-medium border-b-2 border-[#29828a] text-[#29828a]">Permissions</button>
+          <button onClick={() => navigate('/admin/attendance')} className="pb-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-900 transition-colors">Attendance</button>
         </div>
       </div>
+
+      <FeatureLock featureName="Advanced Permissions & RBAC">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          {/* Table toolbar */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <p className="text-sm font-semibold text-gray-700">{filteredUsers.length} staff members</p>
+            <div className="relative w-64">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search staff..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2D9596]/20 focus:border-[#2D9596]"
+              />
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center py-20"><GearLoader /></div>
+          ) : (
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Role</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Modules Access</th>
+                  <th className="px-5 py-3" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {filteredUsers.map(u => {
+                  const perms = (u.permissions && typeof Object.values(u.permissions)[0] === 'object') ? u.permissions : {};
+                  const accessCount = MODULES.filter(m => m.actions.some(a => perms[m.key]?.[a])).length;
+                  return (
+                    <tr key={u.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => openDrawer(u)}>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-[#E0F2F2] text-[#1F6B72] font-bold text-xs flex items-center justify-center shrink-0">
+                            {initials(u.name)}
+                          </div>
+                          <span className="text-sm font-semibold text-gray-900">{u.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${ROLE_COLORS[u.role] || 'bg-gray-100 text-gray-600'}`}>
+                          {ROLE_LABELS[u.role] || u.role}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-gray-500">{u.email}</td>
+                      <td className="px-5 py-3.5">
+                        {(() => {
+                          const readCount = MODULES.filter(m => perms[m.key]?.read === true).length;
+                          let label, cls;
+                          if (readCount === 0)              { label = 'None';    cls = 'bg-gray-100 text-gray-500'; }
+                          else if (readCount === MODULES.length) { label = 'All'; cls = 'bg-[#E0F2F2] text-[#1F6B72]'; }
+                          else                              { label = 'Partial'; cls = 'bg-amber-50 text-amber-600'; }
+                          return (
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${cls}`}>{label}</span>
+                          );
+                        })()}
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        <ChevronRight size={16} className="text-gray-400 ml-auto" />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Permissions Drawer */}
+        {drawerUser && (
+          <div className="fixed inset-0 z-50 pointer-events-none">
+            <div className="absolute inset-0 bg-black/20 backdrop-blur-sm pointer-events-auto" onClick={() => setDrawerUser(null)} />
+            <div className="absolute right-0 top-0 h-full w-full max-w-lg bg-white shadow-2xl flex flex-col pointer-events-auto animate-slide-in-right">
+              {/* Drawer header */}
+              <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[#E0F2F2] text-[#1F6B72] font-bold text-sm flex items-center justify-center">
+                    {initials(drawerUser.name)}
+                  </div>
+                  <div>
+                    <p className="font-bold text-gray-900 text-sm leading-tight">{drawerUser.name}</p>
+                    <p className="text-xs text-gray-500">{drawerUser.email}</p>
+                  </div>
+                </div>
+                <button onClick={() => setDrawerUser(null)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+                  <X size={18} className="text-gray-500" />
+                </button>
+              </div>
+
+              {/* Presets */}
+              <div className="px-6 py-4 border-b border-gray-100">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Quick Presets</p>
+                <div className="flex gap-2">
+                  {Object.entries(ROLE_LABELS).map(([key, label]) => (
+                    <button
+                      key={key}
+                      onClick={() => applyPreset(key)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                        ROLE_COLORS[key]
+                      } border-transparent hover:border-current`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Permission matrix */}
+              <div className="flex-1 overflow-y-auto">
+                <table className="w-full">
+                  <thead className="sticky top-0 bg-gray-50 border-b border-gray-100 z-10">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Module</th>
+                      {ALL_ACTIONS.map(a => (
+                        <th key={a} className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">{a}</th>
+                      ))}
+                      <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">All</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {MODULES.map(m => (
+                      <tr key={m.key} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-3.5 text-sm font-medium text-gray-800">{m.label}</td>
+                        {ALL_ACTIONS.map(a => (
+                          <td key={a} className="px-3 py-3.5 text-center">
+                            {m.actions.includes(a) ? (
+                              <Toggle
+                                checked={!!permissions[m.key]?.[a]}
+                                onChange={() => togglePerm(m.key, a)}
+                              />
+                            ) : (
+                              <span className="text-gray-200">—</span>
+                            )}
+                          </td>
+                        ))}
+                        <td className="px-3 py-3.5 text-center">
+                          {(() => {
+                            const onCount = m.actions.filter(a => permissions[m.key]?.[a]).length;
+                            const total = m.actions.length;
+                            let label, cls;
+                            if (onCount === 0)  { label = 'None';    cls = 'bg-gray-100 text-gray-400'; }
+                            else if (onCount === total) { label = 'All'; cls = 'bg-[#E0F2F2] text-[#1F6B72]'; }
+                            else               { label = 'Partial'; cls = 'bg-amber-50 text-amber-600'; }
+                            return (
+                              <button
+                                onClick={() => toggleAllForModule(m.key, m.actions)}
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${cls} hover:opacity-80 transition-opacity`}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+                <button onClick={() => setDrawerUser(null)} className="flex-1 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">
+                  Cancel
+                </button>
+                <button onClick={handleSave} disabled={saving} className="flex-1 py-2.5 text-sm font-bold text-white bg-[#2D9596] hover:bg-[#1F6B72] rounded-xl transition-colors disabled:opacity-50">
+                  {saving ? 'Saving...' : 'Save Permissions'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </FeatureLock>
     </div>
   );
 };

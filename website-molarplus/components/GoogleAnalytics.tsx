@@ -3,13 +3,15 @@
 import Script from 'next/script';
 
 export default function GoogleAnalytics({ gaId }: { gaId: string }) {
-  if (!gaId) return null;
+  const id = gaId || 'G-TB31DJC76Y';
 
   return (
     <>
+      <link rel="preconnect" href="https://www.googletagmanager.com" />
+      <link rel="preconnect" href="https://www.google-analytics.com" />
       <Script
         strategy="afterInteractive"
-        src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
+        src={`https://www.googletagmanager.com/gtag/js?id=${id}`}
       />
       <Script
         id="google-analytics"
@@ -19,7 +21,7 @@ export default function GoogleAnalytics({ gaId }: { gaId: string }) {
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
-            gtag('config', '${gaId}', {
+            gtag('config', '${id}', {
               page_path: window.location.pathname,
             });
           `,

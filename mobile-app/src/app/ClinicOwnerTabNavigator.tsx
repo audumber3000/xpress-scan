@@ -1,10 +1,10 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Home, Calendar, Users, User } from 'lucide-react-native';
+import { Home, Calendar, Users, Wrench } from 'lucide-react-native';
 import { ClinicOwnerHomeScreen } from '../features/clinic-owner/home/screens/Home';
 import { AppointmentsScreen } from '../features/clinic-owner/appointments/screens/AppointmentsScreen';
 import { PatientsScreen } from '../features/clinic-owner/patients/screens/PatientsScreen';
-import { ProfileScreen } from '../features/clinic-owner/profile/screens/ProfileScreen';
+import { UtilitiesScreen } from '../features/clinic-owner/utilities/screens/UtilitiesScreen';
 import { AdminHubScreen } from '../features/admin/hub/screens/AdminHubScreen';
 import { CustomTabBar } from './CustomTabBar';
 import { useAuth } from './AuthContext';
@@ -14,7 +14,7 @@ export type ClinicOwnerTabParamList = {
   Appointments: undefined;
   Admin?: undefined;
   Patients: undefined;
-  Profile: undefined;
+  Utilities: undefined;
 };
 
 const Tab = createBottomTabNavigator<ClinicOwnerTabParamList>();
@@ -64,10 +64,10 @@ export const ClinicOwnerTabNavigator = () => {
         }}
       />
       <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
+        name="Utilities"
+        component={UtilitiesScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Wrench size={size} color={color} />,
         }}
       />
     </Tab.Navigator>

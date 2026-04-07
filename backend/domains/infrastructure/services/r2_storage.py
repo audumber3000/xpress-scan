@@ -38,157 +38,167 @@ def _get_r2_client():
     
     return _r2_client
 
-def upload_pdf_to_r2(file_path: str, filename: str, folder: str = "reports") -> Optional[str]:
+
+class StorageCategory:
+    CONSENTS = "consents"
+    MEDICAL_REPORTS = "medical-reports"
+    INVOICES = "invoices"
+    DOCUMENTS = "documents"
+    WHATSAPP_MEDIA = "whatsapp-media"
+    EXPENSES = "expenses"
+    STAFF = "staff"
+
+def get_r2_path(clinic_id: int, patient_id: Optional[int] = None, category: str = StorageCategory.DOCUMENTS, filename: str = "") -> str:
     """
-    Upload a PDF file to Cloudflare R2 and return the public URL
+    Generate a standardized R2 storage path
+    Hierarchy: clinics/{clinic_id}/[patients/{patient_id}/]{category}/{filename}
+    """
+    if patient_id:
+        base = f"clinics/{clinic_id}/patients/{patient_id}/{category}"
+    else:
+        # Clinic level documents (finance, staff, etc)
+        if category == StorageCategory.EXPENSES:
+            base = f"clinics/{clinic_id}/finance/expenses"
+        elif category == StorageCategory.STAFF:
+            base = f"clinics/{clinic_id}/staff/documents"
+        else:
+            base = f"clinics/{clinic_id}/{category}"
+            
+    return f"{base}/{filename}" if filename else base
+
+def get_presigned_url(key_or_url: str, expires_in: int = 604800) -> Optional[str]:
+    """Generate a presigned GET URL for an R2 object (key or full API URL)"""
+    if not key_or_url: return None
     
-    Args:
-        file_path: Local path to the PDF file
-        filename: Name to save the file as in storage
-        folder: Folder path in storage (default: "reports")
-    
-    Returns:
-        Public URL of the uploaded file or None if upload failed
+    try:
+        client = _get_r2_client()
+        if not client: return key_or_url
+        
+        bucket_name = os.getenv("R2_BUCKET_NAME")
+        r2_public_url = os.getenv("R2_PUBLIC_URL")
+        
+        # If it's already a public URL, just return it
+        if r2_public_url and key_or_url.startswith(r2_public_url):
+            return key_or_url
+            
+        # Extract key if it's a full R2 API URL
+        key = key_or_url
+        if "cloudflarestorage.com" in key_or_url:
+            parsed = urllib.parse.urlparse(key_or_url)
+            path_parts = parsed.path.lstrip('/').split('/')
+            if len(path_parts) > 1:
+                # Format: /bucket/key/path/to/file
+                key = "/".join(path_parts[1:])
+        
+        # If bucket name is already in the key (legacy), remove it
+        if bucket_name and key.startswith(f"{bucket_name}/"):
+            key = key[len(bucket_name)+1:]
+
+        if r2_public_url:
+            return f"{r2_public_url.rstrip('/')}/{key}"
+            
+        return client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': bucket_name, 'Key': key},
+            ExpiresIn=expires_in
+        )
+    except Exception as e:
+        print(f"Error generating presigned URL: {e}")
+        return key_or_url
+
+def upload_pdf_to_r2(file_path: str, filename: str, clinic_id: Optional[int] = None, patient_id: Optional[int] = None, category: str = StorageCategory.MEDICAL_REPORTS) -> Optional[str]:
+    """
+    Upload a PDF file to Cloudflare R2 and return the relative storage path (key)
     """
     try:
         client = _get_r2_client()
         if not client:
-            print("R2 client not initialized")
             return None
         
         bucket_name = os.getenv("R2_BUCKET_NAME")
-        r2_public_url = os.getenv("R2_PUBLIC_URL")  # Custom domain or public URL
         
-        # Create the full path in storage
-        storage_path = f"{folder}/{filename}"
+        # Resolve storage path
+        if clinic_id:
+            storage_path = get_r2_path(clinic_id, patient_id, category, filename)
+        else:
+            storage_path = f"legacy/{category}/{filename}"
         
-        # Upload the file
-        print(f"Uploading {filename} to R2 Storage...")
+        print(f"Uploading {filename} to R2: {storage_path}")
         with open(file_path, 'rb') as file:
             client.upload_fileobj(
                 file,
                 bucket_name,
                 storage_path,
-                ExtraArgs={
-                    'ContentType': 'application/pdf'
-                }
+                ExtraArgs={'ContentType': 'application/pdf'}
             )
         
-        # Generate public URL
-        if r2_public_url:
-            # Use custom domain if configured
-            public_url = f"{r2_public_url.rstrip('/')}/{storage_path}"
+        # Return the relative path (key)
+        return storage_path
+            
+    except Exception as e:
+        print(f"Error uploading to R2: {e}")
+        return None
+
+def upload_bytes_to_r2(data: bytes, filename: str, content_type: str, clinic_id: Optional[int] = None, patient_id: Optional[int] = None, category: str = StorageCategory.DOCUMENTS) -> Optional[str]:
+    """
+    Upload bytes to Cloudflare R2 and return the relative storage path (key)
+    """
+    try:
+        client = _get_r2_client()
+        if not client:
+            return None
+        
+        bucket_name = os.getenv("R2_BUCKET_NAME")
+        
+        if clinic_id:
+            storage_path = get_r2_path(clinic_id, patient_id, category, filename)
         else:
-            # Generate a presigned URL (valid for 7 days by default)
-            # R2 doesn't provide direct public URLs without a custom domain
-            public_url = client.generate_presigned_url(
-                'get_object',
-                Params={'Bucket': bucket_name, 'Key': storage_path},
-                ExpiresIn=604800  # 7 days
-            )
+            storage_path = f"legacy/{category}/{filename}"
+            
+        client.put_object(
+            Body=data,
+            Bucket=bucket_name,
+            Key=storage_path,
+            ContentType=content_type
+        )
         
-        print(f"File uploaded successfully. Public URL: {public_url}")
-        return public_url
-        
-    except ClientError as e:
-        print(f"Error uploading to R2 Storage: {e}")
-        return None
+        # Return the relative path (key)
+        return storage_path
+            
     except Exception as e:
-        print(f"Error uploading to R2 Storage: {e}")
+        print(f"Error uploading bytes to R2: {e}")
         return None
 
-def delete_file_from_r2(filename: str, folder: str = "reports") -> bool:
-    """
-    Delete a file from Cloudflare R2
-    
-    Args:
-        filename: Name of the file to delete
-        folder: Folder path in storage (default: "reports")
-    
-    Returns:
-        True if deletion was successful, False otherwise
-    """
+def delete_file_from_r2(storage_path: str) -> bool:
+    """Delete a file from Cloudflare R2 using its full storage path"""
     try:
         client = _get_r2_client()
-        if not client:
-            return False
-        
-        bucket_name = os.getenv("R2_BUCKET_NAME")
-        storage_path = f"{folder}/{filename}"
-        
-        client.delete_object(Bucket=bucket_name, Key=storage_path)
+        if not client: return False
+        client.delete_object(Bucket=os.getenv("R2_BUCKET_NAME"), Key=storage_path)
         return True
-    except ClientError as e:
-        print(f"Error deleting from R2 Storage: {e}")
-        return False
     except Exception as e:
-        print(f"Error deleting from R2 Storage: {e}")
+        print(f"Error deleting from R2: {e}")
         return False
 
-def list_files_in_folder(folder: str = "reports") -> list:
-    """
-    List all files in an R2 folder
-    
-    Args:
-        folder: Folder path in storage (default: "reports")
-    
-    Returns:
-        List of file names
-    """
+def list_files_in_prefix(prefix: str) -> list:
+    """List files in R2 by prefix"""
     try:
         client = _get_r2_client()
-        if not client:
-            return []
-        
-        bucket_name = os.getenv("R2_BUCKET_NAME")
-        prefix = f"{folder}/"
-        
-        response = client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
-        
-        if 'Contents' in response:
-            return [obj['Key'] for obj in response['Contents']]
-        return []
-    except ClientError as e:
-        print(f"Error listing files from R2 Storage: {e}")
-        return []
+        if not client: return []
+        response = client.list_objects_v2(Bucket=os.getenv("R2_BUCKET_NAME"), Prefix=prefix)
+        return [obj['Key'] for obj in response.get('Contents', [])]
     except Exception as e:
-        print(f"Error listing files from R2 Storage: {e}")
+        print(f"Error listing R2 files: {e}")
         return []
 
 def create_bucket_if_not_exists(bucket_name: str = None) -> bool:
-    """
-    Create an R2 bucket if it doesn't exist
-    Note: R2 buckets are typically created via Cloudflare dashboard
-    
-    Args:
-        bucket_name: Name of the bucket (optional, uses env var if not provided)
-    
-    Returns:
-        True if bucket exists or was created successfully, False otherwise
-    """
+    """Placeholder for bucket existence check"""
     try:
         client = _get_r2_client()
-        if not client:
-            return False
-        
-        if not bucket_name:
-            bucket_name = os.getenv("R2_BUCKET_NAME")
-        
-        if not bucket_name:
-            return False
-        
-        # Try to access the bucket
+        if not client: return False
+        if not bucket_name: bucket_name = os.getenv("R2_BUCKET_NAME")
         client.head_bucket(Bucket=bucket_name)
         return True
-    except ClientError as e:
-        error_code = e.response.get('Error', {}).get('Code', '')
-        if error_code == '404':
-            # Bucket doesn't exist, but we can't create it via API
-            print(f"Bucket {bucket_name} does not exist. Please create it via Cloudflare dashboard.")
-            return False
-        print(f"Error checking R2 bucket: {e}")
-        return False
-    except Exception as e:
-        print(f"Error checking R2 bucket: {e}")
+    except Exception:
         return False
 

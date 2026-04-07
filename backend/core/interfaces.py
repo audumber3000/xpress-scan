@@ -37,6 +37,9 @@ class PatientRepositoryProtocol(BaseRepositoryProtocol, Protocol):
     def search_by_name(self, clinic_id: int, name: str, skip: int = 0, limit: int = 100) -> List[Any]:
         ...
 
+    def search_duplicates(self, clinic_id: int, name: Optional[str] = None, phone: Optional[str] = None, email: Optional[str] = None) -> List[Any]:
+        ...
+
 
 class ClinicRepositoryProtocol(BaseRepositoryProtocol, Protocol):
     """Clinic-specific repository interface"""
@@ -106,6 +109,9 @@ class PatientServiceProtocol(BaseServiceProtocol, Protocol):
         ...
 
     def search_patients(self, clinic_id: int, query: str, skip: int = 0, limit: int = 100) -> List[Any]:
+        ...
+
+    def check_duplicates(self, clinic_id: int, name: Optional[str] = None, phone: Optional[str] = None, email: Optional[str] = None) -> List[Any]:
         ...
 
 

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, Calendar as CalendarIcon, SlidersHorizontal } from 'lucide-react-native';
+import { Search, Calendar as CalendarIcon, Plus, MapPin } from 'lucide-react-native';
 import { appointmentsApiService, Appointment } from '../../../../services/api/appointments.api';
+import { adminApiService, ClinicInfo } from '../../../../services/api/admin.api';
+import { useAuth } from '../../../../app/AuthContext';
 import { colors } from '../../../../shared/constants/colors';
 import { WeekDaysView } from '../components/WeekDaysView';
 import { MonthCalendarView } from '../components/MonthCalendarView';
@@ -10,22 +12,34 @@ import { MonthNavigationHeader } from '../components/MonthNavigationHeader';
 import { AppointmentsList } from '../components/AppointmentsList';
 import { AppSkeleton } from '../../../../shared/components/Skeleton';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
+import { ClinicSwitcherSheet } from '../../../../shared/components/ClinicSwitcherSheet';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface AppointmentsScreenProps {
   navigation: any;
 }
 
 export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigation }) => {
+  const { backendUser, switchBranch } = useAuth();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<'Week' | 'Month'>('Week');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [showClinicSwitcher, setShowClinicSwitcher] = useState(false);
 
   useEffect(() => {
+    // Load persisted view mode
+    const loadPreferences = async () => {
+      const savedViewMode = await AsyncStorage.getItem('appointments_view_mode');
+      if (savedViewMode === 'Week' || savedViewMode === 'Month') {
+        setViewMode(savedViewMode);
+      }
+    };
+    loadPreferences();
     loadAppointments();
-  }, []);
+  }, [backendUser?.clinic?.id]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -42,6 +56,20 @@ export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigati
       console.error('Error loading appointments:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const toggleViewMode = async (mode: 'Week' | 'Month') => {
+    setViewMode(mode);
+    await AsyncStorage.setItem('appointments_view_mode', mode);
+  };
+
+  const handleClinicSelected = async (clinic: ClinicInfo) => {
+    try {
+      await switchBranch(clinic.id);
+      setShowClinicSwitcher(false);
+    } catch (error) {
+      console.error('Error switching clinic:', error);
     }
   };
 
@@ -148,7 +176,7 @@ export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigati
       <ScreenHeader
         variant="primary"
         title="Appointments"
-        titleIcon={<CalendarIcon size={22} />}
+        onBackPress={navigation.canGoBack() ? () => navigation.goBack() : undefined}
         rightComponent={
           <View style={styles.headerRight}>
             <TouchableOpacity
@@ -172,7 +200,7 @@ export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigati
         <View style={styles.toggleContainer}>
           <TouchableOpacity
             style={[styles.toggleButton, viewMode === 'Week' && styles.toggleButtonActive]}
-            onPress={() => setViewMode('Week')}
+            onPress={() => toggleViewMode('Week')}
           >
             <Text style={[styles.toggleText, viewMode === 'Week' && styles.toggleTextActive]}>
               Week
@@ -180,7 +208,7 @@ export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigati
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.toggleButton, viewMode === 'Month' && styles.toggleButtonActive]}
-            onPress={() => setViewMode('Month')}
+            onPress={() => toggleViewMode('Month')}
           >
             <Text style={[styles.toggleText, viewMode === 'Month' && styles.toggleTextActive]}>
               Month
@@ -235,6 +263,20 @@ export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigati
           </View>
         )}
       </ScrollView>
+      
+      {/* Floating Action Button */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => navigation.navigate('AddAppointment')}
+      >
+        <Plus color="#FFFFFF" size={24} />
+      </TouchableOpacity>
+
+      <ClinicSwitcherSheet
+        isVisible={showClinicSwitcher}
+        onClose={() => setShowClinicSwitcher(false)}
+        onClinicSelected={handleClinicSelected}
+      />
     </SafeAreaView>
   );
 };
@@ -247,7 +289,22 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+  },
+  clinicSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginLeft: 8,
+    maxWidth: 150,
+  },
+  clinicNameText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   iconButton: {
     width: 40,
@@ -301,5 +358,21 @@ const styles = StyleSheet.create({
   listWrapper: {
     paddingTop: 8,
     paddingBottom: 40,
+  },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    backgroundColor: colors.primary,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
 });

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, type LayoutChangeEvent } from 'react-native';
 import { BottomTabBarHeightCallbackContext, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Shield } from 'lucide-react-native';
+import { useAuth } from './AuthContext';
 import { colors } from '../shared/constants/colors';
 import { adminColors } from '../shared/constants/adminColors';
 import { useNavigationState } from '@react-navigation/native';
@@ -11,11 +12,12 @@ const TAB_LABELS: Record<string, string> = {
   Appointments: 'Appointments',
   Admin: 'Admin',
   Patients: 'Patients',
-  Profile: 'Profile',
+  Utilities: 'Utilities',
 };
 
 export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const onHeightChange = React.useContext(BottomTabBarHeightCallbackContext);
+  const { backendUser } = useAuth() || {};
   
   // Check if we're in admin section
   const currentRoute = useNavigationState(state => {
@@ -182,5 +184,36 @@ const styles = StyleSheet.create({
         elevation: 10,
       },
     }),
+  },
+  badgeContainer: {
+    position: 'absolute',
+    top: -2,
+    right: -6,
+    zIndex: 10,
+  },
+  freeBadgePill: {
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+    minWidth: 28,
+    alignItems: 'center',
+  },
+  freeBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 7,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  proMiniBadge: {
+    backgroundColor: 'rgba(46, 42, 133, 0.9)',
+    borderRadius: 6,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: '#FFD700',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

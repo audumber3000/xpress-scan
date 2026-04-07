@@ -1,19 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../../../shared/constants/colors';
 import { GearLoader } from '../../../../shared/components/GearLoader';
 import { patientsApiService, Patient } from '../../../../services/api/patients.api';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
-import { DentalChart } from '../components/DentalChart';
-import { TimelineView } from '../components/TimelineView';
-import { BillingView } from '../components/BillingView';
+import { CasePapersTab } from '../components/CasePapersTab';
+import { BillingTab } from '../components/BillingTab';
 import { PatientInfoView } from '../components/PatientInfoView';
-import { PrescriptionsView } from '../components/PrescriptionsView';
+import { FilesView } from '../components/FilesView';
 
-import { appointmentsApiService } from '../../../../services/api/appointments.api';
-import { transactionsApiService } from '../../../../services/api/transactions.api';
+import { Phone, MessageCircle } from 'lucide-react-native';
 
 interface PatientDetailsScreenProps {
   navigation: any;
@@ -25,26 +23,21 @@ interface PatientDetailsScreenProps {
   };
 }
 
-type TabType = 'chart' | 'timeline' | 'billing' | 'profile' | 'prescriptions';
+type TabType = 'case-papers' | 'billing' | 'info' | 'files';
 
-import { Phone, MessageCircle } from 'lucide-react-native';
+const TABS: { id: TabType; name: string }[] = [
+  { id: 'case-papers', name: 'Case Papers' },
+  { id: 'billing', name: 'Billing' },
+  { id: 'info', name: 'Info' },
+  { id: 'files', name: 'Files' },
+];
 
 export const PatientDetailsScreen: React.FC<PatientDetailsScreenProps> = ({ navigation, route }) => {
   const { patientId, initialTab } = route.params;
   const [patient, setPatient] = useState<Patient | null>(null);
-  const [appointments, setAppointments] = useState<any[]>([]);
-  const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>((initialTab as TabType) || 'chart');
-
-  const tabs: { id: TabType; name: string; icon: string }[] = [
-    { id: 'chart', name: 'Chart', icon: '🦷' },
-    { id: 'timeline', name: 'Timeline', icon: '📅' },
-    { id: 'billing', name: 'Billing', icon: '💰' },
-    { id: 'profile', name: 'Info', icon: '👤' },
-    { id: 'prescriptions', name: 'Scripts', icon: '💊' }
-  ];
+  const [activeTab, setActiveTab] = useState<TabType>((initialTab as TabType) || 'case-papers');
 
   useEffect(() => {
     loadPatientData();
@@ -54,20 +47,11 @@ export const PatientDetailsScreen: React.FC<PatientDetailsScreenProps> = ({ navi
     setLoading(true);
     setError(null);
     try {
-      const [details, apts, trans] = await Promise.all([
-        patientsApiService.getPatientDetails(patientId),
-        appointmentsApiService.getAppointments(), // Ideally getByPatientId
-        transactionsApiService.getPatientTransactions(patientId)
-      ]);
-
+      const details = await patientsApiService.getPatientDetails(patientId);
       if (!details) {
         setError('Patient not found');
       } else {
         setPatient(details);
-        // Filter appointments for this patient
-        const patientApts = apts.filter((a: any) => a.patientId === patientId);
-        setAppointments(patientApts);
-        setPayments(trans);
       }
     } catch (err: any) {
       console.error('❌ [PATIENT_DETAILS] Load error:', err);
@@ -77,47 +61,16 @@ export const PatientDetailsScreen: React.FC<PatientDetailsScreenProps> = ({ navi
     }
   };
 
-  const handleToothUpdate = async (toothNum: number, toothData: any) => {
-    if (!patient) return;
-
-    // Optimistic update
-    const newDentalChart = { ...patient.dentalChart, [toothNum]: toothData };
-    setPatient({ ...patient, dentalChart: newDentalChart });
-
-    try {
-      await patientsApiService.updatePatient(patientId, { dental_chart: newDentalChart });
-    } catch (err) {
-      console.error('❌ [PATIENT_DETAILS] Update error:', err);
-      showAlert('Error', 'Failed to save tooth update');
-      // Rollback if needed
-      loadPatientData();
-    }
-  };
-
   const handleCall = () => {
     if (patient?.phone) {
-      // Logic to open dialer
+      Linking.openURL(`tel:${patient.phone.replace(/[^0-9+]/g, '')}`);
     }
   };
 
   const handleWhatsApp = () => {
     if (patient?.phone) {
-      // Logic for WhatsApp
-    }
-  };
-
-  const handleAddTimelineStep = async (step: any) => {
-    if (!patient) return;
-
-    const newPlan = [...(patient.treatmentPlan || []), { ...step, id: Date.now().toString() }];
-    setPatient({ ...patient, treatmentPlan: newPlan });
-
-    try {
-      await patientsApiService.updatePatient(patientId, { treatment_plan: newPlan });
-    } catch (err) {
-      console.error('❌ [PATIENT_DETAILS] Timeline error:', err);
-      showAlert('Error', 'Failed to save treatment step');
-      loadPatientData();
+      const num = patient.phone.replace(/[^0-9]/g, '');
+      Linking.openURL(`https://wa.me/${num}`);
     }
   };
 
@@ -164,80 +117,40 @@ export const PatientDetailsScreen: React.FC<PatientDetailsScreenProps> = ({ navi
         }
       />
 
-      {/* Tabs - Mobile Optimized Scrollable */}
-      <View style={styles.tabBarWrapper}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabBar}
-        >
-          {tabs.map((tab) => (
-            <TouchableOpacity
-              key={tab.id}
-              style={[styles.tab, activeTab === tab.id && styles.tabActive]}
-              onPress={() => setActiveTab(tab.id)}
-            >
-              <Text style={styles.tabIcon}>{tab.icon}</Text>
-              <Text style={[styles.tabText, activeTab === tab.id && styles.tabTextActive]}>
-                {tab.name}
-              </Text>
-              {activeTab === tab.id && <View style={styles.activeIndicator} />}
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+      {/* Tab bar — simple underline style */}
+      <View style={styles.tabBar}>
+        {TABS.map((tab) => (
+          <TouchableOpacity
+            key={tab.id}
+            style={[styles.tabBtn, activeTab === tab.id && styles.tabBtnActive]}
+            onPress={() => setActiveTab(tab.id)}
+          >
+            <Text style={[styles.tabLabel, activeTab === tab.id && styles.tabLabelActive]}>
+              {tab.name}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       <View style={styles.content}>
-        {activeTab === 'chart' && (
-          <DentalChart
-            teethData={patient.dentalChart}
-            onToothUpdate={handleToothUpdate}
-          />
-        )}
-
-        {activeTab === 'timeline' && (
-          <TimelineView
-            history={appointments.filter(a => a.status === 'completed' || a.status === 'Finished').map(a => ({
-              id: a.id,
-              procedure: a.treatment || 'Treatment',
-              date: a.date,
-              status: 'completed'
-            }))}
-            plan={patient.treatmentPlan || []}
-            onAddStep={handleAddTimelineStep}
-          />
+        {activeTab === 'case-papers' && (
+          <CasePapersTab patient={patient} patientId={patientId} />
         )}
 
         {activeTab === 'billing' && (
-          <BillingView
-            payments={payments.map(p => ({
-              id: p.id,
-              date: p.date,
-              procedure: p.treatment || 'Treatment',
-              amount: p.amount,
-              status: p.status === 'success' ? 'paid' : 'pending'
-            }))}
-          />
+          <BillingTab patientId={patientId} patientPhone={patient.phone} />
         )}
 
-        {activeTab === 'profile' && (
+        {activeTab === 'info' && (
           <PatientInfoView patient={patient} />
         )}
 
-        {activeTab === 'prescriptions' && (
-          <PrescriptionsView prescriptions={patient.prescriptions || []} />
+        {activeTab === 'files' && (
+          <FilesView patientId={patientId} />
         )}
       </View>
     </SafeAreaView>
   );
-};
-
-const tabIconStyles = {
-  chart: { fontSize: 16 },
-  timeline: { fontSize: 16 },
-  billing: { fontSize: 16 },
-  profile: { fontSize: 16 },
-  prescriptions: { fontSize: 16 },
 };
 
 const styles = StyleSheet.create({
@@ -266,54 +179,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  tabBarWrapper: {
-    backgroundColor: '#FFFFFF',
+  // Tab bar — simple underline style matching admin screens
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
-  tabBar: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    alignItems: 'center' as const,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
   },
-  tab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#F3F4F6',
-    position: 'relative',
-    minWidth: 100,
-    justifyContent: 'center',
+  tabBtnActive: {
+    borderBottomColor: colors.primary,
   },
-  tabActive: {
-    backgroundColor: 'rgba(155, 140, 255, 0.1)',
-    borderColor: 'rgba(155, 140, 255, 0.2)',
+  tabLabel: {
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: '#6B7280',
   },
-  tabIcon: {
-    fontSize: 16,
-    marginRight: 6,
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#667085',
-  },
-  tabTextActive: {
+  tabLabelActive: {
     color: colors.primary,
-  },
-  activeIndicator: {
-    position: 'absolute',
-    bottom: -12,
-    left: 16,
-    right: 16,
-    height: 3,
-    backgroundColor: colors.primary,
-    borderTopLeftRadius: 3,
-    borderTopRightRadius: 3,
+    fontWeight: '700' as const,
   },
   errorText: {
     fontSize: 16,

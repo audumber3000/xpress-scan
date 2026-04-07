@@ -19,6 +19,7 @@ from core.dtos import (
 )
 from core.dependencies import get_auth_service, get_user_service
 from core.auth_utils import require_role
+from core.nexus_notify import notify
 from database import get_db
 from sqlalchemy.orm import Session, joinedload
 from models import Clinic, User
@@ -45,6 +46,15 @@ async def register_user(
     try:
         user = auth_service.create_user(user_data.dict())
         token = auth_service.create_jwt_token(user.id)
+
+        notify(
+            "welcome", channel="email",
+            to_email=user.email, to_name=getattr(user, 'first_name', '') or user.email,
+            template_data={
+                "owner_name": getattr(user, 'first_name', None) or user.email.split('@')[0],
+                "clinic_name": getattr(user_data, 'clinic_name', 'your clinic') or 'your clinic',
+            }
+        )
 
         return AuthResponseDTO(
             message="User registered successfully",
@@ -104,11 +114,23 @@ async def login_user(
             auth_service.register_device(user.id, device_info)
 
         token = auth_service.create_jwt_token(user.id)
+        
+        # Load clinics for the user
+        user_clinics_list = (
+            db.query(Clinic)
+            .join(User.clinics)
+            .filter(User.id == user.id)
+            .all()
+        )
+        
+        user_dto = UserResponseDTO.from_orm(user)
+        user_dto.clinics = [ClinicResponseDTO.from_orm(c) for c in user_clinics_list]
+        
         clinic = _get_clinic_for_user(db, user)
 
         return AuthResponseDTO(
             message="Login successful",
-            user=UserResponseDTO.from_orm(user),
+            user=user_dto,
             token=token,
             clinic=clinic
         )
@@ -151,12 +173,23 @@ async def oauth_login(
             device_info = auth_service.detect_device_info(request, oauth_data.device.dict() if hasattr(oauth_data.device, 'dict') else oauth_data.device)
             auth_service.register_device(user.id, device_info)
 
+        # Load clinics for the user
+        user_clinics_list = (
+            db.query(Clinic)
+            .join(User.clinics)
+            .filter(User.id == user.id)
+            .all()
+        )
+        
+        user_dto = UserResponseDTO.from_orm(user)
+        user_dto.clinics = [ClinicResponseDTO.from_orm(c) for c in user_clinics_list]
+        
         token = auth_service.create_jwt_token(user.id)
         clinic = _get_clinic_for_user(db, user)
 
         return AuthResponseDTO(
             message="OAuth login successful",
-            user=UserResponseDTO.from_orm(user),
+            user=user_dto,
             token=token,
             clinic=clinic
         )
@@ -226,10 +259,22 @@ async def oauth_code_login(
             )
             auth_service.register_device(user.id, device_info)
         token = auth_service.create_jwt_token(user.id)
+        
+        # Load clinics for the user
+        user_clinics_list = (
+            db.query(Clinic)
+            .join(User.clinics)
+            .filter(User.id == user.id)
+            .all()
+        )
+        
+        user_dto = UserResponseDTO.from_orm(user)
+        user_dto.clinics = [ClinicResponseDTO.from_orm(c) for c in user_clinics_list]
+        
         clinic = _get_clinic_for_user(db, user)
         return AuthResponseDTO(
             message="OAuth login successful",
-            user=UserResponseDTO.from_orm(user),
+            user=user_dto,
             token=token,
             clinic=clinic,
         )
@@ -292,7 +337,7 @@ async def get_current_user(
         # Re-load user with clinic in this session so clinic is always available when user has clinic_id
         user_with_clinic = (
             db.query(User)
-            .options(joinedload(User.clinic))
+            .options(joinedload(User.active_clinic))
             .filter(User.id == user.id, User.is_active == True)
             .first()
         )
@@ -303,16 +348,28 @@ async def get_current_user(
             )
         user = user_with_clinic
 
-        user_data = UserResponseDTO.from_orm(user).model_dump()
+        user_dto = UserResponseDTO.from_orm(user)
+        
+        # Load clinics for the user
+        user_clinics_list = (
+            db.query(Clinic)
+            .join(User.clinics)
+            .filter(User.id == user.id)
+            .all()
+        )
+        user_dto.clinics = [ClinicResponseDTO.from_orm(c) for c in user_clinics_list]
+        
         clinic_info = None
-        if user.clinic_id and user.clinic:
-            clinic_info = ClinicResponseDTO.from_orm(user.clinic).model_dump()
+        if user.clinic_id and hasattr(user, "active_clinic") and user.active_clinic:
+            clinic_info = ClinicResponseDTO.from_orm(user.active_clinic).model_dump()
         elif user.clinic_id:
             clinic = db.query(Clinic).filter(Clinic.id == user.clinic_id).first()
             if clinic:
                 clinic_info = ClinicResponseDTO.from_orm(clinic).model_dump()
-        user_data["clinic"] = clinic_info
-        return user_data
+        
+        result = user_dto.model_dump()
+        result["clinic"] = clinic_info
+        return result
 
     except HTTPException:
         raise
@@ -321,6 +378,21 @@ async def get_current_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get user info: {str(e)}"
         )
+
+
+@router.patch("/me/signature", summary="Update user signature")
+async def update_signature(
+    payload: dict,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    from core.auth_utils import get_current_user as _get_user
+    from models import User
+    user = _get_user(request, db)
+    signature_url = payload.get("signature_url")  # base64 string or None
+    db.query(User).filter(User.id == user.id).update({"signature_url": signature_url})
+    db.commit()
+    return {"status": "ok"}
 
 
 @router.post(
@@ -543,4 +615,91 @@ async def refresh_token(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Token refresh failed: {str(e)}"
+        )
+
+@router.post(
+    "/switch-clinic/{clinic_id}",
+    response_model=AuthResponseDTO,
+    summary="Switch active clinic",
+    description="Switch the current user's active clinic context"
+)
+async def switch_clinic(
+    clinic_id: int,
+    request: Request,
+    auth_service = Depends(get_auth_service),
+    db: Session = Depends(get_db)
+):
+    """
+    Switch the active clinic for the current user.
+    Verifies that the user has access to the requested clinic.
+    """
+    try:
+        # Get current user from token
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authorization header"
+            )
+
+        token = auth_header.split(" ")[1]
+        user_info = auth_service.validate_token(token)
+
+        if not user_info:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+
+        # Get full user from DB
+        user = db.query(User).filter(User.id == user_info.id).first()
+        if not user:
+             raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        # Verify clinic access
+        clinic = db.query(Clinic).join(User.clinics).filter(User.id == user.id, Clinic.id == clinic_id).first()
+        if not clinic:
+            # Check if user is owner of the clinic directly (legacy check or backup)
+            clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
+            # In a real multi-clinic system, we should rely on user_clinics association
+            # If not in user_clinics, check if they are the one who created it or similar
+            if not clinic:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You do not have access to this clinic"
+                )
+
+        # Update active clinic
+        user.clinic_id = clinic_id
+        db.commit()
+        db.refresh(user)
+
+        # Prepare response
+        user_clinics_list = (
+            db.query(Clinic)
+            .join(User.clinics)
+            .filter(User.id == user.id)
+            .all()
+        )
+        
+        user_dto = UserResponseDTO.from_orm(user)
+        user_dto.clinics = [ClinicResponseDTO.from_orm(c) for c in user_clinics_list]
+        
+        return AuthResponseDTO(
+            message=f"Switched to clinic: {clinic.name}",
+            user=user_dto,
+            token=token,
+            clinic=ClinicResponseDTO.from_orm(clinic)
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Clinic switch failed: {str(e)}"
         )

@@ -1,86 +1,120 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BaseApiService } from './base.api';
 
+export interface ClinicInfo {
+  id: string;
+  name: string;
+  address?: string;
+  imageUrl?: string;
+  subscription_plan?: 'free' | 'professional';
+}
+
 export interface BackendUser {
   id: string;
   email: string;
   name: string;
   role: 'clinic_owner' | 'receptionist' | 'doctor';
   phone?: string;
-  clinic?: {
-    id: string;
-    name: string;
-    address?: string;
-  };
+  clinic?: ClinicInfo;
+  clinics?: ClinicInfo[];
+  permissions?: Record<string, Record<string, boolean>>;
 }
 
 export class AuthApiService extends BaseApiService {
   async getUserInfo(): Promise<BackendUser | null> {
     try {
       const storedUser = await AsyncStorage.getItem('backend_user');
-      if (storedUser) {
-        return JSON.parse(storedUser);
-      }
-      return null;
+      return storedUser ? JSON.parse(storedUser) : null;
     } catch (error) {
       console.error('Error fetching stored user:', error);
       return null;
     }
   }
 
+  private transformUser(data: any): BackendUser {
+    // Backend returns data in different formats depending on endpoint
+    // AuthResponseDTO: { user: {...}, clinic: {...}, clinics: [...] }
+    // User response: { id: ..., email: ..., clinic: {...}, clinics: [...] }
+    const userData = data.user || data;
+    
+    // Robustly extract clinic and clinics from either location
+    const clinicSource = data.clinic || userData.clinic;
+    const clinicsSource = data.clinics || userData.clinics;
+    
+    return {
+      id: userData.id.toString(),
+      email: userData.email,
+      name: userData.name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
+      role: userData.role,
+      phone: userData.phone,
+      clinic: clinicSource ? {
+        id: clinicSource.id.toString(),
+        name: clinicSource.name,
+        address: clinicSource.address,
+        imageUrl: clinicSource.logo_url,
+        subscription_plan: clinicSource.subscription_plan,
+      } : undefined,
+      clinics: clinicsSource ? clinicsSource.map((c: any) => ({
+        id: c.id.toString(),
+        name: c.name,
+        address: c.address,
+        imageUrl: c.logo_url,
+        subscription_plan: c.subscription_plan,
+      })) : [],
+      permissions: userData.permissions || {},
+    };
+  }
+
   async getCurrentUser(): Promise<BackendUser | null> {
     try {
-      console.log('🔍 [API] Fetching current user from:', `${this.baseURL}/auth/mobile/me`);
-
       const headers = await this.getAuthHeaders();
-      console.log('🔑 [API] Headers:', JSON.stringify(headers, null, 2));
-
-      const response = await fetch(`${this.baseURL}/auth/me`, {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/auth/me`, {
         method: 'GET',
         headers,
       });
 
-      console.log('📡 [API] Response status:', response.status);
-
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ [API] Error response:', errorText);
-        throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
-      console.log('✅ [API] User data received:', JSON.stringify(data, null, 2));
+      const user = this.transformUser(data);
 
-      // Transform backend response to match BackendUser interface
-      const user: BackendUser = {
-        id: data.id.toString(),
-        email: data.email,
-        name: data.name || `${data.first_name || ''} ${data.last_name || ''}`.trim(),
-        role: data.role,
-        phone: data.phone,
-        clinic: data.clinic ? {
-          id: data.clinic.id.toString(),
-          name: data.clinic.name,
-          address: data.clinic.address,
-        } : undefined,
-      };
-
-      // Store user info locally
       await AsyncStorage.setItem('backend_user', JSON.stringify(user));
-      console.log('💾 [API] User data stored locally');
-
       return user;
-    } catch (error: any) {
-      console.error('❌ [API] Error fetching current user:', error);
-      console.error('❌ [API] Error message:', error.message);
-      console.error('❌ [API] Error stack:', error.stack);
+    } catch (error) {
+      console.error('Error fetching current user:', error);
       return null;
+    }
+  }
+
+  async switchClinic(clinicId: string): Promise<BackendUser | null> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await this.fetchWithTimeout(`${this.baseURL}/auth/switch-clinic/${clinicId}`, {
+        method: 'POST',
+        headers,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to switch clinic: ${errorText}`);
+      }
+
+      const data = await response.json();
+      const user = this.transformUser(data);
+      
+      await AsyncStorage.setItem('backend_user', JSON.stringify(user));
+      return user;
+    } catch (error) {
+      console.error('Error switching clinic:', error);
+      throw error;
     }
   }
 
   async oauthLogin(idToken: string, role?: string): Promise<{ user: BackendUser | null; error?: string }> {
     try {
-      const response = await fetch(`${this.baseURL}/auth/oauth`, {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/auth/oauth`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -91,7 +125,7 @@ export class AuthApiService extends BaseApiService {
           device: {
             device_name: 'Mobile App',
             device_type: 'mobile',
-            device_platform: 'iOS/Android',
+            device_platform: Platform.OS === 'ios' ? 'iOS' : 'Android',
           },
         }),
       });
@@ -103,80 +137,49 @@ export class AuthApiService extends BaseApiService {
 
       const data = await response.json();
 
-      // Store tokens
       if (data.token) {
         await AsyncStorage.setItem('access_token', data.token);
       }
-      if (data.refresh_token) {
-        await AsyncStorage.setItem('refresh_token', data.refresh_token);
-      }
 
-      // Transform and store user data
-      if (data.user) {
-        const user: BackendUser = {
-          id: data.user.id.toString(),
-          email: data.user.email,
-          name: data.user.name || `${data.user.first_name || ''} ${data.user.last_name || ''}`.trim(),
-          role: data.user.role,
-          phone: data.user.phone,
-          clinic: data.user.clinic ? {
-            id: data.user.clinic.id.toString(),
-            name: data.user.clinic.name,
-            address: data.user.clinic.address,
-          } : undefined,
-        };
-
-        await AsyncStorage.setItem('backend_user', JSON.stringify(user));
-        return { user };
-      }
-
-      return { user: null };
+      const user = this.transformUser(data);
+      await AsyncStorage.setItem('backend_user', JSON.stringify(user));
+      
+      return { user };
     } catch (error: any) {
       console.error('Error during OAuth login:', error);
       return { user: null, error: error.message };
     }
   }
 
+  async completeOnboarding(onboardingData: any): Promise<{ message?: string; error?: string }> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await this.fetchWithTimeout(`${this.baseURL}/auth/onboarding`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(onboardingData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      console.error('Error during onboarding:', error);
+      return { error: error.message };
+    }
+  }
+
   async clearTokens(): Promise<void> {
     try {
-      await AsyncStorage.multiRemove(['access_token', 'refresh_token', 'backend_user']);
+      await AsyncStorage.multiRemove(['access_token', 'refresh_token', 'backend_user', 'selected_clinic_id']);
     } catch (error) {
       console.error('Error clearing tokens:', error);
     }
   }
-
-  async getProfileStats(): Promise<{ patients: number; appointments: number; rating: number } | null> {
-    try {
-      console.log('📊 [API] Fetching profile stats from:', `${this.baseURL}/dashboard/metrics`);
-
-      const headers = await this.getAuthHeaders();
-      const response = await fetch(`${this.baseURL}/dashboard/metrics`, {
-        method: 'GET',
-        headers,
-      });
-
-      console.log('📡 [API] Stats response status:', response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ [API] Stats error response:', errorText);
-        throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
-      }
-
-      const data = await response.json();
-      console.log('✅ [API] Stats data received:', JSON.stringify(data, null, 2));
-
-      return {
-        patients: data.total_patients?.value || 0,
-        appointments: data.appointments_today?.value || 0,
-        rating: 4.9, // This would come from a separate rating endpoint if available
-      };
-    } catch (error: any) {
-      console.error('❌ [API] Error fetching profile stats:', error);
-      console.error('❌ [API] Error message:', error.message);
-      return null;
-    }
-  }
 }
 
+import { Platform } from 'react-native';
 export const authApiService = new AuthApiService();

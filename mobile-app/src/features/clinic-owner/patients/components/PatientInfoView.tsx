@@ -1,21 +1,61 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { Phone, Mail, MapPin, User, Info } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { Phone, Mail, MapPin, User, Info, Clock, Calendar } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
-import { Patient } from '../../../../services/api/patients.api';
+import { Patient, patientsApiService } from '../../../../services/api/patients.api';
 
 interface PatientInfoViewProps {
     patient: Patient;
 }
 
+const getInitials = (name: string) => {
+    if (!name) return '??';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+};
+
+const fmtDate = (d: string) => {
+    try { return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); }
+    catch { return d; }
+};
+
 export const PatientInfoView: React.FC<PatientInfoViewProps> = ({ patient }) => {
+    const [visits, setVisits] = useState<any[]>([]);
+    const [loadingVisits, setLoadingVisits] = useState(true);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const data = await patientsApiService.getCasePapers(patient.id);
+                setVisits(Array.isArray(data) ? data : []);
+            } catch { setVisits([]); }
+            finally { setLoadingVisits(false); }
+        })();
+    }, [patient.id]);
+
     return (
         <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+            {/* Avatar Header */}
+            <View style={styles.avatarSection}>
+                <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>{getInitials(patient.name)}</Text>
+                </View>
+                <Text style={styles.avatarName}>{patient.name}</Text>
+                <Text style={styles.avatarSub}>{patient.gender}, {patient.age} years</Text>
+                <View style={[
+                    styles.statusBadge,
+                    { backgroundColor: patient.status === 'Active' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(107, 114, 128, 0.1)', marginTop: 8 }
+                ]}>
+                    <Text style={[styles.statusText, { color: patient.status === 'Active' ? colors.success : colors.gray500 }]}>
+                        {patient.status?.toUpperCase() || 'ACTIVE'}
+                    </Text>
+                </View>
+            </View>
+
             {/* Basic Profile */}
             <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                     <User size={18} color={colors.primary} />
-                    <Text style={styles.sectionTitle}>Basic Profile</Text>
+                    <Text style={styles.sectionTitle}>Personal Information</Text>
                 </View>
                 <View style={styles.card}>
                     <View style={styles.infoRow}>
@@ -68,7 +108,7 @@ export const PatientInfoView: React.FC<PatientInfoViewProps> = ({ patient }) => 
                 </View>
             </View>
 
-            {/* Additional Info */}
+            {/* Clinic Info */}
             <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                     <Info size={18} color={colors.primary} />
@@ -85,7 +125,7 @@ export const PatientInfoView: React.FC<PatientInfoViewProps> = ({ patient }) => 
                                 styles.statusText,
                                 { color: patient.status === 'Active' ? colors.success : colors.gray500 }
                             ]}>
-                                {patient.status.toUpperCase()}
+                                {patient.status?.toUpperCase() || 'ACTIVE'}
                             </Text>
                         </View>
                     </View>
@@ -95,6 +135,54 @@ export const PatientInfoView: React.FC<PatientInfoViewProps> = ({ patient }) => 
                         <Text style={styles.value}>{patient.lastVisit || 'N/A'}</Text>
                     </View>
                 </View>
+            </View>
+
+            {/* Visit History */}
+            <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                    <Calendar size={18} color={colors.primary} />
+                    <Text style={styles.sectionTitle}>Visit History</Text>
+                </View>
+                {loadingVisits ? (
+                    <ActivityIndicator color={colors.primary} style={{ paddingVertical: 20 }} />
+                ) : visits.length === 0 ? (
+                    <View style={styles.card}>
+                        <Text style={{ fontSize: 13, color: '#9CA3AF', fontStyle: 'italic', textAlign: 'center', paddingVertical: 12 }}>
+                            No visit history found.
+                        </Text>
+                    </View>
+                ) : (
+                    <View style={styles.card}>
+                        {visits.map((visit: any, i: number) => (
+                            <React.Fragment key={visit.id || i}>
+                                {i > 0 && <View style={styles.divider} />}
+                                <View style={styles.visitRow}>
+                                    <View style={styles.visitDot} />
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.visitComplaint} numberOfLines={1}>
+                                            {Array.isArray(visit.chief_complaint) ? visit.chief_complaint.join(', ') : visit.chief_complaint || 'General Checkup'}
+                                        </Text>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                                            <Clock size={10} color="#9CA3AF" />
+                                            <Text style={styles.visitDate}>{fmtDate(visit.date)}</Text>
+                                        </View>
+                                    </View>
+                                    <View style={[
+                                        styles.visitStatusBadge,
+                                        { backgroundColor: visit.status === 'Completed' ? '#F0FDF4' : '#FFFBEB' }
+                                    ]}>
+                                        <Text style={[
+                                            styles.visitStatusText,
+                                            { color: visit.status === 'Completed' ? '#15803D' : '#B45309' }
+                                        ]}>
+                                            {visit.status || 'In Progress'}
+                                        </Text>
+                                    </View>
+                                </View>
+                            </React.Fragment>
+                        ))}
+                    </View>
+                )}
             </View>
 
             <View style={{ height: 40 }} />
@@ -162,5 +250,66 @@ const styles = StyleSheet.create({
     statusText: {
         fontSize: 10,
         fontWeight: 'bold',
+    },
+    // Avatar header
+    avatarSection: {
+        alignItems: 'center',
+        marginBottom: 24,
+        paddingTop: 8,
+    },
+    avatar: {
+        width: 72,
+        height: 72,
+        borderRadius: 20,
+        backgroundColor: colors.primary,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    avatarText: {
+        fontSize: 24,
+        fontWeight: '700',
+        color: '#fff',
+    },
+    avatarName: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#111827',
+    },
+    avatarSub: {
+        fontSize: 13,
+        color: '#6B7280',
+        marginTop: 2,
+    },
+    // Visit history
+    visitRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingVertical: 10,
+    },
+    visitDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: colors.primary,
+    },
+    visitComplaint: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#111827',
+    },
+    visitDate: {
+        fontSize: 11,
+        color: '#9CA3AF',
+    },
+    visitStatusBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 6,
+    },
+    visitStatusText: {
+        fontSize: 10,
+        fontWeight: '700',
     },
 });

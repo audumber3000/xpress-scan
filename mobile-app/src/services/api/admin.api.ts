@@ -20,10 +20,26 @@ export interface StaffMember {
 }
 
 export class AdminApiService extends BaseApiService {
+    async getClinics(): Promise<ClinicInfo[]> {
+        try {
+            const headers = await this.getAuthHeaders();
+            const response = await this.fetchWithTimeout(`${this.baseURL}/clinics/`, {
+                method: 'GET',
+                headers,
+            });
+
+            if (!response.ok) return [];
+            return await response.json();
+        } catch (error) {
+            console.error('❌ [API] Error fetching clinics:', error);
+            return [];
+        }
+    }
+
     async getClinicInfo(): Promise<ClinicInfo | null> {
         try {
             const headers = await this.getAuthHeaders();
-            const response = await fetch(`${this.baseURL}/clinics/me`, {
+            const response = await this.fetchWithTimeout(`${this.baseURL}/clinics/me`, {
                 method: 'GET',
                 headers,
             });
@@ -36,10 +52,31 @@ export class AdminApiService extends BaseApiService {
         }
     }
 
+    async ownerAddClinic(data: { name: string, address?: string, phone?: string, email?: string }): Promise<ClinicInfo | null> {
+        try {
+            const headers = await this.getAuthHeaders();
+            const response = await this.fetchWithTimeout(`${this.baseURL}/clinics/owner/add`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) {
+                const error = await response.text();
+                console.error('❌ [API] Error adding clinic branch:', error);
+                return null;
+            }
+            return await response.json();
+        } catch (error) {
+            console.error('❌ [API] Error adding clinic branch:', error);
+            return null;
+        }
+    }
+
     async getStaff(): Promise<StaffMember[]> {
         try {
             const headers = await this.getAuthHeaders();
-            const response = await fetch(`${this.baseURL}/clinic-users`, {
+            const response = await this.fetchWithTimeout(`${this.baseURL}/clinic-users/`, {
                 method: 'GET',
                 headers,
             });
@@ -55,7 +92,7 @@ export class AdminApiService extends BaseApiService {
     async addStaffMember(data: any): Promise<boolean> {
         try {
             const headers = await this.getAuthHeaders();
-            const response = await fetch(`${this.baseURL}/clinic-users`, {
+            const response = await this.fetchWithTimeout(`${this.baseURL}/clinic-users/`, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(data)
@@ -70,7 +107,7 @@ export class AdminApiService extends BaseApiService {
     async updateStaffMember(id: string, data: any): Promise<boolean> {
         try {
             const headers = await this.getAuthHeaders();
-            const response = await fetch(`${this.baseURL}/clinic-users/${id}`, {
+            const response = await this.fetchWithTimeout(`${this.baseURL}/clinic-users/${id}`, {
                 method: 'PUT',
                 headers,
                 body: JSON.stringify(data)
@@ -85,7 +122,7 @@ export class AdminApiService extends BaseApiService {
     async getAttendanceForWeek(weekStart: string): Promise<any> {
         try {
             const headers = await this.getAuthHeaders();
-            const response = await fetch(`${this.baseURL}/attendance/week?week_start=${weekStart}`, {
+            const response = await this.fetchWithTimeout(`${this.baseURL}/attendance/week?week_start=${weekStart}`, {
                 method: 'GET',
                 headers,
             });
@@ -101,7 +138,7 @@ export class AdminApiService extends BaseApiService {
     async getTreatmentTypes(): Promise<any[]> {
         try {
             const headers = await this.getAuthHeaders();
-            const response = await fetch(`${this.baseURL}/treatment-types`, {
+            const response = await this.fetchWithTimeout(`${this.baseURL}/treatment-types/`, {
                 method: 'GET',
                 headers,
             });
@@ -117,7 +154,7 @@ export class AdminApiService extends BaseApiService {
     async createTreatmentType(data: any): Promise<boolean> {
         try {
             const headers = await this.getAuthHeaders();
-            const response = await fetch(`${this.baseURL}/treatment-types`, {
+            const response = await this.fetchWithTimeout(`${this.baseURL}/treatment-types/`, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(data)
@@ -132,7 +169,7 @@ export class AdminApiService extends BaseApiService {
     async updateTreatmentType(id: string, data: any): Promise<boolean> {
         try {
             const headers = await this.getAuthHeaders();
-            const response = await fetch(`${this.baseURL}/treatment-types/${id}`, {
+            const response = await this.fetchWithTimeout(`${this.baseURL}/treatment-types/${id}`, {
                 method: 'PUT',
                 headers,
                 body: JSON.stringify(data)
@@ -147,7 +184,7 @@ export class AdminApiService extends BaseApiService {
     async deleteTreatmentType(id: string): Promise<boolean> {
         try {
             const headers = await this.getAuthHeaders();
-            const response = await fetch(`${this.baseURL}/treatment-types/${id}`, {
+            const response = await this.fetchWithTimeout(`${this.baseURL}/treatment-types/${id}`, {
                 method: 'DELETE',
                 headers
             });
@@ -161,7 +198,7 @@ export class AdminApiService extends BaseApiService {
     async getRoles(): Promise<any[]> {
         try {
             const headers = await this.getAuthHeaders();
-            const response = await fetch(`${this.baseURL}/permissions/roles`, {
+            const response = await this.fetchWithTimeout(`${this.baseURL}/permissions/roles`, {
                 method: 'GET',
                 headers,
             });
@@ -176,7 +213,7 @@ export class AdminApiService extends BaseApiService {
     async getResources(): Promise<any[]> {
         try {
             const headers = await this.getAuthHeaders();
-            const response = await fetch(`${this.baseURL}/permissions/resources`, {
+            const response = await this.fetchWithTimeout(`${this.baseURL}/permissions/resources`, {
                 method: 'GET',
                 headers,
             });
@@ -191,7 +228,7 @@ export class AdminApiService extends BaseApiService {
     async getUserPermissions(userId: string): Promise<any> {
         try {
             const headers = await this.getAuthHeaders();
-            const response = await fetch(`${this.baseURL}/permissions/users/${userId}/permissions`, {
+            const response = await this.fetchWithTimeout(`${this.baseURL}/permissions/users/${userId}/permissions`, {
                 method: 'GET',
                 headers,
             });
@@ -206,7 +243,7 @@ export class AdminApiService extends BaseApiService {
     async updateUserRole(userId: string, role: string): Promise<boolean> {
         try {
             const headers = await this.getAuthHeaders();
-            const response = await fetch(`${this.baseURL}/permissions/users/${userId}/role`, {
+            const response = await this.fetchWithTimeout(`${this.baseURL}/permissions/users/${userId}/role`, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ user_id: userId, role })
@@ -221,13 +258,171 @@ export class AdminApiService extends BaseApiService {
     async syncRoles(): Promise<boolean> {
         try {
             const headers = await this.getAuthHeaders();
-            const response = await fetch(`${this.baseURL}/permissions/sync-roles`, {
+            const response = await this.fetchWithTimeout(`${this.baseURL}/permissions/sync-roles`, {
                 method: 'POST',
                 headers,
             });
             return response.ok;
         } catch (error) {
             console.error('❌ [API] Error syncing roles:', error);
+            return false;
+        }
+    }
+
+    async markAttendance(data: { user_id: string; date: string; status: string; reason?: string }): Promise<boolean> {
+        try {
+            const headers = await this.getAuthHeaders();
+            const response = await this.fetchWithTimeout(`${this.baseURL}/attendance`, {
+                method: 'POST', headers, body: JSON.stringify(data),
+            });
+            return response.ok;
+        } catch (error) {
+            console.error('❌ [API] Error marking attendance:', error);
+            return false;
+        }
+    }
+
+    // ── Practice Settings ──
+    private getPracticeSettingsBackendCategory(category: string): string {
+        const map: Record<string, string> = {
+            'chief-complaints':   'complaint',
+            'clinical-advice':    'advice',
+            'on-examination':     'finding',
+            'clinical-findings':  'finding',
+            'diagnosis':          'diagnosis',
+            'final-diagnosis':    'diagnosis',
+            'medical-history':    'medical-condition',
+            'dental-history':     'dental-history',
+            'allergies':          'allergy',
+            'ongoing-medication': 'current-medication',
+            'additional-fees':    'additional-fee',
+        };
+        return map[category] || category;
+    }
+
+    async getPracticeSettings(category: string): Promise<any[]> {
+        try {
+            const headers = await this.getAuthHeaders();
+            if (category === 'procedures') {
+                const r = await this.fetchWithTimeout(`${this.baseURL}/treatment-types/`, { headers });
+                if (!r.ok) return [];
+                return await r.json();
+            }
+            const bc = this.getPracticeSettingsBackendCategory(category);
+            const r = await this.fetchWithTimeout(`${this.baseURL}/clinical/settings/?category=${bc}`, { headers });
+            if (!r.ok) return [];
+            return await r.json();
+        } catch (error) {
+            console.error('❌ [API] Error fetching practice settings:', error);
+            return [];
+        }
+    }
+
+    async createPracticeSetting(data: { name: string; description?: string; cost?: number; category: string }): Promise<any | null> {
+        try {
+            const headers = await this.getAuthHeaders();
+            if (data.category === 'procedures') {
+                const r = await this.fetchWithTimeout(`${this.baseURL}/treatment-types/`, {
+                    method: 'POST', headers, body: JSON.stringify(data),
+                });
+                if (!r.ok) return null;
+                return await r.json();
+            }
+            const bc = this.getPracticeSettingsBackendCategory(data.category);
+            const r = await this.fetchWithTimeout(`${this.baseURL}/clinical/settings/`, {
+                method: 'POST', headers, body: JSON.stringify({ ...data, category: bc }),
+            });
+            if (!r.ok) return null;
+            return await r.json();
+        } catch (error) {
+            console.error('❌ [API] Error creating practice setting:', error);
+            return null;
+        }
+    }
+
+    async updatePracticeSetting(id: string, data: any): Promise<boolean> {
+        try {
+            const headers = await this.getAuthHeaders();
+            if (data.category === 'procedures') {
+                const r = await this.fetchWithTimeout(`${this.baseURL}/treatment-types/${id}/`, {
+                    method: 'PUT', headers, body: JSON.stringify(data),
+                });
+                return r.ok;
+            }
+            const bc = this.getPracticeSettingsBackendCategory(data.category);
+            const r = await this.fetchWithTimeout(`${this.baseURL}/clinical/settings/${id}/`, {
+                method: 'PUT', headers, body: JSON.stringify({ ...data, category: bc }),
+            });
+            return r.ok;
+        } catch (error) {
+            console.error('❌ [API] Error updating practice setting:', error);
+            return false;
+        }
+    }
+
+    async deletePracticeSetting(id: string, category: string): Promise<boolean> {
+        try {
+            const headers = await this.getAuthHeaders();
+            const url = category === 'procedures'
+                ? `${this.baseURL}/treatment-types/${id}/`
+                : `${this.baseURL}/clinical/settings/${id}/`;
+            const r = await this.fetchWithTimeout(url, { method: 'DELETE', headers });
+            return r.ok;
+        } catch (error) {
+            console.error('❌ [API] Error deleting practice setting:', error);
+            return false;
+        }
+    }
+
+    // ── Template Configs (Invoice / Prescription / Consent) ──
+    async getTemplateConfigs(): Promise<any[]> {
+        try {
+            const headers = await this.getAuthHeaders();
+            const r = await this.fetchWithTimeout(`${this.baseURL}/template-configs`, { headers });
+            if (!r.ok) return [];
+            return await r.json();
+        } catch (error) {
+            console.error('❌ [API] Error fetching template configs:', error);
+            return [];
+        }
+    }
+
+    async saveTemplateConfig(data: {
+        category: string;
+        template_id: string;
+        logo_url?: string;
+        primary_color?: string;
+        footer_text?: string;
+        gst_number?: string;
+    }): Promise<boolean> {
+        try {
+            const headers = await this.getAuthHeaders();
+            const r = await this.fetchWithTimeout(`${this.baseURL}/template-configs`, {
+                method: 'POST', headers, body: JSON.stringify(data),
+            });
+            if (r.ok && data.category === 'invoice' && data.gst_number !== undefined) {
+                await this.fetchWithTimeout(`${this.baseURL}/clinics/me`, {
+                    method: 'PATCH', headers,
+                    body: JSON.stringify({ gst_number: data.gst_number, logo_url: data.logo_url, invoice_template: data.template_id }),
+                }).catch(() => {});
+            }
+            return r.ok;
+        } catch (error) {
+            console.error('❌ [API] Error saving template config:', error);
+            return false;
+        }
+    }
+
+    // ── Clinic Info Update ──
+    async updateClinicInfo(id: string, data: Partial<ClinicInfo>): Promise<boolean> {
+        try {
+            const headers = await this.getAuthHeaders();
+            const response = await this.fetchWithTimeout(`${this.baseURL}/clinics/${id}`, {
+                method: 'PUT', headers, body: JSON.stringify(data),
+            });
+            return response.ok;
+        } catch (error) {
+            console.error('❌ [API] Error updating clinic info:', error);
             return false;
         }
     }

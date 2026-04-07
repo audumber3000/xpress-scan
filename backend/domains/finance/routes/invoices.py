@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, text
 from typing import List, Optional
 from datetime import datetime
+from domains.finance.invoice_pdf_engine import generate_invoice_html
 import os
 import requests
 import re
@@ -19,15 +20,37 @@ from models import Invoice, InvoiceLineItem, InvoiceAuditLog, Patient, User, Cli
 from core.auth_utils import get_current_user
 from schemas import (
     InvoiceOut, InvoiceLineItemCreate, InvoiceLineItemOut,
-    MarkAsPaidRequest
+    MarkAsPaidRequest, InvoiceCreate
 )
 from domains.infrastructure.services.pdf_service import html_template_to_pdf
 from domains.infrastructure.services.r2_storage import upload_pdf_to_r2
 
 router = APIRouter()
 
+_invoice_columns_ensured = False
+
+def _ensure_invoice_columns(db: Session):
+    """Backfill invoice lifecycle columns for older DBs — runs only once per process."""
+    global _invoice_columns_ensured
+    if _invoice_columns_ensured:
+        return
+    try:
+        db.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS finalized_at TIMESTAMP"))
+        db.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paid_amount DOUBLE PRECISION DEFAULT 0"))
+        db.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS due_amount DOUBLE PRECISION DEFAULT 0"))
+        db.commit()
+        _invoice_columns_ensured = True
+    except Exception:
+        db.rollback()
+
 def enrich_invoice(db: Session, invoice: Invoice):
     """Enrich invoice with related data"""
+    total_amount = float(invoice.total or 0)
+    paid_amount = float(getattr(invoice, 'paid_amount', 0) or 0)
+    due_amount = getattr(invoice, 'due_amount', None)
+    if due_amount is None:
+        due_amount = max(0.0, total_amount - paid_amount)
+
     invoice_dict = {
         'id': invoice.id,
         'clinic_id': invoice.clinic_id,
@@ -38,9 +61,12 @@ def enrich_invoice(db: Session, invoice: Invoice):
         'status': invoice.status,
         'payment_mode': invoice.payment_mode,
         'utr': invoice.utr,
-        'visit_id': invoice.visit_id,
+        'appointment_id': invoice.appointment_id,
         'subtotal': invoice.subtotal,
         'tax': invoice.tax,
+        'discount': invoice.discount or 0.0,
+        'discount_type': invoice.discount_type or 'amount',
+        'discount_amount': invoice.discount_amount or 0.0,
         'total': invoice.total,
         'notes': invoice.notes,
         'created_by': invoice.created_by,
@@ -49,6 +75,9 @@ def enrich_invoice(db: Session, invoice: Invoice):
         'synced_at': getattr(invoice, 'synced_at', None).isoformat() if getattr(invoice, 'synced_at', None) else None,
         'sync_status': getattr(invoice, 'sync_status', 'local'),
         'paid_at': invoice.paid_at.isoformat() if invoice.paid_at else None,
+        'finalized_at': getattr(invoice, 'finalized_at', None).isoformat() if getattr(invoice, 'finalized_at', None) else None,
+        'paid_amount': paid_amount,
+        'due_amount': float(due_amount or 0),
         'line_items': [
             {
                 'id': item.id,
@@ -68,14 +97,40 @@ def enrich_invoice(db: Session, invoice: Invoice):
     return invoice_dict
 
 def recalculate_invoice_totals(db: Session, invoice: Invoice):
-    """Recalculate invoice subtotal, tax, and total"""
+    """Recalculate invoice subtotal, tax, discount, and total"""
     subtotal = sum(item.amount for item in invoice.line_items)
+    
+    # Calculate discount
+    discount_amount = 0.0
+    if hasattr(invoice, 'discount') and invoice.discount and invoice.discount > 0:
+        if invoice.discount_type == 'percentage':
+            discount_amount = subtotal * (invoice.discount / 100)
+        else:
+            discount_amount = invoice.discount
+            
+    # Cap discount
+    if discount_amount > subtotal:
+        discount_amount = subtotal
+        
     tax = 0.0  # Can add tax calculation logic here (e.g., GST)
-    total = subtotal + tax
+    total = subtotal - discount_amount + tax
     
     invoice.subtotal = subtotal
+    invoice.discount_amount = discount_amount
     invoice.tax = tax
     invoice.total = total
+
+    current_paid = float(getattr(invoice, 'paid_amount', 0) or 0)
+    if invoice.status in ['paid_unverified', 'paid_verified']:
+        invoice.paid_amount = max(current_paid, total)
+        invoice.due_amount = 0.0
+    elif invoice.status == 'partially_paid':
+        normalized_paid = min(max(current_paid, 0.0), total)
+        invoice.paid_amount = normalized_paid
+        invoice.due_amount = max(total - normalized_paid, 0.0)
+    else:
+        invoice.paid_amount = 0.0
+        invoice.due_amount = max(total, 0.0)
 
 def create_audit_log(
     db: Session,
@@ -97,7 +152,69 @@ def create_audit_log(
     )
     db.add(audit_log)
 
-@router.get("/", response_model=List[InvoiceOut])
+@router.post("", response_model=InvoiceOut)
+async def create_invoice(
+    invoice_data: InvoiceCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new manual invoice"""
+    try:
+        _ensure_invoice_columns(db)
+        # Check if patient exists in this clinic
+        patient = db.query(Patient).filter(
+            Patient.id == invoice_data.patient_id,
+            Patient.clinic_id == current_user.clinic_id
+        ).first()
+        if not patient:
+            raise HTTPException(status_code=404, detail="Patient not found")
+            
+        # Generate generic invoice number
+        year = datetime.utcnow().year
+        last_invoice = db.query(Invoice).filter(
+            Invoice.clinic_id == current_user.clinic_id,
+            Invoice.invoice_number.like(f"INV-{year}-%")
+        ).order_by(desc(Invoice.invoice_number)).first()
+        
+        if last_invoice:
+            try:
+                last_num = int(last_invoice.invoice_number.split('-')[-1])
+                new_num = last_num + 1
+            except (ValueError, IndexError):
+                new_num = 1
+        else:
+            new_num = 1
+            
+        invoice_number = f"INV-{year}-{new_num:04d}"
+        
+        invoice = Invoice(
+            clinic_id=current_user.clinic_id,
+            patient_id=invoice_data.patient_id,
+            appointment_id=invoice_data.appointment_id,
+            invoice_number=invoice_number,
+            status='draft',
+            subtotal=0.0,
+            tax=0.0,
+            total=0.0,
+            paid_amount=0.0,
+            due_amount=0.0,
+            notes=invoice_data.notes
+        )
+        db.add(invoice)
+        db.flush()
+        
+        create_audit_log(db, invoice.id, current_user.id, 'created')
+        
+        db.commit()
+        db.refresh(invoice)
+        return enrich_invoice(db, invoice)
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error creating invoice: {str(e)}")
+
+@router.get("", response_model=List[InvoiceOut])
 async def get_invoices(
     skip: int = Query(0),
     limit: int = Query(100),
@@ -108,6 +225,7 @@ async def get_invoices(
 ):
     """Get all invoices for the clinic"""
     try:
+        _ensure_invoice_columns(db)
         query = db.query(Invoice).filter(Invoice.clinic_id == current_user.clinic_id)
         
         if status:
@@ -127,6 +245,7 @@ async def get_invoice(
     current_user: User = Depends(get_current_user)
 ):
     """Get a specific invoice"""
+    _ensure_invoice_columns(db)
     invoice = db.query(Invoice).filter(
         Invoice.id == invoice_id,
         Invoice.clinic_id == current_user.clinic_id
@@ -146,6 +265,7 @@ async def add_line_item(
 ):
     """Add a new line item to invoice"""
     try:
+        _ensure_invoice_columns(db)
         invoice = db.query(Invoice).filter(
             Invoice.id == invoice_id,
             Invoice.clinic_id == current_user.clinic_id
@@ -202,6 +322,7 @@ async def update_line_item(
 ):
     """Update a line item"""
     try:
+        _ensure_invoice_columns(db)
         invoice = db.query(Invoice).filter(
             Invoice.id == invoice_id,
             Invoice.clinic_id == current_user.clinic_id
@@ -269,6 +390,7 @@ async def delete_line_item(
 ):
     """Delete a line item"""
     try:
+        _ensure_invoice_columns(db)
         invoice = db.query(Invoice).filter(
             Invoice.id == invoice_id,
             Invoice.clinic_id == current_user.clinic_id
@@ -310,6 +432,51 @@ async def delete_line_item(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error deleting line item: {str(e)}")
 
+@router.post("/{invoice_id}/finalize", response_model=InvoiceOut)
+async def finalize_invoice(
+    invoice_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Finalize invoice so it becomes non-editable."""
+    try:
+        _ensure_invoice_columns(db)
+        invoice = db.query(Invoice).filter(
+            Invoice.id == invoice_id,
+            Invoice.clinic_id == current_user.clinic_id
+        ).first()
+
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+
+        if invoice.status != 'draft':
+            raise HTTPException(status_code=400, detail="Only draft invoices can be finalized")
+
+        if not invoice.line_items or len(invoice.line_items) == 0:
+            raise HTTPException(status_code=400, detail="Add at least one line item before finalizing")
+
+        recalculate_invoice_totals(db, invoice)
+        invoice.status = 'finalized'
+        invoice.finalized_at = datetime.utcnow()
+        invoice.paid_amount = 0.0
+        invoice.due_amount = max(float(invoice.total or 0), 0.0)
+
+        create_audit_log(db, invoice_id, current_user.id, 'finalized', {
+            'status': 'draft'
+        }, {
+            'status': invoice.status,
+            'finalized_at': invoice.finalized_at.isoformat() if invoice.finalized_at else None
+        })
+
+        db.commit()
+        db.refresh(invoice)
+        return enrich_invoice(db, invoice)
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error finalizing invoice: {str(e)}")
+
 @router.post("/{invoice_id}/mark-as-paid", response_model=InvoiceOut)
 async def mark_invoice_as_paid(
     invoice_id: int,
@@ -317,8 +484,9 @@ async def mark_invoice_as_paid(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Mark invoice as paid (unverified)"""
+    """Record payment (full or partial) on finalized invoice."""
     try:
+        _ensure_invoice_columns(db)
         invoice = db.query(Invoice).filter(
             Invoice.id == invoice_id,
             Invoice.clinic_id == current_user.clinic_id
@@ -327,23 +495,55 @@ async def mark_invoice_as_paid(
         if not invoice:
             raise HTTPException(status_code=404, detail="Invoice not found")
         
-        if invoice.status != 'draft':
-            raise HTTPException(status_code=400, detail="Only draft invoices can be marked as paid")
-        
+        if invoice.status not in ['finalized', 'partially_paid']:
+            raise HTTPException(status_code=400, detail="Only finalized invoices can be marked as paid")
+
+        recalculate_invoice_totals(db, invoice)
+
+        remaining_due = max(float(invoice.total or 0) - float(getattr(invoice, 'paid_amount', 0) or 0), 0.0)
+        if remaining_due <= 0:
+            raise HTTPException(status_code=400, detail="Invoice is already fully paid")
+
         old_status = invoice.status
-        invoice.status = 'paid_unverified'
+        old_paid = float(getattr(invoice, 'paid_amount', 0) or 0)
+
+        is_partial = bool(payment_data.is_partial)
+        amount_paid = float(payment_data.amount_paid or 0)
+        if is_partial:
+            if amount_paid <= 0:
+                raise HTTPException(status_code=400, detail="Enter valid partial payment amount")
+            if amount_paid >= remaining_due:
+                raise HTTPException(status_code=400, detail="Partial amount must be less than due amount")
+            payment_amount = amount_paid
+        else:
+            payment_amount = remaining_due
+
+        invoice.paid_amount = min(float(invoice.total or 0), old_paid + payment_amount)
+        invoice.due_amount = max(float(invoice.total or 0) - invoice.paid_amount, 0.0)
+
+        if invoice.due_amount > 0:
+            invoice.status = 'partially_paid'
+            invoice.paid_at = None
+        else:
+            invoice.status = 'paid_unverified'
+            invoice.paid_at = datetime.utcnow()
+
         invoice.payment_mode = payment_data.payment_mode
         invoice.utr = payment_data.utr
-        invoice.paid_at = datetime.utcnow()
         
         # Audit log
         create_audit_log(db, invoice_id, current_user.id, 'marked_paid', {
-            'status': old_status
+            'status': old_status,
+            'paid_amount': old_paid,
+            'due_amount': remaining_due
         }, {
             'status': invoice.status,
             'payment_mode': invoice.payment_mode,
-            'utr': invoice.utr
-        }, notes=f"Marked as paid via {invoice.payment_mode}")
+            'utr': invoice.utr,
+            'paid_amount': invoice.paid_amount,
+            'due_amount': invoice.due_amount,
+            'payment_amount': payment_amount
+        }, notes=f"Payment recorded via {invoice.payment_mode}")
         
         db.commit()
         db.refresh(invoice)
@@ -363,6 +563,7 @@ async def update_invoice(
 ):
     """Update invoice (payment_mode, utr, notes)"""
     try:
+        _ensure_invoice_columns(db)
         invoice = db.query(Invoice).filter(
             Invoice.id == invoice_id,
             Invoice.clinic_id == current_user.clinic_id
@@ -377,7 +578,9 @@ async def update_invoice(
         old_values = {
             'payment_mode': invoice.payment_mode,
             'utr': invoice.utr,
-            'notes': invoice.notes
+            'notes': invoice.notes,
+            'discount': getattr(invoice, 'discount', 0),
+            'discount_type': getattr(invoice, 'discount_type', 'amount')
         }
         
         # Update fields
@@ -387,11 +590,19 @@ async def update_invoice(
             invoice.utr = invoice_update.get('utr')
         if 'notes' in invoice_update:
             invoice.notes = invoice_update.get('notes')
+        if 'discount' in invoice_update:
+            invoice.discount = float(invoice_update['discount'])
+        if 'discount_type' in invoice_update:
+            invoice.discount_type = invoice_update['discount_type']
+            
+        recalculate_invoice_totals(db, invoice)
         
         new_values = {
             'payment_mode': invoice.payment_mode,
             'utr': invoice.utr,
-            'notes': invoice.notes
+            'notes': invoice.notes,
+            'discount': invoice.discount,
+            'discount_type': invoice.discount_type
         }
         
         # Audit log
@@ -406,6 +617,36 @@ async def update_invoice(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error updating invoice: {str(e)}")
 
+@router.delete("/{invoice_id}")
+async def delete_invoice(
+    invoice_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Delete an entire invoice completely"""
+    try:
+        _ensure_invoice_columns(db)
+        invoice = db.query(Invoice).filter(
+            Invoice.id == invoice_id,
+            Invoice.clinic_id == current_user.clinic_id
+        ).first()
+        
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+        
+        # It's usually safer to only allow deleting drafts or unverified invoices,
+        # but the request asks to allow deleting invoices entirely to cancel them out from double entry.
+        
+        db.delete(invoice)
+        db.commit()
+        
+        return {"success": True, "message": "Invoice deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting invoice: {str(e)}")
+
 @router.get("/{invoice_id}/pdf")
 async def download_invoice_pdf(
     invoice_id: int,
@@ -414,6 +655,7 @@ async def download_invoice_pdf(
 ):
     """Generate and return invoice PDF"""
     try:
+        _ensure_invoice_columns(db)
         invoice = db.query(Invoice).filter(
             Invoice.id == invoice_id,
             Invoice.clinic_id == current_user.clinic_id
@@ -425,8 +667,15 @@ async def download_invoice_pdf(
         # Get clinic info
         clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
         
+        # Get template configuration
+        from models import TemplateConfiguration
+        config = db.query(TemplateConfiguration).filter(
+            TemplateConfiguration.clinic_id == current_user.clinic_id,
+            TemplateConfiguration.category == 'invoice'
+        ).first()
+
         # Generate HTML invoice template
-        html_content = generate_invoice_html(invoice, clinic)
+        html_content = generate_invoice_html(invoice, clinic, config)
         
         # Convert to PDF
         pdf_path = html_template_to_pdf(html_content)
@@ -462,6 +711,7 @@ async def send_invoice_via_whatsapp(
 ):
     """Send invoice PDF to patient via WhatsApp"""
     try:
+        _ensure_invoice_columns(db)
         # Get invoice
         invoice = db.query(Invoice).filter(
             Invoice.id == invoice_id,
@@ -482,8 +732,15 @@ async def send_invoice_via_whatsapp(
         # Get clinic info
         clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
         
+        # Get template configuration
+        from models import TemplateConfiguration
+        config = db.query(TemplateConfiguration).filter(
+            TemplateConfiguration.clinic_id == current_user.clinic_id,
+            TemplateConfiguration.category == 'invoice'
+        ).first()
+
         # Generate HTML invoice template
-        html_content = generate_invoice_html(invoice, clinic)
+        html_content = generate_invoice_html(invoice, clinic, config)
         
         # Convert to PDF
         pdf_path = html_template_to_pdf(html_content)
@@ -529,7 +786,8 @@ async def send_invoice_via_whatsapp(
         message = render_template(template_content, template_vars)
         
         # Send via WhatsApp
-        WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://localhost:3001")
+        # WhatsApp Service URL (MolarPlus Nexus)
+        NEXUS_SERVICES_URL = os.getenv("NEXUS_SERVICES_URL", "http://localhost:8001")
         
         # Clean phone number
         clean_phone = re.sub(r'\D', '', str(patient.phone))
@@ -539,7 +797,7 @@ async def send_invoice_via_whatsapp(
         # Send message with PDF as base64 media
         try:
             response = requests.post(
-                f"{WHATSAPP_SERVICE_URL}/api/send/{current_user.id}",
+                f"{NEXUS_SERVICES_URL}/api/send/{current_user.id}",
                 json={
                     "phone": clean_phone,
                     "message": message,
@@ -579,158 +837,5 @@ async def send_invoice_via_whatsapp(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error sending invoice via WhatsApp: {str(e)}")
 
-def generate_invoice_html(invoice: Invoice, clinic: Clinic) -> str:
-    """Generate HTML content for invoice PDF"""
-    payment_status_label = "UPI – Unverified" if invoice.status == 'paid_unverified' and invoice.payment_mode == 'UPI' else invoice.status.replace('_', ' ').title()
-    
-    line_items_html = ""
-    for item in invoice.line_items:
-        line_items_html += f"""
-        <tr>
-            <td style="padding: 8px; border-bottom: 1px solid #ddd;">{item.description}</td>
-            <td style="padding: 8px; text-align: center; border-bottom: 1px solid #ddd;">{item.quantity}</td>
-            <td style="padding: 8px; text-align: right; border-bottom: 1px solid #ddd;">₹{item.unit_price:.2f}</td>
-            <td style="padding: 8px; text-align: right; border-bottom: 1px solid #ddd;">₹{item.amount:.2f}</td>
-        </tr>
-        """
-    
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                margin: 40px;
-                color: #333;
-            }}
-            .header {{
-                border-bottom: 3px solid #10B981;
-                padding-bottom: 20px;
-                margin-bottom: 30px;
-            }}
-            .clinic-name {{
-                font-size: 24px;
-                font-weight: bold;
-                color: #10B981;
-                margin-bottom: 10px;
-            }}
-            .invoice-info {{
-                display: flex;
-                justify-content: space-between;
-                margin-bottom: 30px;
-            }}
-            .patient-info, .invoice-details {{
-                width: 48%;
-            }}
-            .section-title {{
-                font-weight: bold;
-                margin-bottom: 10px;
-                color: #555;
-            }}
-            table {{
-                width: 100%;
-                border-collapse: collapse;
-                margin: 20px 0;
-            }}
-            th {{
-                background-color: #f3f4f6;
-                padding: 12px;
-                text-align: left;
-                border-bottom: 2px solid #ddd;
-                font-weight: bold;
-            }}
-            .total-section {{
-                margin-top: 20px;
-                text-align: right;
-            }}
-            .total-row {{
-                padding: 8px;
-                font-size: 16px;
-            }}
-            .grand-total {{
-                font-size: 20px;
-                font-weight: bold;
-                border-top: 2px solid #10B981;
-                padding-top: 10px;
-            }}
-            .payment-info {{
-                margin-top: 30px;
-                padding: 15px;
-                background-color: #f9fafb;
-                border-left: 4px solid #10B981;
-            }}
-            .footer {{
-                margin-top: 40px;
-                padding-top: 20px;
-                border-top: 1px solid #ddd;
-                text-align: center;
-                color: #666;
-                font-size: 12px;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <div class="clinic-name">{clinic.name if clinic else 'Clinic'}</div>
-            <div style="color: #666;">
-                {clinic.address if clinic and clinic.address else ''}
-                {f'<br>Phone: {clinic.phone}' if clinic and clinic.phone else ''}
-                {f'<br>Email: {clinic.email}' if clinic and clinic.email else ''}
-            </div>
-        </div>
-        
-        <div class="invoice-info">
-            <div class="patient-info">
-                <div class="section-title">Bill To:</div>
-                <div>{invoice.patient.name if invoice.patient else ''}</div>
-                {f'<div>Phone: {invoice.patient.phone}</div>' if invoice.patient and invoice.patient.phone else ''}
-            </div>
-            <div class="invoice-details">
-                <div class="section-title">Invoice Details:</div>
-                <div>Invoice #: {invoice.invoice_number}</div>
-                <div>Date: {invoice.created_at.strftime('%d %B %Y') if invoice.created_at else ''}</div>
-                <div>Status: {payment_status_label}</div>
-            </div>
-        </div>
-        
-        <table>
-            <thead>
-                <tr>
-                    <th>Description</th>
-                    <th style="text-align: center;">Quantity</th>
-                    <th style="text-align: right;">Unit Price</th>
-                    <th style="text-align: right;">Amount</th>
-                </tr>
-            </thead>
-            <tbody>
-                {line_items_html}
-            </tbody>
-        </table>
-        
-        <div class="total-section">
-            <div class="total-row">Subtotal: ₹{invoice.subtotal:.2f}</div>
-            {f'<div class="total-row">Tax: ₹{invoice.tax:.2f}</div>' if invoice.tax > 0 else ''}
-            <div class="total-row grand-total">Total: ₹{invoice.total:.2f}</div>
-        </div>
-        
-        {f'''
-        <div class="payment-info">
-            <div><strong>Payment Mode:</strong> {invoice.payment_mode}</div>
-            {f'<div><strong>UTR:</strong> {invoice.utr}</div>' if invoice.utr else ''}
-            <div><strong>Status:</strong> {payment_status_label}</div>
-        </div>
-        ''' if invoice.payment_mode else ''}
-        
-        {f'<div style="margin-top: 20px;"><strong>Notes:</strong> {invoice.notes}</div>' if invoice.notes else ''}
-        
-        <div class="footer">
-            <div>Thank you for your business!</div>
-            <div style="margin-top: 10px;">This is a computer-generated invoice.</div>
-        </div>
-    </body>
-    </html>
-    """
-    return html
+
 

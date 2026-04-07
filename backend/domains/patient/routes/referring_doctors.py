@@ -8,12 +8,12 @@ from core.auth_utils import get_current_user
 
 router = APIRouter()
 
-@router.get("/", response_model=List[ReferringDoctorOut])
+@router.get("", response_model=List[ReferringDoctorOut])
 def list_referring_doctors(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Get all referring doctors for current clinic"""
     return db.query(ReferringDoctor).filter(ReferringDoctor.clinic_id == current_user.clinic_id).all()
 
-@router.post("/", response_model=ReferringDoctorOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ReferringDoctorOut, status_code=status.HTTP_201_CREATED)
 def create_referring_doctor(doctor: ReferringDoctorCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Create a new referring doctor for current clinic"""
     doctor_data = doctor.dict()

@@ -1,7 +1,8 @@
 import React from "react";
 import AttendanceCell from "./AttendanceCell";
+import { format } from "date-fns";
 
-const AttendanceGrid = ({ employees, weekDays, onEmployeeClick }) => {
+const AttendanceGrid = ({ employees, weekDays, onEmployeeProfileClick, onCellClick }) => {
   const getDayName = (date) => {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     return days[date.getDay()];
@@ -17,8 +18,9 @@ const AttendanceGrid = ({ employees, weekDays, onEmployeeClick }) => {
     const employee = employees.find(emp => emp.id === employeeId);
     if (!employee || !employee.attendance) return null;
     
-    const dateStr = date.toISOString().split('T')[0];
-    return employee.attendance[dateStr] || null;
+    const dateStr = format(date, 'yyyy-MM-dd'); // local date, not UTC
+    const val = employee.attendance[dateStr];
+    return val !== undefined ? val : null;
   };
 
   const isHoliday = (date) => {
@@ -26,14 +28,14 @@ const AttendanceGrid = ({ employees, weekDays, onEmployeeClick }) => {
     const holidays = [
       '2024-09-25', // Example holiday
     ];
-    return holidays.includes(date.toISOString().split('T')[0]);
+    return holidays.includes(format(date, 'yyyy-MM-dd'));
   };
 
   const getHolidayName = (date) => {
     const holidays = {
       '2024-09-25': 'Annual Book Fair',
     };
-    return holidays[date.toISOString().split('T')[0]] || null;
+    return holidays[format(date, 'yyyy-MM-dd')] || null;
   };
 
   const defaultAvatar = (name) => {
@@ -70,11 +72,13 @@ const AttendanceGrid = ({ employees, weekDays, onEmployeeClick }) => {
           {employees.map((employee, empIndex) => (
             <tr
               key={employee.id}
-              className="hover:bg-gray-50 transition-colors cursor-pointer border-t border-gray-100"
-              onClick={() => onEmployeeClick(employee)}
+              className="border-t border-gray-100"
             >
-              {/* Employee Profile Cell */}
-              <td className="px-6 py-4 border-r border-gray-100 sticky left-0 bg-white hover:bg-gray-50 z-10">
+              {/* Employee Profile Cell — click opens attendance history drawer */}
+              <td
+                onClick={() => onEmployeeProfileClick && onEmployeeProfileClick(employee)}
+                className="px-6 py-4 border-r border-gray-100 sticky left-0 bg-white hover:bg-gray-50 z-10 cursor-pointer"
+              >
                 <div className="flex items-center gap-3">
                   <div className="w-11 h-11 rounded-full bg-[#E0F2F2] flex items-center justify-center text-[#2D9596] font-semibold text-sm">
                     {employee.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
@@ -93,6 +97,8 @@ const AttendanceGrid = ({ employees, weekDays, onEmployeeClick }) => {
                 const attendance = getEmployeeAttendance(employee.id, date);
                 const holiday = isHoliday(date);
                 const holidayName = getHolidayName(date);
+                // attendance === null means future date — show as disabled
+                const isFutureDate = attendance === null;
 
                 return (
                   <AttendanceCell
@@ -101,6 +107,8 @@ const AttendanceGrid = ({ employees, weekDays, onEmployeeClick }) => {
                     reason={attendance?.reason}
                     isHoliday={holiday}
                     holidayName={holidayName}
+                    isFuture={isFutureDate}
+                    onClick={isFutureDate ? undefined : () => onCellClick && onCellClick(employee, date)}
                   />
                 );
               })}

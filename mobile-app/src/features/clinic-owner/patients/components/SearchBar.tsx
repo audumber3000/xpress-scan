@@ -6,12 +6,14 @@ interface SearchBarProps {
   value: string;
   onChangeText: (text: string) => void;
   placeholder?: string;
+  autoFocus?: boolean;
 }
 
 export const SearchBar: React.FC<SearchBarProps> = ({
   value,
   onChangeText,
-  placeholder = 'Search by name, ID or phone...'
+  placeholder = 'Search by name, ID or phone...',
+  autoFocus = false
 }) => {
   return (
     <View style={styles.searchContainer}>
@@ -22,6 +24,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         placeholderTextColor="#9CA3AF"
         value={value}
         onChangeText={onChangeText}
+        autoFocus={autoFocus}
       />
     </View>
   );

@@ -4,7 +4,13 @@ import { toast } from "react-toastify";
 const MarkAsPaidModal = ({ invoice, onClose, onConfirm }) => {
   const [paymentMode, setPaymentMode] = useState("UPI");
   const [utr, setUtr] = useState("");
+  const [isPartial, setIsPartial] = useState(false);
+  const [amountPaid, setAmountPaid] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const total = Number(invoice?.total || 0);
+  const alreadyPaid = Number(invoice?.paid_amount || 0);
+  const dueAmount = Math.max(0, Number(invoice?.due_amount ?? (total - alreadyPaid)));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -14,11 +20,25 @@ const MarkAsPaidModal = ({ invoice, onClose, onConfirm }) => {
       return;
     }
 
+    const parsedAmount = Number(amountPaid || 0);
+    if (isPartial) {
+      if (!parsedAmount || parsedAmount <= 0) {
+        toast.error("Enter valid partial payment amount");
+        return;
+      }
+      if (parsedAmount >= dueAmount) {
+        toast.error("Partial amount must be less than due amount");
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       await onConfirm({
         payment_mode: paymentMode,
-        utr: utr.trim() || null
+        utr: utr.trim() || null,
+        is_partial: isPartial,
+        amount_paid: isPartial ? parsedAmount : null
       });
       onClose();
     } catch (error) {
@@ -77,11 +97,53 @@ const MarkAsPaidModal = ({ invoice, onClose, onConfirm }) => {
             </p>
           </div>
 
+          <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <input
+                type="checkbox"
+                checked={isPartial}
+                onChange={(e) => setIsPartial(e.target.checked)}
+                className="rounded border-gray-300 text-[#25D366] focus:ring-[#25D366]"
+              />
+              Partial payment?
+            </label>
+
+            {isPartial && (
+              <div className="mt-3">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Amount Paid (₹)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={amountPaid}
+                  onChange={(e) => setAmountPaid(e.target.value)}
+                  placeholder="Enter partial amount"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#25D366] focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-1">Must be less than due amount ₹{dueAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+              </div>
+            )}
+          </div>
+
           <div className="bg-gray-50 p-4 rounded-lg">
             <div className="flex justify-between text-sm mb-2">
               <span className="text-gray-600">Invoice Total:</span>
               <span className="font-semibold text-gray-900">
-                ₹{invoice?.total?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}
+                ₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm mb-2">
+              <span className="text-gray-600">Already Paid:</span>
+              <span className="font-semibold text-gray-900">
+                ₹{alreadyPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Due Amount:</span>
+              <span className="font-semibold text-red-600">
+                ₹{dueAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </span>
             </div>
           </div>

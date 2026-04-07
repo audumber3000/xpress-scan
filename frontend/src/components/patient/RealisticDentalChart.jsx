@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import teethMapping from '../../assets/teeth_mapping.json';
-import ToothEditPopover from './ToothEditPopover';
-import ToothSurfaceMap from './ToothSurfaceMap';
+
 import { CONDITION_LABELS } from './dentalConstants';
 
 /**
@@ -17,20 +16,9 @@ const RealisticDentalChart = ({
     onNotesChange,
     editable = true
 }) => {
-    const [popoverState, setPopoverState] = useState({ visible: false, toothNum: null, x: 0, y: 0 });
-
     const handleToothClick = (toothNum, event) => {
-        onToothSelect(toothNum);
-        if (editable && event) {
-            const rect = event.currentTarget.getBoundingClientRect();
-            const parentRect = event.currentTarget.closest('.dental-chart-container').getBoundingClientRect();
-
-            setPopoverState({
-                visible: true,
-                toothNum: toothNum,
-                x: rect.left + rect.width / 2 - parentRect.left,
-                y: rect.top - parentRect.top
-            });
+        if (editable) {
+            onToothSelect(toothNum);
         }
     };
 
@@ -67,7 +55,7 @@ const RealisticDentalChart = ({
 
             <div className="relative group/chart">
                 {/* Fixed SVG Root - Using medical standard orientations with high-clearance gap */}
-                <svg viewBox="0 -40 1169 680" className="w-full h-auto drop-shadow-sm select-none">
+                <svg viewBox="0 -40 1169 500" className="w-full h-auto drop-shadow-sm select-none">
                     <defs>
                         <pattern id="hatchPattern" patternUnits="userSpaceOnUse" width="4" height="4" patternTransform="rotate(45)">
                             <line x1="0" y1="0" x2="0" y2="4" stroke="#94a3b8" strokeWidth="1" />
@@ -93,7 +81,7 @@ const RealisticDentalChart = ({
                         const isUpper = toothInt <= 16;
 
                         // Substantially increase space between arches
-                        const archGap = 150;
+                        const archGap = 40;
                         const yOffset = isUpper ? 0 : archGap;
 
                         const center = getToothCenter(paths);
@@ -180,40 +168,18 @@ const RealisticDentalChart = ({
                                     />
                                 )}
 
-                                {/* Surface Indicator Overlays */}
-                                {Object.entries(surfaces).map(([surf, cond]) => {
-                                    if (cond === 'caries') {
-                                        return (
-                                            <circle
-                                                key={surf}
-                                                cx={adjustedCenter.x + (surf === 'M' ? -15 : (surf === 'D' ? 15 : 0))}
-                                                cy={adjustedCenter.y + (surf === 'B' ? -15 : (surf === 'L' ? 15 : 0))}
-                                                r="4"
-                                                fill="#3f2b1d"
-                                                className="pointer-events-none"
-                                            />
-                                        );
-                                    }
-                                    return null;
-                                })}
 
-                                {/* Surface Map Selector */}
-                                <ToothSurfaceMap
-                                    toothNum={toothNum}
-                                    surfaces={surfaces}
-                                    onSurfaceSelect={(surface) => {
-                                        onToothSelect(toothInt);
-                                    }}
-                                    transform={`translate(${adjustedCenter.x - 36}, ${isUpper ? 165 : 300}) scale(1.2)`}
-                                    className="opacity-50 group-hover/tooth:opacity-100 transition-opacity"
-                                />
+
 
                                 {/* Medical Tooth Number */}
+                                {isSelected || statusColor ? (
+                                    <circle cx={adjustedCenter.x} cy={isUpper ? -19 : 436} r="10" fill={isSelected ? '#2a276e' : statusColor} />
+                                ) : null}
                                 <text
                                     x={adjustedCenter.x}
-                                    y={isUpper ? -15 : 550}
+                                    y={isUpper ? -15 : 440}
                                     textAnchor="middle"
-                                    className={`text-[13px] font-black tracking-tighter transition-colors duration-300 ${isSelected ? 'fill-[#2a276e]' : 'fill-gray-400'
+                                    className={`text-[13px] font-black tracking-tighter transition-colors duration-300 ${isSelected || statusColor ? 'fill-white' : 'fill-gray-400'
                                         }`}
                                 >
                                     {toothNum}
@@ -223,7 +189,7 @@ const RealisticDentalChart = ({
                     })}
 
                     {/* Midline Divider - Extended for the new height */}
-                    <line x1="584" y1="-20" x2="584" y2="600" stroke="#f1f5f9" strokeWidth="2" strokeDasharray="4 4" />
+                    <line x1="584" y1="-20" x2="584" y2="480" stroke="#f1f5f9" strokeWidth="2" strokeDasharray="4 4" />
                 </svg>
             </div>
 
@@ -233,21 +199,6 @@ const RealisticDentalChart = ({
                 <span>Lower Left (24-17)</span>
             </div>
 
-            {/* Popover for editing */}
-            {popoverState.visible && (
-                <ToothEditPopover
-                    toothNum={popoverState.toothNum}
-                    currentSurfaces={popoverState.toothNum ? (teethData[popoverState.toothNum]?.surfaces || {}) : {}}
-                    currentStatus={popoverState.toothNum ? (teethData[popoverState.toothNum]?.status || 'present') : 'present'}
-                    currentNotes={popoverState.toothNum ? (toothNotes[popoverState.toothNum] || '') : ''}
-                    position={{ top: popoverState.y, left: popoverState.x }}
-                    side={popoverState.toothNum <= 16 ? 'bottom' : 'top'}
-                    onClose={() => setPopoverState({ ...popoverState, visible: false })}
-                    onSurfaceConditionChange={onSurfaceConditionChange}
-                    onToothStatusChange={onToothStatusChange}
-                    onNotesChange={onNotesChange}
-                />
-            )}
 
             {/* Professional Status Legend */}
             <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-4 border-t border-gray-50 pt-8">
@@ -256,16 +207,16 @@ const RealisticDentalChart = ({
                     <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest leading-none">Selected</span>
                 </div>
                 <div className="flex items-center gap-3 bg-red-50/50 p-2.5 rounded-xl border border-red-100/50">
-                    <div className="w-4 h-4 rounded-lg bg-[#ef4444] shadow-sm"></div>
-                    <span className="text-[10px] font-bold text-red-700 uppercase tracking-widest leading-none">Missing</span>
+                    <div className="w-4 h-4 rounded-lg bg-[#ef4444] shadow-sm flex-shrink-0"></div>
+                    <span className="text-[10px] font-bold text-red-700 uppercase tracking-widest leading-none">Teeth Removed</span>
                 </div>
                 <div className="flex items-center gap-3 bg-blue-50/50 p-2.5 rounded-xl border border-blue-100/50">
-                    <div className="w-4 h-4 rounded-lg bg-[#3b82f6] shadow-sm"></div>
-                    <span className="text-[10px] font-bold text-blue-700 uppercase tracking-widest leading-none">Implant</span>
+                    <div className="w-4 h-4 rounded-lg bg-[#3b82f6] shadow-sm flex-shrink-0"></div>
+                    <span className="text-[10px] font-bold text-blue-700 uppercase tracking-widest leading-none">Treatment Taken Before</span>
                 </div>
                 <div className="flex items-center gap-3 bg-amber-50/50 p-2.5 rounded-xl border border-amber-100/50">
-                    <div className="w-4 h-4 rounded-lg bg-[#f59e0b] shadow-sm"></div>
-                    <span className="text-[10px] font-bold text-amber-700 uppercase tracking-widest leading-none">Root Canal</span>
+                    <div className="w-4 h-4 rounded-lg bg-[#f59e0b] shadow-sm flex-shrink-0"></div>
+                    <span className="text-[10px] font-bold text-amber-700 uppercase tracking-widest leading-none">Recommended To Take Treatment</span>
                 </div>
             </div>
         </div>

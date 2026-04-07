@@ -62,7 +62,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ payments }) => {
                                 styles.statusText,
                                 { color: payment.status === 'paid' ? colors.success : colors.warning }
                             ]}>
-                                {payment.status.toUpperCase()}
+                                {(payment.status || 'UNPAID').toUpperCase()}
                             </Text>
                         </View>
                     </View>

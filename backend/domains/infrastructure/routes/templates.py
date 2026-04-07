@@ -4,7 +4,7 @@ import os
 
 router = APIRouter()
 
-@router.get("/")
+@router.get("")
 def list_templates():
     """List all available report templates - Public endpoint"""
     try:

@@ -38,7 +38,18 @@ const Signup = () => {
         navigate("/dashboard");
       }
     } catch (error) {
-      setError(error.message || "Network error. Please try again.");
+      const errorMessage = error.response?.data?.detail || error.message || "Network error. Please try again.";
+      setError(errorMessage);
+      
+      if (errorMessage.includes('email-already-in-use')) {
+        toast.error(
+          <div>
+            This email is already registered. <Link to="/login" className="underline font-bold">Try logging in with Google</Link>
+          </div>
+        );
+      } else {
+        toast.error(errorMessage);
+      }
     }
     
     setLoading(false);

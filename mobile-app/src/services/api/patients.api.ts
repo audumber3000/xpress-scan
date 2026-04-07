@@ -17,6 +17,26 @@ export interface BillingRecord {
   status: 'paid' | 'pending' | 'overdue';
 }
 
+export interface PatientFile {
+  file_name: string;
+  file_path: string;
+  file_type: 'pdf' | 'image' | 'dicom' | 'xray' | 'other';
+  file_size: number;
+  uploaded_at: string;
+  notes?: string;
+}
+
+export interface XrayFile {
+  id: string;
+  file_name: string;
+  file_path: string;
+  file_size: number;
+  image_type: string;
+  capture_date: string;
+  notes?: string;
+  created_at: string;
+}
+
 export interface Patient {
   id: string;
   name: string;
@@ -41,7 +61,7 @@ export class PatientsApiService extends BaseApiService {
       console.log('👥 [API] Fetching patients from:', `${this.baseURL}/patients`);
 
       const headers = await this.getAuthHeaders();
-      const response = await fetch(`${this.baseURL}/patients`, {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/patients/`, {
         method: 'GET',
         headers,
       });
@@ -88,7 +108,7 @@ export class PatientsApiService extends BaseApiService {
       console.log('👥 [API] Fetching patient from:', `${this.baseURL}/patients/${patientId}`);
 
       const headers = await this.getAuthHeaders();
-      const response = await fetch(`${this.baseURL}/patients/${patientId}`, {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/patients/${patientId}`, {
         method: 'GET',
         headers,
       });
@@ -162,7 +182,7 @@ export class PatientsApiService extends BaseApiService {
       const requestBody = JSON.stringify(patientData);
       console.log('📤 [API] Request body:', requestBody);
 
-      const response = await fetch(`${this.baseURL}/patients`, {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/patients/`, {
         method: 'POST',
         headers: {
           ...headers,
@@ -192,7 +212,7 @@ export class PatientsApiService extends BaseApiService {
     try {
       console.log('👥 [API] Updating patient:', patientId);
       const headers = await this.getAuthHeaders();
-      const response = await fetch(`${this.baseURL}/patients/${patientId}`, {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/patients/${patientId}`, {
         method: 'PUT',
         headers: {
           ...headers,
@@ -218,7 +238,7 @@ export class PatientsApiService extends BaseApiService {
       console.log('🗑️ [API] Deleting patient:', patientId);
 
       const headers = await this.getAuthHeaders();
-      const response = await fetch(`${this.baseURL}/patients/${patientId}`, {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/patients/${patientId}`, {
         method: 'DELETE',
         headers: headers,
       });
@@ -235,6 +255,240 @@ export class PatientsApiService extends BaseApiService {
     } catch (error: any) {
       console.error('❌ [API] Error deleting patient:', error);
       throw error;
+    }
+  }
+
+  async getFiles(patientId: string): Promise<PatientFile[]> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await this.fetchWithTimeout(`${this.baseURL}/patients/${patientId}/files`, {
+        method: 'GET',
+        headers,
+      });
+      if (!response.ok) throw new Error('Failed to fetch patient files');
+      return await response.json();
+    } catch (error) {
+      console.error('Error getting patient files:', error);
+      return [];
+    }
+  }
+
+  async uploadFile(patientId: string, file: any, notes?: string): Promise<any> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const formData = new FormData();
+      formData.append('file', file);
+      if (notes) formData.append('notes', notes);
+
+      const response = await fetch(`${this.baseURL}/patients/${patientId}/files/upload`, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Accept': 'application/json',
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to upload file');
+      }
+      return await response.json();
+    } catch (error: any) {
+      console.error('Error uploading file:', error);
+      throw error;
+    }
+  }
+
+  async getXrays(patientId: string): Promise<XrayFile[]> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await this.fetchWithTimeout(`${this.baseURL}/patients/${patientId}/xrays`, {
+        method: 'GET',
+        headers,
+      });
+      if (!response.ok) throw new Error('Failed to fetch x-rays');
+      return await response.json();
+    } catch (error) {
+      console.error('Error getting x-rays:', error);
+      return [];
+    }
+  }
+
+  // ─── Case Papers ───────────────────────────────────────────
+  async getCasePapers(patientId: string): Promise<any[]> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await this.fetchWithTimeout(
+        `${this.baseURL}/clinical/case-papers/patient/${patientId}`,
+        { method: 'GET', headers },
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('❌ [API] getCasePapers error:', error);
+      return [];
+    }
+  }
+
+  async createCasePaper(data: any): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/clinical/case-papers`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const txt = await response.text();
+      throw new Error(`HTTP ${response.status}: ${txt}`);
+    }
+    return await response.json();
+  }
+
+  async updateCasePaper(id: string, data: any): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/clinical/case-papers/${id}`, {
+      method: 'PUT',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const txt = await response.text();
+      throw new Error(`HTTP ${response.status}: ${txt}`);
+    }
+    return await response.json();
+  }
+
+  // ─── Clinical Prescriptions ────────────────────────────────
+  async getClinicalPrescriptions(patientId: string): Promise<any[]> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await this.fetchWithTimeout(
+        `${this.baseURL}/clinical/prescriptions/patient/${patientId}`,
+        { method: 'GET', headers },
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('❌ [API] getClinicalPrescriptions error:', error);
+      return [];
+    }
+  }
+
+  async createClinicalPrescription(data: any): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/clinical/prescriptions`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  }
+
+  async updateClinicalPrescription(id: string, data: any): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/clinical/prescriptions/${id}`, {
+      method: 'PUT',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  }
+
+  // ─── Lab Orders ────────────────────────────────────────────
+  async getLabOrders(casePaperId: string): Promise<any[]> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await this.fetchWithTimeout(
+        `${this.baseURL}/clinical/lab-orders?case_paper_id=${casePaperId}`,
+        { method: 'GET', headers },
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('❌ [API] getLabOrders error:', error);
+      return [];
+    }
+  }
+
+  async createLabOrder(data: any): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/clinical/lab-orders`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  }
+
+  // ─── Patient Documents ─────────────────────────────────────
+  async getPatientDocuments(patientId: string, casePaperId?: string): Promise<any[]> {
+    try {
+      const headers = await this.getAuthHeaders();
+      let url = `${this.baseURL}/documents/patient/${patientId}`;
+      if (casePaperId) url += `?case_paper_id=${casePaperId}`;
+      const response = await this.fetchWithTimeout(url, { method: 'GET', headers });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('❌ [API] getPatientDocuments error:', error);
+      return [];
+    }
+  }
+
+  // ─── Invoices ──────────────────────────────────────────────
+  async getInvoices(patientId: string): Promise<any[]> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await this.fetchWithTimeout(
+        `${this.baseURL}/invoices?patient_id=${patientId}`,
+        { method: 'GET', headers },
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('❌ [API] getInvoices error:', error);
+      return [];
+    }
+  }
+
+  async createInvoice(data: any): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/invoices`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  }
+
+  async sendInvoiceWhatsApp(invoiceId: string): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(
+      `${this.baseURL}/invoices/${invoiceId}/send-whatsapp`,
+      { method: 'POST', headers },
+    );
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  }
+
+  // ─── Payments ──────────────────────────────────────────────
+  async getPayments(patientId: string): Promise<any[]> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await this.fetchWithTimeout(
+        `${this.baseURL}/payments?patient_id=${patientId}`,
+        { method: 'GET', headers },
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('❌ [API] getPayments error:', error);
+      return [];
     }
   }
 }

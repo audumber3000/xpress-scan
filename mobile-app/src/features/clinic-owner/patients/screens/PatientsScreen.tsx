@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking, StatusBar } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Linking, StatusBar } from 'react-native';
 import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Plus, Users } from 'lucide-react-native';
 import { patientsApiService, Patient } from '../../../../services/api/patients.api';
+import { useAuth } from '../../../../app/AuthContext';
 import { SearchBar } from '../components/SearchBar';
 import { FilterTabs } from '../components/FilterTabs';
 import { PatientsList } from '../components/PatientsList';
@@ -14,19 +15,34 @@ import { AppSkeleton } from '../../../../shared/components/Skeleton';
 
 interface PatientsScreenProps {
   navigation: any;
+  route?: any;
 }
 
-export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation }) => {
-  const [searchQuery, setSearchQuery] = useState('');
+interface UIPatient extends Patient {
+  initials: string;
+  avatarColor: string;
+}
+
+export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, route }) => {
+  const [searchQuery, setSearchQuery] = useState(route?.params?.initialSearchQuery || '');
   const [selectedTab, setSelectedTab] = useState('all');
-  const [patients, setPatients] = useState<any[]>([]);
+  const [patients, setPatients] = useState<UIPatient[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showAddPatient, setShowAddPatient] = useState(false);
 
+  const { backendUser } = useAuth();
+
   useEffect(() => {
     loadPatients();
-  }, []);
+  }, [backendUser?.clinic?.id]);
+
+  // If initialSearchQuery changes (e.g. navigating again with different query), update state
+  useEffect(() => {
+    if (route?.params?.initialSearchQuery) {
+      setSearchQuery(route.params.initialSearchQuery);
+    }
+  }, [route?.params?.initialSearchQuery]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -50,16 +66,12 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation }) =>
   const loadPatients = async () => {
     setLoading(true);
     try {
-      // Real API call
       const data = await patientsApiService.getPatients();
-
-      // Augment data with UI components (initials, colors)
       const augmentedData = data.map(p => ({
         ...p,
         initials: getInitials(p.name),
         avatarColor: getAvatarColor()
       }));
-
       setPatients(augmentedData);
     } catch (err: any) {
       console.error('Error loading patients:', err);
@@ -73,64 +85,48 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation }) =>
   const filterPatients = () => {
     let filtered = patients;
 
-    // Filter by tab
     if (selectedTab === 'active') {
       filtered = filtered.filter(p => p.status === 'Active');
     } else if (selectedTab === 'inactive') {
       filtered = filtered.filter(p => p.status === 'Inactive');
     }
 
-    // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(p =>
         p.name.toLowerCase().includes(query) ||
-        p.phone.includes(query) ||
-        p.id.includes(query)
+        (p.phone && p.phone.includes(query)) ||
+        (p.id && p.id.toString().includes(query))
       );
     }
 
     return filtered;
   };
 
-  const handlePatientPress = (patient: any) => {
+  const handlePatientPress = (patient: UIPatient) => {
     navigation.navigate('PatientDetails', { patientId: patient.id });
   };
 
-  const handlePhonePress = (patient: any) => {
-    const phoneNumber = patient.phone.replace(/[^0-9]/g, '');
-    Linking.openURL(`tel:${phoneNumber}`);
-  };
-
-  const handleDeletePatient = async (patient: any) => {
-    setPatients(prevPatients => prevPatients.filter(p => p.id !== patient.id));
-    // Real API call
-    try {
-      await patientsApiService.deletePatient(patient.id);
-      loadPatients();
-    } catch (error) {
-      console.error('Error deleting patient:', error);
-      showAlert('Error', 'Failed to delete patient');
+  const handleCallPatient = (patient: UIPatient) => {
+    if (patient.phone) {
+      Linking.openURL(`tel:${patient.phone}`);
+    } else {
+      showAlert('Error', 'Patient has no phone number');
     }
   };
 
-  const handleAddPatient = () => {
-    setShowAddPatient(true);
+  const handleDeletePatient = (patient: UIPatient) => {
+    showAlert('Delete Patient', `Are you sure you want to delete ${patient.name}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => {} } // Delete logic not implemented yet
+    ]);
   };
 
-  const handlePatientAdded = () => {
-    loadPatients();
-  };
-
-  const filteredPatients = filterPatients();
-  const allCount = patients.length;
-  const activeCount = patients.filter(p => p.status === 'Active').length;
-  const inactiveCount = patients.filter(p => p.status === 'Inactive').length;
-
+  // Prepare tabs with counts
   const tabs = [
-    { label: 'All', count: allCount, value: 'all' },
-    { label: 'Active', count: activeCount, value: 'active' },
-    { label: 'Inactive', count: inactiveCount, value: 'inactive' },
+    { key: 'all', label: 'All Patients', value: 'all', count: patients.length },
+    { key: 'active', label: 'Active', value: 'active', count: patients.filter(p => p.status === 'Active').length },
+    { key: 'inactive', label: 'Inactive', value: 'inactive', count: patients.filter(p => p.status === 'Inactive').length },
   ];
 
   return (
@@ -140,46 +136,56 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation }) =>
         variant="primary"
         title="Patients"
         titleIcon={<Users size={22} />}
+        onBackPress={navigation.canGoBack() ? () => navigation.goBack() : undefined}
       />
 
-      {/* Search Bar */}
       <SearchBar
         value={searchQuery}
         onChangeText={setSearchQuery}
+        placeholder="Search by name, ID or phone"
+        autoFocus={route?.params?.fromHomeSearch || !!route?.params?.initialSearchQuery}
       />
 
-      {/* Filter Tabs */}
       <FilterTabs
         tabs={tabs}
         selectedTab={selectedTab}
         onTabChange={setSelectedTab}
       />
 
-      {/* Patients List */}
-      <PatientsList
-        patients={filteredPatients}
-        onPatientPress={handlePatientPress}
-        onPhonePress={handlePhonePress}
-        onDelete={handleDeletePatient}
-        refreshing={refreshing}
-        onRefresh={onRefresh}
-        loading={loading}
-      />
+      {loading && !refreshing ? (
+        <View style={{ padding: 20 }}>
+          <AppSkeleton show={true} width="100%" height={80} radius={12} />
+          <View style={{ height: 12 }} />
+          <AppSkeleton show={true} width="100%" height={80} radius={12} />
+          <View style={{ height: 12 }} />
+          <AppSkeleton show={true} width="100%" height={80} radius={12} />
+        </View>
+      ) : (
+        <PatientsList
+          patients={filterPatients()}
+          onPatientPress={handlePatientPress}
+          onPhonePress={handleCallPatient}
+          onDelete={handleDeletePatient}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+        />
+      )}
 
-      {/* Floating Add Button */}
+      {/* Floating Action Button */}
       <TouchableOpacity
         style={styles.fab}
-        onPress={handleAddPatient}
-        activeOpacity={0.8}
+        onPress={() => setShowAddPatient(true)}
       >
-        <Plus size={28} color="#FFFFFF" />
+        <Plus color="#FFFFFF" size={24} />
       </TouchableOpacity>
 
-      {/* Add Patient Bottom Sheet */}
       <AddPatientScreen
         visible={showAddPatient}
         onClose={() => setShowAddPatient(false)}
-        onPatientAdded={handlePatientAdded}
+        onPatientAdded={() => {
+          setShowAddPatient(false);
+          loadPatients();
+        }}
       />
     </SafeAreaView>
   );
@@ -192,18 +198,18 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: 'absolute',
-    bottom: 80,
     right: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    bottom: 20,
     backgroundColor: colors.primary,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
 });

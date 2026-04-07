@@ -1,187 +1,126 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from 'react';
+import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useHeader } from '../contexts/HeaderContext';
-import { 
-  Calendar, 
-  Users, 
-  DollarSign, 
-  Monitor, 
-  Settings, 
-  Lock,
-  Briefcase,
-  Building2,
-  MessageSquare,
-  UserPlus
-} from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { Building2, Users, Settings as SettingsIcon, FileText, Bell, CreditCard, PlusCircle, Activity, ChevronDown, CheckCircle2, DollarSign, Stethoscope, Shield, Calendar } from 'lucide-react';
 
 const AdminHub = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { setTitle } = useHeader();
+  const { user } = useAuth();
   
   React.useEffect(() => {
     setTitle && setTitle('Admin Hub');
   }, [setTitle]);
 
-  const adminSections = [
-    {
-      title: 'Daily Admin',
-      modules: [
-        {
-          id: 'attendance',
-          title: 'Attendance',
-          icon: Calendar,
-          iconColor: '#2D9596',
-          backgroundColor: '#E0F2F2',
-          path: '/admin/attendance'
-        },
-        {
-          id: 'staff',
-          title: 'Staff',
-          icon: Users,
-          iconColor: '#2D9596',
-          backgroundColor: '#E0F2F2',
-          path: '/admin/staff'
-        },
-        {
-          id: 'clinic',
-          title: 'Clinic Info',
-          icon: Building2,
-          iconColor: '#2D9596',
-          backgroundColor: '#E0F2F2',
-          path: '/admin/clinic'
-        }
-      ]
-    },
-    {
-      title: 'Billing & Finance',
-      modules: [
-        {
-          id: 'treatments',
-          title: 'Treatments',
-          icon: DollarSign,
-          iconColor: '#10B981',
-          backgroundColor: '#D1FAE5',
-          path: '/admin/treatments'
-        },
-        {
-          id: 'subscription',
-          title: 'Subscription',
-          icon: Monitor,
-          iconColor: '#8B5CF6',
-          backgroundColor: '#EDE9FE',
-          path: '/subscription'
-        }
-      ]
-    },
-    {
-      title: 'Communication',
-      modules: [
-        {
-          id: 'templates',
-          title: 'Templates',
-          icon: MessageSquare,
-          iconColor: '#2D9596',
-          backgroundColor: '#E0F2F2',
-          path: '/admin/templates'
-        },
-        {
-          id: 'doctors',
-          title: 'Ref. Doctors',
-          icon: UserPlus,
-          iconColor: '#2D9596',
-          backgroundColor: '#E0F2F2',
-          path: '/admin/doctors'
-        }
-      ]
-    },
-    {
-      title: 'System',
-      modules: [
-        {
-          id: 'permissions',
-          title: 'Permissions',
-          icon: Lock,
-          iconColor: '#2D9596',
-          backgroundColor: '#E0F2F2',
-          path: '/admin/permissions'
-        }
-      ]
-    }
-  ];
+  const getInitialOpenSection = () => {
+    if (location.pathname.includes('/admin/clinic')) return 'branches';
+    if (location.pathname.includes('/admin/practice-settings')) return 'practice_settings';
+    return '';
+  };
+  const [openSection, setOpenSection] = useState(getInitialOpenSection);
+  const userBranches = (user?.clinics?.length > 0 ? user.clinics : [user?.clinic]).filter(Boolean);
+
+  const toggleSection = (id) => {
+    setOpenSection(openSection === id ? '' : id);
+  };
+
+  // Helper for Sidebar items
+  const SidebarItem = ({ id, icon: Icon, label, hasChildren, path, activePath }) => {
+    const isExpanded = openSection === id;
+    const isActive = path
+      ? location.pathname.startsWith(path)
+      : activePath
+        ? location.pathname.includes(activePath)
+        : false;
+
+    return (
+      <div className="mb-0.5">
+        <button
+          onClick={() => {
+              if (path && !hasChildren) {
+                navigate(path);
+              }
+              if (hasChildren) toggleSection(id);
+          }}
+          className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 ${isActive ? 'bg-gradient-to-r from-[#29828a]/10 to-transparent border-l-4 border-[#29828a] text-[#29828a] font-semibold' : 'text-gray-600 hover:bg-gray-50 border-l-4 border-transparent hover:border-gray-200'}`}
+        >
+          <div className="flex items-center gap-3">
+              <Icon size={20} className={isActive ? 'text-[#29828a]' : 'text-gray-500'} />
+              <span className="font-medium tracking-wide text-[14px]">{label}</span>
+          </div>
+          {hasChildren && (
+              <ChevronDown size={16} className={`transition-transform duration-300 text-gray-400 ${isExpanded ? 'rotate-180' : ''}`} />
+          )}
+        </button>
+      </div>
+    );
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header with Gradient - No rounded corners, with decorative dots */}
-      <div className="bg-gradient-to-br from-[#29828a] to-[#1F6B72] px-6 py-8 mb-6 relative overflow-hidden">
-        {/* Decorative dot pattern on right side */}
-        <div 
-          className="absolute right-0 top-0 bottom-0 w-64 opacity-20 pointer-events-none"
-          style={{
-            backgroundImage: 'radial-gradient(circle, rgba(255, 255, 255, 0.6) 2px, transparent 2px)',
-            backgroundSize: '20px 20px'
-          }}
-        ></div>
+    <div className="flex h-screen w-full bg-[#f8fafc] overflow-hidden">
+      {/* Secondary Sidebar Navigation */}
+      <div className="w-72 bg-white border-r border-gray-200 flex flex-col h-full shrink-0 shadow-sm z-10">
+        <div className="p-6 border-b border-gray-100/80 mt-1">
+          <h2 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
+            <SettingsIcon size={22} className="text-[#29828a]" />
+            Admin Hub
+          </h2>
+          <p className="text-xs text-gray-500 mt-1 uppercase tracking-wider font-semibold ml-8">Configuration</p>
+        </div>
         
-        <div className="max-w-7xl mx-auto relative z-10">
-          {/* Clinic Info */}
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <h1 className="text-3xl font-bold text-white mb-2">BrightSmile Clinic</h1>
-              <p className="text-white/90 text-base mb-3">📍 London, Marylebone NW1</p>
-              <div className="flex gap-2">
-                <div className="flex items-center gap-2 bg-white/25 px-3 py-1.5 rounded-xl">
-                  <div className="w-2 h-2 rounded-full bg-green-400"></div>
-                  <span className="text-white text-sm font-semibold">Open</span>
-                </div>
-                <div className="flex items-center gap-2 bg-white/25 px-3 py-1.5 rounded-xl">
-                  <Users size={14} className="text-white" />
-                  <span className="text-white text-sm font-semibold">12 Staff</span>
-                </div>
-              </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-1 custom-scrollbar">
+          
+          <SidebarItem id="branches" icon={Building2} label="Branches" hasChildren activePath="/admin/clinic" />
+          {openSection === 'branches' && (
+            <div className="ml-9 border-l-2 border-gray-100 pl-3 space-y-1.5 mb-3 mt-1">
+               {userBranches.map((branch) => (
+                 <button key={branch.id} onClick={() => navigate('/admin/clinic')} className={`w-full text-left px-3 py-2 text-[13px] rounded-lg transition-colors ${location.pathname.includes('/clinic') && user?.clinic?.id === branch.id ? 'text-[#29828a] font-semibold bg-[#29828a]/5' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}>
+                   {branch.name}
+                 </button>
+               ))}
+               <button onClick={() => navigate('/add-clinic')} className="w-full text-left px-3 py-2 text-[13px] rounded-lg text-[#29828a] font-medium flex items-center gap-2 hover:bg-gray-50">
+                 <PlusCircle size={14} /> Add New Branch
+               </button>
             </div>
-            <div className="relative">
-              <div className="w-16 h-16 rounded-full bg-white/30 flex items-center justify-center">
-                <Briefcase size={32} className="text-white" />
-              </div>
-              <div className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-green-400 border-3 border-white"></div>
+          )}
+
+          <SidebarItem id="team" icon={Users} label="Staff" path="/admin/staff" />
+
+          <SidebarItem id="practice_settings" icon={Activity} label="Practice Settings" hasChildren activePath="/admin/practice-settings" />
+          {openSection === 'practice_settings' && (
+            <div className="ml-9 border-l-2 border-gray-100 pl-3 space-y-1.5 mb-3 mt-1 max-h-[35vh] overflow-y-auto custom-scrollbar">
+               {['Procedures', 'Chief Complaints', 'Medical History', 'Clinical Advice', 'On Examination', 'Dental History', 'Diagnosis', 'Allergies', 'Ongoing Medication', 'Additional Fees'].map((tab) => {
+                  const slug = tab.toLowerCase().replace(/\s+/g, '-');
+                  const isActive = location.pathname.includes(`/practice-settings/${slug}`);
+                  return (
+                    <button 
+                      key={tab} 
+                      onClick={() => navigate(`/admin/practice-settings/${slug}`)}
+                      className={`w-full text-left px-3 py-2 text-[13px] rounded-lg transition-colors ${isActive ? 'text-[#29828a] font-semibold bg-[#29828a]/5' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
+                    >
+                      {tab}
+                    </button>
+                  );
+               })}
             </div>
-          </div>
+          )}
+
+          <SidebarItem id="templates" icon={FileText} label="Templates" path="/admin/templates-manager" />
+          <SidebarItem id="notifications" icon={Bell} label="Notifications" path="/admin/notifications" />
+          <SidebarItem id="subscription" icon={CreditCard} label="Subscription" path="/admin/subscription" />
         </div>
       </div>
 
-      {/* Admin Hub Section - Organized by categories */}
-      <div className="max-w-7xl mx-auto px-6 space-y-8">
-        {adminSections.map((section) => (
-          <div key={section.title}>
-            {/* Section Header */}
-            <div className="flex items-center mb-4">
-              <h2 className="text-lg font-bold text-gray-900">{section.title}</h2>
-              <div className="flex-1 ml-4 h-px bg-gray-200"></div>
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+        <div className="flex-1 overflow-y-auto w-full h-full relative z-10 bg-[#f8fafc]">
+            {/* The routed dynamic sub-component renders here */}
+            <div className="w-full min-h-full">
+               <Outlet />
             </div>
-
-            {/* Module Cards Grid - Very small compact cards */}
-            <div className="grid grid-cols-5 md:grid-cols-8 lg:grid-cols-10 gap-2">
-              {section.modules.map((module) => {
-                const Icon = module.icon;
-                return (
-                  <button
-                    key={module.id}
-                    onClick={() => navigate(module.path)}
-                    className="group relative aspect-square rounded-lg p-2 flex flex-col items-center justify-center transition-all hover:scale-105 hover:shadow-lg"
-                    style={{ backgroundColor: module.backgroundColor }}
-                  >
-                    <div className="w-8 h-8 rounded-md bg-white/50 flex items-center justify-center mb-1 group-hover:bg-white/70 transition-colors">
-                      <Icon size={20} style={{ color: module.iconColor }} strokeWidth={2.5} />
-                    </div>
-                    <p className="text-[11px] font-semibold text-gray-700 text-center leading-tight">
-                      {module.title}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+        </div>
       </div>
     </div>
   );

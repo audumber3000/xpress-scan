@@ -10,6 +10,9 @@ export { default as PatientBilling } from './PatientBilling';
 export { default as PatientInfo } from './PatientInfo';
 export { default as PatientPrescriptions } from './PatientPrescriptions';
 export { default as PatientFilesTab } from './PatientFilesTab';
+export { default as CasePapersTab } from './CasePapersTab';
+export { default as ToothRightDrawer } from './ToothRightDrawer';
+export { default as PatientVisitHistory } from './PatientVisitHistory';
 
 // Constants and utilities
 export * from './dentalConstants';

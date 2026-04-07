@@ -10,7 +10,7 @@ from schemas import AttendanceOut, AttendanceCreate, AttendanceUpdate
 
 router = APIRouter()
 
-@router.get("/", response_model=List[AttendanceOut])
+@router.get("", response_model=List[AttendanceOut])
 def get_attendance(
     start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
@@ -123,6 +123,8 @@ def get_attendance_week(
             Attendance.date < end_date
         ).all()
         
+        today = datetime.utcnow().date()
+
         # Build attendance map: {user_id: {date: {status, reason}}}
         attendance_map = {}
         for record in attendance_records:
@@ -141,10 +143,11 @@ def get_attendance_week(
             for day_offset in range(7):
                 current_date = start_date + timedelta(days=day_offset)
                 date_key = current_date.strftime("%Y-%m-%d")
-                employee_attendance[date_key] = attendance_map.get(employee.id, {}).get(date_key, {
-                    'status': 'on_time',
-                    'reason': ''
-                })
+                # Future dates: return None so the UI shows them as unmarked
+                if current_date.date() > today:
+                    employee_attendance[date_key] = None
+                else:
+                    employee_attendance[date_key] = attendance_map.get(employee.id, {}).get(date_key, {})
             
             employees_data.append({
                 'id': employee.id,
@@ -163,7 +166,7 @@ def get_attendance_week(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching week attendance: {str(e)}")
 
-@router.post("/", response_model=AttendanceOut, status_code=201)
+@router.post("", response_model=AttendanceOut, status_code=201)
 def create_attendance(
     attendance: AttendanceCreate,
     db: Session = Depends(get_db),

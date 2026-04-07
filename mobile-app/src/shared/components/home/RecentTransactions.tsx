@@ -9,6 +9,9 @@ import {
 import { ArrowUpRight, ArrowDownLeft } from 'lucide-react-native';
 import { colors } from '../../constants/colors';
 import { Transaction } from '../../../services/api/transactions.api';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../../app/AppNavigator';
 import { AppSkeleton } from '../Skeleton';
 
 interface RecentTransactionsProps {
@@ -23,10 +26,18 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   loading = false,
 }) => {
   const getInitials = (name: string) => {
-    const names = name.split(' ');
-    return names.length > 1
-      ? `${names[0][0]}${names[1][0]}`.toUpperCase()
-      : name.substring(0, 2).toUpperCase();
+    if (!name) return '??';
+    const names = name.trim().split(/\s+/);
+    if (names.length > 1 && names[0][0] && names[1][0]) {
+      return `${names[0][0]}${names[1][0]}`.toUpperCase();
+    }
+    return (name || '??').substring(0, 2).toUpperCase();
+  };
+
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  const handleItemPress = (transaction: Transaction) => {
+    navigation.navigate('InvoiceDetails', { invoiceId: transaction.id });
   };
 
   const getStatusColor = (status: string) => {
@@ -43,7 +54,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   };
 
   const formatAmount = (amount: number) => {
-    return `$${amount.toLocaleString()}`;
+    return `₹${amount.toLocaleString()}`;
   };
 
 
@@ -60,54 +71,73 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
         {loading ? (
           <>
             {[1, 2, 3].map((i) => (
-              <View key={i} style={styles.transactionCard}>
-                <AppSkeleton width={60} height={60} radius={30} />
-                <View style={[styles.transactionInfo, { marginLeft: 16 }]}>
+              <View key={i} style={styles.skeletonItem}>
+                <AppSkeleton width={50} height={50} radius={25} />
+                <View style={[styles.transactionInfo, { marginLeft: 12 }]}>
                   <AppSkeleton width={120} height={18} radius={4} />
                   <View style={{ height: 8 }} />
                   <AppSkeleton width={80} height={14} radius={4} />
                 </View>
                 <View style={styles.transactionRight}>
                   <AppSkeleton width={60} height={18} radius={4} />
-                  <View style={{ height: 8 }} />
-                  <AppSkeleton width={50} height={14} radius={4} />
                 </View>
               </View>
             ))}
           </>
         ) : transactions.length > 0 ? (
-          transactions.slice(0, 5).map((transaction) => {
-            const statusColor = getStatusColor(transaction.status);
+          transactions.slice(0, 5).map((transaction, index) => {
             const statusBgColor = transaction.status.toLowerCase() === 'completed' || transaction.status.toLowerCase() === 'success'
               ? '#E6F9F1'
               : '#FFFBEB';
             const statusTextColor = transaction.status.toLowerCase() === 'completed' || transaction.status.toLowerCase() === 'success'
               ? '#10B981'
               : '#F59E0B';
+            
+            const initials = getInitials(transaction.patientName || '??');
 
             return (
-              <View key={transaction.id} style={styles.transactionCard}>
-                <View style={styles.iconCircle}>
-                  <ArrowDownLeft size={28} color="#2E2A85" strokeWidth={2.5} />
-                </View>
-                <View style={styles.transactionInfo}>
-                  <Text style={styles.transactionName}>
-                    {transaction.patientName || transaction.description}
-                  </Text>
-                  <Text style={styles.transactionDate}>
-                    {transaction.time || '10:30 AM'} • {transaction.treatment || 'Treatment'}
-                  </Text>
-                </View>
-                <View style={styles.transactionRight}>
-                  <Text style={styles.transactionAmount}>
-                    {formatAmount(transaction.amount)}
-                  </Text>
-                  <View style={[styles.statusBadge, { backgroundColor: statusBgColor }]}>
-                    <Text style={[styles.statusText, { color: statusTextColor }]}>
-                      {transaction.status.toUpperCase()}
+              <View key={transaction.id} style={styles.container}>
+                <TouchableOpacity 
+                  style={styles.rowContent} 
+                  activeOpacity={0.7}
+                  onPress={() => handleItemPress(transaction)}
+                >
+                  {/* Avatar with initials and small arrow indicator */}
+                  <View style={styles.avatarContainer}>
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>{initials}</Text>
+                    </View>
+                    <View style={styles.iconIndicator}>
+                      <ArrowDownLeft size={12} color="#FFFFFF" strokeWidth={3} />
+                    </View>
+                  </View>
+
+                  {/* Transaction Info */}
+                  <View style={styles.transactionInfo}>
+                    <Text style={styles.transactionName} numberOfLines={1}>
+                      {transaction.patientName || transaction.description}
+                    </Text>
+                    <Text style={styles.transactionDate}>
+                      {transaction.time || '10:30 AM'} • {transaction.treatment || 'Treatment'}
                     </Text>
                   </View>
-                </View>
+
+                  {/* Right Side: Amount and Status */}
+                  <View style={styles.transactionRight}>
+                    <Text style={styles.transactionAmount}>
+                      {formatAmount(transaction.amount)}
+                    </Text>
+                    <View style={[styles.statusBadge, { backgroundColor: statusBgColor }]}>
+                      <Text style={[styles.statusText, { color: statusTextColor }]}>
+                        {(transaction.status || 'pending').toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+                {/* Separator - don't show after last item */}
+                {index < Math.min(transactions.length, 5) - 1 && (
+                  <View style={styles.separator} />
+                )}
               </View>
             );
           })
@@ -121,7 +151,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
 
 const styles = StyleSheet.create({
   section: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 0, // Fill width to match patient list
     marginTop: 32,
     marginBottom: 24,
   },
@@ -129,59 +159,73 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
+    paddingHorizontal: 20,
   },
   sectionTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#111827',
   },
   viewAllText: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#2E2A85',
     fontWeight: '600',
   },
-  loadingContainer: {
-    paddingVertical: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#6B7280',
-  },
   transactionsList: {
-    gap: 16,
+    backgroundColor: '#FFFFFF',
   },
-  transactionCard: {
+  container: {
+    backgroundColor: '#FFFFFF',
+  },
+  rowContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#EFEEFC',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
-  iconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  avatarContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  avatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: '#F3F4FE',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+  },
+  avatarText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2E2A85',
+  },
+  iconIndicator: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#10B981',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   transactionInfo: {
     flex: 1,
+    marginRight: 8,
   },
   transactionName: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '600',
     color: '#111827',
     marginBottom: 4,
   },
   transactionDate: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#9CA3AF',
     fontWeight: '500',
   },
@@ -189,25 +233,39 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   transactionAmount: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#111827',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   statusText: {
-    fontSize: 12,
+    fontSize: 9,
     fontWeight: 'bold',
     letterSpacing: 0.5,
+  },
+  separator: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+    marginLeft: 82, // Alignment with text (avatar width 50 + margin 12 + padding 20)
+  },
+  skeletonItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
   emptyText: {
     fontSize: 15,
     color: '#6B7280',
     textAlign: 'center',
     paddingVertical: 40,
+    paddingHorizontal: 20,
   },
 });

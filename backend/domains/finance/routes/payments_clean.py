@@ -17,7 +17,7 @@ router = APIRouter()
 
 
 @router.post(
-    "/",
+    "",
     response_model=PaymentResponseDTO,
     status_code=status.HTTP_201_CREATED,
     summary="Process a payment",
@@ -85,7 +85,7 @@ async def get_patient_payments(
 
 
 @router.get(
-    "/",
+    "",
     response_model=List[PaymentResponseDTO],
     summary="Get clinic payments",
     description="Retrieve payments for the current clinic with optional filters"

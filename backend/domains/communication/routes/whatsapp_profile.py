@@ -13,8 +13,8 @@ from pydantic import BaseModel
 
 router = APIRouter(tags=["WhatsApp Profile"])
 
-# WhatsApp Service URL (Node.js service)
-WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://localhost:3001")
+# MolarPlus Nexus Service URL
+NEXUS_SERVICES_URL = os.getenv("NEXUS_SERVICES_URL", "http://localhost:8001")
 
 
 # Pydantic schemas
@@ -36,7 +36,7 @@ async def set_status(
     """Set WhatsApp status"""
     try:
         response = requests.post(
-            f"{WHATSAPP_SERVICE_URL}/api/status/set/{current_user.id}",
+            f"{NEXUS_SERVICES_URL}/api/status/set/{current_user.id}",
             json={"status": request.status},
             timeout=60
         )
@@ -65,7 +65,7 @@ async def get_user_status(
     """Get status of a specific user"""
     try:
         response = requests.get(
-            f"{WHATSAPP_SERVICE_URL}/api/status/user/{current_user.id}/{phone}",
+            f"{NEXUS_SERVICES_URL}/api/status/user/{current_user.id}/{phone}",
             timeout=30
         )
         
@@ -93,7 +93,7 @@ async def update_profile_picture(
     """Update profile picture"""
     try:
         response = requests.post(
-            f"{WHATSAPP_SERVICE_URL}/api/profile/picture/{current_user.id}",
+            f"{NEXUS_SERVICES_URL}/api/profile/picture/{current_user.id}",
             json={
                 "image": request.image,
                 "imageType": request.imageType
@@ -125,7 +125,7 @@ async def get_profile_picture(
     """Get profile picture of a user"""
     try:
         response = requests.get(
-            f"{WHATSAPP_SERVICE_URL}/api/profile/picture/{current_user.id}/{phone}",
+            f"{NEXUS_SERVICES_URL}/api/profile/picture/{current_user.id}/{phone}",
             timeout=30
         )
         

@@ -9,7 +9,7 @@ from datetime import datetime
 
 router = APIRouter()
 
-@router.get("/", response_model=List[dict])
+@router.get("", response_model=List[dict])
 def get_user_devices(
     user_id: Optional[int] = None,
     db: Session = Depends(get_db),

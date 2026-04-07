@@ -20,8 +20,8 @@ from database import get_db
 from models import ScheduledMessage, Patient
 from sqlalchemy.orm import Session
 
-# WhatsApp Service URL
-WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://localhost:3001")
+# WhatsApp Service URL (MolarPlus Nexus)
+NEXUS_SERVICES_URL = os.getenv("NEXUS_SERVICES_URL", "http://localhost:8001")
 
 def send_scheduled_messages():
     """Check for and send scheduled messages that are due"""
@@ -67,7 +67,7 @@ def send_scheduled_messages():
                         
                         # Send via WhatsApp service
                         response = requests.post(
-                            f"{WHATSAPP_SERVICE_URL}/api/send/{scheduled_msg.user_id}",
+                            f"{NEXUS_SERVICES_URL}/api/send/{scheduled_msg.user_id}",
                             json={
                                 "phone": clean_phone,
                                 "message": scheduled_msg.message
@@ -113,7 +113,7 @@ def send_scheduled_messages():
 def run_scheduler():
     """Run scheduler loop - checks every minute"""
     print("WhatsApp Scheduler started. Checking for scheduled messages every minute...")
-    print(f"Service URL: {WHATSAPP_SERVICE_URL}")
+    print(f"Service URL: {NEXUS_SERVICES_URL}")
     
     while True:
         try:

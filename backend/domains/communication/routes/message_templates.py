@@ -9,7 +9,7 @@ from models import User
 
 router = APIRouter()
 
-@router.get("/", response_model=List[MessageTemplateOut])
+@router.get("", response_model=List[MessageTemplateOut])
 def get_message_templates(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -44,7 +44,7 @@ def get_message_template(
     
     return template
 
-@router.post("/", response_model=MessageTemplateOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=MessageTemplateOut, status_code=status.HTTP_201_CREATED)
 def create_message_template(
     template: MessageTemplateCreate,
     db: Session = Depends(get_db),

@@ -14,13 +14,17 @@ import { SettingsMenuItem } from '../components/SettingsMenuItem';
 import { colors } from '../../../../shared/constants/colors';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
 import { AppSkeleton } from '../../../../shared/components/Skeleton';
+import { ClinicSwitcherSheet } from '../../../../shared/components/ClinicSwitcherSheet';
+import { ClinicInfo } from '../../../../services/api/admin.api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface ProfileScreenProps {
   navigation: any;
 }
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
-  const { user, logout, isLoading } = useAuth();
+  const { user, backendUser, logout, isLoading, switchBranch } = useAuth();
+  const [showClinicSwitcher, setShowClinicSwitcher] = useState(false);
 
   const handleEditProfile = () => {
     showAlert('Edit Profile', 'Edit profile functionality coming soon!');
@@ -35,7 +39,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
   };
 
   const handleSubscription = () => {
-    showAlert('Subscription & Billing', 'Subscription management coming soon!');
+    navigation.navigate('Admin');
+    navigation.navigate('Subscription');
   };
 
   const handleLogout = () => {
@@ -43,6 +48,15 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Logout', style: 'destructive', onPress: () => logout() },
     ]);
+  };
+
+  const handleClinicSelected = async (clinic: ClinicInfo) => {
+    try {
+      await switchBranch(clinic.id);
+      setShowClinicSwitcher(false);
+    } catch (error) {
+      console.error('Error switching clinic:', error);
+    }
   };
 
   const handleTestNotification = async () => {
@@ -99,8 +113,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
         <AppSkeleton show={isLoading} width="100%" height={200} radius={0}>
           <ProfileHeader
             name={userName}
-            role="LEAD DENTIST"
-            clinic="Clino Health"
+            role={backendUser?.role?.toUpperCase() || "LEAD DENTIST"}
+            clinic={backendUser?.clinic?.name || ""}
             onEditPress={handleEditProfile}
           />
         </AppSkeleton>
@@ -118,13 +132,22 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
           <View style={styles.settingsCard}>
             {/* Clinic Management */}
             <Text style={styles.sectionTitle}>CLINIC MANAGEMENT</Text>
-            <SettingsMenuItem
+             <SettingsMenuItem
               icon={Building2}
               iconColor={colors.primary}
               iconBgColor={colors.primaryBg}
               title="Clinic Information"
               subtitle="Address, hours & contact"
               onPress={handleClinicInfo}
+            />
+            <View style={styles.separator} />
+            <SettingsMenuItem
+              icon={Building2}
+              iconColor={colors.primary}
+              iconBgColor={colors.primaryBg}
+              title="Switch Branch"
+              subtitle={`Current: ${backendUser?.clinic?.name || 'Main'}`}
+              onPress={() => setShowClinicSwitcher(true)}
             />
             <View style={styles.separator} />
             <SettingsMenuItem
@@ -144,20 +167,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
               iconBgColor={colors.primaryBg}
               title="Subscription & Billing"
               subtitle="Manage plans & invoices"
-              badge="PRO"
-              badgeColor="#10B981"
+              badge={backendUser?.clinic?.subscription_plan === 'professional' ? "PRO" : "FREE"}
+              badgeColor={backendUser?.clinic?.subscription_plan === 'professional' ? "#10B981" : "#F59E0B"}
               onPress={handleSubscription}
-            />
-
-            {/* Developer Tools */}
-            <Text style={[styles.sectionTitle, styles.sectionTitleSpacing]}>DEVELOPER TOOLS</Text>
-            <SettingsMenuItem
-              icon={BellRing}
-              iconColor="#8B5CF6"
-              iconBgColor="#F3E8FF"
-              title="Test Local Notification"
-              subtitle="Send a test notification"
-              onPress={handleTestNotification}
             />
           </View>
         )}
@@ -180,6 +192,12 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      <ClinicSwitcherSheet
+        isVisible={showClinicSwitcher}
+        onClose={() => setShowClinicSwitcher(false)}
+        onClinicSelected={handleClinicSelected}
+      />
     </SafeAreaView>
   );
 };

@@ -3,7 +3,8 @@ Clinic repository implementation
 """
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_, func
+from sqlalchemy import and_, func, or_
+from datetime import datetime
 from models import Clinic, User
 from core.interfaces import ClinicRepositoryProtocol
 from domains.infrastructure.repositories.base_repository import BaseRepository
@@ -43,16 +44,43 @@ class ClinicRepository(BaseRepository[Clinic], ClinicRepositoryProtocol):
             User.clinic_id == clinic_id
         ).scalar()
 
+        # Calculate if clinic is open
+        is_open = False
+        # Adjust day name to full name for the default timings dict
+        full_days = {
+            'mon': 'monday', 'tue': 'tuesday', 'wed': 'wednesday',
+            'thu': 'thursday', 'fri': 'friday', 'sat': 'saturday', 'sun': 'sunday'
+        }
+        day_short = datetime.utcnow().strftime('%a').lower()
+        day_name = full_days.get(day_short, 'monday')
+        
+        timings = clinic.timings or {}
+        day_config = timings.get(day_name, {})
+        
+        if day_config and not day_config.get('closed', False):
+            # IST is UTC+5:30. 
+            now = datetime.utcnow()
+            current_time_str = now.strftime('%H:%M')
+            open_time = day_config.get('open', '08:00')
+            close_time = day_config.get('close', '20:00')
+            
+            if open_time <= current_time_str <= close_time:
+                is_open = True
+
         return {
             'clinic_info': {
                 'id': clinic.id,
                 'name': clinic.name,
                 'subscription_plan': clinic.subscription_plan,
                 'status': clinic.status,
-                'created_at': clinic.created_at
+                'created_at': clinic.created_at,
+                'address': clinic.address,
+                'phone': clinic.phone
             },
             'user_count': user_count,
-            'specialization': clinic.specialization
+            'specialization': clinic.specialization,
+            'is_open': is_open,
+            'timings': timings
         }
 
     def update_clinic_subscription(self, clinic_id: int, new_plan: str, razorpay_subscription_id: Optional[str] = None) -> bool:

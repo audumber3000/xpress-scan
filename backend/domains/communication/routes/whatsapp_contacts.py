@@ -13,8 +13,8 @@ from pydantic import BaseModel
 
 router = APIRouter(tags=["WhatsApp Contacts"])
 
-# WhatsApp Service URL (Node.js service)
-WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://localhost:3001")
+# MolarPlus Nexus Service URL
+NEXUS_SERVICES_URL = os.getenv("NEXUS_SERVICES_URL", "http://localhost:8001")
 
 
 @router.get("/check/{phone}")
@@ -26,7 +26,7 @@ async def check_is_on_whatsapp(
     """Check if a phone number is registered on WhatsApp"""
     try:
         response = requests.get(
-            f"{WHATSAPP_SERVICE_URL}/api/is-on-whatsapp/{current_user.id}/{phone}",
+            f"{NEXUS_SERVICES_URL}/api/is-on-whatsapp/{current_user.id}/{phone}",
             timeout=30
         )
         

@@ -8,7 +8,7 @@ from core.auth_utils import get_current_user
 
 router = APIRouter()
 
-@router.get("/", response_model=List[ScanTypeOut])
+@router.get("", response_model=List[ScanTypeOut])
 def list_scan_types(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Get all scan types for current clinic"""
     # Check if user has permission to view billing
@@ -20,7 +20,7 @@ def list_scan_types(db: Session = Depends(get_db), current_user = Depends(get_cu
     
     return db.query(ScanType).filter(ScanType.clinic_id == current_user.clinic_id).all()
 
-@router.post("/", response_model=ScanTypeOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ScanTypeOut, status_code=status.HTTP_201_CREATED)
 def create_scan_type(scan_type: ScanTypeCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Create a new scan type for current clinic"""
     # Check if user has permission to edit billing

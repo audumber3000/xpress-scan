@@ -37,7 +37,7 @@ class AuthRepository(AuthRepositoryProtocol):
         from sqlalchemy.orm import joinedload
 
         user = self.db.query(User).options(
-            joinedload(User.clinic)
+            joinedload(User.active_clinic)
         ).filter(User.id == user_id).first()
 
         if not user:
@@ -45,5 +45,5 @@ class AuthRepository(AuthRepositoryProtocol):
 
         return {
             'user': user,
-            'clinic': user.clinic
+            'clinic': user.active_clinic
         }

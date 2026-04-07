@@ -3,316 +3,461 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { api } from '../utils/api';
 import { useHeader } from '../contexts/HeaderContext';
-import { Award, CreditCard, Download, HelpCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  CheckCircle2,
+  XCircle,
+  CreditCard,
+  Download,
+  Zap,
+  Clock,
+  ArrowRight,
+  ShieldCheck,
+  FileText,
+  Users,
+  Bell,
+  BarChart3,
+  Building2,
+  Headphones,
+  Star,
+} from 'lucide-react';
 import GearLoader from '../components/GearLoader';
+
+const PRO_FEATURES = [
+  { icon: Users,     label: 'Patient Records',        starter: 'Up to 200',  pro: 'Unlimited' },
+  { icon: Users,     label: 'Staff Accounts',          starter: '1 user',     pro: 'Unlimited' },
+  { icon: Building2, label: 'Clinic Branches',         starter: '1',          pro: 'Unlimited' },
+  { icon: Bell,      label: 'WhatsApp Notifications',  starter: false,        pro: true },
+  { icon: Bell,      label: 'Email Notifications',     starter: false,        pro: true },
+  { icon: BarChart3, label: 'Analytics & Reports',     starter: 'Basic',      pro: 'Advanced' },
+  { icon: FileText,  label: 'Template Manager',        starter: false,        pro: true },
+  { icon: CreditCard,label: 'Invoice & Billing',       starter: true,         pro: true },
+  { icon: Star,      label: 'Appointment Calendar',    starter: true,         pro: true },
+  { icon: Headphones,label: 'Priority Support',        starter: false,        pro: '24 / 7' },
+  { icon: ShieldCheck,label: 'Consent Forms',          starter: false,        pro: true },
+];
+
+const FeatVal = ({ val }) => {
+  if (val === true)  return <CheckCircle2 size={15} className="text-[#29828a]" />;
+  if (val === false) return <XCircle size={15} className="text-gray-200" />;
+  return <span className="text-xs font-medium text-gray-600">{val}</span>;
+};
+
+// ── Section row helper (left label + right content, like reference image) ──
+const Section = ({ title, description, action, children, noBorder }) => (
+  <div className={`flex flex-col md:flex-row gap-6 py-8 ${noBorder ? '' : 'border-b border-gray-100'}`}>
+    <div className="md:w-64 lg:w-72 flex-shrink-0">
+      <h4 className="text-sm font-semibold text-gray-800 mb-1">{title}</h4>
+      {description && <p className="text-xs text-gray-400 leading-relaxed">{description}</p>}
+      {action && <div className="mt-3">{action}</div>}
+    </div>
+    <div className="flex-1 min-w-0">{children}</div>
+  </div>
+);
+
+const TABS = [
+  { id: 'subscription', label: 'Manage Subscription' },
+  { id: 'history',      label: 'Billing History' },
+];
 
 const Subscription = () => {
   const { setTitle } = useHeader();
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('subscription');
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState(null);
-  const [plans, setPlans] = useState([]);
-  const [syncing, setSyncing] = useState(false);
   const [billingHistory, setBillingHistory] = useState([
-    { id: 1, date: 'Sep 12, 2023', invoice: 'INV-0042', amount: 99.00, status: 'PAID' },
-    { id: 2, date: 'Aug 12, 2023', invoice: 'INV-0039', amount: 99.00, status: 'PAID' },
-    { id: 3, date: 'Jul 12, 2023', invoice: 'INV-0035', amount: 99.00, status: 'PAID' },
+    { id: 1, plan: 'Professional Plan', invoice: 'INV-CF-0001', amount: 1200.00, date: 'Mar 12, 2024', status: 'PAID' },
   ]);
 
   useEffect(() => {
-    setTitle(
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => navigate('/admin')}
-          className="flex items-center gap-1 text-gray-600 hover:text-gray-900 transition"
-        >
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">Admin Hub</span>
-        </button>
-      </div>
-    );
-    fetchSubscription();
-    fetchPlans();
-  }, [setTitle, navigate]);
+    setTitle('Subscription & Billing');
+    const queryParams = new URLSearchParams(window.location.search);
+    const orderId = queryParams.get('order_id');
+    if (orderId) {
+      verifyPaymentStatus(orderId);
+    } else {
+      fetchSubscription();
+    }
+  }, []); // eslint-disable-line
+
+  const verifyPaymentStatus = async (orderId) => {
+    try {
+      setLoading(true);
+      const res = await api.get(`/subscriptions/verify-status?order_id=${orderId}`);
+      if (res.success) {
+        toast.success('Payment successful! Your Professional Plan is now active.');
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+      await fetchSubscription();
+    } catch {
+      fetchSubscription();
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchSubscription = async () => {
     try {
       setLoading(true);
       const data = await api.get('/subscriptions/');
-      setSubscription(data || {
-        plan_name: 'Professional Plan',
-        status: 'active',
-        current_start: new Date().toISOString(),
-        current_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        patient_count: 850,
-        patient_limit: 1000,
-        storage_used: 15,
-        storage_limit: 50
-      });
-    } catch (error) {
-      console.error('Error fetching subscription:', error);
-      setSubscription({
-        plan_name: 'Professional Plan',
-        status: 'active',
-        current_start: new Date().toISOString(),
-        current_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        patient_count: 850,
-        patient_limit: 1000,
-        storage_used: 15,
-        storage_limit: 50
-      });
+      setSubscription(data);
+      if (data.plan_name === 'professional' && data.status === 'active') {
+        setBillingHistory([{
+          id: 'current',
+          plan: 'Professional Plan',
+          invoice: `INV-${data.provider_order_id || 'PRO'}`,
+          amount: 1200.00,
+          date: new Date(data.updated_at || Date.now()).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+          status: 'PAID',
+        }]);
+      }
+    } catch {
+      setSubscription({ plan_name: 'free', status: 'active' });
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchPlans = async () => {
-    try {
-      const data = await api.get('/subscriptions/plans');
-      setPlans(data.plans || []);
-    } catch (error) {
-      console.error('Error fetching plans:', error);
-    }
-  };
+  const handleUpgrade = () => navigate('/checkout?plan=professional');
 
-  const handleCreateSubscription = async (plan) => {
-    if (plan.name === 'free') {
-      toast.error('You are already on the free plan');
-      return;
-    }
-
-    if (!plan.razorpay_plan_id) {
-      toast.error('This plan is not available for subscription. Please configure Razorpay plan ID.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const data = await api.post('/subscriptions/create', {
-        plan_name: plan.name,
-        razorpay_plan_id: plan.razorpay_plan_id
-      });
-      
-      // After creating subscription, user will need to complete payment via Razorpay
-      // For now, we'll just refresh the subscription data
-      toast.success('Subscription created! Please complete the payment process.');
-      await fetchSubscription();
-    } catch (error) {
-      toast.error(error.message || 'Failed to create subscription');
-      console.error('Error creating subscription:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePause = async () => {
-    if (!window.confirm('Are you sure you want to pause your subscription?')) {
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await api.post('/subscriptions/pause');
-      toast.success('Subscription paused successfully');
-      await fetchSubscription();
-    } catch (error) {
-      toast.error(error.message || 'Failed to pause subscription');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResume = async () => {
-    setLoading(true);
-    try {
-      await api.post('/subscriptions/resume');
-      toast.success('Subscription resumed successfully');
-      await fetchSubscription();
-    } catch (error) {
-      toast.error(error.message || 'Failed to resume subscription');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCancel = async () => {
-    if (!window.confirm('Are you sure you want to cancel your subscription? You will lose access to premium features at the end of the billing cycle.')) {
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await api.post('/subscriptions/cancel?cancel_at_cycle_end=true');
-      toast.success('Subscription cancelled. You will retain access until the end of the billing period.');
-      await fetchSubscription();
-    } catch (error) {
-      toast.error(error.message || 'Failed to cancel subscription');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      await api.post('/subscriptions/sync');
-      toast.success('Subscription synced successfully');
-      await fetchSubscription();
-    } catch (error) {
-      toast.error(error.message || 'Failed to sync subscription');
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0
-    }).format(amount);
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
-  const getStatusBadgeColor = (status) => {
-    const colors = {
-      active: 'bg-green-100 text-green-800',
-      paused: 'bg-yellow-100 text-yellow-800',
-      cancelled: 'bg-red-100 text-red-800',
-      expired: 'bg-gray-100 text-gray-800'
-    };
-    return colors[status] || colors.active;
-  };
-
-  const currentPlan = plans.find(p => p.name === subscription?.plan_name) || plans[0];
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <GearLoader />
+  const downloadInvoice = (inv) => {
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Invoice ${inv.invoice}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #fff; color: #1a1a1a; padding: 48px; max-width: 720px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 48px; padding-bottom: 24px; border-bottom: 2px solid #f0f0f0; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-icon { width: 40px; height: 40px; background: #29828a; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+    .brand-icon svg { width: 22px; height: 22px; }
+    .brand-name { font-size: 22px; font-weight: 800; color: #1a1a1a; letter-spacing: -0.5px; }
+    .brand-sub { font-size: 12px; color: #888; margin-top: 1px; }
+    .invoice-meta { text-align: right; }
+    .invoice-title { font-size: 28px; font-weight: 700; color: #29828a; letter-spacing: -0.5px; }
+    .invoice-num { font-size: 13px; color: #888; margin-top: 4px; font-family: monospace; }
+    .badges { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+    .badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
+    .badge-paid { background: #d1fae5; color: #065f46; }
+    .badge-pending { background: #fef3c7; color: #92400e; }
+    .section { margin-bottom: 36px; }
+    .section-label { font-size: 11px; font-weight: 700; color: #aaa; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .info-card { background: #f9fafb; border-radius: 12px; padding: 16px 20px; }
+    .info-card p { font-size: 13px; color: #555; line-height: 1.7; }
+    .info-card strong { color: #1a1a1a; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { background: #f3f4f6; }
+    th { padding: 11px 14px; text-align: left; font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.8px; }
+    td { padding: 14px; font-size: 13px; color: #333; border-bottom: 1px solid #f0f0f0; }
+    .total-row td { font-weight: 700; font-size: 15px; color: #1a1a1a; background: #f9fafb; border-bottom: none; border-top: 2px solid #e5e7eb; }
+    .total-row td:last-child { color: #29828a; font-size: 17px; }
+    .footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid #f0f0f0; text-align: center; font-size: 11px; color: #bbb; line-height: 1.8; }
+    @media print { body { padding: 32px; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 3C7 3 3 7 3 12s4 9 9 9 9-4 9-9-4-9-9-9z" fill="white" opacity="0.3"/>
+          <path d="M8 12l3 3 5-5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
       </div>
-    );
-  }
+      <div>
+        <div class="brand-name">MolarPlus</div>
+        <div class="brand-sub">Dental Practice Software</div>
+      </div>
+    </div>
+    <div class="invoice-meta">
+      <div class="invoice-title">INVOICE</div>
+      <div class="invoice-num">${inv.invoice}</div>
+      <div class="badges">
+        <span class="badge ${inv.status === 'PAID' ? 'badge-paid' : 'badge-pending'}">${inv.status}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section two-col">
+    <div>
+      <div class="section-label">Billed by</div>
+      <div class="info-card">
+        <p><strong>MolarPlus Technologies</strong><br/>support@molarplus.com<br/>India</p>
+      </div>
+    </div>
+    <div>
+      <div class="section-label">Invoice details</div>
+      <div class="info-card">
+        <p><strong>Invoice Date:</strong> ${inv.date}<br/><strong>Invoice No:</strong> ${inv.invoice}<br/><strong>Payment:</strong> Cashfree</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Summary</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Description</th>
+          <th>Period</th>
+          <th style="text-align:right">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>${inv.plan}</strong><br/><span style="font-size:12px;color:#888">Monthly subscription — MolarPlus Professional</span></td>
+          <td style="color:#888">${inv.date}</td>
+          <td style="text-align:right">₹${inv.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        </tr>
+        <tr class="total-row">
+          <td colspan="2">Total</td>
+          <td style="text-align:right">₹${inv.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    Thank you for using MolarPlus · This is a computer-generated invoice · No signature required<br/>
+    For support: support@molarplus.com
+  </div>
+
+  <script>window.onload = () => window.print();</script>
+</body>
+</html>`;
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (win) win.onafterprint = () => URL.revokeObjectURL(url);
+  };
+
+  const formatDate = (d) => d
+    ? new Date(d).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })
+    : 'N/A';
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-full">
+      <GearLoader />
+    </div>
+  );
+
+  const isPro = subscription?.plan_name === 'professional' && subscription?.status === 'active';
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="max-w-6xl mx-auto">
+    <div className="flex flex-col h-full bg-[#f8fafc] overflow-y-auto custom-scrollbar">
 
-        {/* Current Plan Section */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">CURRENT PLAN</h3>
-            <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
-              Active
-            </span>
-          </div>
-
-          <div className="bg-white rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center mb-6">
-              <div className="w-14 h-14 rounded-full bg-[#E0F2F2] flex items-center justify-center mr-4">
-                <Award className="w-7 h-7 text-[#2D9596]" />
-              </div>
-              <div className="flex-1">
-                <h4 className="text-lg font-bold text-gray-900">{subscription?.plan_name || 'Professional Plan'}</h4>
-                <p className="text-sm text-gray-600">$99 / month • Renews {formatDate(subscription?.current_end)}</p>
-              </div>
-            </div>
-
-            {/* Patient Count Usage */}
-            <div className="mb-5">
-              <div className="flex justify-between mb-2">
-                <span className="text-sm font-semibold text-gray-900">Patient Count</span>
-                <span className="text-sm font-semibold text-gray-600">
-                  {subscription?.patient_count || 850} / {subscription?.patient_limit || 1000}
-                </span>
-              </div>
-              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-[#2D9596] rounded-full" 
-                  style={{ width: `${((subscription?.patient_count || 850) / (subscription?.patient_limit || 1000)) * 100}%` }}
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                {Math.round(((subscription?.patient_count || 850) / (subscription?.patient_limit || 1000)) * 100)}% of monthly limit reached
-              </p>
-            </div>
-
-            {/* Cloud Storage Usage */}
-            <div className="mb-6">
-              <div className="flex justify-between mb-2">
-                <span className="text-sm font-semibold text-gray-900">Cloud Storage</span>
-                <span className="text-sm font-semibold text-gray-600">
-                  {subscription?.storage_used || 15}GB / {subscription?.storage_limit || 50}GB
-                </span>
-              </div>
-              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-[#2D9596] rounded-full" 
-                  style={{ width: `${((subscription?.storage_used || 15) / (subscription?.storage_limit || 50)) * 100}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Manage Button */}
-            <button className="w-full flex items-center justify-center gap-2 bg-[#2D9596] text-white py-3 rounded-xl font-semibold hover:bg-[#1F6B72] transition">
-              <CreditCard className="w-5 h-5" />
-              Manage Plan & Billing
-            </button>
-          </div>
+      {/* ── Header + Tabs ── */}
+      <div className="bg-white border-b border-gray-100 px-6 lg:px-8 pt-6">
+        <div className="mb-5">
+          <h2 className="text-xl font-bold text-gray-900">Subscription &amp; Billing</h2>
+          <p className="text-sm text-gray-400 mt-0.5">Manage your plan and view payment history.</p>
         </div>
 
-        {/* Billing History Section */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">BILLING HISTORY</h3>
-            <button className="text-sm font-semibold text-[#2D9596] hover:text-[#1F6B72]">View All</button>
-          </div>
+        {/* Tab navigation — underline style */}
+        <div className="flex gap-6">
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`pb-3 text-sm font-semibold border-b-2 transition-colors ${
+                activeTab === tab.id
+                  ? 'border-[#29828a] text-[#29828a]'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-          <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
-            {billingHistory.map((invoice, index) => (
-              <div key={invoice.id}>
-                <div className="flex items-center p-4">
-                  <div className="w-11 h-11 rounded-full bg-[#E0F2F2] flex items-center justify-center mr-3">
-                    <CreditCard className="w-5 h-5 text-[#2D9596]" />
+      {/* ── Tab Content ── */}
+      <div className="flex-1 px-6 lg:px-8">
+
+        {/* ════ MANAGE SUBSCRIPTION TAB ════ */}
+        {activeTab === 'subscription' && (
+          <>
+            {/* Current Plan */}
+            <Section
+              title="Current Plan"
+              description="You can update your plan anytime for best benefit from the product."
+              action={
+                !isPro ? (
+                  <button
+                    onClick={handleUpgrade}
+                    className="text-sm font-semibold text-[#29828a] hover:underline"
+                  >
+                    Switch Plan
+                  </button>
+                ) : null
+              }
+            >
+              <div className={`relative overflow-hidden flex items-center justify-between gap-4 p-4 rounded-xl border ${isPro ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-100'}`}>
+                {isPro && (
+                  <>
+                    <div className="absolute inset-0 bg-gradient-to-br from-white/60 via-amber-50/20 to-transparent pointer-events-none rounded-xl" />
+                    <div className="absolute -top-4 -right-4 w-24 h-24 bg-amber-200/30 rounded-full blur-2xl pointer-events-none" />
+                    <div className="absolute top-0 left-8 w-32 h-px bg-gradient-to-r from-transparent via-amber-300/60 to-transparent pointer-events-none" />
+                  </>
+                )}
+                <div className="relative flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isPro ? 'bg-amber-100' : 'bg-gray-100'}`}>
+                    {isPro ? (
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M3 17L5.5 8L9.5 13L12 6L14.5 13L18.5 8L21 17H3Z" fill="#F59E0B" stroke="#D97706" strokeWidth="1.2" strokeLinejoin="round"/>
+                        <rect x="3" y="18" width="18" height="2.5" rx="1.25" fill="#D97706"/>
+                        <circle cx="12" cy="5.5" r="1.5" fill="#F59E0B" stroke="#D97706" strokeWidth="1"/>
+                        <circle cx="3.5" cy="8.5" r="1.5" fill="#F59E0B" stroke="#D97706" strokeWidth="1"/>
+                        <circle cx="20.5" cy="8.5" r="1.5" fill="#F59E0B" stroke="#D97706" strokeWidth="1"/>
+                      </svg>
+                    ) : (
+                      <ShieldCheck size={18} className="text-gray-400" />
+                    )}
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-gray-900">{invoice.date}</p>
-                    <p className="text-xs text-gray-600">{invoice.invoice} • ${invoice.amount.toFixed(2)}</p>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold text-gray-900">
+                        {isPro ? 'Professional Plan' : 'Starter Plan'}
+                      </p>
+                      {isPro && (
+                        <span className="text-xs font-semibold text-[#29828a]">₹1,200 / month</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {isPro
+                        ? `Next billing: ${formatDate(subscription?.current_end)}`
+                        : 'Free forever — unlimited upgrade available'}
+                    </p>
                   </div>
-                  <span className="px-2.5 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg mr-3">
-                    {invoice.status}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${isPro ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
+                    {subscription?.status || 'Active'}
                   </span>
-                  <button className="w-9 h-9 rounded-full bg-gray-50 flex items-center justify-center hover:bg-gray-100 transition">
-                    <Download className="w-4 h-4 text-gray-500" />
+                  {isPro && <CheckCircle2 size={18} className="text-[#29828a]" />}
+                </div>
+              </div>
+
+              {!isPro && (
+                <div className="mt-3 flex items-center justify-between gap-4 p-4 rounded-xl border border-gray-100 bg-white hover:border-[#29828a]/30 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-[#29828a]/8 flex items-center justify-center flex-shrink-0">
+                      <Zap size={18} className="text-[#29828a]" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">
+                        Professional Plan <span className="text-[#29828a]">₹1,200 / month</span>
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">Unlimited patients, staff, branches, WhatsApp &amp; more</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleUpgrade}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-[#29828a] hover:bg-[#1f6b72] text-white text-xs font-semibold rounded-lg transition-all flex-shrink-0"
+                  >
+                    Upgrade <ArrowRight size={12} />
                   </button>
                 </div>
-                {index < billingHistory.length - 1 && (
-                  <div className="h-px bg-gray-100 ml-16" />
+              )}
+            </Section>
+
+            {/* What's Included */}
+            <Section
+              title="What's Included"
+              description="Features available in your current plan compared to Professional."
+              noBorder
+            >
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                {/* Header */}
+                <div className="grid grid-cols-3 px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Feature</div>
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center">Starter</div>
+                  <div className="text-[10px] font-bold text-[#29828a] uppercase tracking-wider text-center">Professional</div>
+                </div>
+                <div className="divide-y divide-gray-50">
+                  {PRO_FEATURES.map((row, i) => {
+                    const Icon = row.icon;
+                    return (
+                      <div key={i} className="grid grid-cols-3 px-4 py-3 hover:bg-gray-50/40 transition-colors items-center">
+                        <div className="flex items-center gap-2">
+                          <Icon size={12} className="text-gray-300 flex-shrink-0" />
+                          <span className="text-xs text-gray-700">{row.label}</span>
+                        </div>
+                        <div className="flex justify-center"><FeatVal val={row.starter} /></div>
+                        <div className="flex justify-center"><FeatVal val={row.pro} /></div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {!isPro && (
+                  <div className="flex items-center justify-between px-4 py-3.5 bg-[#29828a]/5 border-t border-[#29828a]/10">
+                    <p className="text-xs text-gray-600 font-medium">Launch offer — <strong className="text-[#29828a]">₹1,200/month</strong> (Standard ₹2,999)</p>
+                    <button
+                      onClick={handleUpgrade}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-[#29828a] hover:bg-[#1f6b72] text-white text-xs font-semibold rounded-lg transition-all"
+                    >
+                      Upgrade Now <ArrowRight size={12} />
+                    </button>
+                  </div>
                 )}
               </div>
-            ))}
-          </div>
-        </div>
+            </Section>
+          </>
+        )}
 
-        {/* Upgrade Prompt */}
-        <div className="bg-[#E0F2F2] rounded-2xl p-5 flex items-center">
-          <div className="w-12 h-12 rounded-full bg-white/80 flex items-center justify-center mr-3">
-            <HelpCircle className="w-6 h-6 text-[#2D9596]" />
-          </div>
-          <div className="flex-1">
-            <h4 className="text-sm font-semibold text-gray-900 mb-1">Need to upgrade your plan?</h4>
-            <p className="text-xs text-gray-600">Chat with our team for custom clinic solutions.</p>
-          </div>
-          <ChevronRight className="w-5 h-5 text-gray-400" />
-        </div>
+        {/* ════ BILLING HISTORY TAB ════ */}
+        {activeTab === 'history' && (
+          <Section
+            title="Billing History"
+            description="Summary of payments made for your subscription plan."
+            noBorder
+          >
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              {billingHistory.length > 0 ? (
+                <>
+                  <div className="grid grid-cols-5 px-5 py-3 bg-gray-50 border-b border-gray-100">
+                    {['Invoice', 'Plan', 'Amount', 'Date', 'Status'].map(h => (
+                      <div key={h} className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{h}</div>
+                    ))}
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                    {billingHistory.map(inv => (
+                      <div key={inv.id} className="grid grid-cols-5 px-5 py-4 items-center hover:bg-gray-50/40 transition-colors">
+                        <span className="text-xs font-mono text-gray-500">{inv.invoice}</span>
+                        <span className="text-sm text-gray-700">{inv.plan}</span>
+                        <span className="text-sm font-semibold text-gray-900">₹{inv.amount.toLocaleString('en-IN')}</span>
+                        <span className="text-xs text-gray-500">{inv.date}</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-full ${inv.status === 'PAID' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${inv.status === 'PAID' ? 'bg-green-500' : 'bg-amber-500'}`} />
+                            {inv.status}
+                          </span>
+                          <button
+                            onClick={() => downloadInvoice(inv)}
+                            title="Download Invoice"
+                            className="p-1.5 text-gray-300 hover:text-[#29828a] hover:bg-gray-50 rounded-lg transition-colors"
+                          >
+                            <Download size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="py-16 text-center">
+                  <FileText size={28} className="mx-auto mb-2 text-gray-200" />
+                  <p className="text-sm text-gray-400 font-medium">No billing history yet.</p>
+                  <p className="text-xs text-gray-300 mt-1">Invoices will appear here after your first payment.</p>
+                </div>
+              )}
+            </div>
+          </Section>
+        )}
+
       </div>
     </div>
   );

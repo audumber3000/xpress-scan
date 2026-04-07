@@ -13,6 +13,7 @@ class ClinicBase(BaseModel):
     subscription_plan: str = "free"
     status: str = "active"
     logo_url: Optional[str] = None
+    invoice_template: str = "modern_orange"
     primary_color: str = "#10B981"
     timings: Optional[Dict[str, Any]] = {
         'monday': {'open': '08:00', 'close': '20:00', 'closed': False},
@@ -62,6 +63,7 @@ class UserOut(UserBase):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     supabase_user_id: Optional[str] = None
+    clinics: List[ClinicOut] = []
 
     class Config:
         from_attributes = True
@@ -71,10 +73,14 @@ class PatientBase(BaseModel):
     name: str
     age: int
     gender: str
-    village: str
+    village: Optional[str] = None
     phone: str
-    referred_by: str
+    referred_by: Optional[str] = None
     treatment_type: str
+    blood_group: Optional[str] = None
+    patient_history: Optional[str] = None
+    display_id: Optional[str] = None
+    last_visit: Optional[datetime] = None
     notes: Optional[str] = None
     payment_type: str = "Cash"
     
@@ -229,7 +235,7 @@ class InvoiceLineItemOut(InvoiceLineItemBase):
 
 class InvoiceBase(BaseModel):
     patient_id: int
-    visit_id: Optional[int] = None
+    appointment_id: Optional[int] = None
     payment_mode: Optional[str] = None
     utr: Optional[str] = None
     notes: Optional[str] = None
@@ -241,6 +247,8 @@ class InvoiceUpdate(BaseModel):
     payment_mode: Optional[str] = None
     utr: Optional[str] = None
     notes: Optional[str] = None
+    discount: Optional[float] = None
+    discount_type: Optional[str] = None
 
 class InvoiceOut(InvoiceBase):
     id: int
@@ -249,6 +257,9 @@ class InvoiceOut(InvoiceBase):
     status: str  # draft, paid_unverified, paid_verified, cancelled
     subtotal: float
     tax: float
+    discount: float = 0.0
+    discount_type: str = "amount"
+    discount_amount: float = 0.0
     total: float
     created_by: Optional[int] = None
     created_at: datetime
@@ -256,6 +267,9 @@ class InvoiceOut(InvoiceBase):
     synced_at: Optional[datetime] = None
     sync_status: str = "local"
     paid_at: Optional[datetime] = None
+    finalized_at: Optional[datetime] = None
+    paid_amount: float = 0.0
+    due_amount: float = 0.0
     
     # Nested patient info
     patient_name: Optional[str] = None
@@ -270,6 +284,8 @@ class InvoiceOut(InvoiceBase):
 class MarkAsPaidRequest(BaseModel):
     payment_mode: str  # UPI, Cash, Card, etc.
     utr: Optional[str] = None
+    is_partial: Optional[bool] = False
+    amount_paid: Optional[float] = None
 
 # X-ray Image Schemas
 class XrayImageCreate(BaseModel):
@@ -331,10 +347,19 @@ class SubscriptionBase(BaseModel):
 
 class SubscriptionOut(SubscriptionBase):
     id: int
-    clinic_id: int
+    clinic_id: Optional[int] = None
+    user_id: Optional[int] = None
     razorpay_subscription_id: Optional[str] = None
     razorpay_customer_id: Optional[str] = None
     razorpay_plan_id: Optional[str] = None
+    
+    # Generic Provider Fields
+    provider: str = "razorpay"
+    provider_subscription_id: Optional[str] = None
+    provider_customer_id: Optional[str] = None
+    provider_plan_id: Optional[str] = None
+    provider_order_id: Optional[str] = None
+    
     current_start: Optional[datetime] = None
     current_end: Optional[datetime] = None
     quantity: int = 1
@@ -349,11 +374,26 @@ class SubscriptionOut(SubscriptionBase):
 
 class SubscriptionCreate(BaseModel):
     plan_name: str  # professional, enterprise
-    razorpay_plan_id: str
+    razorpay_plan_id: Optional[str] = None
+    provider: str = "cashfree"
 
 class SubscriptionUpdate(BaseModel):
     status: Optional[str] = None
     notes: Optional[Dict[str, Any]] = None
+
+class CouponValidateRequest(BaseModel):
+    code: str
+    plan_name: str
+
+class CouponValidateResponse(BaseModel):
+    is_valid: bool
+    discount_amount: float
+    final_amount: float
+    message: Optional[str] = None
+
+class CheckoutRequest(BaseModel):
+    plan_name: str = "professional"
+    coupon_code: Optional[str] = None
 
 # Attendance Schemas
 class AttendanceBase(BaseModel):
@@ -416,3 +456,375 @@ class MessageTemplateOut(MessageTemplateBase):
     
     class Config:
         from_attributes = True 
+
+# Vendor Schemas
+class VendorBase(BaseModel):
+    name: str
+    contact_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    gst_number: Optional[str] = None
+    is_active: bool = True
+
+class VendorCreate(VendorBase):
+    clinic_id: Optional[int] = None
+
+class VendorUpdate(BaseModel):
+    name: Optional[str] = None
+    contact_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    gst_number: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class VendorOut(VendorBase):
+    id: int
+    clinic_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Inventory Item Schemas
+class InventoryItemBase(BaseModel):
+    name: str
+    category: Optional[str] = None
+    quantity: float = 0.0
+    unit: Optional[str] = None
+    min_stock_level: float = 0.0
+    price_per_unit: float = 0.0
+
+class InventoryItemCreate(InventoryItemBase):
+    clinic_id: Optional[int] = None
+    vendor_id: Optional[int] = None
+
+class InventoryItemUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    min_stock_level: Optional[float] = None
+    price_per_unit: Optional[float] = None
+    vendor_id: Optional[int] = None
+
+class InventoryItemOut(InventoryItemBase):
+    id: int
+    clinic_id: int
+    vendor_id: Optional[int] = None
+    vendor_name: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Consent Template Schemas
+class ConsentTemplateBase(BaseModel):
+    name: str
+    content: str
+    is_active: bool = True
+
+class ConsentTemplateCreate(ConsentTemplateBase):
+    clinic_id: Optional[int] = None
+
+class ConsentTemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    content: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class ConsentTemplateOut(ConsentTemplateBase):
+    id: int
+    clinic_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Patient Consent Schemas
+class PatientConsentBase(BaseModel):
+    patient_id: int
+    template_id: int
+    signed_content: str
+    signature_url: Optional[str] = None
+
+class PatientConsentCreate(PatientConsentBase):
+    pass
+
+class PatientConsentOut(PatientConsentBase):
+    id: int
+    signed_at: Optional[datetime] = None
+    created_at: datetime
+    template_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+# Patient Document Schemas
+class PatientDocumentBase(BaseModel):
+    patient_id: int
+    file_name: str
+    file_type: str
+    file_size: Optional[int] = None
+
+class PatientDocumentCreate(PatientDocumentBase):
+    clinic_id: Optional[int] = None
+
+class PatientDocumentOut(PatientDocumentBase):
+    id: int
+    clinic_id: int
+    file_path: str
+    uploaded_by: Optional[int] = None
+    uploader_name: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class UserUpdate(BaseModel):
+    clinic_id: Optional[int] = None # For switching clinic
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    name: Optional[str] = None
+    permissions: Optional[Dict[str, Any]] = None
+
+# Expense Schemas
+class ExpenseBase(BaseModel):
+    vendor_id: Optional[int] = None
+    amount: float
+    payment_method: str
+    category: str = "General"
+    notes: Optional[str] = None
+    date: Optional[datetime] = None
+
+class ExpenseCreate(ExpenseBase):
+    pass
+
+class ExpenseUpdate(BaseModel):
+    vendor_id: Optional[int] = None
+    amount: Optional[float] = None
+    payment_method: Optional[str] = None
+    category: Optional[str] = None
+    notes: Optional[str] = None
+    date: Optional[datetime] = None
+
+class ExpenseOut(ExpenseBase):
+    id: int
+    clinic_id: int
+    bill_file_url: Optional[str] = None
+    created_by: int
+    created_at: datetime
+    updated_at: datetime
+    vendor_name: Optional[str] = None
+    creator_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+# Ledger Item Schema (Unifies Invoice and Expense for the frontend)
+class LedgerItemOut(BaseModel):
+    id: int
+    type: str  # 'invoice' or 'expense'
+    date: datetime
+    amount: float
+    payment_method: Optional[str] = None
+    category: str
+    description: str
+    entity_name: Optional[str] = None  # Patient name or Vendor name
+    entity_id: Optional[int] = None
+    status: Optional[str] = None
+    bill_file_url: Optional[str] = None # for expenses
+    invoice_number: Optional[str] = None # for invoices
+    
+    class Config:
+        from_attributes = True
+
+# Clinical Setting Schemas
+class ClinicalSettingBase(BaseModel):
+    category: str  # complaint, finding, diagnosis, medical-condition
+    name: str
+    description: Optional[str] = None
+    is_active: bool = True
+
+class ClinicalSettingCreate(ClinicalSettingBase):
+    clinic_id: Optional[int] = None
+
+class ClinicalSettingUpdate(BaseModel):
+    category: Optional[str] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class ClinicalSettingOut(ClinicalSettingBase):
+    id: int
+    clinic_id: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Case Paper Schemas
+class CasePaperBase(BaseModel):
+    patient_id: int
+    appointment_id: Optional[int] = None
+    dentist_id: Optional[int] = None
+    date: datetime
+    status: str = "In Progress"
+    chief_complaint: Optional[Any] = []
+    medical_history: Optional[Any] = []
+    allergies: Optional[Any] = []
+    dental_history: Optional[Any] = []
+    clinical_examination: Optional[str] = None
+    diagnosis: Optional[str] = None
+    next_visit_recommendation: Optional[str] = None
+    notes: Optional[str] = None
+    
+    # Clinical Snapshots
+    dental_chart_snapshot: Optional[Any] = None
+    treatment_plan_snapshot: Optional[Any] = None
+    tooth_notes_snapshot: Optional[Any] = None
+
+class CasePaperCreate(CasePaperBase):
+    clinic_id: Optional[int] = None
+
+class CasePaperUpdate(BaseModel):
+    status: Optional[str] = None
+    chief_complaint: Optional[Any] = None
+    medical_history: Optional[Any] = None
+    allergies: Optional[Any] = None
+    dental_history: Optional[Any] = None
+    clinical_examination: Optional[str] = None
+    diagnosis: Optional[str] = None
+    next_visit_recommendation: Optional[str] = None
+    notes: Optional[str] = None
+    dental_chart_snapshot: Optional[Any] = None
+    treatment_plan_snapshot: Optional[Any] = None
+    tooth_notes_snapshot: Optional[Any] = None
+
+import json as _json
+
+def _parse_json_list(v):
+    """Safely coerce a DB-stored JSON string back to a Python list."""
+    if isinstance(v, list):
+        return v
+    if isinstance(v, str):
+        try:
+            parsed = _json.loads(v)
+            return parsed if isinstance(parsed, list) else [parsed]
+        except Exception:
+            return [v] if v.strip() else []
+    if v is None:
+        return []
+    return v
+
+def _parse_json_auto(v, default=None):
+    """Safely parse JSON and preserve its structure (Dict/List), returning default if None."""
+    if v is None:
+        return default
+    if isinstance(v, (dict, list)):
+        return v
+    if isinstance(v, str):
+        try:
+            return _json.loads(v)
+        except Exception:
+            return default
+    return v
+
+class CasePaperOut(CasePaperBase):
+    id: int
+    clinic_id: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def model_validate(cls, obj, **kwargs):
+        if hasattr(obj, '__dict__') or hasattr(obj, '_sa_instance_state'):
+            data = {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
+            
+            # Legacy list-like fields
+            for field in ('chief_complaint', 'medical_history', 'allergies', 'dental_history'):
+                data[field] = _parse_json_list(data.get(field))
+            
+            # Snapshots with specific defaults
+            data['dental_chart_snapshot'] = _parse_json_auto(data.get('dental_chart_snapshot'), {})
+            data['tooth_notes_snapshot'] = _parse_json_auto(data.get('tooth_notes_snapshot'), {})
+            data['treatment_plan_snapshot'] = _parse_json_auto(data.get('treatment_plan_snapshot'), [])
+            
+            return super().model_validate(data, **kwargs)
+        return super().model_validate(obj, **kwargs)
+
+    class Config:
+        from_attributes = True
+
+# Prescription Schemas
+class PrescriptionItem(BaseModel):
+    medicine_name: str
+    dosage: Optional[str] = None
+    frequency: Optional[str] = None
+    duration: Optional[str] = None
+    instructions: Optional[str] = None
+
+class PrescriptionBase(BaseModel):
+    patient_id: int
+    appointment_id: Optional[int] = None
+    visit_number: Optional[int] = None
+    items: List[PrescriptionItem] = []
+    notes: Optional[str] = None
+
+class PrescriptionCreate(PrescriptionBase):
+    clinic_id: Optional[int] = None
+
+class PrescriptionOut(PrescriptionBase):
+    id: int
+    clinic_id: int
+    pdf_url: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Lab Order Schemas
+class LabOrderBase(BaseModel):
+    patient_id: int
+    case_paper_id: Optional[int] = None
+    vendor_id: int
+    work_type: str
+    tooth_number: Optional[str] = None
+    shade: Optional[str] = None
+    instructions: Optional[str] = None
+    due_date: Optional[datetime] = None
+    status: str = "Draft"
+    cost: float = 0.0
+
+class LabOrderCreate(LabOrderBase):
+    clinic_id: Optional[int] = None
+
+class LabOrderUpdate(BaseModel):
+    vendor_id: Optional[int] = None
+    work_type: Optional[str] = None
+    tooth_number: Optional[str] = None
+    shade: Optional[str] = None
+    instructions: Optional[str] = None
+    due_date: Optional[datetime] = None
+    status: Optional[str] = None
+    cost: Optional[float] = None
+
+class LabOrderOut(LabOrderBase):
+    id: int
+    clinic_id: int
+    created_at: datetime
+    updated_at: datetime
+    
+    # Nested info
+    patient_name: Optional[str] = None
+    vendor_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
