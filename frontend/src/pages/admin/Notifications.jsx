@@ -37,8 +37,8 @@ const EVENT_AUDIENCE = {
   appointment_reminder:        'patient',
   google_review:               'patient',
   consent_form:                'patient',
-  daily_report:                'doctor',
 };
+
 
 const CHANNEL_COST = { whatsapp: 0.74, email: 0.02, sms: 0.15 };
 
@@ -51,8 +51,8 @@ const EVENT_LABELS = {
   appointment_reminder:     'Appointment Reminder',
   google_review:            'Google Review Request',
   consent_form:             'Consent Form Notification',
-  daily_report:             'Daily Report (Doctor)',
 };
+
 
 const CHANNEL_META = {
   whatsapp: { label: 'WhatsApp', color: 'text-green-600', bg: 'bg-white',     badge: 'bg-green-100 text-green-700',  icon: WhatsAppIcon,  priceLabel: '~₹0.74 / WhatsApp message' },
@@ -840,8 +840,11 @@ const Notifications = () => {
             <div className="grid grid-cols-6 gap-3 px-5 py-3 bg-gray-50 border-b border-gray-100">
               <div className="col-span-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">Event</div>
               {['whatsapp', 'email', 'sms'].map(ch => (
-                <div key={ch} className={`text-xs font-semibold uppercase tracking-wider text-center ${CHANNEL_META[ch].color}`}>
+                <div key={ch} className={`text-xs font-semibold uppercase tracking-wider text-center ${ch === 'sms' ? 'text-gray-300' : CHANNEL_META[ch].color}`}>
                   {CHANNEL_META[ch].label}
+                  {ch === 'sms' && (
+                    <span className="ml-1 text-[9px] font-semibold bg-gray-100 text-gray-400 border border-gray-200 rounded px-1 py-0.5 normal-case">Soon</span>
+                  )}
                 </div>
               ))}
               <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider text-center">Test</div>
@@ -881,26 +884,37 @@ const Notifications = () => {
                       </div>
                       {['whatsapp', 'email', 'sms'].map(ch => {
                         const checked = (pref.channels || []).includes(ch);
+                        const isSmsLocked = ch === 'sms';
                         return (
                           <div key={ch} className="flex items-center justify-center">
-                            <button
-                              onClick={() => updatePref(pref.event_type, 'toggleChannel', ch)}
-                              disabled={!pref.is_enabled}
-                              className={`w-5 h-5 rounded flex items-center justify-center transition-all disabled:opacity-30 border-2 ${
-                                checked
-                                  ? 'border-[#29828a] bg-[#29828a]'
-                                  : 'border-gray-300 hover:border-gray-400'
-                              }`}
-                            >
-                              {checked && (
-                                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                                  <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                            {isSmsLocked ? (
+                              <div title="SMS coming soon" className="w-5 h-5 rounded flex items-center justify-center border-2 border-gray-200 bg-gray-50 cursor-not-allowed opacity-40">
+                                <svg width="9" height="12" viewBox="0 0 9 12" fill="none">
+                                  <rect x="1" y="5" width="7" height="6" rx="1" stroke="#9ca3af" strokeWidth="1.4"/>
+                                  <path d="M2.5 5V3.5a2 2 0 014 0V5" stroke="#9ca3af" strokeWidth="1.4" strokeLinecap="round"/>
                                 </svg>
-                              )}
-                            </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => updatePref(pref.event_type, 'toggleChannel', ch)}
+                                disabled={!pref.is_enabled}
+                                className={`w-5 h-5 rounded flex items-center justify-center transition-all disabled:opacity-30 border-2 ${
+                                  checked
+                                    ? 'border-[#29828a] bg-[#29828a]'
+                                    : 'border-gray-300 hover:border-gray-400'
+                                }`}
+                              >
+                                {checked && (
+                                  <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                                    <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                )}
+                              </button>
+                            )}
                           </div>
                         );
                       })}
+
                       <div className="flex items-center justify-center">
                         <button
                           onClick={() => openTestDrawer(pref)}

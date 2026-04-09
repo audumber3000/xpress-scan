@@ -234,15 +234,34 @@ const GoogleReviews = () => {
 
   // ── Unlink ────────────────────────────────────────────────────────
   const handleUnlink = async () => {
-    if (!window.confirm('Unlink this clinic from Google Places? Accumulated reviews will be kept.')) return;
-    await api.delete('/google-places/unlink');
-    setPlaceInfo(null);
-    setReviews([]);
-    setSummary(null);
-    setCompetitors([]);
-    setState('NOT_LINKED');
-    toast.success('Unlinked successfully');
+    toast.info(
+      <div className="flex flex-col gap-2">
+        <span className="font-semibold text-sm">Unlink clinic from Google Places?</span>
+        <span className="text-xs text-gray-600">Accumulated reviews will be kept.</span>
+        <div className="flex gap-2 mt-1">
+          <button
+            className="px-3 py-1 bg-red-600 text-white text-xs font-bold rounded hover:bg-red-700 transition"
+            onClick={async () => {
+              toast.dismiss('unlink-confirm');
+              await api.delete('/google-places/unlink');
+              setPlaceInfo(null);
+              setReviews([]);
+              setSummary(null);
+              setCompetitors([]);
+              setState('NOT_LINKED');
+              toast.success('Unlinked successfully');
+            }}
+          >Yes, Unlink</button>
+          <button
+            className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-bold rounded hover:bg-gray-200 transition"
+            onClick={() => toast.dismiss('unlink-confirm')}
+          >Cancel</button>
+        </div>
+      </div>,
+      { toastId: 'unlink-confirm', autoClose: false, closeOnClick: false }
+    );
   };
+
 
   // ── Fetch reviews ─────────────────────────────────────────────────
   const fetchReviews = useCallback(async () => {
@@ -337,12 +356,11 @@ const GoogleReviews = () => {
             </div>
           </div>
 
-          <div className="mb-6 relative z-50">
-            {/* The Google Autocomplete Custom Web Component */}
-            <gmp-place-autocomplete 
+          <div className="mb-6">
+            {/* Google Autocomplete Custom Web Component */}
+            <gmp-place-autocomplete
                id="location-input"
                className="w-full block"
-               style={{ width: '100%', minHeight: '46px', position: 'relative', zIndex: 9999, pointerEvents: 'auto', display: 'block' }}
             />
           </div>
 

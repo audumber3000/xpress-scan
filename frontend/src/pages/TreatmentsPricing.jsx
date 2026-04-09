@@ -4,8 +4,84 @@ import { useNavigate } from 'react-router-dom';
 import { useHeader } from "../contexts/HeaderContext";
 import { useAuth } from "../contexts/AuthContext";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
-import { ChevronLeft, Search, Plus, Pill, Layers } from 'lucide-react';
+import { ChevronLeft, Search, Plus, Pill, Layers, Info } from 'lucide-react';
 import GearLoader from "../components/GearLoader";
+
+/* ── GST Info Popover (reusable) ─────────────────────────────────────────── */
+const GST_DATA = {
+  exempt: [
+    "OPD Consultation & Registration",
+    "Intraoral X-rays (RVG / IOPA), OPG, CBCT",
+    "Dental Fillings (Composite, GIC, Amalgam)",
+    "Root Canal Treatment (RCT), Pulpotomy",
+    "Routine & surgical Extractions, Impacted Wisdom Teeth",
+    "Scaling & Root Planing (for disease treatment)",
+    "Crowns & Bridges (PFM, Zirconia, Metal) — part of treatment plan",
+    "Dental Implants & Dentures",
+    "Braces / Clear Aligners — functional malocclusion treatment",
+    "Jaw fracture treatment, cyst/tumour removal (SAC 9993)",
+  ],
+  taxable18: [
+    "Teeth Whitening / Bleaching (in-office or take-home kit)",
+    "Veneers / Laminates — purely cosmetic on healthy teeth",
+    "Tooth Jewellery / Dental Gems",
+    "Gingival Depigmentation (gum bleaching — aesthetic only)",
+    "Cosmetic Enamel Contouring (SAC 999722)",
+  ],
+  goods: [
+    "Mouthwashes, Dental Floss, Interdental Brushes — 18%",
+    "Medicated Toothpaste — 12–18% (depends on composition)",
+    "Prescribed gels / kits sold over-the-counter (HSN 3004)",
+  ],
+};
+
+const GSTInfoPopover = () => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        title="GST Guide for Indian Dental Clinics"
+        className="flex items-center gap-1 px-2 py-1 text-xs font-semibold text-sky-700 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 transition"
+      >
+        <Info className="w-3.5 h-3.5" />
+        GST Guide
+      </button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 998 }} />
+          <div style={{
+            position: 'absolute', left: 0, top: 36, zIndex: 999,
+            width: 440, maxHeight: '75vh', overflowY: 'auto',
+            background: '#fff', border: '1px solid #e2e8f0',
+            borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,.15)',
+            padding: '16px 18px', fontSize: 12,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <span style={{ fontWeight: 700, fontSize: 13, color: '#1e293b' }}>🇮🇳 GST Guide — Indian Dental Clinics</span>
+              <button onClick={() => setOpen(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 16, color: '#64748b' }}>×</button>
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, color: '#16a34a', background: '#f0fdf4', padding: '4px 8px', borderRadius: 6, marginBottom: 6, fontSize: 11 }}>🟢 EXEMPT 0% GST — SAC 9993 (Healthcare Services)</div>
+              <ul style={{ margin: 0, paddingLeft: 18, color: '#374151', lineHeight: 1.7 }}>{GST_DATA.exempt.map(it => <li key={it}>{it}</li>)}</ul>
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, color: '#dc2626', background: '#fef2f2', padding: '4px 8px', borderRadius: 6, marginBottom: 6, fontSize: 11 }}>🔴 TAXABLE 18% GST — SAC 999722 (Cosmetic Procedures)</div>
+              <ul style={{ margin: 0, paddingLeft: 18, color: '#374151', lineHeight: 1.7 }}>{GST_DATA.taxable18.map(it => <li key={it}>{it}</li>)}</ul>
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, color: '#d97706', background: '#fffbeb', padding: '4px 8px', borderRadius: 6, marginBottom: 6, fontSize: 11 }}>🟠 GOODS SALE — HSN 3004 (5–18% GST)</div>
+              <ul style={{ margin: 0, paddingLeft: 18, color: '#374151', lineHeight: 1.7 }}>{GST_DATA.goods.map(it => <li key={it}>{it}</li>)}</ul>
+            </div>
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '8px 10px', fontSize: 11, color: '#78350f' }}>
+              ⚠️ <strong>Composite Supply Rule:</strong> Even if your lab charges 12% GST on a crown, the fee you bill the patient remains 0% GST — the primary service is healthcare. Always consult your CA for jurisdiction-specific advice.
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
 
 const TreatmentsPricing = () => {
   const { setTitle } = useHeader();
@@ -275,19 +351,26 @@ const TreatmentsPricing = () => {
 
       {/* Top Level Tabs */}
       <div className="mb-6 border-b border-gray-200">
-          <div className="flex gap-6 -mb-px">
-            <button
-              onClick={() => setActiveTab('services')}
-              className={`pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'services' ? 'border-[#29828a] text-[#29828a]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
-            >
-              Treatment & Pricing
-            </button>
-            <button
-              onClick={() => setActiveTab('medications')}
-              className={`pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'medications' ? 'border-[#29828a] text-[#29828a]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
-            >
-              Medication
-            </button>
+          <div className="flex items-center justify-between -mb-px">
+            <div className="flex gap-6">
+              <button
+                onClick={() => setActiveTab('services')}
+                className={`pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'services' ? 'border-[#29828a] text-[#29828a]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+              >
+                Treatment & Pricing
+              </button>
+              <button
+                onClick={() => setActiveTab('medications')}
+                className={`pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'medications' ? 'border-[#29828a] text-[#29828a]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+              >
+                Medication
+              </button>
+            </div>
+            {activeTab === 'services' && (
+              <div className="pb-2">
+                <GSTInfoPopover />
+              </div>
+            )}
           </div>
         </div>
 

@@ -167,10 +167,14 @@ const CasePapersTab = ({
   const fetchExistingCasePaperInvoice = async () => {
     if (!selectedCasePaper?.id || selectedCasePaper?.isNew || !patientData?.id) return;
     try {
-      const invoices = await api.get('/invoices', { params: { patient_id: patientData.id, limit: 200 } });
       const casePaperId = String(selectedCasePaper.id);
+      // Fetch invoices filtered by appointment_id — includes ALL statuses (draft, finalized, paid)
+      // so we never create a duplicate invoice for the same case paper
+      const invoices = await api.get('/invoices', {
+        params: { patient_id: patientData.id, appointment_id: casePaperId, limit: 10 }
+      });
       const existing = (invoices || []).find(
-        inv => String(inv.appointment_id) === casePaperId && inv.status !== 'draft'
+        inv => String(inv.appointment_id) === casePaperId
       );
       setExistingCasePaperInvoiceId(existing?.id || null);
     } catch (err) {

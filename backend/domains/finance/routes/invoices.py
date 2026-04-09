@@ -9,6 +9,7 @@ import requests
 import re
 
 from database import SessionLocal
+from core.notification_dispatch import notify_event
 
 def get_db():
     db = SessionLocal()
@@ -220,6 +221,7 @@ async def get_invoices(
     limit: int = Query(100),
     status: Optional[str] = None,
     patient_id: Optional[int] = None,
+    appointment_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -232,6 +234,8 @@ async def get_invoices(
             query = query.filter(Invoice.status == status)
         if patient_id:
             query = query.filter(Invoice.patient_id == patient_id)
+        if appointment_id:
+            query = query.filter(Invoice.appointment_id == appointment_id)
         
         invoices = query.order_by(desc(Invoice.created_at)).offset(skip).limit(limit).all()
         return [enrich_invoice(db, inv) for inv in invoices]
@@ -478,6 +482,27 @@ async def finalize_invoice(
 
         db.commit()
         db.refresh(invoice)
+
+        # ── Notify patient that invoice is ready ──────────────────────
+        patient = db.query(Patient).filter(Patient.id == invoice.patient_id).first()
+        clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+        if patient and clinic:
+            notify_event(
+                "invoice_notification",
+                db=db,
+                clinic_id=current_user.clinic_id,
+                to_phone=patient.phone or "",
+                to_email=patient.email or "",
+                to_name=patient.name,
+                template_data={
+                    "patient_name": patient.name,
+                    "clinic_name": clinic.name,
+                    "invoice_number": invoice.invoice_number,
+                    "total_amount": float(invoice.total or 0),
+                    "clinic_phone": clinic.phone or "",
+                },
+            )
+
         return enrich_invoice(db, invoice)
     except HTTPException:
         raise
@@ -555,6 +580,40 @@ async def mark_invoice_as_paid(
         
         db.commit()
         db.refresh(invoice)
+
+        # ── On full payment: fire google_review automatically ───────
+        if invoice.status == 'paid_unverified':
+            patient = db.query(Patient).filter(Patient.id == invoice.patient_id).first()
+            clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+            if patient and clinic:
+                # Try to fetch the clinic's Google Place review URL
+                review_link = ""
+                try:
+                    from models import ClinicGooglePlace
+                    gp = db.query(ClinicGooglePlace).filter(
+                        ClinicGooglePlace.clinic_id == current_user.clinic_id
+                    ).first()
+                    if gp and gp.place_id:
+                        review_link = f"https://search.google.com/local/writereview?placeid={gp.place_id}"
+                except Exception:
+                    pass  # model may not exist yet — skip silently
+
+                if review_link:
+                    notify_event(
+                        "google_review",
+                        db=db,
+                        clinic_id=current_user.clinic_id,
+                        to_phone=patient.phone or "",
+                        to_email=patient.email or "",
+                        to_name=patient.name,
+                        template_data={
+                            "patient_name": patient.name,
+                            "clinic_name": clinic.name,
+                            "review_link": review_link,
+                            "clinic_phone": clinic.phone or "",
+                        },
+                    )
+
         return enrich_invoice(db, invoice)
     except HTTPException:
         raise

@@ -23,14 +23,18 @@ router = APIRouter()
 NEXUS_BASE = os.getenv("NEXUS_SERVICES_URL", "http://localhost:8001")
 
 DEFAULT_EVENT_TYPES = [
+    "appointment_booked",
     "appointment_confirmation",
+    "checked_in",
     "invoice_notification",
     "prescription_notification",
     "appointment_reminder",
     "google_review",
     "consent_form",
-    "daily_summary",
 ]
+
+# Events hidden from the preferences UI (system-scheduled, not user-configurable)
+_HIDDEN_EVENT_TYPES = {"daily_summary", "daily_report"}
 
 def get_db():
     db = SessionLocal()
@@ -147,6 +151,7 @@ def get_preferences(
             "is_enabled": p.is_enabled,
         }
         for p in prefs
+        if p.event_type not in _HIDDEN_EVENT_TYPES
     ]
 
 

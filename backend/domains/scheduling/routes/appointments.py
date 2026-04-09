@@ -6,7 +6,7 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 from core.auth_utils import get_current_user
-from domains.communication.services.email_service import EmailService
+from core.notification_dispatch import notify_event, fmt_appt_time
 
 router = APIRouter()
 
@@ -146,37 +146,25 @@ async def create_appointment(
         # Get clinic information for email
         clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
         
-        # Send email notification for appointment scheduled
-        if db_appointment.patient_email and clinic:
-            try:
-                email_service = EmailService()
-                appointment_date_str = db_appointment.appointment_date.strftime("%B %d, %Y")
-                appointment_time_str = db_appointment.start_time
-                # Format time from 24-hour to 12-hour format
-                try:
-                    hour, minute = appointment_time_str.split(':')
-                    hour_int = int(hour)
-                    am_pm = 'AM' if hour_int < 12 else 'PM'
-                    display_hour = hour_int if hour_int <= 12 else hour_int - 12
-                    if display_hour == 0:
-                        display_hour = 12
-                    appointment_time_formatted = f"{display_hour}:{minute} {am_pm}"
-                except:
-                    appointment_time_formatted = appointment_time_str
-                
-                email_service.send_appointment_scheduled_email(
-                    to_email=db_appointment.patient_email,
-                    patient_name=db_appointment.patient_name,
-                    clinic_name=clinic.name,
-                    appointment_date=appointment_date_str,
-                    appointment_time=appointment_time_formatted,
-                    treatment=db_appointment.treatment,
-                    clinic_phone=clinic.phone
-                )
-            except Exception as email_error:
-                # Log error but don't fail the appointment creation
-                print(f"Failed to send appointment scheduled email: {email_error}")
-        
+        # ── Notify patient of new appointment ──────────────────────────
+        if clinic:
+            appt_date_str = db_appointment.appointment_date.strftime("%d %b %Y")
+            notify_event(
+                "appointment_booked",
+                db=db,
+                clinic_id=current_user.clinic_id,
+                to_phone=db_appointment.patient_phone or "",
+                to_email=db_appointment.patient_email or "",
+                to_name=db_appointment.patient_name,
+                template_data={
+                    "patient_name": db_appointment.patient_name,
+                    "clinic_name": clinic.name,
+                    "appointment_date": appt_date_str,
+                    "appointment_time": fmt_appt_time(db_appointment.start_time),
+                    "clinic_phone": clinic.phone or "",
+                },
+            )
+
         return AppointmentOut(
             id=db_appointment.id,
             clinic_id=db_appointment.clinic_id,
@@ -704,52 +692,36 @@ async def update_appointment(
         # Get clinic information for email
         clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
         
-        # Send email notifications if status changed and patient email exists
-        if status_changed and appointment.patient_email and clinic:
-            try:
-                email_service = EmailService()
-                appointment_date_str = appointment.appointment_date.strftime("%B %d, %Y")
-                appointment_time_str = appointment.start_time
-                # Format time from 24-hour to 12-hour format
-                try:
-                    hour, minute = appointment_time_str.split(':')
-                    hour_int = int(hour)
-                    am_pm = 'AM' if hour_int < 12 else 'PM'
-                    display_hour = hour_int if hour_int <= 12 else hour_int - 12
-                    if display_hour == 0:
-                        display_hour = 12
-                    appointment_time_formatted = f"{display_hour}:{minute} {am_pm}"
-                except:
-                    appointment_time_formatted = appointment_time_str
-                
-                if appointment.status == 'accepted':
-                    # Send appointment accepted email
-                    email_service.send_appointment_accepted_email(
-                        to_email=appointment.patient_email,
-                        patient_name=appointment.patient_name,
-                        clinic_name=clinic.name,
-                        appointment_date=appointment_date_str,
-                        appointment_time=appointment_time_formatted,
-                        treatment=appointment.treatment,
-                        doctor_name=doctor_name,
-                        clinic_phone=clinic.phone
-                    )
-                elif appointment.status == 'rejected':
-                    # Send appointment rejected email with custom reason if provided
-                    rejection_reason = appointment_update.rejection_reason
-                    email_service.send_appointment_rejected_email(
-                        to_email=appointment.patient_email,
-                        patient_name=appointment.patient_name,
-                        clinic_name=clinic.name,
-                        appointment_date=appointment_date_str,
-                        appointment_time=appointment_time_formatted,
-                        treatment=appointment.treatment,
-                        rejection_reason=rejection_reason,
-                        clinic_phone=clinic.phone
-                    )
-            except Exception as email_error:
-                # Log error but don't fail the appointment update
-                print(f"Failed to send appointment status email: {email_error}")
+        # ── Notify patient of status change ──────────────────────────
+        if status_changed and clinic:
+            appt_date_str = appointment.appointment_date.strftime("%d %b %Y")
+            td = {
+                "patient_name": appointment.patient_name,
+                "clinic_name": clinic.name,
+                "appointment_date": appt_date_str,
+                "appointment_time": fmt_appt_time(appointment.start_time),
+                "doctor_name": doctor_name or "our team",
+                "clinic_phone": clinic.phone or "",
+            }
+            if appointment.status in ("confirmed", "accepted"):
+                notify_event(
+                    "appointment_confirmation",
+                    db=db, clinic_id=current_user.clinic_id,
+                    to_phone=appointment.patient_phone or "",
+                    to_email=appointment.patient_email or "",
+                    to_name=appointment.patient_name,
+                    template_data=td,
+                )
+            elif appointment.status == "checking":
+                notify_event(
+                    "checked_in",
+                    db=db, clinic_id=current_user.clinic_id,
+                    to_phone=appointment.patient_phone or "",
+                    to_email=appointment.patient_email or "",
+                    to_name=appointment.patient_name,
+                    template_data=td,
+                )
+
         
         return AppointmentOut(
             id=appointment.id,

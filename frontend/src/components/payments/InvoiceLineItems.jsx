@@ -1,6 +1,103 @@
 import React, { useState } from "react";
 import InvoiceLineItemForm from "./InvoiceLineItemForm";
 
+/* ── GST Info Popover ─────────────────────────────────────────────────────── */
+const GST_INFO = {
+  exempt: [
+    { label: "SAC 9993 — EXEMPT (0% GST)", items: [
+      "OPD Consultation & Registration",
+      "Intraoral X-rays (RVG / IOPA), OPG, CBCT",
+      "Dental Fillings (Composite, GIC, Amalgam)",
+      "Root Canal Treatment (RCT), Pulpotomy",
+      "Routine & surgical Extractions, Impacted Wisdom Teeth",
+      "Scaling & Root Planing (for disease treatment)",
+      "Crowns & Bridges (PFM, Zirconia, Metal) — when part of treatment plan",
+      "Dental Implants & Dentures",
+      "Metal / Ceramic Braces (functional malocclusion treatment)",
+      "Jaw fracture treatment, cyst/tumour removal",
+    ]},
+  ],
+  taxable: [
+    { label: "SAC 999722 — TAXABLE (18% GST)", items: [
+      "Teeth Whitening / Bleaching (in-office or take-home)",
+      "Veneers / Laminates (purely cosmetic on healthy teeth)",
+      "Tooth Jewellery / Dental Gems",
+      "Gingival Depigmentation (gum bleaching — aesthetic only)",
+      "Cosmetic Enamel Contouring",
+    ]},
+    { label: "HSN 3004 — Sale of Goods (5–18% GST)", items: [
+      "Mouthwashes, Dental Floss, Interdental Brushes (18%)",
+      "Medicated Toothpaste (12–18% depending on composition)",
+      "Over-the-counter dental kits / prescribed gels sold separately",
+    ]},
+  ],
+  note: "Composite Supply Rule: The crown/implant fee you charge a patient remains 0% even if your lab charges you 12% GST — the primary service is healthcare. Consult your CA for jurisdiction-specific advice.",
+};
+
+const GSTInfoPopover = () => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        title="GST Guide for Indian Dental Clinics"
+        style={{
+          width: 20, height: 20, borderRadius: '50%',
+          background: '#e0f2fe', border: '1px solid #7dd3fc',
+          color: '#0369a1', fontSize: 11, fontWeight: 700,
+          cursor: 'pointer', lineHeight: '18px', textAlign: 'center',
+          flexShrink: 0,
+        }}
+      >ℹ</button>
+
+      {open && (
+        <>
+          {/* Backdrop */}
+          <div
+            onClick={() => setOpen(false)}
+            style={{ position: 'fixed', inset: 0, zIndex: 998 }}
+          />
+          {/* Panel */}
+          <div style={{
+            position: 'absolute', right: 0, top: 28, zIndex: 999,
+            width: 420, maxHeight: '75vh', overflowY: 'auto',
+            background: '#fff', border: '1px solid #e2e8f0',
+            borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,.15)',
+            padding: '16px 18px', fontSize: 12,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <span style={{ fontWeight: 700, fontSize: 13, color: '#1e293b' }}>🇮🇳 GST Guide — Indian Dental Clinics</span>
+              <button onClick={() => setOpen(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 16, color: '#64748b' }}>×</button>
+            </div>
+
+            {GST_INFO.exempt.map(sec => (
+              <div key={sec.label} style={{ marginBottom: 12 }}>
+                <div style={{ fontWeight: 700, color: '#16a34a', background: '#f0fdf4', padding: '4px 8px', borderRadius: 6, marginBottom: 6, fontSize: 11 }}>🟢 {sec.label}</div>
+                <ul style={{ margin: 0, paddingLeft: 18, color: '#374151', lineHeight: 1.7 }}>
+                  {sec.items.map(it => <li key={it}>{it}</li>)}
+                </ul>
+              </div>
+            ))}
+
+            {GST_INFO.taxable.map(sec => (
+              <div key={sec.label} style={{ marginBottom: 12 }}>
+                <div style={{ fontWeight: 700, color: '#dc2626', background: '#fef2f2', padding: '4px 8px', borderRadius: 6, marginBottom: 6, fontSize: 11 }}>🔴 {sec.label}</div>
+                <ul style={{ margin: 0, paddingLeft: 18, color: '#374151', lineHeight: 1.7 }}>
+                  {sec.items.map(it => <li key={it}>{it}</li>)}
+                </ul>
+              </div>
+            ))}
+
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '8px 10px', fontSize: 11, color: '#78350f', marginTop: 4 }}>
+              ⚠️ <strong>Composite Supply Rule:</strong> {GST_INFO.note}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdateInvoice, canEdit }) => {
   const [editingId, setEditingId] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -48,7 +145,10 @@ const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdat
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">Line Items</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-lg font-semibold text-gray-900">Line Items</h3>
+          <GSTInfoPopover />
+        </div>
         {canEdit && (
           <button
             onClick={() => {
@@ -61,6 +161,7 @@ const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdat
           </button>
         )}
       </div>
+
 
       {showAddForm && !editingId && (
         <InvoiceLineItemForm
