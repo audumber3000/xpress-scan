@@ -29,7 +29,7 @@ DEFAULT_EVENT_TYPES = [
     "appointment_reminder",
     "google_review",
     "consent_form",
-    "daily_report",
+    "daily_summary",
 ]
 
 def get_db():

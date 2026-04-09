@@ -94,7 +94,7 @@ def wa_appointment_booked(patient_name: str, clinic_name: str,
     tpl = _get_tpl("WA_TPL_APPOINTMENT_BOOKED", "mp_appointment_booked_v2")
     return {
         "template_name": tpl,
-        "components": [_header_text(clinic_name), _body_params(patient_name, clinic_name, appointment_date, appointment_time, clinic_phone)],
+        "components": [_body_params(patient_name, clinic_name, appointment_date, appointment_time, clinic_phone)],
     }
 
 
@@ -109,7 +109,7 @@ def wa_appointment_confirmed(patient_name: str, clinic_name: str,
     tpl = _get_tpl("WA_TPL_APPOINTMENT_CONFIRMED", "mp_appointment_confirmed")
     return {
         "template_name": tpl,
-        "components": [_header_text(clinic_name), _body_params(patient_name, clinic_name, appointment_date, appointment_time, clinic_phone)],
+        "components": [_body_params(patient_name, clinic_name, appointment_date, appointment_time, clinic_phone)],
     }
 
 
@@ -138,7 +138,7 @@ def wa_appointment_reminder(patient_name: str, clinic_name: str,
     tpl = _get_tpl("WA_TPL_APPOINTMENT_REMINDER", "mp_appointment_reminder")
     return {
         "template_name": tpl,
-        "components": [_header_text(clinic_name), _body_params(patient_name, clinic_name, appointment_date, appointment_time, clinic_phone)],
+        "components": [_body_params(patient_name, clinic_name, appointment_date, appointment_time, clinic_phone)],
     }
 
 
@@ -152,15 +152,12 @@ def wa_invoice_sent(patient_name: str, clinic_name: str,
                  {{3}} invoice_number, {{4}} total_amount, {{5}} clinic_phone
     """
     tpl = _get_tpl("WA_TPL_INVOICE", "mp_invoice_sent")
+    components = [_body_params(patient_name, clinic_name, invoice_number, f"₹{total_amount:,.2f}", clinic_phone)]
     if media_id or document_url:
-        header = _header_document(document_url, f"Invoice_{invoice_number}.pdf", media_id)
-    else:
-        header = _header_text(clinic_name)
+        components.insert(0, _header_document(document_url, f"Invoice_{invoice_number}.pdf", media_id))
     return {
         "template_name": tpl,
-        "components": [header, _body_params(
-            patient_name, clinic_name, invoice_number, f"₹{total_amount:,.2f}", clinic_phone
-        )],
+        "components": components,
     }
 
 
@@ -173,13 +170,12 @@ def wa_prescription_sent(patient_name: str, clinic_name: str, doctor_name: str =
                  {{3}} doctor_name, {{4}} clinic_phone
     """
     tpl = _get_tpl("WA_TPL_PRESCRIPTION", "mp_prescription_sent")
+    components = [_body_params(patient_name, clinic_name, doctor_name or "your doctor", clinic_phone)]
     if media_id or document_url:
-        header = _header_document(document_url, "Prescription.pdf", media_id)
-    else:
-        header = _header_text(clinic_name)
+        components.insert(0, _header_document(document_url, "Prescription.pdf", media_id))
     return {
         "template_name": tpl,
-        "components": [header, _body_params(patient_name, clinic_name, doctor_name or "your doctor", clinic_phone)],
+        "components": components,
     }
 
 
@@ -193,10 +189,7 @@ def wa_consent_form(patient_name: str, clinic_name: str, consent_link: str,
     tpl = _get_tpl("WA_TPL_CONSENT_FORM", "mp_consent_form")
     return {
         "template_name": tpl,
-        "components": [
-            _header_text(clinic_name),
-            _body_params(patient_name, clinic_name, procedure_name or "your procedure", consent_link, clinic_phone),
-        ],
+        "components": [_body_params(patient_name, clinic_name, procedure_name or "your procedure", consent_link, clinic_phone)],
     }
 
 
@@ -210,7 +203,7 @@ def wa_google_review(patient_name: str, clinic_name: str, review_link: str,
     tpl = _get_tpl("WA_TPL_GOOGLE_REVIEW", "mp_google_review")
     return {
         "template_name": tpl,
-        "components": [_header_text(clinic_name), _body_params(patient_name, clinic_name, review_link, clinic_phone)],
+        "components": [_body_params(patient_name, clinic_name, review_link, clinic_phone)],
     }
 
 
