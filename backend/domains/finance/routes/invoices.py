@@ -419,6 +419,14 @@ async def delete_line_item(
         }, None)
         
         db.delete(line_item)
+        db.flush()
+        
+        # If no line items remain on a draft invoice, delete the invoice entirely
+        remaining = db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == invoice_id).count()
+        if remaining == 0 and invoice.status == 'draft':
+            db.delete(invoice)
+            db.commit()
+            return {"deleted": True, "message": "Invoice deleted — no items remaining"}
         
         # Recalculate totals
         recalculate_invoice_totals(db, invoice)
@@ -634,8 +642,8 @@ async def delete_invoice(
         if not invoice:
             raise HTTPException(status_code=404, detail="Invoice not found")
         
-        # It's usually safer to only allow deleting drafts or unverified invoices,
-        # but the request asks to allow deleting invoices entirely to cancel them out from double entry.
+        if invoice.status in ('paid_verified', 'paid_unverified', 'partially_paid'):
+            raise HTTPException(status_code=400, detail="Paid invoices cannot be deleted")
         
         db.delete(invoice)
         db.commit()

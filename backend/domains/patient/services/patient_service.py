@@ -58,9 +58,6 @@ class PatientService(PatientServiceProtocol):
         patient = Patient(**patient_dict)
         created_patient = self.patient_repo.create(patient)
 
-        # Create draft invoice automatically
-        self._create_draft_invoice(created_patient, clinic_id)
-
         return created_patient
 
     def get_patient(self, patient_id: int, clinic_id: int) -> Optional[Patient]:

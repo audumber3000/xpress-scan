@@ -6,7 +6,8 @@ const CasePaperActionBar = ({
   onFormChange,
   onSave,
   onPrescription,
-  onInvoice
+  onInvoice,
+  hasExistingInvoice = false
 }) => {
   return (
     <div className="fixed bottom-8 right-12 z-[50] flex gap-4 p-5 bg-white/90 backdrop-blur-md rounded-[2.5rem] border border-white shadow-2xl shadow-indigo-900/10 animate-in slide-in-from-bottom duration-500 group">
@@ -46,10 +47,14 @@ const CasePaperActionBar = ({
       
       <button 
         onClick={onInvoice}
-        className="flex items-center gap-2 px-6 py-3 bg-[#00ba7c] text-white font-semibold rounded-lg text-sm hover:bg-[#009e6a] transition-all shadow-sm"
+        className={`flex items-center gap-2 px-6 py-3 font-semibold rounded-lg text-sm transition-all shadow-sm ${
+          hasExistingInvoice
+            ? 'bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100'
+            : 'bg-[#00ba7c] text-white hover:bg-[#009e6a]'
+        }`}
       >
         <Receipt size={18} />
-        <span>Invoice</span>
+        <span>{hasExistingInvoice ? 'View Invoice' : 'Invoice'}</span>
       </button>
     </div>
   );

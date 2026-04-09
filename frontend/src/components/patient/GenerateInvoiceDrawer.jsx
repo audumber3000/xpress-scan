@@ -246,9 +246,9 @@ const GenerateInvoiceDrawer = ({ isOpen, onClose, patientId, draftItems = [], on
                     <div className="flex justify-start">
                         <button
                             onClick={onClose}
-                            className="px-4 py-2 border border-red-300 text-red-700 bg-white hover:bg-red-50 rounded-lg transition-colors text-sm font-medium"
+                            className="px-4 py-2 border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 rounded-lg transition-colors text-sm font-medium"
                         >
-                            Delete Invoice
+                            Discard
                         </button>
                     </div>
                     

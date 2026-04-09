@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Path, Request
 from sqlalchemy.orm import Session
 from database import SessionLocal
-from models import Patient, Payment, TreatmentType, Invoice, InvoiceLineItem, InvoiceAuditLog, PatientDocument
+from models import Patient, Payment, TreatmentType, PatientDocument
 from schemas import PatientCreate, PatientOut
 from typing import List
 from schemas import PatientResponse
@@ -65,65 +65,6 @@ def create_patient(
         db_patient = Patient(**patient_data)
         db.add(db_patient)
         db.flush()
-        
-        # Find treatment type to get price
-        treatment_type = db.query(TreatmentType).filter(
-            TreatmentType.clinic_id == current_user.clinic_id,
-            TreatmentType.name == patient.treatment_type
-        ).first()
-        
-        amount = treatment_type.price if treatment_type else 2000.0
-        
-        # Generate invoice number
-        year = datetime.utcnow().year
-        last_invoice = db.query(Invoice).filter(
-            Invoice.clinic_id == current_user.clinic_id,
-            Invoice.invoice_number.like(f"INV-{year}-%")
-        ).order_by(Invoice.invoice_number.desc()).first()
-        
-        if last_invoice:
-            try:
-                last_num = int(last_invoice.invoice_number.split('-')[-1])
-                new_num = last_num + 1
-            except:
-                new_num = 1
-        else:
-            new_num = 1
-        
-        invoice_number = f"INV-{year}-{new_num:04d}"
-        
-        # Create invoice with draft status
-        invoice = Invoice(
-            clinic_id=current_user.clinic_id,
-            patient_id=db_patient.id,
-            invoice_number=invoice_number,
-            status='draft',
-            subtotal=amount,
-            tax=0.0,
-            total=amount,
-            created_by=current_user.id
-        )
-        db.add(invoice)
-        db.flush()
-        
-        # Create initial line item
-        line_item = InvoiceLineItem(
-            invoice_id=invoice.id,
-            description=f"{patient.treatment_type}",
-            quantity=1.0,
-            unit_price=amount,
-            amount=amount
-        )
-        db.add(line_item)
-        
-        # Create audit log
-        audit_log = InvoiceAuditLog(
-            invoice_id=invoice.id,
-            action='created',
-            user_id=current_user.id,
-            notes=f"Invoice created automatically with patient registration"
-        )
-        db.add(audit_log)
         
         db.commit()
         db.refresh(db_patient)

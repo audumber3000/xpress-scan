@@ -167,8 +167,10 @@ const PatientTimeline = ({
                     <span className="text-[11px] font-medium text-gray-500">{displayDate}</span>
                     <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1.5 text-gray-700">
-                            <div className="w-4 h-4 bg-gray-200 overflow-hidden shrink-0 rounded-full">
-                                <img src={`https://i.pravatar.cc/150?u=${doctorName}`} alt="Doctor" className="w-full h-full object-cover" />
+                            <div className="w-4 h-4 shrink-0 rounded-full bg-[#2a276e] flex items-center justify-center">
+                                <span className="text-white font-bold" style={{ fontSize: '7px', lineHeight: 1 }}>
+                                    {doctorName ? doctorName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : 'DR'}
+                                </span>
                             </div>
                             <span className="text-[11px] font-medium truncate max-w-[100px]">{doctorName}</span>
                         </div>

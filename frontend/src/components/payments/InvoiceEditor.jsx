@@ -219,6 +219,12 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
     try {
       setSaving(true);
       const updated = await api.delete(`/invoices/${currentInvoiceId}/line-items/${lineItemId}`);
+      if (updated?.deleted) {
+        toast.success("Invoice deleted — no items remaining");
+        if (onSave) onSave();
+        onClose();
+        return;
+      }
       setInvoice(updated);
       toast.success("Line item deleted successfully");
     } catch (error) {

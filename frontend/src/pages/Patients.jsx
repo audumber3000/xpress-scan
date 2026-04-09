@@ -362,7 +362,11 @@ const Patients = () => {
                     </tr>
                   ) : (
                     paginatedData.map((patient) => (
-                      <tr key={patient.id} className="hover:bg-gray-50/50">
+                      <tr
+                        key={patient.id}
+                        className="hover:bg-indigo-50/40 cursor-pointer transition-colors"
+                        onClick={() => navigate(`/patient-profile/${patient.id}`)}
+                      >
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{patient.id}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-600">{patient.display_id || '---'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{patient.name}</td>
@@ -373,9 +377,9 @@ const Patients = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDate(patient.last_visit)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
                           <button 
-                            onClick={() => navigate(`/patient-profile/${patient.id}`)}
+                            onClick={(e) => { e.stopPropagation(); navigate(`/patient-profile/${patient.id}`); }}
                             className="p-1.5 text-[#2a276e] hover:bg-indigo-50 rounded-md transition-colors inline-flex"
-                            title="View Reports"
+                            title="View Profile"
                           >
                             <Eye size={16} />
                           </button>

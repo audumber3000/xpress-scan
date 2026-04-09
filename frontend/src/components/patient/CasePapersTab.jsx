@@ -47,7 +47,6 @@ const CasePapersTab = ({
   // Drawer States
   const [prescriptionOpen, setPrescriptionOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
-  const [invoiceOpen, setInvoiceOpen] = useState(false);
   
   // Clinical Session State (Isolated per Case Paper)
   const [sessionTeethData, setSessionTeethData] = useState({});
@@ -56,6 +55,11 @@ const CasePapersTab = ({
 
   // Draft Billing State (Local to Case Paper session)
   const [draftCharges, setDraftCharges] = useState([]);
+
+  // Invoice editing: null=closed, 'new'=create, number=existing
+  const [invoiceEditId, setInvoiceEditId] = useState(null);
+  // Tracks if a finalized invoice already exists for this case paper
+  const [existingCasePaperInvoiceId, setExistingCasePaperInvoiceId] = useState(null);
   
   // Form state for Lab Order
   const [labOrderForm, setLabOrderForm] = useState({
@@ -154,8 +158,55 @@ const CasePapersTab = ({
   useEffect(() => {
     if (selectedCasePaper?.id) {
       fetchLabOrders();
+      if (!selectedCasePaper?.isNew) fetchExistingCasePaperInvoice();
+    } else {
+      setExistingCasePaperInvoiceId(null);
     }
   }, [selectedCasePaper?.id]);
+
+  const fetchExistingCasePaperInvoice = async () => {
+    if (!selectedCasePaper?.id || selectedCasePaper?.isNew || !patientData?.id) return;
+    try {
+      const invoices = await api.get('/invoices', { params: { patient_id: patientData.id, limit: 200 } });
+      const casePaperId = String(selectedCasePaper.id);
+      const existing = (invoices || []).find(
+        inv => String(inv.appointment_id) === casePaperId && inv.status !== 'draft'
+      );
+      setExistingCasePaperInvoiceId(existing?.id || null);
+    } catch (err) {
+      console.error('Failed to check existing invoice:', err);
+    }
+  };
+
+  const handleAutoSaveForDrawer = async (openCallback) => {
+    if (!selectedCasePaper?.isNew) {
+      openCallback();
+      return;
+    }
+    try {
+      const payload = {
+        ...form,
+        patient_id: patientData.id,
+        clinic_id: patientData.clinic_id,
+        date: new Date().toISOString(),
+        status: 'In Progress',
+        dental_chart_snapshot: sessionTeethData,
+        treatment_plan_snapshot: sessionTreatmentPlan,
+        tooth_notes_snapshot: sessionToothNotes
+      };
+      const saved = await api.post('/clinical/case-papers', payload);
+      setSelectedCasePaper(saved);
+      fetchCasePapers();
+      if (typeof onSaveClinicalRecords === 'function') {
+        onSaveClinicalRecords({ dental_chart: sessionTeethData, treatment_plan: sessionTreatmentPlan, tooth_notes: sessionToothNotes }).catch(() => {});
+      }
+      toast.success('Case paper saved automatically');
+      openCallback();
+    } catch (err) {
+      console.error('Failed to auto-save case paper:', err);
+      toast.error('Error saving case paper. Please save manually first.');
+    }
+  };
 
   const fetchLabOrders = async () => {
     try {
@@ -486,20 +537,14 @@ const CasePapersTab = ({
           selectedCasePaper={selectedCasePaper}
           isNewCasePaper={selectedCasePaper?.isNew}
           onNewLabOrder={() => {
-            if (selectedCasePaper?.isNew) {
-              toast.info('Save the case paper first, then add lab orders.');
-              return;
-            }
-            setSelectedLabOrder(null);
-            setIsLabDrawerOpen(true);
+            handleAutoSaveForDrawer(() => {
+              setSelectedLabOrder(null);
+              setIsLabDrawerOpen(true);
+            });
           }}
           onEditLabOrder={(order) => { setSelectedLabOrder(order); setIsLabDrawerOpen(true); }}
           onNewPrescription={() => {
-            if (selectedCasePaper?.isNew) {
-              toast.info('Save the case paper first, then add prescription.');
-              return;
-            }
-            setPrescriptionOpen(true);
+            handleAutoSaveForDrawer(() => setPrescriptionOpen(true));
           }}
         />
 
@@ -509,11 +554,7 @@ const CasePapersTab = ({
           form={form}
           onFormChange={setForm}
           onUploadClick={() => {
-            if (selectedCasePaper?.isNew) {
-              toast.info('Save the case paper first, then upload documents.');
-              return;
-            }
-            setScanOpen(true);
+            handleAutoSaveForDrawer(() => setScanOpen(true));
           }}
         />
       </div>
@@ -524,18 +565,15 @@ const CasePapersTab = ({
         onFormChange={setForm}
         onSave={handleSaveCasePaper}
         onPrescription={() => {
-          if (selectedCasePaper?.isNew) {
-            toast.info('Save the case paper first, then add prescription.');
-            return;
-          }
-          setPrescriptionOpen(true);
+          handleAutoSaveForDrawer(() => setPrescriptionOpen(true));
         }}
+        hasExistingInvoice={!!existingCasePaperInvoiceId}
         onInvoice={() => {
-          if (selectedCasePaper?.isNew) {
-            toast.info('Save the case paper first, then generate invoice.');
+          if (existingCasePaperInvoiceId) {
+            setInvoiceEditId(String(existingCasePaperInvoiceId));
             return;
           }
-          setInvoiceOpen(true);
+          handleAutoSaveForDrawer(() => setInvoiceEditId('new'));
         }}
       />
 
@@ -608,16 +646,18 @@ const CasePapersTab = ({
           }}
       />
       
-      {invoiceOpen && (
+      {invoiceEditId && (
         <InvoiceEditor
-          invoiceId="new"
-          onClose={() => setInvoiceOpen(false)}
+          invoiceId={invoiceEditId}
+          onClose={() => setInvoiceEditId(null)}
           onSave={() => {
             setDraftCharges([]);
+            setInvoiceEditId(null);
+            fetchExistingCasePaperInvoice();
             refreshPayments?.();
             refreshInvoices?.();
           }}
-          prefill={{
+          prefill={invoiceEditId === 'new' ? {
             patientId: patientData?.id,
             appointmentId: selectedCasePaper?.isNew ? null : selectedCasePaper?.id,
             notes: `Case Paper #${selectedVisitNumber || selectedCasePaper?.id}`,
@@ -629,7 +669,7 @@ const CasePapersTab = ({
                 unit_price: order.cost || 0
               }))
             ]
-          }}
+          } : null}
         />
       )}
 
