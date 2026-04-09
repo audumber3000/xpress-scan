@@ -758,7 +758,7 @@ async def send_invoice_via_whatsapp(
             pass
         
         # Prepare message using template
-        from routes.message_templates import get_template_for_scenario, render_template
+        from domains.communication.routes.message_templates import get_template_for_scenario, render_template
         
         clinic_name = clinic.name if clinic else "Clinic"
         filename = f"invoice_{invoice.id}.pdf"  # Use invoice ID as filename

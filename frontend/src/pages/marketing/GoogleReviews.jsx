@@ -342,7 +342,7 @@ const GoogleReviews = () => {
             <gmp-place-autocomplete 
                id="location-input"
                className="w-full block"
-               style={{ width: '100%', minHeight: '46px' }}
+               style={{ width: '100%', minHeight: '46px', position: 'relative', zIndex: 9999, pointerEvents: 'auto', display: 'block' }}
             />
           </div>
 

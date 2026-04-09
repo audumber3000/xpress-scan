@@ -1,5 +1,6 @@
 # Environment files
 .env
+.env.production
 
 # Firebase service account (contains private keys - never commit)
 **/betterclinic-*-firebase-adminsdk-*.json

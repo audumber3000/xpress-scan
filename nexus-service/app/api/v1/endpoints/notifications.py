@@ -129,13 +129,19 @@ async def send_whatsapp(request: WhatsAppSendRequest):
 
 @router.post("/whatsapp/test")
 async def test_whatsapp(request: WhatsAppTestRequest):
-    """Send a free-form WhatsApp text for testing (requires 24h window)."""
-    result = await notification_service.send_whatsapp_text(
-        mobile_number=request.mobile_number,
-        message=request.message,
+    """Send a test WhatsApp template via MSG91 (mp_appointment_booked_v2 with demo values)."""
+    result = await notification_service.dispatch_event(
+        event_type="appointment_booked",
+        channel="whatsapp",
+        to_phone=request.mobile_number,
+        patient_name="Test Patient",
+        clinic_name="Demo Clinic",
+        appointment_date="25 Apr 2026",
+        appointment_time="10:00 AM",
+        clinic_phone="+91 9000000000",
     )
-    if not result["success"]:
-        raise HTTPException(status_code=500, detail=result["error"])
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Send failed"))
     return result
 
 

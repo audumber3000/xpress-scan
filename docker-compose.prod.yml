@@ -1,0 +1,177 @@
+services:
+
+  # ── Database ────────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # No host port exposed — only accessible within Docker network
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    # No host port exposed — only accessible within Docker network
+
+  # ── Main Backend ─────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ${FIREBASE_JSON_PATH}:/app/firebase-service-account.json:ro
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=${JWT_SECRET}
+      - FIREBASE_SERVICE_ACCOUNT_PATH=/app/firebase-service-account.json
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_ENDPOINT_URL=${R2_ENDPOINT_URL}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      - CASHFREE_APP_ID=${CASHFREE_APP_ID}
+      - CASHFREE_SECRET_KEY=${CASHFREE_SECRET_KEY}
+      - CASHFREE_ENV=${CASHFREE_ENV}
+      - CASHFREE_RETURN_URL=${CASHFREE_RETURN_URL}
+      - CASHFREE_NOTIFY_URL=${CASHFREE_NOTIFY_URL}
+      - SUBSCRIPTION_PROVIDER=${SUBSCRIPTION_PROVIDER}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_PLACES_API_KEY=${GOOGLE_PLACES_API_KEY}
+      - BACKEND_URL=${BACKEND_URL}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - NEXUS_SERVICES_URL=http://nexus:8001
+      - MSG91_AUTH_KEY=${MSG91_AUTH_KEY}
+      - MSG91_SMS_SENDER=${MSG91_SMS_SENDER}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  # ── Backend RQ Worker ────────────────────────────────────────────────────────
+  backend-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: rq worker --url redis://redis:6379/0 high default low
+    volumes:
+      - ${FIREBASE_JSON_PATH}:/app/firebase-service-account.json:ro
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=${JWT_SECRET}
+      - FIREBASE_SERVICE_ACCOUNT_PATH=/app/firebase-service-account.json
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_ENDPOINT_URL=${R2_ENDPOINT_URL}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  # ── Nexus Service ────────────────────────────────────────────────────────────
+  nexus:
+    build:
+      context: ./nexus-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./nexus-service/assets:/app/assets
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379/0
+      - BACKEND_URL=http://backend:8000
+      - NEXUS_PORT=8001
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_ENDPOINT_URL=${R2_ENDPOINT_URL}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - META_ACCESS_TOKEN=${META_ACCESS_TOKEN}
+      - META_PHONE_NUMBER_ID=${META_PHONE_NUMBER_ID}
+      - META_WHATSAPP_BUSINESS_ACCOUNT_ID=${META_WHATSAPP_BUSINESS_ACCOUNT_ID}
+      - META_API_VERSION=${META_API_VERSION}
+      - ZEPTO_MAIL_TOKEN=${ZEPTO_MAIL_TOKEN}
+      - ZEPTO_API_URL=${ZEPTO_API_URL}
+      - ZEPTO_PLATFORM_FROM_EMAIL=${ZEPTO_PLATFORM_FROM_EMAIL}
+      - ZEPTO_PLATFORM_FROM_NAME=${ZEPTO_PLATFORM_FROM_NAME}
+      - ZEPTO_PATIENT_FROM_EMAIL=${ZEPTO_PATIENT_FROM_EMAIL}
+      - ZEPTO_PATIENT_FROM_NAME=${ZEPTO_PATIENT_FROM_NAME}
+      - ZEPTO_FROM_EMAIL=${ZEPTO_FROM_EMAIL}
+      - ZEPTO_FROM_NAME=${ZEPTO_FROM_NAME}
+      - WA_TPL_APPOINTMENT_BOOKED=${WA_TPL_APPOINTMENT_BOOKED}
+      - WA_TPL_APPOINTMENT_CONFIRMED=${WA_TPL_APPOINTMENT_CONFIRMED}
+      - WA_TPL_CHECKED_IN=${WA_TPL_CHECKED_IN}
+      - WA_TPL_APPOINTMENT_REMINDER=${WA_TPL_APPOINTMENT_REMINDER}
+      - WA_TPL_INVOICE=${WA_TPL_INVOICE}
+      - WA_TPL_PRESCRIPTION=${WA_TPL_PRESCRIPTION}
+      - WA_TPL_CONSENT_FORM=${WA_TPL_CONSENT_FORM}
+      - WA_TPL_GOOGLE_REVIEW=${WA_TPL_GOOGLE_REVIEW}
+      - MSG91_AUTH_KEY=${MSG91_AUTH_KEY}
+      - MSG91_SMS_SENDER=${MSG91_SMS_SENDER}
+    ports:
+      - "8001:8001"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  # ── Nexus RQ Worker ──────────────────────────────────────────────────────────
+  nexus-worker:
+    build:
+      context: ./nexus-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: python worker.py
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379/0
+      - BACKEND_URL=http://backend:8000
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_ENDPOINT_URL=${R2_ENDPOINT_URL}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - META_ACCESS_TOKEN=${META_ACCESS_TOKEN}
+      - META_PHONE_NUMBER_ID=${META_PHONE_NUMBER_ID}
+      - META_API_VERSION=${META_API_VERSION}
+      - ZEPTO_MAIL_TOKEN=${ZEPTO_MAIL_TOKEN}
+      - ZEPTO_API_URL=${ZEPTO_API_URL}
+      - ZEPTO_FROM_EMAIL=${ZEPTO_FROM_EMAIL}
+      - ZEPTO_FROM_NAME=${ZEPTO_FROM_NAME}
+      - ZEPTO_PLATFORM_FROM_EMAIL=${ZEPTO_PLATFORM_FROM_EMAIL}
+      - ZEPTO_PLATFORM_FROM_NAME=${ZEPTO_PLATFORM_FROM_NAME}
+      - ZEPTO_PATIENT_FROM_EMAIL=${ZEPTO_PATIENT_FROM_EMAIL}
+      - ZEPTO_PATIENT_FROM_NAME=${ZEPTO_PATIENT_FROM_NAME}
+      - MSG91_AUTH_KEY=${MSG91_AUTH_KEY}
+      - MSG91_SMS_SENDER=${MSG91_SMS_SENDER}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  redis_data:

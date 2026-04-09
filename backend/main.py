@@ -26,7 +26,7 @@ from core.permissions import permission_manager
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from database import get_db, engine
-from models import ClinicalAsset
+from models import Base, ClinicalAsset
 from domains.infrastructure.services.r2_storage import get_presigned_url
 from fastapi import Depends
 # Domain imports (using clean architecture routes)
@@ -84,7 +84,10 @@ async def _daily_places_sync():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan context manager"""
-    # Startup
+    # Startup — ensure all ORM tables exist before any migrations run
+    Base.metadata.create_all(bind=engine)
+    print("✅ Database tables verified/created")
+
     await cache_service.init_cache()
     print("Application started with caching enabled")
 

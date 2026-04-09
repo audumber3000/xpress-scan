@@ -20,7 +20,7 @@ from domains.finance.services.cashfree.cashfree_provider import CashfreeProvider
 
 router = APIRouter()
 
-NEXUS_BASE = os.getenv("NEXUS_URL", "http://localhost:8001")
+NEXUS_BASE = os.getenv("NEXUS_SERVICES_URL", "http://localhost:8001")
 
 DEFAULT_EVENT_TYPES = [
     "appointment_confirmation",
@@ -658,15 +658,73 @@ async def template_test_send(
         rendered = f"[MolarPlus Test] {body.event_type.replace('_', ' ').title()} — {clinic_name}"
         template_name = body.event_type
 
+    # Per-event demo data for WhatsApp templates
+    WA_DEMO_DATA = {
+        "appointment_booked": {
+            "patient_name": "Rahul Sharma", "clinic_name": clinic_name,
+            "appointment_date": "25 Apr 2026", "appointment_time": "10:30 AM",
+            "clinic_phone": "+91 9000000000",
+        },
+        "appointment_confirmation": {
+            "patient_name": "Rahul Sharma", "clinic_name": clinic_name,
+            "appointment_date": "25 Apr 2026", "appointment_time": "10:30 AM",
+            "clinic_phone": "+91 9000000000",
+        },
+        "checked_in": {
+            "patient_name": "Rahul Sharma", "clinic_name": clinic_name,
+            "doctor_name": "Dr. Mehta", "clinic_phone": "+91 9000000000",
+        },
+        "appointment_reminder": {
+            "patient_name": "Rahul Sharma", "clinic_name": clinic_name,
+            "appointment_date": "25 Apr 2026", "appointment_time": "10:30 AM",
+            "clinic_phone": "+91 9000000000",
+        },
+        "invoice_notification": {
+            "patient_name": "Rahul Sharma", "clinic_name": clinic_name,
+            "invoice_number": "INV-2026-001", "total_amount": 850.0,
+            "clinic_phone": "+91 9000000000",
+        },
+        "prescription_notification": {
+            "patient_name": "Rahul Sharma", "clinic_name": clinic_name,
+            "doctor_name": "Dr. Mehta", "clinic_phone": "+91 9000000000",
+        },
+        "consent_form": {
+            "patient_name": "Rahul Sharma", "clinic_name": clinic_name,
+            "consent_link": "https://molarplus.com/consent/demo",
+            "procedure_name": "Root Canal", "clinic_phone": "+91 9000000000",
+        },
+        "google_review": {
+            "patient_name": "Rahul Sharma", "clinic_name": clinic_name,
+            "review_link": "https://g.page/r/demo-review",
+            "clinic_phone": "+91 9000000000",
+        },
+        "daily_summary": {
+            "doctor_name": "Dr. Mehta", "clinic_name": clinic_name,
+            "date": "09 Apr 2026", "total_patients": 12,
+            "total_appointments": 15, "total_revenue": 18500.0,
+            "cash_revenue": 12000.0, "online_revenue": 6500.0,
+        },
+    }
+
     # Send via Nexus
     success = False
     error_msg = None
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             if channel == "whatsapp":
+                demo = WA_DEMO_DATA.get(body.event_type, {
+                    "patient_name": "Test Patient", "clinic_name": clinic_name,
+                    "appointment_date": "25 Apr 2026", "appointment_time": "10:00 AM",
+                    "clinic_phone": "+91 9000000000",
+                })
                 resp = await client.post(
-                    f"{NEXUS_BASE}/api/v1/notifications/whatsapp/test",
-                    json={"mobile_number": body.recipient, "message": rendered},
+                    f"{NEXUS_BASE}/api/v1/notifications/send-event",
+                    json={
+                        "event_type": body.event_type,
+                        "channel": "whatsapp",
+                        "to_phone": body.recipient,
+                        "template_data": demo,
+                    },
                 )
             elif channel == "email":
                 resp = await client.post(

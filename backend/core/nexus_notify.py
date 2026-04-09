@@ -10,7 +10,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-NEXUS_BASE = os.getenv("NEXUS_BASE_URL", "http://localhost:8001")
+NEXUS_BASE = os.getenv("NEXUS_SERVICES_URL", "http://localhost:8001")
 
 
 async def _fire(event_type: str, channel: str, to_email: str = "", to_name: str = "",

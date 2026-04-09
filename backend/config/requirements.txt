@@ -26,3 +26,5 @@ email-validator
 google-auth
 google-auth-oauthlib
 google-api-python-client
+sentry-sdk[fastapi]>=2.0.0
+jinja2
