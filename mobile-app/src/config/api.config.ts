@@ -44,7 +44,9 @@ export const getNexusBaseUrl = (): string => {
 export const getApiBaseUrl = (): string => {
   // 1. Check for environment variable first (standard for Expo)
   if (process.env.EXPO_PUBLIC_API_URL) {
-    console.log('🌐 [CONFIG] Using API URL from environment:', process.env.EXPO_PUBLIC_API_URL);
+    if (__DEV__) {
+      console.log('🌐 [CONFIG] Using API URL from environment:', process.env.EXPO_PUBLIC_API_URL);
+    }
     return process.env.EXPO_PUBLIC_API_URL;
   }
 
@@ -53,7 +55,6 @@ export const getApiBaseUrl = (): string => {
   const isDev = process.env.NODE_ENV === 'development' || __DEV__;
   
   if (!isDev) {
-    console.log('🌐 [CONFIG] Using Production API:', API_CONFIG.PRODUCTION);
     return API_CONFIG.PRODUCTION;
   }
 
@@ -62,15 +63,21 @@ export const getApiBaseUrl = (): string => {
   
   if (Platform.OS === 'android') {
     // Android emulator uses 10.0.2.2 to access host machine's localhost
-    console.log('🤖 [CONFIG] Development: Android detected - using 10.0.2.2:8000');
+    if (__DEV__) {
+      console.log('🤖 [CONFIG] Development: Android detected - using 10.0.2.2:8000');
+    }
     return API_CONFIG.ANDROID_EMULATOR;
   } else if (Platform.OS === 'ios') {
     // iOS simulator can use localhost
-    console.log('🍎 [CONFIG] Development: iOS detected - using localhost:8000');
+    if (__DEV__) {
+      console.log('🍎 [CONFIG] Development: iOS detected - using localhost:8000');
+    }
     return API_CONFIG.LOCALHOST;
   }
   
   // Fallback to configured BASE_URL
-  console.log('💻 [CONFIG] Using configured BASE_URL:', API_CONFIG.BASE_URL);
+  if (__DEV__) {
+    console.log('💻 [CONFIG] Using configured BASE_URL:', API_CONFIG.BASE_URL);
+  }
   return API_CONFIG.BASE_URL;
 };

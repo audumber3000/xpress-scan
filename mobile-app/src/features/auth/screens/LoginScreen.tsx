@@ -97,6 +97,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     }
   };
 
+  
   // 2/3 of total horizontal width (with 28 padding on each side)
   const googleCardWidth = (width - 56) * 2 / 3;
 
@@ -170,7 +171,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
             </View>
           </TouchableOpacity>
         </View>
-      </View>
+
+              </View>
     </ScrollView>
   );
 
