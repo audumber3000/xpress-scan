@@ -178,21 +178,21 @@ body {{
   font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
   color: var(--text-main);
   line-height: 1.3;
-  background-color: var(--bg-color);
+  background-color: #fff;
   margin: 0;
-  padding: 20px;
+  padding: 0;
   font-size: 13px;
 }}
 .invoice-container {{
-  max-width: 850px;
-  margin: auto;
+  width: 100%;
+  min-height: 297mm;
+  margin: 0;
   background: #fff;
-  box-shadow: 0 4px 15px rgba(0,0,0,.1);
-  border-radius: 8px;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }}
 .color-strip {{ height: 10px; background-color: var(--primary-color); }}
-.invoice-body {{ padding: 25px 35px; }}
+.invoice-body {{ padding: 40px 50px; flex-grow: 1; }}
 .header {{
   display: flex;
   justify-content: space-between;
