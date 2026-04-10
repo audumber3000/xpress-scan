@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { MessageCircle } from 'lucide-react';
 import { api } from "../../utils/api";
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -95,10 +96,10 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
     const clinicPhone = user?.clinic?.phone || '';
     const clinicAddress = user?.clinic?.address || '';
     const today = new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' });
+    const primaryColor = user?.clinic?.primary_color || '#1a2a6c';
 
     const downloadPrescriptionPdf = () => {
         const validItems = items.filter(i => i.medicine_name.trim());
-        const primaryColor = user?.clinic?.primary_color || '#1a2a6c';
         const logoUrl = user?.clinic?.logo_url;
         const clinicTagline = user?.clinic?.tagline || 'Comprehensive Clinical Care';
         const doctorReg = user?.clinic?.reg_number || '';
