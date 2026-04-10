@@ -806,98 +806,47 @@ async def send_invoice_via_whatsapp(
             TemplateConfiguration.category == 'invoice'
         ).first()
 
-        # Generate HTML invoice template
+        # 2. Generate PDF using engine
         html_content = generate_invoice_html(invoice, clinic, config)
-        
-        # Convert to PDF
         pdf_path = html_template_to_pdf(html_content)
         
-        # Read PDF file and convert to base64
-        import base64
-        with open(pdf_path, 'rb') as pdf_file:
-            pdf_content = pdf_file.read()
-            pdf_base64 = base64.b64encode(pdf_content).decode('utf-8')
-        
-        # Cleanup temp file
-        try:
-            os.remove(pdf_path)
-        except:
-            pass
-        
-        # Prepare message using template
-        from domains.communication.routes.message_templates import get_template_for_scenario, render_template
-        
-        clinic_name = clinic.name if clinic else "Clinic"
-        filename = f"invoice_{invoice.id}.pdf"  # Use invoice ID as filename
-        
-        # Get invoice template or use default
-        default_invoice_message = f"Dear {patient.name},\n\nYour invoice #{invoice.invoice_number} is ready.\n\nTotal Amount: ₹{invoice.total:.2f}\n\nPlease find the invoice PDF attached.\n\nThank you,\n{clinic_name}"
-        template_content = get_template_for_scenario(
-            db,
-            current_user.clinic_id,
-            "invoice",
-            default_invoice_message
-        )
-        
-        # Render template with variables
-        template_vars = {
-            "patient_name": patient.name,
-            "clinic_name": clinic_name,
-            "invoice_number": invoice.invoice_number,
-            "invoice_id": invoice.id,
-            "total_amount": f"₹{invoice.total:.2f}",
-            "subtotal": f"₹{invoice.subtotal:.2f}",
-            "tax": f"₹{invoice.tax:.2f}",
-            "payment_mode": invoice.payment_mode or "Not specified"
-        }
-        message = render_template(template_content, template_vars)
-        
-        # Send via WhatsApp
-        # WhatsApp Service URL (MolarPlus Nexus)
+        # 2. Upload to Nexus Media Service (Official Legacy Flow)
         NEXUS_SERVICES_URL = os.getenv("NEXUS_SERVICES_URL", "http://localhost:8001")
-        
-        # Clean phone number
-        clean_phone = re.sub(r'\D', '', str(patient.phone))
-        if len(clean_phone) == 10:
-            clean_phone = "91" + clean_phone
-        
-        # Send message with PDF as base64 media
         try:
-            response = requests.post(
-                f"{NEXUS_SERVICES_URL}/api/send/{current_user.id}",
-                json={
-                    "phone": clean_phone,
-                    "message": message,
-                    "media": pdf_base64,
-                    "mediaType": "application/pdf",
-                    "filename": filename
-                },
-                timeout=60
-            )
+            with open(pdf_path, 'rb') as f:
+                files = {'file': (f'Invoice_{invoice.invoice_number}.pdf', f, 'application/pdf')}
+                data = {'clinic_id': str(current_user.clinic_id), 'patient_id': str(patient.id)}
+                resp = requests.post(f"{NEXUS_SERVICES_URL}/api/v1/notifications/media/upload", files=files, data=data, timeout=30)
+                
+            # Cleanup temp file
+            if os.path.exists(pdf_path): os.remove(pdf_path)
             
-            if response.status_code == 200:
-                result = response.json()
-                if result.get("success"):
-                    return {
-                        "success": True,
-                        "message": "Invoice sent successfully via WhatsApp",
-                        "phone_number": clean_phone
-                    }
-                else:
-                    raise HTTPException(
-                        status_code=500,
-                        detail=result.get("error", "Failed to send invoice via WhatsApp")
-                    )
-            else:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"WhatsApp service returned status {response.status_code}"
-                )
-        except requests.exceptions.RequestException as e:
-            raise HTTPException(
-                status_code=503,
-                detail=f"Failed to connect to WhatsApp service: {str(e)}"
-            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=500, detail=f"Nexus Upload Failed: {resp.text}")
+            
+            media_id = resp.json().get("media_id") # Nexus returns public R2 URL as media_id
+        except Exception as e:
+            if os.path.exists(pdf_path): os.remove(pdf_path)
+            raise HTTPException(status_code=500, detail=f"Nexus Connection Error: {str(e)}")
+
+        # 3. Dispatch WhatsApp event via Nexus (Universal Service)
+        notify_event(
+            "invoice_notification",
+            db=db,
+            clinic_id=current_user.clinic_id,
+            to_phone=patient.phone,
+            to_name=patient.name,
+            template_data={
+                "patient_name": patient.name,
+                "clinic_name": clinic.name,
+                "invoice_number": invoice.invoice_number,
+                "total_amount": float(invoice.total),
+                "clinic_phone": clinic.phone or "",
+                "media_id": media_id  # Nexus handles this public R2 URL
+            }
+        )
+
+        return {"success": True, "message": "Invoice sharing initiated via official Nexus service"}
         
     except HTTPException:
         raise

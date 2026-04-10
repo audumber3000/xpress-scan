@@ -7,6 +7,14 @@ from core.auth_utils import get_current_user, require_doctor_or_owner
 from typing import List, Optional
 from datetime import datetime
 from domains.activity.routes.activity_log import push_activity
+from domains.medical.services.prescription_service import PrescriptionService
+from domains.infrastructure.services.pdf_service import html_template_to_pdf
+from core.notification_dispatch import notify_event
+import os
+import requests
+import re
+
+from models import Clinic, TemplateConfiguration
 
 router = APIRouter(prefix="/prescriptions", tags=["prescriptions"])
 
@@ -74,3 +82,78 @@ def delete_prescription(
     db.delete(db_prescription)
     db.commit()
     return {"message": "Prescription deleted successfully"}
+
+@router.post("/{prescription_id}/send-whatsapp")
+async def send_prescription_via_whatsapp(
+    prescription_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Generate Prescription PDF and send to patient via professional WhatsApp Service.
+    """
+    try:
+        # 1. Fetch prescription and clinic info
+        prescription = db.query(Prescription).filter(
+            Prescription.id == prescription_id,
+            Prescription.clinic_id == current_user.clinic_id
+        ).first()
+        if not prescription:
+            raise HTTPException(status_code=404, detail="Prescription not found")
+        
+        patient = prescription.patient
+        if not patient or not patient.phone:
+            raise HTTPException(status_code=400, detail="Patient phone number is required")
+            
+        clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+        config = db.query(TemplateConfiguration).filter(
+            TemplateConfiguration.clinic_id == current_user.clinic_id,
+            TemplateConfiguration.category == 'prescription'
+        ).first()
+
+        # 2. Generate PDF using Legacy Engine (Supports CC/Dx parsing)
+        service = PrescriptionService(db)
+        html_content, _ = service.generate_prescription_pdf_from_model(prescription, clinic, config)
+        pdf_path = html_template_to_pdf(html_content)
+        
+        # 3. Upload to Nexus Media Service (Official Legacy Flow)
+        NEXUS_SERVICES_URL = os.getenv("NEXUS_SERVICES_URL", "http://localhost:8001")
+        try:
+            with open(pdf_path, 'rb') as f:
+                files = {'file': (f'Prescription_{prescription_id}.pdf', f, 'application/pdf')}
+                data = {'clinic_id': str(current_user.clinic_id), 'patient_id': str(patient.id)}
+                resp = requests.post(f"{NEXUS_SERVICES_URL}/api/v1/notifications/media/upload", files=files, data=data, timeout=30)
+                
+            # Cleanup temp file
+            if os.path.exists(pdf_path): os.remove(pdf_path)
+            
+            if resp.status_code != 200:
+                raise HTTPException(status_code=500, detail=f"Nexus Upload Failed: {resp.text}")
+            
+            media_id = resp.json().get("media_id") # Nexus returns public R2 URL as media_id
+        except Exception as e:
+            if os.path.exists(pdf_path): os.remove(pdf_path)
+            raise HTTPException(status_code=500, detail=f"Nexus Connection Error: {str(e)}")
+
+        # 4. Dispatch WhatsApp event via Nexus (Universal Service)
+        notify_event(
+            "prescription_notification",
+            db=db,
+            clinic_id=current_user.clinic_id,
+            to_phone=patient.phone,
+            to_name=patient.name,
+            template_data={
+                "patient_name": patient.name,
+                "clinic_name": clinic.name,
+                "doctor_name": getattr(clinic, "doctor_name", "your doctor"),
+                "clinic_phone": clinic.phone or "",
+                "media_id": media_id  # Nexus handles this public R2 URL
+            }
+        )
+        
+        return {"success": True, "message": "Prescription sharing initiated via official Nexus service"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"WhatsApp Error: {str(e)}")

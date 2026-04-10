@@ -5,7 +5,7 @@ from core.dtos import PrescriptionRequestDTO, PrescriptionItemDTO
 from domains.infrastructure.services.template_service import TemplateService
 from domains.infrastructure.services.pdf_service import html_template_to_pdf, generate_pdf_filename, cleanup_temp_file
 from domains.infrastructure.services.r2_storage import upload_pdf_to_r2, StorageCategory
-from models import PatientDocument, Patient, Clinic
+from models import PatientDocument, Patient, Clinic, Prescription as PrescriptionModel
 from sqlalchemy.orm import Session
 
 
@@ -248,5 +248,115 @@ class PrescriptionService:
         }
         current_prescriptions.insert(0, new_entry)
         patient.prescriptions = current_prescriptions
-        self.db.commit()
         return new_entry
+
+    def generate_prescription_pdf_from_model(self, prescription: PrescriptionModel, clinic: Clinic, config=None):
+        """
+        Refined legacy engine that supports the dedicated Prescription table.
+        Uses the same template and note-parsing logic as the original.
+        """
+        patient = prescription.patient
+        
+        # 1. Branding & Prefixes (Legacy Logic)
+        if not config:
+            from models import TemplateConfiguration
+            config = self.db.query(TemplateConfiguration).filter(
+                TemplateConfiguration.clinic_id == clinic.id,
+                TemplateConfiguration.category == 'prescription'
+            ).first()
+
+        primary_color = (config.primary_color if config and config.primary_color else None) \
+                        or getattr(clinic, 'primary_color', None) or '#1a2a6c'
+        logo_url      = (config.logo_url if config and config.logo_url else None) \
+                        or getattr(clinic, 'logo_url', None)
+
+        # ── Logo HTML ─────────────────────────────────────────────────────────
+        if logo_url:
+            logo_html = f'<img src="{logo_url}" alt="Logo" style="width:75px;height:75px;object-fit:contain;">'
+        else:
+            initials = (clinic.name[:2].upper() if clinic and clinic.name else 'DC')
+            logo_html = (
+                f'<div style="width:75px;height:75px;background:#f0f4f8;'
+                f'border:2px dashed {primary_color};display:flex;justify-content:center;'
+                f'align-items:center;color:{primary_color};font-weight:bold;font-size:12px;'
+                f'text-align:center;">{initials}</div>'
+            )
+
+        # ── Clinical notes parsing (Legacy Feature) ───────────────────────────
+        notes_raw = prescription.notes or ''
+        chief_complaint = ''
+        diagnosis       = ''
+        advice_lines    = []
+        next_visit      = ''
+
+        for line in notes_raw.splitlines():
+            l = line.strip()
+            if not l: continue
+            if l.lower().startswith('cc:') or l.lower().startswith('chief complaint:'):
+                chief_complaint = l.split(':', 1)[-1].strip()
+            elif l.lower().startswith('dx:') or l.lower().startswith('diagnosis:'):
+                diagnosis = l.split(':', 1)[-1].strip()
+            elif l.lower().startswith('advice:') or l.lower().startswith('instructions:'):
+                advice_lines.append(l.split(':', 1)[-1].strip())
+            elif any(l.lower().startswith(p) for p in ['next visit:', 'follow up:', 'next appointment:']):
+                next_visit = l.split(':', 1)[-1].strip()
+            else:
+                advice_lines.append(l)
+
+        # Build clinical notes block
+        clinical_notes_parts = []
+        if chief_complaint: clinical_notes_parts.append(f'<div class="clinical-notes"><h4>Chief Complaint:</h4><p>{chief_complaint}</p></div>')
+        if diagnosis: clinical_notes_parts.append(f'<div class="clinical-notes"><h4>Diagnosis:</h4><p>{diagnosis}</p></div>')
+        clinical_notes_html = ''.join(clinical_notes_parts) if clinical_notes_parts else (f'<div class="clinical-notes"><p>{notes_raw}</p></div>' if notes_raw else '')
+
+        # Build advice block
+        advice_html = ''
+        if advice_lines:
+            items_li = ''.join(f'<li>{a}</li>' for a in advice_lines)
+            advice_html = f'<div class="advice-section"><h4>Advice / Instructions:</h4><ul>{items_li}</ul></div>'
+
+        # ── Medication rows ───────────────────────────────────────────────────
+        items_html = ''
+        for idx, item in enumerate(prescription.items or [], 1):
+            dosage = item.get('dosage', '')
+            duration = item.get('duration', '')
+            medicine = item.get('medicine_name', 'Unknown Medicine')
+            instr = item.get('notes', '') or item.get('quantity', '')
+            items_html += f"""
+            <tr>
+                <td>{idx}</td>
+                <td class="text-left"><span class="med-name">{medicine}</span></td>
+                <td>{dosage}</td>
+                <td>{duration}</td>
+                <td>{instr}</td>
+            </tr>"""
+
+        # ── Final Context Building (Legacy Synchronized) ──────────────────────
+        template_data = {
+            'primary_color':        primary_color,
+            'logo_html':            logo_html,
+            'clinic_name':          clinic.name,
+            'clinic_tagline':       getattr(clinic, 'tagline', 'Dental Excellence'),
+            'doctor_name_html':     f'<div class="doc-name">{getattr(clinic, "doctor_name", "")}</div>',
+            'clinic_address_html':  f'<p>{clinic.address or ""}</p>',
+            'clinic_phone_html':    f'<p>📞 {clinic.phone or ""}</p>',
+            'clinic_email_html':    f'<p>✉️ {clinic.email or ""}</p>',
+            'clinic_reg_html':      f'<p>Reg: {getattr(clinic, "reg_number", "")}</p>',
+            'doctor_signature_label': getattr(clinic, 'doctor_name', 'Authorized Signature'),
+            'patient_name':         patient.name,
+            'patient_id':           getattr(patient, 'display_id', str(patient.id)),
+            'patient_age':          str(patient.age or 'N/A'),
+            'patient_gender':       (patient.gender or 'N/A').capitalize(),
+            'patient_phone':        patient.phone or 'N/A',
+            'current_date':         datetime.now().strftime('%d %B %Y'),
+            'clinical_notes_html':  clinical_notes_html,
+            'prescription_items':   items_html,
+            'advice_html':          advice_html,
+            'follow_up_html':       f'Next Appointment: {next_visit}' if next_visit else '',
+            'footer_text_html':     f'<div style="text-align:center;font-size:10px;">{config.footer_text or ""}</div>' if config and config.footer_text else '',
+        }
+
+        template_content = self.template_service.load_template("prescription_template.html")
+        html_content     = self.template_service.fill_template(template_content, template_data)
+        
+        return html_content, template_data

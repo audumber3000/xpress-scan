@@ -98,122 +98,221 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
 
     const downloadPrescriptionPdf = () => {
         const validItems = items.filter(i => i.medicine_name.trim());
+        const primaryColor = user?.clinic?.primary_color || '#1a2a6c';
+        const logoUrl = user?.clinic?.logo_url;
+        const clinicTagline = user?.clinic?.tagline || 'Comprehensive Clinical Care';
+        const doctorReg = user?.clinic?.reg_number || '';
+        const patientData_local = patientData; // Closure
+        const initialData_id = initialData?.id;
+        
         const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Prescription - ${patientData?.name || 'Patient'}</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; background: #fff; color: #1a1a1a; padding: 40px 48px; max-width: 720px; margin: 0 auto; }
-    .header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 12px; padding-bottom: 16px; border-bottom: 2px solid #29828a; }
-    .brand-icon { width: 52px; height: 52px; background: #29828a; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-    .brand-icon svg { width: 30px; height: 30px; }
-    .doctor-info h1 { font-size: 20px; font-weight: 800; color: #1a1a1a; }
-    .doctor-info p { font-size: 12px; color: #555; margin-top: 2px; }
-    .rx-bar { display: flex; align-items: center; gap: 16px; background: #29828a; color: white; padding: 10px 20px; margin: 0 -48px; margin-bottom: 20px; }
-    .rx-bar .rx-symbol { font-size: 28px; font-weight: 900; font-style: italic; }
-    .patient-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px; border-bottom: 1px solid #eee; padding-bottom: 16px; }
-    .patient-field { font-size: 12px; color: #888; }
-    .patient-field strong { display: block; color: #1a1a1a; font-size: 13px; margin-top: 2px; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-    thead tr { background: #f0fafa; }
-    th { padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #29828a; text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 2px solid #29828a; }
-    td { padding: 11px 12px; font-size: 13px; color: #333; border-bottom: 1px solid #f0f0f0; }
-    .instructions-box { background: #f9fafb; border-left: 3px solid #29828a; padding: 12px 16px; border-radius: 0 8px 8px 0; margin-bottom: 32px; }
-    .instructions-box p { font-size: 12px; color: #555; line-height: 1.7; }
-    .footer { margin-top: 40px; padding-top: 16px; border-top: 2px solid #29828a; display: flex; justify-content: space-between; align-items: flex-end; }
-    .footer-left { font-size: 11px; color: #888; }
-    .signature-block { text-align: right; }
-    .signature-block p { font-size: 13px; font-weight: 700; color: #1a1a1a; }
-    .signature-block .sig-line { border-top: 1px solid #333; width: 180px; margin: 32px 0 6px auto; }
-    .watermark { position: fixed; bottom: 30%; left: 50%; transform: translateX(-50%) rotate(-30deg); font-size: 48px; font-weight: 900; color: rgba(41,130,138,0.05); white-space: nowrap; pointer-events: none; }
-    @media print { body { padding: 32px 40px; } .watermark { display: block; } }
-  </style>
+    <meta charset="UTF-8" />
+    <title>Prescription - ${patientData?.name || 'Patient'}</title>
+    <style>
+        :root {
+            --primary-color: ${primaryColor};
+            --text-main: #333;
+            --text-muted: #555;
+            --border-light: #ddd;
+            --table-header-bg: #f8fafc;
+            --highlight-bg: #f0f4f8;
+        }
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            color: var(--text-main);
+            line-height: 1.3;
+            background-color: #fff;
+            margin: 0;
+            padding: 0;
+            font-size: 13px;
+        }
+        .prescription-container {
+            width: 100%;
+            min-height: 297mm;
+            margin: 0;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+        }
+        .color-strip {
+            height: 10px;
+            background-color: var(--primary-color);
+        }
+        .prescription-body {
+            padding: 40px 50px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid var(--border-light);
+            padding-bottom: 15px;
+            margin-bottom: 15px;
+        }
+        .header-left { display: flex; align-items: center; }
+        .clinic-info-left h1 {
+            margin: 0;
+            color: var(--primary-color);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 24px;
+            line-height: 1.1;
+        }
+        .clinic-info-left .tagline { margin: 3px 0; font-size: 16px; color: var(--primary-color); font-weight: bold; }
+        .clinic-info-right { text-align: right; }
+        .clinic-info-right .doc-name { font-size: 14px; font-weight: bold; color: var(--primary-color); margin: 0 0 4px 0; }
+        .clinic-info-right p { margin: 2px 0; font-size: 11px; color: var(--text-muted); font-weight: 500; }
+
+        .prescription-title {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            margin: 10px 0 15px 0;
+            color: var(--text-main);
+            text-decoration: underline;
+            letter-spacing: 2px;
+        }
+        .info-table {
+            width: 100%;
+            margin-bottom: 18px;
+            background: var(--highlight-bg);
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid var(--border-light);
+        }
+        .info-table td { vertical-align: top; width: 33%; }
+        .info-table p { margin: 4px 0; font-size: 12px; }
+        .info-table strong { color: var(--primary-color); }
+
+        .rx-symbol {
+            font-size: 32px;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 8px;
+            line-height: 1;
+            font-family: serif;
+        }
+        .med-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        .med-table th, .med-table td { border: 1px solid var(--border-light); padding: 7px 9px; text-align: center; }
+        .med-table th { background-color: var(--table-header-bg); color: var(--primary-color); font-weight: bold; font-size: 11px; }
+        .med-table .text-left { text-align: left; }
+        .med-name { font-weight: bold; font-size: 13px; color: var(--text-main); }
+        .med-composition { font-size: 10px; color: var(--text-muted); display: block; margin-top: 2px; font-style: italic; }
+
+        .footer {
+            margin-top: 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            border-top: 1px solid var(--border-light);
+            padding-top: 15px;
+        }
+        .signature-box { width: 30%; text-align: center; }
+        .signature-line {
+            border-top: 1px solid var(--text-main);
+            margin-top: 50px;
+            padding-top: 5px;
+            font-weight: bold;
+            color: var(--primary-color);
+            font-size: 12px;
+        }
+    </style>
 </head>
 <body>
-  <div class="header">
-    <div class="brand-icon">
-      <svg viewBox="0 0 24 24" fill="none">
-        <path d="M12 3C7 3 3 7 3 12s4 9 9 9 9-4 9-9-4-9-9-9z" fill="white" opacity="0.3"/>
-        <path d="M12 5c-2.5 0-5 1.5-5 4 0 1.2.5 2.2 1.3 3L12 19l3.7-7c.8-.8 1.3-1.8 1.3-3 0-2.5-2.5-4-5-4z" fill="white"/>
-      </svg>
+<div class="prescription-container">
+    <div class="color-strip"></div>
+    <div class="prescription-body">
+        <div class="header">
+            <div class="header-left">
+                <div style="margin-right:20px;flex-shrink:0;">
+                    ${logoUrl ? `<img src="${logoUrl}" style="width:75px;height:75px;object-fit:contain;">` : `<div style="width:75px;height:75px;background:#f0f4f8;border:2px dashed var(--primary-color);display:flex;justify-content:center;align-items:center;color:var(--primary-color);font-weight:bold;font-size:12px;text-align:center;">${clinicName.slice(0,2).toUpperCase()}</div>`}
+                </div>
+                <div class="clinic-info-left">
+                    <h1>${clinicName}</h1>
+                    <div class="tagline">${clinicTagline}</div>
+                </div>
+            </div>
+            <div class="clinic-info-right">
+                <div class="doc-name">${doctorName}</div>
+                <p>${clinicAddress}</p>
+                <p>📞 ${clinicPhone}</p>
+                <p>✉️ ${user?.email || ''}</p>
+                ${doctorReg ? `<p>Reg No: ${doctorReg}</p>` : ''}
+            </div>
+        </div>
+        <div class="prescription-title">PRESCRIPTION</div>
+        <table class="info-table">
+            <tr>
+                <td><p><strong>Patient Name:</strong> ${patientData_local?.name || '—'}</p></td>
+                <td><p><strong>Age / Sex:</strong> ${patientAge || '—'} / ${patientData_local?.gender || '—'}</p></td>
+                <td><p><strong>Date:</strong> ${today}</p></td>
+            </tr>
+        </table>
+        <div class="rx-symbol">&#8478;</div>
+        <table class="med-table">
+            <thead>
+                <tr>
+                    <th style="width:30px;">S.No.</th>
+                    <th class="text-left">Medicine Name</th>
+                    <th style="width:80px;">Dosage</th>
+                    <th style="width:70px;">Duration</th>
+                    <th>Instructions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${validItems.map((it, idx) => `
+                <tr>
+                    <td>${idx + 1}</td>
+                    <td class="text-left">
+                        <span class="med-name">${it.medicine_name}</span>
+                        ${it.notes ? `<span class="med-composition">(${it.notes})</span>` : ''}
+                    </td>
+                    <td>${it.dosage}</td>
+                    <td>${it.duration}</td>
+                    <td>${it.instructions || it.quantity || '—'}</td>
+                </tr>`).join('')}
+            </tbody>
+        </table>
+        ${notes ? `<div style="flex-grow:1;margin-top:20px;border-top:1px solid #eee;padding-top:10px;"><strong>Advice / Notes:</strong><p style="font-size:12px;margin-top:5px;white-space:pre-wrap;">${notes}</p></div>` : '<div style="flex-grow:1;"></div>'}
+        <div class="footer">
+            <div></div>
+            <div class="signature-box">
+                <div class="signature-line">${doctorName}</div>
+                <p style="margin:5px 0 0 0;color:var(--text-muted);font-weight:bold;">${clinicName}</p>
+            </div>
+        </div>
     </div>
-    <div class="doctor-info">
-      <h1>Dr. ${doctorName}</h1>
-      <p>${clinicName}</p>
-    </div>
-  </div>
-
-  <div class="rx-bar">
-    <span class="rx-symbol">&#x211E;</span>
-    <span style="font-size:13px;font-weight:600;letter-spacing:2px;">PRESCRIPTION</span>
-  </div>
-
-  <div class="patient-row">
-    <div class="patient-field">Name <strong>${patientData?.name || '—'}</strong></div>
-    <div class="patient-field">Age <strong>${patientData?.age || patientData?.dob ? (new Date().getFullYear() - new Date(patientData?.dob).getFullYear()) + ' yrs' : '—'}</strong></div>
-    <div class="patient-field">Gender <strong>${patientData?.gender || '—'}</strong></div>
-    <div class="patient-field">Date <strong>${today}</strong></div>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>Medicine</th>
-        <th>Dosage</th>
-        <th>Duration</th>
-        <th>Instructions</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${validItems.map((it, idx) => `
-      <tr>
-        <td>${idx + 1}</td>
-        <td><strong>${it.medicine_name}</strong></td>
-        <td>${it.dosage}</td>
-        <td>${it.duration}</td>
-        <td>${it.instructions || it.notes || '—'}</td>
-      </tr>`).join('')}
-    </tbody>
-  </table>
-
-  ${notes ? `<div class="instructions-box"><p><strong>General Instructions:</strong> ${notes}</p></div>` : ''}
-
-  <div class="footer">
-    <div class="footer-left">
-      ${clinicPhone ? `<p>&#9742; ${clinicPhone}</p>` : ''}
-      ${clinicAddress ? `<p>&#9679; ${clinicAddress}</p>` : ''}
-    </div>
-    <div class="signature-block">
-      <div class="sig-line"></div>
-      <p>Dr. ${doctorName}</p>
-      <p style="font-size:11px;color:#888;">${clinicName}</p>
-    </div>
-  </div>
-
-  <div class="watermark">MolarPlus</div>
-  <script>window.onload = () => window.print();</script>
+    <div class="color-strip"></div>
+</div>
+<script>window.onload = () => { window.print(); window.close(); }</script>
 </body>
 </html>`;
         const blob = new Blob([html], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
-        const win = window.open(url, '_blank');
         if (win) win.onafterprint = () => URL.revokeObjectURL(url);
     };
 
-    const sendOnWhatsApp = () => {
-        const validItems = items.filter(i => i.medicine_name.trim());
-        const phone = patientData?.phone?.replace(/\D/g, '') || '';
-        const medLines = validItems.map((it, i) =>
-            `${i + 1}. *${it.medicine_name}* — ${it.dosage} for ${it.duration}${it.instructions ? ` (${it.instructions})` : ''}`
-        ).join('\n');
-        const text = `*Prescription from Dr. ${doctorName}*\n${clinicName}\nDate: ${today}\n\n*Patient:* ${patientData?.name || ''}\n\n*Medications:*\n${medLines}${notes ? `\n\n*Instructions:* ${notes}` : ''}\n\n_This is a computer-generated prescription._`;
-        const waUrl = phone
-            ? `https://wa.me/91${phone}?text=${encodeURIComponent(text)}`
-            : `https://wa.me/?text=${encodeURIComponent(text)}`;
-        window.open(waUrl, '_blank');
+    const sendOnWhatsApp = async () => {
+        if (!initialData?.id) {
+            alert("Please save the prescription before sharing via WhatsApp.");
+            return;
+        }
+        
+        setIsLoading(true);
+        try {
+            await api.post(`/prescriptions/${initialData.id}/send-whatsapp`);
+            alert("Prescription sharing initiated via WhatsApp! Please check the recipient's phone.");
+        } catch (error) {
+            console.error("WhatsApp error:", error);
+            alert(error.response?.data?.detail || "Failed to share prescription via WhatsApp.");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     if (!isOpen) return null;
@@ -249,107 +348,118 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
                 {/* Preview Mode */}
                 {mode === 'preview' && (
                     <>
-                        <div className="flex-1 overflow-y-auto bg-gray-50">
-                            {/* Prescription Preview */}
-                            <div className="m-4 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                                {/* Header */}
-                                <div className="p-5 border-b-2 border-[#29828a] flex items-start gap-3">
-                                    <div className="w-12 h-12 bg-[#29828a] rounded-xl flex items-center justify-center flex-shrink-0">
-                                        <svg viewBox="0 0 24 24" fill="none" className="w-7 h-7">
-                                            <path d="M12 3C7 3 3 7 3 12s4 9 9 9 9-4 9-9-4-9-9-9z" fill="white" opacity="0.3"/>
-                                            <path d="M12 5c-2.5 0-5 1.5-5 4 0 1.2.5 2.2 1.3 3L12 19l3.7-7c.8-.8 1.3-1.8 1.3-3 0-2.5-2.5-4-5-4z" fill="white"/>
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <p className="font-black text-gray-900 text-base">Dr. {doctorName}</p>
-                                        <p className="text-xs text-gray-500 mt-0.5">{clinicName}</p>
-                                        {clinicPhone && <p className="text-xs text-gray-400 mt-0.5">☎ {clinicPhone}</p>}
-                                    </div>
-                                </div>
-                                {/* Rx bar */}
-                                <div className="bg-[#29828a] text-white flex items-center gap-3 px-5 py-2">
-                                    <span className="text-2xl font-black italic">℞</span>
-                                    <span className="text-xs font-bold tracking-[3px] uppercase">Prescription</span>
-                                </div>
-                                {/* Patient row */}
-                                <div className="grid grid-cols-4 gap-3 px-5 py-3 border-b border-gray-100">
-                                    {[
-                                        ['Name', patientData?.name || '—'],
-                                        ['Age', patientAge ? `${patientAge} yrs` : '—'],
-                                        ['Gender', patientData?.gender || '—'],
-                                        ['Date', today],
-                                    ].map(([label, val]) => (
-                                        <div key={label}>
-                                            <p className="text-[10px] text-gray-400 font-semibold">{label}</p>
-                                            <p className="text-sm font-bold text-gray-900 mt-0.5 truncate">{val}</p>
+                        <div className="flex-1 overflow-y-auto bg-gray-100 p-4">
+                            <div className="bg-white shadow-lg min-h-[700px] flex flex-col">
+                                <div style={{ height: '8px', backgroundColor: primaryColor }}></div>
+                                <div className="p-8 flex-1 flex flex-col">
+                                    {/* Letterhead Preview */}
+                                    <div className="flex justify-between items-start border-b-2 border-gray-100 pb-4 mb-4">
+                                        <div className="flex items-center gap-4">
+                                            {user?.clinic?.logo_url ? (
+                                                <img src={user.clinic.logo_url} className="w-16 h-16 object-contain" />
+                                            ) : (
+                                                <div className="w-16 h-16 bg-gray-50 border-2 border-dashed rounded-lg flex items-center justify-center text-xs font-bold text-gray-400" style={{ borderColor: primaryColor, color: primaryColor }}>{clinicName.slice(0,2).toUpperCase()}</div>
+                                            )}
+                                            <div>
+                                                <h1 className="text-xl font-black uppercase tracking-tight" style={{ color: primaryColor }}>{clinicName}</h1>
+                                                <p className="text-xs font-bold opacity-70" style={{ color: primaryColor }}>{user?.clinic?.tagline || 'Comprehensive Clinical Care'}</p>
+                                            </div>
                                         </div>
-                                    ))}
-                                </div>
-                                {/* Medications table */}
-                                <div className="px-5 py-3">
-                                    <table className="w-full text-sm border-collapse">
+                                        <div className="text-right">
+                                            <p className="text-sm font-bold" style={{ color: primaryColor }}>Dr. {doctorName}</p>
+                                            <p className="text-[10px] text-gray-500 max-w-[180px] ml-auto">{clinicAddress}</p>
+                                            <p className="text-[10px] text-gray-600 font-medium whitespace-pre-wrap">☎ {clinicPhone}\n✉ {user?.email || ''}\n{user?.clinic?.reg_number ? `Reg No: ${user.clinic.reg_number}` : ''}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="text-center mb-6">
+                                        <span className="text-sm font-black tracking-[4px] uppercase border-b-2 border-gray-900 pb-1">Prescription</span>
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-2 bg-gray-50 p-3 rounded-lg border border-gray-100 mb-6">
+                                        <div>
+                                            <p className="text-[9px] font-bold text-gray-400 uppercase">Patient</p>
+                                            <p className="text-xs font-bold text-gray-900">{patientData?.name || '—'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-bold text-gray-400 uppercase">Age / Sex</p>
+                                            <p className="text-xs font-bold text-gray-900">{patientAge || '—'} / {patientData?.gender || '—'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-bold text-gray-400 uppercase">Date</p>
+                                            <p className="text-xs font-bold text-gray-900">{today}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="mb-2 text-2xl font-serif font-black" style={{ color: primaryColor }}>&#8478;</div>
+
+                                    <table className="w-full text-xs mb-6 border-collapse">
                                         <thead>
-                                            <tr className="bg-[#f0fafa]">
-                                                <th className="text-left px-2 py-2 text-[10px] font-black text-[#29828a] uppercase tracking-wider border-b-2 border-[#29828a] w-6">#</th>
-                                                <th className="text-left px-2 py-2 text-[10px] font-black text-[#29828a] uppercase tracking-wider border-b-2 border-[#29828a]">Medicine</th>
-                                                <th className="text-left px-2 py-2 text-[10px] font-black text-[#29828a] uppercase tracking-wider border-b-2 border-[#29828a]">Dosage</th>
-                                                <th className="text-left px-2 py-2 text-[10px] font-black text-[#29828a] uppercase tracking-wider border-b-2 border-[#29828a]">Duration</th>
-                                                <th className="text-left px-2 py-2 text-[10px] font-black text-[#29828a] uppercase tracking-wider border-b-2 border-[#29828a]">Instructions</th>
+                                            <tr className="bg-gray-50">
+                                                <th className="border border-gray-200 p-2 text-left w-6">#</th>
+                                                <th className="border border-gray-200 p-2 text-left">Medicine</th>
+                                                <th className="border border-gray-200 p-2">Dosage</th>
+                                                <th className="border border-gray-200 p-2">Duration</th>
+                                                <th className="border border-gray-200 p-2">Instructions</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {validItems.length > 0 ? validItems.map((it, idx) => (
-                                                <tr key={idx} className="border-b border-gray-50">
-                                                    <td className="px-2 py-2.5 text-gray-400 text-xs">{idx + 1}</td>
-                                                    <td className="px-2 py-2.5 font-semibold text-gray-900">{it.medicine_name}</td>
-                                                    <td className="px-2 py-2.5 text-gray-600">{it.dosage}</td>
-                                                    <td className="px-2 py-2.5 text-gray-600">{it.duration}</td>
-                                                    <td className="px-2 py-2.5 text-gray-500 text-xs">{it.instructions || it.notes || '—'}</td>
+                                                <tr key={idx}>
+                                                    <td className="border border-gray-100 p-2 text-gray-400 text-[10px] text-center">{idx + 1}</td>
+                                                    <td className="border border-gray-100 p-2">
+                                                        <span className="font-bold block">{it.medicine_name}</span>
+                                                        {it.notes && <span className="text-[10px] text-gray-400 italic">({it.notes})</span>}
+                                                    </td>
+                                                    <td className="border border-gray-100 p-2 text-center font-medium">{it.dosage}</td>
+                                                    <td className="border border-gray-100 p-2 text-center">{it.duration}</td>
+                                                    <td className="border border-gray-100 p-2 text-[10px] text-gray-500">{it.instructions || it.quantity || '—'}</td>
                                                 </tr>
                                             )) : (
-                                                <tr><td colSpan="5" className="px-2 py-6 text-center text-gray-400 text-xs">No medications added yet. Switch to Edit tab to add.</td></tr>
+                                                <tr><td colSpan="5" className="p-8 text-center text-gray-400 italic">No medications added</td></tr>
                                             )}
                                         </tbody>
                                     </table>
-                                </div>
-                                {notes && (
-                                    <div className="mx-5 mb-4 bg-gray-50 border-l-4 border-[#29828a] rounded-r-lg px-4 py-3">
-                                        <p className="text-xs font-bold text-gray-500 mb-0.5">General Instructions</p>
-                                        <p className="text-sm text-gray-700">{notes}</p>
-                                    </div>
-                                )}
-                                {/* Footer */}
-                                <div className="px-5 py-4 border-t-2 border-[#29828a] flex justify-between items-end">
-                                    <div className="text-xs text-gray-400">
-                                        {clinicAddress && <p>{clinicAddress}</p>}
-                                    </div>
-                                    <div className="text-right">
-                                        {doctorSignature ? (
-                                            <img src={doctorSignature} alt="Signature" className="h-12 max-w-[140px] object-contain ml-auto mb-1" />
-                                        ) : (
-                                            <div className="w-32 border-t border-gray-400 mb-1 ml-auto"></div>
+
+                                    <div className="flex-1">
+                                        {notes && (
+                                            <div className="border-t border-gray-100 pt-3">
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Advice / Instructions</p>
+                                                <p className="text-xs text-gray-600 whitespace-pre-wrap">{notes}</p>
+                                            </div>
                                         )}
-                                        <p className="text-xs font-bold text-gray-900">Dr. {doctorName}</p>
-                                        <p className="text-[10px] text-gray-400">{clinicName}</p>
+                                    </div>
+
+                                    <div className="mt-6 flex justify-between items-end border-t border-gray-100 pt-4">
+                                        <div></div>
+                                        <div className="text-right">
+                                            <div className="w-32 border-t border-gray-400 ml-auto mb-1"></div>
+                                            <p className="text-[10px] font-bold text-gray-900">{doctorName}</p>
+                                            <p className="text-[9px] text-gray-400 font-bold uppercase">{clinicName}</p>
+                                        </div>
                                     </div>
                                 </div>
+                                <div style={{ height: '8px', backgroundColor: primaryColor }}></div>
                             </div>
                         </div>
                         {/* Preview Actions */}
                         <div className="p-4 border-t border-gray-100 bg-gray-50 flex gap-3">
                             <button
                                 onClick={downloadPrescriptionPdf}
-                                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-[#29828a] hover:bg-[#1f6b72] text-white font-bold text-sm transition-all shadow-sm"
+                                disabled={isLoading}
+                                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl hover:opacity-90 text-white font-bold text-sm transition-all shadow-sm"
+                                style={{ backgroundColor: primaryColor }}
                             >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                                 Download PDF
                             </button>
                             <button
                                 onClick={sendOnWhatsApp}
-                                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-[#25D366] hover:bg-[#1ebe5a] text-white font-bold text-sm transition-all shadow-sm"
+                                disabled={isLoading}
+                                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-[#25D366] hover:bg-[#1ebe5a] text-white font-bold text-sm transition-all shadow-sm disabled:opacity-50"
                             >
-                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                                Send WhatsApp
+                                <MessageCircle className="w-4 h-4" />
+                                {isLoading ? 'Sending...' : 'WhatsApp Share'}
                             </button>
                         </div>
                     </>
