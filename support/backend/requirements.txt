@@ -4,6 +4,9 @@ sqlalchemy
 psycopg2-binary
 python-dotenv
 python-jose[cryptography]
+PyJWT
+httpx
+aiofiles
 pydantic
 requests
 python-multipart
