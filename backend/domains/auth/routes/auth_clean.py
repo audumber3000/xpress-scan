@@ -523,7 +523,8 @@ async def complete_onboarding(
             "phone": data.get("clinic_phone", ""),
             "email": data.get("clinic_email", user.email),
             "specialization": data.get("specialization", "dental"),
-            "subscription_plan": data.get("subscription_plan", "free")
+            "subscription_plan": data.get("subscription_plan", "free"),
+            "referred_by_code": data.get("referred_by_code")
         }
 
         result = user_service.complete_onboarding(user.id, clinic_data)

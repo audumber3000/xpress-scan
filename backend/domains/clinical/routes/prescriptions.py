@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Response
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Prescription, User, Patient
@@ -9,6 +9,7 @@ from datetime import datetime
 from domains.activity.routes.activity_log import push_activity
 from domains.medical.services.prescription_service import PrescriptionService
 from domains.infrastructure.services.pdf_service import html_template_to_pdf
+from domains.clinical.prescription_pdf_engine import generate_prescription_html
 from core.notification_dispatch import notify_event
 import os
 import requests
@@ -82,6 +83,43 @@ def delete_prescription(
     db.delete(db_prescription)
     db.commit()
     return {"message": "Prescription deleted successfully"}
+
+@router.get("/{prescription_id}/pdf")
+def download_prescription_pdf(
+    prescription_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Generate and return a prescription PDF — mirrors the invoice /pdf endpoint."""
+    prescription = db.query(Prescription).filter(
+        Prescription.id == prescription_id,
+        Prescription.clinic_id == current_user.clinic_id
+    ).first()
+    if not prescription:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+
+    clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+    config = db.query(TemplateConfiguration).filter(
+        TemplateConfiguration.clinic_id == current_user.clinic_id,
+        TemplateConfiguration.category == 'prescription'
+    ).first()
+
+    html_content = generate_prescription_html(prescription, clinic, config)
+    pdf_path = html_template_to_pdf(html_content)
+
+    with open(pdf_path, 'rb') as f:
+        pdf_content = f.read()
+    try:
+        os.remove(pdf_path)
+    except Exception:
+        pass
+
+    return Response(
+        content=pdf_content,
+        media_type='application/pdf',
+        headers={'Content-Disposition': f'attachment; filename="prescription_{prescription_id}.pdf"'}
+    )
+
 
 @router.post("/{prescription_id}/send-whatsapp")
 async def send_prescription_via_whatsapp(

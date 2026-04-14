@@ -6,6 +6,7 @@ any route — never raises.
 """
 import re
 import logging
+import datetime
 from sqlalchemy.orm import Session
 from core.nexus_notify import notify
 
@@ -63,26 +64,44 @@ def notify_event(
         data = template_data or {}
         phone = _clean_phone(to_phone) if to_phone else ""
 
+        from models import NotificationLog  # avoid circular import
+
         for channel in channels:
+            recipient = phone if channel in ("whatsapp", "sms") else to_email
+            if not recipient:
+                logger.debug(f"notify_event [{event_type}] {channel}: no recipient, skip")
+                continue
+
+            # Write a 'queued' log entry before firing so every send is recorded
+            log_entry = NotificationLog(
+                clinic_id=clinic_id,
+                channel=channel,
+                recipient=recipient,
+                event_type=event_type,
+                template_name=event_type,
+                status="queued",
+                cost=0.0,
+                created_at=datetime.datetime.utcnow(),
+                updated_at=datetime.datetime.utcnow(),
+            )
+            db.add(log_entry)
+            db.commit()
+            db.refresh(log_entry)
+            log_id = log_entry.id
+
             if channel == "whatsapp":
-                if phone:
-                    notify(event_type, channel="whatsapp", to_phone=phone, template_data=data)
-                else:
-                    logger.debug(f"notify_event [{event_type}] whatsapp: no phone, skip")
+                notify(event_type, channel="whatsapp", to_phone=phone, template_data=data, log_id=log_id)
             elif channel == "email":
-                if to_email:
-                    notify(
-                        event_type,
-                        channel="email",
-                        to_email=to_email,
-                        to_name=to_name,
-                        template_data=data,
-                    )
-                else:
-                    logger.debug(f"notify_event [{event_type}] email: no address, skip")
+                notify(
+                    event_type,
+                    channel="email",
+                    to_email=to_email,
+                    to_name=to_name,
+                    template_data=data,
+                    log_id=log_id,
+                )
             elif channel == "sms":
-                if phone:
-                    notify(event_type, channel="sms", to_phone=phone, template_data=data)
+                notify(event_type, channel="sms", to_phone=phone, template_data=data, log_id=log_id)
 
     except Exception as exc:
         logger.warning(f"notify_event [{event_type}] dispatch error: {exc}")

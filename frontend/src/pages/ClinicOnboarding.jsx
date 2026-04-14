@@ -105,11 +105,16 @@ const ClinicOnboarding = () => {
       const cleanPhone = formData.clinic_phone.replace(/\D/g, '');
       if (cleanPhone.length < 10) throw new Error("Phone number must be at least 10 digits.");
 
+      const referralCode = sessionStorage.getItem('referred_by_code');
+
       const result = await api.post('/auth/onboarding', {
         ...formData,
         number_of_chairs: parseInt(formData.number_of_chairs) || 1,
-        specialization: formData.category 
+        specialization: formData.category,
+        referred_by_code: referralCode
       });
+
+      if (referralCode) sessionStorage.removeItem('referred_by_code');
 
       localStorage.setItem('user', JSON.stringify(result.user));
       toast.success("Welcome aboard, Dr.! MolarPlus is ready.");

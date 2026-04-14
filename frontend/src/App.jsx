@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { InboxProvider } from "./contexts/InboxContext";
 import { HeaderProvider } from "./contexts/HeaderContext";
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -18,7 +17,6 @@ import Settings from "./pages/Settings";
 import ClinicOnboarding from "./pages/ClinicOnboarding";
 import AuthCallback from "./pages/AuthCallback";
 import LoadingTest from "./pages/LoadingTest";
-import Inbox from "./pages/Inbox";
 import Mail from "./pages/Mail";
 import MailCallback from "./pages/MailCallback";
 import LabHub from "./pages/lab/LabHub";
@@ -27,7 +25,6 @@ import Calendar from "./pages/Calendar";
 import BookingPage from "./pages/BookingPage";
 import PatientProfile from "./pages/PatientProfile";
 import DentalChartDemo from "./pages/DentalChartDemo";
-import WhatsAppTest from "./pages/WhatsAppTest";
 import Subscription from "./pages/Subscription";
 import AdminHub from "./pages/AdminHub";
 import StaffManagement from "./pages/StaffManagement";
@@ -167,7 +164,7 @@ function AppContent() {
           <Header />
           
           {/* Main content area */}
-          <main className={`flex-1 w-full ${location.pathname === '/inbox' ? 'overflow-hidden' : 'overflow-auto'}`}>
+          <main className="flex-1 w-full overflow-auto">
             {/* Mobile menu button */}
             <button
               onClick={() => setIsMobileSidebarOpen(true)}
@@ -186,10 +183,8 @@ function AppContent() {
               <Route path="/patient-profile/:patientId" element={<ProtectedRoute><PatientProfile /></ProtectedRoute>} />
               <Route path="/patient-intake" element={<ProtectedRoute><PatientIntake /></ProtectedRoute>} />
               <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
-              <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
               <Route path="/mail" element={<ProtectedRoute><Mail /></ProtectedRoute>} />
               <Route path="/mail/callback" element={<ProtectedRoute><MailCallback /></ProtectedRoute>} />
-              <Route path="/whatsapp-test" element={<ProtectedRoute><WhatsAppTest /></ProtectedRoute>} />
               <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
               <Route path="/marketing/reviews" element={<ProtectedRoute><GoogleReviews /></ProtectedRoute>} />
               <Route path="/marketing/posters" element={<ProtectedRoute><MarketingPosters /></ProtectedRoute>} />
@@ -250,9 +245,7 @@ function App() {
       <Router>
         <AuthProvider>
           <HeaderProvider>
-            <InboxProvider>
-              <AppContent />
-            </InboxProvider>
+            <AppContent />
           </HeaderProvider>
         </AuthProvider>
       </Router>

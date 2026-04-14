@@ -36,7 +36,7 @@ from domains.auth.routes import auth_clean as auth
 from domains.auth.routes import clinic_users, permissions
 from domains.clinic.routes import clinics, subscriptions
 from domains.finance.routes import payments_clean as payments, invoices, ledger
-from domains.communication.routes import whatsapp_inbox, whatsapp_groups, whatsapp_profile, whatsapp_contacts, whatsapp_messages_advanced, notifications, message_templates, whatsapp_webhook
+from domains.communication.routes import notifications, message_templates
 from domains.scheduling.routes import attendance, attendance_mobile, appointments
 from domains.medical.routes import reports, xray, medications
 from domains.analytics.routes import dashboard, dashboard_reports
@@ -319,12 +319,6 @@ app.include_router(subscriptions.router, prefix="/api/v1/subscriptions", tags=["
 app.include_router(payments.router, prefix="/api/v1/payments", tags=["payments"])
 app.include_router(invoices.router, prefix="/api/v1/invoices", tags=["invoices"])
 app.include_router(ledger.router, prefix="/api/v1")
-app.include_router(whatsapp_webhook.router, prefix="/api/v1/whatsapp/webhook", tags=["whatsapp_webhook"])
-app.include_router(whatsapp_inbox.router, prefix="/api/v1/whatsapp/inbox", tags=["whatsapp_inbox"])
-app.include_router(whatsapp_groups.router, prefix="/api/v1/whatsapp/groups", tags=["whatsapp_groups"])
-app.include_router(whatsapp_profile.router, prefix="/api/v1/whatsapp/profile", tags=["whatsapp_profile"])
-app.include_router(whatsapp_contacts.router, prefix="/api/v1/whatsapp/contacts", tags=["whatsapp_contacts"])
-app.include_router(whatsapp_messages_advanced.router, prefix="/api/v1/whatsapp/messages", tags=["whatsapp_messages_advanced"])
 app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["notifications"])
 app.include_router(message_templates.router, prefix="/api/v1/message-templates", tags=["message_templates"])
 app.include_router(attendance.router, prefix="/api/v1/attendance", tags=["attendance"])

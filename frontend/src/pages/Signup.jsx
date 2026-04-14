@@ -1,9 +1,9 @@
-import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { toast } from 'react-toastify';
 import { api } from '../utils/api';
 import LoadingButton from '../components/LoadingButton';
 import loginImage from '../assets/login-page-left-side.png';
+import { useEffect } from "react";
 
 const Signup = () => {
   const [email, setEmail] = useState("");
@@ -14,6 +14,15 @@ const Signup = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const ref = searchParams.get('ref');
+    if (ref) {
+      sessionStorage.setItem('referred_by_code', ref);
+      console.log('🔗 [REFERRAL] Captured code:', ref);
+    }
+  }, [searchParams]);
 
   const handleSignup = async (e) => {
     e.preventDefault();

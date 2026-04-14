@@ -14,6 +14,9 @@ import Subscriptions from './pages/Subscriptions';
 import ActivityPage from './pages/Activity';
 import NotificationsData from './pages/NotificationsData';
 import Growth from './pages/Growth';
+import MarketingPromos from './pages/MarketingPromos';
+import MarketingReferrals from './pages/MarketingReferrals';
+import MarketingCampaigns from './pages/MarketingCampaigns';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -45,6 +48,9 @@ function AppRoutes() {
         <Route path="activity" element={<ActivityPage />} />
         <Route path="notifications-data" element={<NotificationsData />} />
         <Route path="growth" element={<Growth />} />
+        <Route path="marketing/promos" element={<MarketingPromos />} />
+        <Route path="marketing/referrals" element={<MarketingReferrals />} />
+        <Route path="marketing/campaigns" element={<MarketingCampaigns />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

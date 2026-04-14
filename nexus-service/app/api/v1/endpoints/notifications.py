@@ -1,3 +1,5 @@
+import os
+import httpx
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel, EmailStr
 from typing import Dict, Any, Optional, List
@@ -16,6 +18,8 @@ class SendEventRequest(BaseModel):
     to_phone: Optional[str] = ""
     attachments: Optional[List[Dict[str, str]]] = None
     template_data: Dict[str, Any] = {}  # fields passed to the template builder
+    log_id: Optional[int] = None        # NotificationLog PK — for status callback
+    callback_url: Optional[str] = None  # main backend PATCH URL
 
 
 @router.post("/send-event")
@@ -23,6 +27,7 @@ async def send_event(request: SendEventRequest):
     """
     Dispatch a notification for any event_type via the specified channel.
     template_data must contain all fields required by the event template.
+    After sending, patches the main backend log entry with the real status + provider_message_id.
     """
     result = await notification_service.dispatch_event(
         event_type=request.event_type,
@@ -33,6 +38,30 @@ async def send_event(request: SendEventRequest):
         attachments=request.attachments,
         **request.template_data,
     )
+
+    # Fire-and-forget callback to main backend with the real send result
+    if request.callback_url:
+        success = result.get("success", False)
+        provider_id = None
+        # Extract MSG91 request_id from result data
+        data = result.get("data", {})
+        if isinstance(data, dict):
+            provider_id = (
+                data.get("request_id") or
+                data.get("requestId") or
+                data.get("message_id") or
+                data.get("messageId")
+            )
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.patch(request.callback_url, json={
+                    "status": "sent" if success else "failed",
+                    "provider_message_id": provider_id,
+                    "error_message": result.get("error") if not success else None,
+                })
+        except Exception:
+            pass  # callback failure must never break the send response
+
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Dispatch failed"))
     return result

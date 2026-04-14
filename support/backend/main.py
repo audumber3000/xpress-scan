@@ -6,7 +6,7 @@ load_dotenv(os.path.join(BASE_DIR, "..", ".env"))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes import auth, metrics, clinics, tickets, financials, subscriptions, activity, notifications_data, growth
+from routes import auth, metrics, clinics, tickets, financials, subscriptions, activity, notifications_data, growth, marketing
 
 app = FastAPI(title="MolarPlus Support Dashboard API", version="1.0.0")
 
@@ -29,6 +29,7 @@ app.include_router(subscriptions.router, prefix="/api/v1/subscriptions", tags=["
 app.include_router(activity.router, prefix="/api/v1/activity", tags=["Activity"])
 app.include_router(notifications_data.router, prefix="/api/v1/notifications-data", tags=["Notifications"])
 app.include_router(growth.router, prefix="/api/v1/growth", tags=["Growth"])
+app.include_router(marketing.router, prefix="/api/v1/marketing", tags=["Marketing"])
 
 
 @app.get("/health")

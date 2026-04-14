@@ -21,6 +21,7 @@ class Clinic(Base):
     cashfree_customer_id = Column(String)
     logo_url = Column(String)
     number_of_chairs = Column(Integer)
+    referred_by_code = Column(String, nullable=True)
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
 
@@ -132,6 +133,30 @@ class Subscription(Base):
     updated_at = Column(DateTime)
 
     clinic = relationship("Clinic")
+
+
+class SubscriptionCoupon(Base):
+    __tablename__ = 'subscription_coupons'
+    id = Column(Integer, primary_key=True)
+    code = Column(String, unique=True, index=True, nullable=False)
+    discount_percent = Column(Float, nullable=True)  
+    discount_amount = Column(Float, nullable=True)   
+    is_active = Column(Boolean, default=True)
+    expiry_date = Column(DateTime, nullable=True)
+    usage_limit = Column(Integer, default=100)
+    used_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class ReferralCode(Base):
+    __tablename__ = 'referral_codes'
+    id = Column(Integer, primary_key=True)
+    code = Column(String, unique=True, index=True, nullable=False)
+    creator_name = Column(String, nullable=False)  
+    discount_percent = Column(Float, nullable=True)  
+    reward_details = Column(JSON, nullable=True)  
+    is_active = Column(Boolean, default=True)
+    usage_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 
 class NotificationLog(Base):

@@ -4,6 +4,7 @@ import {
   CreditCard, CheckCircle2, XCircle, Send,
   RefreshCw, BarChart2, FileText, Loader2,
   ChevronLeft, ChevronRight, X, Plug, ExternalLink,
+  Clock, Eye,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -37,6 +38,7 @@ const EVENT_AUDIENCE = {
   appointment_reminder:        'patient',
   google_review:               'patient',
   consent_form:                'patient',
+  daily_summary:               'doctor',
 };
 
 
@@ -51,6 +53,7 @@ const EVENT_LABELS = {
   appointment_reminder:     'Appointment Reminder',
   google_review:            'Google Review Request',
   consent_form:             'Consent Form Notification',
+  daily_summary:            'Doctor Daily Summary',
 };
 
 
@@ -956,8 +959,10 @@ const Notifications = () => {
                   className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 bg-white outline-none focus:ring-2 focus:ring-[#29828a]/10"
                 >
                   <option value="">All Status</option>
+                  <option value="queued">Queued</option>
                   <option value="sent">Sent</option>
                   <option value="delivered">Delivered</option>
+                  <option value="read">Read</option>
                   <option value="failed">Failed</option>
                 </select>
                 <button onClick={() => fetchLogs(logsPage)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">
@@ -1003,14 +1008,25 @@ const Notifications = () => {
                           <td className="px-5 py-3.5 text-sm text-gray-700 font-mono text-xs">{log.recipient}</td>
                           <td className="px-5 py-3.5 text-xs text-gray-500">{EVENT_LABELS[log.event_type] || log.event_type || '—'}</td>
                           <td className="px-5 py-3.5">
-                            <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
-                              log.status === 'sent' || log.status === 'delivered'
-                                ? 'bg-green-50 text-green-700'
-                                : 'bg-red-50 text-red-600'
-                            }`}>
-                              {log.status === 'sent' || log.status === 'delivered' ? <CheckCircle2 size={10} /> : <XCircle size={10} />}
-                              {log.status}
-                            </span>
+                            {(() => {
+                              const s = log.status;
+                              const cfg = {
+                                queued:    { cls: 'bg-gray-100 text-gray-500',   icon: <Clock size={10} />,        label: 'Queued' },
+                                sent:      { cls: 'bg-blue-50 text-blue-600',    icon: <Send size={10} />,         label: 'Sent' },
+                                delivered: { cls: 'bg-green-50 text-green-700',  icon: <CheckCircle2 size={10} />, label: 'Delivered' },
+                                read:      { cls: 'bg-purple-50 text-purple-700',icon: <Eye size={10} />,          label: 'Read' },
+                                failed:    { cls: 'bg-red-50 text-red-600',      icon: <XCircle size={10} />,      label: 'Failed' },
+                              }[s] || { cls: 'bg-gray-100 text-gray-500', icon: null, label: s };
+                              return (
+                                <span
+                                  className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${cfg.cls}`}
+                                  title={log.error_message || undefined}
+                                >
+                                  {cfg.icon}
+                                  {cfg.label}
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="px-5 py-3.5 text-xs font-medium text-gray-600 text-right pr-6">
                             {log.cost > 0 ? `₹${log.cost.toFixed(4)}` : '—'}

@@ -73,9 +73,7 @@ def create_patient(
         if db_patient.phone:
             try:
                 from routes.message_templates import get_template_for_scenario, render_template
-                import requests
                 import re
-                import os
                 
                 from models import Clinic
                 clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
@@ -94,14 +92,6 @@ def create_patient(
                 clean_phone = re.sub(r'\D', '', str(db_patient.phone))
                 if len(clean_phone) == 10:
                     clean_phone = "91" + clean_phone
-                
-                # WhatsApp Service URL (MolarPlus Nexus)
-                NEXUS_SERVICES_URL = os.getenv("NEXUS_SERVICES_URL", "http://localhost:8001")
-                requests.post(
-                    f"{NEXUS_SERVICES_URL}/api/send/{current_user.id}",
-                    json={"phone": clean_phone, "message": rendered_message},
-                    timeout=30
-                )
             except Exception as e:
                 print(f"⚠️ Welcome message error: {e}")
         

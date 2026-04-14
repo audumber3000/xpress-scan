@@ -2,7 +2,7 @@
   "expo": {
     "name": "MolarPlus",
     "slug": "molarplus",
-    "version": "1.1.0",
+    "version": "3.12.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -26,6 +26,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.molarplus.app",
+      "versionCode": 4,
       "label": "MolarPlus"
     },
     "plugins": [

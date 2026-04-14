@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { useInboxActions } from "../contexts/InboxContext";
 import { useHeader } from "../contexts/HeaderContext";
 import { Gem, Crown, Search, X } from "lucide-react";
 import { FaSync } from "react-icons/fa";
@@ -11,7 +10,6 @@ const Header = () => {
   const { user, signOut, switchClinic } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { inboxActions } = useInboxActions();
   const { title, refreshFunction, loading, handleRefresh } = useHeader();
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showClinicDropdown, setShowClinicDropdown] = useState(false);
@@ -27,8 +25,7 @@ const Header = () => {
   const [searchLoading, setSearchLoading] = useState(false);
   const searchRef = useRef(null);
   const searchInputRef = useRef(null);
-  
-  const isInboxPage = location.pathname === '/inbox';
+
   const isDashboardPage = location.pathname === '/dashboard';
 
   // Improved user info extraction
@@ -319,27 +316,7 @@ const Header = () => {
 
       {/* Right side - Icons and User Profile */}
       <div className="flex items-center gap-2 md:gap-3">
-        {/* Inbox-specific icons - only show on inbox page */}
-        {isInboxPage && inboxActions?.status !== undefined && (
-          <>
-            {/* Refresh Status Icon */}
-            <button
-              onClick={inboxActions.onRefresh}
-              disabled={inboxActions.loading}
-              className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
-              title="Refresh Status"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </button>
-
-          </>
-        )}
-
-        {/* Default icons - only show when NOT on inbox page */}
-        {!isInboxPage && (
-          <>
+        <>
             {/* Search Icon */}
             <button
               onClick={() => setShowSearch(true)}
@@ -393,8 +370,7 @@ const Header = () => {
             </div>
 
             <div className="w-px h-6 bg-gray-300 hidden md:block mx-1"></div>
-          </>
-        )}
+        </>
 
         {/* User Profile */}
         <div className="relative">

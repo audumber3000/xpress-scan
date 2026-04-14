@@ -26,6 +26,7 @@ const PRO_FEATURES = [
   { icon: Users,     label: 'Patient Records',        starter: 'Up to 200',  pro: 'Unlimited' },
   { icon: Users,     label: 'Staff Accounts',          starter: '1 user',     pro: 'Unlimited' },
   { icon: Building2, label: 'Clinic Branches',         starter: '1',          pro: 'Unlimited' },
+  { icon: Star,      label: 'Google Reviews',          starter: true,         pro: true },
   { icon: Bell,      label: 'WhatsApp Notifications',  starter: false,        pro: true },
   { icon: Bell,      label: 'Email Notifications',     starter: false,        pro: true },
   { icon: BarChart3, label: 'Analytics & Reports',     starter: 'Basic',      pro: 'Advanced' },

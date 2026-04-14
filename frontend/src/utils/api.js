@@ -38,12 +38,7 @@ export const authenticatedFetch = async (url, options = {}) => {
       fullUrl += `?${queryString}`;
     }
   }
-
-
-
-  // Add timeout to fetch requests (60 seconds for WhatsApp endpoints, 30 for others)
-  const isWhatsAppEndpoint = url.includes('/whatsapp/');
-  const timeout = isWhatsAppEndpoint ? 60000 : 30000;
+  const timeout = 30000;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 

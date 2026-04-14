@@ -32,7 +32,8 @@ async def get_available_plans():
             "features": [
                 "Basic dental charting",
                 "Patient management",
-                "Simple reporting"
+                "Simple reporting",
+                "Google Reviews"
             ]
         },
         {

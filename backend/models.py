@@ -73,6 +73,7 @@ class Clinic(Base):
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     synced_at = Column(DateTime, nullable=True)
     sync_status = Column(String, default='local')  # 'local', 'synced', 'pending'
+    referred_by_code = Column(String, nullable=True)  # Which referral code was used to sign up
 
     # Relationships
     users = relationship("User", secondary=user_clinics, back_populates="clinics")
@@ -378,6 +379,18 @@ class SubscriptionCoupon(Base):
     usage_limit = Column(Integer, default=100)
     used_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class ReferralCode(Base):
+    __tablename__ = 'referral_codes'
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, unique=True, index=True, nullable=False)
+    creator_name = Column(String, nullable=False)  # Who this code belongs to (content creator, agency)
+    discount_percent = Column(Float, nullable=True)  # Discount for the clinic using it
+    reward_details = Column(JSON, nullable=True)  # Details on how the creator gets paid/rewarded
+    is_active = Column(Boolean, default=True)
+    usage_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
 
 class ScheduledMessage(Base):
     __tablename__ = 'scheduled_messages'
@@ -744,14 +757,16 @@ class NotificationLog(Base):
     __tablename__ = 'notification_logs'
     id = Column(Integer, primary_key=True, index=True)
     clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
-    channel = Column(String, nullable=False)       # whatsapp, email, sms
-    recipient = Column(String, nullable=False)      # phone or email address
-    event_type = Column(String, nullable=True)      # what triggered this notification
+    channel = Column(String, nullable=False)           # whatsapp, email, sms
+    recipient = Column(String, nullable=False)          # phone or email address
+    event_type = Column(String, nullable=True)          # what triggered this notification
     template_name = Column(String, nullable=True)
-    status = Column(String, default='sent')         # sent, failed, delivered
+    status = Column(String, default='queued')           # queued, sent, delivered, read, failed
     cost = Column(Float, default=0.0)
     error_message = Column(Text, nullable=True)
+    provider_message_id = Column(String, nullable=True, index=True)  # MSG91 request_id for webhook correlation
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
     clinic = relationship("Clinic")
 

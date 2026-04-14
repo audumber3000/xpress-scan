@@ -103,125 +103,68 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
         const logoUrl = user?.clinic?.logo_url;
         const clinicTagline = user?.clinic?.tagline || 'Comprehensive Clinical Care';
         const doctorReg = user?.clinic?.reg_number || '';
-        const patientData_local = patientData; // Closure
-        const initialData_id = initialData?.id;
-        
+        const patientData_local = patientData;
+
+        // Parse structured notes (mirrors backend engine logic)
+        let ccText = '', dxText = '', nextVisit = '', adviceLines = [];
+        notes.split('\n').forEach(line => {
+            const l = line.trim();
+            const ll = l.toLowerCase();
+            if (!l) return;
+            if (ll.startsWith('cc:') || ll.startsWith('chief complaint:')) ccText = l.replace(/^[^:]+:\s*/, '');
+            else if (ll.startsWith('dx:') || ll.startsWith('diagnosis:')) dxText = l.replace(/^[^:]+:\s*/, '');
+            else if (ll.startsWith('next visit:') || ll.startsWith('follow up:') || ll.startsWith('next appointment:')) nextVisit = l.replace(/^[^:]+:\s*/, '');
+            else if (ll.startsWith('advice:') || ll.startsWith('instructions:')) adviceLines.push(l.replace(/^[^:]+:\s*/, ''));
+            else adviceLines.push(l);
+        });
+
         const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
     <title>Prescription - ${patientData?.name || 'Patient'}</title>
     <style>
-        :root {
-            --primary-color: ${primaryColor};
-            --text-main: #333;
-            --text-muted: #555;
-            --border-light: #ddd;
-            --table-header-bg: #f8fafc;
-            --highlight-bg: #f0f4f8;
-        }
-        body {
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            color: var(--text-main);
-            line-height: 1.3;
-            background-color: #fff;
-            margin: 0;
-            padding: 0;
-            font-size: 13px;
-        }
-        .prescription-container {
-            width: 100%;
-            min-height: 297mm;
-            margin: 0;
-            background: #fff;
-            display: flex;
-            flex-direction: column;
-        }
-        .color-strip {
-            height: 10px;
-            background-color: var(--primary-color);
-        }
-        .prescription-body {
-            padding: 40px 50px;
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-        }
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            border-bottom: 2px solid var(--border-light);
-            padding-bottom: 15px;
-            margin-bottom: 15px;
-        }
+        :root { --primary-color: ${primaryColor}; --text-main: #333; --text-muted: #555; --border-light: #ddd; --table-header-bg: #f8fafc; --highlight-bg: #f0f4f8; }
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: var(--text-main); line-height: 1.3; background: #fff; margin: 0; padding: 0; font-size: 13px; }
+        .prescription-container { width: 100%; background: #fff; }
+        .color-strip { height: 10px; background-color: var(--primary-color); }
+        .prescription-body { padding: 40px 50px 200px 50px; }
+        .footer-wrapper { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 0 50px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid var(--border-light); padding-bottom: 15px; margin-bottom: 15px; }
         .header-left { display: flex; align-items: center; }
-        .clinic-info-left h1 {
-            margin: 0;
-            color: var(--primary-color);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            font-size: 24px;
-            line-height: 1.1;
-        }
+        .clinic-info-left h1 { margin: 0; color: var(--primary-color); text-transform: uppercase; letter-spacing: 1px; font-size: 24px; line-height: 1.1; }
         .clinic-info-left .tagline { margin: 3px 0; font-size: 16px; color: var(--primary-color); font-weight: bold; }
         .clinic-info-right { text-align: right; }
         .clinic-info-right .doc-name { font-size: 14px; font-weight: bold; color: var(--primary-color); margin: 0 0 4px 0; }
         .clinic-info-right p { margin: 2px 0; font-size: 11px; color: var(--text-muted); font-weight: 500; }
-
-        .prescription-title {
-            text-align: center;
-            font-size: 18px;
-            font-weight: bold;
-            margin: 10px 0 15px 0;
-            color: var(--text-main);
-            text-decoration: underline;
-            letter-spacing: 2px;
-        }
-        .info-table {
-            width: 100%;
-            margin-bottom: 18px;
-            background: var(--highlight-bg);
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid var(--border-light);
-        }
-        .info-table td { vertical-align: top; width: 33%; }
-        .info-table p { margin: 4px 0; font-size: 12px; }
-        .info-table strong { color: var(--primary-color); }
-
-        .rx-symbol {
-            font-size: 32px;
-            font-weight: bold;
-            color: var(--primary-color);
-            margin-bottom: 8px;
-            line-height: 1;
-            font-family: serif;
-        }
+        .prescription-title { text-align: center; font-size: 18px; font-weight: bold; margin: 10px 0 15px 0; color: var(--text-main); text-decoration: underline; letter-spacing: 2px; }
+        .patient-box { background: var(--highlight-bg); padding: 10px 12px; border-radius: 5px; border: 1px solid var(--border-light); margin-bottom: 15px; }
+        .info-table { width: 100%; border-collapse: collapse; }
+        .info-table td { vertical-align: top; width: 33%; padding: 2px 4px; }
+        .info-table p { margin: 3px 0; font-size: 12px; }
+        .info-table strong { display: inline-block; min-width: 90px; color: var(--primary-color); }
+        .clinical-notes { margin-bottom: 12px; }
+        .clinical-notes h4 { margin: 0 0 3px 0; color: var(--primary-color); font-size: 13px; }
+        .clinical-notes p { margin: 0 0 8px 0; font-size: 13px; }
+        .rx-symbol { font-size: 32px; font-weight: bold; color: var(--primary-color); margin-bottom: 8px; line-height: 1; font-family: serif; }
         .med-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
         .med-table th, .med-table td { border: 1px solid var(--border-light); padding: 7px 9px; text-align: center; }
         .med-table th { background-color: var(--table-header-bg); color: var(--primary-color); font-weight: bold; font-size: 11px; }
         .med-table .text-left { text-align: left; }
         .med-name { font-weight: bold; font-size: 13px; color: var(--text-main); }
         .med-composition { font-size: 10px; color: var(--text-muted); display: block; margin-top: 2px; font-style: italic; }
-
-        .footer {
-            margin-top: 25px;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-end;
-            border-top: 1px solid var(--border-light);
-            padding-top: 15px;
-        }
+        .advice-section { margin-bottom: 10px; }
+        .advice-section h4 { color: var(--primary-color); margin: 0 0 5px 0; text-transform: uppercase; font-size: 12px; }
+        .advice-section ul { margin: 0; padding-left: 20px; }
+        .advice-section li { margin-bottom: 4px; font-size: 12px; }
+        .footer { font-size: 11px; color: #666; margin-top: 20px; display: flex; justify-content: space-between; align-items: flex-end; border-top: 1px solid var(--border-light); padding-top: 15px; }
+        .terms { width: 65%; }
+        .terms h4 { margin-bottom: 4px; color: var(--primary-color); text-transform: uppercase; }
+        .terms ul { padding-left: 15px; margin: 0 0 8px 0; }
+        .terms li { margin-bottom: 2px; }
+        .follow-up { font-size: 13px; font-weight: bold; color: #d32f2f; margin-top: 8px; }
         .signature-box { width: 30%; text-align: center; }
-        .signature-line {
-            border-top: 1px solid var(--text-main);
-            margin-top: 50px;
-            padding-top: 5px;
-            font-weight: bold;
-            color: var(--primary-color);
-            font-size: 12px;
-        }
+        .signature-line { border-top: 1px solid var(--text-main); margin-top: 40px; padding-top: 5px; font-weight: bold; color: var(--primary-color); font-size: 12px; }
     </style>
 </head>
 <body>
@@ -231,36 +174,52 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
         <div class="header">
             <div class="header-left">
                 <div style="margin-right:20px;flex-shrink:0;">
-                    ${logoUrl ? `<img src="${logoUrl}" style="width:75px;height:75px;object-fit:contain;">` : `<div style="width:75px;height:75px;background:#f0f4f8;border:2px dashed var(--primary-color);display:flex;justify-content:center;align-items:center;color:var(--primary-color);font-weight:bold;font-size:12px;text-align:center;">${clinicName.slice(0,2).toUpperCase()}</div>`}
+                    ${logoUrl ? `<img src="${logoUrl}" style="width:75px;height:75px;object-fit:contain;">` : `<div style="width:75px;height:75px;background:#f0f4f8;border:2px dashed ${primaryColor};display:flex;justify-content:center;align-items:center;color:${primaryColor};font-weight:bold;font-size:12px;text-align:center;">${clinicName.slice(0,2).toUpperCase()}</div>`}
                 </div>
                 <div class="clinic-info-left">
                     <h1>${clinicName}</h1>
-                    <div class="tagline">${clinicTagline}</div>
+                    ${clinicTagline ? `<div class="tagline">${clinicTagline}</div>` : ''}
                 </div>
             </div>
             <div class="clinic-info-right">
                 <div class="doc-name">${doctorName}</div>
-                <p>${clinicAddress}</p>
-                <p>📞 ${clinicPhone}</p>
-                <p>✉️ ${user?.email || ''}</p>
+                ${clinicAddress ? `<p>${clinicAddress}</p>` : ''}
+                ${clinicPhone ? `<p>📞 ${clinicPhone}</p>` : ''}
+                ${user?.email ? `<p>✉️ ${user.email}</p>` : ''}
                 ${doctorReg ? `<p>Reg No: ${doctorReg}</p>` : ''}
             </div>
         </div>
+
         <div class="prescription-title">PRESCRIPTION</div>
-        <table class="info-table">
-            <tr>
-                <td><p><strong>Patient Name:</strong> ${patientData_local?.name || '—'}</p></td>
-                <td><p><strong>Age / Sex:</strong> ${patientAge || '—'} / ${patientData_local?.gender || '—'}</p></td>
-                <td><p><strong>Date:</strong> ${today}</p></td>
-            </tr>
-        </table>
+
+        <div class="patient-box">
+            <table class="info-table">
+                <tr>
+                    <td>
+                        <p><strong>Patient Name:</strong> ${patientData_local?.name || '—'}</p>
+                        <p><strong>Patient ID:</strong> ${patientData_local?.display_id || patientData_local?.id || '—'}</p>
+                    </td>
+                    <td>
+                        <p><strong>Age / Sex:</strong> ${patientAge || '—'} / ${patientData_local?.gender || '—'}</p>
+                        <p><strong>Date:</strong> ${today}</p>
+                    </td>
+                    <td>
+                        <p><strong>Contact:</strong> ${patientData_local?.phone || '—'}</p>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        ${ccText ? `<div class="clinical-notes"><h4>Chief Complaint (C/O):</h4><p>${ccText}</p></div>` : ''}
+        ${dxText ? `<div class="clinical-notes"><h4>Diagnosis:</h4><p>${dxText}</p></div>` : ''}
+
         <div class="rx-symbol">&#8478;</div>
         <table class="med-table">
             <thead>
                 <tr>
                     <th style="width:30px;">S.No.</th>
-                    <th class="text-left">Medicine Name</th>
-                    <th style="width:80px;">Dosage</th>
+                    <th class="text-left" style="width:40%;">Medicine Name</th>
+                    <th style="width:80px;">Dosage<br><small>(M-A-N)</small></th>
                     <th style="width:70px;">Duration</th>
                     <th>Instructions</th>
                 </tr>
@@ -279,22 +238,39 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
                 </tr>`).join('')}
             </tbody>
         </table>
-        ${notes ? `<div style="flex-grow:1;margin-top:20px;border-top:1px solid #eee;padding-top:10px;"><strong>Advice / Notes:</strong><p style="font-size:12px;margin-top:5px;white-space:pre-wrap;">${notes}</p></div>` : '<div style="flex-grow:1;"></div>'}
+
+        ${adviceLines.length ? `<div class="advice-section"><h4>Instructions / Advice:</h4><ul>${adviceLines.map(l => `<li>${l}</li>`).join('')}</ul></div>` : ''}
+
+    </div>
+
+    <div class="footer-wrapper">
         <div class="footer">
-            <div></div>
+            <div class="terms">
+                <h4>Terms &amp; Conditions</h4>
+                <ul>
+                    <li>This prescription is valid for 7 days from the date of issue.</li>
+                    <li>Medicines must be taken strictly as directed. Do not alter the dosage without consulting the doctor.</li>
+                    <li>Complete the full course of antibiotics even if symptoms subside early.</li>
+                    <li>In case of any allergic reaction or adverse effects, stop medication and contact the clinic immediately.</li>
+                    <li>This prescription is issued for the named patient only and is non-transferable.</li>
+                    <li>This is a computer-generated prescription and does not require a physical signature.</li>
+                </ul>
+                ${nextVisit ? `<p class="follow-up">Next Appointment: ${nextVisit}</p>` : ''}
+            </div>
             <div class="signature-box">
-                <div class="signature-line">${doctorName}</div>
+                <div class="signature-line">${doctorName} / Signature</div>
                 <p style="margin:5px 0 0 0;color:var(--text-muted);font-weight:bold;">${clinicName}</p>
             </div>
         </div>
+        <div class="color-strip"></div>
     </div>
-    <div class="color-strip"></div>
 </div>
-<script>window.onload = () => { window.print(); window.close(); }</script>
+<script>window.onload = () => { window.print(); }</script>
 </body>
 </html>`;
         const blob = new Blob([html], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
+        const win = window.open(url, '_blank');
         if (win) win.onafterprint = () => URL.revokeObjectURL(url);
     };
 
@@ -306,11 +282,11 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
         
         setIsLoading(true);
         try {
-            await api.post(`/prescriptions/${initialData.id}/send-whatsapp`);
+            await api.post(`/clinical/prescriptions/${initialData.id}/send-whatsapp`);
             alert("Prescription sharing initiated via WhatsApp! Please check the recipient's phone.");
         } catch (error) {
             console.error("WhatsApp error:", error);
-            alert(error.response?.data?.detail || "Failed to share prescription via WhatsApp.");
+            alert(error.detail || error.message || "Failed to share prescription via WhatsApp.");
         } finally {
             setIsLoading(false);
         }
@@ -444,12 +420,11 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
                             </div>
                         </div>
                         {/* Preview Actions */}
-                        <div className="p-4 border-t border-gray-100 bg-gray-50 flex gap-3">
+                        <div className="p-4 border-t border-gray-200 bg-gray-50 flex gap-3">
                             <button
                                 onClick={downloadPrescriptionPdf}
                                 disabled={isLoading}
-                                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl hover:opacity-90 text-white font-bold text-sm transition-all shadow-sm"
-                                style={{ backgroundColor: primaryColor }}
+                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-[#2a276e] hover:bg-[#1a1548] text-white text-sm font-semibold rounded-lg transition-colors shadow-sm disabled:opacity-50"
                             >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                                 Download PDF
@@ -457,7 +432,7 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
                             <button
                                 onClick={sendOnWhatsApp}
                                 disabled={isLoading}
-                                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-[#25D366] hover:bg-[#1ebe5a] text-white font-bold text-sm transition-all shadow-sm disabled:opacity-50"
+                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-[#00ba7c] hover:bg-[#009e6a] text-white text-sm font-semibold rounded-lg transition-colors shadow-sm disabled:opacity-50"
                             >
                                 <MessageCircle className="w-4 h-4" />
                                 {isLoading ? 'Sending...' : 'WhatsApp Share'}

@@ -1,8 +1,11 @@
 import os
 import httpx
+import logging
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
+
+logger = logging.getLogger(__name__)
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel, EmailStr
@@ -31,10 +34,11 @@ DEFAULT_EVENT_TYPES = [
     "appointment_reminder",
     "google_review",
     "consent_form",
+    "daily_summary",
 ]
 
 # Events hidden from the preferences UI (system-scheduled, not user-configurable)
-_HIDDEN_EVENT_TYPES = {"daily_summary", "daily_report"}
+_HIDDEN_EVENT_TYPES = {"daily_report"}
 
 def get_db():
     db = SessionLocal()
@@ -229,7 +233,9 @@ def get_notification_logs(
                 "status": l.status,
                 "cost": l.cost,
                 "error_message": l.error_message,
+                "provider_message_id": getattr(l, 'provider_message_id', None),
                 "created_at": l.created_at.isoformat() if l.created_at else None,
+                "updated_at": l.updated_at.isoformat() if getattr(l, 'updated_at', None) else None,
             }
             for l in logs
         ],
@@ -688,10 +694,12 @@ async def template_test_send(
             "patient_name": "Rahul Sharma", "clinic_name": clinic_name,
             "invoice_number": "INV-2026-001", "total_amount": 850.0,
             "clinic_phone": "+91 9000000000",
+            "media_id": os.getenv("SAMPLE_PDF_URL", "https://www.africau.edu/images/default/sample.pdf"),
         },
         "prescription_notification": {
             "patient_name": "Rahul Sharma", "clinic_name": clinic_name,
             "doctor_name": "Dr. Mehta", "clinic_phone": "+91 9000000000",
+            "media_id": os.getenv("SAMPLE_PDF_URL", "https://www.africau.edu/images/default/sample.pdf"),
         },
         "consent_form": {
             "patient_name": "Rahul Sharma", "clinic_name": clinic_name,
@@ -785,3 +793,108 @@ async def template_test_send(
         "cost": cost,
         "new_balance": wallet.balance,
     }
+
+
+# ─── Internal log status update (called by Nexus after sending) ───────────────
+
+class LogUpdateRequest(BaseModel):
+    status: str                              # sent, failed
+    provider_message_id: Optional[str] = None
+    error_message: Optional[str] = None
+
+
+@router.patch("/logs/{log_id}")
+async def update_notification_log(
+    log_id: int,
+    body: LogUpdateRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Internal endpoint — called by Nexus after dispatching to update the log
+    entry status and provider_message_id (MSG91 request_id).
+    No auth required: only reachable from within the private network.
+    """
+    import datetime as dt
+    log = db.query(NotificationLog).filter(NotificationLog.id == log_id).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Log entry not found")
+
+    log.status = body.status
+    if body.provider_message_id:
+        log.provider_message_id = body.provider_message_id
+    if body.error_message:
+        log.error_message = body.error_message
+    log.updated_at = dt.datetime.utcnow()
+    db.commit()
+    return {"ok": True}
+
+
+# ─── MSG91 delivery webhook ───────────────────────────────────────────────────
+
+@router.post("/webhook/msg91")
+async def msg91_delivery_webhook(request: Request, db: Session = Depends(get_db)):
+    """
+    Receive delivery status callbacks from MSG91 WhatsApp webhooks.
+
+    MSG91 actual payload fields (from Custom Webhook builder):
+      requestId    — correlates to provider_message_id stored on NotificationLog
+      eventName    — DELIVERED | READ | FAILED | SENT  (uppercase)
+      reason       — error reason if eventName is FAILED
+      customerNumber, companyId, ts, templateName, etc.
+
+    Set up 4 webhooks in MSG91 → same URL, different "Select Event":
+      • On Delivered Events  → eventName = DELIVERED
+      • On Read Events       → eventName = READ
+      • On Failed Events     → eventName = FAILED
+      • On Sent Events       → eventName = SENT
+    """
+    import datetime as dt
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+
+    # MSG91 sends a single flat object per webhook call (one event per POST)
+    # Normalise eventName (uppercase) → our status (lowercase)
+    EVENT_NAME_MAP = {
+        "DELIVERED": "delivered",
+        "READ":      "read",
+        "FAILED":    "failed",
+        "SENT":      "sent",
+        # lowercase fallbacks just in case
+        "delivered": "delivered",
+        "read":      "read",
+        "failed":    "failed",
+        "sent":      "sent",
+        "undelivered": "failed",
+        "submitted":   "sent",
+    }
+
+    request_id = (
+        payload.get("requestId") or
+        payload.get("request_id") or
+        payload.get("oneApiRequestId") or
+        payload.get("crqid")
+    )
+    event_name = payload.get("eventName") or payload.get("status") or ""
+    status = EVENT_NAME_MAP.get(event_name.strip())
+    reason = payload.get("reason") or None
+
+    if not request_id or not status:
+        logger.debug(f"MSG91 webhook: unrecognised payload — requestId={request_id} eventName={event_name}")
+        return {"ok": True, "updated": 0}
+
+    log = db.query(NotificationLog).filter(
+        NotificationLog.provider_message_id == request_id
+    ).first()
+
+    if log:
+        log.status = status
+        if reason and status == "failed":
+            log.error_message = reason
+        log.updated_at = dt.datetime.utcnow()
+        db.commit()
+        return {"ok": True, "updated": 1}
+
+    logger.debug(f"MSG91 webhook: no log found for requestId={request_id}")
+    return {"ok": True, "updated": 0}

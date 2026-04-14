@@ -41,9 +41,10 @@ class NotificationService:
         self.zepto_from_email    = os.getenv("ZEPTO_FROM_EMAIL", self.platform_from_email)
         self.zepto_from_name     = os.getenv("ZEPTO_FROM_NAME",  self.platform_from_name)
 
-        # ── MSG91 (SMS) ───────────────────────────────────────────────────────
+        # ── MSG91 (SMS / WhatsApp) ────────────────────────────────────────────
         self.msg91_auth_key = os.getenv("MSG91_AUTH_KEY", "")
         self.msg91_sms_sender = os.getenv("MSG91_SMS_SENDER", "MOLARPLUS")
+        self.msg91_wa_namespace = os.getenv("MSG91_WA_NAMESPACE", "")
 
     # ─── WhatsApp via Meta Cloud API ─────────────────────────────────────────
 
@@ -99,25 +100,29 @@ class NotificationService:
                         if param.get("type") == "text":
                             msg91_components[f"body_{i+1}"] = {"type": "text", "value": param.get("text")}
                 
+        template_obj: Dict[str, Any] = {
+            "name": template_name,
+            "language": {
+                "code": language_code,
+                "policy": "deterministic"
+            },
+            "to_and_components": [
+                {
+                    "to": [mobile_number],
+                    "components": msg91_components
+                }
+            ]
+        }
+        if self.msg91_wa_namespace:
+            template_obj["namespace"] = self.msg91_wa_namespace
+
         payload: Dict[str, Any] = {
             "integrated_number": integrated_number,
             "content_type": "template",
             "payload": {
                 "messaging_product": "whatsapp",
                 "type": "template",
-                "template": {
-                    "name": template_name,
-                    "language": {
-                        "code": language_code,
-                        "policy": "deterministic"
-                    },
-                    "to_and_components": [
-                        {
-                            "to": [mobile_number],
-                            "components": msg91_components
-                        }
-                    ]
-                }
+                "template": template_obj,
             }
         }
 

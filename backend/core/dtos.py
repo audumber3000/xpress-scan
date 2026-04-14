@@ -90,7 +90,7 @@ class ClinicBaseDTO(BaseModel):
 
 
 class ClinicCreateDTO(ClinicBaseDTO):
-    pass
+    referred_by_code: Optional[str] = None
 
 
 class ClinicUpdateDTO(BaseModel):
@@ -411,6 +411,7 @@ class PrescriptionItemDTO(BaseModel):
     duration: str  # e.g., "5 days"
     quantity: str
     notes: Optional[str] = None
+    instructions: Optional[str] = None  # e.g., "After Food", "Empty Stomach"
 
 
 class PrescriptionRequestDTO(BaseModel):

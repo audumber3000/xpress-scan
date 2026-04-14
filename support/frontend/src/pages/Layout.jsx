@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Ticket, LogOut, Menu,
-  IndianRupee, CreditCard, Activity, Bell, TrendingUp
+  IndianRupee, CreditCard, Activity, Bell, TrendingUp,
+  Megaphone, Tag, Share2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { SectionLabel } from '../components/ui';
@@ -34,6 +35,14 @@ const NAV_GROUPS = [
     label: 'Support',
     items: [
       { to: '/tickets', icon: Ticket, label: 'Tickets' },
+    ],
+  },
+  {
+    label: 'Marketing',
+    items: [
+      { to: '/marketing/promos', icon: Tag, label: 'Promocodes' },
+      { to: '/marketing/referrals', icon: Share2, label: 'Referrals' },
+      { to: '/marketing/campaigns', icon: Megaphone, label: 'Campaigns' },
     ],
   },
 ];

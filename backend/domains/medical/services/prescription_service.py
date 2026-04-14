@@ -252,12 +252,24 @@ class PrescriptionService:
 
     def generate_prescription_pdf_from_model(self, prescription: PrescriptionModel, clinic: Clinic, config=None):
         """
-        Refined legacy engine that supports the dedicated Prescription table.
-        Uses the same template and note-parsing logic as the original.
+        Generate prescription HTML using the prescription_pdf_engine.
+        Mirrors the invoice pattern: pure Python, no template files.
         """
+        if not config:
+            from models import TemplateConfiguration
+            config = self.db.query(TemplateConfiguration).filter(
+                TemplateConfiguration.clinic_id == clinic.id,
+                TemplateConfiguration.category == 'prescription'
+            ).first()
+
+        from domains.clinical.prescription_pdf_engine import generate_prescription_html
+        html_content = generate_prescription_html(prescription, clinic, config)
+        return html_content, {}
+
+    def _generate_prescription_pdf_from_model_legacy(self, prescription: PrescriptionModel, clinic: Clinic, config=None):
+        """Legacy implementation kept for reference — not called anywhere."""
         patient = prescription.patient
-        
-        # 1. Branding & Prefixes (Legacy Logic)
+
         if not config:
             from models import TemplateConfiguration
             config = self.db.query(TemplateConfiguration).filter(
