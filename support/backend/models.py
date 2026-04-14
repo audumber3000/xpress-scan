@@ -18,12 +18,17 @@ class Clinic(Base):
     specialization = Column(String)
     subscription_plan = Column(String)
     status = Column(String)
-    cashfree_customer_id = Column(String)
-    logo_url = Column(String)
-    number_of_chairs = Column(Integer)
-    referred_by_code = Column(String, nullable=True)
+    razorpay_customer_id = Column(String, nullable=True)
+    cashfree_customer_id = Column(String, nullable=True)
+    logo_url = Column(String, nullable=True)
+    invoice_template = Column(String, nullable=True)
+    primary_color = Column(String, nullable=True)
+    number_of_chairs = Column(Integer, nullable=True)
+    timings = Column(JSON, nullable=True)
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
+    synced_at = Column(DateTime, nullable=True)
+    sync_status = Column(String, nullable=True)
 
 
 class User(Base):
@@ -170,6 +175,8 @@ class NotificationLog(Base):
     status = Column(String)
     cost = Column(Float)
     error_message = Column(Text)
+    provider_message_id = Column(String, nullable=True)
+    updated_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime)
 
     clinic = relationship("Clinic")
