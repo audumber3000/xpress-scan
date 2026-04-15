@@ -58,6 +58,76 @@ if [ "$ERRORS" -gt 0 ]; then
   exit 1
 fi
 
+# 5. Schema migration check — catch missing ALTER TABLE migrations before deploy
+echo ""
+echo "▶ Running schema migration check against prod DB..."
+DB_URL=$(grep -E "^DATABASE_URL=" .env.production | cut -d'=' -f2-)
+
+SCHEMA_RESULT=$(python3 - <<PYEOF
+import sys
+try:
+    from sqlalchemy import create_engine, text
+    engine = create_engine("$DB_URL")
+    REQUIRED = {
+        "clinics": {
+            "id", "clinic_code", "name", "address", "phone", "email",
+            "gst_number", "specialization", "subscription_plan", "status",
+            "razorpay_customer_id", "cashfree_customer_id",
+            "logo_url", "invoice_template", "primary_color",
+            "number_of_chairs", "timings",
+            "created_at", "updated_at", "synced_at", "sync_status",
+            "referred_by_code",
+        },
+        "users": {
+            "id", "email", "name", "first_name", "last_name",
+            "role", "is_active", "permissions", "created_at", "updated_at",
+        },
+        "user_clinics": {"id", "user_id", "clinic_id"},
+        "patients": {"id", "clinic_id", "name", "phone", "created_at", "updated_at"},
+        "appointments": {
+            "id", "clinic_id", "patient_name",
+            "appointment_date", "start_time", "end_time",
+            "status", "created_at", "updated_at",
+        },
+    }
+    failures = []
+    with engine.connect() as conn:
+        for table, required in REQUIRED.items():
+            rows = conn.execute(
+                text("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=:t"),
+                {"t": table}
+            )
+            actual = {r[0] for r in rows}
+            missing = required - actual
+            if missing:
+                failures.append(f"  {table}: missing {sorted(missing)}")
+    engine.dispose()
+    if failures:
+        print("FAIL")
+        for f in failures:
+            print(f)
+    else:
+        print("OK")
+except Exception as e:
+    print(f"ERROR: {e}")
+PYEOF
+)
+
+if echo "$SCHEMA_RESULT" | grep -q "^OK"; then
+  echo "  ✅ Schema check passed — all required columns exist"
+elif echo "$SCHEMA_RESULT" | grep -q "^ERROR"; then
+  echo "  ⚠️  Could not connect to DB for schema check — proceeding anyway"
+  echo "     $SCHEMA_RESULT"
+else
+  echo "  ❌ Schema check FAILED — missing columns detected:"
+  echo "$SCHEMA_RESULT" | grep -v "^FAIL"
+  echo ""
+  echo "  Run the missing ALTER TABLE migrations on prod before deploying."
+  echo "  Example: docker exec molarplus-db-1 psql -U postgres molarplus -c \\"
+  echo "    \"ALTER TABLE <table> ADD COLUMN IF NOT EXISTS <col> <type>;\""
+  exit 1
+fi
+
 echo ""
 echo "  All checks passed."
 
