@@ -7,7 +7,9 @@ import {
   ScrollView,
   StyleSheet,
   Modal,
-  Animated
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -235,6 +237,10 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
       presentationStyle="pageSheet"
       onRequestClose={handleClose}
     >
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       <SafeAreaView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
@@ -528,6 +534,7 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
           </TouchableOpacity>
         </Modal>
       </SafeAreaView>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };

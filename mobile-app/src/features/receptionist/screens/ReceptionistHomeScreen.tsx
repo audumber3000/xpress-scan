@@ -260,7 +260,7 @@ export const ReceptionistHomeScreen: React.FC<Props> = ({ navigation }) => {
 
             <View style={styles.nameBlock}>
               <Text style={styles.hiText} numberOfLines={1}>
-                Hi, {backendUser?.name || 'Receptionist'}
+                Hi, {(backendUser?.name || 'Staff').split(' ')[0]}
               </Text>
               <Text style={styles.clinicText} numberOfLines={1}>
                 {backendUser?.clinic?.name || 'Clinic'}

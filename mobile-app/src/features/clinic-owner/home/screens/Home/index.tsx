@@ -29,7 +29,9 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const userName = user?.displayName || user?.email?.split('@')[0] || 'Smith';
+  const firstName = (backendUser?.name || user?.displayName || 'Doctor').split(' ')[0];
+  const role = backendUser?.role;
+  const userName = (role === 'clinic_owner' || role === 'doctor') ? `Dr. ${firstName}` : firstName;
 
   // Global Sync: Load data whenever the active clinic changes or period changes
   useEffect(() => {

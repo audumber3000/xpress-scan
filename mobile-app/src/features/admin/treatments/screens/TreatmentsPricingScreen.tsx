@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, RefreshControl, Modal, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, RefreshControl, Modal, Dimensions, KeyboardAvoidingView, Platform } from 'react-native';
 import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Search, MoreVertical, Plus, Stethoscope, Sparkles, X, Smile, Calendar, IndianRupee, Trash2, Edit3, ChevronRight } from 'lucide-react-native';
@@ -215,7 +215,8 @@ export const TreatmentsPricingScreen: React.FC<{ navigation: any }> = ({ navigat
           activeOpacity={1}
           onPress={() => setIsModalVisible(false)}
         >
-          <TouchableOpacity activeOpacity={1} style={styles.bottomTray}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <TouchableOpacity activeOpacity={1} style={styles.bottomTray}>
             <View style={styles.trayHandle} />
             <View style={styles.trayHeader}>
               <Text style={styles.trayTitle}>{editingTreatment ? 'Edit Treatment' : 'Add Treatment'}</Text>
@@ -273,6 +274,7 @@ export const TreatmentsPricingScreen: React.FC<{ navigation: any }> = ({ navigat
             </View>
             <View style={{ height: 40 }} />
           </TouchableOpacity>
+        </KeyboardAvoidingView>
         </TouchableOpacity>
       </Modal>
     </SafeAreaView>

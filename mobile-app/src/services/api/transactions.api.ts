@@ -57,8 +57,9 @@ export class TransactionsApiService extends BaseApiService {
 
         // Map backend invoice status to frontend transaction status
         let status: 'completed' | 'pending' | 'success' = 'pending';
-        if (invoice.status === 'paid_verified') status = 'success';
-        else if (invoice.status === 'paid_unverified') status = 'pending';
+        if (invoice.status === 'paid_verified') status = 'completed';
+        else if (invoice.status === 'paid_unverified') status = 'success';
+        else if (invoice.status === 'pending') status = 'pending';
 
         return {
           id: invoice.id.toString(),

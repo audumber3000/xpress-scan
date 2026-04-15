@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Bell, Bookmark, ChevronDown } from 'lucide-react-native';
+import { Bell, ChevronDown } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '../../../../../../shared/constants/colors';
 
@@ -98,12 +98,6 @@ export const WelcomeHeaderTopPart: React.FC<WelcomeHeaderProps> = ({
                 <Text style={styles.upgradeBadgeText}>⚡ PRO</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity
-              style={styles.iconButton}
-              activeOpacity={0.7}
-            >
-              <Bookmark size={20} color="#FFFFFF" strokeWidth={2} />
-            </TouchableOpacity>
             <TouchableOpacity
               style={styles.iconButton}
               onPress={onNotificationPress}

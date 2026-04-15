@@ -95,6 +95,20 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
         // 3. Background-sync with backend (non-blocking)
         syncBackendUser(firebaseUser, storedUser)
       } else {
+        // Firebase fired null — this happens on every app restart because the
+        // Firebase JS SDK v12 has no AsyncStorage persistence layer on React Native.
+        // Before clearing the session, check if the backend token is still valid.
+        const storedUser = await authApiService.getUserInfo()
+        if (storedUser) {
+          const freshUser = await authApiService.getCurrentUser()
+          if (freshUser) {
+            // Backend token still valid — keep the session alive
+            setBackendUser(freshUser)
+            setIsLoading(false)
+            return
+          }
+        }
+        // No valid session — clear everything
         setBackendUser(null)
         await authApiService.clearTokens()
         setAuthEmail('')

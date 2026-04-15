@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl } from 'react-native';
 import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowRight, ArrowDownLeft, ArrowUpRight, Search, Users, Receipt, CreditCard, Wallet, Calendar, Plus, Info, ChevronLeft } from 'lucide-react-native';
+import { ArrowDownLeft, ArrowUpRight, ChevronLeft, Receipt } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../../app/AppNavigator';
@@ -119,6 +119,7 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () =>
       ) : (
         <ScrollView
           style={styles.content}
+          contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -129,78 +130,90 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () =>
             />
           }
         >
-          <View style={styles.transactionsList}>
             {activeTab === 'payments' ? (
-              transactions.map((transaction, index) => {
-                const statusBgColor = transaction.status.toLowerCase() === 'completed' || transaction.status.toLowerCase() === 'success'
-                  ? '#E6F9F1' : '#FFFBEB';
-                const statusTextColor = transaction.status.toLowerCase() === 'completed' || transaction.status.toLowerCase() === 'success'
-                  ? '#10B981' : '#F59E0B';
-                const initials = getInitials(transaction.patientName || '??');
-
-                return (
-                  <View key={transaction.id} style={styles.itemContainer}>
-                    <TouchableOpacity style={styles.rowContent} activeOpacity={0.7} onPress={() => handleItemPress(transaction)}>
-                      <View style={styles.avatarContainer}>
-                        <View style={styles.avatar}>
-                          <Text style={styles.avatarText}>{initials}</Text>
-                        </View>
-                        <View style={[styles.iconIndicator, { backgroundColor: '#10B981' }]}>
-                          <ArrowDownLeft size={10} color="#FFFFFF" strokeWidth={3} />
-                        </View>
-                      </View>
-                      <View style={styles.transactionInfo}>
-                        <Text style={styles.itemTitle}>{transaction.patientName}</Text>
-                        <Text style={styles.itemSubtitle}>{transaction.time || '10:30 AM'} • {transaction.treatment || 'Treatment'}</Text>
-                      </View>
-                      <View style={styles.transactionRight}>
-                        <Text style={styles.itemAmount}>₹{transaction.amount.toLocaleString()}</Text>
-                        <View style={[styles.statusBadge, { backgroundColor: statusBgColor }]}>
-                          <Text style={[styles.statusText, { color: statusTextColor }]}>{transaction.status.toUpperCase()}</Text>
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                    {index < transactions.length - 1 && <View style={styles.separator} />}
-                  </View>
-                );
-              })
-            ) : (
-              ledgerItems.map((item, index) => {
-                const isExpense = item.type === 'expense';
-                const indicatorColor = isExpense ? '#EF4444' : '#10B981';
-                const initials = getInitials(item.entityName || '??');
-
-                return (
-                  <View key={`${item.type}-${item.id}`} style={styles.itemContainer}>
-                    <TouchableOpacity style={styles.rowContent} activeOpacity={0.7} onPress={() => handleItemPress(item)}>
-                      <View style={styles.avatarContainer}>
-                        <View style={styles.avatar}>
-                          <Text style={styles.avatarText}>{initials}</Text>
-                        </View>
-                        <View style={[styles.iconIndicator, { backgroundColor: indicatorColor }]}>
-                          {isExpense ? <ArrowUpRight size={10} color="#FFFFFF" strokeWidth={3} /> : <ArrowDownLeft size={10} color="#FFFFFF" strokeWidth={3} />}
-                        </View>
-                      </View>
-                      <View style={styles.transactionInfo}>
-                        <Text style={styles.itemTitle} numberOfLines={1}>{item.entityName || 'General'}</Text>
-                        <View style={styles.row}>
-                          <View style={[styles.typeBadge, { backgroundColor: isExpense ? '#FEE2E2' : '#E0F2FE' }]}>
-                            <Text style={[styles.typeBadgeText, { color: isExpense ? '#B91C1C' : '#0369A1' }]}>{item.type.toUpperCase()}</Text>
+              transactions.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyIcon}>🧾</Text>
+                  <Text style={styles.emptyTitle}>No transactions found</Text>
+                  <Text style={styles.emptySubtitle}>Patient payments will appear here once invoices are created.</Text>
+                </View>
+              ) : (
+                transactions.map((transaction, index) => {
+                  const s = transaction.status.toLowerCase();
+                  const statusBgColor = s === 'completed' ? '#E6F9F1' : s === 'success' ? '#EFF6FF' : '#FFFBEB';
+                  const statusTextColor = s === 'completed' ? '#10B981' : s === 'success' ? '#3B82F6' : '#F59E0B';
+                  const statusLabel = s === 'completed' ? 'PAID' : s === 'success' ? 'UNVERIFIED' : 'PENDING';
+                  const initials = getInitials(transaction.patientName || '??');
+                  return (
+                    <View key={transaction.id}>
+                      <TouchableOpacity style={styles.rowContent} activeOpacity={0.7} onPress={() => handleItemPress(transaction)}>
+                        <View style={styles.avatarContainer}>
+                          <View style={styles.avatar}>
+                            <Text style={styles.avatarText}>{initials}</Text>
                           </View>
-                          <Text style={styles.itemSubtitle}>{item.date} • {item.category}</Text>
+                          <View style={[styles.iconIndicator, { backgroundColor: '#10B981' }]}>
+                            <ArrowDownLeft size={10} color="#FFFFFF" strokeWidth={3} />
+                          </View>
                         </View>
-                      </View>
-                      <View style={styles.transactionRight}>
-                        <Text style={[styles.itemAmount, { color: isExpense ? '#B91C1C' : '#10B981' }]}>{isExpense ? '-' : '+'}₹{item.amount.toLocaleString()}</Text>
-                        <Text style={styles.paymentMethodText}>{item.payment_method || 'Cash'}</Text>
-                      </View>
-                    </TouchableOpacity>
-                    {index < ledgerItems.length - 1 && <View style={styles.separator} />}
-                  </View>
-                );
-              })
+                        <View style={styles.transactionInfo}>
+                          <Text style={styles.itemTitle}>{transaction.patientName}</Text>
+                          <Text style={styles.itemSubtitle}>{transaction.time || '10:30 AM'} • {transaction.treatment || 'Treatment'}</Text>
+                        </View>
+                        <View style={styles.transactionRight}>
+                          <Text style={styles.itemAmount}>₹{transaction.amount.toLocaleString()}</Text>
+                          <View style={[styles.statusBadge, { backgroundColor: statusBgColor }]}>
+                            <Text style={[styles.statusText, { color: statusTextColor }]}>{statusLabel}</Text>
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                      {index < transactions.length - 1 && <View style={styles.separator} />}
+                    </View>
+                  );
+                })
+              )
+            ) : (
+              ledgerItems.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyIcon}>📊</Text>
+                  <Text style={styles.emptyTitle}>No ledger entries found</Text>
+                  <Text style={styles.emptySubtitle}>All income and expenses will appear here.</Text>
+                </View>
+              ) : (
+                ledgerItems.map((item, index) => {
+                  const isExpense = item.type === 'expense';
+                  const indicatorColor = isExpense ? '#EF4444' : '#10B981';
+                  const initials = getInitials(item.entityName || '??');
+                  return (
+                    <View key={`${item.type}-${item.id}`}>
+                      <TouchableOpacity style={styles.rowContent} activeOpacity={0.7} onPress={() => handleItemPress(item)}>
+                        <View style={styles.avatarContainer}>
+                          <View style={styles.avatar}>
+                            <Text style={styles.avatarText}>{initials}</Text>
+                          </View>
+                          <View style={[styles.iconIndicator, { backgroundColor: indicatorColor }]}>
+                            {isExpense ? <ArrowUpRight size={10} color="#FFFFFF" strokeWidth={3} /> : <ArrowDownLeft size={10} color="#FFFFFF" strokeWidth={3} />}
+                          </View>
+                        </View>
+                        <View style={styles.transactionInfo}>
+                          <Text style={styles.itemTitle} numberOfLines={1}>{item.entityName || 'General'}</Text>
+                          <View style={styles.row}>
+                            <View style={[styles.typeBadge, { backgroundColor: isExpense ? '#FEE2E2' : '#E0F2FE' }]}>
+                              <Text style={[styles.typeBadgeText, { color: isExpense ? '#B91C1C' : '#0369A1' }]}>{item.type.toUpperCase()}</Text>
+                            </View>
+                            <Text style={styles.itemSubtitle}>{item.date} • {item.category}</Text>
+                          </View>
+                        </View>
+                        <View style={styles.transactionRight}>
+                          <Text style={[styles.itemAmount, { color: isExpense ? '#B91C1C' : '#10B981' }]}>{isExpense ? '-' : '+'}₹{item.amount.toLocaleString()}</Text>
+                          <Text style={styles.paymentMethodText}>{item.payment_method || 'Cash'}</Text>
+                        </View>
+                      </TouchableOpacity>
+                      {index < ledgerItems.length - 1 && <View style={styles.separator} />}
+                    </View>
+                  );
+                })
+              )
             )}
-          </View>
         </ScrollView>
       )}
     </SafeAreaView>
@@ -227,7 +240,11 @@ const styles = StyleSheet.create({
   activeTabIndicator: { position: 'absolute', bottom: 0, left: '20%', right: '20%', height: 3, backgroundColor: colors.primary, borderRadius: 2 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   content: { flex: 1 },
-  transactionsList: { padding: 15, backgroundColor: '#FFFFFF', margin: 15, borderRadius: 12, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
+  listContent: { padding: 15, flexGrow: 1 },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 80, paddingHorizontal: 32 },
+  emptyIcon: { fontSize: 48, marginBottom: 16 },
+  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#111827', marginBottom: 8, textAlign: 'center' },
+  emptySubtitle: { fontSize: 14, color: '#6B7280', textAlign: 'center', lineHeight: 20 },
   itemContainer: { paddingVertical: 12 },
   rowContent: { flexDirection: 'row', alignItems: 'center' },
   avatarContainer: { position: 'relative' },
