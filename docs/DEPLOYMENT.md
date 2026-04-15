@@ -209,22 +209,36 @@ Take a manual server snapshot from Hetzner console before any major changes.
 
 ## Deploying Updates
 
-Code updates are handled via `git pull` on the server.
+**Always use `deploy.sh` — never run `docker compose up` manually.** The script runs schema checks, env checks, and a post-deploy health check that manual commands skip.
 
-From your local Mac:
-1. Ensure changes are pushed to `main`.
-2. (Optional) If `.env.production` changed, sync it:
-   `sshpass -p '<PASSWORD>' scp .env.production root@178.104.132.255:/root/molarplus/`
+### Standard deploy
 
-On the server:
 ```bash
-# 1. Pull latest changes
-cd /root/molarplus
-git reset --hard HEAD  # Clean up any local drift
-git pull origin main
+# 1. On your Mac — push to GitHub
+git push origin main
 
-# 2. Rebuild and restart
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+# 2. On the server — pull and deploy
+ssh root@178.104.132.255
+cd /root/molarplus
+git stash                  # preserve local docker-compose.prod.yml changes (port bindings)
+git pull origin main
+git stash pop
+./deploy.sh                # runs all checks, builds, starts, verifies health
+```
+
+> ⚠️ The `git stash / pop` step is needed because `docker-compose.prod.yml` has a local change on the server (DB port 5432 exposed for the SSH tunnel from support server). Never `git reset --hard` — that would wipe the port binding and break the support tool DB connection.
+
+### If you added a new column to `models.py`
+
+Run the migration on prod **before** running `deploy.sh`. The deploy will refuse to proceed if the column is missing.
+
+```bash
+# On the server — run BEFORE deploy.sh
+docker exec molarplus-db-1 psql -U postgres molarplus -c \
+  "ALTER TABLE <table_name> ADD COLUMN IF NOT EXISTS <col_name> <type>;"
+
+# Then deploy as normal
+./deploy.sh
 ```
 
 ---
@@ -269,6 +283,7 @@ There are **3 layers** that catch errors before they hit production users.
 - All critical env vars are non-empty (`DATABASE_URL`, `JWT_SECRET`, `FIREBASE_JSON_PATH`, `R2_*`, `CASHFREE_*`, `BACKEND_URL`)
 - `DATABASE_URL` has no bare `@` in the password (must be `%40`)
 - Firebase JSON path exists on disk
+- **Schema migration check** — connects to the real prod DB and verifies every required column exists in `clinics`, `users`, `user_clinics`, `patients`, and `appointments` before wasting time on a build
 - Backend health endpoint responds after deploy
 
 **Run:**
@@ -279,6 +294,10 @@ cd /root/molarplus
 ```
 
 If any check fails, the script **exits before building** with a clear error message.
+
+> ⚠️ **Why the schema check matters:** SQLAlchemy generates SQL from `models.py` at runtime. If you add a column to the model but forget the `ALTER TABLE` on prod, every query to that table crashes with `UndefinedColumn`. `create_all()` in tests always passes because it builds a fresh DB — only a check against the real DB catches this. The `referred_by_code` outage (April 2026) is the canonical example.
+>
+> If the schema check fails, `deploy.sh` prints the exact `ALTER TABLE` to run and exits. Fix the DB first, then re-run `deploy.sh`.
 
 ---
 
@@ -379,3 +398,4 @@ SMOKE_URL=http://localhost:8000 pytest tests/smoke/test_smoke.py -v --noconftest
 | `libgdk-pixbuf2.0-0` not found | Renamed to `libgdk-pixbuf-2.0-0` in Debian Bookworm |
 | `ModuleNotFoundError: sentry_sdk` | Added `sentry-sdk[fastapi]>=2.0.0` to both `backend/config/requirements.txt` and `nexus-service/requirements.txt` |
 | `ImportError: jinja2 must be installed` | Added `jinja2` to `backend/config/requirements.txt` |
+| `UndefinedColumn: clinics.referred_by_code` (April 2026) | Column added to `models.py` but `ALTER TABLE` never ran on prod. `create_all()` in tests masked it. Fix: added schema check to `deploy.sh` — now blocks deploy if any required column is missing. |
