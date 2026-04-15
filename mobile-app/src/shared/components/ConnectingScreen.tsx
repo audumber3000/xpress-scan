@@ -1,249 +1,178 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated, StatusBar, Dimensions } from 'react-native';
-import { Smartphone, Server } from 'lucide-react-native';
-import { colors } from '../constants/colors';
+import {
+  View,
+  StyleSheet,
+  Animated,
+  Easing,
+  StatusBar,
+  Dimensions,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { RefreshCw } from 'lucide-react-native';
+import Svg, { Path } from 'react-native-svg';
 
-const { width } = Dimensions.get('window');
+const { width: W, height: H } = Dimensions.get('window');
 
-const LOADING_MESSAGES = [
-    "Connecting...",
-    "Verifying the role...",
-    "Logging in...",
-    "Syncing clinic data...",
-    "Establishing secure session...",
-    "Almost there..."
-];
+// ─── Tooth SVG ────────────────────────────────────────────────────────────────
+// Molar silhouette: crown + two roots, viewBox 0 0 40 58
 
-export const ConnectingScreen = () => {
-    const dotPosition = useRef(new Animated.Value(0)).current;
-    const progressPosition = useRef(new Animated.Value(0)).current;
-    const fadeAnim = useRef(new Animated.Value(1)).current;
+const TOOTH_PATH =
+  'M8,4 Q4,4 4,8 L4,28 Q4,34 8,34 Q9,42 9,48 Q9,54 13,54 Q17,54 17,48 Q17,42 20,42 Q23,42 23,48 Q23,54 27,54 Q31,54 31,48 Q31,42 32,34 Q36,34 36,28 L36,8 Q36,4 32,4 Z';
 
-    const [messageIndex, setMessageIndex] = useState(0);
+interface ToothProps {
+  size?: number;
+  color?: string;
+  opacity?: number;
+  rotate?: number;
+  style?: object;
+}
 
-    useEffect(() => {
-        // Dot flow animation (smaller, subtle dots)
-        Animated.loop(
-            Animated.timing(dotPosition, {
-                toValue: 1,
-                duration: 1500,
-                useNativeDriver: true,
-            })
-        ).start();
-
-        // Progress bar to-and-fro animation
-        Animated.loop(
-            Animated.sequence([
-                Animated.timing(progressPosition, {
-                    toValue: 1,
-                    duration: 1500,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(progressPosition, {
-                    toValue: 0,
-                    duration: 1500,
-                    useNativeDriver: true,
-                }),
-            ])
-        ).start();
-
-        // Text rotation logic
-        const interval = setInterval(() => {
-            // Fade out
-            Animated.timing(fadeAnim, {
-                toValue: 0,
-                duration: 400,
-                useNativeDriver: true,
-            }).start(() => {
-                setMessageIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
-                // Fade in
-                Animated.timing(fadeAnim, {
-                    toValue: 1,
-                    duration: 400,
-                    useNativeDriver: true,
-                }).start();
-            });
-        }, 2500);
-
-        return () => clearInterval(interval);
-    }, []);
-
-    const translateXDot1 = dotPosition.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0, 80],
-    });
-
-    const translateXDot2 = dotPosition.interpolate({
-        inputRange: [0, 1],
-        outputRange: [-40, 40],
-    });
-
-    const translateXProgress = progressPosition.interpolate({
-        inputRange: [0, 1],
-        outputRange: [-40, 120],
-    });
-
-    return (
-        <View style={styles.container}>
-            <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
-
-            <View style={styles.animationContainer}>
-                {/* Phone Icon */}
-                <View style={styles.iconBox}>
-                    <View style={styles.phoneIcon}>
-                        <Smartphone size={32} color={colors.white} />
-                    </View>
-                </View>
-
-                {/* Dotted Line and Subtle Pulse */}
-                <View style={styles.connector}>
-                    <View style={styles.dottedLine} />
-                    <Animated.View
-                        style={[
-                            styles.subtlePulse,
-                            { transform: [{ translateX: translateXDot1 }] }
-                        ]}
-                    />
-                </View>
-
-                {/* Server Icon */}
-                <View style={styles.iconBoxServer}>
-                    <View style={styles.serverIcon}>
-                        <Server size={32} color={colors.white} />
-                    </View>
-                </View>
-            </View>
-
-            <View style={styles.textContainer}>
-                <Animated.Text style={[styles.title, { opacity: fadeAnim }]}>
-                    {LOADING_MESSAGES[messageIndex]}
-                </Animated.Text>
-                <Text style={styles.subtitle}>Establishing secure connection</Text>
-            </View>
-
-            <View style={styles.loaderContainer}>
-                <View style={styles.progressBarBg}>
-                    <Animated.View
-                        style={[
-                            styles.progressBarFill,
-                            { transform: [{ translateX: translateXProgress }] }
-                        ]}
-                    />
-                </View>
-                <Text style={styles.loaderLabel}>SECURITY HANDSHAKE</Text>
-            </View>
-        </View>
-    );
+const Tooth: React.FC<ToothProps> = ({
+  size = 36,
+  color = '#2a276e',
+  opacity = 0.13,
+  rotate = 0,
+  style,
+}) => {
+  const h = size * (58 / 40); // keep aspect ratio
+  return (
+    <Svg
+      width={size}
+      height={h}
+      viewBox="0 0 40 58"
+      style={[{ transform: [{ rotate: `${rotate}deg` }] }, style]}
+    >
+      <Path d={TOOTH_PATH} fill={color} opacity={opacity} />
+    </Svg>
+  );
 };
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#F9FAFB',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    animationContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 60,
-    },
-    iconBox: {
-        width: 80,
-        height: 120,
-        backgroundColor: '#2A276E',
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.1,
-        shadowRadius: 15,
-        elevation: 10,
-    },
-    iconBoxServer: {
-        width: 80,
-        height: 120,
-        backgroundColor: '#4B5563',
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.1,
-        shadowRadius: 15,
-        elevation: 10,
-    },
-    phoneIcon: {
-        opacity: 0.9,
-    },
-    serverIcon: {
-        opacity: 0.8,
-    },
-    connector: {
-        width: 100,
-        height: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: 10,
-    },
-    dottedLine: {
-        width: '100%',
-        height: 1,
-        borderWidth: 1,
-        borderColor: '#9CA3AF',
-        borderStyle: 'dashed',
-        opacity: 0.3,
-    },
-    subtlePulse: {
-        position: 'absolute',
-        left: 10,
-        width: 4,
-        height: 4,
-        borderRadius: 2,
-        backgroundColor: '#2A276E',
-        opacity: 0.6,
-    },
-    textContainer: {
-        alignItems: 'center',
-        marginBottom: 60,
-        height: 80, // Fixed height to prevent layout jumps
-        justifyContent: 'center',
-    },
-    title: {
-        fontSize: 28,
-        fontWeight: '700',
-        color: '#1F2937',
-        marginBottom: 8,
-        textAlign: 'center',
-    },
-    subtitle: {
-        fontSize: 16,
-        color: '#6B7280',
-        fontWeight: '500',
-    },
-    loaderContainer: {
-        width: 200,
-        alignItems: 'center',
-    },
-    progressBarBg: {
-        width: '100%',
-        height: 6,
-        backgroundColor: '#E5E7EB',
-        borderRadius: 3,
-        overflow: 'hidden',
-        marginBottom: 12,
-    },
-    progressBarFill: {
-        width: 80,
-        height: '100%',
-        backgroundColor: '#2A276E',
-        borderRadius: 3,
-    },
-    loaderLabel: {
-        fontSize: 10,
-        fontWeight: '700',
-        color: '#9CA3AF',
-        letterSpacing: 1.5,
-    },
+// ─── Decorative tooth positions ───────────────────────────────────────────────
+
+const TEETH = [
+  { top: H * 0.10, left: W * 0.06,  size: 44, rotate: -18, opacity: 0.12 },
+  { top: H * 0.08, left: W * 0.74,  size: 36, rotate:  14, opacity: 0.10 },
+  { top: H * 0.30, left: W * 0.85,  size: 30, rotate:  22, opacity: 0.09 },
+  { top: H * 0.62, left: W * 0.04,  size: 34, rotate: -10, opacity: 0.10 },
+  { top: H * 0.74, left: W * 0.80,  size: 40, rotate:  16, opacity: 0.11 },
+  { top: H * 0.84, left: W * 0.30,  size: 28, rotate:  -8, opacity: 0.08 },
+];
+
+// ─── Sync messages ────────────────────────────────────────────────────────────
+
+const SYNC_MESSAGES = [
+  'Syncing patients...',
+  'Syncing appointments...',
+  'Syncing reports...',
+  'Syncing inventory...',
+  'Syncing lab orders...',
+  'Syncing charts...',
+  'Syncing staff...',
+];
+
+const CYCLE_MS = 1800;
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
+
+export const ConnectingScreen = () => {
+  const spinAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const [msgIdx, setMsgIdx] = useState(0);
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(spinAnim, {
+        toValue: 1,
+        duration: CYCLE_MS,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    ).start();
+
+    const interval = setInterval(() => {
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 280,
+        useNativeDriver: true,
+      }).start(() => {
+        setMsgIdx(prev => (prev + 1) % SYNC_MESSAGES.length);
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 280,
+          useNativeDriver: true,
+        }).start();
+      });
+    }, CYCLE_MS);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const rotate = spinAnim.interpolate({
+    inputRange:  [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  return (
+    <View style={s.root}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
+
+      {/* Decorative background teeth */}
+      {TEETH.map((t, i) => (
+        <Tooth
+          key={i}
+          size={t.size}
+          rotate={t.rotate}
+          opacity={t.opacity}
+          style={{ position: 'absolute', top: t.top, left: t.left }}
+        />
+      ))}
+
+      {/* Sync icon */}
+      <LinearGradient
+        colors={['#4a4694', '#2a276e']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={s.circle}
+      >
+        <Animated.View style={{ transform: [{ rotate }] }}>
+          <RefreshCw size={72} color="#fff" strokeWidth={1.8} />
+        </Animated.View>
+      </LinearGradient>
+
+      {/* Cycling text */}
+      <Animated.Text style={[s.message, { opacity: fadeAnim }]}>
+        {SYNC_MESSAGES[msgIdx]}
+      </Animated.Text>
+    </View>
+  );
+};
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const s = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 36,
+  },
+  circle: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#2a276e',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.30,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  message: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#374151',
+    letterSpacing: 0.2,
+  },
 });

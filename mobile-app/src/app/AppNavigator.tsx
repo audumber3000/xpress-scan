@@ -1,9 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
 
 // Import screens
+import { OnboardingScreen, ONBOARDING_KEY } from '../features/auth/screens/OnboardingScreen';
 import { GetStartedScreen } from '../features/auth/screens/GetStartedScreen';
 import { LoginScreen } from '../features/auth/screens/LoginScreen';
 import { SignupScreen } from '../features/auth/screens/SignupScreen';
@@ -39,6 +41,7 @@ import { TemplatesScreen } from '../features/admin/templates/screens/TemplatesSc
 import { TeamScreen } from '../features/admin/team/screens/TeamScreen';
 
 export type RootStackParamList = {
+  Onboarding: undefined;
   GetStarted: undefined;
   Login: undefined;
   Signup: undefined;
@@ -76,6 +79,13 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const AppNavigator = () => {
   const { isAuthenticated, isLoading, backendUser } = useAuth();
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem(ONBOARDING_KEY).then(val => {
+      setHasSeenOnboarding(val === 'true');
+    });
+  }, []);
 
   useEffect(() => {
     if (!isLoading) {
@@ -87,12 +97,15 @@ export const AppNavigator = () => {
     }
   }, [isAuthenticated, isLoading, backendUser]);
 
-  if (isLoading || (isAuthenticated && !backendUser)) {
+  if (isLoading || hasSeenOnboarding === null || (isAuthenticated && !backendUser)) {
     return <ConnectingScreen />;
   }
 
   const getInitialRoute = () => {
-    if (!isAuthenticated) return 'Login';
+    if (!isAuthenticated) {
+      if (!hasSeenOnboarding) return 'Onboarding';
+      return 'Login';
+    }
     if (backendUser?.role === 'clinic_owner' && !backendUser?.clinic?.id) {
       return 'Signup';
     }
@@ -164,6 +177,7 @@ export const AppNavigator = () => {
             )
           ) : (
             <>
+              <Stack.Screen name="Onboarding" component={OnboardingScreen} />
               <Stack.Screen name="GetStarted" component={GetStartedScreen} />
               <Stack.Screen name="Login" component={LoginScreen} />
               <Stack.Screen name="Signup" component={SignupScreen} />

@@ -12,13 +12,13 @@ import {
   Platform,
   StyleSheet,
   Dimensions,
-  Alert
+  Alert,
+  Image
 } from 'react-native';
-import { 
-  LogIn, 
-  ChevronRight, 
-  ArrowLeft, 
-  Mail, 
+import {
+  ChevronRight,
+  ArrowLeft,
+  Mail,
   Lock,
   Eye,
   EyeOff
@@ -109,9 +109,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     >
       {/* Header Icon & Title */}
       <View style={styles.header}>
-        <View style={styles.iconCircle}>
-          <LogIn size={40} color={colors.primary} />
-        </View>
+        <Image
+          source={require('../../../../assets/icon.png')}
+          style={styles.appLogo}
+          resizeMode="contain"
+        />
         <Text style={styles.title}>Login</Text>
         
         <TouchableOpacity 
@@ -271,6 +273,12 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 48,
+  },
+  appLogo: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    marginBottom: 24,
   },
   iconCircle: {
     width: 80,

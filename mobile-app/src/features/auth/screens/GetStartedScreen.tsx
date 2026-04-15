@@ -9,12 +9,12 @@ import {
   SafeAreaView,
   Alert,
   TouchableOpacity,
-  ScrollView
+  ScrollView,
+  Image
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { 
-  UserPlus, 
-  ChevronRight, 
+import {
+  ChevronRight,
   Mail
 } from 'lucide-react-native';
 import { RootStackParamList } from '../../../app/AppNavigator';
@@ -60,9 +60,11 @@ export const GetStartedScreen: React.FC<GetStartedScreenProps> = ({ navigation }
       >
         {/* Header Icon & Title */}
         <View style={styles.header}>
-          <View style={styles.iconCircle}>
-            <UserPlus size={40} color={colors.primary} />
-          </View>
+          <Image
+            source={require('../../../../assets/icon.png')}
+            style={styles.appLogo}
+            resizeMode="contain"
+          />
           <Text style={styles.title}>Register</Text>
           
           <TouchableOpacity 
@@ -135,6 +137,12 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 48,
+  },
+  appLogo: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    marginBottom: 24,
   },
   iconCircle: {
     width: 80,
