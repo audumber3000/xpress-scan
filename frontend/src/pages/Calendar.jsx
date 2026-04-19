@@ -1220,29 +1220,7 @@ const Calendar = () => {
   // Generate clinic-based booking URL
   const getBookingUrl = () => {
     const clinicId = clinicData?.id || "1";
-    const clinicName = clinicData?.name || user?.user_metadata?.clinic_name || "Medical Center";
-    const clinicAddress = clinicData?.address || "123 Medical Street, Health City";
-    const clinicPhone = clinicData?.phone || "+1 (555) 123-4567";
-    const clinicHours = clinicData?.hours || "Mon-Fri: 8:00 AM - 8:00 PM, Sat: 9:00 AM - 5:00 PM, Sun: Closed";
-    
-    console.log("Generating booking URL with:");
-    console.log("clinicData:", clinicData);
-    console.log("clinicId:", clinicId);
-    console.log("clinicName:", clinicName);
-    console.log("clinicAddress:", clinicAddress);
-    console.log("clinicPhone:", clinicPhone);
-    
-    const params = new URLSearchParams({
-      clinic: clinicId,
-      name: clinicName,
-      address: clinicAddress,
-      phone: clinicPhone,
-      hours: clinicHours
-    });
-    
-    const url = `/booking?${params.toString()}`;
-    console.log("Generated URL:", url);
-    return url;
+    return `/booking?clinic=${clinicId}`;
   };
 
   const weekDates = getWeekDates();
