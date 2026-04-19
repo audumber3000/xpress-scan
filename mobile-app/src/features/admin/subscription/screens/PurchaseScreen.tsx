@@ -168,7 +168,7 @@ export const PurchaseScreen: React.FC<PurchaseScreenProps> = ({ navigation }) =>
       const session = new CFSession(
         checkoutRes.payment_session_id,
         checkoutRes.order_id,
-        CFEnvironment.SANDBOX // Using Sandbox as per backend .env
+        CFEnvironment.PRODUCTION
       );
 
       // Launch Web Checkout (Simplified for cross-platform)
