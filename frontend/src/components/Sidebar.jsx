@@ -88,16 +88,6 @@ const mainNavItems = [
     ),
   },
   {
-    name: "Inbox",
-    path: "/mail",
-    permissionKey: "inbox",
-    icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-      </svg>
-    )
-  },
-  {
     name: "Marketing",
     path: "/marketing",
     hasSubmenu: true,
@@ -138,7 +128,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const [clinicData, setClinicData] = useState(null);
   const [expandedMenus, setExpandedMenus] = useState({});
 
@@ -154,13 +144,9 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
   const collapsed = isCollapsed !== undefined ? isCollapsed : internalCollapsed;
   const setCollapsed = onCollapseChange || setInternalCollapsed;
 
-  // Check if we're on mobile
+  // Check if we're on mobile — initialise immediately to avoid layout flash
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    
-    checkMobile();
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);

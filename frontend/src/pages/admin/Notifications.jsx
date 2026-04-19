@@ -78,11 +78,6 @@ const Notifications = () => {
   const [topUpAmount, setTopUpAmount]     = useState(500);
   const [toppingUp, setToppingUp]         = useState(false);
 
-  // Per-channel test state
-  const [testWA, setTestWA]         = useState({ number: '', loading: false });
-  const [testWATpl, setTestWATpl]   = useState({ number: '', loading: false });
-  const [testEmail, setTestEmail]   = useState({ address: '', loading: false });
-  const [testSMS, setTestSMS]       = useState({ number: '', loading: false });
 
   // Provider marketplace drawer
   const [drawerProvider, setDrawerProvider] = useState(null);
@@ -224,62 +219,6 @@ const Notifications = () => {
     }
   }, [location.search]);   // eslint-disable-line
 
-  const handleTestWA = async () => {
-    if (!testWA.number) { toast.error('Enter a mobile number'); return; }
-    setTestWA(p => ({ ...p, loading: true }));
-    try {
-      await api.post('/notification-admin/test/whatsapp', { mobile_number: testWA.number });
-      toast.success('WhatsApp test message sent!');
-    } catch (err) {
-      toast.error(err?.detail || 'WhatsApp test failed');
-    } finally {
-      setTestWA(p => ({ ...p, loading: false }));
-    }
-  };
-
-  const handleTestWATemplate = async () => {
-    if (!testWATpl.number) { toast.error('Enter a WhatsApp number with country code'); return; }
-    setTestWATpl(p => ({ ...p, loading: true }));
-    try {
-      await api.post('/notification-admin/test/whatsapp-template', {
-        mobile_number: testWATpl.number,
-        clinic_name: 'Demo Clinic',
-        clinic_phone: '+91 9594078777',
-      });
-      toast.success('✅ WhatsApp template message sent!');
-    } catch (err) {
-      toast.error(err?.detail || err?.message || 'WhatsApp template test failed');
-    } finally {
-      setTestWATpl(p => ({ ...p, loading: false }));
-    }
-  };
-
-  const handleTestEmail = async () => {
-    if (!testEmail.address) { toast.error('Enter an email address'); return; }
-    setTestEmail(p => ({ ...p, loading: true }));
-    try {
-      await api.post('/notification-admin/test/email', { to_email: testEmail.address });
-      toast.success('Test email sent!');
-    } catch (err) {
-      toast.error(err?.detail || 'Email test failed');
-    } finally {
-      setTestEmail(p => ({ ...p, loading: false }));
-    }
-  };
-
-  const handleTestSMS = async () => {
-    if (!testSMS.number) { toast.error('Enter a mobile number'); return; }
-    setTestSMS(p => ({ ...p, loading: true }));
-    try {
-      await api.post('/notification-admin/test/sms', { mobile_number: testSMS.number });
-      toast.success('Test SMS sent!');
-    } catch (err) {
-      toast.error(err?.detail || 'SMS test failed');
-    } finally {
-      setTestSMS(p => ({ ...p, loading: false }));
-    }
-  };
-
   const TABS = [
     { id: 'overview',    label: 'Overview',       icon: BarChart2    },
     { id: 'preferences', label: 'Preferences',    icon: MessageSquare},
@@ -376,71 +315,6 @@ const Notifications = () => {
               <StatCard channel="whatsapp" />
               <StatCard channel="email" />
               <StatCard channel="sms" />
-            </div>
-
-            {/* Quick Channel Test */}
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-              <h3 className="font-semibold text-gray-900 mb-1">Quick Channel Test</h3>
-              <p className="text-xs text-gray-400 mb-5">Send a real test message to verify your channels are working.</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-
-                {/* WhatsApp template test */}
-                <div className="border border-gray-100 rounded-xl p-4 bg-gray-50/40">
-                  <div className="flex items-center gap-2 mb-3">
-                    <WhatsAppIcon size={18} />
-                    <span className="text-sm font-semibold text-gray-800">WhatsApp</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-100 ml-auto">Template</span>
-                  </div>
-                  <p className="text-[11px] text-gray-400 mb-3">Sends <code className="bg-gray-100 px-1 rounded">mp_appointment_booked_v2</code> with sample data.</p>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="919876543210 (with country code)"
-                      className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-400 transition-all"
-                      value={testWATpl.number}
-                      onChange={e => setTestWATpl(p => ({ ...p, number: e.target.value }))}
-                      onKeyDown={e => e.key === 'Enter' && handleTestWATemplate()}
-                    />
-                    <button
-                      onClick={handleTestWATemplate}
-                      disabled={testWATpl.loading}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-200 text-white text-sm font-semibold rounded-lg transition-all whitespace-nowrap"
-                    >
-                      {testWATpl.loading ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                      Send
-                    </button>
-                  </div>
-                </div>
-
-                {/* Email test */}
-                <div className="border border-gray-100 rounded-xl p-4 bg-gray-50/40">
-                  <div className="flex items-center gap-2 mb-3">
-                    <GmailIcon size={18} />
-                    <span className="text-sm font-semibold text-gray-800">Email</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100 ml-auto">ZeptoMail</span>
-                  </div>
-                  <p className="text-[11px] text-gray-400 mb-3">Sends a branded test email from <code className="bg-gray-100 px-1 rounded">clinic@molarplus.com</code>.</p>
-                  <div className="flex gap-2">
-                    <input
-                      type="email"
-                      placeholder="you@example.com"
-                      className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
-                      value={testEmail.address}
-                      onChange={e => setTestEmail(p => ({ ...p, address: e.target.value }))}
-                      onKeyDown={e => e.key === 'Enter' && handleTestEmail()}
-                    />
-                    <button
-                      onClick={handleTestEmail}
-                      disabled={testEmail.loading}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white text-sm font-semibold rounded-lg transition-all whitespace-nowrap"
-                    >
-                      {testEmail.loading ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                      Send
-                    </button>
-                  </div>
-                </div>
-
-              </div>
             </div>
 
             {/* Wallet + Transactions */}

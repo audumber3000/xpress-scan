@@ -342,7 +342,6 @@ const Patients = () => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-[#f8fafc] sticky top-0 z-10">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">MRN</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Patient ID</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
@@ -367,7 +366,6 @@ const Patients = () => {
                         className="hover:bg-indigo-50/40 cursor-pointer transition-colors"
                         onClick={() => navigate(`/patient-profile/${patient.id}`)}
                       >
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{patient.id}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-600">{patient.display_id || '---'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{patient.name}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{patient.phone}</td>

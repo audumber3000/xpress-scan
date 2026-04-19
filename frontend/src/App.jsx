@@ -54,6 +54,63 @@ import PWAInstall from "./components/PWAInstall";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ConnectivityBanner from "./components/ConnectivityBanner";
 
+const BANNER_KEY = 'mp_mobile_banner_dismissed';
+
+function MobileAppBanner() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const isMobile = window.innerWidth < 768;
+    const dismissed = sessionStorage.getItem(BANNER_KEY);
+    if (isMobile && !dismissed) setVisible(true);
+  }, []);
+
+  if (!visible) return null;
+
+  const dismiss = () => {
+    sessionStorage.setItem(BANNER_KEY, '1');
+    setVisible(false);
+  };
+
+  return (
+    <div className="md:hidden bg-amber-50 border-b border-amber-200 px-4 py-2.5 shrink-0">
+      <div className="flex items-start gap-2.5">
+        <svg className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-amber-800 leading-snug">
+            For the best experience, open on a <strong>desktop browser</strong> or download the <strong>MolarPlus app</strong>.
+          </p>
+          <div className="flex items-center gap-3 mt-1.5">
+            <a
+              href="https://play.google.com/store/apps/details?id=com.molarplus.app"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] font-semibold text-amber-700 underline underline-offset-2"
+            >
+              Android
+            </a>
+            <a
+              href="https://apps.apple.com/app/molarplus/id0000000000"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] font-semibold text-amber-700 underline underline-offset-2"
+            >
+              iOS
+            </a>
+          </div>
+        </div>
+        <button onClick={dismiss} className="shrink-0 text-amber-400 hover:text-amber-600 transition-colors p-0.5 mt-0.5">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   
@@ -76,7 +133,26 @@ function ProtectedRoute({ children }) {
   if (user.role === 'clinic_owner' && !user.clinic_id && window.location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />;
   }
-  
+
+  // Staff locked out when owner's subscription has expired
+  if (user.subscription_expired && user.role !== 'clinic_owner') {
+    return (
+      <div className="flex items-center justify-center h-screen w-screen bg-gray-50">
+        <div className="max-w-md w-full mx-4 bg-white rounded-2xl shadow-lg p-10 text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Subscription Expired</h2>
+          <p className="text-gray-500 text-sm leading-relaxed">
+            Your clinic's Professional plan has expired. Please contact your clinic administrator to renew the subscription and restore access.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return children;
 }
 
@@ -159,10 +235,13 @@ function AppContent() {
           isCollapsed={isSidebarCollapsed}
           onCollapseChange={setIsSidebarCollapsed}
         />
-        <div className="flex-1 flex flex-col w-full h-full relative transition-all duration-300 ease-in-out">
+        <div className="flex-1 flex flex-col min-w-0 h-full relative transition-all duration-300 ease-in-out overflow-x-hidden">
           {/* Header */}
           <Header />
-          
+
+          {/* Mobile browser notice */}
+          <MobileAppBanner />
+
           {/* Main content area */}
           <main className="flex-1 w-full overflow-auto">
             {/* Mobile menu button */}

@@ -468,20 +468,41 @@ async def get_current_user_info(
     
     # Get clinic information if user has a clinic
     clinic_info = None
+    subscription_expired = False
     if user.clinic_id:
-        from models import Clinic, Subscription
+        from models import Clinic, Subscription, User as UserModel, user_clinics as user_clinics_table
         from datetime import datetime as dt
         clinic = db.query(Clinic).filter(Clinic.id == user.clinic_id).first()
 
-        # Enforce subscription expiry — downgrade to free if past current_end
-        if clinic and clinic.subscription_plan != 'free':
-            sub = db.query(Subscription).filter(Subscription.user_id == user.id).first()
-            if not sub:
-                sub = db.query(Subscription).filter(Subscription.clinic_id == user.clinic_id).first()
-            if sub and sub.current_end and sub.current_end < dt.utcnow():
-                sub.status = "expired"
+        # Find the owner of this clinic to check their subscription
+        owner_sub = None
+        if user.role == 'clinic_owner':
+            owner_sub = db.query(Subscription).filter(Subscription.user_id == user.id).first()
+            if not owner_sub:
+                owner_sub = db.query(Subscription).filter(Subscription.clinic_id == user.clinic_id).first()
+        else:
+            # Staff: find the clinic_owner for this clinic via user_clinics
+            owner = (
+                db.query(UserModel)
+                .join(user_clinics_table, UserModel.id == user_clinics_table.c.user_id)
+                .filter(
+                    user_clinics_table.c.clinic_id == user.clinic_id,
+                    UserModel.role == 'clinic_owner'
+                )
+                .first()
+            )
+            if owner:
+                owner_sub = db.query(Subscription).filter(Subscription.user_id == owner.id).first()
+                if not owner_sub:
+                    owner_sub = db.query(Subscription).filter(Subscription.clinic_id == user.clinic_id).first()
+
+        # Enforce subscription expiry — downgrade clinic plan if past current_end
+        if clinic and clinic.subscription_plan != 'free' and owner_sub:
+            if owner_sub.current_end and owner_sub.current_end < dt.utcnow():
+                owner_sub.status = "expired"
                 clinic.subscription_plan = "free"
                 db.commit()
+                subscription_expired = True
 
         if clinic:
             clinic_info = {
@@ -492,18 +513,18 @@ async def get_current_user_info(
                 "email": clinic.email,
                 "specialization": clinic.specialization,
                 "subscription_plan": clinic.subscription_plan,
-                "logo": clinic.logo_url,  # Add logo field for frontend compatibility
-                "logo_url": clinic.logo_url,  # Keep both for backward compatibility
+                "logo": clinic.logo_url,
+                "logo_url": clinic.logo_url,
                 "created_at": clinic.created_at.isoformat() if clinic.created_at else None,
                 "updated_at": getattr(clinic, 'updated_at', clinic.created_at).isoformat() if getattr(clinic, 'updated_at', clinic.created_at) else None,
                 "synced_at": getattr(clinic, 'synced_at', None).isoformat() if getattr(clinic, 'synced_at', None) else None,
                 "sync_status": getattr(clinic, 'sync_status', 'local')
             }
-    
+
     # Get all clinics this user belongs to
     from schemas import ClinicOut
     clinics_list = [ClinicOut.from_orm(c) for c in user.clinics]
-    
+
     # Return user with clinic info and all associated clinics
     return {
         "id": user.id,
@@ -514,6 +535,7 @@ async def get_current_user_info(
         "role": user.role,
         "clinic_id": user.clinic_id,
         "is_active": user.is_active,
+        "subscription_expired": subscription_expired,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": getattr(user, 'updated_at', user.created_at).isoformat() if getattr(user, 'updated_at', user.created_at) else None,
         "synced_at": getattr(user, 'synced_at', None).isoformat() if getattr(user, 'synced_at', None) else None,
@@ -526,6 +548,8 @@ async def get_current_user_info(
 def _seed_clinic_defaults(db, clinic_id: int):
     """Seed common default values for all practice settings sections on new clinic creation."""
     from models import TreatmentType, ClinicalSetting
+    from core.wallet_service import credit as wallet_credit
+    wallet_credit(db, clinic_id, 50.0, "Welcome bonus — new clinic top-up")
 
     # Procedures (TreatmentType)
     procedures = [

@@ -91,104 +91,103 @@ const GoogleReviews = () => {
   const [syncing, setSyncing] = useState(false);
 
   const initialized = useRef(false);
-  
+  const [mapsReady, setMapsReady] = useState(false);
+
   const searchContainer = useRef(null);
   const autocompleteElement = useRef(null);
 
-  // ── Load Google Places API Script ───────────────────
+  // ── Load Google Places API & mark ready ───────────────────────────
   useEffect(() => {
     const key = import.meta.env.VITE_GOOGLE_PLACES_API_KEY;
     if (!key) return;
 
-    if (window.google?.maps?.importLibrary) return;
-
-    // Inject official inline bootstrap script logic if not yet loaded
-    const g = { key: key, v: "weekly" };
-    (g => {
-      var h, a, k, p = "The Google Maps JavaScript API", c = "google", l = "importLibrary", q = "__ib__", m = document, b = window;
-      b = b[c] || (b[c] = {});
-      var d = b.maps || (b.maps = {}), r = new Set, e = new URLSearchParams,
-        u = () => h || (h = new Promise(async (f, n) => {
-          await (a = m.createElement("script"));
-          e.set("libraries", [...r] + "");
-          for (k in g) e.set(k.replace(/[A-Z]/g, t => "_" + t[0].toLowerCase()), g[k]);
-          e.set("callback", c + ".maps." + q);
-          a.src = `https://maps.${c}apis.com/maps/api/js?` + e;
-          d[q] = f;
-          a.onerror = () => h = n(Error(p + " could not load."));
-          a.nonce = m.querySelector("script[nonce]")?.nonce || "";
-          m.head.append(a);
-        }));
-      d[l] ? console.warn(p + " only loads once. Ignoring:", g) : d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n));
-    })(g);
-  }, []);
-
-  // ── Attach Autocomplete Listener when visible ───────────────────
-  useEffect(() => {
-    let autocomplete = document.getElementById("location-input");
-    
-    // We only attach listeners if the element is rendered in the DOM
-    if (!autocomplete || state !== 'NOT_LINKED') return;
-
-    const setupWidget = async () => {
+    const load = async () => {
       try {
+        // Bootstrap the Maps loader if not already present
+        if (!window.google?.maps?.importLibrary) {
+          const g = { key, v: "weekly" };
+          await new Promise((resolve) => {
+            (g => {
+              var h, a, k, p = "The Google Maps JavaScript API", c = "google", l = "importLibrary", q = "__ib__", m = document, b = window;
+              b = b[c] || (b[c] = {});
+              var d = b.maps || (b.maps = {}), r = new Set, e = new URLSearchParams,
+                u = () => h || (h = new Promise(async (f, n) => {
+                  await (a = m.createElement("script"));
+                  e.set("libraries", [...r] + "");
+                  for (k in g) e.set(k.replace(/[A-Z]/g, t => "_" + t[0].toLowerCase()), g[k]);
+                  e.set("callback", c + ".maps." + q);
+                  a.src = `https://maps.${c}apis.com/maps/api/js?` + e;
+                  d[q] = f;
+                  a.onerror = () => h = n(Error(p + " could not load."));
+                  a.nonce = m.querySelector("script[nonce]")?.nonce || "";
+                  m.head.append(a);
+                }));
+              d[l] ? console.warn(p + " only loads once. Ignoring:", g) : d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n));
+            })(g);
+            // The bootstrap defines importLibrary synchronously, so resolve immediately
+            resolve();
+          });
+        }
+        // Actually load the Places library — this triggers the real script download
         await window.google.maps.importLibrary('places');
-        
-        autocomplete.includedPrimaryTypes = ['establishment'];
-        autocomplete.placeholder = "Type clinic name + city...";
-
-        const listener = async (event) => {
-          console.log("[Places] Autocomplete event fired:", event.type, event);
-          
-          const payload = event.detail || event;
-          let place = payload.place;
-          const placePrediction = payload.placePrediction;
-          
-          if (!place && placePrediction) {
-              try {
-                  place = typeof placePrediction.toPlace === 'function' ? placePrediction.toPlace() : placePrediction;
-              } catch (e) {
-                  console.error("[Places] toPlace() error:", e);
-              }
-          }
-
-          if (!place) {
-             console.warn("[Places] Event did not contain place info");
-             setSelectedPlace(null);
-             return;
-          }
-          
-          try {
-            const id = place.id || place.place_id;
-            if (!place.displayName || !place.formattedAddress) {
-                if (typeof place.fetchFields === 'function') {
-                    await place.fetchFields({ fields: ['id', 'displayName', 'formattedAddress'] });
-                }
-            }
-            
-            const name = (place.displayName && place.displayName.text) ? place.displayName.text : (place.displayName || place.name);
-            setSelectedPlace({
-              place_id: id,
-              name: name,
-              address: place.formattedAddress
-            });
-          } catch (err) {
-            console.error("[Places] Fetch Fields error:", err);
-          }
-        };
-
-        autocomplete.removeEventListener('gmp-placeselect', listener);
-        autocomplete.removeEventListener('gmp-select', listener);
-        
-        autocomplete.addEventListener('gmp-placeselect', listener);
-        autocomplete.addEventListener('gmp-select', listener);
+        setMapsReady(true);
       } catch (e) {
-         console.error('[Places] Widget initialization failed:', e);
+        console.error('[Places] Failed to load Google Maps:', e);
       }
     };
-    
-    setupWidget();
-  }, [state]);
+
+    load();
+  }, []);
+
+  // ── Attach Autocomplete Listener once widget is in DOM ────────────
+  useEffect(() => {
+    if (!mapsReady || state !== 'NOT_LINKED') return;
+
+    const autocomplete = document.getElementById("location-input");
+    if (!autocomplete) return;
+
+    autocomplete.includedPrimaryTypes = ['establishment'];
+    autocomplete.placeholder = "Type clinic name + city...";
+
+    const listener = async (event) => {
+      const payload = event.detail || event;
+      let place = payload.place;
+      const placePrediction = payload.placePrediction;
+
+      if (!place && placePrediction) {
+        try {
+          place = typeof placePrediction.toPlace === 'function' ? placePrediction.toPlace() : placePrediction;
+        } catch (e) {
+          console.error("[Places] toPlace() error:", e);
+        }
+      }
+
+      if (!place) {
+        setSelectedPlace(null);
+        return;
+      }
+
+      try {
+        const id = place.id || place.place_id;
+        if (!place.displayName || !place.formattedAddress) {
+          if (typeof place.fetchFields === 'function') {
+            await place.fetchFields({ fields: ['id', 'displayName', 'formattedAddress'] });
+          }
+        }
+        const name = place.displayName?.text ?? place.displayName ?? place.name;
+        setSelectedPlace({ place_id: id, name, address: place.formattedAddress });
+      } catch (err) {
+        console.error("[Places] Fetch Fields error:", err);
+      }
+    };
+
+    autocomplete.addEventListener('gmp-placeselect', listener);
+    autocomplete.addEventListener('gmp-select', listener);
+    return () => {
+      autocomplete.removeEventListener('gmp-placeselect', listener);
+      autocomplete.removeEventListener('gmp-select', listener);
+    };
+  }, [mapsReady, state]);
 
   // ── Initial status check ─────────────────────────────────────────
   useEffect(() => {
@@ -357,11 +356,14 @@ const GoogleReviews = () => {
           </div>
 
           <div className="mb-6">
-            {/* Google Autocomplete Custom Web Component */}
-            <gmp-place-autocomplete
-               id="location-input"
-               className="w-full block"
-            />
+            {mapsReady ? (
+              <gmp-place-autocomplete
+                id="location-input"
+                className="w-full block"
+              />
+            ) : (
+              <div className="w-full h-10 bg-gray-100 animate-pulse rounded-lg" />
+            )}
           </div>
 
           {/* Selected place confirmation chip */}

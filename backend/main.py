@@ -266,6 +266,21 @@ app = FastAPI(
     redirect_slashes=False
 )
 
+from fastapi.responses import JSONResponse
+from core.wallet_service import InsufficientWalletBalance
+
+@app.exception_handler(InsufficientWalletBalance)
+async def insufficient_wallet_handler(request, exc: InsufficientWalletBalance):
+    return JSONResponse(
+        status_code=402,
+        content={
+            "detail": str(exc),
+            "code": "INSUFFICIENT_WALLET_BALANCE",
+            "needed": exc.needed,
+            "available": exc.available,
+        },
+    )
+
 # CORS setup
 origins = [
     "http://localhost:3000",

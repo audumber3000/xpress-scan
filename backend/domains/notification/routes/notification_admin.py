@@ -19,6 +19,7 @@ from models import (
 )
 from core.auth_utils import get_current_user
 from core.nexus_notify import notify
+from core import wallet_service
 from domains.finance.services.cashfree.cashfree_provider import CashfreeProvider
 
 router = APIRouter()
@@ -49,15 +50,7 @@ def get_db():
 
 
 def _get_or_create_wallet(clinic_id: int, db: Session) -> NotificationWallet:
-    wallet = db.query(NotificationWallet).filter(
-        NotificationWallet.clinic_id == clinic_id
-    ).first()
-    if not wallet:
-        wallet = NotificationWallet(clinic_id=clinic_id, balance=0.0)
-        db.add(wallet)
-        db.commit()
-        db.refresh(wallet)
-    return wallet
+    return wallet_service.get_or_create_wallet(db, clinic_id)
 
 
 # ─── Pydantic schemas ─────────────────────────────────────────────────────────
@@ -605,8 +598,6 @@ def get_notification_templates(
 
 # ─── Template-based test send (deducts wallet) ────────────────────────────────
 
-CHANNEL_COST = {"whatsapp": 0.74, "email": 0.02, "sms": 0.15}
-
 SAMPLE_VARS = {
     "patient_name": "Rahul Sharma",
     "doctor_name": "Dr. Mehta",
@@ -641,17 +632,17 @@ async def template_test_send(
     clinic_name = clinic.name if clinic else "MolarPlus"
 
     channel = body.channel.lower()
-    if channel not in CHANNEL_COST:
+    if channel not in ("whatsapp", "email", "sms"):
         raise HTTPException(status_code=400, detail=f"Invalid channel: {channel}")
 
-    cost = CHANNEL_COST[channel]
+    cost = wallet_service.get_cost(channel, body.event_type)
 
     # Check wallet balance
     wallet = _get_or_create_wallet(clinic_id, db)
     if wallet.balance < cost:
         raise HTTPException(
             status_code=402,
-            detail=f"Insufficient wallet balance. Need ₹{cost:.2f}, have ₹{wallet.balance:.2f}.",
+            detail=f"Insufficient wallet balance. Need ₹{cost:.4f}, have ₹{wallet.balance:.4f}.",
         )
 
     # Fetch template from DB (name matches event_type)
@@ -760,7 +751,7 @@ async def template_test_send(
     except Exception as e:
         error_msg = str(e)
 
-    # Deduct from wallet and log regardless of send result (charge on attempt)
+    # Deduct from wallet only on successful send
     if success:
         wallet.balance = round(wallet.balance - cost, 4)
         db.add(WalletTransaction(
