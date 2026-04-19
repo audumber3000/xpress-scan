@@ -6,6 +6,43 @@ import {
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
 
+const parseClinicHours = (hoursString) => {
+  const t = {
+    monday:    { open:'08:00', close:'20:00', closed:false },
+    tuesday:   { open:'08:00', close:'20:00', closed:false },
+    wednesday: { open:'08:00', close:'20:00', closed:false },
+    thursday:  { open:'08:00', close:'20:00', closed:false },
+    friday:    { open:'08:00', close:'20:00', closed:false },
+    saturday:  { open:'09:00', close:'17:00', closed:false },
+    sunday:    { open:'00:00', close:'00:00', closed:true  },
+  };
+  if (!hoursString) return t;
+  const to24 = (s) => {
+    const clean = s.replace(/AM|PM/gi,'').trim();
+    const [h,m=0] = clean.split(':').map(Number);
+    const pm = s.toUpperCase().includes('PM');
+    let h24 = h;
+    if (pm && h !== 12) h24 += 12;
+    if (!pm && h === 12) h24 = 0;
+    return `${String(h24).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+  };
+  for (const part of hoursString.split(',').map(p=>p.trim())) {
+    if (/closed/i.test(part)) {
+      if (/sun/i.test(part)) t.sunday.closed = true;
+      if (/sat/i.test(part)) t.saturday.closed = true;
+    } else {
+      const [days, range] = part.split(':').map(p=>p.trim());
+      if (range && range.includes('-')) {
+        const [open, close] = range.split('-').map(s=>s.trim());
+        const o = to24(open), c = to24(close);
+        if (/mon.fri/i.test(days)) ['monday','tuesday','wednesday','thursday','friday'].forEach(d=>{t[d].open=o;t[d].close=c;});
+        else if (/sat/i.test(days)) { t.saturday.open=o; t.saturday.close=c; }
+      }
+    }
+  }
+  return t;
+};
+
 const BookingPage = () => {
   const [searchParams] = useSearchParams();
   const [clinicInfo, setClinicInfo] = useState(null);
@@ -39,10 +76,23 @@ const BookingPage = () => {
 
   const clinicId = searchParams.get('clinic');
 
-  // Fetch clinic info from API
+  // Seed from URL params immediately (works with old & new URLs)
   useEffect(() => {
     if (!clinicId) { setClinicLoading(false); return; }
-    setClinicLoading(true);
+
+    const urlName    = searchParams.get('name');
+    const urlAddress = searchParams.get('address');
+    const urlPhone   = searchParams.get('phone');
+    const urlHours   = searchParams.get('hours');
+
+    // Show URL params right away so header is never blank
+    if (urlName) {
+      setClinicInfo({ name: urlName, address: urlAddress, phone: urlPhone, logo_url: null, specialization: null, email: null });
+      if (urlHours) setClinicTimings(parseClinicHours(urlHours));
+      setClinicLoading(false);
+    }
+
+    // Then fetch from API to get logo + specialization + structured timings
     fetch(`${BASE_URL}/appointments/public/clinic-info?clinic_id=${clinicId}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
