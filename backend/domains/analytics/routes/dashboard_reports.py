@@ -168,7 +168,7 @@ async def generate_dashboard_report(
     
     try:
         # Call nexus-service for AI-powered report generation
-        nexus_url = os.getenv("NEXUS_URL", "http://localhost:8001")
+        nexus_url = os.getenv("NEXUS_SERVICES_URL", os.getenv("NEXUS_URL", "http://nexus:8001"))
         
         # Get clinic information
         clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
@@ -187,7 +187,7 @@ async def generate_dashboard_report(
         
         target_path = nexus_url_map.get(request.report_type, "/api/v1/reports/generate")
         
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 f"{nexus_url}{target_path}",
                 json={
