@@ -380,6 +380,27 @@ class SubscriptionCoupon(Base):
     used_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
+class SubscriptionPayment(Base):
+    __tablename__ = 'subscription_payments'
+    id = Column(Integer, primary_key=True, index=True)
+    subscription_id = Column(Integer, ForeignKey('subscriptions.id'), nullable=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    provider = Column(String, nullable=False)          # cashfree
+    provider_order_id = Column(String, nullable=True, index=True)
+    provider_payment_id = Column(String, nullable=True, index=True)
+    plan_name = Column(String, nullable=False)
+    amount = Column(Float, nullable=False)
+    currency = Column(String, default='INR')
+    status = Column(String, nullable=False)            # paid, failed, refunded
+    paid_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    subscription = relationship("Subscription", backref="payments")
+    clinic = relationship("Clinic")
+    user = relationship("User")
+
+
 class ReferralCode(Base):
     __tablename__ = 'referral_codes'
     id = Column(Integer, primary_key=True, index=True)

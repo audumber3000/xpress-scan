@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Tag, Search, Plus, Trash2, Edit2, X } from 'lucide-react';
+import { Tag, Search, Plus, Trash2, ToggleLeft, ToggleRight, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import api from '../utils/api';
 import { PageHeader, Card, Badge, Spinner, fmt } from '../components/ui';
@@ -52,6 +52,16 @@ export default function MarketingPromos() {
       toast.error(e?.response?.data?.detail || 'Failed to create promocode');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleToggle = async (id, isActive) => {
+    try {
+      await api.patch(`/marketing/promocodes/${id}`, { is_active: !isActive });
+      setPromos(promos.map(p => p.id === id ? { ...p, is_active: !isActive } : p));
+      toast.success(isActive ? 'Promocode deactivated' : 'Promocode activated');
+    } catch (e) {
+      toast.error('Failed to update status');
     }
   };
 
@@ -121,8 +131,11 @@ export default function MarketingPromos() {
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                         <button className="p-1 text-slate-400 hover:text-brand-600 cursor-not-allowed" title="Edit coming soon"><Edit2 size={14}/></button>
-                         <button onClick={() => handleDelete(p.id)} className="p-1 text-slate-400 hover:text-red-600 transition-colors"><Trash2 size={14}/></button>
+                        <button onClick={() => handleToggle(p.id, p.is_active)} title={p.is_active ? 'Deactivate' : 'Activate'}
+                          className={`p-1 transition-colors ${p.is_active ? 'text-emerald-500 hover:text-slate-400' : 'text-slate-300 hover:text-emerald-500'}`}>
+                          {p.is_active ? <ToggleRight size={18}/> : <ToggleLeft size={18}/>}
+                        </button>
+                        <button onClick={() => handleDelete(p.id)} className="p-1 text-slate-400 hover:text-red-600 transition-colors"><Trash2 size={14}/></button>
                       </div>
                     </td>
                   </tr>

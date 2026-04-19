@@ -39,7 +39,9 @@ async def get_available_plans():
         {
             "name": "professional",
             "display_name": "Professional Plan",
-            "price": 1200,  # ₹1200 per month as requested
+            "price": 899,
+            "annual_price": 8100,
+            "annual_monthly_equivalent": 675,
             "currency": "INR",
             "interval": "month",
             "features": [
@@ -88,7 +90,90 @@ async def get_current_subscription(
             updated_at=datetime.utcnow()
         )
     
-    return subscription
+    # Annotate with expiry info for frontend renew UI
+    now = datetime.utcnow()
+    is_expired = (
+        subscription.current_end is not None
+        and subscription.current_end < now
+        and subscription.status != "active"
+    )
+    result = {
+        "id": subscription.id,
+        "clinic_id": subscription.clinic_id,
+        "user_id": subscription.user_id,
+        "plan_name": subscription.plan_name,
+        "status": subscription.status,
+        "provider": subscription.provider,
+        "provider_order_id": subscription.provider_order_id,
+        "current_start": subscription.current_start.isoformat() if subscription.current_start else None,
+        "current_end": subscription.current_end.isoformat() if subscription.current_end else None,
+        "is_expired": is_expired,
+        "created_at": subscription.created_at.isoformat() if subscription.created_at else None,
+        "updated_at": subscription.updated_at.isoformat() if subscription.updated_at else None,
+    }
+    return result
+
+@router.get("/history")
+async def get_billing_history(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Return billing history for the current user."""
+    from models import SubscriptionPayment
+
+    PLAN_LABELS = {
+        "professional": "Professional — Monthly",
+        "professional_annual": "Professional — Annual",
+    }
+
+    # Real payment records
+    payments = db.query(SubscriptionPayment).filter(
+        SubscriptionPayment.user_id == current_user.id
+    ).order_by(SubscriptionPayment.paid_at.desc()).all()
+
+    # Fallback: if no records yet (pre-migration users), synthesise from subscription row
+    if not payments and current_user.clinic_id:
+        payments = db.query(SubscriptionPayment).filter(
+            SubscriptionPayment.clinic_id == current_user.clinic_id
+        ).order_by(SubscriptionPayment.paid_at.desc()).all()
+
+    if payments:
+        history = [
+            {
+                "id": p.id,
+                "invoice": f"INV-{p.provider_order_id or p.id}",
+                "plan": PLAN_LABELS.get(p.plan_name, p.plan_name.title()),
+                "amount": p.amount,
+                "date": (p.paid_at or p.created_at).strftime("%-d %b %Y"),
+                "status": p.status.upper(),
+            }
+            for p in payments
+        ]
+        return {"history": history}
+
+    # Last resort fallback for users who paid before this table existed
+    subscription = db.query(Subscription).filter(
+        Subscription.user_id == current_user.id
+    ).first()
+    if not subscription and current_user.clinic_id:
+        subscription = db.query(Subscription).filter(
+            Subscription.clinic_id == current_user.clinic_id
+        ).first()
+
+    if not subscription or subscription.plan_name == "free":
+        return {"history": []}
+
+    PLAN_PRICES = {"professional": 899, "professional_annual": 8100}
+    entry = {
+        "id": f"sub-{subscription.id}",
+        "invoice": f"INV-{subscription.provider_order_id or subscription.id}",
+        "plan": PLAN_LABELS.get(subscription.plan_name, subscription.plan_name.title()),
+        "amount": PLAN_PRICES.get(subscription.plan_name, 899),
+        "date": (subscription.current_start or subscription.created_at or datetime.utcnow()).strftime("%-d %b %Y"),
+        "status": "PAID" if subscription.status == "active" else subscription.status.upper(),
+    }
+    return {"history": [entry]}
+
 
 @router.post("/validate-coupon")
 async def validate_subscription_coupon(
@@ -100,9 +185,9 @@ async def validate_subscription_coupon(
     subscription_service = SubscriptionService(db)
     # Pricing logic
     if request.plan_name == "professional":
-        price = 1200
-    elif request.plan_name == "professional_yearly":
-        price = 10800
+        price = 899
+    elif request.plan_name == "professional_annual":
+        price = 8100
     else:
         price = 0
     
@@ -136,9 +221,9 @@ async def create_checkout(
     
     # Prices for professional plans
     if checkout_data.plan_name == "professional":
-        price = 1200
-    elif checkout_data.plan_name == "professional_yearly":
-        price = 10800
+        price = 899
+    elif checkout_data.plan_name == "professional_annual":
+        price = 8100
     else:
         price = 0
     

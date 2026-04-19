@@ -62,6 +62,7 @@ def list_subscriptions(
                 "plan_name": s.plan_name,
                 "status": s.status,
                 "provider": s.provider,
+                "provider_order_id": s.provider_order_id,
                 "provider_subscription_id": s.provider_subscription_id,
                 "current_start": s.current_start.isoformat() if s.current_start else None,
                 "current_end": s.current_end.isoformat() if s.current_end else None,

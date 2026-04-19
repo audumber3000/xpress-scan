@@ -51,35 +51,72 @@ def generate_ref_code(length=8):
     chars = string.ascii_uppercase + string.digits
     return ''.join(random.choices(chars, k=length))
 
+def _promo_dict(p):
+    return {
+        "id": p.id,
+        "code": p.code,
+        "discount_percent": p.discount_percent,
+        "discount_amount": p.discount_amount,
+        "is_active": p.is_active,
+        "expiry_date": p.expiry_date.isoformat() if p.expiry_date else None,
+        "usage_limit": p.usage_limit,
+        "used_count": p.used_count,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+    }
+
+
 # --- Promocode Endpoints ---
 @router.get("/promocodes")
 def list_promocodes(db: Session = Depends(get_db), current_user: User = Depends(get_current_admin)):
-    return db.query(SubscriptionCoupon).all()
+    return [_promo_dict(p) for p in db.query(SubscriptionCoupon).order_by(SubscriptionCoupon.created_at.desc()).all()]
 
 @router.post("/promocodes")
 def create_promocode(data: PromoCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_admin)):
     existing = db.query(SubscriptionCoupon).filter(SubscriptionCoupon.code == data.code).first()
     if existing:
         raise HTTPException(status_code=400, detail="Promocode already exists")
-    
-    promo = SubscriptionCoupon(**data.dict())
+
+    import datetime as dt
+    expiry = None
+    if data.expiry_date:
+        try:
+            expiry = dt.datetime.fromisoformat(data.expiry_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid expiry_date format")
+
+    promo = SubscriptionCoupon(
+        code=data.code.upper(),
+        discount_percent=data.discount_percent,
+        discount_amount=data.discount_amount,
+        usage_limit=data.usage_limit,
+        expiry_date=expiry,
+        is_active=data.is_active,
+        used_count=0,
+    )
     db.add(promo)
     db.commit()
     db.refresh(promo)
-    return promo
+    return _promo_dict(promo)
+
+@router.patch("/promocodes/{promo_id}")
+def toggle_promocode(promo_id: int, data: PromoUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_admin)):
+    promo = db.query(SubscriptionCoupon).filter(SubscriptionCoupon.id == promo_id).first()
+    if not promo:
+        raise HTTPException(status_code=404, detail="Promocode not found")
+    for key, val in data.dict(exclude_unset=True).items():
+        setattr(promo, key, val)
+    db.commit()
+    return _promo_dict(promo)
 
 @router.put("/promocodes/{promo_id}")
 def update_promocode(promo_id: int, data: PromoUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_admin)):
     promo = db.query(SubscriptionCoupon).filter(SubscriptionCoupon.id == promo_id).first()
     if not promo:
         raise HTTPException(status_code=404, detail="Promocode not found")
-    
     for key, val in data.dict(exclude_unset=True).items():
         setattr(promo, key, val)
-        
     db.commit()
-    db.refresh(promo)
-    return promo
+    return _promo_dict(promo)
 
 @router.delete("/promocodes/{promo_id}")
 def delete_promocode(promo_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_admin)):
@@ -91,49 +128,70 @@ def delete_promocode(promo_id: int, db: Session = Depends(get_db), current_user:
     db.commit()
     return {"success": True}
 
+def _ref_dict(r, signup_count=None):
+    return {
+        "id": r.id,
+        "code": r.code,
+        "creator_name": r.creator_name,
+        "discount_percent": r.discount_percent,
+        "is_active": r.is_active,
+        "signup_count": signup_count if signup_count is not None else r.usage_count,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+    }
+
+
 # --- Referral Manager Endpoints ---
 @router.get("/referrals")
 def list_referrals(db: Session = Depends(get_db), current_user: User = Depends(get_current_admin)):
-    referrals = db.query(ReferralCode).all()
-    # Fetch usage counts from actual clinic records
+    referrals = db.query(ReferralCode).order_by(ReferralCode.created_at.desc()).all()
     result = []
     for r in referrals:
-        r_dict = r.__dict__.copy()
-        # count how many clinics used this referral to signup
         signup_count = db.query(Clinic).filter(Clinic.referred_by_code == r.code).count()
-        r_dict["signup_count"] = signup_count
-        result.append(r_dict)
+        result.append(_ref_dict(r, signup_count))
     return result
 
 @router.post("/referrals")
 def create_referral(data: ReferralCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_admin)):
-    code = data.code or generate_ref_code()
-    
+    code = (data.code or "").upper().strip() or generate_ref_code()
+
     existing = db.query(ReferralCode).filter(ReferralCode.code == code).first()
     if existing:
         raise HTTPException(status_code=400, detail="Referral code already exists")
-    
-    payload = data.dict()
-    payload["code"] = code
-    
-    ref = ReferralCode(**payload)
+
+    ref = ReferralCode(
+        code=code,
+        creator_name=data.creator_name,
+        discount_percent=data.discount_percent,
+        reward_details=data.reward_details,
+        is_active=data.is_active,
+        usage_count=0,
+    )
     db.add(ref)
     db.commit()
     db.refresh(ref)
-    return ref
+    return _ref_dict(ref, 0)
+
+@router.patch("/referrals/{ref_id}")
+def toggle_referral(ref_id: int, data: ReferralUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_admin)):
+    ref = db.query(ReferralCode).filter(ReferralCode.id == ref_id).first()
+    if not ref:
+        raise HTTPException(status_code=404, detail="Referral not found")
+    for key, val in data.dict(exclude_unset=True).items():
+        setattr(ref, key, val)
+    db.commit()
+    signup_count = db.query(Clinic).filter(Clinic.referred_by_code == ref.code).count()
+    return _ref_dict(ref, signup_count)
 
 @router.put("/referrals/{ref_id}")
 def update_referral(ref_id: int, data: ReferralUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_admin)):
     ref = db.query(ReferralCode).filter(ReferralCode.id == ref_id).first()
     if not ref:
         raise HTTPException(status_code=404, detail="Referral not found")
-    
     for key, val in data.dict(exclude_unset=True).items():
         setattr(ref, key, val)
-        
     db.commit()
-    db.refresh(ref)
-    return ref
+    signup_count = db.query(Clinic).filter(Clinic.referred_by_code == ref.code).count()
+    return _ref_dict(ref, signup_count)
 
 @router.delete("/referrals/{ref_id}")
 def delete_referral(ref_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_admin)):

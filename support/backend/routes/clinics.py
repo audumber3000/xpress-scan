@@ -262,6 +262,7 @@ def get_clinic(clinic_id: int, db: Session = Depends(get_db), _=Depends(get_curr
             "plan_name": subscription.plan_name if subscription else clinic.subscription_plan,
             "status": subscription.status if subscription else "unknown",
             "provider": subscription.provider if subscription else None,
+            "provider_order_id": subscription.provider_order_id if subscription else None,
             "provider_subscription_id": subscription.provider_subscription_id if subscription else None,
             "current_start": subscription.current_start.isoformat() if subscription and subscription.current_start else None,
             "current_end": subscription.current_end.isoformat() if subscription and subscription.current_end else None,

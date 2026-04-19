@@ -1,7 +1,10 @@
+import csv
 import datetime
+import io
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -269,6 +272,132 @@ def growth_summary(db: Session = Depends(get_db), _=Depends(get_current_admin)):
             for lead, clinic_name in overdue_rows
         ],
         "conversion_steps": conversion_steps,
+    }
+
+
+CSV_COLUMNS = [
+    "lead_name", "contact_person", "phone", "email",
+    "source", "stage", "owner", "priority", "expected_mrr", "notes",
+]
+
+
+@router.get("/sample-csv")
+def download_sample_csv(_=Depends(get_current_admin)):
+    rows = [
+        CSV_COLUMNS,
+        ["City Dental Clinic", "Dr. Priya Sharma", "9876543210", "priya@citydental.com", "instagram", "new_lead", "Audumber", "high", "899", "Interested in demo"],
+        ["SmileCare Hospital", "Dr. Rahul Mehta", "9988776655", "rahul@smilecare.in", "google", "contact_attempted", "Audumber", "medium", "899", ""],
+        ["Bright Smile Dental", "", "9123456789", "", "referral", "new_lead", "", "low", "", "Follow up next week"],
+    ]
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerows(rows)
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="leads_import_sample.csv"'},
+    )
+
+
+@router.post("/import-csv")
+async def import_leads_csv(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin),
+):
+    _ensure_growth_tables(db)
+
+    if not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV files are accepted")
+
+    content = await file.read()
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = content.decode("latin-1")
+
+    reader = csv.DictReader(io.StringIO(text))
+
+    if not reader.fieldnames:
+        raise HTTPException(status_code=400, detail="CSV file is empty or has no headers")
+
+    reader.fieldnames = [h.strip().lower().replace(" ", "_") for h in reader.fieldnames]
+
+    if "lead_name" not in reader.fieldnames:
+        raise HTTPException(status_code=400, detail="CSV must have a 'lead_name' column")
+
+    now = datetime.datetime.utcnow()
+    imported, skipped_dup, errors = 0, 0, []
+
+    existing_phones = set(r[0] for r in db.query(GrowthLead.phone).filter(GrowthLead.phone.isnot(None)).all())
+    existing_emails = set(r[0] for r in db.query(GrowthLead.email).filter(GrowthLead.email.isnot(None)).all())
+
+    for row_num, row in enumerate(reader, start=2):
+        lead_name = (row.get("lead_name") or "").strip()
+        if not lead_name:
+            errors.append({"row": row_num, "reason": "lead_name is empty"})
+            continue
+
+        phone = (row.get("phone") or "").strip() or None
+        email = (row.get("email") or "").strip() or None
+
+        if phone and phone in existing_phones:
+            skipped_dup += 1
+            continue
+        if email and email in existing_emails:
+            skipped_dup += 1
+            continue
+
+        stage = (row.get("stage") or "new_lead").strip()
+        if stage not in STAGES:
+            stage = "new_lead"
+
+        try:
+            mrr = float((row.get("expected_mrr") or "0").strip() or 0)
+        except ValueError:
+            mrr = 0.0
+
+        lead = GrowthLead(
+            lead_name=lead_name,
+            contact_person=(row.get("contact_person") or "").strip() or None,
+            phone=phone,
+            email=email,
+            source=(row.get("source") or "csv_import").strip() or "csv_import",
+            stage=stage,
+            owner=(row.get("owner") or current_user.name).strip() or current_user.name,
+            priority=(row.get("priority") or "medium").strip() or "medium",
+            expected_mrr=mrr,
+            notes=(row.get("notes") or "").strip() or None,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(lead)
+        db.flush()
+
+        db.add(GrowthLeadActivity(
+            lead_id=lead.id,
+            activity_type="lead_created",
+            title="Lead imported via CSV",
+            by_user=current_user.name,
+            to_stage=stage,
+            created_at=now,
+        ))
+
+        if phone:
+            existing_phones.add(phone)
+        if email:
+            existing_emails.add(email)
+
+        imported += 1
+
+    db.commit()
+
+    return {
+        "success": True,
+        "imported": imported,
+        "skipped_duplicates": skipped_dup,
+        "errors": errors,
     }
 
 

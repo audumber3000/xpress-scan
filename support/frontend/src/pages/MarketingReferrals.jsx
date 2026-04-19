@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Share2, Search, Plus, Trash2, Edit2, X, Copy, ExternalLink } from 'lucide-react';
+import { Share2, Search, Plus, Trash2, ToggleLeft, ToggleRight, X, Copy } from 'lucide-react';
 import { toast } from 'react-toastify';
 import api from '../utils/api';
 import { PageHeader, Card, Badge, Spinner, fmt } from '../components/ui';
@@ -54,6 +54,16 @@ export default function MarketingReferrals() {
       toast.error(e?.response?.data?.detail || 'Failed to create referral');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleToggle = async (id, isActive) => {
+    try {
+      await api.patch(`/marketing/referrals/${id}`, { is_active: !isActive });
+      setReferrals(referrals.map(r => r.id === id ? { ...r, is_active: !isActive } : r));
+      toast.success(isActive ? 'Referral deactivated' : 'Referral activated');
+    } catch (e) {
+      toast.error('Failed to update status');
     }
   };
 
@@ -137,8 +147,11 @@ export default function MarketingReferrals() {
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                         <button className="p-1 text-slate-400 hover:text-brand-600 cursor-not-allowed" title="Edit coming soon"><Edit2 size={14}/></button>
-                         <button onClick={() => handleDelete(r.id)} className="p-1 text-slate-400 hover:text-red-600 transition-colors"><Trash2 size={14}/></button>
+                        <button onClick={() => handleToggle(r.id, r.is_active)} title={r.is_active ? 'Deactivate' : 'Activate'}
+                          className={`p-1 transition-colors ${r.is_active ? 'text-emerald-500 hover:text-slate-400' : 'text-slate-300 hover:text-emerald-500'}`}>
+                          {r.is_active ? <ToggleRight size={18}/> : <ToggleLeft size={18}/>}
+                        </button>
+                        <button onClick={() => handleDelete(r.id)} className="p-1 text-slate-400 hover:text-red-600 transition-colors"><Trash2 size={14}/></button>
                       </div>
                     </td>
                   </tr>

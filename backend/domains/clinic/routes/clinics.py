@@ -448,7 +448,7 @@ async def update_subscription(
     Requires admin privileges. Used for subscription management.
     """
     try:
-        valid_plans = ["free", "professional", "enterprise"]
+        valid_plans = ["free", "professional", "professional_annual", "enterprise"]
         if subscription_plan not in valid_plans:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

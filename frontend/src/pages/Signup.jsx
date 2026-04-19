@@ -1,9 +1,10 @@
+import { useState, useEffect } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { toast } from 'react-toastify';
 import { api } from '../utils/api';
+import { useAuth } from '../contexts/AuthContext';
 import LoadingButton from '../components/LoadingButton';
 import loginImage from '../assets/login-page-left-side.png';
-import { useEffect } from "react";
 
 const Signup = () => {
   const [email, setEmail] = useState("");
@@ -15,6 +16,7 @@ const Signup = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { setUser, setToken } = useAuth();
 
   useEffect(() => {
     const ref = searchParams.get('ref');
@@ -30,17 +32,22 @@ const Signup = () => {
     setLoading(true);
     
     try {
+      const referredBy = sessionStorage.getItem('referred_by_code');
       const data = await api.post('/auth/register', {
         email,
         password,
         first_name: firstName,
         last_name: lastName,
-        role
+        role,
+        ...(referredBy && { referred_by_code: referredBy }),
       });
-      
-      // Store the JWT token
+
       localStorage.setItem('auth_token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
+      setToken(data.token);
+      setUser(data.user);
+      sessionStorage.removeItem('referred_by_code');
+
       if (!data.user.clinic_id) {
         navigate("/onboarding");
       } else {
@@ -88,20 +95,22 @@ const Signup = () => {
         // Get the ID token
         const idToken = await result.user.getIdToken();
 
-        // Send to backend for verification and JWT generation
-        const data = await api.post('/auth/oauth', { id_token: idToken });
-
-        console.log('🔵 [SIGNUP] Backend response received');
+        const referredBy = sessionStorage.getItem('referred_by_code');
+        const data = await api.post('/auth/oauth', {
+          id_token: idToken,
+          ...(referredBy && { referred_by_code: referredBy }),
+        });
 
         const userWithClinic = data.clinic ? { ...data.user, clinic: data.clinic } : data.user;
         localStorage.setItem('auth_token', data.token);
         localStorage.setItem('user', JSON.stringify(userWithClinic));
+        setToken(data.token);
+        setUser(userWithClinic);
+        sessionStorage.removeItem('referred_by_code');
 
         toast.success('Signup successful!');
 
-        // Redirect based on user state
         const redirectPath = !data.user.clinic_id ? '/onboarding' : '/dashboard';
-        console.log('🔵 [SIGNUP] Redirecting to:', redirectPath);
         navigate(redirectPath, { replace: true });
       } else {
         throw new Error('No user data received from Google');
@@ -112,6 +121,7 @@ const Signup = () => {
       const errorMessage = error.message || 'Google signup failed. Please try again.';
       setError(errorMessage);
       toast.error(errorMessage);
+    } finally {
       setLoading(false);
     }
   };

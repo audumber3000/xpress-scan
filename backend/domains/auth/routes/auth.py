@@ -469,8 +469,20 @@ async def get_current_user_info(
     # Get clinic information if user has a clinic
     clinic_info = None
     if user.clinic_id:
-        from models import Clinic
+        from models import Clinic, Subscription
+        from datetime import datetime as dt
         clinic = db.query(Clinic).filter(Clinic.id == user.clinic_id).first()
+
+        # Enforce subscription expiry — downgrade to free if past current_end
+        if clinic and clinic.subscription_plan != 'free':
+            sub = db.query(Subscription).filter(Subscription.user_id == user.id).first()
+            if not sub:
+                sub = db.query(Subscription).filter(Subscription.clinic_id == user.clinic_id).first()
+            if sub and sub.current_end and sub.current_end < dt.utcnow():
+                sub.status = "expired"
+                clinic.subscription_plan = "free"
+                db.commit()
+
         if clinic:
             clinic_info = {
                 "id": clinic.id,

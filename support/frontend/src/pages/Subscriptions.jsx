@@ -4,9 +4,9 @@ import { Link } from 'react-router-dom';
 import api from '../utils/api';
 import { PageHeader, StatCard, Card, CardHeader, Badge, StatusBadge, Pagination, FilterSelect, Spinner, fmt } from '../components/ui';
 
-const PLAN_MAP = { free: 'slate', professional: 'sky', enterprise: 'violet' };
-const PLAN_ORDER = ['enterprise', 'professional', 'free'];
-const PLAN_BAR = { enterprise: 'bg-violet-500', professional: 'bg-sky-500', free: 'bg-slate-400' };
+const PLAN_MAP = { free: 'slate', professional: 'sky', professional_annual: 'violet', enterprise: 'amber' };
+const PLAN_ORDER = ['enterprise', 'professional_annual', 'professional', 'free'];
+const PLAN_BAR = { enterprise: 'bg-amber-500', professional_annual: 'bg-violet-500', professional: 'bg-sky-500', free: 'bg-slate-400' };
 const STATUS_BAR = { active: 'bg-emerald-500', paused: 'bg-amber-400', cancelled: 'bg-rose-500', expired: 'bg-slate-400' };
 const LIMIT = 50;
 
@@ -183,7 +183,7 @@ export default function Subscriptions() {
               <FilterSelect value={statusFilter} onChange={v => { setStatusFilter(v); setPage(1); }}
                 options={['active', 'paused', 'cancelled', 'expired']} placeholder="All Statuses" />
               <FilterSelect value={planFilter} onChange={v => { setPlanFilter(v); setPage(1); }}
-                options={['free', 'professional', 'enterprise']} placeholder="All Plans" />
+                options={['free', 'professional', 'professional_annual', 'enterprise']} placeholder="All Plans" />
             </div>
 
             {loading ? <Spinner /> : (

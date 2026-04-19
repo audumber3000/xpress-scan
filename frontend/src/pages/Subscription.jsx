@@ -19,22 +19,43 @@ import {
   Building2,
   Headphones,
   Star,
+  Image,
+  CalendarDays,
+  Receipt,
+  Cloud,
+  Smartphone,
+  FlaskConical,
+  Package,
+  TrendingUp,
+  MessageCircle,
+  Database,
+  Bot,
 } from 'lucide-react';
 import GearLoader from '../components/GearLoader';
 
 const PRO_FEATURES = [
-  { icon: Users,     label: 'Patient Records',        starter: 'Up to 200',  pro: 'Unlimited' },
-  { icon: Users,     label: 'Staff Accounts',          starter: '1 user',     pro: 'Unlimited' },
-  { icon: Building2, label: 'Clinic Branches',         starter: '1',          pro: 'Unlimited' },
-  { icon: Star,      label: 'Google Reviews',          starter: true,         pro: true },
-  { icon: Bell,      label: 'WhatsApp Notifications',  starter: false,        pro: true },
-  { icon: Bell,      label: 'Email Notifications',     starter: false,        pro: true },
-  { icon: BarChart3, label: 'Analytics & Reports',     starter: 'Basic',      pro: 'Advanced' },
-  { icon: FileText,  label: 'Template Manager',        starter: false,        pro: true },
-  { icon: CreditCard,label: 'Invoice & Billing',       starter: true,         pro: true },
-  { icon: Star,      label: 'Appointment Calendar',    starter: true,         pro: true },
-  { icon: Headphones,label: 'Priority Support',        starter: false,        pro: '24 / 7' },
-  { icon: ShieldCheck,label: 'Consent Forms',          starter: false,        pro: true },
+  { icon: Users,        label: 'Patient Management',       starter: true,    pro: true },
+  { icon: FileText,     label: 'Treatment Records',        starter: true,    pro: true },
+  { icon: FileText,     label: 'Digital Case Sheets',      starter: true,    pro: true },
+  { icon: Image,        label: 'Media Uploads (X-rays)',   starter: true,    pro: true },
+  { icon: CalendarDays, label: 'Appointment Scheduling',   starter: true,    pro: true },
+  { icon: CalendarDays, label: 'Calendar View',            starter: true,    pro: true },
+  { icon: Receipt,      label: 'Billing & Invoicing',      starter: true,    pro: true },
+  { icon: CreditCard,   label: 'Payment Tracking',         starter: true,    pro: true },
+  { icon: BarChart3,    label: 'Dashboard Analytics',      starter: true,    pro: true },
+  { icon: Star,         label: 'Google Review Management', starter: true,    pro: true },
+  { icon: Cloud,        label: 'Cloud Storage',            starter: true,    pro: true },
+  { icon: Smartphone,   label: 'Cross-platform Access',    starter: true,    pro: true },
+  { icon: Bot,          label: 'AI Report Generation',     starter: false,   pro: true },
+  { icon: Bell,         label: 'Notifications & Alerts',   starter: false,   pro: true },
+  { icon: ShieldCheck,  label: 'Consent Forms',            starter: false,   pro: true },
+  { icon: Users,        label: 'Multi-user Access',        starter: false,   pro: true },
+  { icon: Package,      label: 'Inventory Management',     starter: false,   pro: true },
+  { icon: FlaskConical, label: 'Lab Order Management',     starter: false,   pro: true },
+  { icon: TrendingUp,   label: 'Competitor Tracking',      starter: false,   pro: true },
+  { icon: MessageCircle,label: 'Patient Communication',    starter: false,   pro: true },
+  { icon: Database,     label: 'Data Backup & Security',   starter: false,   pro: true },
+  { icon: Headphones,   label: 'Priority Support',         starter: false,   pro: true },
 ];
 
 const FeatVal = ({ val }) => {
@@ -100,26 +121,21 @@ const Subscription = () => {
   const fetchSubscription = async () => {
     try {
       setLoading(true);
-      const data = await api.get('/subscriptions/');
-      setSubscription(data);
-      if (data.plan_name === 'professional' && data.status === 'active') {
-        setBillingHistory([{
-          id: 'current',
-          plan: 'Professional Plan',
-          invoice: `INV-${data.provider_order_id || 'PRO'}`,
-          amount: 1200.00,
-          date: new Date(data.updated_at || Date.now()).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
-          status: 'PAID',
-        }]);
-      }
+      const [subData, historyData] = await Promise.all([
+        api.get('/subscriptions/'),
+        api.get('/subscriptions/history'),
+      ]);
+      setSubscription(subData);
+      setBillingHistory(historyData.history || []);
     } catch {
       setSubscription({ plan_name: 'free', status: 'active' });
+      setBillingHistory([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUpgrade = () => navigate('/checkout?plan=professional');
+  const handleUpgrade = (billing = 'monthly') => navigate(`/checkout?plan=professional&billing=${billing}`);
 
   const downloadInvoice = (inv) => {
     const html = `<!DOCTYPE html>
@@ -245,7 +261,8 @@ const Subscription = () => {
     </div>
   );
 
-  const isPro = subscription?.plan_name === 'professional' && subscription?.status === 'active';
+  const isExpired = subscription?.is_expired === true;
+  const isPro = ['professional', 'professional_annual'].includes(subscription?.plan_name) && subscription?.status === 'active' && !isExpired;
 
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-y-auto custom-scrollbar">
@@ -281,6 +298,37 @@ const Subscription = () => {
         {/* ════ MANAGE SUBSCRIPTION TAB ════ */}
         {activeTab === 'subscription' && (
           <>
+            {/* Expired Banner */}
+            {isExpired && (
+              <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-5 flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Clock size={16} className="text-red-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-red-700">Your Professional Plan has expired</p>
+                    <p className="text-xs text-red-500 mt-0.5">
+                      Expired on {formatDate(subscription?.current_end)}. Your premium features are now locked. Renew to restore full access.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => handleUpgrade('monthly')}
+                    className="px-3 py-2 border border-red-300 text-red-600 text-xs font-bold rounded-lg hover:bg-red-100 transition-all"
+                  >
+                    ₹899/mo
+                  </button>
+                  <button
+                    onClick={() => handleUpgrade('annual')}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-all"
+                  >
+                    ₹675/mo — Annual <ArrowRight size={11} />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Current Plan */}
             <Section
               title="Current Plan"
@@ -296,7 +344,7 @@ const Subscription = () => {
                 ) : null
               }
             >
-              <div className={`relative overflow-hidden flex items-center justify-between gap-4 p-4 rounded-xl border ${isPro ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-100'}`}>
+              <div className={`relative overflow-hidden flex items-center justify-between gap-4 p-4 rounded-xl border ${isPro ? 'bg-amber-50 border-amber-200' : isExpired ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-100'}`}>
                 {isPro && (
                   <>
                     <div className="absolute inset-0 bg-gradient-to-br from-white/60 via-amber-50/20 to-transparent pointer-events-none rounded-xl" />
@@ -321,46 +369,62 @@ const Subscription = () => {
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-gray-900">
-                        {isPro ? 'Professional Plan' : 'Starter Plan'}
+                        {isPro ? 'Professional Plan' : isExpired ? 'Professional Plan' : 'Starter Plan'}
                       </p>
                       {isPro && (
-                        <span className="text-xs font-semibold text-[#29828a]">₹1,200 / month</span>
+                        <span className="text-xs font-semibold text-[#29828a]">₹899 / month</span>
+                      )}
+                      {isExpired && (
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600">Expired</span>
                       )}
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">
                       {isPro
                         ? `Next billing: ${formatDate(subscription?.current_end)}`
+                        : isExpired
+                        ? `Expired on ${formatDate(subscription?.current_end)} — renew to restore access`
                         : 'Free forever — unlimited upgrade available'}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${isPro ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
-                    {subscription?.status || 'Active'}
+                  <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${isPro ? 'bg-amber-100 text-amber-700' : isExpired ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
+                    {isExpired ? 'Expired' : subscription?.status || 'Active'}
                   </span>
                   {isPro && <CheckCircle2 size={18} className="text-[#29828a]" />}
                 </div>
               </div>
 
               {!isPro && (
-                <div className="mt-3 flex items-center justify-between gap-4 p-4 rounded-xl border border-gray-100 bg-white hover:border-[#29828a]/30 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-[#29828a]/8 flex items-center justify-center flex-shrink-0">
-                      <Zap size={18} className="text-[#29828a]" />
+                <div className="mt-3 rounded-xl border border-gray-100 bg-white overflow-hidden">
+                  <div className="flex items-center justify-between gap-4 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-[#29828a]/8 flex items-center justify-center flex-shrink-0">
+                        <Zap size={18} className="text-[#29828a]" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">Professional Plan</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Unlimited patients, staff, WhatsApp &amp; more</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">
-                        Professional Plan <span className="text-[#29828a]">₹1,200 / month</span>
-                      </p>
-                      <p className="text-xs text-gray-400 mt-0.5">Unlimited patients, staff, branches, WhatsApp &amp; more</p>
-                    </div>
+                    <button
+                      onClick={() => handleUpgrade('monthly')}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-[#29828a] hover:bg-[#1f6b72] text-white text-xs font-semibold rounded-lg transition-all flex-shrink-0"
+                    >
+                      ₹899/mo <ArrowRight size={12} />
+                    </button>
                   </div>
-                  <button
-                    onClick={handleUpgrade}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-[#29828a] hover:bg-[#1f6b72] text-white text-xs font-semibold rounded-lg transition-all flex-shrink-0"
-                  >
-                    Upgrade <ArrowRight size={12} />
-                  </button>
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-green-50 border-t border-green-100">
+                    <p className="text-xs text-green-700 font-medium">
+                      💰 Save ₹1,488/year — pay <strong>₹675/month</strong> billed annually
+                    </p>
+                    <button
+                      onClick={() => handleUpgrade('annual')}
+                      className="text-xs font-bold text-green-700 hover:underline flex items-center gap-1 flex-shrink-0"
+                    >
+                      25% off <ArrowRight size={10} />
+                    </button>
+                  </div>
                 </div>
               )}
             </Section>
@@ -394,14 +458,22 @@ const Subscription = () => {
                   })}
                 </div>
                 {!isPro && (
-                  <div className="flex items-center justify-between px-4 py-3.5 bg-[#29828a]/5 border-t border-[#29828a]/10">
-                    <p className="text-xs text-gray-600 font-medium">Launch offer — <strong className="text-[#29828a]">₹1,200/month</strong> (Standard ₹2,999)</p>
-                    <button
-                      onClick={handleUpgrade}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-[#29828a] hover:bg-[#1f6b72] text-white text-xs font-semibold rounded-lg transition-all"
-                    >
-                      Upgrade Now <ArrowRight size={12} />
-                    </button>
+                  <div className="flex items-center justify-between gap-3 px-4 py-3.5 bg-[#29828a]/5 border-t border-[#29828a]/10">
+                    <p className="text-xs text-gray-600 font-medium">₹899/month or <strong className="text-[#29828a]">₹675/month</strong> billed annually — save 25%</p>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <button
+                        onClick={() => handleUpgrade('monthly')}
+                        className="px-3 py-2 border border-[#29828a] text-[#29828a] text-xs font-semibold rounded-lg transition-all hover:bg-[#29828a]/5"
+                      >
+                        Monthly
+                      </button>
+                      <button
+                        onClick={() => handleUpgrade('annual')}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-[#29828a] hover:bg-[#1f6b72] text-white text-xs font-semibold rounded-lg transition-all"
+                      >
+                        Annual — 25% off <ArrowRight size={12} />
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

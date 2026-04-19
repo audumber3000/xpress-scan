@@ -35,7 +35,8 @@ const ClinicOnboarding = () => {
     clinic_email: "",
     number_of_chairs: "1",
     category: "General Dentistry",
-    subscription_plan: "free",
+    subscription_plan: "professional",
+    billing_cycle: "monthly",
     scan_types: [
       { name: "Consultation", price: 300 },
       { name: "Teeth Cleaning", price: 800 },
@@ -358,53 +359,53 @@ const ClinicOnboarding = () => {
               )}
 
               {currentStep === 4 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div 
-                    onClick={() => setFormData(prev => ({ ...prev, subscription_plan: 'professional' }))}
-                    className={`
-                      p-10 rounded-[40px] border-2 cursor-pointer transition-all duration-500 relative group
-                      ${formData.subscription_plan === 'professional' ? 'bg-[#2a276e] border-[#2a276e] text-white shadow-2xl scale-[1.02]' : 'bg-[#F8F9FF] border-gray-50 hover:border-gray-200'}
-                    `}
-                  >
-                    <h4 className="text-xl font-black mb-2">Professional Plan</h4>
-                    <div className="mb-8 flex items-baseline gap-2">
-                      <span className="text-4xl font-black">₹2,499</span>
-                      <span className="text-[10px] font-bold opacity-60">Monthly</span>
-                    </div>
-                    <ul className="space-y-4 mb-12">
-                      {['WhatsApp Sync', 'Advanced BI', 'Unlimited Staff'].map(feat => (
-                        <li key={feat} className="flex items-center gap-3 text-xs font-bold opacity-80">
-                          <CheckCircle2 className="w-5 h-5" /> {feat}
-                        </li>
-                      ))}
-                    </ul>
-                    <div className={`py-4 rounded-2xl text-center text-xs font-black transition-all ${formData.subscription_plan === 'professional' ? 'bg-white text-[#2a276e]' : 'bg-[#2a276e] text-white'}`}>
-                      Select Professional
-                    </div>
+                <div className="flex flex-col items-center gap-8">
+                  {/* Billing toggle */}
+                  <div className="flex items-center gap-1 bg-[#F8F9FF] rounded-2xl p-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, billing_cycle: 'monthly' }))}
+                      className={`px-6 py-2.5 rounded-xl text-xs font-black transition-all ${formData.billing_cycle !== 'annual' ? 'bg-white text-[#2a276e] shadow-sm' : 'text-gray-400'}`}
+                    >
+                      Monthly
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, billing_cycle: 'annual' }))}
+                      className={`px-6 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${formData.billing_cycle === 'annual' ? 'bg-white text-[#2a276e] shadow-sm' : 'text-gray-400'}`}
+                    >
+                      Annual <span className="bg-green-100 text-green-700 text-[9px] font-black px-2 py-0.5 rounded-full">25% OFF</span>
+                    </button>
                   </div>
 
-                  <div 
-                    onClick={() => setFormData(prev => ({ ...prev, subscription_plan: 'enterprise' }))}
-                    className={`
-                      p-10 rounded-[40px] border-2 cursor-pointer transition-all duration-500 relative group
-                      ${formData.subscription_plan === 'enterprise' ? 'bg-[#2a276e] border-[#2a276e] text-white shadow-2xl scale-[1.02]' : 'bg-[#F8F9FF] border-gray-50 hover:border-gray-200'}
-                    `}
-                  >
-                    <h4 className="text-xl font-black mb-2">Enterprise Plan</h4>
+                  {/* Plan card */}
+                  <div className="w-full max-w-sm p-10 rounded-[40px] bg-[#2a276e] text-white shadow-2xl">
+                    <h4 className="text-xl font-black mb-1">MolarPlus Professional</h4>
+                    <p className="text-xs opacity-60 mb-8">Everything you need to run your clinic</p>
                     <div className="mb-8 flex items-baseline gap-2">
-                      <span className="text-4xl font-black">₹9,999</span>
-                      <span className="text-[10px] font-bold opacity-60">Monthly</span>
+                      {formData.billing_cycle === 'annual' ? (
+                        <>
+                          <span className="text-4xl font-black">₹675</span>
+                          <span className="text-[10px] font-bold opacity-60">/month</span>
+                          <span className="text-xs opacity-50 line-through ml-1">₹899</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-4xl font-black">₹899</span>
+                          <span className="text-[10px] font-bold opacity-60">/month</span>
+                        </>
+                      )}
                     </div>
-                    <ul className="space-y-4 mb-12">
-                      {['Multi-Branch', 'Custom API', 'Priority SLA'].map(feat => (
+                    {formData.billing_cycle === 'annual' && (
+                      <p className="text-xs opacity-70 -mt-4 mb-6">Billed as ₹8,100/year — save ₹1,488</p>
+                    )}
+                    <ul className="space-y-4 mb-10">
+                      {['Unlimited Patients & Staff', 'WhatsApp Reminders', 'Treatment Planning', 'Lab Order Tracking', 'Revenue Dashboard', 'Weekly & Monthly Reports'].map(feat => (
                         <li key={feat} className="flex items-center gap-3 text-xs font-bold opacity-80">
-                          <CheckCircle2 className="w-5 h-5" /> {feat}
+                          <CheckCircle2 className="w-4 h-4" /> {feat}
                         </li>
                       ))}
                     </ul>
-                    <div className={`py-4 rounded-2xl text-center text-xs font-black transition-all ${formData.subscription_plan === 'enterprise' ? 'bg-white text-[#2a276e]' : 'bg-[#2a276e] text-white'}`}>
-                      Select Enterprise
-                    </div>
                   </div>
                 </div>
               )}

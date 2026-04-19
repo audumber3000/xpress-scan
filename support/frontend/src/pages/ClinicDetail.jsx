@@ -10,7 +10,7 @@ import {
 import api from '../utils/api';
 import { StatCard, Card, Badge, StatusBadge, TabBar, Spinner, fmt } from '../components/ui';
 
-const PLAN_MAP = { free: 'slate', professional: 'violet', enterprise: 'amber' };
+const PLAN_MAP = { free: 'slate', professional: 'violet', professional_annual: 'sky', enterprise: 'amber' };
 const ROLE_MAP = { clinic_owner: 'violet', doctor: 'sky', receptionist: 'slate' };
 const APPT_MAP = { completed: 'emerald', confirmed: 'sky', cancelled: 'rose' };
 
@@ -168,7 +168,8 @@ export default function ClinicDetail() {
               <select value={editForm.subscription_plan || 'free'} onChange={e => setEditForm(f => ({ ...f, subscription_plan: e.target.value }))}
                 className="w-full h-8 px-2.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400">
                 <option value="free">Free</option>
-                <option value="professional">Professional</option>
+                <option value="professional">Professional (Monthly)</option>
+                <option value="professional_annual">Professional (Annual)</option>
                 <option value="enterprise">Enterprise</option>
               </select>
             </div>
@@ -208,9 +209,13 @@ export default function ClinicDetail() {
                   <InfoRow label="Plan" value={subscription.plan_name} />
                   <InfoRow label="Status" value={subscription.status} />
                   <InfoRow label="Provider" value={subscription.provider} />
+                  <InfoRow label="Order ID" value={subscription.provider_order_id} />
                   <InfoRow label="Sub ID" value={subscription.provider_subscription_id} />
                   <InfoRow label="Start" value={fmt.date(subscription.current_start)} />
                   <InfoRow label="End" value={fmt.date(subscription.current_end)} />
+                  {subscription.current_end && new Date(subscription.current_end) < new Date() && (
+                    <div className="mt-1 text-xs font-semibold text-rose-500">Expired</div>
+                  )}
                 </dl>
               ) : <p className="text-sm text-slate-400">No subscription record.</p>}
             </div>

@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
-import { Plus, ArrowRightLeft, Users, Target, TrendingUp, PhoneCall, AlertTriangle, X, CalendarDays, Trophy, CircleOff } from 'lucide-react';
+import { Plus, ArrowRightLeft, Users, Target, TrendingUp, PhoneCall, AlertTriangle, X, CalendarDays, Trophy, CircleOff, Upload, Download, FileText, CheckCircle2 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import api from '../utils/api';
 import { PageHeader, Card, Badge, Spinner, fmt } from '../components/ui';
@@ -40,6 +40,12 @@ export default function Growth() {
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [drawerMode, setDrawerMode] = useState('view');
   const [quickNote, setQuickNote] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importPreview, setImportPreview] = useState([]);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+  const fileInputRef = useRef(null);
 
   const loadSummaryAndPipeline = async () => {
     const [sum, pipe, stageList] = await Promise.all([
@@ -202,6 +208,63 @@ export default function Growth() {
   };
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / 20)), [total]);
+  const [pageTab, setPageTab] = useState('metrics');
+
+  const openImport = () => {
+    setImportFile(null);
+    setImportPreview([]);
+    setImportResult(null);
+    setImportOpen(true);
+  };
+
+  const handleFileSelect = (file) => {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      toast.error('Only CSV files are accepted');
+      return;
+    }
+    setImportFile(file);
+    setImportResult(null);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const lines = e.target.result.split('\n').filter(Boolean);
+      const rows = lines.slice(0, 6).map(l => l.split(',').map(c => c.trim().replace(/^"|"$/g, '')));
+      setImportPreview(rows);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleImport = async () => {
+    if (!importFile) { toast.error('Please select a CSV file first'); return; }
+    setImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', importFile);
+      const res = await api.post('/growth/import-csv', formData);
+      setImportResult(res);
+      toast.success(`Imported ${res.imported} leads`);
+      await Promise.all([loadSummaryAndPipeline(), loadLeads()]);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Import failed');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const downloadSample = () => {
+    const rows = [
+      ['lead_name', 'contact_person', 'phone', 'email', 'source', 'stage', 'owner', 'priority', 'expected_mrr', 'notes'],
+      ['City Dental Clinic', 'Dr. Priya Sharma', '9876543210', 'priya@citydental.com', 'instagram', 'new_lead', 'Audumber', 'high', '899', 'Interested in demo'],
+      ['SmileCare Hospital', 'Dr. Rahul Mehta', '9988776655', 'rahul@smilecare.in', 'google', 'contact_attempted', 'Audumber', 'medium', '899', ''],
+      ['Bright Smile Dental', '', '9123456789', '', 'referral', 'new_lead', '', 'low', '', 'Follow up next week'],
+    ];
+    const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'leads_import_sample.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
 
   if (loading) return <Spinner />;
 
@@ -212,6 +275,12 @@ export default function Growth() {
         subtitle="Leads, sales funnel, demos, trials, and conversions"
         actions={(
           <div className="flex items-center gap-2">
+            <button
+              onClick={openImport}
+              className="h-8 px-3 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 inline-flex items-center gap-1"
+            >
+              <Upload size={13} /> Import CSV
+            </button>
             <button
               onClick={openCreateDrawer}
               className="h-8 px-3 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 inline-flex items-center gap-1"
@@ -228,223 +297,379 @@ export default function Growth() {
         )}
       />
 
-      {summary && (
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-          <Card className="p-3"><p className="text-[10px] text-slate-400 uppercase">Leads</p><p className="text-lg font-bold text-slate-900">{fmt.num(summary.totals?.leads)}</p></Card>
-          <Card className="p-3"><p className="text-[10px] text-slate-400 uppercase">Won</p><p className="text-lg font-bold text-emerald-600">{fmt.num(summary.totals?.won)}</p></Card>
-          <Card className="p-3"><p className="text-[10px] text-slate-400 uppercase">Lost</p><p className="text-lg font-bold text-rose-600">{fmt.num(summary.totals?.lost)}</p></Card>
-          <Card className="p-3"><p className="text-[10px] text-slate-400 uppercase">Active Trials</p><p className="text-lg font-bold text-amber-600">{fmt.num(summary.totals?.active_trials)}</p></Card>
-          <Card className="p-3"><p className="text-[10px] text-slate-400 uppercase">Win Rate</p><p className="text-lg font-bold text-brand-700">{summary.totals?.win_rate || 0}%</p></Card>
-          <Card className="p-3"><p className="text-[10px] text-slate-400 uppercase">Expected MRR</p><p className="text-lg font-bold text-slate-900">{fmt.inr(summary.totals?.expected_mrr)}</p></Card>
-        </div>
-      )}
-
-      {!!summary?.overdue_leads?.length && (
-        <Card className="border-amber-200 bg-amber-50/50">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle size={16} className="text-amber-600" />
-            <h3 className="text-sm font-semibold text-amber-800">Overdue Follow-ups ({summary.overdue_leads.length})</h3>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {summary.overdue_leads.slice(0, 8).map(lead => (
-              <button
-                key={lead.id}
-                onClick={() => openLeadDrawer(lead.id)}
-                className="text-left bg-white border border-amber-200 rounded-lg px-3 py-2 hover:border-amber-300"
-              >
-                <p className="text-xs font-semibold text-slate-800">{lead.lead_name}</p>
-                <p className="text-[11px] text-slate-500">{pretty(lead.stage)} · {lead.delay_hours}h delayed</p>
-              </button>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {!!summary?.conversion_steps?.length && (
-        <Card>
-          <div className="mb-3">
-            <h3 className="text-sm font-semibold text-slate-800">Stage Conversion %</h3>
-            <p className="text-xs text-slate-400">Visibility into funnel health at each step</p>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={summary.conversion_steps || []}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="to" tickFormatter={(v) => pretty(v)} tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                  <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} domain={[0, 100]} />
-                  <Tooltip formatter={(v) => [`${v}%`, 'Conversion']} labelFormatter={(label) => pretty(label)} />
-                  <Bar dataKey="conversion_pct" fill="#4f46e5" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="space-y-2">
-              {summary.conversion_steps.map((s) => (
-                <div key={`${s.from}-${s.to}`} className="bg-slate-50 rounded-lg p-2.5">
-                  <p className="text-xs font-semibold text-slate-700">{pretty(s.from)} → {pretty(s.to)}</p>
-                  <p className="text-[11px] text-slate-400">{s.from_count} to {s.to_count} leads</p>
-                  <p className="text-sm font-bold text-brand-700 mt-0.5">{s.conversion_pct}%</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Card>
-      )}
-
-      <Card>
-        <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg w-fit">
+      {/* Page-level tabs */}
+      <div className="border-b border-slate-200">
+        <div className="flex gap-6">
           {[
-            { id: 'pipeline', label: 'Pipeline', icon: ArrowRightLeft },
-            { id: 'leads', label: 'Leads', icon: Users },
-            { id: 'playbook', label: 'Playbook', icon: Target },
-          ].map(t => {
-            const Icon = t.icon;
-            const active = activeTab === t.id;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
-                className={`h-8 px-3 rounded-md text-xs font-semibold inline-flex items-center gap-1.5 ${active ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                <Icon size={14} /> {t.label}
-              </button>
-            );
-          })}
+            { id: 'metrics', label: 'Metrics' },
+            { id: 'pipeline', label: 'Pipeline & Leads' },
+          ].map(t => (
+            <button
+              key={t.id}
+              onClick={() => setPageTab(t.id)}
+              className={`pb-3 text-sm font-semibold border-b-2 transition-colors ${
+                pageTab === t.id
+                  ? 'border-[#29828a] text-[#29828a]'
+                  : 'border-transparent text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
+      </div>
 
-        {activeTab === 'pipeline' && (
-          <div className="mt-4 overflow-x-auto">
-            <div className="flex gap-3 min-w-max pb-2">
-              {pipeline.map(stage => (
-                <div key={stage.id} className="w-72 bg-slate-50 rounded-xl border border-slate-200/70 p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <Badge color={STAGE_COLOR[stage.id] || 'slate'}>{pretty(stage.id)}</Badge>
-                    <span className="text-xs text-slate-400">{stage.count}</span>
-                  </div>
+      {/* ── Metrics tab ── */}
+      {pageTab === 'metrics' && (
+        <div className="space-y-5">
+          {summary && (
+            <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+              <Card className="p-3"><p className="text-[10px] text-slate-400 uppercase">Leads</p><p className="text-lg font-bold text-slate-900">{fmt.num(summary.totals?.leads)}</p></Card>
+              <Card className="p-3"><p className="text-[10px] text-slate-400 uppercase">Won</p><p className="text-lg font-bold text-emerald-600">{fmt.num(summary.totals?.won)}</p></Card>
+              <Card className="p-3"><p className="text-[10px] text-slate-400 uppercase">Lost</p><p className="text-lg font-bold text-rose-600">{fmt.num(summary.totals?.lost)}</p></Card>
+              <Card className="p-3"><p className="text-[10px] text-slate-400 uppercase">Active Trials</p><p className="text-lg font-bold text-amber-600">{fmt.num(summary.totals?.active_trials)}</p></Card>
+              <Card className="p-3"><p className="text-[10px] text-slate-400 uppercase">Win Rate</p><p className="text-lg font-bold text-brand-700">{summary.totals?.win_rate || 0}%</p></Card>
+              <Card className="p-3"><p className="text-[10px] text-slate-400 uppercase">Expected MRR</p><p className="text-lg font-bold text-slate-900">{fmt.inr(summary.totals?.expected_mrr)}</p></Card>
+            </div>
+          )}
 
-                  <div className="space-y-2">
-                    {(stage.items || []).slice(0, 8).map(lead => (
-                      <div key={lead.id} onClick={() => openLeadDrawer(lead.id)} className="w-full text-left bg-white border border-slate-200 rounded-lg p-2.5 hover:border-brand-300 cursor-pointer">
-                        <p className="text-sm font-semibold text-slate-800 truncate">{lead.lead_name}</p>
-                        <p className="text-xs text-slate-400 mt-0.5 truncate">{lead.contact_person || '—'} · {lead.phone || '—'}</p>
-                        <div className="flex items-center justify-between gap-2 mt-2">
-                          <Badge color="sky">{lead.source || 'unknown'}</Badge>
-                          <span className="text-xs font-semibold text-slate-700">{fmt.inr(lead.expected_mrr)}</span>
+          {!!summary?.overdue_leads?.length && (
+            <Card className="border-amber-200 bg-amber-50/50">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle size={16} className="text-amber-600" />
+                <h3 className="text-sm font-semibold text-amber-800">Overdue Follow-ups ({summary.overdue_leads.length})</h3>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {summary.overdue_leads.slice(0, 8).map(lead => (
+                  <button key={lead.id} onClick={() => openLeadDrawer(lead.id)}
+                    className="text-left bg-white border border-amber-200 rounded-lg px-3 py-2 hover:border-amber-300">
+                    <p className="text-xs font-semibold text-slate-800">{lead.lead_name}</p>
+                    <p className="text-[11px] text-slate-500">{pretty(lead.stage)} · {lead.delay_hours}h delayed</p>
+                  </button>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {!!summary?.conversion_steps?.length && (
+            <Card>
+              <div className="mb-3">
+                <h3 className="text-sm font-semibold text-slate-800">Stage Conversion %</h3>
+                <p className="text-xs text-slate-400">Visibility into funnel health at each step</p>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={summary.conversion_steps || []}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis dataKey="to" tickFormatter={(v) => pretty(v)} tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} domain={[0, 100]} />
+                      <Tooltip formatter={(v) => [`${v}%`, 'Conversion']} labelFormatter={(label) => pretty(label)} />
+                      <Bar dataKey="conversion_pct" fill="#29828a" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="space-y-2">
+                  {summary.conversion_steps.map((s) => (
+                    <div key={`${s.from}-${s.to}`} className="bg-slate-50 rounded-lg p-2.5">
+                      <p className="text-xs font-semibold text-slate-700">{pretty(s.from)} → {pretty(s.to)}</p>
+                      <p className="text-[11px] text-slate-400">{s.from_count} to {s.to_count} leads</p>
+                      <p className="text-sm font-bold text-[#29828a] mt-0.5">{s.conversion_pct}%</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* ── Pipeline & Leads tab ── */}
+      {pageTab === 'pipeline' && (
+        <Card>
+          <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg w-fit">
+            {[
+              { id: 'pipeline', label: 'Pipeline', icon: ArrowRightLeft },
+              { id: 'leads', label: 'Leads', icon: Users },
+              { id: 'playbook', label: 'Playbook', icon: Target },
+            ].map(t => {
+              const Icon = t.icon;
+              const active = activeTab === t.id;
+              return (
+                <button key={t.id} onClick={() => setActiveTab(t.id)}
+                  className={`h-8 px-3 rounded-md text-xs font-semibold inline-flex items-center gap-1.5 ${active ? 'bg-white text-[#29828a] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                  <Icon size={14} /> {t.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {activeTab === 'pipeline' && (
+            <div className="mt-4 overflow-x-auto">
+              <div className="flex gap-3 min-w-max pb-2">
+                {pipeline.map(stage => (
+                  <div key={stage.id} className="w-72 bg-slate-50 rounded-xl border border-slate-200/70 p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <Badge color={STAGE_COLOR[stage.id] || 'slate'}>{pretty(stage.id)}</Badge>
+                      <span className="text-xs text-slate-400">{stage.count}</span>
+                    </div>
+                    <div className="space-y-2">
+                      {(stage.items || []).slice(0, 8).map(lead => (
+                        <div key={lead.id} onClick={() => openLeadDrawer(lead.id)} className="w-full text-left bg-white border border-slate-200 rounded-lg p-2.5 hover:border-brand-300 cursor-pointer">
+                          <p className="text-sm font-semibold text-slate-800 truncate">{lead.lead_name}</p>
+                          <p className="text-xs text-slate-400 mt-0.5 truncate">{lead.contact_person || '—'} · {lead.phone || '—'}</p>
+                          <div className="flex items-center justify-between gap-2 mt-2">
+                            <Badge color="sky">{lead.source || 'unknown'}</Badge>
+                            <span className="text-xs font-semibold text-slate-700">{fmt.inr(lead.expected_mrr)}</span>
+                          </div>
+                          <div className="mt-2">
+                            <select value={lead.stage || 'new_lead'} onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => { e.stopPropagation(); moveStage(lead.id, e.target.value); }}
+                              className="w-full h-7 px-2 text-xs border border-slate-200 rounded-md bg-white">
+                              {stages.map(s => <option key={s} value={s}>{pretty(s)}</option>)}
+                            </select>
+                          </div>
                         </div>
-                        <div className="mt-2">
-                          <select
-                            value={lead.stage || 'new_lead'}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              moveStage(lead.id, e.target.value);
-                            }}
-                            className="w-full h-7 px-2 text-xs border border-slate-200 rounded-md bg-white"
-                          >
+                      ))}
+                      {stage.count > 8 && <p className="text-[11px] text-slate-400 text-center">+{stage.count - 8} more</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'leads' && (
+            <div className="mt-4 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                <input value={filters.q} onChange={(e) => setFilters(f => ({ ...f, q: e.target.value }))} placeholder="Search lead/contact/phone" className="h-9 px-3 text-sm border border-slate-200 rounded-lg bg-white" />
+                <select value={filters.stage} onChange={(e) => setFilters(f => ({ ...f, stage: e.target.value }))} className="h-9 px-3 text-sm border border-slate-200 rounded-lg bg-white">
+                  <option value="">All stages</option>
+                  {stages.map(s => <option key={s} value={s}>{pretty(s)}</option>)}
+                </select>
+                <select value={filters.source} onChange={(e) => setFilters(f => ({ ...f, source: e.target.value }))} className="h-9 px-3 text-sm border border-slate-200 rounded-lg bg-white">
+                  <option value="">All sources</option>
+                  {['instagram', 'facebook', 'google', 'referral', 'direct', 'other'].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <button onClick={() => loadLeads()} className="h-9 px-3 rounded-lg bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-200">Apply</button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      {['Lead', 'Source', 'Stage', 'Owner', 'MRR', 'Follow-up', 'Move'].map(h => (
+                        <th key={h} className="py-2.5 px-3 text-[11px] text-slate-400 font-semibold uppercase tracking-wider text-left">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {leads.map(lead => (
+                      <tr key={lead.id} className="hover:bg-slate-50/60">
+                        <td className="py-2.5 px-3">
+                          <button onClick={() => openLeadDrawer(lead.id)} className="text-left">
+                            <p className="font-semibold text-slate-800 hover:text-brand-700">{lead.lead_name}</p>
+                          </button>
+                          <p className="text-[11px] text-slate-400">{lead.contact_person || '—'} · {lead.phone || '—'}</p>
+                        </td>
+                        <td className="py-2.5 px-3"><Badge color="sky">{lead.source || 'unknown'}</Badge></td>
+                        <td className="py-2.5 px-3"><Badge color={STAGE_COLOR[lead.stage] || 'slate'}>{pretty(lead.stage || 'new_lead')}</Badge></td>
+                        <td className="py-2.5 px-3 text-slate-600">{lead.owner || '—'}</td>
+                        <td className="py-2.5 px-3 text-slate-700 font-semibold">{fmt.inr(lead.expected_mrr)}</td>
+                        <td className="py-2.5 px-3 text-xs text-slate-400">{lead.next_follow_up_at ? fmt.datetime(lead.next_follow_up_at) : '—'}</td>
+                        <td className="py-2.5 px-3">
+                          <select value={lead.stage || 'new_lead'} onChange={(e) => moveStage(lead.id, e.target.value)} className="h-7 px-2 text-xs border border-slate-200 rounded-md bg-white">
                             {stages.map(s => <option key={s} value={s}>{pretty(s)}</option>)}
                           </select>
-                        </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span>{total > 0 ? `${(page - 1) * 20 + 1}-${Math.min(page * 20, total)} of ${total}` : '0 results'}</span>
+                <div className="flex gap-1">
+                  <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} className="h-7 px-2 rounded bg-slate-100 text-slate-600 disabled:opacity-30">Prev</button>
+                  <span className="h-7 px-2 inline-flex items-center">{page}/{totalPages}</span>
+                  <button disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))} className="h-7 px-2 rounded bg-slate-100 text-slate-600 disabled:opacity-30">Next</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'playbook' && (
+            <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Card className="p-4 bg-slate-50 border-slate-200">
+                <h4 className="text-sm font-semibold text-slate-800 mb-2 inline-flex items-center gap-1.5"><TrendingUp size={16} /> Recommended Funnel</h4>
+                <ol className="space-y-1.5 text-sm text-slate-600">
+                  {['New Lead','Contact Attempted','Connected','Demo Scheduled','Demo Done','Trial Active','Negotiation','Won / Lost'].map((x, i) => (
+                    <li key={x}><span className="text-slate-400 mr-1">{i + 1}.</span>{x}</li>
+                  ))}
+                </ol>
+              </Card>
+              <Card className="p-4 bg-slate-50 border-slate-200">
+                <h4 className="text-sm font-semibold text-slate-800 mb-2 inline-flex items-center gap-1.5"><PhoneCall size={16} /> Operating Rules</h4>
+                <ul className="space-y-1.5 text-sm text-slate-600 list-disc pl-4">
+                  <li>Every lead must have next follow-up date.</li>
+                  <li>No activity for 3 days in active stages = overdue.</li>
+                  <li>Demo done should always create trial or explicit lost reason.</li>
+                  <li>Won stage should include expected/final MRR.</li>
+                  <li>Lost leads move to nurture if there is future potential.</li>
+                </ul>
+              </Card>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {importOpen && (
+        <>
+          <div className="fixed inset-0 z-40 bg-slate-900/40" onClick={() => setImportOpen(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[560px] overflow-hidden">
+              {/* Header */}
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Import Leads from CSV</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Duplicates (same phone/email) are skipped automatically</p>
+                </div>
+                <button onClick={() => setImportOpen(false)} className="w-8 h-8 rounded-lg hover:bg-slate-100 inline-flex items-center justify-center text-slate-400">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4">
+                {/* Column reference */}
+                <div className="bg-slate-50 rounded-xl border border-slate-200 p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Required CSV Columns</p>
+                    <button onClick={downloadSample} className="h-7 px-2.5 rounded-lg bg-brand-50 text-brand-700 text-[11px] font-semibold hover:bg-brand-100 inline-flex items-center gap-1">
+                      <Download size={12} /> Sample CSV
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-600">
+                    {[
+                      ['lead_name', 'Required — clinic/business name'],
+                      ['contact_person', 'Doctor or owner name'],
+                      ['phone', 'Used for duplicate check'],
+                      ['email', 'Used for duplicate check'],
+                      ['source', 'instagram, google, referral…'],
+                      ['stage', 'new_lead, connected, demo_done…'],
+                      ['owner', 'Who owns this lead'],
+                      ['priority', 'high / medium / low'],
+                      ['expected_mrr', 'Number in INR (e.g. 899)'],
+                      ['notes', 'Any free-text notes'],
+                    ].map(([col, hint]) => (
+                      <div key={col} className="flex gap-1.5">
+                        <span className="font-mono font-semibold text-brand-700 shrink-0">{col}</span>
+                        <span className="text-slate-400 truncate">{hint}</span>
                       </div>
                     ))}
-                    {stage.count > 8 && <p className="text-[11px] text-slate-400 text-center">+{stage.count - 8} more</p>}
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
 
-        {activeTab === 'leads' && (
-          <div className="mt-4 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-              <input value={filters.q} onChange={(e) => setFilters(f => ({ ...f, q: e.target.value }))} placeholder="Search lead/contact/phone" className="h-9 px-3 text-sm border border-slate-200 rounded-lg bg-white" />
-              <select value={filters.stage} onChange={(e) => setFilters(f => ({ ...f, stage: e.target.value }))} className="h-9 px-3 text-sm border border-slate-200 rounded-lg bg-white">
-                <option value="">All stages</option>
-                {stages.map(s => <option key={s} value={s}>{pretty(s)}</option>)}
-              </select>
-              <select value={filters.source} onChange={(e) => setFilters(f => ({ ...f, source: e.target.value }))} className="h-9 px-3 text-sm border border-slate-200 rounded-lg bg-white">
-                <option value="">All sources</option>
-                {['instagram', 'facebook', 'google', 'referral', 'direct', 'other'].map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-              <button onClick={() => loadLeads()} className="h-9 px-3 rounded-lg bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-200">Apply</button>
-            </div>
+                {/* Drop zone */}
+                {!importResult && (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => { e.preventDefault(); handleFileSelect(e.dataTransfer.files[0]); }}
+                    className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${importFile ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 hover:border-brand-300 hover:bg-brand-50/30'}`}
+                  >
+                    <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={(e) => handleFileSelect(e.target.files[0])} />
+                    {importFile ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <FileText size={18} className="text-emerald-600" />
+                        <span className="text-sm font-semibold text-emerald-700">{importFile.name}</span>
+                        <span className="text-xs text-slate-400">({(importFile.size / 1024).toFixed(1)} KB)</span>
+                      </div>
+                    ) : (
+                      <>
+                        <Upload size={24} className="mx-auto mb-2 text-slate-300" />
+                        <p className="text-sm font-semibold text-slate-600">Drop CSV here or click to browse</p>
+                        <p className="text-xs text-slate-400 mt-1">UTF-8 or Latin-1 encoding · max 5 MB</p>
+                      </>
+                    )}
+                  </div>
+                )}
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100">
-                    {['Lead', 'Source', 'Stage', 'Owner', 'MRR', 'Follow-up', 'Move'].map(h => (
-                      <th key={h} className="py-2.5 px-3 text-[11px] text-slate-400 font-semibold uppercase tracking-wider text-left">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {leads.map(lead => (
-                    <tr key={lead.id} className="hover:bg-slate-50/60">
-                      <td className="py-2.5 px-3">
-                        <button onClick={() => openLeadDrawer(lead.id)} className="text-left">
-                          <p className="font-semibold text-slate-800 hover:text-brand-700">{lead.lead_name}</p>
-                        </button>
-                        <p className="text-[11px] text-slate-400">{lead.contact_person || '—'} · {lead.phone || '—'}</p>
-                      </td>
-                      <td className="py-2.5 px-3"><Badge color="sky">{lead.source || 'unknown'}</Badge></td>
-                      <td className="py-2.5 px-3"><Badge color={STAGE_COLOR[lead.stage] || 'slate'}>{pretty(lead.stage || 'new_lead')}</Badge></td>
-                      <td className="py-2.5 px-3 text-slate-600">{lead.owner || '—'}</td>
-                      <td className="py-2.5 px-3 text-slate-700 font-semibold">{fmt.inr(lead.expected_mrr)}</td>
-                      <td className="py-2.5 px-3 text-xs text-slate-400">{lead.next_follow_up_at ? fmt.datetime(lead.next_follow_up_at) : '—'}</td>
-                      <td className="py-2.5 px-3">
-                        <select value={lead.stage || 'new_lead'} onChange={(e) => moveStage(lead.id, e.target.value)} className="h-7 px-2 text-xs border border-slate-200 rounded-md bg-white">
-                          {stages.map(s => <option key={s} value={s}>{pretty(s)}</option>)}
-                        </select>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                {/* Preview table */}
+                {importPreview.length > 1 && !importResult && (
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="w-full text-xs min-w-max">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-100">
+                          {importPreview[0].map((h, i) => (
+                            <th key={i} className="py-1.5 px-3 text-[10px] font-semibold text-slate-500 uppercase text-left whitespace-nowrap">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {importPreview.slice(1).map((row, ri) => (
+                          <tr key={ri} className="hover:bg-slate-50">
+                            {row.map((cell, ci) => (
+                              <td key={ci} className="py-1.5 px-3 text-slate-700 max-w-[140px] truncate">{cell || <span className="text-slate-300">—</span>}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <p className="text-[10px] text-slate-400 px-3 py-1.5">Showing first 5 rows preview</p>
+                  </div>
+                )}
 
-            <div className="flex items-center justify-between text-xs text-slate-400">
-              <span>{total > 0 ? `${(page - 1) * 20 + 1}-${Math.min(page * 20, total)} of ${total}` : '0 results'}</span>
-              <div className="flex gap-1">
-                <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} className="h-7 px-2 rounded bg-slate-100 text-slate-600 disabled:opacity-30">Prev</button>
-                <span className="h-7 px-2 inline-flex items-center">{page}/{totalPages}</span>
-                <button disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))} className="h-7 px-2 rounded bg-slate-100 text-slate-600 disabled:opacity-30">Next</button>
+                {/* Result */}
+                {importResult && (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 size={18} className="text-emerald-600" />
+                      <p className="text-sm font-semibold text-emerald-800">Import complete</p>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="bg-white rounded-lg p-2">
+                        <p className="text-lg font-bold text-emerald-600">{importResult.imported}</p>
+                        <p className="text-[10px] text-slate-500 uppercase">Imported</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-2">
+                        <p className="text-lg font-bold text-amber-500">{importResult.skipped_duplicates}</p>
+                        <p className="text-[10px] text-slate-500 uppercase">Skipped</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-2">
+                        <p className="text-lg font-bold text-rose-500">{importResult.errors?.length || 0}</p>
+                        <p className="text-[10px] text-slate-500 uppercase">Errors</p>
+                      </div>
+                    </div>
+                    {importResult.errors?.length > 0 && (
+                      <div className="mt-2 max-h-28 overflow-y-auto space-y-1">
+                        {importResult.errors.map((e, i) => (
+                          <p key={i} className="text-xs text-rose-600">Row {e.row}: {e.reason}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex items-center gap-2 justify-end">
+                {importResult ? (
+                  <>
+                    <button onClick={() => { setImportFile(null); setImportPreview([]); setImportResult(null); }} className="h-9 px-4 rounded-lg bg-white border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-100">Import More</button>
+                    <button onClick={() => setImportOpen(false)} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700">Done</button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => setImportOpen(false)} className="h-9 px-4 rounded-lg bg-white border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-100">Cancel</button>
+                    <button onClick={handleImport} disabled={!importFile || importing} className="h-9 px-4 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 inline-flex items-center gap-1.5">
+                      {importing ? <><span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Importing...</> : <><Upload size={14} /> Import Leads</>}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
-        )}
-
-        {activeTab === 'playbook' && (
-          <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card className="p-4 bg-slate-50 border-slate-200">
-              <h4 className="text-sm font-semibold text-slate-800 mb-2 inline-flex items-center gap-1.5"><TrendingUp size={16} /> Recommended Funnel</h4>
-              <ol className="space-y-1.5 text-sm text-slate-600">
-                {[
-                  'New Lead',
-                  'Contact Attempted',
-                  'Connected',
-                  'Demo Scheduled',
-                  'Demo Done',
-                  'Trial Active',
-                  'Negotiation',
-                  'Won / Lost',
-                ].map((x, i) => <li key={x}><span className="text-slate-400 mr-1">{i + 1}.</span>{x}</li>)}
-              </ol>
-            </Card>
-
-            <Card className="p-4 bg-slate-50 border-slate-200">
-              <h4 className="text-sm font-semibold text-slate-800 mb-2 inline-flex items-center gap-1.5"><PhoneCall size={16} /> Operating Rules</h4>
-              <ul className="space-y-1.5 text-sm text-slate-600 list-disc pl-4">
-                <li>Every lead must have next follow-up date.</li>
-                <li>No activity for 3 days in active stages = overdue.</li>
-                <li>Demo done should always create trial or explicit lost reason.</li>
-                <li>Won stage should include expected/final MRR.</li>
-                <li>Lost leads move to nurture if there is future potential.</li>
-              </ul>
-            </Card>
-          </div>
-        )}
-      </Card>
+        </>
+      )}
 
       {drawerOpen && (
         <>

@@ -27,8 +27,9 @@ const Checkout = () => {
   const [isValidating, setIsValidating] = useState(false);
   const [discountInfo, setDiscountInfo] = useState(null);
 
-  // Hardcoded price for professional as per user request (₹1200)
-  const basePrice = planName === 'professional' ? 1200 : 0;
+  const billing = queryParams.get('billing') || 'monthly';
+  const isAnnual = billing === 'annual';
+  const basePrice = planName === 'professional' ? (isAnnual ? 8100 : 899) : 0;
 
   const handleApplyCoupon = async () => {
     if (!couponCode) return;
@@ -96,7 +97,26 @@ const Checkout = () => {
               <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">
                 Order Summary
               </h2>
-              
+
+              {/* Billing toggle */}
+              <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+                <button
+                  onClick={() => navigate(`/checkout?plan=${planName}&billing=monthly`)}
+                  className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${!isAnnual ? 'bg-white text-[#2a276e] shadow-sm' : 'text-gray-400'}`}
+                >
+                  Monthly
+                </button>
+                <button
+                  onClick={() => navigate(`/checkout?plan=${planName}&billing=annual`)}
+                  className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${isAnnual ? 'bg-white text-[#2a276e] shadow-sm' : 'text-gray-400'}`}
+                >
+                  Annual
+                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${isAnnual ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-400'}`}>
+                    25% OFF
+                  </span>
+                </button>
+              </div>
+
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="p-6 border-b border-gray-100">
                   <div className="flex items-center gap-3 mb-4">
@@ -105,13 +125,19 @@ const Checkout = () => {
                     </div>
                     <div>
                       <h3 className="font-bold text-gray-900 capitalize">{planName} Plan</h3>
-                      <p className="text-xs text-gray-500">Monthly Subscription</p>
+                      <p className="text-xs text-gray-500">{isAnnual ? 'Annual Subscription' : 'Monthly Subscription'}</p>
                     </div>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Base Price</span>
-                    <span className="font-bold text-gray-900">₹{basePrice}</span>
+                    <span className="text-gray-600">{isAnnual ? '₹675/month × 12' : 'Monthly price'}</span>
+                    <span className="font-bold text-gray-900">₹{basePrice.toLocaleString('en-IN')}</span>
                   </div>
+                  {isAnnual && (
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-xs text-gray-400 line-through">₹899 × 12 = ₹10,788</span>
+                      <span className="text-xs font-semibold text-green-600">You save ₹1,488</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="p-6 space-y-3 bg-gray-50/50">
