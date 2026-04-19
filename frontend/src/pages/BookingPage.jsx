@@ -4,7 +4,7 @@ import {
   Calendar, Clock, User, Phone, Mail, MapPin, CheckCircle, Info, MessageCircle, Stethoscope
 } from "lucide-react";
 
-const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+const BASE_URL = `${import.meta.env.VITE_BACKEND_URL || "http://localhost:8000"}/api/v1`;
 
 const parseClinicHours = (hoursString) => {
   const t = {

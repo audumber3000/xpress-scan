@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
 import { api } from '../utils/api';
 import { 
@@ -23,6 +24,7 @@ import {
 
 const ClinicOnboarding = () => {
   const navigate = useNavigate();
+  const { setUser: setAuthUser, setToken } = useAuth();
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
   const [currentStep, setCurrentStep] = useState(1);
@@ -35,7 +37,7 @@ const ClinicOnboarding = () => {
     clinic_email: "",
     number_of_chairs: "1",
     category: "General Dentistry",
-    subscription_plan: "professional",
+    subscription_plan: "free",
     billing_cycle: "monthly",
     scan_types: [
       { name: "Consultation", price: 300 },
@@ -118,6 +120,7 @@ const ClinicOnboarding = () => {
       if (referralCode) sessionStorage.removeItem('referred_by_code');
 
       localStorage.setItem('user', JSON.stringify(result.user));
+      setAuthUser(result.user);
       toast.success("Welcome aboard, Dr.! MolarPlus is ready.");
       navigate("/dashboard");
     } catch (error) {
