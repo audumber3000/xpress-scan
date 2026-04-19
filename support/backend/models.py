@@ -29,6 +29,7 @@ class Clinic(Base):
     updated_at = Column(DateTime)
     synced_at = Column(DateTime, nullable=True)
     sync_status = Column(String, nullable=True)
+    referred_by_code = Column(String, nullable=True)
 
 
 class User(Base):

@@ -39,7 +39,9 @@ export default function MarketingPromos() {
     try {
       const payload = { ...form };
       if (payload.discount_percent) payload.discount_percent = Number(payload.discount_percent);
+      else delete payload.discount_percent;
       if (payload.discount_amount) payload.discount_amount = Number(payload.discount_amount);
+      else delete payload.discount_amount;
       payload.usage_limit = Number(payload.usage_limit);
       if (!payload.expiry_date) delete payload.expiry_date;
       
