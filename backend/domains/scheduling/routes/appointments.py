@@ -195,6 +195,26 @@ async def create_appointment(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error creating appointment: {str(e)}")
 
+@router.get("/public/clinic-info")
+async def get_public_clinic_info(
+    clinic_id: int = Query(...),
+    db: Session = Depends(get_db)
+):
+    """Return public clinic info for the booking page"""
+    clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clinic not found")
+    return {
+        "id": clinic.id,
+        "name": clinic.name,
+        "address": clinic.address,
+        "phone": clinic.phone,
+        "email": clinic.email,
+        "specialization": clinic.specialization,
+        "logo_url": clinic.logo_url,
+        "timings": clinic.timings,
+    }
+
 @router.get("/public", response_model=List[AppointmentOut])
 async def get_public_appointments(
     date_from: str = Query(..., description="Start date (YYYY-MM-DD)"),
