@@ -262,24 +262,36 @@ async def cashfree_webhook(
     db: Session = Depends(get_db)
 ):
     """Handle Cashfree webhooks"""
+    import hmac, hashlib, base64, json as _json
+
     try:
-        payload = await request.json()
+        raw_body = await request.body()
+
+        # Signature verification — must use raw bytes, not parsed JSON
+        secret = os.getenv("CASHFREE_WEBHOOK_SECRET") or os.getenv("CASHFREE_SECRET_KEY", "")
+        signature = request.headers.get("x-webhook-signature", "")
+        timestamp = request.headers.get("x-webhook-timestamp", "")
+
+        if secret and signature and timestamp:
+            signed_payload = timestamp.encode() + raw_body
+            expected = base64.b64encode(
+                hmac.new(secret.encode(), signed_payload, hashlib.sha256).digest()
+            ).decode()
+            if not hmac.compare_digest(expected, signature):
+                print("WEBHOOK SIGNATURE MISMATCH — rejecting")
+                return {"status": "error", "message": "Invalid signature"}
+
+        payload = _json.loads(raw_body)
         print(f"WEBHOOK RECEIVED: {payload}")
-        
+
         subscription_service = SubscriptionService(db)
-        
-        # In production, we MUST verify signature here
-        # signature = request.headers.get("x-webhook-signature")
-        
         success = subscription_service.handle_webhook("cashfree", payload)
         if success:
             return {"status": "ok", "message": "Processed successfully"}
-        
-        # Even if not SUCCESS status, we return 200 to acknowledge receipt
+
         return {"status": "received", "message": "Webhook acknowledged"}
-        
+
     except Exception as e:
         print(f"WEBHOOK ERROR: {str(e)}")
-        # We still return 200 to stop retry if it's a malformed test payload
         return {"status": "error", "message": str(e)}
 

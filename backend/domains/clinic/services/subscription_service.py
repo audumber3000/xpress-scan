@@ -218,4 +218,10 @@ class SubscriptionService:
                     self._log_payment(sub, cf_payment_id, payment_amount, paid_at)
                     self.db.commit()
                     return True
+
+            elif order_id and payment_status == "FAILED":
+                # Don't change subscription status — keep as pending so user can retry
+                error_msg = payment_data.get("payment_message") or "Payment failed"
+                print(f"PAYMENT FAILED: order={order_id} reason={error_msg}")
+
         return False
