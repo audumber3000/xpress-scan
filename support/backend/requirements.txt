@@ -10,3 +10,4 @@ aiofiles
 pydantic
 requests
 python-multipart
+firebase-admin

@@ -1,4 +1,6 @@
 import datetime
+import logging
+import os
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -6,13 +8,44 @@ from pydantic import BaseModel
 from typing import Optional
 from database import get_db
 from models import (
-    Clinic, User, Patient, Appointment, Invoice, Subscription,
-    GooglePlaceLink, SupportTicket,
+    Clinic, User, Patient, Appointment, Invoice, InvoiceLineItem, Subscription,
+    GooglePlaceLink, GoogleReview, SupportTicket, SupportMessage,
     NotificationLog, NotificationWallet, WalletTransaction, NotificationPreference,
-    UserDevice, ActivityLog,
+    UserDevice, ActivityLog, GrowthLead, GrowthLeadActivity,
 )
 from routes.auth import get_current_admin
 from services.notification_service import notification_service
+
+logger = logging.getLogger(__name__)
+
+DELETE_PASSWORD = "Audumber"
+
+
+def _get_firebase_app():
+    try:
+        import firebase_admin
+        from firebase_admin import credentials
+        if not firebase_admin._apps:
+            json_path = os.getenv("FIREBASE_JSON_PATH", "")
+            if json_path and os.path.exists(json_path):
+                cred = credentials.Certificate(json_path)
+                firebase_admin.initialize_app(cred)
+        return firebase_admin._apps.get("[DEFAULT]")
+    except Exception as e:
+        logger.warning(f"Firebase init failed: {e}")
+        return None
+
+
+def _delete_firebase_user(uid: str) -> bool:
+    try:
+        import firebase_admin
+        from firebase_admin import auth as fb_auth
+        _get_firebase_app()
+        fb_auth.delete_user(uid)
+        return True
+    except Exception as e:
+        logger.warning(f"Firebase delete failed for uid={uid}: {e}")
+        return False
 
 router = APIRouter()
 
@@ -513,4 +546,102 @@ async def activate_trial(clinic_id: int, db: Session = Depends(get_db), _=Depend
             "whatsapp": wa_result.get("success"),
             "email": email_result.get("success"),
         },
+    }
+
+
+class DeleteClinicBody(BaseModel):
+    password: str
+
+
+@router.delete("/{clinic_id}")
+def delete_clinic(
+    clinic_id: int,
+    body: DeleteClinicBody,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_admin),
+):
+    if body.password != DELETE_PASSWORD:
+        raise HTTPException(status_code=403, detail="Incorrect password")
+
+    clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clinic not found")
+
+    clinic_name = clinic.name
+
+    # Collect Firebase UIDs before deleting users
+    users = db.query(User).filter(User.clinic_id == clinic_id).all()
+    firebase_uids = [u.supabase_user_id for u in users if u.supabase_user_id]
+
+    try:
+        # 1. Invoice line items
+        invoice_ids = [i.id for i in db.query(Invoice.id).filter(Invoice.clinic_id == clinic_id).all()]
+        if invoice_ids:
+            db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id.in_(invoice_ids)).delete(synchronize_session=False)
+
+        # 2. Invoices
+        db.query(Invoice).filter(Invoice.clinic_id == clinic_id).delete(synchronize_session=False)
+
+        # 3. Appointments
+        db.query(Appointment).filter(Appointment.clinic_id == clinic_id).delete(synchronize_session=False)
+
+        # 4. Patients
+        db.query(Patient).filter(Patient.clinic_id == clinic_id).delete(synchronize_session=False)
+
+        # 5. Notification data
+        db.query(NotificationLog).filter(NotificationLog.clinic_id == clinic_id).delete(synchronize_session=False)
+        db.query(NotificationPreference).filter(NotificationPreference.clinic_id == clinic_id).delete(synchronize_session=False)
+        db.query(WalletTransaction).filter(WalletTransaction.clinic_id == clinic_id).delete(synchronize_session=False)
+        db.query(NotificationWallet).filter(NotificationWallet.clinic_id == clinic_id).delete(synchronize_session=False)
+
+        # 6. Google data
+        db.query(GoogleReview).filter(GoogleReview.clinic_id == clinic_id).delete(synchronize_session=False)
+        db.query(GooglePlaceLink).filter(GooglePlaceLink.clinic_id == clinic_id).delete(synchronize_session=False)
+
+        # 7. Activity logs
+        db.query(ActivityLog).filter(ActivityLog.clinic_id == clinic_id).delete(synchronize_session=False)
+
+        # 8. Support messages → tickets
+        ticket_ids = [t.id for t in db.query(SupportTicket.id).filter(SupportTicket.clinic_id == clinic_id).all()]
+        if ticket_ids:
+            db.query(SupportMessage).filter(SupportMessage.ticket_id.in_(ticket_ids)).delete(synchronize_session=False)
+        db.query(SupportTicket).filter(SupportTicket.clinic_id == clinic_id).delete(synchronize_session=False)
+
+        # 9. Growth leads
+        lead_ids = [l.id for l in db.query(GrowthLead.id).filter(GrowthLead.clinic_id == clinic_id).all()]
+        if lead_ids:
+            db.query(GrowthLeadActivity).filter(GrowthLeadActivity.lead_id.in_(lead_ids)).delete(synchronize_session=False)
+        db.query(GrowthLead).filter(GrowthLead.clinic_id == clinic_id).delete(synchronize_session=False)
+
+        # 10. Subscriptions
+        user_ids = [u.id for u in users]
+        if user_ids:
+            db.query(Subscription).filter(Subscription.user_id.in_(user_ids)).delete(synchronize_session=False)
+        db.query(Subscription).filter(Subscription.clinic_id == clinic_id).delete(synchronize_session=False)
+
+        # 11. User devices + users
+        if user_ids:
+            db.query(UserDevice).filter(UserDevice.user_id.in_(user_ids)).delete(synchronize_session=False)
+        db.query(User).filter(User.clinic_id == clinic_id).delete(synchronize_session=False)
+
+        # 12. Clinic
+        db.query(Clinic).filter(Clinic.id == clinic_id).delete(synchronize_session=False)
+
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Delete clinic {clinic_id} failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
+
+    # Delete Firebase users after DB commit (non-fatal if Firebase fails)
+    fb_deleted = 0
+    for uid in firebase_uids:
+        if _delete_firebase_user(uid):
+            fb_deleted += 1
+
+    return {
+        "deleted": True,
+        "clinic_name": clinic_name,
+        "firebase_users_deleted": fb_deleted,
+        "firebase_users_total": len(firebase_uids),
     }

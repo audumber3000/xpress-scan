@@ -43,6 +43,7 @@ class User(Base):
     role = Column(String)
     password_hash = Column(String, nullable=True)
     is_active = Column(Boolean)
+    supabase_user_id = Column(String, nullable=True)
     created_at = Column(DateTime)
 
     active_clinic = relationship("Clinic", foreign_keys=[clinic_id])
