@@ -594,74 +594,65 @@ def delete_clinic(
     uid_list = user_ids if user_ids else [-1]  # avoid empty IN clause
 
     try:
-        # Raw SQL helper for tables not in the support ORM
-        def raw_delete(table: str, col: str, val):
-            db.execute(text(f"DELETE FROM {table} WHERE {col} = :v"), {"v": val})
+        c = clinic_id
+        u = uid_list
 
-        # 1. Invoice audit logs + line items + invoices
-        invoice_ids = [i.id for i in db.query(Invoice.id).filter(Invoice.clinic_id == clinic_id).all()]
-        if invoice_ids:
-            db.execute(text("DELETE FROM invoice_audit_logs WHERE invoice_id = ANY(:v)"), {"v": invoice_ids})
-            db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id.in_(invoice_ids)).delete(synchronize_session=False)
-        db.query(Invoice).filter(Invoice.clinic_id == clinic_id).delete(synchronize_session=False)
+        # ── Step 1: children of invoices ──────────────────────────────
+        db.execute(text("DELETE FROM invoice_audit_logs WHERE invoice_id IN (SELECT id FROM invoices WHERE clinic_id=:c)"), {"c": c})
+        db.execute(text("DELETE FROM invoice_line_items WHERE invoice_id IN (SELECT id FROM invoices WHERE clinic_id=:c)"), {"c": c})
 
-        # 2. Appointments
-        db.query(Appointment).filter(Appointment.clinic_id == clinic_id).delete(synchronize_session=False)
+        # ── Step 2: children of patients ──────────────────────────────
+        db.execute(text("DELETE FROM patient_consents WHERE patient_id IN (SELECT id FROM patients WHERE clinic_id=:c)"), {"c": c})
+        db.execute(text("DELETE FROM patient_documents WHERE patient_id IN (SELECT id FROM patients WHERE clinic_id=:c)"), {"c": c})
+        db.execute(text("DELETE FROM xray_images WHERE patient_id IN (SELECT id FROM patients WHERE clinic_id=:c)"), {"c": c})
+        db.execute(text("DELETE FROM prescriptions WHERE patient_id IN (SELECT id FROM patients WHERE clinic_id=:c)"), {"c": c})
+        db.execute(text("DELETE FROM case_papers WHERE patient_id IN (SELECT id FROM patients WHERE clinic_id=:c)"), {"c": c})
 
-        # 3. Patient files / consents / dental chart data (raw — not in support ORM)
-        raw_delete("patient_consents", "clinic_id", clinic_id)
-        raw_delete("patient_documents", "clinic_id", clinic_id)
-        raw_delete("treatment_plans", "clinic_id", clinic_id) if _table_exists(db, "treatment_plans") else None
-        raw_delete("lab_orders", "clinic_id", clinic_id) if _table_exists(db, "lab_orders") else None
-        raw_delete("message_templates", "clinic_id", clinic_id) if _table_exists(db, "message_templates") else None
-        raw_delete("salary_records", "clinic_id", clinic_id) if _table_exists(db, "salary_records") else None
-        raw_delete("attendance_records", "clinic_id", clinic_id) if _table_exists(db, "attendance_records") else None
-        raw_delete("competitor_snapshots", "clinic_id", clinic_id) if _table_exists(db, "competitor_snapshots") else None
+        # ── Step 3: children of whatsapp_chats ────────────────────────
+        db.execute(text("DELETE FROM whatsapp_messages WHERE chat_id IN (SELECT id FROM whatsapp_chats WHERE clinic_id=:c)"), {"c": c})
 
-        # 4. Patients
-        db.query(Patient).filter(Patient.clinic_id == clinic_id).delete(synchronize_session=False)
+        # ── Step 4: children of support_tickets ───────────────────────
+        db.execute(text("DELETE FROM support_messages WHERE ticket_id IN (SELECT id FROM support_tickets WHERE clinic_id=:c)"), {"c": c})
 
-        # 5. Notification data
-        db.query(NotificationLog).filter(NotificationLog.clinic_id == clinic_id).delete(synchronize_session=False)
-        db.query(NotificationPreference).filter(NotificationPreference.clinic_id == clinic_id).delete(synchronize_session=False)
-        db.query(WalletTransaction).filter(WalletTransaction.clinic_id == clinic_id).delete(synchronize_session=False)
-        db.query(NotificationWallet).filter(NotificationWallet.clinic_id == clinic_id).delete(synchronize_session=False)
+        # ── Step 5: children of growth_leads ──────────────────────────
+        db.execute(text("DELETE FROM growth_lead_activities WHERE lead_id IN (SELECT id FROM growth_leads WHERE clinic_id=:c)"), {"c": c})
 
-        # 6. Google data
-        db.query(GoogleReview).filter(GoogleReview.clinic_id == clinic_id).delete(synchronize_session=False)
-        db.query(GooglePlaceLink).filter(GooglePlaceLink.clinic_id == clinic_id).delete(synchronize_session=False)
+        # ── Step 6: children of subscriptions ─────────────────────────
+        db.execute(text("DELETE FROM subscription_payments WHERE subscription_id IN (SELECT id FROM subscriptions WHERE clinic_id=:c OR user_id=ANY(:u))"), {"c": c, "u": u})
 
-        # 7. Activity logs
-        db.query(ActivityLog).filter(ActivityLog.clinic_id == clinic_id).delete(synchronize_session=False)
+        # ── Step 7: all direct clinic_id tables ───────────────────────
+        for tbl in [
+            "invoices", "appointments", "patients",
+            "notification_logs", "notification_preferences",
+            "wallet_transactions", "notification_wallets",
+            "google_reviews", "google_place_links",
+            "activity_logs", "support_tickets", "growth_leads",
+            "lab_orders", "message_templates", "scheduled_messages",
+            "whatsapp_chats", "competitor_snapshots", "competitor_caches",
+            "dashboard_reports", "reports", "clinical_settings",
+            "clinical_assets", "expenses", "attendance",
+            "payments", "vendors", "referring_doctors",
+            "template_configurations", "treatment_types",
+            "consent_templates", "medications", "inventory_items",
+        ]:
+            try:
+                db.execute(text(f"DELETE FROM {tbl} WHERE clinic_id=:c"), {"c": c})
+            except Exception:
+                db.rollback()
+                raise
 
-        # 8. Support messages → tickets
-        ticket_ids = [t.id for t in db.query(SupportTicket.id).filter(SupportTicket.clinic_id == clinic_id).all()]
-        if ticket_ids:
-            db.query(SupportMessage).filter(SupportMessage.ticket_id.in_(ticket_ids)).delete(synchronize_session=False)
-        db.query(SupportTicket).filter(SupportTicket.clinic_id == clinic_id).delete(synchronize_session=False)
+        # ── Step 8: subscriptions (clinic_id + user_id) ───────────────
+        db.execute(text("DELETE FROM subscriptions WHERE clinic_id=:c OR user_id=ANY(:u)"), {"c": c, "u": u})
 
-        # 9. Growth leads
-        lead_ids = [l.id for l in db.query(GrowthLead.id).filter(GrowthLead.clinic_id == clinic_id).all()]
-        if lead_ids:
-            db.query(GrowthLeadActivity).filter(GrowthLeadActivity.lead_id.in_(lead_ids)).delete(synchronize_session=False)
-        db.query(GrowthLead).filter(GrowthLead.clinic_id == clinic_id).delete(synchronize_session=False)
+        # ── Step 9: user_clinics association ──────────────────────────
+        db.execute(text("DELETE FROM user_clinics WHERE clinic_id=:c OR user_id=ANY(:u)"), {"c": c, "u": u})
 
-        # 10. Subscriptions
-        if user_ids:
-            db.query(Subscription).filter(Subscription.user_id.in_(user_ids)).delete(synchronize_session=False)
-        db.query(Subscription).filter(Subscription.clinic_id == clinic_id).delete(synchronize_session=False)
+        # ── Step 10: user_devices + users ─────────────────────────────
+        db.execute(text("DELETE FROM user_devices WHERE user_id=ANY(:u)"), {"u": u})
+        db.execute(text("DELETE FROM users WHERE clinic_id=:c"), {"c": c})
 
-        # 11. user_clinics association table (many-to-many, not in support ORM)
-        db.execute(text("DELETE FROM user_clinics WHERE clinic_id = :c OR user_id = ANY(:u)"),
-                   {"c": clinic_id, "u": uid_list})
-
-        # 12. User devices + users
-        if user_ids:
-            db.query(UserDevice).filter(UserDevice.user_id.in_(user_ids)).delete(synchronize_session=False)
-        db.query(User).filter(User.clinic_id == clinic_id).delete(synchronize_session=False)
-
-        # 13. Clinic
-        db.query(Clinic).filter(Clinic.id == clinic_id).delete(synchronize_session=False)
+        # ── Step 11: clinic itself ─────────────────────────────────────
+        db.execute(text("DELETE FROM clinics WHERE id=:c"), {"c": c})
 
         db.commit()
     except Exception as e:

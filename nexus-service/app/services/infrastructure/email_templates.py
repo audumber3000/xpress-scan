@@ -201,6 +201,119 @@ def platform_wallet_low(owner_name: str, clinic_name: str, current_balance: floa
     }
 
 
+def platform_app_welcome(owner_name: str = "there", clinic_name: str = "your clinic") -> dict:
+    body = f"""
+<p>Hi <strong>{owner_name}</strong>,</p>
+<p>Welcome to <strong>MolarPlus</strong>. Your clinic <strong>{clinic_name}</strong> is ready to go.</p>
+<p>You can now start setting up your workflows, team, and patient communication.</p>
+<a href="https://app.molarplus.com/dashboard" class="btn">Open MolarPlus →</a>"""
+    body += _SUPPORT_BLOCK
+    return {
+        "subject": f"Welcome to MolarPlus, {owner_name}",
+        "html": _base_wrapper(_platform_header(), body, _platform_footer()),
+    }
+
+
+def platform_subscription_confirmed(owner_name: str = "there", clinic_name: str = "your clinic", plan_name: str = "Professional", valid_until: str = "") -> dict:
+    validity = f"Valid until: {valid_until}" if valid_until else "Your plan is now active."
+    body = f"""
+<p>Hi <strong>{owner_name}</strong>,</p>
+<p>Your subscription for <strong>{clinic_name}</strong> has been confirmed successfully.</p>
+<div class="info-box">
+  <strong>{plan_name}</strong>
+  {validity}
+</div>
+<p>Thank you for upgrading with MolarPlus.</p>
+<a href="https://app.molarplus.com/admin/subscription" class="btn">View Subscription →</a>"""
+    body += _SUPPORT_BLOCK
+    return {
+        "subject": f"Subscription confirmed for {clinic_name}",
+        "html": _base_wrapper(_platform_header(), body, _platform_footer()),
+    }
+
+
+def platform_topup_success(owner_name: str = "there", clinic_name: str = "your clinic", amount: str = "", new_balance: str = "") -> dict:
+    body = f"""
+<p>Hi <strong>{owner_name}</strong>,</p>
+<p>Your MolarPlus wallet top-up for <strong>{clinic_name}</strong> was successful.</p>
+<div class="info-box">
+  <strong>Top-up successful</strong>
+  Amount added: ₹{amount or "0.00"}<br/>New balance: ₹{new_balance or "0.00"}
+</div>
+<a href="https://app.molarplus.com/admin/notifications" class="btn">View Wallet →</a>"""
+    body += _SUPPORT_BLOCK
+    return {
+        "subject": f"Wallet top-up successful for {clinic_name}",
+        "html": _base_wrapper(_platform_header(), body, _platform_footer()),
+    }
+
+
+def platform_lab_due_tomorrow(owner_name: str = "there", clinic_name: str = "your clinic", due_date: str = "tomorrow", work_type: str = "lab work") -> dict:
+    body = f"""
+<p>Hi <strong>{owner_name}</strong>,</p>
+<p>This is a reminder that a lab order for <strong>{clinic_name}</strong> is due on <strong>{due_date}</strong>.</p>
+<div class="info-box">
+  <strong>Upcoming due item</strong>
+  Work type: {work_type}
+</div>
+<p>Please review your lab queue to avoid delays.</p>"""
+    body += _SUPPORT_BLOCK
+    return {
+        "subject": f"Lab order due tomorrow for {clinic_name}",
+        "html": _base_wrapper(_platform_header(), body, _platform_footer()),
+    }
+
+
+def platform_weekly_report(owner_name: str = "there", clinic_name: str = "your clinic") -> dict:
+    body = f"""
+<p>Hi <strong>{owner_name}</strong>,</p>
+<p>Your weekly MolarPlus business snapshot for <strong>{clinic_name}</strong> is ready.</p>
+<p>Open the dashboard to review appointments, collections, and team activity for the last 7 days.</p>
+<a href="https://app.molarplus.com/reports" class="btn">Review Weekly Report →</a>"""
+    body += _SUPPORT_BLOCK
+    return {
+        "subject": f"Your weekly MolarPlus report is ready",
+        "html": _base_wrapper(_platform_header(), body, _platform_footer()),
+    }
+
+
+def platform_monthly_report(owner_name: str = "there", clinic_name: str = "your clinic") -> dict:
+    body = f"""
+<p>Hi <strong>{owner_name}</strong>,</p>
+<p>Your monthly performance summary for <strong>{clinic_name}</strong> is now available in MolarPlus.</p>
+<a href="https://app.molarplus.com/reports" class="btn">Open Monthly Report →</a>"""
+    body += _SUPPORT_BLOCK
+    return {
+        "subject": f"Monthly MolarPlus report for {clinic_name}",
+        "html": _base_wrapper(_platform_header(), body, _platform_footer()),
+    }
+
+
+def platform_review_report(owner_name: str = "there", clinic_name: str = "your clinic") -> dict:
+    body = f"""
+<p>Hi <strong>{owner_name}</strong>,</p>
+<p>Your review and reputation summary for <strong>{clinic_name}</strong> is ready.</p>
+<p>Check your recent patient feedback and overall review momentum inside MolarPlus.</p>
+<a href="https://app.molarplus.com/reports" class="btn">Open Review Insights →</a>"""
+    body += _SUPPORT_BLOCK
+    return {
+        "subject": f"Review insights ready for {clinic_name}",
+        "html": _base_wrapper(_platform_header(), body, _platform_footer()),
+    }
+
+
+def platform_trial_message(subject: str, headline: str, owner_name: str = "there", clinic_name: str = "your clinic") -> dict:
+    body = f"""
+<p>Hi <strong>{owner_name}</strong>,</p>
+<p>{headline} for <strong>{clinic_name}</strong>.</p>
+<a href="https://app.molarplus.com/subscription" class="btn">Open MolarPlus →</a>"""
+    body += _SUPPORT_BLOCK
+    return {
+        "subject": subject,
+        "html": _base_wrapper(_platform_header(), body, _platform_footer()),
+    }
+
+
 # ─── Clinic → Patient templates ───────────────────────────────────────────────
 
 def patient_appointment_booked(patient_name: str, clinic_name: str, clinic_logo_url: str,
@@ -352,7 +465,11 @@ def patient_google_review(patient_name: str, clinic_name: str, clinic_logo_url: 
 # ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 PLATFORM_EVENTS = {
-    "welcome", "branch_added", "subscription_purchased", "wallet_topup", "wallet_low"
+    "welcome", "branch_added", "subscription_purchased", "wallet_topup", "wallet_low",
+    "molarplus_app_welcome", "molarplus_subscription_confirmed", "molarplus_topup_success",
+    "molarplus_lab_due_tomorrow", "molarplus_weekly_report_mk", "molarplus_monthly_report_mk",
+    "molarplus_review_report_mk", "molarplus_trial_started_mk", "molarplus_trial_mid_mk",
+    "molarplus_trial_ending_mk", "molarplus_trial_ended_mk",
 }
 
 PATIENT_EVENTS = {
@@ -373,6 +490,33 @@ def build_email(event_type: str, **kwargs) -> dict:
         "subscription_purchased":     platform_subscription_purchased,
         "wallet_topup":               platform_wallet_topup,
         "wallet_low":                 platform_wallet_low,
+        "molarplus_app_welcome":      platform_app_welcome,
+        "molarplus_subscription_confirmed": platform_subscription_confirmed,
+        "molarplus_topup_success":    platform_topup_success,
+        "molarplus_lab_due_tomorrow": platform_lab_due_tomorrow,
+        "molarplus_weekly_report_mk": platform_weekly_report,
+        "molarplus_monthly_report_mk": platform_monthly_report,
+        "molarplus_review_report_mk": platform_review_report,
+        "molarplus_trial_started_mk": lambda **kwargs: platform_trial_message(
+            "Your MolarPlus trial has started",
+            "Your MolarPlus trial has officially started",
+            **kwargs,
+        ),
+        "molarplus_trial_mid_mk": lambda **kwargs: platform_trial_message(
+            "Your MolarPlus trial is underway",
+            "You are in the middle of your MolarPlus trial",
+            **kwargs,
+        ),
+        "molarplus_trial_ending_mk": lambda **kwargs: platform_trial_message(
+            "Your MolarPlus trial is ending soon",
+            "Your MolarPlus trial is ending soon",
+            **kwargs,
+        ),
+        "molarplus_trial_ended_mk": lambda **kwargs: platform_trial_message(
+            "Your MolarPlus trial has ended",
+            "Your MolarPlus trial has ended",
+            **kwargs,
+        ),
         "appointment_booked":         patient_appointment_booked,
         "appointment_confirmation":   patient_appointment_confirmed,
         "checked_in":                 patient_checked_in,

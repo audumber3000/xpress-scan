@@ -22,6 +22,7 @@ from core.auth_utils import require_role
 from core.nexus_notify import notify
 from database import get_db
 from sqlalchemy.orm import Session, joinedload
+from domains.notification.services.platform_notification_service import PlatformNotificationService
 from models import Clinic, User
 
 router = APIRouter()
@@ -48,11 +49,11 @@ async def register_user(
         token = auth_service.create_jwt_token(user.id)
 
         notify(
-            "welcome", channel="email",
+            "molarplus_app_welcome", channel="email",
             to_email=user.email, to_name=getattr(user, 'first_name', '') or user.email,
             template_data={
                 "owner_name": getattr(user, 'first_name', None) or user.email.split('@')[0],
-                "clinic_name": getattr(user_data, 'clinic_name', 'your clinic') or 'your clinic',
+                "clinic_name": "your clinic",
             }
         )
 
@@ -486,7 +487,8 @@ async def logout_user():
 async def complete_onboarding(
     request: Request,
     auth_service = Depends(get_auth_service),
-    user_service = Depends(get_user_service)
+    user_service = Depends(get_user_service),
+    db: Session = Depends(get_db),
 ):
     """
     Complete onboarding for clinic owners - creates clinic and links user.
@@ -529,12 +531,12 @@ async def complete_onboarding(
 
         result = user_service.complete_onboarding(user.id, clinic_data)
         clinic = result["clinic"]
+        platform_notifications = PlatformNotificationService(db)
 
         # Create default scan types if provided
         scan_types = data.get("scan_types", [])
         if scan_types:
             from models import TreatmentType
-            db = user_service.user_repo.db
             for scan_type_data in scan_types:
                 if scan_type_data.get("name") and scan_type_data.get("price"):
                     treatment_type = TreatmentType(
@@ -545,6 +547,11 @@ async def complete_onboarding(
                     )
                     db.add(treatment_type)
             db.commit()
+
+        try:
+            platform_notifications.send_welcome_notifications(clinic, result["user"])
+        except Exception as notification_error:
+            print(f"Failed to queue onboarding notifications: {notification_error}")
 
         return {
             "message": "Onboarding completed successfully",

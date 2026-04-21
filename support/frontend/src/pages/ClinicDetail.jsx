@@ -70,7 +70,7 @@ export default function ClinicDetail() {
         number_of_chairs: res.clinic.number_of_chairs || 1,
         subscription_plan: res.clinic.subscription_plan || 'free',
         clinic_label: res.clinic.clinic_label || '',
-        parent_clinic_id: res.clinic.parent_clinic_id || '',
+        parent_clinic_id: res.clinic.parent_clinic_id || null,
       });
     } catch { toast.error('Failed to load clinic'); }
     finally { setLoading(false); }
@@ -238,7 +238,7 @@ export default function ClinicDetail() {
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-slate-500 mb-1">Parent Clinic ID (if branch)</label>
-              <input type="number" value={editForm.parent_clinic_id || ''} onChange={e => setEditForm(f => ({ ...f, parent_clinic_id: e.target.value ? parseInt(e.target.value) : '' }))}
+              <input type="number" value={editForm.parent_clinic_id || ''} onChange={e => setEditForm(f => ({ ...f, parent_clinic_id: e.target.value ? parseInt(e.target.value) : null }))}
                 placeholder="e.g. 3"
                 className="w-full h-8 px-2.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400" />
             </div>

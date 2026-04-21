@@ -705,10 +705,11 @@ async def complete_onboarding(
             "name": data.get("clinic_name"),
             "address": data.get("clinic_address", ""),
             "phone": data.get("clinic_phone", ""),
-            "email": data.get("clinic_email", user.email),  # Default to user's email
+            "email": data.get("clinic_email", user.email),
             "specialization": data.get("specialization", "radiology"),
             "subscription_plan": "trial",
-            "number_of_chairs": data.get("number_of_chairs", 1)
+            "number_of_chairs": data.get("number_of_chairs", 1),
+            "clinic_label": "main_branch",
         }
         
         clinic = Clinic(**clinic_data)

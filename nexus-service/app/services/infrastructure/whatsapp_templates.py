@@ -264,16 +264,31 @@ def build_whatsapp(event_type: str, **kwargs) -> dict:
             "template_name": "molarplus_app_welcome",
             "components": [_header_text(kw.get("owner_name", ""))],  # {{1}} in header only, 0 body
         },
-        "molarplus_subscription_confirmed": lambda **kw: wa_passthrough_template(
-            "molarplus_subscription_confirmed",
-            kw.get("owner_name", ""), kw.get("plan_name", "")),  # {{1}}=owner, {{2}}=plan
-        "molarplus_topup_success":   lambda **kw: wa_passthrough_template(
-            "molarplus_topup_success",
-            kw.get("owner_name", ""), kw.get("amount", "")),  # {{1}}=owner, {{2}}=amount
-        "molarplus_lab_due_tomorrow_mk": lambda **kw: wa_passthrough_template(
-            "molarplus_lab_due_tomorrow",
-            kw.get("owner_name", ""), kw.get("clinic_name", ""),
-            kw.get("lab_name", ""), kw.get("patient_name", ""), kw.get("order_date", "")),
+        # T2: header {{1}}=owner, body {{1}}=plan {{2}}=valid_until
+        "molarplus_subscription_confirmed": lambda **kw: {
+            "template_name": "molarplus_subscription_confirmed",
+            "components": [
+                _header_text(kw.get("owner_name", "")),
+                _body_params(kw.get("plan_name", ""), kw.get("valid_until", "")),
+            ],
+        },
+        # T3: header {{1}}=owner, body {{1}}=amount {{2}}=new_balance
+        "molarplus_topup_success":   lambda **kw: {
+            "template_name": "molarplus_topup_success",
+            "components": [
+                _header_text(kw.get("owner_name", "")),
+                _body_params(kw.get("amount", ""), kw.get("new_balance", "")),
+            ],
+        },
+        # T4: header {{1}}=owner_name, body {{1}}=lab {{2}}=order_date {{3}}=patient
+        "molarplus_lab_due_tomorrow_mk": lambda **kw: {
+            "template_name": "molarplus_lab_due_tomorrow",
+            "components": [
+                _header_text(kw.get("owner_name", "")),
+                _body_params(kw.get("lab_name", ""), kw.get("order_date", ""), kw.get("patient_name", "")),
+            ],
+        },
+        # T5: header {{1}}=week_date, body 8 params
         "molarplus_weekly_report_mk": lambda **kw: {
             "template_name": "molarplus_weekly_report_mk",
             "components": [
@@ -286,6 +301,7 @@ def build_whatsapp(event_type: str, **kwargs) -> dict:
                 ),
             ],
         },
+        # T6: header {{1}}=month, body 9 params
         "molarplus_monthly_report_mk": lambda **kw: {
             "template_name": "molarplus_monthly_report_mk",
             "components": [
@@ -299,16 +315,41 @@ def build_whatsapp(event_type: str, **kwargs) -> dict:
                 ),
             ],
         },
-        "molarplus_review_report_mk": lambda **kw: wa_passthrough_template(
-            "molarplus_review_report_mk", kw.get("owner_name", ""), kw.get("clinic_name", "")),
-        "molarplus_trial_started_mk": lambda **kw: wa_passthrough_template(
-            "molarplus_trial_started_mk", kw.get("owner_name", ""), kw.get("clinic_name", "")),
-        "molarplus_trial_mid_mk":    lambda **kw: wa_passthrough_template(
-            "molarplus_trial_mid_mk", kw.get("owner_name", ""), kw.get("clinic_name", "")),
-        "molarplus_trial_ending_mk": lambda **kw: wa_passthrough_template(
-            "molarplus_trial_ending_mk", kw.get("owner_name", ""), kw.get("clinic_name", "")),
-        "molarplus_trial_ended_mk":  lambda **kw: wa_passthrough_template(
-            "molarplus_trial_ended_mk", kw.get("owner_name", ""), kw.get("clinic_name", "")),
+        # T7: header {{1}}=month, body 6 params
+        "molarplus_review_report_mk": lambda **kw: {
+            "template_name": "molarplus_review_report_mk",
+            "components": [
+                _header_text(kw.get("month", "")),
+                _body_params(
+                    kw.get("rating", ""), kw.get("new_reviews", ""),
+                    kw.get("change", ""), kw.get("loved1", ""),
+                    kw.get("loved2", ""), kw.get("area_to_watch", ""),
+                ),
+            ],
+        },
+        # F1: header {{1}}=owner_name, body 0 params
+        "molarplus_trial_started_mk": lambda **kw: {
+            "template_name": "molarplus_trial_started_mk",
+            "components": [_header_text(kw.get("owner_name", ""))],
+        },
+        # F2: header {{1}}=owner_name, body 0 params
+        "molarplus_trial_mid_mk":    lambda **kw: {
+            "template_name": "molarplus_trial_mid_mk",
+            "components": [_header_text(kw.get("owner_name", ""))],
+        },
+        # F3: header {{1}}=owner_name, body {{1}}=price
+        "molarplus_trial_ending_mk": lambda **kw: {
+            "template_name": "molarplus_trial_ending_mk",
+            "components": [
+                _header_text(kw.get("owner_name", "")),
+                _body_params(kw.get("price", "999")),
+            ],
+        },
+        # F4: header {{1}}=owner_name, body 0 params
+        "molarplus_trial_ended_mk":  lambda **kw: {
+            "template_name": "molarplus_trial_ended_mk",
+            "components": [_header_text(kw.get("owner_name", ""))],
+        },
     }
     fn = builders.get(event_type)
     if not fn:

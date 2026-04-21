@@ -61,6 +61,31 @@ async def owner_add_clinic(
         if owner_sub and owner_sub.status == 'active':
             branch_plan = owner_sub.plan_name
 
+        # Determine branch label and parent based on existing clinics
+        existing_clinics = db.execute(
+            select(Clinic.id, Clinic.clinic_label).join(
+                user_clinics, user_clinics.c.clinic_id == Clinic.id
+            ).where(
+                user_clinics.c.user_id == current_user.id,
+                user_clinics.c.role == 'clinic_owner',
+                user_clinics.c.is_active == True,
+            ).order_by(Clinic.id.asc())
+        ).fetchall()
+
+        new_label = None
+        new_parent_id = None
+        if existing_clinics:
+            # Auto-label the first clinic as Main Branch if not already labeled
+            first = existing_clinics[0]
+            if not first.clinic_label:
+                db.execute(
+                    Clinic.__table__.update()
+                    .where(Clinic.id == first.id)
+                    .values(clinic_label="main_branch")
+                )
+            new_label = "branch"
+            new_parent_id = first.id
+
         # Create the new clinic
         new_clinic = Clinic(
             name=clinic_data.name,
@@ -71,6 +96,8 @@ async def owner_add_clinic(
             clinic_code=generate_clinic_code(),
             status='active',
             subscription_plan=branch_plan,
+            clinic_label=new_label,
+            parent_clinic_id=new_parent_id,
             created_at=datetime.datetime.utcnow(),
             updated_at=datetime.datetime.utcnow(),
         )

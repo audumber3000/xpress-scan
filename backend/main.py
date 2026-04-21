@@ -81,6 +81,24 @@ async def _daily_places_sync():
             db.close()
 
 
+async def _notification_automation_loop():
+    """Background task: run platform notification automations hourly."""
+    from database import SessionLocal
+    from domains.notification.services.platform_notification_service import run_platform_notification_automation
+
+    while True:
+        db = SessionLocal()
+        try:
+            summary = run_platform_notification_automation(db)
+            print(f"[notification-automation] run complete: {summary}")
+        except Exception as exc:
+            print(f"[notification-automation] run error: {exc}")
+        finally:
+            db.close()
+
+        await asyncio.sleep(60 * 60)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan context manager"""
@@ -243,6 +261,7 @@ async def lifespan(app: FastAPI):
 
     # Start daily Places review sync background task
     places_sync_task = asyncio.create_task(_daily_places_sync())
+    notification_automation_task = asyncio.create_task(_notification_automation_loop())
 
     # Initialize Casbin permission manager
     try:
@@ -255,6 +274,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     places_sync_task.cancel()
+    notification_automation_task.cancel()
     await cache_service.close()
     print("Application shutdown complete")
 
