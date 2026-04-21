@@ -92,100 +92,56 @@ const GoogleReviews = () => {
 
   const initialized = useRef(false);
   const [mapsReady, setMapsReady] = useState(false);
+  const inputRef = useRef(null);
+  const acRef = useRef(null);
 
-  const searchContainer = useRef(null);
-  const autocompleteElement = useRef(null);
-
-  // ── Load Google Places API & mark ready ───────────────────────────
+  // ── Load Google Maps JS (classic loader) ──────────────────────────
   useEffect(() => {
     const key = import.meta.env.VITE_GOOGLE_PLACES_API_KEY;
     if (!key) return;
 
-    const load = async () => {
-      try {
-        // Bootstrap the Maps loader if not already present
-        if (!window.google?.maps?.importLibrary) {
-          const g = { key, v: "weekly" };
-          await new Promise((resolve) => {
-            (g => {
-              var h, a, k, p = "The Google Maps JavaScript API", c = "google", l = "importLibrary", q = "__ib__", m = document, b = window;
-              b = b[c] || (b[c] = {});
-              var d = b.maps || (b.maps = {}), r = new Set, e = new URLSearchParams,
-                u = () => h || (h = new Promise(async (f, n) => {
-                  await (a = m.createElement("script"));
-                  e.set("libraries", [...r] + "");
-                  for (k in g) e.set(k.replace(/[A-Z]/g, t => "_" + t[0].toLowerCase()), g[k]);
-                  e.set("callback", c + ".maps." + q);
-                  a.src = `https://maps.${c}apis.com/maps/api/js?` + e;
-                  d[q] = f;
-                  a.onerror = () => h = n(Error(p + " could not load."));
-                  a.nonce = m.querySelector("script[nonce]")?.nonce || "";
-                  m.head.append(a);
-                }));
-              d[l] ? console.warn(p + " only loads once. Ignoring:", g) : d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n));
-            })(g);
-            // The bootstrap defines importLibrary synchronously, so resolve immediately
-            resolve();
-          });
-        }
-        // Actually load the Places library — this triggers the real script download
-        await window.google.maps.importLibrary('places');
-        setMapsReady(true);
-      } catch (e) {
-        console.error('[Places] Failed to load Google Maps:', e);
-      }
-    };
+    const loadScript = () => new Promise((resolve, reject) => {
+      if (window.google?.maps?.places) { resolve(); return; }
+      const existing = document.querySelector('script[src*="maps.googleapis.com"]');
+      if (existing) { existing.addEventListener('load', resolve); existing.addEventListener('error', reject); return; }
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places&loading=async`;
+      script.async = true;
+      script.defer = true;
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
 
-    load();
+    loadScript()
+      .then(() => setMapsReady(true))
+      .catch((e) => console.error('[Places] Failed to load Google Maps:', e));
   }, []);
 
-  // ── Attach Autocomplete Listener once widget is in DOM ────────────
+  // ── Attach classic Autocomplete once input is in DOM ──────────────
   useEffect(() => {
-    if (!mapsReady || state !== 'NOT_LINKED') return;
+    if (!mapsReady || state !== 'NOT_LINKED' || !inputRef.current || acRef.current) return;
 
-    const autocomplete = document.getElementById("location-input");
-    if (!autocomplete) return;
+    const ac = new window.google.maps.places.Autocomplete(inputRef.current, {
+      types: ['establishment'],
+      fields: ['place_id', 'name', 'formatted_address'],
+    });
 
-    autocomplete.includedPrimaryTypes = ['establishment'];
-    autocomplete.placeholder = "Type clinic name + city...";
-
-    const listener = async (event) => {
-      const payload = event.detail || event;
-      let place = payload.place;
-      const placePrediction = payload.placePrediction;
-
-      if (!place && placePrediction) {
-        try {
-          place = typeof placePrediction.toPlace === 'function' ? placePrediction.toPlace() : placePrediction;
-        } catch (e) {
-          console.error("[Places] toPlace() error:", e);
-        }
+    ac.addListener('place_changed', () => {
+      const place = ac.getPlace();
+      if (place && place.place_id) {
+        setSelectedPlace({
+          place_id: place.place_id,
+          name: place.name,
+          address: place.formatted_address,
+        });
       }
+    });
 
-      if (!place) {
-        setSelectedPlace(null);
-        return;
-      }
-
-      try {
-        const id = place.id || place.place_id;
-        if (!place.displayName || !place.formattedAddress) {
-          if (typeof place.fetchFields === 'function') {
-            await place.fetchFields({ fields: ['id', 'displayName', 'formattedAddress'] });
-          }
-        }
-        const name = place.displayName?.text ?? place.displayName ?? place.name;
-        setSelectedPlace({ place_id: id, name, address: place.formattedAddress });
-      } catch (err) {
-        console.error("[Places] Fetch Fields error:", err);
-      }
-    };
-
-    autocomplete.addEventListener('gmp-placeselect', listener);
-    autocomplete.addEventListener('gmp-select', listener);
+    acRef.current = ac;
     return () => {
-      autocomplete.removeEventListener('gmp-placeselect', listener);
-      autocomplete.removeEventListener('gmp-select', listener);
+      window.google.maps.event.clearInstanceListeners(ac);
+      acRef.current = null;
     };
   }, [mapsReady, state]);
 
@@ -356,14 +312,27 @@ const GoogleReviews = () => {
           </div>
 
           <div className="mb-6">
-            {mapsReady ? (
-              <gmp-place-autocomplete
-                id="location-input"
-                className="w-full block"
-              />
-            ) : (
-              <div className="w-full h-10 bg-gray-100 animate-pulse rounded-lg" />
-            )}
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder={mapsReady ? "Type clinic name + city..." : "Loading map search..."}
+              disabled={!mapsReady}
+              onChange={() => { if (selectedPlace) setSelectedPlace(null); }}
+              style={{
+                width: '100%',
+                height: '42px',
+                padding: '0 12px',
+                fontSize: '14px',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                outline: 'none',
+                boxSizing: 'border-box',
+                backgroundColor: mapsReady ? '#fff' : '#f3f4f6',
+                color: '#111827',
+              }}
+              onFocus={e => { e.target.style.borderColor = '#2a276e'; e.target.style.boxShadow = '0 0 0 3px rgba(42,39,110,0.1)'; }}
+              onBlur={e => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = 'none'; }}
+            />
           </div>
 
           {/* Selected place confirmation chip */}

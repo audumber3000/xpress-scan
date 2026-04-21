@@ -5,7 +5,7 @@ import {
   ArrowLeft, Building2, Users, CalendarDays, Receipt,
   Edit2, Check, X, ShieldAlert, ShieldCheck, Save,
   MessageSquare, Wallet, Bell, Settings2, Smartphone, Mail, MessageCircle,
-  CheckCircle2, XCircle, IndianRupee
+  CheckCircle2, XCircle, IndianRupee, Zap, Loader2
 } from 'lucide-react';
 import api from '../utils/api';
 import { StatCard, Card, Badge, StatusBadge, TabBar, Spinner, fmt } from '../components/ui';
@@ -53,6 +53,7 @@ export default function ClinicDetail() {
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
+  const [activatingTrial, setActivatingTrial] = useState(false);
 
   const load = async () => {
     try {
@@ -91,6 +92,22 @@ export default function ClinicDetail() {
     } catch { toast.error('Action failed'); }
   };
 
+  const handleActivateTrial = async () => {
+    if (!window.confirm(`Activate 7-day Professional trial for "${data?.clinic?.name}"?\n\nThis will:\n• Set plan to Trial (7 days)\n• Send WhatsApp + email to the clinic owner`)) return;
+    setActivatingTrial(true);
+    try {
+      const res = await api.post(`/clinics/${id}/activate-trial`);
+      const wa = res.notifications?.whatsapp ? '✅ WA sent' : '⚠️ WA failed';
+      const em = res.notifications?.email ? '✅ Email sent' : '⚠️ Email failed';
+      toast.success(`Trial activated until ${new Date(res.trial_ends_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} · ${wa} · ${em}`);
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || err?.message || 'Failed to activate trial');
+    } finally {
+      setActivatingTrial(false);
+    }
+  };
+
   if (loading) return <Spinner />;
   if (!data) return <div className="p-6 text-slate-500">Clinic not found.</div>;
 
@@ -119,7 +136,7 @@ export default function ClinicDetail() {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {isActive ? (
             <button onClick={() => handleStatus('suspend')} className="flex items-center gap-1.5 h-8 px-3 text-xs font-semibold text-rose-600 bg-rose-50 rounded-lg hover:bg-rose-100 transition-colors">
               <ShieldAlert size={14} /> Suspend
@@ -127,6 +144,16 @@ export default function ClinicDetail() {
           ) : (
             <button onClick={() => handleStatus('activate')} className="flex items-center gap-1.5 h-8 px-3 text-xs font-semibold text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors">
               <ShieldCheck size={14} /> Activate
+            </button>
+          )}
+          {clinic.subscription_plan === 'free' && (
+            <button
+              onClick={handleActivateTrial}
+              disabled={activatingTrial}
+              className="flex items-center gap-1.5 h-8 px-3 text-xs font-semibold text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 disabled:opacity-60 transition-colors border border-amber-200"
+            >
+              {activatingTrial ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
+              Activate Trial
             </button>
           )}
           {!editing ? (
@@ -213,7 +240,18 @@ export default function ClinicDetail() {
                   <InfoRow label="Sub ID" value={subscription.provider_subscription_id} />
                   <InfoRow label="Start" value={fmt.date(subscription.current_start)} />
                   <InfoRow label="End" value={fmt.date(subscription.current_end)} />
-                  {subscription.current_end && new Date(subscription.current_end) < new Date() && (
+                  {subscription.is_trial && (
+                    <div className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                      <Zap size={12} />
+                      Trial active
+                      {subscription.current_end && (
+                        <span className="font-normal text-amber-600">
+                          — expires {new Date(subscription.current_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {!subscription.is_trial && subscription.current_end && new Date(subscription.current_end) < new Date() && (
                     <div className="mt-1 text-xs font-semibold text-rose-500">Expired</div>
                   )}
                 </dl>

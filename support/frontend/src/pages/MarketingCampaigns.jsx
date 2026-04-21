@@ -11,7 +11,7 @@ export default function MarketingCampaigns() {
     channel: 'whatsapp',
     target_criteria: 'all',
     subject: '',
-    template_name: 'molarplus_update',
+    template_name: '',
     message_body: ''
   });
   
@@ -21,7 +21,15 @@ export default function MarketingCampaigns() {
     async function loadTemplates() {
       try {
         const res = await api.get('/marketing/whatsapp-templates');
-        if (Array.isArray(res)) setTemplates(res);
+        if (Array.isArray(res)) {
+          setTemplates(res);
+          if (res[0]?.name) {
+            setFormData(prev => ({
+              ...prev,
+              template_name: prev.template_name || res[0].name
+            }));
+          }
+        }
       } catch (err) {
         console.error('Failed to load whatsapp templates', err);
       }
@@ -65,7 +73,7 @@ export default function MarketingCampaigns() {
     <div className="p-6 space-y-5 max-w-[800px]">
       <PageHeader
         title="Campaigns & Bulk Messages"
-        subtitle="Dispatch bulk WhatsApp updates or Emails to clinics"
+        subtitle="Send the approved bulk WhatsApp marketing templates or email broadcasts to clinics"
       />
 
       <Card>
@@ -114,9 +122,19 @@ export default function MarketingCampaigns() {
                   <select name="template_name" value={formData.template_name} onChange={handleChange}
                     className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400">
                     {templates.map(t => (
-                       <option key={t} value={t}>{t}</option>
+                       <option key={t.name} value={t.name}>{t.label}</option>
                     ))}
                   </select>
+                  {templates.length > 0 && (
+                    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                      <div className="text-xs font-semibold text-slate-700">
+                        {templates.find(t => t.name === formData.template_name)?.name || 'Template'}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {templates.find(t => t.name === formData.template_name)?.description}
+                      </div>
+                    </div>
+                  )}
                </div>
             ) : (
                <>

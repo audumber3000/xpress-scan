@@ -12,6 +12,7 @@ from models import (
     UserDevice, ActivityLog,
 )
 from routes.auth import get_current_admin
+from services.notification_service import notification_service
 
 router = APIRouter()
 
@@ -266,6 +267,7 @@ def get_clinic(clinic_id: int, db: Session = Depends(get_db), _=Depends(get_curr
             "provider_subscription_id": subscription.provider_subscription_id if subscription else None,
             "current_start": subscription.current_start.isoformat() if subscription and subscription.current_start else None,
             "current_end": subscription.current_end.isoformat() if subscription and subscription.current_end else None,
+            "is_trial": bool(getattr(subscription, 'is_trial', False)) if subscription else False,
         } if subscription else None,
         "google_reviews": {
             "place_name": gplace.place_name if gplace else None,
@@ -375,3 +377,140 @@ def activate_clinic(clinic_id: int, db: Session = Depends(get_db), _=Depends(get
     clinic.updated_at = datetime.datetime.utcnow()
     db.commit()
     return {"success": True, "status": "active"}
+
+
+@router.post("/{clinic_id}/activate-trial")
+async def activate_trial(clinic_id: int, db: Session = Depends(get_db), _=Depends(get_current_admin)):
+    clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clinic not found")
+
+    if clinic.subscription_plan not in ("free", None, ""):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Trial can only be activated for free plan clinics. Current plan: {clinic.subscription_plan}",
+        )
+
+    owner = (
+        db.query(User)
+        .filter(User.clinic_id == clinic_id, User.role == "clinic_owner", User.is_active == True)
+        .order_by(User.created_at.asc())
+        .first()
+    )
+    if not owner:
+        raise HTTPException(status_code=404, detail="No active clinic owner found")
+
+    # Block if owner already has an active non-free subscription
+    existing = db.query(Subscription).filter(
+        Subscription.user_id == owner.id,
+        Subscription.status == "active",
+    ).first()
+    if existing and existing.plan_name not in ("free", "trial", None):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Owner already has an active paid subscription: {existing.plan_name}",
+        )
+
+    now = datetime.datetime.utcnow()
+    trial_end = now + datetime.timedelta(days=7)
+
+    sub = db.query(Subscription).filter(Subscription.user_id == owner.id).first()
+    if sub:
+        sub.plan_name = "trial"
+        sub.status = "active"
+        sub.provider = "none"
+        sub.is_trial = True
+        sub.trial_ends_at = trial_end
+        sub.current_start = now
+        sub.current_end = trial_end
+        sub.updated_at = now
+    else:
+        sub = Subscription(
+            clinic_id=clinic_id,
+            user_id=owner.id,
+            plan_name="trial",
+            status="active",
+            provider="none",
+            is_trial=True,
+            trial_ends_at=trial_end,
+            current_start=now,
+            current_end=trial_end,
+        )
+        db.add(sub)
+
+    clinic.subscription_plan = "trial"
+    clinic.updated_at = now
+    db.commit()
+
+    owner_name = owner.first_name or (owner.name or "").split()[0] or "Doctor"
+    clinic_name = clinic.name or "your clinic"
+    phone = (clinic.phone or "").replace("+", "").replace(" ", "")
+    email = owner.email or clinic.email
+    trial_end_str = trial_end.strftime("%d %b %Y")
+
+    # WhatsApp
+    wa_result = {"success": False, "error": "No phone"}
+    if phone:
+        wa_result = await notification_service.send_whatsapp(
+            mobile_number=phone,
+            template_name="molarplus_trial_started_mk",
+            parameters=[owner_name, clinic_name],
+        )
+
+    # Email
+    email_result = {"success": False, "error": "No email"}
+    if email:
+        html = f"""
+        <div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;color:#1a1a1a;">
+          <div style="background:linear-gradient(135deg,#29828a,#1f6b72);padding:32px 28px;border-radius:12px 12px 0 0;text-align:center;">
+            <h1 style="color:#fff;font-size:22px;margin:0;">Your 7-Day Trial Has Started! 🎉</h1>
+            <p style="color:rgba(255,255,255,0.85);font-size:14px;margin:8px 0 0;">Welcome to MolarPlus Professional</p>
+          </div>
+          <div style="background:#fff;padding:28px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 12px 12px;">
+            <p style="font-size:15px;color:#374151;">Hi <strong>{owner_name}</strong>,</p>
+            <p style="font-size:14px;color:#6b7280;line-height:1.6;">
+              Great news — your 7-day free trial of MolarPlus Professional has been activated for
+              <strong style="color:#1a1a1a;"> {clinic_name}</strong>. Explore all Pro features with no commitment.
+            </p>
+            <div style="background:#f0fafa;border:1px solid #b2dfe2;border-radius:10px;padding:20px;margin:20px 0;">
+              <p style="font-size:13px;color:#29828a;font-weight:600;margin:0 0 10px;">What's included in your trial:</p>
+              <ul style="font-size:13px;color:#374151;margin:0;padding-left:18px;line-height:2;">
+                <li>Unlimited appointments &amp; patients</li>
+                <li>WhatsApp &amp; Email notifications</li>
+                <li>Treatment plans &amp; dental charts</li>
+                <li>Invoice &amp; billing management</li>
+                <li>Lab order tracking</li>
+                <li>Staff &amp; multi-branch support</li>
+              </ul>
+            </div>
+            <p style="font-size:13px;color:#6b7280;">
+              Your trial ends on <strong style="color:#1a1a1a;">{trial_end_str}</strong>.
+              Upgrade anytime to keep all features after your trial.
+            </p>
+            <div style="text-align:center;margin:24px 0 8px;">
+              <a href="https://app.molarplus.com/subscription"
+                 style="background:#29828a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;display:inline-block;">
+                View Subscription &amp; Upgrade
+              </a>
+            </div>
+            <p style="font-size:12px;color:#9ca3af;text-align:center;margin-top:20px;">
+              MolarPlus · Clinic Management Platform · <a href="https://app.molarplus.com" style="color:#29828a;">app.molarplus.com</a>
+            </p>
+          </div>
+        </div>
+        """
+        email_result = await notification_service.send_email(
+            to_email=email,
+            subject=f"Your 7-day MolarPlus Professional trial has started! 🎉",
+            html_content=html,
+            to_name=owner_name,
+        )
+
+    return {
+        "success": True,
+        "trial_ends_at": trial_end.isoformat(),
+        "notifications": {
+            "whatsapp": wa_result.get("success"),
+            "email": email_result.get("success"),
+        },
+    }

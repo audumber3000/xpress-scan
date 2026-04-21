@@ -135,6 +135,8 @@ class Subscription(Base):
     current_start = Column(DateTime)
     current_end = Column(DateTime)
     quantity = Column(Integer)
+    is_trial = Column(Boolean, default=False)
+    trial_ends_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
 

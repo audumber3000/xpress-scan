@@ -234,6 +234,15 @@ def wa_daily_summary(doctor_name: str, clinic_name: str, date: str,
     }
 
 
+def wa_passthrough_template(template_name: str, *values) -> dict:
+    """Build a passthrough template with optional ordered body params."""
+    components = [_body_params(*values)] if values else []
+    return {
+        "template_name": template_name,
+        "components": components,
+    }
+
+
 # ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 def build_whatsapp(event_type: str, **kwargs) -> dict:
@@ -251,6 +260,34 @@ def build_whatsapp(event_type: str, **kwargs) -> dict:
         "consent_form":              wa_consent_form,
         "google_review":             wa_google_review,
         "daily_summary":             wa_daily_summary,
+        "molarplus_app_welcome":     lambda **kw: wa_passthrough_template(
+            "molarplus_app_welcome", kw.get("owner_name", ""), kw.get("clinic_name", "")),
+        "molarplus_subscription_confirmed": lambda **kw: wa_passthrough_template(
+            "molarplus_subscription_confirmed",
+            kw.get("owner_name", ""), kw.get("clinic_name", ""),
+            kw.get("plan_name", ""), kw.get("valid_until", "")),
+        "molarplus_topup_success":   lambda **kw: wa_passthrough_template(
+            "molarplus_topup_success",
+            kw.get("owner_name", ""), kw.get("clinic_name", ""),
+            kw.get("amount", ""), kw.get("new_balance", "")),
+        "molarplus_lab_due_tomorrow_mk": lambda **kw: wa_passthrough_template(
+            "molarplus_lab_due_tomorrow",
+            kw.get("owner_name", ""), kw.get("clinic_name", ""),
+            kw.get("lab_name", ""), kw.get("patient_name", ""), kw.get("order_date", "")),
+        "molarplus_weekly_report_mk": lambda **kw: wa_passthrough_template(
+            "molarplus_weekly_report_mk", kw.get("owner_name", ""), kw.get("clinic_name", "")),
+        "molarplus_monthly_report_mk": lambda **kw: wa_passthrough_template(
+            "molarplus_monthly_report_mk", kw.get("owner_name", ""), kw.get("clinic_name", "")),
+        "molarplus_review_report_mk": lambda **kw: wa_passthrough_template(
+            "molarplus_review_report_mk", kw.get("owner_name", ""), kw.get("clinic_name", "")),
+        "molarplus_trial_started_mk": lambda **kw: wa_passthrough_template(
+            "molarplus_trial_started_mk", kw.get("owner_name", ""), kw.get("clinic_name", "")),
+        "molarplus_trial_mid_mk":    lambda **kw: wa_passthrough_template(
+            "molarplus_trial_mid_mk", kw.get("owner_name", ""), kw.get("clinic_name", "")),
+        "molarplus_trial_ending_mk": lambda **kw: wa_passthrough_template(
+            "molarplus_trial_ending_mk", kw.get("owner_name", ""), kw.get("clinic_name", "")),
+        "molarplus_trial_ended_mk":  lambda **kw: wa_passthrough_template(
+            "molarplus_trial_ended_mk", kw.get("owner_name", ""), kw.get("clinic_name", "")),
     }
     fn = builders.get(event_type)
     if not fn:

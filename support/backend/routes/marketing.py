@@ -6,6 +6,10 @@ from database import get_db
 from models import User, SubscriptionCoupon, ReferralCode, Clinic
 from .auth import get_current_admin
 from services.notification_service import notification_service
+from services.marketing_template_registry import (
+    get_bulk_whatsapp_template,
+    list_bulk_whatsapp_templates,
+)
 import string
 import random
 
@@ -205,24 +209,24 @@ def delete_referral(ref_id: int, db: Session = Depends(get_db), current_user: Us
 
 @router.get("/whatsapp-templates")
 def list_whatsapp_templates(current_user: User = Depends(get_current_admin)):
-    # Simulating DB fetch of registered templates.
-    # In reality, MSG91 standard templates are mapped here.
-    return [
-        "mp_appointment_booked_v2",
-        "mp_appointment_confirmed",
-        "mp_checked_in",
-        "mp_appointment_reminder",
-        "mp_invoice_sent",
-        "mp_prescription_sent",
-        "mp_consent_form",
-        "mp_google_review",
-        "mp_daily_summary",
-        "molarplus_update"
-    ]
+    return list_bulk_whatsapp_templates()
 
 # --- Bulk Messaging Endpoint ---
 @router.post("/bulk-message")
 async def send_bulk_message(data: BulkMessage, db: Session = Depends(get_db), current_user: User = Depends(get_current_admin)):
+    if data.channel not in {"whatsapp", "email"}:
+        raise HTTPException(status_code=400, detail="Unsupported channel")
+
+    if data.channel == "whatsapp":
+        if not data.template_name:
+            raise HTTPException(status_code=400, detail="template_name is required for WhatsApp campaigns")
+        template = get_bulk_whatsapp_template(data.template_name)
+        if not template:
+            raise HTTPException(status_code=400, detail="Unknown or inactive WhatsApp bulk template")
+
+    if data.channel == "email" and not data.message_body:
+        raise HTTPException(status_code=400, detail="message_body is required for email campaigns")
+
     query = db.query(Clinic)
     
     if data.target_criteria != 'all':
@@ -265,5 +269,6 @@ async def send_bulk_message(data: BulkMessage, db: Session = Depends(get_db), cu
         "success": True,
         "sent_count": count,
         "total_attempted": len(clinics),
+        "template_name": data.template_name,
         "errors": errors
     }
