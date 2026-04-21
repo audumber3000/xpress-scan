@@ -653,7 +653,11 @@ def delete_clinic(
         # ── Step 9: user_clinics association ──────────────────────────
         db.execute(text("DELETE FROM user_clinics WHERE clinic_id=:c OR user_id=ANY(:u)"), {"c": c, "u": u})
 
-        # ── Step 10: user_devices + users ─────────────────────────────
+        # ── Step 10: null out cross-clinic user references, then delete ──
+        # Doctors/users from this clinic may be referenced in other clinics' data
+        db.execute(text("UPDATE appointments SET doctor_id = NULL WHERE doctor_id = ANY(:u)"), {"u": u})
+        db.execute(text("UPDATE case_papers SET dentist_id = NULL WHERE dentist_id = ANY(:u)"), {"u": u})
+        db.execute(text("UPDATE google_place_links SET linked_by = NULL WHERE linked_by = ANY(:u)"), {"u": u})
         db.execute(text("DELETE FROM user_devices WHERE user_id=ANY(:u)"), {"u": u})
         db.execute(text("DELETE FROM users WHERE clinic_id=:c"), {"c": c})
 
