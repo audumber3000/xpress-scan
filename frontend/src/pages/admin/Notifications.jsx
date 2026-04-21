@@ -39,10 +39,33 @@ const EVENT_AUDIENCE = {
   google_review:               'patient',
   consent_form:                'patient',
   daily_summary:               'doctor',
+  // platform / automated
+  molarplus_app_welcome:              'owner',
+  molarplus_subscription_confirmed:   'owner',
+  molarplus_topup_success:            'owner',
+  molarplus_weekly_report_mk:         'owner',
+  molarplus_monthly_report_mk:        'owner',
+  molarplus_review_report_mk:         'owner',
+  molarplus_lab_due_tomorrow_mk:      'owner',
+  molarplus_trial_started_mk:         'owner',
+  molarplus_trial_mid_mk:             'owner',
+  molarplus_trial_ending_mk:          'owner',
+  molarplus_trial_ended_mk:           'owner',
 };
 
 
-const CHANNEL_COST = { whatsapp: 0.74, email: 0.02, sms: 0.15 };
+// WhatsApp utility rate (patient events); marketing rate for _mk templates
+const MARKETING_EVENTS = new Set([
+  'google_review', 'molarplus_weekly_report_mk', 'molarplus_monthly_report_mk',
+  'molarplus_review_report_mk', 'molarplus_trial_started_mk', 'molarplus_trial_mid_mk',
+  'molarplus_trial_ending_mk', 'molarplus_trial_ended_mk',
+]);
+const getChannelCost = (channel, eventType = '') => {
+  if (channel === 'whatsapp') return MARKETING_EVENTS.has(eventType) ? 0.8631 : 0.115;
+  if (channel === 'email') return 0.02;
+  if (channel === 'sms') return 0.15;
+  return 0;
+};
 
 const EVENT_LABELS = {
   appointment_booked:       'Appointment Booked',
@@ -54,11 +77,23 @@ const EVENT_LABELS = {
   google_review:            'Google Review Request',
   consent_form:             'Consent Form Notification',
   daily_summary:            'Doctor Daily Summary',
+  // platform / automated
+  molarplus_app_welcome:              'Welcome Message',
+  molarplus_subscription_confirmed:   'Subscription Confirmed',
+  molarplus_topup_success:            'Wallet Top-up Success',
+  molarplus_weekly_report_mk:         'Weekly Report',
+  molarplus_monthly_report_mk:        'Monthly Report',
+  molarplus_review_report_mk:         'Monthly Review Reminder',
+  molarplus_lab_due_tomorrow_mk:      'Lab Order Due Tomorrow',
+  molarplus_trial_started_mk:         'Trial Started',
+  molarplus_trial_mid_mk:             'Trial — Day 4 Nudge',
+  molarplus_trial_ending_mk:          'Trial Ending Soon',
+  molarplus_trial_ended_mk:           'Trial Ended',
 };
 
 
 const CHANNEL_META = {
-  whatsapp: { label: 'WhatsApp', color: 'text-green-600', bg: 'bg-white',     badge: 'bg-green-100 text-green-700',  icon: WhatsAppIcon,  priceLabel: '~₹0.74 / WhatsApp message' },
+  whatsapp: { label: 'WhatsApp', color: 'text-green-600', bg: 'bg-white',     badge: 'bg-green-100 text-green-700',  icon: WhatsAppIcon,  priceLabel: '₹0.115 utility / ₹0.8631 marketing' },
   email:    { label: 'Email',    color: 'text-blue-600',  bg: 'bg-white',     badge: 'bg-blue-100 text-blue-700',    icon: GmailIcon,     priceLabel: '~₹0.02 / Mail'            },
   sms:      { label: 'SMS',      color: 'text-purple-600',bg: 'bg-purple-50', badge: 'bg-purple-100 text-purple-700', icon: MessageCircle, priceLabel: '~₹0.15 / SMS'            },
 };
@@ -697,6 +732,7 @@ const Notifications = () => {
 
         {/* ── PREFERENCES TAB ── */}
         {activeTab === 'preferences' && (
+          <>
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="flex items-center justify-between p-5 border-b border-gray-50">
               <div>
@@ -806,6 +842,58 @@ const Notifications = () => {
               )}
             </div>
           </div>
+
+          {/* ── Automated / Platform Notifications ── */}
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden mt-6">
+            <div className="p-5 border-b border-gray-50">
+              <h3 className="font-semibold text-gray-900">Automated Notifications</h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                System-sent messages to clinic owners — triggered automatically. Use Test to preview and send a sample.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-6 gap-3 px-5 py-3 bg-gray-50 border-b border-gray-100">
+              <div className="col-span-5 text-xs font-semibold text-gray-400 uppercase tracking-wider">Event</div>
+              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider text-center">Test</div>
+            </div>
+
+            <div className="divide-y divide-gray-50">
+              {[
+                { event_type: 'molarplus_app_welcome',            channels: ['whatsapp', 'email'] },
+                { event_type: 'molarplus_subscription_confirmed', channels: ['whatsapp', 'email'] },
+                { event_type: 'molarplus_topup_success',          channels: ['whatsapp', 'email'] },
+                { event_type: 'molarplus_weekly_report_mk',       channels: ['whatsapp'] },
+                { event_type: 'molarplus_monthly_report_mk',      channels: ['whatsapp'] },
+                { event_type: 'molarplus_review_report_mk',       channels: ['whatsapp'] },
+                { event_type: 'molarplus_lab_due_tomorrow_mk',    channels: ['whatsapp'] },
+                { event_type: 'molarplus_trial_started_mk',       channels: ['whatsapp'] },
+                { event_type: 'molarplus_trial_mid_mk',           channels: ['whatsapp'] },
+                { event_type: 'molarplus_trial_ending_mk',        channels: ['whatsapp'] },
+                { event_type: 'molarplus_trial_ended_mk',         channels: ['whatsapp'] },
+              ].map(pref => (
+                <div key={pref.event_type} className="grid grid-cols-6 gap-3 px-5 py-4 hover:bg-gray-50/50 transition-colors items-center">
+                  <div className="col-span-5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-gray-800">{EVENT_LABELS[pref.event_type] || pref.event_type}</p>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-600 border border-violet-100">
+                        🤖 Auto
+                      </span>
+                      <span className="text-[10px] font-mono text-gray-300">{pref.event_type}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-center">
+                    <button
+                      onClick={() => openTestDrawer({ ...pref, is_enabled: true })}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#29828a] border border-[#29828a]/30 bg-[#29828a]/5 hover:bg-[#29828a]/10 rounded-lg transition-all"
+                    >
+                      <Send size={11} /> Test
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          </>
         )}
 
         {/* ── MESSAGE LOGS TAB ── */}
@@ -951,7 +1039,7 @@ const Notifications = () => {
         const audience = EVENT_AUDIENCE[pref.event_type] || 'patient';
         const tpl = testDrawer.templates[pref.event_type];
         const ch = testDrawer.selectedChannel;
-        const cost = CHANNEL_COST[ch] || 0;
+        const cost = getChannelCost(ch, pref.event_type);
         const isEmail = ch === 'email';
         const renderedPreview = tpl?.content
           ? tpl.content

@@ -21,6 +21,10 @@ from core.auth_utils import get_current_user
 from core.nexus_notify import notify
 from core import wallet_service
 from domains.finance.services.cashfree.cashfree_provider import CashfreeProvider
+from domains.notification.services.platform_notification_service import (
+    PlatformNotificationService,
+    run_platform_notification_automation,
+)
 
 router = APIRouter()
 
@@ -403,16 +407,11 @@ def verify_wallet_topup(
         owner = db.query(User).filter(User.clinic_id == clinic_id, User.role == 'clinic_owner').first()
         clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
         if owner and clinic:
-            owner_name = getattr(owner, 'first_name', None) or owner.email.split('@')[0]
-            notify(
-                "wallet_topup", channel="email",
-                to_email=owner.email, to_name=owner_name,
-                template_data={
-                    "owner_name": owner_name,
-                    "clinic_name": clinic.name,
-                    "amount": txn.amount,
-                    "new_balance": wallet.balance,
-                }
+            PlatformNotificationService(db).send_wallet_topup_notifications(
+                clinic=clinic,
+                owner=owner,
+                amount=txn.amount,
+                new_balance=wallet.balance,
             )
         return {"success": True, "message": "Wallet credited successfully", "balance": wallet.balance}
 
@@ -445,21 +444,25 @@ async def wallet_cashfree_webhook(
                 owner = db.query(User).filter(User.clinic_id == txn.clinic_id, User.role == 'clinic_owner').first()
                 clinic = db.query(Clinic).filter(Clinic.id == txn.clinic_id).first()
                 if owner and clinic:
-                    owner_name = getattr(owner, 'first_name', None) or owner.email.split('@')[0]
-                    notify(
-                        "wallet_topup", channel="email",
-                        to_email=owner.email, to_name=owner_name,
-                        template_data={
-                            "owner_name": owner_name,
-                            "clinic_name": clinic.name,
-                            "amount": txn.amount,
-                            "new_balance": wallet.balance,
-                        }
+                    PlatformNotificationService(db).send_wallet_topup_notifications(
+                        clinic=clinic,
+                        owner=owner,
+                        amount=txn.amount,
+                        new_balance=wallet.balance,
                     )
 
         return {"status": "ok"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+@router.post("/automation/run")
+def run_notification_automation(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    summary = run_platform_notification_automation(db)
+    return {"success": True, "summary": summary}
 
 
 # ─── Test endpoints ────────────────────────────────────────────────────────────
@@ -707,6 +710,44 @@ async def template_test_send(
             "date": "09 Apr 2026", "total_patients": 12,
             "total_appointments": 15, "total_revenue": 18500.0,
             "cash_revenue": 12000.0, "online_revenue": 6500.0,
+        },
+        # Platform / automated templates
+        "molarplus_app_welcome": {
+            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
+        },
+        "molarplus_subscription_confirmed": {
+            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
+            "plan_name": "Professional", "valid_until": "30 Apr 2026",
+        },
+        "molarplus_topup_success": {
+            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
+            "amount": "500.00", "new_balance": "550.00",
+        },
+        "molarplus_weekly_report_mk": {
+            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
+        },
+        "molarplus_monthly_report_mk": {
+            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
+        },
+        "molarplus_review_report_mk": {
+            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
+        },
+        "molarplus_lab_due_tomorrow_mk": {
+            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
+            "lab_name": "DentaLab India", "order_date": "20 Apr 2026",
+            "patient_name": "Rahul Sharma",
+        },
+        "molarplus_trial_started_mk": {
+            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
+        },
+        "molarplus_trial_mid_mk": {
+            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
+        },
+        "molarplus_trial_ending_mk": {
+            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
+        },
+        "molarplus_trial_ended_mk": {
+            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
         },
     }
 
