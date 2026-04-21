@@ -9,6 +9,11 @@ from sqlalchemy import or_
 
 from core.nexus_notify import notify
 from models import Clinic, LabOrder, NotificationLog, User
+from domains.notification.services.report_stats_service import (
+    get_weekly_stats,
+    get_monthly_stats,
+    get_review_stats,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -232,25 +237,28 @@ class PlatformNotificationService:
             owner = _get_owner_for_clinic(self.db, clinic.id)
 
             if today.weekday() == 0:
+                weekly_data = get_weekly_stats(self.db, clinic.id, today)
                 sent = self.send_whatsapp_event(
                     clinic,
                     "molarplus_weekly_report_mk",
-                    template_data={"clinic_name": clinic.name, "owner_name": _owner_name(owner, clinic)},
+                    template_data=weekly_data,
                     not_before=dt.datetime.combine(today, dt.time.min),
                 )
                 summary["weekly_reports"] += int(sent.sent)
 
             if today.day == 1:
+                monthly_data = get_monthly_stats(self.db, clinic.id, today)
                 sent_monthly = self.send_whatsapp_event(
                     clinic,
                     "molarplus_monthly_report_mk",
-                    template_data={"clinic_name": clinic.name, "owner_name": _owner_name(owner, clinic)},
+                    template_data=monthly_data,
                     not_before=dt.datetime.combine(today, dt.time.min),
                 )
+                review_data = get_review_stats(self.db, clinic.id, today)
                 sent_review = self.send_whatsapp_event(
                     clinic,
                     "molarplus_review_report_mk",
-                    template_data={"clinic_name": clinic.name, "owner_name": _owner_name(owner, clinic)},
+                    template_data=review_data,
                     not_before=dt.datetime.combine(today, dt.time.min),
                 )
                 summary["monthly_reports"] += int(sent_monthly.sent)
@@ -263,7 +271,10 @@ class PlatformNotificationService:
                     sent_trial = self.send_whatsapp_event(
                         clinic,
                         trial_event,
-                        template_data={"clinic_name": clinic.name, "owner_name": _owner_name(owner, clinic)},
+                        template_data={
+                            "owner_name": _owner_name(owner, clinic),
+                            "price": "999",  # starting plan price for trial_ending_mk body_1
+                        },
                         not_before=dt.datetime.combine(today, dt.time.min),
                     )
                     summary["trial_messages"] += int(sent_trial.sent)
@@ -295,6 +306,7 @@ class PlatformNotificationService:
                 clinic,
                 "molarplus_lab_due_tomorrow_mk",
                 template_data={
+                    "owner_name": _owner_name(owner, clinic),
                     "lab_name": lab_name,
                     "order_date": order_date,
                     "patient_name": patient_name,
