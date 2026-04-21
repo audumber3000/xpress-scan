@@ -69,6 +69,8 @@ export default function ClinicDetail() {
         address: res.clinic.address || '',
         number_of_chairs: res.clinic.number_of_chairs || 1,
         subscription_plan: res.clinic.subscription_plan || 'free',
+        clinic_label: res.clinic.clinic_label || '',
+        parent_clinic_id: res.clinic.parent_clinic_id || '',
       });
     } catch { toast.error('Failed to load clinic'); }
     finally { setLoading(false); }
@@ -149,6 +151,9 @@ export default function ClinicDetail() {
               <span className="text-[11px] text-slate-400 font-mono">{clinic.clinic_code}</span>
               <StatusBadge status={clinic.status} />
               <Badge color={PLAN_MAP[clinic.subscription_plan] || 'slate'}>{clinic.subscription_plan || 'free'}</Badge>
+              {clinic.clinic_label && (
+                <Badge color={clinic.clinic_label === 'Main Branch' ? 'violet' : 'sky'}>{clinic.clinic_label}</Badge>
+              )}
             </div>
           </div>
         </div>
@@ -222,6 +227,46 @@ export default function ClinicDetail() {
                 <option value="enterprise">Enterprise</option>
               </select>
             </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 mb-1">Branch Label</label>
+              <select value={editForm.clinic_label || ''} onChange={e => setEditForm(f => ({ ...f, clinic_label: e.target.value }))}
+                className="w-full h-8 px-2.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400">
+                <option value="">— None —</option>
+                <option value="Main Branch">Main Branch</option>
+                <option value="Branch">Branch</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 mb-1">Parent Clinic ID (if branch)</label>
+              <input type="number" value={editForm.parent_clinic_id || ''} onChange={e => setEditForm(f => ({ ...f, parent_clinic_id: e.target.value ? parseInt(e.target.value) : '' }))}
+                placeholder="e.g. 3"
+                className="w-full h-8 px-2.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400" />
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Branch info banner */}
+      {(clinic.parent_clinic_name || clinic.branches?.length > 0) && (
+        <Card className="border-violet-100 bg-violet-50/40">
+          <div className="flex flex-wrap gap-4 text-sm">
+            {clinic.parent_clinic_name && (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-violet-400 uppercase tracking-wider">Part of</span>
+                <span className="font-semibold text-violet-700">{clinic.parent_clinic_name}</span>
+                <span className="text-[11px] text-slate-400">(ID: {clinic.parent_clinic_id})</span>
+              </div>
+            )}
+            {clinic.branches?.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-bold text-violet-400 uppercase tracking-wider">Branches</span>
+                {clinic.branches.map(b => (
+                  <a key={b.id} href={`/clinics/${b.id}`} className="px-2 py-0.5 bg-white border border-violet-200 rounded-md text-xs font-medium text-violet-700 hover:bg-violet-50 transition-colors">
+                    {b.name} <span className="text-slate-400">({b.clinic_label || 'Branch'})</span>
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
         </Card>
       )}

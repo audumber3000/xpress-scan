@@ -74,9 +74,12 @@ class Clinic(Base):
     synced_at = Column(DateTime, nullable=True)
     sync_status = Column(String, default='local')  # 'local', 'synced', 'pending'
     referred_by_code = Column(String, nullable=True)  # Which referral code was used to sign up
+    clinic_label = Column(String, nullable=True)  # e.g. "Main Branch", "Branch"
+    parent_clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=True)  # set on branch clinics
 
     # Relationships
     users = relationship("User", secondary=user_clinics, back_populates="clinics")
+    branches = relationship("Clinic", foreign_keys=[parent_clinic_id], backref="parent_clinic")
 
 class User(Base):
     __tablename__ = 'users'

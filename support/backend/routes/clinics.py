@@ -3,7 +3,7 @@ import logging
 import os
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
 from pydantic import BaseModel
 from typing import Optional
 from database import get_db
@@ -19,6 +19,13 @@ from services.notification_service import notification_service
 logger = logging.getLogger(__name__)
 
 DELETE_PASSWORD = "Audumber"
+
+
+def _table_exists(db: Session, table: str) -> bool:
+    result = db.execute(text(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = :t)"
+    ), {"t": table}).scalar()
+    return bool(result)
 
 
 def _get_firebase_app():
@@ -249,6 +256,10 @@ def get_clinic(clinic_id: int, db: Session = Depends(get_db), _=Depends(get_curr
         NotificationPreference.clinic_id == clinic_id
     ).order_by(NotificationPreference.event_type).all()
 
+    # Branch info
+    parent_clinic = db.query(Clinic).filter(Clinic.id == clinic.parent_clinic_id).first() if clinic.parent_clinic_id else None
+    branch_clinics = db.query(Clinic).filter(Clinic.parent_clinic_id == clinic_id).all()
+
     return {
         "clinic": {
             "id": clinic.id,
@@ -264,6 +275,10 @@ def get_clinic(clinic_id: int, db: Session = Depends(get_db), _=Depends(get_curr
             "logo_url": clinic.logo_url,
             "number_of_chairs": clinic.number_of_chairs,
             "cashfree_customer_id": clinic.cashfree_customer_id,
+            "clinic_label": clinic.clinic_label,
+            "parent_clinic_id": clinic.parent_clinic_id,
+            "parent_clinic_name": parent_clinic.name if parent_clinic else None,
+            "branches": [{"id": b.id, "name": b.name, "clinic_code": b.clinic_code, "status": b.status, "clinic_label": b.clinic_label} for b in branch_clinics],
             "created_at": clinic.created_at.isoformat() if clinic.created_at else None,
             "updated_at": clinic.updated_at.isoformat() if clinic.updated_at else None,
         },
@@ -375,6 +390,8 @@ class ClinicUpdateBody(BaseModel):
     number_of_chairs: Optional[int] = None
     subscription_plan: Optional[str] = None
     status: Optional[str] = None
+    clinic_label: Optional[str] = None
+    parent_clinic_id: Optional[int] = None
 
 
 @router.patch("/{clinic_id}")
@@ -573,17 +590,33 @@ def delete_clinic(
     users = db.query(User).filter(User.clinic_id == clinic_id).all()
     firebase_uids = [u.supabase_user_id for u in users if u.supabase_user_id]
 
+    user_ids = [u.id for u in users]
+    uid_list = user_ids if user_ids else [-1]  # avoid empty IN clause
+
     try:
-        # 1. Invoice line items
+        # Raw SQL helper for tables not in the support ORM
+        def raw_delete(table: str, col: str, val):
+            db.execute(text(f"DELETE FROM {table} WHERE {col} = :v"), {"v": val})
+
+        # 1. Invoice audit logs + line items + invoices
         invoice_ids = [i.id for i in db.query(Invoice.id).filter(Invoice.clinic_id == clinic_id).all()]
         if invoice_ids:
+            db.execute(text("DELETE FROM invoice_audit_logs WHERE invoice_id = ANY(:v)"), {"v": invoice_ids})
             db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id.in_(invoice_ids)).delete(synchronize_session=False)
-
-        # 2. Invoices
         db.query(Invoice).filter(Invoice.clinic_id == clinic_id).delete(synchronize_session=False)
 
-        # 3. Appointments
+        # 2. Appointments
         db.query(Appointment).filter(Appointment.clinic_id == clinic_id).delete(synchronize_session=False)
+
+        # 3. Patient files / consents / dental chart data (raw — not in support ORM)
+        raw_delete("patient_consents", "clinic_id", clinic_id)
+        raw_delete("patient_documents", "clinic_id", clinic_id)
+        raw_delete("treatment_plans", "clinic_id", clinic_id) if _table_exists(db, "treatment_plans") else None
+        raw_delete("lab_orders", "clinic_id", clinic_id) if _table_exists(db, "lab_orders") else None
+        raw_delete("message_templates", "clinic_id", clinic_id) if _table_exists(db, "message_templates") else None
+        raw_delete("salary_records", "clinic_id", clinic_id) if _table_exists(db, "salary_records") else None
+        raw_delete("attendance_records", "clinic_id", clinic_id) if _table_exists(db, "attendance_records") else None
+        raw_delete("competitor_snapshots", "clinic_id", clinic_id) if _table_exists(db, "competitor_snapshots") else None
 
         # 4. Patients
         db.query(Patient).filter(Patient.clinic_id == clinic_id).delete(synchronize_session=False)
@@ -614,17 +647,20 @@ def delete_clinic(
         db.query(GrowthLead).filter(GrowthLead.clinic_id == clinic_id).delete(synchronize_session=False)
 
         # 10. Subscriptions
-        user_ids = [u.id for u in users]
         if user_ids:
             db.query(Subscription).filter(Subscription.user_id.in_(user_ids)).delete(synchronize_session=False)
         db.query(Subscription).filter(Subscription.clinic_id == clinic_id).delete(synchronize_session=False)
 
-        # 11. User devices + users
+        # 11. user_clinics association table (many-to-many, not in support ORM)
+        db.execute(text("DELETE FROM user_clinics WHERE clinic_id = :c OR user_id = ANY(:u)"),
+                   {"c": clinic_id, "u": uid_list})
+
+        # 12. User devices + users
         if user_ids:
             db.query(UserDevice).filter(UserDevice.user_id.in_(user_ids)).delete(synchronize_session=False)
         db.query(User).filter(User.clinic_id == clinic_id).delete(synchronize_session=False)
 
-        # 12. Clinic
+        # 13. Clinic
         db.query(Clinic).filter(Clinic.id == clinic_id).delete(synchronize_session=False)
 
         db.commit()

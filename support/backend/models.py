@@ -30,6 +30,8 @@ class Clinic(Base):
     synced_at = Column(DateTime, nullable=True)
     sync_status = Column(String, nullable=True)
     referred_by_code = Column(String, nullable=True)
+    clinic_label = Column(String, nullable=True)
+    parent_clinic_id = Column(Integer, nullable=True)
 
 
 class User(Base):
