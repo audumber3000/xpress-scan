@@ -602,11 +602,17 @@ def delete_clinic(
         db.execute(text("DELETE FROM invoice_line_items WHERE invoice_id IN (SELECT id FROM invoices WHERE clinic_id=:c)"), {"c": c})
 
         # ── Step 2: children of patients ──────────────────────────────
+        # lab_orders must come first: it references both case_papers and patients
+        db.execute(text("DELETE FROM lab_orders WHERE patient_id IN (SELECT id FROM patients WHERE clinic_id=:c)"), {"c": c})
         db.execute(text("DELETE FROM patient_consents WHERE patient_id IN (SELECT id FROM patients WHERE clinic_id=:c)"), {"c": c})
         db.execute(text("DELETE FROM patient_documents WHERE patient_id IN (SELECT id FROM patients WHERE clinic_id=:c)"), {"c": c})
         db.execute(text("DELETE FROM xray_images WHERE patient_id IN (SELECT id FROM patients WHERE clinic_id=:c)"), {"c": c})
         db.execute(text("DELETE FROM prescriptions WHERE patient_id IN (SELECT id FROM patients WHERE clinic_id=:c)"), {"c": c})
         db.execute(text("DELETE FROM case_papers WHERE patient_id IN (SELECT id FROM patients WHERE clinic_id=:c)"), {"c": c})
+        # reports and payments also reference patients
+        # payments.report_id references reports, so payments must go first
+        db.execute(text("DELETE FROM payments WHERE patient_id IN (SELECT id FROM patients WHERE clinic_id=:c)"), {"c": c})
+        db.execute(text("DELETE FROM reports WHERE patient_id IN (SELECT id FROM patients WHERE clinic_id=:c)"), {"c": c})
 
         # ── Step 3: children of whatsapp_chats ────────────────────────
         db.execute(text("DELETE FROM whatsapp_messages WHERE chat_id IN (SELECT id FROM whatsapp_chats WHERE clinic_id=:c)"), {"c": c})
@@ -627,13 +633,13 @@ def delete_clinic(
             "wallet_transactions", "notification_wallets",
             "google_reviews", "google_place_links",
             "activity_logs", "support_tickets", "growth_leads",
-            "lab_orders", "message_templates", "scheduled_messages",
+            "message_templates", "scheduled_messages",
             "whatsapp_chats", "competitor_snapshots", "competitor_caches",
-            "dashboard_reports", "reports", "clinical_settings",
-            "clinical_assets", "expenses", "attendance",
-            "payments", "vendors", "referring_doctors",
+            "dashboard_reports", "clinical_settings",
+            "clinical_assets", "expenses", "inventory_items", "attendance",
+            "vendors", "referring_doctors",
             "template_configurations", "treatment_types",
-            "consent_templates", "medications", "inventory_items",
+            "consent_templates", "medications",
         ]:
             try:
                 db.execute(text(f"DELETE FROM {tbl} WHERE clinic_id=:c"), {"c": c})
