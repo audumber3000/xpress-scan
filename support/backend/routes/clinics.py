@@ -636,7 +636,7 @@ def delete_clinic(
             "message_templates", "scheduled_messages",
             "whatsapp_chats", "competitor_snapshots", "competitor_caches",
             "dashboard_reports", "clinical_settings",
-            "clinical_assets", "expenses", "inventory_items", "attendance",
+            "expenses", "inventory_items", "attendance",
             "vendors", "referring_doctors",
             "template_configurations", "treatment_types",
             "consent_templates", "medications",
