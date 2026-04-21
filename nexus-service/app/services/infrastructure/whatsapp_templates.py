@@ -260,24 +260,45 @@ def build_whatsapp(event_type: str, **kwargs) -> dict:
         "consent_form":              wa_consent_form,
         "google_review":             wa_google_review,
         "daily_summary":             wa_daily_summary,
-        "molarplus_app_welcome":     lambda **kw: wa_passthrough_template(
-            "molarplus_app_welcome", kw.get("owner_name", ""), kw.get("clinic_name", "")),
+        "molarplus_app_welcome":     lambda **kw: {
+            "template_name": "molarplus_app_welcome",
+            "components": [_header_text(kw.get("owner_name", ""))],  # {{1}} in header only, 0 body
+        },
         "molarplus_subscription_confirmed": lambda **kw: wa_passthrough_template(
             "molarplus_subscription_confirmed",
-            kw.get("owner_name", ""), kw.get("clinic_name", ""),
-            kw.get("plan_name", ""), kw.get("valid_until", "")),
+            kw.get("owner_name", ""), kw.get("plan_name", "")),  # {{1}}=owner, {{2}}=plan
         "molarplus_topup_success":   lambda **kw: wa_passthrough_template(
             "molarplus_topup_success",
-            kw.get("owner_name", ""), kw.get("clinic_name", ""),
-            kw.get("amount", ""), kw.get("new_balance", "")),
+            kw.get("owner_name", ""), kw.get("amount", "")),  # {{1}}=owner, {{2}}=amount
         "molarplus_lab_due_tomorrow_mk": lambda **kw: wa_passthrough_template(
             "molarplus_lab_due_tomorrow",
             kw.get("owner_name", ""), kw.get("clinic_name", ""),
             kw.get("lab_name", ""), kw.get("patient_name", ""), kw.get("order_date", "")),
-        "molarplus_weekly_report_mk": lambda **kw: wa_passthrough_template(
-            "molarplus_weekly_report_mk", kw.get("owner_name", ""), kw.get("clinic_name", "")),
-        "molarplus_monthly_report_mk": lambda **kw: wa_passthrough_template(
-            "molarplus_monthly_report_mk", kw.get("owner_name", ""), kw.get("clinic_name", "")),
+        "molarplus_weekly_report_mk": lambda **kw: {
+            "template_name": "molarplus_weekly_report_mk",
+            "components": [
+                _header_text(kw.get("week_date", "")),
+                _body_params(
+                    kw.get("appointments", ""), kw.get("appt_change", ""),
+                    kw.get("new_patients", ""), kw.get("patients_change", ""),
+                    kw.get("revenue", ""), kw.get("revenue_change", ""),
+                    kw.get("noshows", ""), kw.get("insight", ""),
+                ),
+            ],
+        },
+        "molarplus_monthly_report_mk": lambda **kw: {
+            "template_name": "molarplus_monthly_report_mk",
+            "components": [
+                _header_text(kw.get("month", "")),
+                _body_params(
+                    kw.get("total_patients", ""), kw.get("new_patients", ""),
+                    kw.get("returning_patients", ""), kw.get("total_revenue", ""),
+                    kw.get("avg_revenue", ""), kw.get("change", ""),
+                    kw.get("top_treatments", ""), kw.get("noshows", ""),
+                    kw.get("noshows_pct", ""),
+                ),
+            ],
+        },
         "molarplus_review_report_mk": lambda **kw: wa_passthrough_template(
             "molarplus_review_report_mk", kw.get("owner_name", ""), kw.get("clinic_name", "")),
         "molarplus_trial_started_mk": lambda **kw: wa_passthrough_template(

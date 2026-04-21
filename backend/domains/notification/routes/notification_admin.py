@@ -716,18 +716,24 @@ async def template_test_send(
             "owner_name": "Dr. Demo", "clinic_name": clinic_name,
         },
         "molarplus_subscription_confirmed": {
-            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
-            "plan_name": "Professional", "valid_until": "30 Apr 2026",
+            "owner_name": "Dr. Demo", "plan_name": "Professional",
         },
         "molarplus_topup_success": {
-            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
-            "amount": "500.00", "new_balance": "550.00",
+            "owner_name": "Dr. Demo", "amount": "500.00",
         },
         "molarplus_weekly_report_mk": {
-            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
+            "week_date": "14 Apr 2026",
+            "appointments": "24", "appt_change": "▲12%",
+            "new_patients": "8", "patients_change": "▲5%",
+            "revenue": "48,500", "revenue_change": "▲18%",
+            "noshows": "3", "insight": "Great week! 🎉",
         },
         "molarplus_monthly_report_mk": {
-            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
+            "month": "March 2026",
+            "total_patients": "92", "new_patients": "18", "returning_patients": "74",
+            "total_revenue": "1,85,000", "avg_revenue": "2,011",
+            "change": "▲15%", "top_treatments": "RCT, Crown, Scaling",
+            "noshows": "7", "noshows_pct": "7",
         },
         "molarplus_review_report_mk": {
             "owner_name": "Dr. Demo", "clinic_name": clinic_name,
