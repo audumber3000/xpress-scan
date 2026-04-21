@@ -97,7 +97,7 @@ const GoogleReviews = () => {
 
   // ── Load Google Maps JS (classic loader) ──────────────────────────
   useEffect(() => {
-    const key = import.meta.env.VITE_GOOGLE_PLACES_API_KEY;
+    const key = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || 'AIzaSyB8bgqI19rjxVmrxYe21ZtJx8U0PptfqdA';
     if (!key) return;
 
     const loadScript = () => new Promise((resolve, reject) => {
