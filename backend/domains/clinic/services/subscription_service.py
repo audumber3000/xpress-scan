@@ -6,6 +6,7 @@ from dateutil.relativedelta import relativedelta
 
 from models import Subscription, Clinic, User, SubscriptionPayment
 from domains.finance.services.cashfree.cashfree_provider import CashfreeProvider
+from domains.notification.services.platform_notification_service import PlatformNotificationService
 
 class SubscriptionService:
     def __init__(self, db: Session):
@@ -158,6 +159,7 @@ class SubscriptionService:
 
                 if sub and sub.status != "active":
                     sub.status = "active"
+                    sub.is_trial = False
                     sub.current_start = datetime.utcnow()
                     sub.current_end = self._billing_end(sub.plan_name, sub.current_start)
 
@@ -170,6 +172,18 @@ class SubscriptionService:
                     amount = order_data.get("order_amount", 0)
                     self._log_payment(sub, order_data.get("cf_order_id"), amount)
                     self.db.commit()
+                    owner = self.db.query(User).filter(User.id == user_id).first()
+                    clinic = self.db.query(Clinic).filter(Clinic.id == sub.clinic_id).first()
+                    if clinic:
+                        try:
+                            PlatformNotificationService(self.db).send_subscription_confirmed_notifications(
+                                clinic=clinic,
+                                owner=owner,
+                                plan_name=sub.plan_name,
+                                valid_until=sub.current_end,
+                            )
+                        except Exception as notification_error:
+                            print(f"Failed to queue subscription confirmation notifications: {notification_error}")
 
                 return {"success": True, "status": status, "message": "Payment verified successfully"}
 
@@ -193,6 +207,7 @@ class SubscriptionService:
                 sub = self.db.query(Subscription).filter(Subscription.provider_order_id == order_id).first()
                 if sub:
                     sub.status = "active"
+                    sub.is_trial = False
                     sub.provider_subscription_id = cf_payment_id
                     sub.current_start = datetime.utcnow()
                     sub.current_end = self._billing_end(sub.plan_name, sub.current_start)
@@ -217,6 +232,18 @@ class SubscriptionService:
 
                     self._log_payment(sub, cf_payment_id, payment_amount, paid_at)
                     self.db.commit()
+                    owner = self.db.query(User).filter(User.id == sub.user_id).first() if sub.user_id else None
+                    clinic = self.db.query(Clinic).filter(Clinic.id == sub.clinic_id).first()
+                    if clinic:
+                        try:
+                            PlatformNotificationService(self.db).send_subscription_confirmed_notifications(
+                                clinic=clinic,
+                                owner=owner,
+                                plan_name=sub.plan_name,
+                                valid_until=sub.current_end,
+                            )
+                        except Exception as notification_error:
+                            print(f"Failed to queue subscription confirmation notifications: {notification_error}")
                     return True
 
             elif order_id and payment_status == "FAILED":

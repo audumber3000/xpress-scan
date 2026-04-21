@@ -90,13 +90,20 @@ async def get_current_subscription(
             updated_at=datetime.utcnow()
         )
     
-    # Annotate with expiry info for frontend renew UI
+    # Annotate with expiry and trial info for frontend
     now = datetime.utcnow()
     is_expired = (
         subscription.current_end is not None
         and subscription.current_end < now
         and subscription.status != "active"
     )
+    is_trial = bool(getattr(subscription, 'is_trial', False) and subscription.status == 'active' and not is_expired)
+    trial_ends_at = None
+    trial_days_remaining = None
+    if is_trial and subscription.current_end:
+        trial_ends_at = subscription.current_end.isoformat()
+        trial_days_remaining = max(0, (subscription.current_end.date() - now.date()).days)
+
     result = {
         "id": subscription.id,
         "clinic_id": subscription.clinic_id,
@@ -108,6 +115,9 @@ async def get_current_subscription(
         "current_start": subscription.current_start.isoformat() if subscription.current_start else None,
         "current_end": subscription.current_end.isoformat() if subscription.current_end else None,
         "is_expired": is_expired,
+        "is_trial": is_trial,
+        "trial_ends_at": trial_ends_at,
+        "trial_days_remaining": trial_days_remaining,
         "created_at": subscription.created_at.isoformat() if subscription.created_at else None,
         "updated_at": subscription.updated_at.isoformat() if subscription.updated_at else None,
     }

@@ -16,7 +16,8 @@ from core.dependencies import get_clinic_service
 from core.auth_utils import get_current_user, require_role
 from core.nexus_notify import notify
 from database import get_db
-from models import Clinic, user_clinics, generate_clinic_code
+from models import Clinic, user_clinics, generate_clinic_code, Subscription
+from sqlalchemy import select, func
 import datetime
 
 router = APIRouter()
@@ -40,6 +41,26 @@ async def owner_add_clinic(
     via the user_clinics association table.
     """
     try:
+        # Enforce 5-clinic limit per owner
+        clinic_count = db.execute(
+            select(func.count()).select_from(user_clinics).where(
+                user_clinics.c.user_id == current_user.id,
+                user_clinics.c.role == 'clinic_owner',
+                user_clinics.c.is_active == True,
+            )
+        ).scalar() or 0
+        if clinic_count >= 5:
+            raise HTTPException(
+                status_code=400,
+                detail="You have reached the maximum of 5 clinics. Contact support to increase this limit."
+            )
+
+        # Inherit the owner's current subscription plan for the new branch
+        owner_sub = db.query(Subscription).filter(Subscription.user_id == current_user.id).first()
+        branch_plan = "free"
+        if owner_sub and owner_sub.status == 'active':
+            branch_plan = owner_sub.plan_name
+
         # Create the new clinic
         new_clinic = Clinic(
             name=clinic_data.name,
@@ -49,6 +70,7 @@ async def owner_add_clinic(
             specialization=getattr(clinic_data, 'specialization', 'dental'),
             clinic_code=generate_clinic_code(),
             status='active',
+            subscription_plan=branch_plan,
             created_at=datetime.datetime.utcnow(),
             updated_at=datetime.datetime.utcnow(),
         )

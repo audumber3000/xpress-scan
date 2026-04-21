@@ -358,6 +358,8 @@ class Subscription(Base):
     status = Column(String, nullable=False, default='active')  # active, paused, cancelled, expired
     current_start = Column(DateTime, nullable=True)  # Current billing period start
     current_end = Column(DateTime, nullable=True)  # Current billing period end
+    is_trial = Column(Boolean, default=False)
+    trial_ends_at = Column(DateTime, nullable=True)
     quantity = Column(Integer, default=1)  # Number of subscriptions
     notes = Column(JSON, nullable=True)  # Additional metadata from Razorpay
     created_at = Column(DateTime, default=datetime.datetime.utcnow)

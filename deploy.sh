@@ -58,10 +58,38 @@ if [ "$ERRORS" -gt 0 ]; then
   exit 1
 fi
 
-# 5. Schema migration check — catch missing ALTER TABLE migrations before deploy
+# 5. Auto-run DB migrations before schema check
+echo ""
+echo "▶ Running DB migrations against prod DB..."
+DB_URL=$(grep -E "^DATABASE_URL=" .env.production | cut -d'=' -f2-)
+
+python3 - <<PYEOF
+import sys, os
+sys.path.insert(0, 'backend')
+os.environ.setdefault('DATABASE_URL', "$DB_URL")
+try:
+    from sqlalchemy import create_engine, text
+    engine = create_engine("$DB_URL")
+    with engine.connect() as conn:
+        for col, ddl in [
+            ("is_trial",      "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS is_trial BOOLEAN DEFAULT FALSE"),
+            ("trial_ends_at", "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP"),
+        ]:
+            try:
+                conn.execute(text(ddl))
+                conn.commit()
+                print(f"  ✅ Migration applied: {col}")
+            except Exception as e:
+                conn.rollback()
+                print(f"  ⚠️  {col}: {e}")
+    engine.dispose()
+except Exception as e:
+    print(f"  ⚠️  Migration error (non-fatal): {e}")
+PYEOF
+
+# 6. Schema migration check — catch missing ALTER TABLE migrations before deploy
 echo ""
 echo "▶ Running schema migration check against prod DB..."
-DB_URL=$(grep -E "^DATABASE_URL=" .env.production | cut -d'=' -f2-)
 
 SCHEMA_RESULT=$(python3 - <<PYEOF
 import sys
@@ -88,6 +116,10 @@ try:
             "id", "clinic_id", "patient_name",
             "appointment_date", "start_time", "end_time",
             "status", "created_at", "updated_at",
+        },
+        "subscriptions": {
+            "id", "plan_name", "status", "current_start", "current_end",
+            "is_trial", "trial_ends_at",
         },
     }
     failures = []

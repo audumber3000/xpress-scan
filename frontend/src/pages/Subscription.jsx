@@ -262,6 +262,7 @@ const Subscription = () => {
   );
 
   const isExpired = subscription?.is_expired === true;
+  const isTrial = subscription?.plan_name === 'trial' && subscription?.status === 'active' && !isExpired;
   const isPro = ['professional', 'professional_annual'].includes(subscription?.plan_name) && subscription?.status === 'active' && !isExpired;
 
   return (
@@ -298,6 +299,47 @@ const Subscription = () => {
         {/* ════ MANAGE SUBSCRIPTION TAB ════ */}
         {activeTab === 'subscription' && (
           <>
+            {/* Trial Banner */}
+            {isTrial && (
+              <div className="mt-6 rounded-2xl border border-[#29828a]/30 bg-[#29828a]/5 p-5 flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-[#29828a]/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Zap size={16} className="text-[#29828a]" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-[#29828a]">
+                      7-Day Free Trial Active
+                      {subscription?.trial_days_remaining != null && (
+                        <span className="ml-2 text-xs font-semibold bg-[#29828a]/10 text-[#29828a] px-2 py-0.5 rounded-full">
+                          {subscription.trial_days_remaining === 0
+                            ? 'Ends today'
+                            : `${subscription.trial_days_remaining} day${subscription.trial_days_remaining !== 1 ? 's' : ''} left`}
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      You have full access to all Professional features during the trial.
+                      Upgrade before it ends to avoid interruption.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => handleUpgrade('monthly')}
+                    className="px-3 py-2 border border-[#29828a] text-[#29828a] text-xs font-bold rounded-lg hover:bg-[#29828a]/5 transition-all"
+                  >
+                    ₹899/mo
+                  </button>
+                  <button
+                    onClick={() => handleUpgrade('annual')}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-[#29828a] hover:bg-[#1f6b72] text-white text-xs font-bold rounded-lg transition-all"
+                  >
+                    Annual — 25% off <ArrowRight size={11} />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Expired Banner */}
             {isExpired && (
               <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-5 flex items-start justify-between gap-4">
@@ -344,7 +386,7 @@ const Subscription = () => {
                 ) : null
               }
             >
-              <div className={`relative overflow-hidden flex items-center justify-between gap-4 p-4 rounded-xl border ${isPro ? 'bg-amber-50 border-amber-200' : isExpired ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-100'}`}>
+              <div className={`relative overflow-hidden flex items-center justify-between gap-4 p-4 rounded-xl border ${isPro ? 'bg-amber-50 border-amber-200' : isTrial ? 'bg-[#29828a]/5 border-[#29828a]/20' : isExpired ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-100'}`}>
                 {isPro && (
                   <>
                     <div className="absolute inset-0 bg-gradient-to-br from-white/60 via-amber-50/20 to-transparent pointer-events-none rounded-xl" />
@@ -353,7 +395,7 @@ const Subscription = () => {
                   </>
                 )}
                 <div className="relative flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isPro ? 'bg-amber-100' : 'bg-gray-100'}`}>
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isPro ? 'bg-amber-100' : isTrial ? 'bg-[#29828a]/10' : 'bg-gray-100'}`}>
                     {isPro ? (
                       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M3 17L5.5 8L9.5 13L12 6L14.5 13L18.5 8L21 17H3Z" fill="#F59E0B" stroke="#D97706" strokeWidth="1.2" strokeLinejoin="round"/>
@@ -362,6 +404,8 @@ const Subscription = () => {
                         <circle cx="3.5" cy="8.5" r="1.5" fill="#F59E0B" stroke="#D97706" strokeWidth="1"/>
                         <circle cx="20.5" cy="8.5" r="1.5" fill="#F59E0B" stroke="#D97706" strokeWidth="1"/>
                       </svg>
+                    ) : isTrial ? (
+                      <Zap size={18} className="text-[#29828a]" />
                     ) : (
                       <ShieldCheck size={18} className="text-gray-400" />
                     )}
@@ -369,10 +413,13 @@ const Subscription = () => {
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-gray-900">
-                        {isPro ? 'Professional Plan' : isExpired ? 'Professional Plan' : 'Starter Plan'}
+                        {isPro ? 'Professional Plan' : isTrial ? '7-Day Free Trial' : isExpired ? 'Professional Plan' : 'Starter Plan'}
                       </p>
                       {isPro && (
                         <span className="text-xs font-semibold text-[#29828a]">₹899 / month</span>
+                      )}
+                      {isTrial && (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#29828a]/10 text-[#29828a]">Trial</span>
                       )}
                       {isExpired && (
                         <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600">Expired</span>
@@ -381,6 +428,8 @@ const Subscription = () => {
                     <p className="text-xs text-gray-400 mt-0.5">
                       {isPro
                         ? `Next billing: ${formatDate(subscription?.current_end)}`
+                        : isTrial
+                        ? `Trial ends ${formatDate(subscription?.current_end)} — upgrade to keep full access`
                         : isExpired
                         ? `Expired on ${formatDate(subscription?.current_end)} — renew to restore access`
                         : 'Free forever — unlimited upgrade available'}
@@ -388,10 +437,10 @@ const Subscription = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${isPro ? 'bg-amber-100 text-amber-700' : isExpired ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
-                    {isExpired ? 'Expired' : subscription?.status || 'Active'}
+                  <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${isPro ? 'bg-amber-100 text-amber-700' : isTrial ? 'bg-[#29828a]/10 text-[#29828a]' : isExpired ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
+                    {isExpired ? 'Expired' : isTrial ? 'Trial' : subscription?.status || 'Active'}
                   </span>
-                  {isPro && <CheckCircle2 size={18} className="text-[#29828a]" />}
+                  {(isPro || isTrial) && <CheckCircle2 size={18} className="text-[#29828a]" />}
                 </div>
               </div>
 

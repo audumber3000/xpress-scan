@@ -469,6 +469,9 @@ async def get_current_user_info(
     # Get clinic information if user has a clinic
     clinic_info = None
     subscription_expired = False
+    is_trial = False
+    trial_ends_at = None
+    trial_days_remaining = None
     if user.clinic_id:
         from models import Clinic, Subscription, User as UserModel, user_clinics as user_clinics_table
         from datetime import datetime as dt
@@ -496,13 +499,29 @@ async def get_current_user_info(
                 if not owner_sub:
                     owner_sub = db.query(Subscription).filter(Subscription.clinic_id == user.clinic_id).first()
 
-        # Enforce subscription expiry — downgrade clinic plan if past current_end
-        if clinic and clinic.subscription_plan != 'free' and owner_sub:
+        # Enforce subscription/trial expiry — downgrade clinic plan if past current_end
+        if clinic and clinic.subscription_plan not in ('free',) and owner_sub:
             if owner_sub.current_end and owner_sub.current_end < dt.utcnow():
                 owner_sub.status = "expired"
+                if getattr(owner_sub, 'is_trial', False):
+                    owner_sub.is_trial = False
                 clinic.subscription_plan = "free"
                 db.commit()
                 subscription_expired = True
+
+        # Compute trial info for response
+        is_trial = bool(
+            owner_sub
+            and getattr(owner_sub, 'is_trial', False)
+            and owner_sub.status == 'active'
+            and clinic
+            and clinic.subscription_plan == 'trial'
+        )
+        trial_ends_at = None
+        trial_days_remaining = None
+        if is_trial and owner_sub and owner_sub.current_end:
+            trial_ends_at = owner_sub.current_end.isoformat()
+            trial_days_remaining = max(0, (owner_sub.current_end.date() - dt.utcnow().date()).days)
 
         if clinic:
             clinic_info = {
@@ -536,6 +555,9 @@ async def get_current_user_info(
         "clinic_id": user.clinic_id,
         "is_active": user.is_active,
         "subscription_expired": subscription_expired,
+        "is_trial": is_trial,
+        "trial_ends_at": trial_ends_at,
+        "trial_days_remaining": trial_days_remaining,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": getattr(user, 'updated_at', user.created_at).isoformat() if getattr(user, 'updated_at', user.created_at) else None,
         "synced_at": getattr(user, 'synced_at', None).isoformat() if getattr(user, 'synced_at', None) else None,
@@ -545,11 +567,31 @@ async def get_current_user_info(
         "clinics": clinics_list
     }
 
-def _seed_clinic_defaults(db, clinic_id: int):
+def _seed_clinic_defaults(db, clinic_id: int, user_id: int = None):
     """Seed common default values for all practice settings sections on new clinic creation."""
-    from models import TreatmentType, ClinicalSetting
+    import datetime as _dt
+    from models import TreatmentType, ClinicalSetting, Subscription
     from core.wallet_service import credit as wallet_credit
     wallet_credit(db, clinic_id, 50.0, "Welcome bonus — new clinic top-up")
+
+    # Create 7-day trial subscription for new owners (only if they don't already have one)
+    if user_id:
+        existing_sub = db.query(Subscription).filter(Subscription.user_id == user_id).first()
+        if not existing_sub:
+            now = _dt.datetime.utcnow()
+            trial_end = now + _dt.timedelta(days=7)
+            db.add(Subscription(
+                clinic_id=clinic_id,
+                user_id=user_id,
+                plan_name="trial",
+                status="active",
+                provider="none",
+                is_trial=True,
+                trial_ends_at=trial_end,
+                current_start=now,
+                current_end=trial_end,
+            ))
+            db.commit()
 
     # Procedures (TreatmentType)
     procedures = [
@@ -665,7 +707,7 @@ async def complete_onboarding(
             "phone": data.get("clinic_phone", ""),
             "email": data.get("clinic_email", user.email),  # Default to user's email
             "specialization": data.get("specialization", "radiology"),
-            "subscription_plan": data.get("subscription_plan", "free"),
+            "subscription_plan": "trial",
             "number_of_chairs": data.get("number_of_chairs", 1)
         }
         
@@ -708,7 +750,7 @@ async def complete_onboarding(
 
         # Seed default practice settings for the new clinic
         try:
-            _seed_clinic_defaults(db, clinic.id)
+            _seed_clinic_defaults(db, clinic.id, user_id=user.id)
         except Exception as seed_err:
             print(f"Non-fatal: failed to seed clinic defaults: {seed_err}")
         
