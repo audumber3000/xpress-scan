@@ -103,9 +103,19 @@ const GoogleReviews = () => {
     const loadScript = () => new Promise((resolve, reject) => {
       if (window.google?.maps?.places) { resolve(); return; }
       const existing = document.querySelector('script[src*="maps.googleapis.com"]');
-      if (existing) { existing.addEventListener('load', resolve); existing.addEventListener('error', reject); return; }
+      if (existing) {
+        // Script tag is already in the DOM — might already be loaded (load event already fired)
+        // so polling is more reliable than attaching a load listener that may never fire.
+        let attempts = 0;
+        const poll = setInterval(() => {
+          if (window.google?.maps?.places) { clearInterval(poll); resolve(); return; }
+          if (++attempts > 100) { clearInterval(poll); reject(new Error('Google Maps timeout')); }
+        }, 100);
+        return;
+      }
       const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places&loading=async`;
+      // No loading=async — classic loading guarantees window.google.maps.places is populated on onload
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places`;
       script.async = true;
       script.defer = true;
       script.onload = resolve;
