@@ -534,6 +534,8 @@ async def get_current_user_info(
                 "subscription_plan": clinic.subscription_plan,
                 "logo": clinic.logo_url,
                 "logo_url": clinic.logo_url,
+                "is_trial": is_trial,
+                "trial_days_remaining": trial_days_remaining,
                 "created_at": clinic.created_at.isoformat() if clinic.created_at else None,
                 "updated_at": getattr(clinic, 'updated_at', clinic.created_at).isoformat() if getattr(clinic, 'updated_at', clinic.created_at) else None,
                 "synced_at": getattr(clinic, 'synced_at', None).isoformat() if getattr(clinic, 'synced_at', None) else None,

@@ -563,7 +563,8 @@ async def complete_onboarding(
             "phone": data.get("clinic_phone", ""),
             "email": data.get("clinic_email", user.email),
             "specialization": data.get("specialization", "dental"),
-            "subscription_plan": data.get("subscription_plan", "free"),
+            "subscription_plan": "free",
+            "clinic_label": "main_branch",
             "referred_by_code": data.get("referred_by_code")
         }
 
@@ -586,6 +587,13 @@ async def complete_onboarding(
                     db.add(treatment_type)
             db.commit()
 
+        # Seed defaults (wallet credit, procedures, clinical settings)
+        try:
+            from domains.auth.routes.auth import _seed_clinic_defaults
+            _seed_clinic_defaults(db, clinic.id)
+        except Exception as seed_err:
+            print(f"Non-fatal: failed to seed clinic defaults: {seed_err}")
+
         try:
             platform_notifications.send_welcome_notifications(clinic, result["user"])
         except Exception as notification_error:
@@ -594,7 +602,7 @@ async def complete_onboarding(
         return {
             "message": "Onboarding completed successfully",
             "user": UserResponseDTO.from_orm(result["user"]),
-            "clinic": ClinicResponseDTO.from_orm(clinic)
+            "clinic": _enrich_clinic_dto(db, clinic)
         }
 
     except HTTPException:
@@ -738,7 +746,7 @@ async def switch_clinic(
             message=f"Switched to clinic: {clinic.name}",
             user=user_dto,
             token=token,
-            clinic=ClinicResponseDTO.from_orm(clinic)
+            clinic=_enrich_clinic_dto(db, clinic)
         )
 
     except HTTPException:
