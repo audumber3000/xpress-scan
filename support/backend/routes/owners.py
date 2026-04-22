@@ -30,9 +30,13 @@ def list_owners(
     rows = db.execute(text("""
         SELECT
             u.id, u.email, u.name, u.created_at,
-            (SELECT COUNT(*) FROM user_clinics uc
-              WHERE uc.user_id = u.id AND uc.role = 'clinic_owner' AND uc.is_active = true
-            ) AS clinic_count
+            (SELECT COUNT(*) FROM (
+                SELECT uc.clinic_id FROM user_clinics uc
+                  WHERE uc.user_id = u.id AND uc.role = 'clinic_owner' AND uc.is_active = true
+                UNION
+                SELECT u2.clinic_id FROM users u2
+                  WHERE u2.id = u.id AND u2.clinic_id IS NOT NULL
+            ) AS all_clinics) AS clinic_count
         FROM users u
         WHERE u.role = 'clinic_owner'
           AND (:q = '' OR u.email ILIKE :like OR u.name ILIKE :like)
@@ -53,10 +57,15 @@ def list_owners(
     for r in rows:
         owner_id = r[0]
         clinics = db.execute(text("""
-            SELECT c.id, c.name, c.clinic_code, c.clinic_label, c.subscription_plan, c.status
+            SELECT DISTINCT c.id, c.name, c.clinic_code, c.clinic_label, c.subscription_plan, c.status
             FROM clinics c
-            JOIN user_clinics uc ON uc.clinic_id = c.id
-            WHERE uc.user_id = :o AND uc.role = 'clinic_owner' AND uc.is_active = true
+            WHERE c.id IN (
+                SELECT uc.clinic_id FROM user_clinics uc
+                  WHERE uc.user_id = :o AND uc.role = 'clinic_owner' AND uc.is_active = true
+                UNION
+                SELECT u.clinic_id FROM users u
+                  WHERE u.id = :o AND u.clinic_id IS NOT NULL
+            )
             ORDER BY c.id ASC
         """), {"o": owner_id}).fetchall()
 
