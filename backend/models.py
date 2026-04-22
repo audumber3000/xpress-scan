@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, JSON, Float, Table
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 import uuid
 import datetime
@@ -79,7 +79,11 @@ class Clinic(Base):
 
     # Relationships
     users = relationship("User", secondary=user_clinics, back_populates="clinics")
-    branches = relationship("Clinic", foreign_keys=[parent_clinic_id], backref="parent_clinic")
+    branches = relationship(
+        "Clinic",
+        foreign_keys=[parent_clinic_id],
+        backref=backref("parent_clinic", remote_side="Clinic.id"),
+    )
 
 class User(Base):
     __tablename__ = 'users'
