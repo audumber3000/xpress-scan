@@ -31,7 +31,7 @@ def list_owners(
               AND (:q = '' OR u.email ILIKE :like OR u.name ILIKE :like)
         )
         SELECT
-            u.id, u.email, u.name, u.phone, u.created_at,
+            u.id, u.email, u.name, u.created_at,
             (SELECT COUNT(*) FROM user_clinics uc
               WHERE uc.user_id = u.id AND uc.role = 'clinic_owner' AND uc.is_active = true
             ) AS clinic_count
@@ -77,9 +77,8 @@ def list_owners(
             "id": owner_id,
             "email": r[1],
             "name": r[2],
-            "phone": r[3],
-            "created_at": r[4].isoformat() if r[4] else None,
-            "clinic_count": r[5],
+            "created_at": r[3].isoformat() if r[3] else None,
+            "clinic_count": r[4],
             "patient_count": patient_count,
             "total_revenue": round(float(revenue), 2),
             "clinics": [
@@ -119,7 +118,6 @@ def get_owner(owner_id: int, db: Session = Depends(get_db), _=Depends(get_curren
             "id": owner.id,
             "email": owner.email,
             "name": owner.name,
-            "phone": owner.phone,
             "role": owner.role,
             "is_active": owner.is_active,
             "created_at": owner.created_at.isoformat() if owner.created_at else None,
