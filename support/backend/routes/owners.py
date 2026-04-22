@@ -22,21 +22,20 @@ def list_owners(
     db: Session = Depends(get_db),
     _=Depends(get_current_admin),
 ):
-    """List clinic owners with aggregate stats across all their clinics."""
+    """List clinic owners with aggregate stats across all their clinics.
+
+    Includes every user with role='clinic_owner', even if they currently have
+    0 active clinics (e.g. onboarding incomplete or all clinics deleted).
+    """
     rows = db.execute(text("""
-        WITH owners AS (
-            SELECT DISTINCT u.id FROM users u
-            JOIN user_clinics uc ON uc.user_id = u.id
-            WHERE uc.role = 'clinic_owner' AND uc.is_active = true
-              AND (:q = '' OR u.email ILIKE :like OR u.name ILIKE :like)
-        )
         SELECT
             u.id, u.email, u.name, u.created_at,
             (SELECT COUNT(*) FROM user_clinics uc
               WHERE uc.user_id = u.id AND uc.role = 'clinic_owner' AND uc.is_active = true
             ) AS clinic_count
         FROM users u
-        WHERE u.id IN (SELECT id FROM owners)
+        WHERE u.role = 'clinic_owner'
+          AND (:q = '' OR u.email ILIKE :like OR u.name ILIKE :like)
         ORDER BY u.created_at DESC
         OFFSET :offset LIMIT :limit
     """), {
@@ -45,9 +44,8 @@ def list_owners(
     }).fetchall()
 
     total = db.execute(text("""
-        SELECT COUNT(DISTINCT u.id) FROM users u
-        JOIN user_clinics uc ON uc.user_id = u.id
-        WHERE uc.role = 'clinic_owner' AND uc.is_active = true
+        SELECT COUNT(*) FROM users u
+        WHERE u.role = 'clinic_owner'
           AND (:q = '' OR u.email ILIKE :like OR u.name ILIKE :like)
     """), {"q": q, "like": f"%{q}%"}).scalar() or 0
 
