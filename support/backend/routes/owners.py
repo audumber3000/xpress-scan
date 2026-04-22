@@ -168,6 +168,8 @@ def delete_owner(
     if not owner:
         raise HTTPException(status_code=404, detail="Owner not found")
 
+    owner_email = owner.email
+
     clinic_ids, user_ids, user_info = discover_owner_scope(db, owner_id)
     if not clinic_ids:
         raise HTTPException(
@@ -193,7 +195,7 @@ def delete_owner(
     return {
         "deleted": True,
         "owner_id": owner_id,
-        "owner_email": owner.email,
+        "owner_email": owner_email,
         "clinics_deleted": len(clinic_ids),
         "users_deleted": len(user_ids),
         "firebase_users_deleted": fb_deleted,
