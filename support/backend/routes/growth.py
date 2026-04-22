@@ -151,6 +151,10 @@ def list_leads(
     source: str = "",
     owner: str = "",
     q: str = "",
+    lead_name: str = "",
+    contact_person: str = "",
+    phone: str = "",
+    mrr_min: float | None = None,
     clinic_id: int = 0,
     page: int = 1,
     limit: int = 25,
@@ -168,9 +172,17 @@ def list_leads(
     if source:
         query = query.filter(GrowthLead.source == source)
     if owner:
-        query = query.filter(GrowthLead.owner == owner)
+        query = query.filter(GrowthLead.owner.ilike(f"%{owner}%"))
     if clinic_id:
         query = query.filter(GrowthLead.clinic_id == clinic_id)
+    if lead_name:
+        query = query.filter(GrowthLead.lead_name.ilike(f"%{lead_name}%"))
+    if contact_person:
+        query = query.filter(GrowthLead.contact_person.ilike(f"%{contact_person}%"))
+    if phone:
+        query = query.filter(GrowthLead.phone.ilike(f"%{phone}%"))
+    if mrr_min is not None:
+        query = query.filter(GrowthLead.expected_mrr >= mrr_min)
     if q:
         like = f"%{q}%"
         query = query.filter(

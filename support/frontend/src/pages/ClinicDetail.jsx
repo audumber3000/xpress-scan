@@ -5,7 +5,7 @@ import {
   ArrowLeft, Building2, Users, CalendarDays, Receipt,
   Edit2, Check, X, ShieldAlert, ShieldCheck, Save,
   MessageSquare, Wallet, Bell, Settings2, Smartphone, Mail, MessageCircle,
-  CheckCircle2, XCircle, IndianRupee, Zap, Loader2, Trash2
+  CheckCircle2, XCircle, IndianRupee, Zap, Loader2
 } from 'lucide-react';
 import api from '../utils/api';
 import { StatCard, Card, Badge, StatusBadge, TabBar, Spinner, fmt } from '../components/ui';
@@ -54,9 +54,6 @@ export default function ClinicDetail() {
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
   const [activatingTrial, setActivatingTrial] = useState(false);
-  const [deleteModal, setDeleteModal] = useState(false);
-  const [deletePassword, setDeletePassword] = useState('');
-  const [deleting, setDeleting] = useState(false);
 
   const load = async () => {
     try {
@@ -110,19 +107,6 @@ export default function ClinicDetail() {
       toast.error(err?.response?.data?.detail || err?.message || 'Failed to activate trial');
     } finally {
       setActivatingTrial(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    setDeleting(true);
-    try {
-      const res = await api.delete(`/clinics/${id}`, { data: { password: deletePassword } });
-      toast.success(`"${res.clinic_name}" deleted permanently`);
-      window.location.href = '/clinics';
-    } catch (err) {
-      toast.error(err?.response?.data?.detail || 'Delete failed');
-    } finally {
-      setDeleting(false);
     }
   };
 
@@ -191,12 +175,6 @@ export default function ClinicDetail() {
               </button>
             </>
           )}
-          <button
-            onClick={() => { setDeletePassword(''); setDeleteModal(true); }}
-            className="flex items-center gap-1.5 h-8 px-3 text-xs font-semibold text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors border border-red-200"
-          >
-            <Trash2 size={13} /> Delete Account
-          </button>
         </div>
       </div>
 
@@ -658,53 +636,6 @@ export default function ClinicDetail() {
         )}
       </Card>
 
-      {/* Delete Account Modal */}
-      {deleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                <Trash2 size={18} className="text-red-600" />
-              </div>
-              <div>
-                <h2 className="text-base font-semibold text-slate-900">Delete Account</h2>
-                <p className="text-xs text-slate-400 mt-0.5">{clinic.name}</p>
-              </div>
-            </div>
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700 leading-relaxed">
-              This will <strong>permanently delete</strong> all clinic data — patients, appointments, invoices, users, notifications, and Firebase accounts. <strong>This cannot be undone.</strong>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1.5">Enter password to confirm</label>
-              <input
-                type="password"
-                value={deletePassword}
-                onChange={e => setDeletePassword(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && !deleting && handleDelete()}
-                placeholder="Password"
-                className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-300"
-                autoFocus
-              />
-            </div>
-            <div className="flex gap-2 justify-end pt-1">
-              <button
-                onClick={() => setDeleteModal(false)}
-                className="h-9 px-4 text-xs font-semibold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={deleting || !deletePassword}
-                className="flex items-center gap-1.5 h-9 px-4 text-xs font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
-              >
-                {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-                {deleting ? 'Deleting...' : 'Delete Permanently'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

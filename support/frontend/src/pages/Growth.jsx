@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
-import { Plus, ArrowRightLeft, Users, Target, TrendingUp, PhoneCall, AlertTriangle, X, CalendarDays, Trophy, CircleOff, Upload, Download, FileText, CheckCircle2 } from 'lucide-react';
+import { Plus, ArrowRightLeft, Users, Target, TrendingUp, PhoneCall, AlertTriangle, X, CalendarDays, Trophy, CircleOff, Upload, Download, FileText, CheckCircle2, Edit2, Save } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import api from '../utils/api';
 import { PageHeader, Card, Badge, Spinner, fmt } from '../components/ui';
@@ -22,6 +22,42 @@ const STAGE_COLOR = {
 
 const pretty = (s) => (s || '').replace(/_/g, ' ');
 
+// Deterministic color from name hash → consistent avatar tint per lead
+const AVATAR_COLORS = [
+  'bg-rose-100 text-rose-700',
+  'bg-orange-100 text-orange-700',
+  'bg-amber-100 text-amber-700',
+  'bg-emerald-100 text-emerald-700',
+  'bg-teal-100 text-teal-700',
+  'bg-sky-100 text-sky-700',
+  'bg-violet-100 text-violet-700',
+  'bg-fuchsia-100 text-fuchsia-700',
+  'bg-pink-100 text-pink-700',
+];
+
+function avatarFor(name) {
+  const s = (name || '?').trim();
+  const initial = (s[0] || '?').toUpperCase();
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  const color = AVATAR_COLORS[h % AVATAR_COLORS.length];
+  return { initial, color };
+}
+
+function LeadAvatar({ name, size = 'md' }) {
+  const { initial, color } = avatarFor(name);
+  const sz = size === 'sm'
+    ? 'w-6 h-6 text-[10px]'
+    : size === 'lg'
+      ? 'w-10 h-10 text-sm'
+      : 'w-7 h-7 text-[11px]';
+  return (
+    <div className={`${sz} ${color} rounded-full flex items-center justify-center font-bold flex-shrink-0`}>
+      {initial}
+    </div>
+  );
+}
+
 export default function Growth() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('pipeline');
@@ -31,15 +67,24 @@ export default function Growth() {
   const [leads, setLeads] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState({ q: '', stage: '', source: '' });
+  const [filters, setFilters] = useState({
+    q: '', stage: '', source: '',
+    lead_name: '', contact_person: '', phone: '', owner: '', mrr_min: '',
+  });
+  const clearFilters = () => setFilters({
+    q: '', stage: '', source: '',
+    lead_name: '', contact_person: '', phone: '', owner: '', mrr_min: '',
+  });
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ lead_name: '', contact_person: '', phone: '', source: 'instagram', stage: 'new_lead', expected_mrr: 0 });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState(null);
   const [selectedActivity, setSelectedActivity] = useState([]);
   const [drawerLoading, setDrawerLoading] = useState(false);
-  const [drawerMode, setDrawerMode] = useState('view');
+  const [drawerMode, setDrawerMode] = useState('view'); // view | edit | create
   const [quickNote, setQuickNote] = useState('');
+  const [editForm, setEditForm] = useState({});
+  const [savingEdit, setSavingEdit] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importPreview, setImportPreview] = useState([]);
@@ -58,8 +103,8 @@ export default function Growth() {
     setStages(stageList || []);
   };
 
-  const openLeadDrawer = async (leadId) => {
-    setDrawerMode('view');
+  const openLeadDrawer = async (leadId, startInEdit = false) => {
+    setDrawerMode(startInEdit ? 'edit' : 'view');
     setDrawerOpen(true);
     setDrawerLoading(true);
     setQuickNote('');
@@ -67,11 +112,55 @@ export default function Growth() {
       const res = await api.get(`/growth/${leadId}`);
       setSelectedLead(res.lead || null);
       setSelectedActivity(res.activity || []);
+      if (startInEdit && res.lead) setEditForm(buildEditForm(res.lead));
     } catch {
       toast.error('Failed to load lead details');
       setDrawerOpen(false);
     } finally {
       setDrawerLoading(false);
+    }
+  };
+
+  const buildEditForm = (lead) => ({
+    lead_name: lead.lead_name || '',
+    contact_person: lead.contact_person || '',
+    phone: lead.phone || '',
+    email: lead.email || '',
+    source: lead.source || 'other',
+    stage: lead.stage || 'new_lead',
+    owner: lead.owner || '',
+    priority: lead.priority || 'medium',
+    expected_mrr: lead.expected_mrr ?? 0,
+    next_follow_up_at: lead.next_follow_up_at ? lead.next_follow_up_at.slice(0, 16) : '',
+    lost_reason: lead.lost_reason || '',
+    notes: lead.notes || '',
+  });
+
+  const startEdit = () => {
+    if (!selectedLead) return;
+    setEditForm(buildEditForm(selectedLead));
+    setDrawerMode('edit');
+  };
+
+  const saveEdit = async () => {
+    if (!selectedLead) return;
+    if (!editForm.lead_name?.trim()) {
+      toast.error('Lead name is required');
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const payload = { ...editForm };
+      if (!payload.next_follow_up_at) delete payload.next_follow_up_at;
+      if (payload.expected_mrr === '' || payload.expected_mrr === null) payload.expected_mrr = 0;
+      await api.patch(`/growth/${selectedLead.id}`, payload);
+      toast.success('Lead updated');
+      await Promise.all([loadSummaryAndPipeline(), loadLeads()]);
+      await openLeadDrawer(selectedLead.id);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Failed to update lead');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -81,6 +170,7 @@ export default function Growth() {
     setSelectedLead(null);
     setSelectedActivity([]);
     setQuickNote('');
+    setEditForm({});
   };
 
   const openCreateDrawer = () => {
@@ -148,6 +238,11 @@ export default function Growth() {
     if (filters.q) params.set('q', filters.q);
     if (filters.stage) params.set('stage', filters.stage);
     if (filters.source) params.set('source', filters.source);
+    if (filters.lead_name) params.set('lead_name', filters.lead_name);
+    if (filters.contact_person) params.set('contact_person', filters.contact_person);
+    if (filters.phone) params.set('phone', filters.phone);
+    if (filters.owner) params.set('owner', filters.owner);
+    if (filters.mrr_min) params.set('mrr_min', filters.mrr_min);
     params.set('page', String(page));
     params.set('limit', '20');
     const res = await api.get(`/growth?${params.toString()}`);
@@ -168,8 +263,13 @@ export default function Growth() {
 
   useEffect(() => { refresh(); }, []);
   useEffect(() => {
-    if (!loading) loadLeads().catch(() => toast.error('Failed to refresh leads'));
-  }, [page, filters.stage, filters.source]);
+    if (loading) return;
+    const t = setTimeout(() => {
+      loadLeads().catch(() => toast.error('Failed to refresh leads'));
+    }, 280);
+    return () => clearTimeout(t);
+  }, [page, filters]);
+  useEffect(() => { setPage(1); }, [filters]);
 
   const moveStage = async (leadId, toStage) => {
     try {
@@ -408,16 +508,26 @@ export default function Growth() {
             <div className="mt-4 overflow-x-auto">
               <div className="flex gap-3 min-w-max pb-2">
                 {pipeline.map(stage => (
-                  <div key={stage.id} className="w-72 bg-slate-50 rounded-xl border border-slate-200/70 p-3">
-                    <div className="flex items-center justify-between mb-2">
+                  <div key={stage.id} className="w-72 bg-slate-50 rounded-xl border border-slate-200/70 flex flex-col" style={{ height: 560 }}>
+                    <div className="flex items-center justify-between px-3 py-2.5 border-b border-slate-200/70 flex-shrink-0">
                       <Badge color={STAGE_COLOR[stage.id] || 'slate'}>{pretty(stage.id)}</Badge>
                       <span className="text-xs text-slate-400">{stage.count}</span>
                     </div>
-                    <div className="space-y-2">
-                      {(stage.items || []).slice(0, 8).map(lead => (
+                    <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
+                      {(stage.items || []).map(lead => (
                         <div key={lead.id} onClick={() => openLeadDrawer(lead.id)} className="w-full text-left bg-white border border-slate-200 rounded-lg p-2.5 hover:border-brand-300 cursor-pointer">
-                          <p className="text-sm font-semibold text-slate-800 truncate">{lead.lead_name}</p>
-                          <p className="text-xs text-slate-400 mt-0.5 truncate">{lead.contact_person || '—'} · {lead.phone || '—'}</p>
+                          <div className="flex items-center gap-2">
+                            <LeadAvatar name={lead.lead_name} size="sm" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-slate-800 truncate">{lead.lead_name}</p>
+                              <p className="text-[11px] text-slate-400 truncate">{lead.contact_person || '—'} · {lead.phone || '—'}</p>
+                            </div>
+                          </div>
+                          {lead.notes && (
+                            <p className="mt-1.5 text-[10px] text-slate-500 leading-snug line-clamp-2 italic">
+                              “{lead.notes}”
+                            </p>
+                          )}
                           <div className="flex items-center justify-between gap-2 mt-2">
                             <Badge color="sky">{lead.source || 'unknown'}</Badge>
                             <span className="text-xs font-semibold text-slate-700">{fmt.inr(lead.expected_mrr)}</span>
@@ -431,7 +541,9 @@ export default function Growth() {
                           </div>
                         </div>
                       ))}
-                      {stage.count > 8 && <p className="text-[11px] text-slate-400 text-center">+{stage.count - 8} more</p>}
+                      {stage.count === 0 && (
+                        <p className="text-[11px] text-slate-300 text-center py-4">No leads</p>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -440,51 +552,108 @@ export default function Growth() {
           )}
 
           {activeTab === 'leads' && (
-            <div className="mt-4 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                <input value={filters.q} onChange={(e) => setFilters(f => ({ ...f, q: e.target.value }))} placeholder="Search lead/contact/phone" className="h-9 px-3 text-sm border border-slate-200 rounded-lg bg-white" />
-                <select value={filters.stage} onChange={(e) => setFilters(f => ({ ...f, stage: e.target.value }))} className="h-9 px-3 text-sm border border-slate-200 rounded-lg bg-white">
-                  <option value="">All stages</option>
-                  {stages.map(s => <option key={s} value={s}>{pretty(s)}</option>)}
-                </select>
-                <select value={filters.source} onChange={(e) => setFilters(f => ({ ...f, source: e.target.value }))} className="h-9 px-3 text-sm border border-slate-200 rounded-lg bg-white">
-                  <option value="">All sources</option>
-                  {['instagram', 'facebook', 'google', 'referral', 'direct', 'other'].map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                <button onClick={() => loadLeads()} className="h-9 px-3 rounded-lg bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-200">Apply</button>
+            <div className="mt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] text-slate-400">Each column has its own search. Filters apply automatically.</p>
+                <button onClick={clearFilters} className="h-7 px-2.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-semibold hover:bg-slate-200">Clear filters</button>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100">
-                      {['Lead', 'Source', 'Stage', 'Owner', 'MRR', 'Follow-up', 'Move'].map(h => (
-                        <th key={h} className="py-2.5 px-3 text-[11px] text-slate-400 font-semibold uppercase tracking-wider text-left">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {leads.map(lead => (
-                      <tr key={lead.id} className="hover:bg-slate-50/60">
-                        <td className="py-2.5 px-3">
-                          <button onClick={() => openLeadDrawer(lead.id)} className="text-left">
-                            <p className="font-semibold text-slate-800 hover:text-brand-700">{lead.lead_name}</p>
-                          </button>
-                          <p className="text-[11px] text-slate-400">{lead.contact_person || '—'} · {lead.phone || '—'}</p>
-                        </td>
-                        <td className="py-2.5 px-3"><Badge color="sky">{lead.source || 'unknown'}</Badge></td>
-                        <td className="py-2.5 px-3"><Badge color={STAGE_COLOR[lead.stage] || 'slate'}>{pretty(lead.stage || 'new_lead')}</Badge></td>
-                        <td className="py-2.5 px-3 text-slate-600">{lead.owner || '—'}</td>
-                        <td className="py-2.5 px-3 text-slate-700 font-semibold">{fmt.inr(lead.expected_mrr)}</td>
-                        <td className="py-2.5 px-3 text-xs text-slate-400">{lead.next_follow_up_at ? fmt.datetime(lead.next_follow_up_at) : '—'}</td>
-                        <td className="py-2.5 px-3">
-                          <select value={lead.stage || 'new_lead'} onChange={(e) => moveStage(lead.id, e.target.value)} className="h-7 px-2 text-xs border border-slate-200 rounded-md bg-white">
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <div className="max-h-[540px] overflow-y-auto">
+                  <table className="w-full text-sm min-w-[920px]">
+                    <thead className="sticky top-0 bg-white z-10">
+                      <tr className="border-b border-slate-100">
+                        <th className="py-2.5 px-3 text-[11px] text-slate-400 font-semibold uppercase tracking-wider text-left w-[26%]">Lead</th>
+                        <th className="py-2.5 px-3 text-[11px] text-slate-400 font-semibold uppercase tracking-wider text-left">Contact</th>
+                        <th className="py-2.5 px-3 text-[11px] text-slate-400 font-semibold uppercase tracking-wider text-left">Phone</th>
+                        <th className="py-2.5 px-3 text-[11px] text-slate-400 font-semibold uppercase tracking-wider text-left">Source</th>
+                        <th className="py-2.5 px-3 text-[11px] text-slate-400 font-semibold uppercase tracking-wider text-left">Stage</th>
+                        <th className="py-2.5 px-3 text-[11px] text-slate-400 font-semibold uppercase tracking-wider text-left">Owner</th>
+                        <th className="py-2.5 px-3 text-[11px] text-slate-400 font-semibold uppercase tracking-wider text-left">MRR ≥</th>
+                        <th className="py-2.5 px-3 text-[11px] text-slate-400 font-semibold uppercase tracking-wider text-left">Follow-up</th>
+                        <th className="py-2.5 px-3 text-[11px] text-slate-400 font-semibold uppercase tracking-wider text-left">Move</th>
+                        <th className="py-2.5 px-3" />
+                      </tr>
+                      <tr className="border-b border-slate-100 bg-slate-50/50">
+                        <th className="py-1.5 px-2">
+                          <input value={filters.lead_name} onChange={(e) => setFilters(f => ({ ...f, lead_name: e.target.value }))}
+                            placeholder="Search name…" className="w-full h-7 px-2 text-xs border border-slate-200 rounded-md bg-white" />
+                        </th>
+                        <th className="py-1.5 px-2">
+                          <input value={filters.contact_person} onChange={(e) => setFilters(f => ({ ...f, contact_person: e.target.value }))}
+                            placeholder="Search contact…" className="w-full h-7 px-2 text-xs border border-slate-200 rounded-md bg-white" />
+                        </th>
+                        <th className="py-1.5 px-2">
+                          <input value={filters.phone} onChange={(e) => setFilters(f => ({ ...f, phone: e.target.value }))}
+                            placeholder="Search phone…" className="w-full h-7 px-2 text-xs border border-slate-200 rounded-md bg-white" />
+                        </th>
+                        <th className="py-1.5 px-2">
+                          <select value={filters.source} onChange={(e) => setFilters(f => ({ ...f, source: e.target.value }))}
+                            className="w-full h-7 px-2 text-xs border border-slate-200 rounded-md bg-white">
+                            <option value="">All</option>
+                            {['instagram', 'facebook', 'google', 'referral', 'direct', 'other'].map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </th>
+                        <th className="py-1.5 px-2">
+                          <select value={filters.stage} onChange={(e) => setFilters(f => ({ ...f, stage: e.target.value }))}
+                            className="w-full h-7 px-2 text-xs border border-slate-200 rounded-md bg-white">
+                            <option value="">All</option>
                             {stages.map(s => <option key={s} value={s}>{pretty(s)}</option>)}
                           </select>
-                        </td>
+                        </th>
+                        <th className="py-1.5 px-2">
+                          <input value={filters.owner} onChange={(e) => setFilters(f => ({ ...f, owner: e.target.value }))}
+                            placeholder="Owner…" className="w-full h-7 px-2 text-xs border border-slate-200 rounded-md bg-white" />
+                        </th>
+                        <th className="py-1.5 px-2">
+                          <input type="number" min="0" value={filters.mrr_min} onChange={(e) => setFilters(f => ({ ...f, mrr_min: e.target.value }))}
+                            placeholder="min ₹" className="w-full h-7 px-2 text-xs border border-slate-200 rounded-md bg-white" />
+                        </th>
+                        <th className="py-1.5 px-2" />
+                        <th className="py-1.5 px-2" />
+                        <th className="py-1.5 px-2" />
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {leads.length === 0 && (
+                        <tr><td colSpan={10} className="py-8 text-center text-sm text-slate-400">No leads match these filters.</td></tr>
+                      )}
+                      {leads.map(lead => (
+                        <tr key={lead.id} className="hover:bg-slate-50/60">
+                          <td className="py-2.5 px-3">
+                            <button onClick={() => openLeadDrawer(lead.id)} className="text-left flex items-center gap-2 min-w-0">
+                              <LeadAvatar name={lead.lead_name} />
+                              <div className="min-w-0">
+                                <p className="font-semibold text-slate-800 hover:text-brand-700 truncate">{lead.lead_name}</p>
+                                {lead.notes && (
+                                  <p className="text-[10px] text-slate-400 italic truncate max-w-[200px]">“{lead.notes}”</p>
+                                )}
+                              </div>
+                            </button>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-600 text-xs">{lead.contact_person || '—'}</td>
+                          <td className="py-2.5 px-3 text-slate-600 text-xs">{lead.phone || '—'}</td>
+                          <td className="py-2.5 px-3"><Badge color="sky">{lead.source || 'unknown'}</Badge></td>
+                          <td className="py-2.5 px-3"><Badge color={STAGE_COLOR[lead.stage] || 'slate'}>{pretty(lead.stage || 'new_lead')}</Badge></td>
+                          <td className="py-2.5 px-3 text-slate-600 text-xs">{lead.owner || '—'}</td>
+                          <td className="py-2.5 px-3 text-slate-700 font-semibold text-xs">{fmt.inr(lead.expected_mrr)}</td>
+                          <td className="py-2.5 px-3 text-xs text-slate-400">{lead.next_follow_up_at ? fmt.datetime(lead.next_follow_up_at) : '—'}</td>
+                          <td className="py-2.5 px-3">
+                            <select value={lead.stage || 'new_lead'} onChange={(e) => moveStage(lead.id, e.target.value)} className="h-7 px-2 text-xs border border-slate-200 rounded-md bg-white">
+                              {stages.map(s => <option key={s} value={s}>{pretty(s)}</option>)}
+                            </select>
+                          </td>
+                          <td className="py-2.5 px-2">
+                            <button onClick={() => openLeadDrawer(lead.id, true)}
+                              title="Edit lead"
+                              className="w-7 h-7 rounded-md bg-slate-100 text-slate-600 hover:bg-brand-50 hover:text-brand-700 inline-flex items-center justify-center">
+                              <Edit2 size={12} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <span>{total > 0 ? `${(page - 1) * 20 + 1}-${Math.min(page * 20, total)} of ${total}` : '0 results'}</span>
@@ -676,17 +845,124 @@ export default function Growth() {
           <div className="fixed inset-0 z-40 bg-slate-900/35" onClick={closeDrawer} />
           <aside className="fixed right-0 top-0 h-full w-full sm:w-[460px] bg-white z-50 border-l border-slate-200 shadow-2xl overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-slate-100 px-4 py-3 flex items-center justify-between z-10">
-              <div>
-                <p className="text-xs text-slate-400 uppercase tracking-wide">Lead Details</p>
-                <p className="text-sm font-semibold text-slate-900">{selectedLead?.lead_name || 'Loading...'}</p>
+              <div className="flex items-center gap-2 min-w-0">
+                {selectedLead?.lead_name && <LeadAvatar name={selectedLead.lead_name} size="lg" />}
+                <div className="min-w-0">
+                  <p className="text-xs text-slate-400 uppercase tracking-wide">Lead Details</p>
+                  <p className="text-sm font-semibold text-slate-900 truncate">{selectedLead?.lead_name || 'Loading...'}</p>
+                </div>
               </div>
-              <button onClick={closeDrawer} className="w-8 h-8 rounded-lg hover:bg-slate-100 inline-flex items-center justify-center text-slate-500">
-                <X size={16} />
-              </button>
+              <div className="flex items-center gap-1">
+                {drawerMode === 'view' && selectedLead && (
+                  <button onClick={startEdit} className="h-8 px-2.5 rounded-lg bg-brand-50 text-brand-700 text-xs font-semibold hover:bg-brand-100 inline-flex items-center gap-1">
+                    <Edit2 size={12} /> Edit
+                  </button>
+                )}
+                <button onClick={closeDrawer} className="w-8 h-8 rounded-lg hover:bg-slate-100 inline-flex items-center justify-center text-slate-500">
+                  <X size={16} />
+                </button>
+              </div>
             </div>
 
             {drawerLoading ? (
               <div className="p-6"><Spinner /></div>
+            ) : drawerMode === 'edit' && selectedLead ? (
+              <div className="p-4 space-y-3">
+                <Card className="p-3 space-y-2">
+                  <p className="text-xs text-slate-400 uppercase tracking-wide">Edit Lead</p>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Lead / Clinic Name *</label>
+                    <input value={editForm.lead_name} onChange={(e) => setEditForm(f => ({ ...f, lead_name: e.target.value }))}
+                      className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg bg-slate-50" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Contact Person</label>
+                      <input value={editForm.contact_person} onChange={(e) => setEditForm(f => ({ ...f, contact_person: e.target.value }))}
+                        className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg bg-slate-50" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Phone</label>
+                      <input value={editForm.phone} onChange={(e) => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                        className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg bg-slate-50" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Email</label>
+                    <input value={editForm.email} onChange={(e) => setEditForm(f => ({ ...f, email: e.target.value }))}
+                      className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg bg-slate-50" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Source</label>
+                      <select value={editForm.source} onChange={(e) => setEditForm(f => ({ ...f, source: e.target.value }))}
+                        className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg bg-slate-50">
+                        {['instagram', 'facebook', 'google', 'referral', 'direct', 'other'].map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Stage</label>
+                      <select value={editForm.stage} onChange={(e) => setEditForm(f => ({ ...f, stage: e.target.value }))}
+                        className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg bg-slate-50">
+                        {stages.map(s => <option key={s} value={s}>{pretty(s)}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Owner</label>
+                      <input value={editForm.owner} onChange={(e) => setEditForm(f => ({ ...f, owner: e.target.value }))}
+                        className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg bg-slate-50" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Priority</label>
+                      <select value={editForm.priority} onChange={(e) => setEditForm(f => ({ ...f, priority: e.target.value }))}
+                        className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg bg-slate-50">
+                        {['high', 'medium', 'low'].map(p => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Expected MRR (₹)</label>
+                      <input type="number" min="0" value={editForm.expected_mrr}
+                        onChange={(e) => setEditForm(f => ({ ...f, expected_mrr: e.target.value === '' ? '' : Number(e.target.value) }))}
+                        className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg bg-slate-50" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Next Follow-up</label>
+                      <input type="datetime-local" value={editForm.next_follow_up_at}
+                        onChange={(e) => setEditForm(f => ({ ...f, next_follow_up_at: e.target.value }))}
+                        className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg bg-slate-50" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Notes</label>
+                    <textarea rows={3} value={editForm.notes}
+                      onChange={(e) => setEditForm(f => ({ ...f, notes: e.target.value }))}
+                      placeholder="Quick note shown on the pipeline card…"
+                      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50" />
+                  </div>
+                  {editForm.stage === 'lost' && (
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Lost Reason</label>
+                      <input value={editForm.lost_reason}
+                        onChange={(e) => setEditForm(f => ({ ...f, lost_reason: e.target.value }))}
+                        className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg bg-slate-50" />
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-2 pt-2">
+                    <button onClick={() => setDrawerMode('view')}
+                      className="h-9 rounded-lg bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-200">
+                      Cancel
+                    </button>
+                    <button onClick={saveEdit} disabled={savingEdit}
+                      className="h-9 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 disabled:opacity-60 inline-flex items-center justify-center gap-1">
+                      <Save size={13} /> {savingEdit ? 'Saving…' : 'Save Changes'}
+                    </button>
+                  </div>
+                </Card>
+              </div>
             ) : drawerMode === 'create' ? (
               <div className="p-4 space-y-4">
                 <Card className="p-3">

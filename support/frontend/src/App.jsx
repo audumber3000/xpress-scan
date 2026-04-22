@@ -7,6 +7,7 @@ import Layout from './pages/Layout';
 import Overview from './pages/Overview';
 import Clinics from './pages/Clinics';
 import ClinicDetail from './pages/ClinicDetail';
+import OwnerDetail from './pages/OwnerDetail';
 import Tickets from './pages/Tickets';
 import TicketDetail from './pages/TicketDetail';
 import Financials from './pages/Financials';
@@ -41,6 +42,7 @@ function AppRoutes() {
         <Route path="overview" element={<Overview />} />
         <Route path="clinics" element={<Clinics />} />
         <Route path="clinics/:id" element={<ClinicDetail />} />
+        <Route path="owners/:id" element={<OwnerDetail />} />
         <Route path="tickets" element={<Tickets />} />
         <Route path="tickets/:id" element={<TicketDetail />} />
         <Route path="financials" element={<Financials />} />
