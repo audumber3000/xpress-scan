@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, StyleSheet, StatusBar, RefreshControl } from 'react-native';
+import { View, ScrollView, StyleSheet, StatusBar, RefreshControl, Dimensions } from 'react-native';
 import { useAuth } from '../../../../../app/AuthContext';
 import { transactionsApiService, Transaction } from '../../../../../services/api/transactions.api';
 import { analyticsApiService, Analytics } from '../../../../../services/api/analytics.api';
@@ -11,7 +11,12 @@ import {
   WelcomeHeaderBottomPocket
 } from './components/WelcomeHeader';
 import { PatientVisitsSection } from './components/PatientVisitsSection';
+import { RevenueSection } from './components/RevenueSection';
 import { ErrorBanner } from './components/ErrorBanner';
+import { GoogleReviewsRow } from '../../../../../shared/components/home/GoogleReviewsRow';
+import { googleReviewsApiService, GooglePlaceStatus } from '../../../../../services/api/google-reviews.api';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface HomeScreenProps {
   navigation: any;
@@ -28,6 +33,10 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
   const [showNotifications, setShowNotifications] = useState(false);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activePage, setActivePage] = useState(0);
+  const [googleStatus, setGoogleStatus] = useState<GooglePlaceStatus | null>(null);
+  const [googleLoading, setGoogleLoading] = useState(true);
+  const [cityRank, setCityRank] = useState<number | null>(null);
 
   const firstName = (backendUser?.name || user?.displayName || 'Doctor').split(' ')[0];
   const role = backendUser?.role;
@@ -73,10 +82,26 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
     }
   };
 
+  const loadGoogleStatus = async () => {
+    setGoogleLoading(true);
+    const [s, competitors] = await Promise.all([
+      googleReviewsApiService.getStatus(),
+      googleReviewsApiService.getCompetitors('city'),
+    ]);
+    setGoogleStatus(s);
+    if (competitors?.competitors?.length) {
+      const idx = competitors.competitors.findIndex(c => c.is_our_clinic);
+      setCityRank(idx >= 0 ? idx + 1 : null);
+    } else {
+      setCityRank(null);
+    }
+    setGoogleLoading(false);
+  };
+
   const loadData = async () => {
     try {
       setLoading(true);
-      await Promise.all([loadAnalytics(), loadTransactions()]);
+      await Promise.all([loadAnalytics(), loadTransactions(), loadGoogleStatus()]);
       setError(null);
     } catch (err) {
       console.error('Error loading dashboard data:', err);
@@ -131,23 +156,58 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
           dailyRevenue={dailyRevenue}
           totalPatients={totalPatients}
           subscriptionPlan={backendUser?.clinic?.subscription_plan}
+          isTrial={backendUser?.clinic?.is_trial}
+          trialDaysRemaining={backendUser?.clinic?.trial_days_remaining}
           onUpgradePress={() => navigation.navigate('Purchase')}
+          onPlanPress={() => navigation.navigate('Subscription')}
         />
 
         {/* Part 2: Tiny Rounded Bottom component */}
         <WelcomeHeaderBottomPocket />
 
-        {/* Graph card overlapping Part 2, sliding under Part 1 */}
+        {/* Swipeable chart cards overlapping Part 2 */}
         <View style={styles.chartWrapper}>
-          <PatientVisitsSection
-            analytics={analytics}
-            selectedPeriod={selectedPeriod}
-            onPeriodChange={setSelectedPeriod}
-            loading={analyticsLoading}
-          />
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={(e) => {
+              const page = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+              setActivePage(page);
+            }}
+          >
+            <View style={{ width: SCREEN_WIDTH }}>
+              <PatientVisitsSection
+                analytics={analytics}
+                selectedPeriod={selectedPeriod}
+                onPeriodChange={setSelectedPeriod}
+                loading={analyticsLoading}
+              />
+            </View>
+            <View style={{ width: SCREEN_WIDTH }}>
+              <RevenueSection
+                analytics={analytics}
+                selectedPeriod={selectedPeriod}
+                onPeriodChange={setSelectedPeriod}
+                loading={analyticsLoading}
+              />
+            </View>
+          </ScrollView>
+          {/* Pagination dots */}
+          <View style={styles.dots}>
+            <View style={[styles.dot, activePage === 0 && styles.dotActive]} />
+            <View style={[styles.dot, activePage === 1 && styles.dotActive]} />
+          </View>
         </View>
 
         <ErrorBanner error={error} onRetry={loadData} />
+
+        <GoogleReviewsRow
+          status={googleStatus}
+          loading={googleLoading}
+          cityRank={cityRank}
+          onPress={() => navigation.navigate('GoogleReviews')}
+        />
 
         <RecentTransactions
           transactions={transactions}
@@ -175,9 +235,26 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   chartWrapper: {
-    marginTop: -80, // Overlap the BottomPocket (Part 2)
-    zIndex: 5,       // Above pocket but below TopPart
-    elevation: 2,   // Below TopPart (80)
-    marginBottom: 20,
+    marginTop: -80,
+    zIndex: 5,
+    elevation: 2,
+    marginBottom: 8,
+  },
+  dots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 14,
+    gap: 6,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#D1D5DB',
+  },
+  dotActive: {
+    width: 18,
+    backgroundColor: '#2E2A85',
   },
 });

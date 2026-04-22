@@ -23,9 +23,47 @@ from core.nexus_notify import notify
 from database import get_db
 from sqlalchemy.orm import Session, joinedload
 from domains.notification.services.platform_notification_service import PlatformNotificationService
-from models import Clinic, User
+from models import Clinic, User, Subscription, user_clinics
+from sqlalchemy import or_
+from datetime import datetime as _dt
 
 router = APIRouter()
+
+
+def _enrich_clinic_dto(db: Session, clinic: Clinic) -> ClinicResponseDTO:
+    """Build a ClinicResponseDTO and attach the owner's subscription info
+    (plan_name, is_trial, plan_ends_at, trial_days_remaining) for header display."""
+    dto = ClinicResponseDTO.from_orm(clinic)
+    owner = (
+        db.query(User)
+        .join(user_clinics, user_clinics.c.user_id == User.id)
+        .filter(
+            user_clinics.c.clinic_id == clinic.id,
+            user_clinics.c.role == "clinic_owner",
+            user_clinics.c.is_active == True,
+        )
+        .first()
+    )
+    if not owner:
+        return dto
+    sub = (
+        db.query(Subscription)
+        .filter(or_(Subscription.clinic_id == clinic.id, Subscription.user_id == owner.id))
+        .order_by(Subscription.id.desc())
+        .first()
+    )
+    if not sub:
+        return dto
+    now = _dt.utcnow()
+    is_expired = bool(
+        sub.current_end and sub.current_end < now and sub.status != "active"
+    )
+    dto.plan_name = sub.plan_name
+    dto.is_trial = bool(getattr(sub, "is_trial", False) and sub.status == "active" and not is_expired)
+    if sub.current_end:
+        dto.plan_ends_at = sub.current_end.isoformat()
+        dto.trial_days_remaining = max(0, (sub.current_end.date() - now.date()).days)
+    return dto
 
 
 @router.post(
@@ -76,11 +114,11 @@ async def register_user(
 
 
 def _get_clinic_for_user(db: Session, user) -> Optional[ClinicResponseDTO]:
-    """Return clinic DTO if user has clinic_id, else None."""
+    """Return clinic DTO (enriched with subscription info) if user has clinic_id, else None."""
     if not getattr(user, "clinic_id", None):
         return None
     clinic = db.query(Clinic).filter(Clinic.id == user.clinic_id).first()
-    return ClinicResponseDTO.from_orm(clinic) if clinic else None
+    return _enrich_clinic_dto(db, clinic) if clinic else None
 
 
 @router.post(
@@ -125,7 +163,7 @@ async def login_user(
         )
         
         user_dto = UserResponseDTO.from_orm(user)
-        user_dto.clinics = [ClinicResponseDTO.from_orm(c) for c in user_clinics_list]
+        user_dto.clinics = [_enrich_clinic_dto(db, c) for c in user_clinics_list]
         
         clinic = _get_clinic_for_user(db, user)
 
@@ -183,7 +221,7 @@ async def oauth_login(
         )
         
         user_dto = UserResponseDTO.from_orm(user)
-        user_dto.clinics = [ClinicResponseDTO.from_orm(c) for c in user_clinics_list]
+        user_dto.clinics = [_enrich_clinic_dto(db, c) for c in user_clinics_list]
         
         token = auth_service.create_jwt_token(user.id)
         clinic = _get_clinic_for_user(db, user)
@@ -270,7 +308,7 @@ async def oauth_code_login(
         )
         
         user_dto = UserResponseDTO.from_orm(user)
-        user_dto.clinics = [ClinicResponseDTO.from_orm(c) for c in user_clinics_list]
+        user_dto.clinics = [_enrich_clinic_dto(db, c) for c in user_clinics_list]
         
         clinic = _get_clinic_for_user(db, user)
         return AuthResponseDTO(
@@ -358,7 +396,7 @@ async def get_current_user(
             .filter(User.id == user.id)
             .all()
         )
-        user_dto.clinics = [ClinicResponseDTO.from_orm(c) for c in user_clinics_list]
+        user_dto.clinics = [_enrich_clinic_dto(db, c) for c in user_clinics_list]
         
         clinic_info = None
         if user.clinic_id and hasattr(user, "active_clinic") and user.active_clinic:
@@ -694,7 +732,7 @@ async def switch_clinic(
         )
         
         user_dto = UserResponseDTO.from_orm(user)
-        user_dto.clinics = [ClinicResponseDTO.from_orm(c) for c in user_clinics_list]
+        user_dto.clinics = [_enrich_clinic_dto(db, c) for c in user_clinics_list]
         
         return AuthResponseDTO(
             message=f"Switched to clinic: {clinic.name}",

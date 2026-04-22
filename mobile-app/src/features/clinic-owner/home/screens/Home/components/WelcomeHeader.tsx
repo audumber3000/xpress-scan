@@ -15,7 +15,10 @@ interface WelcomeHeaderProps {
   onProfilePress?: () => void;
   loading?: boolean;
   subscriptionPlan?: 'free' | 'professional';
+  isTrial?: boolean;
+  trialDaysRemaining?: number | null;
   onUpgradePress?: () => void;
+  onPlanPress?: () => void;
 }
 
 // 1. Background backdrop (lowest layer)
@@ -41,7 +44,10 @@ export const WelcomeHeaderTopPart: React.FC<WelcomeHeaderProps> = ({
   onProfilePress,
   loading = false,
   subscriptionPlan = 'free',
+  isTrial = false,
+  trialDaysRemaining = null,
   onUpgradePress,
+  onPlanPress,
 }) => {
   // Derive initials for avatar
   const initials = userName
@@ -89,13 +95,39 @@ export const WelcomeHeaderTopPart: React.FC<WelcomeHeaderProps> = ({
 
           {/* Right: actions */}
           <View style={styles.rightActions}>
-            {subscriptionPlan !== 'professional' && (
+            {isTrial ? (
+              <TouchableOpacity
+                style={styles.trialBadge}
+                onPress={onPlanPress}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.trialBadgeText}>
+                  🕐 Trial
+                  {typeof trialDaysRemaining === 'number'
+                    ? ` · ${trialDaysRemaining}d left`
+                    : ''}
+                </Text>
+              </TouchableOpacity>
+            ) : subscriptionPlan === 'professional' ? (
+              <TouchableOpacity
+                style={styles.proBadge}
+                onPress={onPlanPress}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.proBadgeText}>
+                  ✦ PRO
+                  {typeof trialDaysRemaining === 'number'
+                    ? ` · ${trialDaysRemaining}d left`
+                    : ''}
+                </Text>
+              </TouchableOpacity>
+            ) : (
               <TouchableOpacity
                 style={styles.upgradeBadge}
                 onPress={onUpgradePress}
                 activeOpacity={0.8}
               >
-                <Text style={styles.upgradeBadgeText}>⚡ PRO</Text>
+                <Text style={styles.upgradeBadgeText}>⚡ Upgrade</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -220,6 +252,34 @@ const styles = StyleSheet.create({
   },
   upgradeBadgeText: {
     color: '#92400E',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  proBadge: {
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#10B981',
+  },
+  proBadgeText: {
+    color: '#6EE7B7',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  trialBadge: {
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#60A5FA',
+  },
+  trialBadgeText: {
+    color: '#BFDBFE',
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 0.5,

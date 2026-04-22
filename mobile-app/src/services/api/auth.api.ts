@@ -7,6 +7,10 @@ export interface ClinicInfo {
   address?: string;
   imageUrl?: string;
   subscription_plan?: 'free' | 'professional';
+  plan_name?: string | null;
+  is_trial?: boolean;
+  plan_ends_at?: string | null;
+  trial_days_remaining?: number | null;
 }
 
 export interface BackendUser {
@@ -53,6 +57,10 @@ export class AuthApiService extends BaseApiService {
         address: clinicSource.address,
         imageUrl: clinicSource.logo_url,
         subscription_plan: clinicSource.subscription_plan,
+        plan_name: clinicSource.plan_name ?? null,
+        is_trial: !!clinicSource.is_trial,
+        plan_ends_at: clinicSource.plan_ends_at ?? null,
+        trial_days_remaining: clinicSource.trial_days_remaining ?? null,
       } : undefined,
       clinics: clinicsSource ? clinicsSource.map((c: any) => ({
         id: c.id.toString(),
@@ -60,6 +68,10 @@ export class AuthApiService extends BaseApiService {
         address: c.address,
         imageUrl: c.logo_url,
         subscription_plan: c.subscription_plan,
+        plan_name: c.plan_name ?? null,
+        is_trial: !!c.is_trial,
+        plan_ends_at: c.plan_ends_at ?? null,
+        trial_days_remaining: c.trial_days_remaining ?? null,
       })) : [],
       permissions: userData.permissions || {},
     };

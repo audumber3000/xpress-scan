@@ -115,6 +115,11 @@ class ClinicResponseDTO(ClinicBaseDTO):
     synced_at: Optional[datetime] = None
     sync_status: str = "local"
     timings: Optional[dict] = None
+    # Subscription/trial info (owner-level, duplicated per clinic for header display)
+    plan_name: Optional[str] = None
+    is_trial: bool = False
+    plan_ends_at: Optional[str] = None
+    trial_days_remaining: Optional[int] = None
 
     class Config:
         from_attributes = True
