@@ -121,6 +121,74 @@ def _get_clinic_for_user(db: Session, user) -> Optional[ClinicResponseDTO]:
     return _enrich_clinic_dto(db, clinic) if clinic else None
 
 
+def _seed_clinic_defaults(db: Session, clinic_id: int):
+    """Seed wallet credit, default procedures, and clinical settings for a new clinic."""
+    from models import TreatmentType, ClinicalSetting
+    from core.wallet_service import credit as wallet_credit
+
+    wallet_credit(db, clinic_id, 50.0, "Welcome bonus — new clinic top-up")
+
+    procedures = [
+        ("Consultation", 200), ("X-Ray", 500), ("Tooth Extraction", 800),
+        ("Dental Filling", 1000), ("Root Canal Treatment", 3500),
+        ("Teeth Cleaning / Scaling", 1200), ("Tooth Whitening", 3000),
+        ("Crown", 5000), ("Dental Bridge", 8000), ("Denture (Full)", 12000),
+        ("Orthodontic Consultation", 500), ("Pit & Fissure Sealant", 600),
+    ]
+    for name, price in procedures:
+        db.add(TreatmentType(clinic_id=clinic_id, name=name, price=float(price), is_active=True))
+
+    defaults = {
+        "complaint": [
+            "Toothache", "Tooth Sensitivity", "Bleeding Gums", "Broken Tooth",
+            "Bad Breath", "Jaw Pain", "Swelling", "Loose Tooth", "Pain on Chewing",
+            "Tooth Discolouration",
+        ],
+        "medical-condition": [
+            "Diabetes", "Hypertension", "Heart Disease", "Asthma",
+            "Thyroid Disorder", "Blood Disorder", "Kidney Disease", "Liver Disease",
+            "No Known Medical Condition",
+        ],
+        "advice": [
+            "Brush twice daily with fluoride toothpaste", "Floss daily",
+            "Avoid sugary and acidic foods", "Visit dentist every 6 months",
+            "Avoid smoking and tobacco", "Use a soft-bristled toothbrush",
+            "Rinse with antiseptic mouthwash", "Take medications as prescribed",
+        ],
+        "finding": [
+            "Caries", "Gingivitis", "Chronic Periodontitis", "Calculus",
+            "Deep Pocket", "Tooth Mobility", "Periapical Abscess", "Plaque",
+            "Attrition", "Recession",
+        ],
+        "dental-history": [
+            "Previous Extraction", "Previous Filling", "Previous Root Canal",
+            "Previous Crown", "Previous Orthodontic Treatment",
+            "No Previous Dental Treatment",
+        ],
+        "diagnosis": [
+            "Dental Caries", "Gingivitis", "Chronic Periodontitis", "Pulpitis",
+            "Periapical Abscess", "Dental Fluorosis", "Malocclusion",
+            "Temporomandibular Disorder", "Oral Ulcer", "Cracked Tooth Syndrome",
+        ],
+        "allergy": [
+            "Penicillin", "Amoxicillin", "Aspirin", "Ibuprofen",
+            "Latex", "Local Anesthetic (Lignocaine)", "No Known Allergies",
+        ],
+        "current-medication": [
+            "Metformin", "Amlodipine", "Atorvastatin", "Aspirin",
+            "Lisinopril", "Warfarin", "Insulin", "No Current Medication",
+        ],
+        "additional-fee": [
+            "Emergency Appointment Fee", "Late Cancellation Fee",
+            "Report Generation Fee", "Home Visit Charge",
+        ],
+    }
+    for category, names in defaults.items():
+        for name in names:
+            db.add(ClinicalSetting(clinic_id=clinic_id, category=category, name=name, is_active=True))
+    db.commit()
+
+
 @router.post(
     "/login",
     response_model=AuthResponseDTO,
@@ -589,7 +657,6 @@ async def complete_onboarding(
 
         # Seed defaults (wallet credit, procedures, clinical settings)
         try:
-            from domains.auth.routes.auth import _seed_clinic_defaults
             _seed_clinic_defaults(db, clinic.id)
         except Exception as seed_err:
             print(f"Non-fatal: failed to seed clinic defaults: {seed_err}")
