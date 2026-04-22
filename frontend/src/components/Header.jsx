@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
-import { Gem, Crown, Search, X } from "lucide-react";
+import { Gem, Crown, Search, X, Clock } from "lucide-react";
 import { FaSync } from "react-icons/fa";
 import { api } from "../utils/api";
 
@@ -348,7 +348,25 @@ const Header = () => {
 
             {/* Plan Indicator */}
             <div className="flex items-center">
-              {user?.clinic?.subscription_plan === 'professional' ? (
+              {user?.clinic?.is_trial ? (
+                <button
+                  onClick={() => navigate("/subscription")}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-100 via-blue-50 to-white border border-blue-200/60 shadow-sm hover:shadow transition-all"
+                  title={
+                    typeof user?.clinic?.trial_days_remaining === 'number'
+                      ? `Trial · ${user.clinic.trial_days_remaining} day${user.clinic.trial_days_remaining === 1 ? '' : 's'} left`
+                      : 'Trial Plan'
+                  }
+                >
+                  <Clock size={18} className="text-blue-500" />
+                  <span className="text-[15px] font-semibold text-gray-800 tracking-wide">
+                    Trial
+                    {typeof user?.clinic?.trial_days_remaining === 'number'
+                      ? ` · ${user.clinic.trial_days_remaining}d left`
+                      : ''}
+                  </span>
+                </button>
+              ) : user?.clinic?.subscription_plan === 'professional' ? (
                 <button
                   onClick={() => navigate("/subscription")}
                   className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-100 via-amber-50 to-white border border-amber-200/50 shadow-sm hover:shadow transition-all"
