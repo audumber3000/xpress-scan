@@ -1,92 +1,189 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal } from 'react-native';
+import {
+    View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal,
+    TextInput, KeyboardAvoidingView, Platform,
+} from 'react-native';
 import {
     UNIVERSAL_UPPER,
     UNIVERSAL_LOWER,
-    SURFACE_COLORS,
-    CONDITION_LABELS,
-    SURFACES,
-    STATUS_LABELS,
-    STATUS_COLORS,
-    TOOTH_NAMES
+    TOOTH_NAMES,
 } from './dentalConstants';
 import { ToothUnit } from './ToothUnit';
 import { colors } from '../../../../../shared/constants/colors';
-import { Check, X } from 'lucide-react-native';
+import { X, Search, ChevronDown } from 'lucide-react-native';
+import { patientsApiService } from '../../../../../services/api/patients.api';
 
 interface DentalChartProps {
     teethData?: any;
     toothNotes?: any;
     onToothUpdate?: (toothNum: number, data: any) => void;
+    onNotesChange?: (toothNum: number, notes: string) => void;
+    onAddTreatment?: (item: { tooth: number; diagnosis: string; procedure: string; notes: string; cost: number; status: string }) => void;
     editable?: boolean;
 }
 
+// ─── Autocomplete Input (inline chips — no z-index issues) ───────
+interface SuggestOption { id: number; name: string; price?: number }
+
+const AutoSuggestInput: React.FC<{
+    label: string;
+    value: string;
+    onChange: (v: string) => void;
+    onSelect?: (s: SuggestOption) => void;
+    suggestions: SuggestOption[];
+    placeholder?: string;
+}> = ({ label, value, onChange, onSelect, suggestions, placeholder }) => {
+    // Show filtered matches when typing; show top-5 defaults when empty
+    const chips = value.trim().length > 0
+        ? suggestions.filter(s => s.name.toLowerCase().includes(value.toLowerCase()) && s.name.toLowerCase() !== value.toLowerCase())
+        : suggestions.slice(0, 5);
+
+    return (
+        <View style={{ marginBottom: 14 }}>
+            <Text style={ss.fieldLabel}>{label}</Text>
+            <View style={ss.inputWrap}>
+                <Search size={14} color="#9CA3AF" style={{ marginRight: 8 }} />
+                <TextInput
+                    style={ss.suggestInput}
+                    value={value}
+                    onChangeText={onChange}
+                    placeholder={placeholder || `Type ${label.toLowerCase()}...`}
+                    placeholderTextColor="#9CA3AF"
+                />
+            </View>
+            {/* Inline chips — rendered below, push content down, no clipping */}
+            {chips.length > 0 && (
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={{ marginTop: 6 }}
+                    keyboardShouldPersistTaps="handled"
+                >
+                    {chips.map(s => (
+                        <TouchableOpacity
+                            key={s.id}
+                            style={ss.chip}
+                            onPress={() => { onChange(s.name); onSelect?.(s); }}
+                        >
+                            <Text style={ss.chipText}>{s.name}</Text>
+                            {s.price ? <Text style={ss.chipPrice}> · ₹{s.price.toLocaleString('en-IN')}</Text> : null}
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+            )}
+        </View>
+    );
+};
+
+// ─── Main DentalChart ─────────────────────────────────────────────
 export const DentalChart: React.FC<DentalChartProps> = ({
     teethData = {},
     toothNotes = {},
     onToothUpdate,
+    onNotesChange,
+    onAddTreatment,
     editable = true,
 }) => {
     const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
     const [isModalVisible, setIsModalVisible] = useState(false);
 
-    const getToothData = (toothNum: number) => {
-        return teethData[toothNum] || { status: 'present', surfaces: {} };
+    // Drawer form state
+    const [examination, setExamination] = useState('');
+    const [diagnosis, setDiagnosis] = useState('');
+    const [procedure, setProcedure] = useState('');
+    const [price, setPrice] = useState('');
+    const [clinicalStatus, setClinicalStatus] = useState('present');
+    const [statusOpen, setStatusOpen] = useState(false);
+
+    // Suggestions
+    const [findingSuggestions, setFindingSuggestions] = useState<SuggestOption[]>([]);
+    const [diagnosisSuggestions, setDiagnosisSuggestions] = useState<SuggestOption[]>([]);
+    const [procedureSuggestions, setProcedureSuggestions] = useState<SuggestOption[]>([]);
+    const [suggestionsLoaded, setSuggestionsLoaded] = useState(false);
+
+    const loadSuggestions = async () => {
+        if (suggestionsLoaded) return;
+        const [f, d, p] = await Promise.all([
+            patientsApiService.getClinicalSuggestions('finding'),
+            patientsApiService.getClinicalSuggestions('diagnosis'),
+            patientsApiService.getClinicalSuggestions('procedure'),
+        ]);
+        setFindingSuggestions(f);
+        setDiagnosisSuggestions(d);
+        setProcedureSuggestions(p);
+        setSuggestionsLoaded(true);
     };
+
+    const getToothData = (toothNum: number) => teethData[toothNum] || { status: 'present', surfaces: {} };
 
     const handleToothPress = (toothNum: number) => {
         setSelectedTooth(toothNum);
         if (editable) {
+            const td = getToothData(toothNum);
+            setExamination(toothNotes[toothNum] || '');
+            setDiagnosis('');
+            setProcedure('');
+            setPrice('');
+            setClinicalStatus(td.status || 'present');
+            setStatusOpen(false);
+            loadSuggestions();
             setIsModalVisible(true);
         }
     };
 
-    const updateSurface = (toothNum: number, surface: string, condition: string) => {
-        const currentData = getToothData(toothNum);
-        const newSurfaces = { ...currentData.surfaces };
+    const handleAddProcedure = () => {
+        if (!procedure.trim() || !selectedTooth) return;
+        onAddTreatment?.({
+            tooth: selectedTooth,
+            diagnosis,
+            procedure,
+            notes: examination,
+            cost: parseFloat(price) || 0,
+            status: 'planned',
+        });
+        // Save notes + status to tooth data
+        if (examination) onNotesChange?.(selectedTooth, examination);
+        const currentData = getToothData(selectedTooth);
+        onToothUpdate?.(selectedTooth, { ...currentData, status: clinicalStatus });
+        setIsModalVisible(false);
+    };
 
-        if (newSurfaces[surface] === condition) {
-            delete newSurfaces[surface];
-        } else {
-            newSurfaces[surface] = condition;
+    const handleStatusSelect = (status: string) => {
+        setClinicalStatus(status);
+        setStatusOpen(false);
+        if (selectedTooth) {
+            const currentData = getToothData(selectedTooth);
+            onToothUpdate?.(selectedTooth, { ...currentData, status });
         }
-
-        onToothUpdate?.(toothNum, { ...currentData, surfaces: newSurfaces });
     };
 
-    const updateStatus = (toothNum: number, status: string) => {
-        const currentData = getToothData(toothNum);
-        onToothUpdate?.(toothNum, { ...currentData, status });
-    };
+    const CLINICAL_STATUS_OPTIONS = [
+        { value: 'present',    label: 'Present (Healthy)' },
+        { value: 'missing',    label: 'Teeth Removed' },
+        { value: 'implant',    label: 'Treatment Taken Before' },
+        { value: 'rootCanal',  label: 'Recommended Treatment' },
+    ];
 
     return (
         <ScrollView
             style={styles.container}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
+            nestedScrollEnabled
         >
-            {/* Legend */}
-            <View style={styles.legendContainer}>
-                <Text style={styles.legendTitle}>Conditions:</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.legendScroll}>
-                    {Object.entries(SURFACE_COLORS).filter(([k]) => k !== 'none').map(([key, color]) => (
-                        <View key={key} style={styles.legendItem}>
-                            <View style={[styles.legendColor, { backgroundColor: color }]} />
-                            <Text style={styles.legendText}>{CONDITION_LABELS[key]}</Text>
-                        </View>
-                    ))}
-                </ScrollView>
-            </View>
-
             {/* Chart View */}
-            <ScrollView horizontal directionalLockEnabled={false} showsHorizontalScrollIndicator={false} style={styles.chartScroll}>
+            <ScrollView
+                horizontal
+                directionalLockEnabled={false}
+                showsHorizontalScrollIndicator={false}
+                style={styles.chartScroll}
+            >
                 <View style={styles.chartContainer}>
                     {/* Upper Arch */}
                     <View style={styles.archLabelRow}>
                         <Text style={styles.archLabel}>Upper Right</Text>
                         <Text style={styles.archLabel}>Upper Left</Text>
                     </View>
-
                     <View style={styles.teethRow}>
                         {UNIVERSAL_UPPER.map(num => (
                             <ToothUnit
@@ -100,15 +197,11 @@ export const DentalChart: React.FC<DentalChartProps> = ({
                             />
                         ))}
                     </View>
-
-                    {/* Divider */}
                     <View style={styles.midlineRow}>
                         <View style={styles.midline} />
                         <Text style={styles.midlineText}>R | L</Text>
                         <View style={styles.midline} />
                     </View>
-
-                    {/* Lower Arch */}
                     <View style={styles.teethRow}>
                         {UNIVERSAL_LOWER.map(num => (
                             <ToothUnit
@@ -122,7 +215,6 @@ export const DentalChart: React.FC<DentalChartProps> = ({
                             />
                         ))}
                     </View>
-
                     <View style={styles.archLabelRow}>
                         <Text style={styles.archLabel}>Lower Right</Text>
                         <Text style={styles.archLabel}>Lower Left</Text>
@@ -130,74 +222,13 @@ export const DentalChart: React.FC<DentalChartProps> = ({
                 </View>
             </ScrollView>
 
-            {/* Active Conditions Table - Web Layout ported to Mobile */}
-            <View style={styles.conditionsTable}>
-                <View style={styles.tableHeaderSection}>
-                    <View style={styles.tableDecoration} />
-                    <Text style={styles.tableTitle}>Active Conditions</Text>
-                </View>
+            <Text style={styles.tapHint}>Tap a tooth to add findings, diagnosis, or procedure</Text>
 
-                <View style={styles.tableHeader}>
-                    <Text style={[styles.columnHeader, { flex: 0.15 }]}>#</Text>
-                    <Text style={[styles.columnHeader, { flex: 0.45 }]}>NAME</Text>
-                    <Text style={[styles.columnHeader, { flex: 0.4 }]}>STATUS/SURFACES</Text>
-                </View>
-
-                {Object.entries(teethData)
-                    .filter(([_, data]: [string, any]) =>
-                        data && (data.status !== 'present' || Object.keys(data.surfaces || {}).length > 0)
-                    )
-                    .map(([tooth, data]: [string, any]) => (
-                        <TouchableOpacity
-                            key={tooth}
-                            style={[
-                                styles.tableRow,
-                                selectedTooth === parseInt(tooth) && styles.selectedRow
-                            ]}
-                            onPress={() => handleToothPress(parseInt(tooth))}
-                        >
-                            <View style={[styles.cell, { flex: 0.15 }]}>
-                                <View style={[
-                                    styles.toothBadge,
-                                    selectedTooth === parseInt(tooth) && styles.toothBadgeActive
-                                ]}>
-                                    <Text style={selectedTooth === parseInt(tooth) ? styles.toothBadgeTextActive : styles.toothBadgeText}>
-                                        {tooth}
-                                    </Text>
-                                </View>
-                            </View>
-                            <View style={[styles.cell, { flex: 0.45 }]}>
-                                <Text style={styles.toothNameText} numberOfLines={1}>{TOOTH_NAMES[parseInt(tooth)]}</Text>
-                            </View>
-                            <View style={[styles.cell, { flex: 0.4 }]}>
-                                <View style={styles.statusDisplay}>
-                                    {data.status !== 'present' && (
-                                        <View style={styles.statusChip}>
-                                            <Text style={styles.statusChipText}>{data.status?.toUpperCase()}</Text>
-                                        </View>
-                                    )}
-                                    {Object.entries(data.surfaces || {}).map(([surface, cond]) => (
-                                        <View key={surface} style={styles.surfaceChip}>
-                                            <Text style={styles.surfaceChipText}>{surface}: {CONDITION_LABELS[cond as string]}</Text>
-                                        </View>
-                                    ))}
-                                </View>
-                            </View>
-                        </TouchableOpacity>
-                    ))}
-
-                {Object.entries(teethData).filter(([_, data]: [string, any]) => data && (data.status !== 'present' || Object.keys(data.surfaces || {}).length > 0)).length === 0 && (
-                    <View style={styles.emptyTable}>
-                        <Text style={styles.emptyTableText}>Healthy Smile - No active conditions recorded.</Text>
-                    </View>
-                )}
-            </View>
-
-            {/* Tooth Edit Bottom Tray */}
+            {/* ─── Tooth Procedure Drawer ─── */}
             {selectedTooth && (
                 <Modal
                     visible={isModalVisible}
-                    transparent={true}
+                    transparent
                     animationType="slide"
                     onRequestClose={() => setIsModalVisible(false)}
                 >
@@ -206,109 +237,211 @@ export const DentalChart: React.FC<DentalChartProps> = ({
                         activeOpacity={1}
                         onPress={() => setIsModalVisible(false)}
                     >
-                        <TouchableOpacity
-                            activeOpacity={1}
-                            style={styles.bottomTray}
+                        <KeyboardAvoidingView
+                            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                            style={{ width: '100%' }}
                         >
-                            <View style={styles.trayHandle} />
+                            <TouchableOpacity activeOpacity={1} style={styles.bottomTray}>
+                                <View style={styles.trayHandle} />
 
-                            <View style={styles.modalHeader}>
-                                <View>
-                                    <Text style={styles.modalTitle}>Tooth #{selectedTooth}</Text>
-                                    <Text style={styles.modalSubtitle}>{TOOTH_NAMES[selectedTooth]}</Text>
-                                </View>
-                                <TouchableOpacity
-                                    onPress={() => setIsModalVisible(false)}
-                                    style={styles.closeBtn}
-                                >
-                                    <X size={20} color={colors.gray500} />
-                                </TouchableOpacity>
-                            </View>
-
-                            <ScrollView
-                                style={styles.modalContent}
-                                showsVerticalScrollIndicator={false}
-                                contentContainerStyle={{ paddingBottom: 40 }}
-                            >
-                                {/* Status Selection */}
-                                <Text style={styles.sectionHeader}>Condition Overview</Text>
-                                <View style={styles.optionGrid}>
-                                    {Object.entries(STATUS_LABELS).map(([key, label]) => (
-                                        <TouchableOpacity
-                                            key={key}
-                                            style={[
-                                                styles.optionButton,
-                                                getToothData(selectedTooth).status === key && styles.optionButtonActive
-                                            ]}
-                                            onPress={() => updateStatus(selectedTooth, key)}
-                                        >
-                                            <Text style={[
-                                                styles.optionText,
-                                                getToothData(selectedTooth).status === key && styles.optionTextActive
-                                            ]}>
-                                                {label}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-
-                                {/* Surface Selection */}
-                                <Text style={styles.sectionHeader}>Surface Details</Text>
-                                {SURFACES.map(surface => (
-                                    <View key={surface.key} style={styles.surfaceRow}>
-                                        <View style={styles.surfaceInfo}>
-                                            <Text style={styles.surfaceLabel}>{surface.label} ({surface.key})</Text>
-                                        </View>
-                                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.conditionScroll}>
-                                            <TouchableOpacity
-                                                style={[
-                                                    styles.conditionButton,
-                                                    !getToothData(selectedTooth).surfaces[surface.key] && styles.conditionButtonActive
-                                                ]}
-                                                onPress={() => updateSurface(selectedTooth, surface.key, 'none')}
-                                            >
-                                                <Text style={styles.conditionText}>Healthy</Text>
-                                            </TouchableOpacity>
-                                            {Object.entries(CONDITION_LABELS).map(([key, label]) => (
-                                                <TouchableOpacity
-                                                    key={key}
-                                                    style={[
-                                                        styles.conditionButton,
-                                                        getToothData(selectedTooth).surfaces[surface.key] === key && styles.conditionButtonActive,
-                                                        { borderColor: SURFACE_COLORS[key] }
-                                                    ]}
-                                                    onPress={() => updateSurface(selectedTooth, surface.key, key)}
-                                                >
-                                                    <View style={[styles.colorDot, { backgroundColor: SURFACE_COLORS[key] }]} />
-                                                    <Text style={styles.conditionText}>{label}</Text>
-                                                </TouchableOpacity>
-                                            ))}
-                                        </ScrollView>
+                                {/* Header */}
+                                <View style={styles.drawerHeader}>
+                                    <View>
+                                        <Text style={styles.drawerTitle}>Tooth #{selectedTooth}</Text>
+                                        <Text style={styles.drawerSub}>{TOOTH_NAMES[selectedTooth] || 'Tooth'}</Text>
                                     </View>
-                                ))}
-
-                                {/* Clinical Notes Section */}
-                                <Text style={styles.sectionHeader}>Clinical Notes</Text>
-                                <View style={styles.notesBox}>
-                                    <Text style={styles.notesTextPlaceholder}>
-                                        {toothNotes[selectedTooth] || "No clinical notes recorded for this tooth yet. Add details in the web platform to see them here."}
-                                    </Text>
+                                    <TouchableOpacity onPress={() => setIsModalVisible(false)} style={styles.closeBtn}>
+                                        <X size={20} color={colors.gray500 || '#6B7280'} />
+                                    </TouchableOpacity>
                                 </View>
-                            </ScrollView>
 
-                            <TouchableOpacity
-                                style={styles.doneButton}
-                                onPress={() => setIsModalVisible(false)}
-                            >
-                                <Text style={styles.doneButtonText}>Save Details</Text>
+                                <ScrollView
+                                    style={styles.drawerBody}
+                                    showsVerticalScrollIndicator={false}
+                                    contentContainerStyle={{ paddingBottom: 20 }}
+                                    keyboardShouldPersistTaps="handled"
+                                >
+                                    <AutoSuggestInput
+                                        label="On Examination"
+                                        value={examination}
+                                        onChange={v => { setExamination(v); onNotesChange?.(selectedTooth!, v); }}
+                                        suggestions={findingSuggestions}
+                                        placeholder="Type findings or select suggestion..."
+                                    />
+
+                                    <AutoSuggestInput
+                                        label="Diagnosis"
+                                        value={diagnosis}
+                                        onChange={setDiagnosis}
+                                        suggestions={diagnosisSuggestions}
+                                        placeholder="Type diagnosis or select suggestion..."
+                                    />
+
+                                    <AutoSuggestInput
+                                        label="Procedure"
+                                        value={procedure}
+                                        onChange={setProcedure}
+                                        onSelect={s => { if (s.price) setPrice(String(s.price)); }}
+                                        suggestions={procedureSuggestions}
+                                        placeholder="Type procedure or select suggestion..."
+                                    />
+
+                                    {/* Price */}
+                                    <View style={{ marginBottom: 14 }}>
+                                        <Text style={ss.fieldLabel}>Procedure Fee (₹)</Text>
+                                        <TextInput
+                                            style={ss.plainInput}
+                                            value={price}
+                                            onChangeText={setPrice}
+                                            placeholder="0"
+                                            placeholderTextColor="#9CA3AF"
+                                            keyboardType="numeric"
+                                        />
+                                        {parseFloat(price) > 0 && (
+                                            <View style={ss.priceHint}>
+                                                <Text style={ss.priceHintText}>
+                                                    ₹{parseFloat(price).toLocaleString('en-IN')} procedure fee
+                                                </Text>
+                                            </View>
+                                        )}
+                                    </View>
+
+                                    {/* Clinical Status */}
+                                    <View style={{ marginBottom: 14 }}>
+                                        <Text style={ss.fieldLabel}>Clinical Status</Text>
+                                        <TouchableOpacity
+                                            style={ss.statusPicker}
+                                            onPress={() => setStatusOpen(o => !o)}
+                                        >
+                                            <Text style={ss.statusPickerText}>
+                                                {CLINICAL_STATUS_OPTIONS.find(o => o.value === clinicalStatus)?.label || 'Present (Healthy)'}
+                                            </Text>
+                                            <ChevronDown size={16} color="#6B7280" />
+                                        </TouchableOpacity>
+                                        {statusOpen && (
+                                            <View style={ss.statusDropdown}>
+                                                {CLINICAL_STATUS_OPTIONS.map(opt => (
+                                                    <TouchableOpacity
+                                                        key={opt.value}
+                                                        style={[ss.statusOption, clinicalStatus === opt.value && ss.statusOptionActive]}
+                                                        onPress={() => handleStatusSelect(opt.value)}
+                                                    >
+                                                        <Text style={[ss.statusOptionText, clinicalStatus === opt.value && ss.statusOptionTextActive]}>
+                                                            {opt.label}
+                                                        </Text>
+                                                    </TouchableOpacity>
+                                                ))}
+                                            </View>
+                                        )}
+                                    </View>
+                                </ScrollView>
+
+                                {/* CTA */}
+                                <TouchableOpacity
+                                    style={[styles.doneButton, !procedure.trim() && { opacity: 0.4 }]}
+                                    onPress={handleAddProcedure}
+                                    disabled={!procedure.trim()}
+                                >
+                                    <Text style={styles.doneButtonText}>Add to Procedures</Text>
+                                </TouchableOpacity>
                             </TouchableOpacity>
-                        </TouchableOpacity>
+                        </KeyboardAvoidingView>
                     </TouchableOpacity>
                 </Modal>
             )}
         </ScrollView>
     );
 };
+
+// ─── Shared sub-styles ───────────────────────────────────────────
+const ss = StyleSheet.create({
+    fieldLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#6B7280',
+        textTransform: 'uppercase',
+        letterSpacing: 0.6,
+        marginBottom: 6,
+    },
+    inputWrap: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F9FAFB',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+    },
+    suggestInput: {
+        flex: 1,
+        fontSize: 14,
+        color: '#111827',
+    },
+    plainInput: {
+        backgroundColor: '#F9FAFB',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderRadius: 10,
+        paddingHorizontal: 14,
+        paddingVertical: 11,
+        fontSize: 14,
+        color: '#111827',
+    },
+    priceHint: {
+        marginTop: 6,
+        backgroundColor: '#ECFDF5',
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        alignSelf: 'flex-start',
+    },
+    priceHintText: { fontSize: 12, color: '#065F46', fontWeight: '700' },
+    statusPicker: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: '#F9FAFB',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderRadius: 10,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+    },
+    statusPickerText: { fontSize: 14, color: '#111827' },
+    statusDropdown: {
+        marginTop: 4,
+        backgroundColor: '#fff',
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        overflow: 'hidden',
+    },
+    statusOption: {
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F9FAFB',
+    },
+    statusOptionActive: { backgroundColor: colors.primary + '15' },
+    statusOptionText: { fontSize: 14, color: '#374151' },
+    statusOptionTextActive: { color: colors.primary, fontWeight: '700' as const },
+
+    // Inline suggestion chips
+    chip: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        backgroundColor: '#F3F4F6',
+        borderRadius: 20,
+        paddingHorizontal: 12,
+        paddingVertical: 5,
+        marginRight: 6,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+    },
+    chipText: { fontSize: 12, color: '#374151', fontWeight: '500' as const },
+    chipPrice: { fontSize: 11, color: '#10B981', fontWeight: '700' as const },
+});
 
 const styles = StyleSheet.create({
     container: {
@@ -317,40 +450,7 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         padding: 16,
-        paddingBottom: 40,
-    },
-    legendContainer: {
-        marginBottom: 20,
-        backgroundColor: '#F9FAFB',
-        padding: 12,
-        borderRadius: 12,
-    },
-    legendTitle: {
-        fontSize: 12,
-        fontWeight: 'bold',
-        color: '#6B7280',
-        textTransform: 'uppercase',
-        letterSpacing: 0.5,
-        marginBottom: 8,
-    },
-    legendScroll: {
-        flexDirection: 'row',
-    },
-    legendItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginRight: 16,
-    },
-    legendColor: {
-        width: 10,
-        height: 10,
-        borderRadius: 2,
-        marginRight: 6,
-    },
-    legendText: {
-        fontSize: 11,
-        color: '#4B5563',
-        fontWeight: '500',
+        paddingBottom: 20,
     },
     chartScroll: {
         marginHorizontal: -16,
@@ -394,6 +494,14 @@ const styles = StyleSheet.create({
         color: '#9CA3AF',
         letterSpacing: 2,
     },
+    tapHint: {
+        textAlign: 'center',
+        fontSize: 11,
+        color: '#9CA3AF',
+        fontStyle: 'italic',
+        marginTop: 10,
+        marginBottom: 4,
+    },
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.4)',
@@ -403,7 +511,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF',
         borderTopLeftRadius: 28,
         borderTopRightRadius: 28,
-        maxHeight: '85%',
+        maxHeight: '88%',
         paddingTop: 8,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: -10 },
@@ -419,21 +527,21 @@ const styles = StyleSheet.create({
         alignSelf: 'center',
         marginBottom: 8,
     },
-    modalHeader: {
+    drawerHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 24,
-        paddingVertical: 16,
+        paddingVertical: 14,
         borderBottomWidth: 1,
         borderBottomColor: '#F3F4F6',
     },
-    modalTitle: {
+    drawerTitle: {
         fontSize: 20,
         fontWeight: 'bold',
         color: '#111827',
     },
-    modalSubtitle: {
+    drawerSub: {
         fontSize: 13,
         color: '#6B7280',
         marginTop: 2,
@@ -443,89 +551,8 @@ const styles = StyleSheet.create({
         backgroundColor: '#F3F4F6',
         borderRadius: 20,
     },
-    modalContent: {
+    drawerBody: {
         padding: 24,
-    },
-    sectionHeader: {
-        fontSize: 13,
-        fontWeight: 'bold',
-        color: '#9CA3AF',
-        textTransform: 'uppercase',
-        letterSpacing: 1,
-        marginTop: 8,
-        marginBottom: 16,
-    },
-    optionGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 10,
-        marginBottom: 24,
-    },
-    optionButton: {
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderRadius: 14,
-        borderWidth: 1,
-        borderColor: '#F3F4F6',
-        backgroundColor: '#F9FAFB',
-    },
-    optionButtonActive: {
-        backgroundColor: colors.primary,
-        borderColor: colors.primary,
-        shadowColor: colors.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-    },
-    optionText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#4B5563',
-    },
-    optionTextActive: {
-        color: '#FFFFFF',
-    },
-    surfaceRow: {
-        marginBottom: 24,
-    },
-    surfaceInfo: {
-        marginBottom: 10,
-    },
-    surfaceLabel: {
-        fontSize: 15,
-        fontWeight: '700',
-        color: '#111827',
-    },
-    conditionScroll: {
-        flexDirection: 'row',
-        marginHorizontal: -24,
-        paddingHorizontal: 24,
-    },
-    conditionButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: '#F3F4F6',
-        marginRight: 10,
-        backgroundColor: '#FFFFFF',
-    },
-    conditionButtonActive: {
-        backgroundColor: '#F9FAFB',
-        borderColor: '#9CA3AF',
-    },
-    colorDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        marginRight: 8,
-    },
-    conditionText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: '#344054',
     },
     doneButton: {
         marginHorizontal: 24,
@@ -544,135 +571,5 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 16,
         fontWeight: 'bold',
-    },
-    // Active Conditions Table Styles
-    conditionsTable: {
-        marginTop: 24,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 16,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: '#F3F4F6',
-    },
-    tableHeaderSection: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 16,
-        gap: 10,
-    },
-    tableDecoration: {
-        width: 4,
-        height: 18,
-        backgroundColor: colors.primary,
-        borderRadius: 2,
-    },
-    tableTitle: {
-        fontSize: 15,
-        fontWeight: 'bold',
-        color: '#111827',
-        letterSpacing: 0.5,
-    },
-    tableHeader: {
-        flexDirection: 'row',
-        paddingBottom: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: '#F3F4F6',
-        marginBottom: 8,
-    },
-    columnHeader: {
-        fontSize: 10,
-        fontWeight: 'bold',
-        color: '#9CA3AF',
-        textTransform: 'uppercase',
-    },
-    tableRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#F9FAFB',
-    },
-    selectedRow: {
-        backgroundColor: 'rgba(155, 140, 255, 0.05)',
-    },
-    cell: {
-        justifyContent: 'center',
-    },
-    toothBadge: {
-        width: 24,
-        height: 24,
-        borderRadius: 6,
-        backgroundColor: '#F3F4F6',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    toothBadgeActive: {
-        backgroundColor: colors.primary,
-    },
-    toothBadgeText: {
-        fontSize: 11,
-        fontWeight: 'bold',
-        color: colors.primary,
-    },
-    toothBadgeTextActive: {
-        fontSize: 11,
-        fontWeight: 'bold',
-        color: '#FFFFFF',
-    },
-    toothNameText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: '#344054',
-    },
-    statusDisplay: {
-        flexDirection: 'column',
-        gap: 4,
-    },
-    statusChip: {
-        alignSelf: 'flex-start',
-        backgroundColor: 'rgba(239, 68, 68, 0.1)',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 4,
-    },
-    statusChipText: {
-        fontSize: 9,
-        fontWeight: 'bold',
-        color: '#EF4444',
-    },
-    surfaceChip: {
-        alignSelf: 'flex-start',
-        backgroundColor: 'rgba(155, 140, 255, 0.1)',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 4,
-    },
-    surfaceChipText: {
-        fontSize: 9,
-        fontWeight: 'bold',
-        color: colors.primary,
-    },
-    emptyTable: {
-        paddingVertical: 24,
-        alignItems: 'center',
-    },
-    emptyTableText: {
-        fontSize: 13,
-        color: '#9CA3AF',
-        fontStyle: 'italic',
-    },
-    notesBox: {
-        backgroundColor: '#F9FAFB',
-        borderRadius: 12,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: '#F3F4F6',
-        marginTop: 4,
-    },
-    notesTextPlaceholder: {
-        fontSize: 14,
-        color: '#6B7280',
-        lineHeight: 20,
-        fontStyle: 'italic',
     },
 });

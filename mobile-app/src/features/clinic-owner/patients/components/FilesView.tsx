@@ -7,8 +7,8 @@ import {
   ScrollView,
   ActivityIndicator,
   FlatList,
-  Alert
 } from 'react-native';
+import { toast } from '../../../../shared/components/toastService';
 import { FileText, Image as ImageIcon, Plus, Trash2, File, ExternalLink } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
 import { patientsApiService, PatientFile, XrayFile } from '../../../../services/api/patients.api';
@@ -64,12 +64,12 @@ export const FilesView: React.FC<FilesViewProps> = ({ patientId }) => {
         };
 
         await patientsApiService.uploadFile(patientId, fileToUpload);
-        Alert.alert('Success', 'File uploaded successfully');
+        toast.success('File uploaded successfully');
         loadFiles();
       }
     } catch (error) {
       console.error('Error picking document:', error);
-      Alert.alert('Error', 'Failed to pick or upload document');
+      toast.error('Failed to pick or upload document');
     } finally {
       setUploading(false);
     }

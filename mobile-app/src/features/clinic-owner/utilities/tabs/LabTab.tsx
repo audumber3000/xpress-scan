@@ -1,9 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, RefreshControl,
-  ActivityIndicator, Modal, TextInput, Alert,
+  ActivityIndicator, Modal, TextInput,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { toast } from '../../../../shared/components/toastService';
+import { showAlert } from '../../../../shared/components/alertService';
 import { useFocusEffect } from '@react-navigation/native';
 import { Plus, X, Check, Search, Calendar as CalendarIcon, User, Layers, Clock } from 'lucide-react-native';
 import { Calendar } from 'react-native-calendars';
@@ -77,11 +79,12 @@ export const LabTab: React.FC = () => {
     }
   }, [selectedPatient]);
 
-  const handleDelete = (id: number) => Alert.alert('Delete Lab Order', 'Are you sure?', [
+  const handleDelete = (id: number) => showAlert('Delete Lab Order', 'Are you sure?', [
     { text: 'Cancel', style: 'cancel' },
     { text: 'Delete', style: 'destructive', onPress: async () => {
       await utilitiesApiService.deleteLabOrder(id);
       setOrders(p => p.filter(o => o.id !== id));
+      toast.success('Lab order deleted');
     }},
   ]);
 
@@ -94,11 +97,11 @@ export const LabTab: React.FC = () => {
   };
 
   const handleCreate = async () => {
-    if (!form.work_type?.trim()) { Alert.alert('Required', 'Work type is required'); return; }
-    if (!selectedPatient) { Alert.alert('Required', 'Please select a patient'); return; }
-    if (!selectedCasePaper) { Alert.alert('Required', 'Please select a visit (case paper)'); return; }
-    if (!selectedVendor) { Alert.alert('Required', 'Please select a vendor (Lab)'); return; }
-    if (!form.due_date) { Alert.alert('Required', 'Please select a due date'); return; }
+    if (!form.work_type?.trim()) { toast.warning('Work type is required'); return; }
+    if (!selectedPatient) { toast.warning('Please select a patient'); return; }
+    if (!selectedCasePaper) { toast.warning('Please select a visit (case paper)'); return; }
+    if (!selectedVendor) { toast.warning('Please select a vendor (Lab)'); return; }
+    if (!form.due_date) { toast.warning('Please select a due date'); return; }
 
     setSaving(true);
     const finalForm: LabOrderCreate = {
@@ -114,8 +117,9 @@ export const LabTab: React.FC = () => {
       setOrders(p => [created, ...p]);
       setShowCreate(false);
       resetForm();
+      toast.success('Lab order created');
     } else {
-      Alert.alert('Error', 'Failed to create lab order.');
+      toast.error('Failed to create lab order.');
     }
   };
 
@@ -135,8 +139,9 @@ export const LabTab: React.FC = () => {
     if (updated) {
       setOrders(p => p.map(o => o.id === editOrder.id ? updated : o));
       setEditOrder(null);
+      toast.success('Lab order updated');
     } else {
-      Alert.alert('Error', 'Failed to update lab order.');
+      toast.error('Failed to update lab order.');
     }
   };
 

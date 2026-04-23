@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
-  StatusBar, Alert, ActivityIndicator,
+  StatusBar, ActivityIndicator,
 } from 'react-native';
+import { toast } from '../../../../shared/components/toastService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -10,6 +11,7 @@ import {
 } from 'lucide-react-native';
 import { adminColors } from '../../../../shared/constants/adminColors';
 import { adminApiService } from '../../../../services/api/admin.api';
+import { FeatureLock } from '../../../../shared/components/FeatureLock';
 
 const TABS = [
   { id: 'invoice',      label: 'Invoices',       icon: FileText,      defaultColor: '#FF9800' },
@@ -96,9 +98,9 @@ export const TemplatesScreen: React.FC<TemplatesScreenProps> = ({ navigation }) 
     });
     setSaving(false);
     if (ok) {
-      Alert.alert('Saved', `${TABS.find(t => t.id === activeTab)?.label} template saved!`);
+      toast.success(`${TABS.find(t => t.id === activeTab)?.label} template saved!`);
     } else {
-      Alert.alert('Error', 'Failed to save. Try again.');
+      toast.error('Failed to save. Try again.');
     }
   };
 
@@ -132,6 +134,11 @@ export const TemplatesScreen: React.FC<TemplatesScreenProps> = ({ navigation }) 
         </LinearGradient>
       </SafeAreaView>
 
+      <FeatureLock
+        featureName="Templates"
+        description="Customising PDF templates for invoices, prescriptions and consent forms is a Professional plan feature."
+      >
+      <View style={{ flex: 1 }}>
       {/* Tab bar — simple underline style */}
       <View style={styles.tabBar}>
         {TABS.map(t => (
@@ -279,6 +286,8 @@ export const TemplatesScreen: React.FC<TemplatesScreenProps> = ({ navigation }) 
           <View style={{ height: 60 }} />
         </ScrollView>
       )}
+      </View>
+      </FeatureLock>
     </View>
   );
 };

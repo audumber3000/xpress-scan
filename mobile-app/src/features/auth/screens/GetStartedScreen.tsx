@@ -7,11 +7,11 @@ import {
   Dimensions,
   Platform,
   SafeAreaView,
-  Alert,
   TouchableOpacity,
   ScrollView,
   Image
 } from 'react-native';
+import { toast } from '../../../shared/components/toastService';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   ChevronRight,
@@ -32,17 +32,17 @@ export const GetStartedScreen: React.FC<GetStartedScreenProps> = ({ navigation }
   const handleGoogleRegister = async () => {
     try {
       const { user, error } = await signInWithGoogle('clinic_owner');
-      if (error) Alert.alert('Registration Failed', error);
+      if (error) toast.error(error || 'Registration failed');
     } catch (err: any) {
-      Alert.alert('Error', err.message);
+      toast.error(err.message);
     }
   };
 
   const handleAppleRegister = () => {
     if (Platform.OS === 'android') {
-      Alert.alert('Not Supported', 'Apple Sign-In is only supported on iOS devices.');
+      toast.info('Apple Sign-In is only supported on iOS devices.');
     } else {
-      Alert.alert('Coming Soon', 'Apple Sign-In for iOS is being finalized.');
+      toast.info('Apple Sign-In for iOS is being finalized.');
     }
   };
 

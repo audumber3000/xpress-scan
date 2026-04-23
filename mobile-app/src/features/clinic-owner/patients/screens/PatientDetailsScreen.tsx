@@ -11,7 +11,8 @@ import { BillingTab } from '../components/BillingTab';
 import { PatientInfoView } from '../components/PatientInfoView';
 import { FilesView } from '../components/FilesView';
 
-import { Phone, MessageCircle } from 'lucide-react-native';
+import { Phone } from 'lucide-react-native';
+import { WhatsAppIcon } from '../../../../shared/components/icons/WhatsAppIcon';
 
 interface PatientDetailsScreenProps {
   navigation: any;
@@ -111,7 +112,7 @@ export const PatientDetailsScreen: React.FC<PatientDetailsScreenProps> = ({ navi
               <Phone size={20} color={colors.primary} />
             </TouchableOpacity>
             <TouchableOpacity onPress={handleWhatsApp} style={styles.headerActionBtn}>
-              <MessageCircle size={20} color={colors.primary} />
+              <WhatsAppIcon size={22} />
             </TouchableOpacity>
           </View>
         }

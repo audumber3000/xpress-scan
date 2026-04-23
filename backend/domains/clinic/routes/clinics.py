@@ -119,8 +119,8 @@ async def owner_add_clinic(
 
         # Seed defaults (wallet credit, trial sub if missing, procedures, clinical settings)
         try:
-            from domains.auth.routes.auth import _seed_clinic_defaults
-            _seed_clinic_defaults(db, new_clinic.id, user_id=current_user.id)
+            from domains.auth.routes.auth_clean import _seed_clinic_defaults
+            _seed_clinic_defaults(db, new_clinic.id)
         except Exception as seed_err:
             print(f"Non-fatal: failed to seed branch defaults: {seed_err}")
 

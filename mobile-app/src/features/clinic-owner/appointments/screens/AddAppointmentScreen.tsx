@@ -7,8 +7,11 @@ import {
   ScrollView,
   TextInput,
   ActivityIndicator,
-  Alert
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+import { toast } from '../../../../shared/components/toastService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar, Clock, User, FileText, ChevronRight } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
@@ -296,6 +299,11 @@ export const AddAppointmentScreen: React.FC<AddAppointmentScreenProps> = ({ navi
         onBackPress={() => navigation.goBack()}
       />
 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.formContainer}>
           {/* Patient Info Section */}
@@ -524,6 +532,7 @@ export const AddAppointmentScreen: React.FC<AddAppointmentScreenProps> = ({ navi
           )}
         </TouchableOpacity>
       </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };

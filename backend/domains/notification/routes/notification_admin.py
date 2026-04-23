@@ -712,48 +712,52 @@ async def template_test_send(
             "cash_revenue": 12000.0, "online_revenue": 6500.0,
         },
         # Platform / automated templates
-        "molarplus_app_welcome": {
-            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
+        "molarplus_app_welcome": {          # header={{1}}=owner, body=0
+            "owner_name": "Dr. Demo",
         },
-        "molarplus_subscription_confirmed": {
-            "owner_name": "Dr. Demo", "plan_name": "Professional",
+        "molarplus_subscription_confirmed": {  # header=owner, body {{1}}=plan {{2}}=valid_until
+            "owner_name": "Dr. Demo", "plan_name": "Professional", "valid_until": "30 Apr 2026",
         },
-        "molarplus_topup_success": {
-            "owner_name": "Dr. Demo", "amount": "500.00",
+        "molarplus_topup_success": {           # header=owner, body {{1}}=amount {{2}}=new_balance
+            "owner_name": "Dr. Demo", "amount": "500.00", "new_balance": "550.00",
         },
-        "molarplus_weekly_report_mk": {
+        "molarplus_lab_due_tomorrow_mk": {     # header=owner, body {{1}}=lab {{2}}=date {{3}}=patient
+            "owner_name": "Dr. Demo",
+            "lab_name": "DentaLab India", "order_date": "20 Apr 2026",
+            "patient_name": "Rahul Sharma",
+        },
+        "molarplus_weekly_report_mk": {        # header={{1}}=week_date, body=8 params
             "week_date": "14 Apr 2026",
             "appointments": "24", "appt_change": "▲12%",
             "new_patients": "8", "patients_change": "▲5%",
             "revenue": "48,500", "revenue_change": "▲18%",
             "noshows": "3", "insight": "Great week! 🎉",
         },
-        "molarplus_monthly_report_mk": {
+        "molarplus_monthly_report_mk": {       # header={{1}}=month, body=9 params
             "month": "March 2026",
             "total_patients": "92", "new_patients": "18", "returning_patients": "74",
             "total_revenue": "1,85,000", "avg_revenue": "2,011",
             "change": "▲15%", "top_treatments": "RCT, Crown, Scaling",
             "noshows": "7", "noshows_pct": "7",
         },
-        "molarplus_review_report_mk": {
-            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
+        "molarplus_review_report_mk": {        # header={{1}}=month, body=6 params
+            "month": "April 2026",
+            "rating": "4.6", "new_reviews": "12",
+            "change": "▲2 vs last month",
+            "loved1": "Friendly staff", "loved2": "Clean clinic",
+            "area_to_watch": "Waiting time",
         },
-        "molarplus_lab_due_tomorrow_mk": {
-            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
-            "lab_name": "DentaLab India", "order_date": "20 Apr 2026",
-            "patient_name": "Rahul Sharma",
+        "molarplus_trial_started_mk": {        # header={{1}}=owner, body=0
+            "owner_name": "Dr. Demo",
         },
-        "molarplus_trial_started_mk": {
-            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
+        "molarplus_trial_mid_mk": {            # header={{1}}=owner, body=0
+            "owner_name": "Dr. Demo",
         },
-        "molarplus_trial_mid_mk": {
-            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
+        "molarplus_trial_ending_mk": {         # header={{1}}=owner, body {{1}}=price
+            "owner_name": "Dr. Demo", "price": "999",
         },
-        "molarplus_trial_ending_mk": {
-            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
-        },
-        "molarplus_trial_ended_mk": {
-            "owner_name": "Dr. Demo", "clinic_name": clinic_name,
+        "molarplus_trial_ended_mk": {          # header={{1}}=owner, body=0
+            "owner_name": "Dr. Demo",
         },
     }
 

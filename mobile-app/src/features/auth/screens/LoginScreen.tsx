@@ -15,6 +15,8 @@ import {
   Alert,
   Image
 } from 'react-native';
+import { toast } from '../../../shared/components/toastService';
+
 import {
   ChevronRight,
   ArrowLeft,
@@ -53,11 +55,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
             { text: 'Cancel', style: 'cancel' }
           ]);
         } else {
-          Alert.alert('Login Failed', error);
+          toast.error(error || 'Login failed');
         }
       }
     } catch (err: any) {
-      Alert.alert('Error', err.message);
+      toast.error(err.message || 'An error occurred');
     } finally {
       setIsLoading(false);
     }
@@ -65,15 +67,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
 
   const handleAppleLogin = () => {
     if (Platform.OS === 'android') {
-      Alert.alert('Not Supported', 'Apple Sign-In is only supported on iOS devices.');
+      toast.info('Apple Sign-In is only supported on iOS devices.');
     } else {
-      Alert.alert('Coming Soon', 'Apple Sign-In for iOS is being finalized.');
+      toast.info('Apple Sign-In for iOS is being finalized.');
     }
   };
 
   const handleEmailLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Missing Fields', 'Please enter both email and password');
+      toast.warning('Please enter both email and password');
       return;
     }
 
@@ -87,11 +89,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
             { text: 'Cancel', style: 'cancel' }
           ]);
         } else {
-          Alert.alert('Login Failed', error);
+          toast.error(error || 'Login failed');
         }
       }
     } catch (err: any) {
-      Alert.alert('Error', err.message);
+      toast.error(err.message || 'An error occurred');
     } finally {
       setIsLoading(false);
     }

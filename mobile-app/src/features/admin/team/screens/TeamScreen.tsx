@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
   StatusBar, Alert, ActivityIndicator, Modal, Switch,
 } from 'react-native';
+import { toast } from '../../../../shared/components/toastService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -11,6 +12,7 @@ import {
 import { adminColors } from '../../../../shared/constants/adminColors';
 import { adminApiService, StaffMember } from '../../../../services/api/admin.api';
 import { GearLoader } from '../../../../shared/components/GearLoader';
+import { FeatureLock } from '../../../../shared/components/FeatureLock';
 import { format, startOfWeek, addWeeks, subWeeks, eachDayOfInterval, endOfWeek } from 'date-fns';
 
 type Tab = 'staff' | 'attendance' | 'permissions';
@@ -187,7 +189,7 @@ export const TeamScreen: React.FC<TeamScreenProps> = ({ navigation, route }) => 
       setMarkModal(null);
       loadAttendance();
     } catch (e) {
-      Alert.alert('Error', 'Failed to mark attendance');
+      toast.error('Failed to mark attendance');
     } finally {
       setMarkSaving(false);
     }
@@ -203,12 +205,12 @@ export const TeamScreen: React.FC<TeamScreenProps> = ({ navigation, route }) => 
         setStaff(updated);
         setSelectedMember({ ...selectedMember, role: newRole });
         setRoleModal(false);
-        Alert.alert('Updated', `Role changed to ${newRole}`);
+        toast.success(`Role changed to ${newRole}`);
       } else {
-        Alert.alert('Error', 'Failed to update role');
+        toast.error('Failed to update role');
       }
     } catch (e) {
-      Alert.alert('Error', 'Unexpected error');
+      toast.error('Unexpected error');
     } finally {
       setRoleSaving(false);
     }
@@ -477,30 +479,37 @@ export const TeamScreen: React.FC<TeamScreenProps> = ({ navigation, route }) => 
         </LinearGradient>
       </SafeAreaView>
 
-      {/* Tab bar — simple underline style */}
-      <View style={styles.tabBar}>
-        {(['staff', 'attendance', 'permissions'] as Tab[]).map(t => (
-          <TouchableOpacity
-            key={t}
-            style={[styles.tabBtn, activeTab === t && styles.tabBtnActive]}
-            onPress={() => setActiveTab(t)}
-          >
-            <Text style={[styles.tabLabel, activeTab === t && styles.tabLabelActive]}>
-              {t.charAt(0).toUpperCase() + t.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <FeatureLock
+        featureName="Team Management"
+        description="Managing staff, attendance, and permissions is a Professional plan feature. Upgrade to unlock full team control."
+      >
+        <View style={{ flex: 1 }}>
+          {/* Tab bar — simple underline style */}
+          <View style={styles.tabBar}>
+            {(['staff', 'attendance', 'permissions'] as Tab[]).map(t => (
+              <TouchableOpacity
+                key={t}
+                style={[styles.tabBtn, activeTab === t && styles.tabBtnActive]}
+                onPress={() => setActiveTab(t)}
+              >
+                <Text style={[styles.tabLabel, activeTab === t && styles.tabLabelActive]}>
+                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-      {staffLoading ? (
-        <View style={styles.center}><GearLoader text="Loading team..." /></View>
-      ) : (
-        <>
-          {activeTab === 'staff'       && renderStaffTab()}
-          {activeTab === 'attendance'  && renderAttendanceTab()}
-          {activeTab === 'permissions' && renderPermissionsTab()}
-        </>
-      )}
+          {staffLoading ? (
+            <View style={styles.center}><GearLoader text="Loading team..." /></View>
+          ) : (
+            <>
+              {activeTab === 'staff'       && renderStaffTab()}
+              {activeTab === 'attendance'  && renderAttendanceTab()}
+              {activeTab === 'permissions' && renderPermissionsTab()}
+            </>
+          )}
+        </View>
+      </FeatureLock>
 
       {/* ── Permission Editor Modal ── */}
       <Modal visible={!!permModalUser} animationType="slide" transparent onRequestClose={() => setPermModalUser(null)}>

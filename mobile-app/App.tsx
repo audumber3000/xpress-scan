@@ -1,6 +1,7 @@
 import React from 'react';
 import { AuthProvider } from './src/app/AuthContext';
 import { AlertProvider } from './src/app/AlertProvider';
+import { ToastProvider } from './src/app/ToastProvider';
 import { AppNavigator } from './src/app/AppNavigator';
 import { ErrorBoundary } from './src/shared/components/ErrorBoundary';
 import { ClinicSwitcherSheet } from './src/shared/components/ClinicSwitcherSheet';
@@ -52,7 +53,9 @@ export default function App() {
       <ErrorBoundary>
         <AuthProvider>
           <AlertProvider>
-            <AppContent />
+            <ToastProvider>
+              <AppContent />
+            </ToastProvider>
           </AlertProvider>
         </AuthProvider>
       </ErrorBoundary>

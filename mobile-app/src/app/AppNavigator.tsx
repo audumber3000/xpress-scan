@@ -39,6 +39,7 @@ import { ConnectivityBanner } from '../shared/components/ConnectivityBanner';
 import { PracticeSettingsScreen } from '../features/admin/practice-settings/screens/PracticeSettingsScreen';
 import { TemplatesScreen } from '../features/admin/templates/screens/TemplatesScreen';
 import { TeamScreen } from '../features/admin/team/screens/TeamScreen';
+import { GoogleReviewsScreen } from '../features/clinic-owner/marketing/screens/GoogleReviewsScreen';
 
 export type RootStackParamList = {
   Onboarding: undefined;
@@ -73,6 +74,7 @@ export type RootStackParamList = {
   Patients: undefined;
   Appointments: undefined;
   Utilities: { initialTab?: 'lab' | 'inventory' | 'consent' } | undefined;
+  GoogleReviews: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -173,6 +175,7 @@ export const AppNavigator = () => {
                 <Stack.Screen name="Templates" component={TemplatesScreen} />
                 <Stack.Screen name="Team" component={TeamScreen} />
                 <Stack.Screen name="Profile" component={ProfileScreen} />
+                <Stack.Screen name="GoogleReviews" component={GoogleReviewsScreen} />
               </>
             )
           ) : (

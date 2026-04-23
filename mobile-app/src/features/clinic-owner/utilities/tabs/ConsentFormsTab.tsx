@@ -1,11 +1,14 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, RefreshControl,
-  ActivityIndicator, Modal, TextInput, Alert,
+  ActivityIndicator, Modal, TextInput,
   KeyboardAvoidingView, Platform, StyleSheet, Share, Linking,
 } from 'react-native';
+import { toast } from '../../../../shared/components/toastService';
+import { showAlert } from '../../../../shared/components/alertService';
 import { useFocusEffect } from '@react-navigation/native';
 import { Plus, X, Send, Link } from 'lucide-react-native';
+import { WhatsAppIcon } from '../../../../shared/components/icons/WhatsAppIcon';
 import { colors } from '../../../../shared/constants/colors';
 import {
   utilitiesApiService,
@@ -56,7 +59,7 @@ export const ConsentFormsTab: React.FC = () => {
   }, []));
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
-  const handleDelete = (id: number) => Alert.alert('Delete Template', 'Remove this consent template?', [
+  const handleDelete = (id: number) => showAlert('Delete Template', 'Remove this consent template?', [
     { text: 'Cancel', style: 'cancel' },
     { text: 'Delete', style: 'destructive', onPress: async () => {
       await utilitiesApiService.updateConsentTemplate(id, { is_active: false });
@@ -74,7 +77,7 @@ export const ConsentFormsTab: React.FC = () => {
 
   const handleCreate = async () => {
     if (!form.name.trim() || !form.content.trim()) {
-      Alert.alert('Required', 'Name and content are required');
+      toast.warning('Name and content are required');
       return;
     }
     setSaving(true);
@@ -84,8 +87,9 @@ export const ConsentFormsTab: React.FC = () => {
       setTemplates(p => [created, ...p]);
       setShowCreate(false);
       setForm({ name: '', content: '' });
+      toast.success('Consent template created');
     } else {
-      Alert.alert('Error', 'Failed to create consent template.');
+      toast.error('Failed to create consent template.');
     }
   };
 
@@ -97,14 +101,15 @@ export const ConsentFormsTab: React.FC = () => {
     if (updated) {
       setTemplates(p => p.map(t => t.id === editTemplate.id ? updated : t));
       setEditTemplate(null);
+      toast.success('Consent template updated');
     } else {
-      Alert.alert('Error', 'Failed to update template.');
+      toast.error('Failed to update template.');
     }
   };
 
   const handleGenerateLink = async (patient: Patient) => {
     if (!sendTemplate || !backendUser?.clinic?.id) {
-      Alert.alert('Error', 'Clinic information not available.');
+      toast.error('Clinic information not available.');
       return;
     }
     setGenerating(true);
@@ -120,8 +125,9 @@ export const ConsentFormsTab: React.FC = () => {
     setGenerating(false);
     if (result) {
       setGeneratedLink(`${WEB_BASE_URL}${result.signUrl}`);
+      toast.success('Consent link generated');
     } else {
-      Alert.alert('Error', 'Failed to generate link. Please try again.');
+      toast.error('Failed to generate link. Please try again.');
     }
   };
 
@@ -138,7 +144,7 @@ export const ConsentFormsTab: React.FC = () => {
     if (canOpen) {
       await Linking.openURL(url);
     } else {
-      Alert.alert('WhatsApp not installed', 'Please install WhatsApp to use this option.');
+      toast.warning('Please install WhatsApp to use this option.');
     }
   };
 
@@ -284,7 +290,7 @@ export const ConsentFormsTab: React.FC = () => {
                     <Text style={localStyles.shareBtnText}>Share / Copy</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[localStyles.whatsappBtn, { flex: 1 }]} onPress={handleWhatsApp} activeOpacity={0.85}>
-                    <Text style={localStyles.whatsappIcon}>{'\u{1F4AC}'}</Text>
+                    <WhatsAppIcon size={20} />
                     <Text style={localStyles.shareBtnText}>WhatsApp</Text>
                   </TouchableOpacity>
                 </View>

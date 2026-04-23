@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -442,6 +444,7 @@ export const AppointmentDetailsScreen: React.FC<AppointmentDetailsScreenProps> =
         onRequestClose={() => setShowCheckInModal(false)}
       >
         <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.modalContent}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>Patient Check-in</Text>
@@ -535,6 +538,7 @@ export const AppointmentDetailsScreen: React.FC<AppointmentDetailsScreenProps> =
               </TouchableOpacity>
             </View>
           </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </SafeAreaView>

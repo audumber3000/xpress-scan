@@ -1,9 +1,11 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, RefreshControl,
-  ActivityIndicator, Modal, TextInput, Alert,
+  ActivityIndicator, Modal, TextInput,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { toast } from '../../../../shared/components/toastService';
+import { showAlert } from '../../../../shared/components/alertService';
 import { useFocusEffect } from '@react-navigation/native';
 import { Plus, X, AlertTriangle } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
@@ -46,18 +48,19 @@ export const InventoryTab: React.FC = () => {
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
   const isLow = (item: InventoryItem) => item.quantity <= item.min_stock_level;
 
-  const handleDelete = (id: number) => Alert.alert('Delete Item', 'Remove this item?', [
+  const handleDelete = (id: number) => showAlert('Delete Item', 'Remove this item?', [
     { text: 'Cancel', style: 'cancel' },
     { text: 'Delete', style: 'destructive', onPress: async () => {
       await utilitiesApiService.deleteInventoryItem(id);
       setItems(p => p.filter(i => i.id !== id));
+      toast.success('Item deleted');
     }},
   ]);
 
   const handleRestock = async () => {
     if (!actionItem) return;
     const add = parseFloat(restockQty) || 0;
-    if (add <= 0) { Alert.alert('Invalid', 'Enter a quantity greater than 0'); return; }
+    if (add <= 0) { toast.warning('Enter a quantity greater than 0'); return; }
     setSaving(true);
     const updated = await utilitiesApiService.updateInventoryItem(actionItem.id, { quantity: actionItem.quantity + add });
     setSaving(false);
@@ -65,11 +68,12 @@ export const InventoryTab: React.FC = () => {
       setItems(p => p.map(i => i.id === actionItem.id ? updated : i));
       setActionItem(updated);
       setRestockQty('');
+      toast.success('Stock updated');
     }
   };
 
   const handleCreate = async () => {
-    if (!form.name?.trim()) { Alert.alert('Required', 'Item name is required'); return; }
+    if (!form.name?.trim()) { toast.warning('Item name is required'); return; }
     setSaving(true);
     const created = await utilitiesApiService.createInventoryItem(form as InventoryItemCreate);
     setSaving(false);
@@ -77,8 +81,9 @@ export const InventoryTab: React.FC = () => {
       setItems(p => [created, ...p]);
       setShowCreate(false);
       setForm({ name: '', category: '', unit: '', quantity: 0, min_stock_level: 0, price_per_unit: 0 });
+      toast.success('Inventory item created');
     } else {
-      Alert.alert('Error', 'Failed to create item.');
+      toast.error('Failed to create item.');
     }
   };
 
@@ -90,8 +95,9 @@ export const InventoryTab: React.FC = () => {
     if (updated) {
       setItems(p => p.map(i => i.id === editItem.id ? updated : i));
       setEditItem(null);
+      toast.success('Inventory item updated');
     } else {
-      Alert.alert('Error', 'Failed to update item.');
+      toast.error('Failed to update item.');
     }
   };
 

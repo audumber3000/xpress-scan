@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StatusBar, StyleSheet, Platform, RefreshControl, Alert,
+  StatusBar, StyleSheet, Platform, RefreshControl,
 } from 'react-native';
+import { toast } from '../../../shared/components/toastService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -199,7 +200,7 @@ export const ReceptionistHomeScreen: React.FC<Props> = ({ navigation }) => {
     if (item.nav) {
       navigation.navigate(item.nav as any, item.params);
     } else {
-      Alert.alert('Coming Soon', `${item.label} module is coming soon to the mobile app!`);
+      toast.info(`${item.label} module is coming soon to the mobile app!`);
     }
   };
 

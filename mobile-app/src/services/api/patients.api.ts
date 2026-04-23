@@ -476,6 +476,88 @@ export class PatientsApiService extends BaseApiService {
     return await response.json();
   }
 
+  async getInvoicesByAppointment(patientId: string, appointmentId: string): Promise<any[]> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await this.fetchWithTimeout(
+        `${this.baseURL}/invoices?patient_id=${patientId}&appointment_id=${appointmentId}&limit=10`,
+        { method: 'GET', headers },
+      );
+      if (!response.ok) return [];
+      const data = await response.json();
+      return Array.isArray(data) ? data : (data.items ?? []);
+    } catch { return []; }
+  }
+
+  async addInvoiceLineItem(invoiceId: string, item: { description: string; quantity: number; unit_price: number }): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/invoices/${invoiceId}/line-items`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(item),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  }
+
+  async deleteInvoiceLineItem(invoiceId: string, lineItemId: string): Promise<void> {
+    const headers = await this.getAuthHeaders();
+    await this.fetchWithTimeout(`${this.baseURL}/invoices/${invoiceId}/line-items/${lineItemId}`, {
+      method: 'DELETE', headers,
+    });
+  }
+
+  async finalizeInvoice(invoiceId: string): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/invoices/${invoiceId}/finalize`, {
+      method: 'POST', headers,
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  }
+
+  async markInvoicePaid(invoiceId: string, paymentMode: string): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/invoices/${invoiceId}/mark-as-paid`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payment_mode: paymentMode }),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  }
+
+  async deleteInvoice(invoiceId: string): Promise<void> {
+    const headers = await this.getAuthHeaders();
+    await this.fetchWithTimeout(`${this.baseURL}/invoices/${invoiceId}`, {
+      method: 'DELETE', headers,
+    });
+  }
+
+  // ─── Clinical Suggestions (autocomplete) ───────────────────
+  async getClinicalSuggestions(category: string): Promise<{ id: number; name: string; price?: number }[]> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const url = category === 'procedure'
+        ? `${this.baseURL}/treatment-types/`
+        : `${this.baseURL}/clinical/settings/?category=${category}`;
+      const response = await this.fetchWithTimeout(url, { headers });
+      if (!response.ok) return [];
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
+    } catch { return []; }
+  }
+
+  async getMedications(): Promise<{ id: number; name: string; dosage?: string; duration?: string; quantity?: string }[]> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await this.fetchWithTimeout(`${this.baseURL}/medications/`, { headers });
+      if (!response.ok) return [];
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
+    } catch { return []; }
+  }
+
   // ─── Payments ──────────────────────────────────────────────
   async getPayments(patientId: string): Promise<any[]> {
     try {

@@ -18,9 +18,9 @@ import {
   Bell,
   ArrowRight,
   Mail,
-  MessageCircle,
   MessageSquare,
 } from 'lucide-react-native';
+import { WhatsAppIcon } from '../../../shared/components/icons/WhatsAppIcon';
 import { RootStackParamList } from '../../../app/AppNavigator';
 
 const { width: W, height: H } = Dimensions.get('window');
@@ -224,7 +224,7 @@ const PLATFORMS = [
   {
     color: '#25D366',
     shadowColor: '#25D366',
-    icon: <MessageCircle size={26} color="#fff" strokeWidth={2} />,
+    icon: <WhatsAppIcon size={32} />,
     label: 'WhatsApp',
     // top of screen
     top:  CY_NOTIF - ORBIT_R - BADGE_R,

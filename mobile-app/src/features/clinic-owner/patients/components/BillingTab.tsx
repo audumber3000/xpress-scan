@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
-  ActivityIndicator, Modal, Alert, RefreshControl,
+  ActivityIndicator, Modal, RefreshControl, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { toast } from '../../../../shared/components/toastService';
 import {
-  Plus, Eye, MessageCircle, FileText, Receipt, ChevronRight,
+  Plus, Eye, FileText, Receipt, ChevronRight,
   X, Check, Trash2,
 } from 'lucide-react-native';
+import { WhatsAppIcon } from '../../../../shared/components/icons/WhatsAppIcon';
 import { patientsApiService } from '../../../../services/api/patients.api';
 import { colors } from '../../../../shared/constants/colors';
 
@@ -71,9 +73,9 @@ export const BillingTab: React.FC<BillingTabProps> = ({ patientId, patientPhone 
     setSendingWA(invoiceId);
     try {
       await patientsApiService.sendInvoiceWhatsApp(invoiceId);
-      Alert.alert('Sent', 'Invoice sent via WhatsApp.');
+      toast.success('Invoice sent via WhatsApp.');
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to send invoice.');
+      toast.error(e.message || 'Failed to send invoice.');
     } finally {
       setSendingWA(null);
     }
@@ -82,7 +84,7 @@ export const BillingTab: React.FC<BillingTabProps> = ({ patientId, patientPhone 
   const handleCreate = async () => {
     const validItems = lineItems.filter(li => li.description.trim() && li.unit_price.trim());
     if (validItems.length === 0) {
-      Alert.alert('Error', 'Add at least one line item with description and price.');
+      toast.error('Add at least one line item with description and price.');
       return;
     }
     setCreating(true);
@@ -97,13 +99,13 @@ export const BillingTab: React.FC<BillingTabProps> = ({ patientId, patientPhone 
         notes: invoiceNotes,
         status: 'draft',
       });
-      Alert.alert('Created', 'Invoice created successfully.');
+      toast.success('Invoice created successfully.');
       setShowCreate(false);
       setLineItems([{ description: '', quantity: '1', unit_price: '' }]);
       setInvoiceNotes('');
       fetchInvoices();
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to create invoice.');
+      toast.error(e.message || 'Failed to create invoice.');
     } finally {
       setCreating(false);
     }
@@ -189,7 +191,7 @@ export const BillingTab: React.FC<BillingTabProps> = ({ patientId, patientPhone 
                     onPress={() => handleSendWhatsApp(inv.id.toString())}
                     disabled={sendingWA === inv.id.toString()}
                   >
-                    <MessageCircle size={16} color={sendingWA === inv.id.toString() ? '#9CA3AF' : '#25D366'} />
+                    <WhatsAppIcon size={18} />
                   </TouchableOpacity>
                 )}
               </View>
@@ -200,7 +202,7 @@ export const BillingTab: React.FC<BillingTabProps> = ({ patientId, patientPhone 
 
       {/* ─── Create Invoice Modal ─── */}
       <Modal visible={showCreate} transparent animationType="slide" onRequestClose={() => setShowCreate(false)}>
-        <View style={s.modalOverlay}>
+        <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={s.modalSheet}>
             <View style={s.sheetHandle} />
             <Text style={s.sheetTitle}>Create Invoice</Text>
@@ -244,7 +246,7 @@ export const BillingTab: React.FC<BillingTabProps> = ({ patientId, patientPhone 
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ─── Invoice Detail Modal ─── */}
@@ -297,7 +299,7 @@ export const BillingTab: React.FC<BillingTabProps> = ({ patientId, patientPhone 
                 style={[s.confirmBtn, { marginTop: 16, flexDirection: 'row', gap: 8 }]}
                 onPress={() => { handleSendWhatsApp(selectedInvoice.id.toString()); setSelectedInvoice(null); }}
               >
-                <MessageCircle size={16} color="#fff" />
+                <WhatsAppIcon size={18} />
                 <Text style={s.confirmBtnText}>Send via WhatsApp</Text>
               </TouchableOpacity>
             )}

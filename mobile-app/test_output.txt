@@ -1,0 +1,143 @@
+
+> molarplus@1.1.0 test
+> jest --verbose --no-cache
+
+  console.log
+    🍎 [CONFIG] Development: iOS detected - using localhost:8000
+
+      at log (src/config/api.config.ts:73:15)
+
+  console.log
+    🍎 [CONFIG] Development: iOS detected - using localhost:8000
+
+      at log (src/config/api.config.ts:73:15)
+
+  console.log
+    🍎 [CONFIG] Development: iOS detected - using localhost:8000
+
+      at log (src/config/api.config.ts:73:15)
+
+  console.log
+    🍎 [CONFIG] Development: iOS detected - using localhost:8000
+
+      at log (src/config/api.config.ts:73:15)
+
+  console.log
+    🍎 [CONFIG] Development: iOS detected - using localhost:8000
+
+      at log (src/config/api.config.ts:73:15)
+
+  console.log
+    🍎 [CONFIG] Development: iOS detected - using localhost:8000
+
+      at log (src/config/api.config.ts:73:15)
+
+  console.log
+    🍎 [CONFIG] Development: iOS detected - using localhost:8000
+
+      at log (src/config/api.config.ts:73:15)
+
+  console.log
+    🍎 [CONFIG] Development: iOS detected - using localhost:8000
+
+      at log (src/config/api.config.ts:73:15)
+
+  console.log
+    🍎 [CONFIG] Development: iOS detected - using localhost:8000
+
+      at log (src/config/api.config.ts:73:15)
+
+  console.log
+    🍎 [CONFIG] Development: iOS detected - using localhost:8000
+
+      at log (src/config/api.config.ts:73:15)
+
+  console.log
+    🍎 [CONFIG] Development: iOS detected - using localhost:8000
+
+      at log (src/config/api.config.ts:73:15)
+
+  console.log
+    🍎 [CONFIG] Development: iOS detected - using localhost:8000
+
+      at log (src/config/api.config.ts:73:15)
+
+  console.log
+    🍎 [CONFIG] Development: iOS detected - using localhost:8000
+
+      at log (src/config/api.config.ts:73:15)
+
+  console.warn
+    SafeAreaView has been deprecated and will be removed in a future release. Please use 'react-native-safe-area-context' instead. See https://github.com/th3rdwave/react-native-safe-area-context
+
+      34 |     if (this.state.hasError) {
+      35 |       return (
+    > 36 |         <SafeAreaView style={styles.container}>
+         |          ^
+      37 |           <StatusBar barStyle="dark-content" />
+      38 |           <View style={styles.content}>
+      39 |             <View style={styles.iconContainer}>
+
+      at warn (node_modules/react-native/Libraries/Utilities/warnOnce.js:27:11)
+      at Object.warnOnce [as SafeAreaView] (node_modules/react-native/index.js:92:5)
+      at ErrorBoundary.SafeAreaView [as render] (src/shared/components/ErrorBoundary.tsx:36:10)
+      at Object.react-stack-bottom-frame (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:13989:29)
+      at updateClassComponent (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6554:25)
+      at beginWork (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:7488:13)
+      at runWithFiberInDEV (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:1574:13)
+      at performUnitOfWork (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:10972:22)
+      at workLoopSync (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:10816:41)
+      at renderRootSync (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:10797:11)
+      at performWorkOnRoot (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:10349:13)
+      at performWorkOnRootViaSchedulerTask (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:2094:7)
+      at flushActQueue (node_modules/react/cjs/react.development.js:566:34)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:859:10)
+      at actImplementation (node_modules/@testing-library/react-native/src/act.ts:30:25)
+      at renderWithAct (node_modules/@testing-library/react-native/src/render-act.ts:13:11)
+      at renderInternal (node_modules/@testing-library/react-native/src/render.tsx:69:33)
+      at renderInternal (node_modules/@testing-library/react-native/src/render.tsx:44:10)
+      at Object.<anonymous> (__tests__/AppSmoke.test.tsx:97:30)
+
+FAIL __tests__/AppSmoke.test.tsx (7.064 s)
+  App Smoke Test
+    ✕ renders correctly (82 ms)
+
+  ● App Smoke Test › renders correctly
+
+    Element type is invalid: expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.
+
+    Check the render method of `ErrorBoundary`.
+
+       95 |     // This test ensures the entire app component tree can mount without crashing
+       96 |     // which catches issues with broken imports or misconfigured providers.
+    >  97 |     const { toJSON } = render(<App />);
+          |                              ^
+       98 |     expect(toJSON()).toBeDefined();
+       99 |   });
+      100 | });
+
+      at createFiberFromTypeAndProps (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12185:28)
+      at createFiberFromElement (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12199:14)
+      at reconcileChildFibersImpl (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5049:31)
+      at node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5227:33
+      at reconcileChildren (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5735:13)
+      at beginWork (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:7551:13)
+      at runWithFiberInDEV (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:1574:13)
+      at performUnitOfWork (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:10972:22)
+      at workLoopSync (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:10816:41)
+      at renderRootSync (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:10797:11)
+      at performWorkOnRoot (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:10384:39)
+      at performWorkOnRootViaSchedulerTask (node_modules/react-test-renderer/cjs/react-test-renderer.development.js:2094:7)
+      at flushActQueue (node_modules/react/cjs/react.development.js:566:34)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:859:10)
+      at actImplementation (node_modules/@testing-library/react-native/src/act.ts:30:25)
+      at renderWithAct (node_modules/@testing-library/react-native/src/render-act.ts:13:11)
+      at renderInternal (node_modules/@testing-library/react-native/src/render.tsx:69:33)
+      at renderInternal (node_modules/@testing-library/react-native/src/render.tsx:44:10)
+      at Object.<anonymous> (__tests__/AppSmoke.test.tsx:97:30)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 1 total
+Snapshots:   0 total
+Time:        7.296 s
+Ran all test suites.

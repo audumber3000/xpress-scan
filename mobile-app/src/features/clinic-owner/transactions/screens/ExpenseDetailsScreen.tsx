@@ -9,9 +9,9 @@ import {
   SafeAreaView,
   StatusBar,
   Linking,
-  Alert,
   Dimensions
 } from 'react-native';
+import { toast } from '../../../../shared/components/toastService';
 import { 
   ChevronLeft, 
   Calendar, 
@@ -50,7 +50,7 @@ export const ExpenseDetailsScreen: React.FC<ExpenseDetailsScreenProps> = ({ rout
       setExpense(data);
     } catch (error: any) {
       console.error('Error fetching expense details:', error);
-      Alert.alert('Error', 'Failed to load expense details: ' + (error.message || 'Unknown error'));
+      toast.error('Failed to load expense details: ' + (error.message || 'Unknown error'));
     } finally {
       setLoading(false);
     }

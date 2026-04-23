@@ -9,8 +9,8 @@ import {
   SafeAreaView,
   StatusBar,
   Linking,
-  Alert
 } from 'react-native';
+import { toast } from '../../../../shared/components/toastService';
 import { 
   ChevronLeft, 
   Receipt, 
@@ -26,6 +26,7 @@ import {
   AlertCircle,
   IndianRupee
 } from 'lucide-react-native';
+import { WhatsAppIcon } from '../../../../shared/components/icons/WhatsAppIcon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../../../shared/constants/colors';
 import { transactionsApiService } from '../../../../services/api/transactions.api';
@@ -52,7 +53,7 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
       setInvoice(data);
     } catch (error: any) {
       console.error('Error fetching invoice details:', error);
-      Alert.alert('Error', 'Failed to load invoice details: ' + (error.message || 'Unknown error'));
+      toast.error('Failed to load invoice details: ' + (error.message || 'Unknown error'));
     } finally {
       setLoading(false);
     }
@@ -107,7 +108,7 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
           <ChevronLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Invoice Details</Text>
-        <TouchableOpacity style={styles.headerButton} onPress={() => Alert.alert('Export', 'Coming soon: PDF Export')}>
+        <TouchableOpacity style={styles.headerButton} onPress={() => toast.info('Coming soon: PDF export')}>
           <Download size={22} color={colors.primary} />
         </TouchableOpacity>
       </View>
@@ -144,8 +145,8 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
 
         {/* Action Buttons */}
         <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.actionButton} onPress={() => Alert.alert('WhatsApp', 'Sending invoice PDF...')}>
-            <Share2 size={20} color={colors.white} />
+          <TouchableOpacity style={styles.actionButton} onPress={() => toast.info('Sending invoice PDF...')}>
+            <WhatsAppIcon size={22} />
             <Text style={styles.actionButtonText}>Share via WhatsApp</Text>
           </TouchableOpacity>
         </View>
