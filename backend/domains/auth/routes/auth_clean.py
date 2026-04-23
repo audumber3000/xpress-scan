@@ -45,6 +45,12 @@ def _enrich_clinic_dto(db: Session, clinic: Clinic) -> ClinicResponseDTO:
         .first()
     )
     if not owner:
+        owner = (
+            db.query(User)
+            .filter(User.clinic_id == clinic.id, User.role == "clinic_owner", User.is_active == True)
+            .first()
+        )
+    if not owner:
         return dto
     sub = (
         db.query(Subscription)
@@ -468,11 +474,11 @@ async def get_current_user(
         
         clinic_info = None
         if user.clinic_id and hasattr(user, "active_clinic") and user.active_clinic:
-            clinic_info = ClinicResponseDTO.from_orm(user.active_clinic).model_dump()
+            clinic_info = _enrich_clinic_dto(db, user.active_clinic).model_dump()
         elif user.clinic_id:
             clinic = db.query(Clinic).filter(Clinic.id == user.clinic_id).first()
             if clinic:
-                clinic_info = ClinicResponseDTO.from_orm(clinic).model_dump()
+                clinic_info = _enrich_clinic_dto(db, clinic).model_dump()
         
         result = user_dto.model_dump()
         result["clinic"] = clinic_info
