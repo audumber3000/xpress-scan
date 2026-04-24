@@ -11,7 +11,12 @@ class Clinic(Base):
     name = Column(String, nullable=False)
     address = Column(String)
     phone = Column(String)
+    email = Column(String)
     logo_url = Column(String)
+    primary_color = Column(String)
+    tagline = Column(String)
+    doctor_name = Column(String)
+    reg_number = Column(String)
 
 class ConsentTemplate(Base):
     __tablename__ = "consent_templates"
@@ -82,6 +87,34 @@ class Expense(Base):
     amount = Column(Float)
     category = Column(String)
     date = Column(DateTime)
+
+class PatientDocument(Base):
+    __tablename__ = 'patient_documents'
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
+    case_paper_id = Column(Integer, nullable=True)
+    file_name = Column(String, nullable=False)
+    file_path = Column(String, nullable=False)
+    file_size = Column(Integer)
+    file_type = Column(String)
+    uploaded_by = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class TemplateConfiguration(Base):
+    __tablename__ = 'template_configurations'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
+    category = Column(String, nullable=False)
+    template_id = Column(String, nullable=False, default='default')
+    logo_url = Column(String, nullable=True)
+    footer_text = Column(Text, nullable=True)
+    primary_color = Column(String, nullable=True)
+    secondary_color = Column(String, nullable=True)
+    config_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class DashboardReport(Base):
     __tablename__ = 'dashboard_reports'

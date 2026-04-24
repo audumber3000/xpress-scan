@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import PatientConsent, Patient, ConsentTemplate, Clinic
+from app.models import PatientConsent, Patient, ConsentTemplate, Clinic, PatientDocument, TemplateConfiguration
 from app.services.infrastructure.pdf_service import PDFService
 import os
 
@@ -102,17 +102,26 @@ class ConsentService:
         if not patient or not template or not clinic:
             raise ValueError(f"Incomplete data in DB for Nexus processing: Patient={bool(patient)}, Template={bool(template)}, Clinic={bool(clinic)}")
 
-        # Generate PDF via PDFService
+        # Load template branding config (consent category)
+        config = db.query(TemplateConfiguration).filter(
+            TemplateConfiguration.clinic_id == clinic_id,
+            TemplateConfiguration.category == 'consent'
+        ).first()
+
+        # Generate PDF via PDFService (branded, matching prescription/invoice style)
         pdf_path = PDFService.generate_signed_consent_pdf(
-            clinic_name=clinic.name,
+            clinic=clinic,
             patient_name=patient.name,
+            patient_id=patient_id,
             template_name=template.name,
             content=data.get('content', template.content),
-            signature_base64=signature_base64
+            signature_base64=signature_base64,
+            config=config,
         )
 
         # Upload to R2 Storage via Nexus Storage Service
         filename = f"consent_{patient_id}_{int(datetime.now().timestamp())}.pdf"
+        file_size = os.path.getsize(pdf_path) if os.path.exists(pdf_path) else 0
         storage_key = StorageService.upload_consent_pdf(
             file_path=pdf_path,
             filename=filename,
@@ -121,9 +130,9 @@ class ConsentService:
         )
 
         if not storage_key:
-            # If R2 upload fails, we still want to keep the local record if possible,
-            # but usually it's a critical error for a cloud app.
             print(f"Warning: R2 Upload failed for {filename}, falling back to local path record.")
+
+        pdf_url = storage_key or pdf_path
 
         # Save record in the main DB (matching the true schema from Postgres)
         consent_record = PatientConsent(
@@ -131,9 +140,22 @@ class ConsentService:
             template_id=template_id,
             signed_content=data.get('content', template.content),
             signed_at=datetime.utcnow(),
-            signature_url=storage_key or pdf_path # Correctly remapped to valid DB column
+            signature_url=pdf_url,
         )
         db.add(consent_record)
+
+        # Also save as PatientDocument so it appears in patient files tab
+        doc_record = PatientDocument(
+            patient_id=patient_id,
+            clinic_id=clinic_id,
+            file_name=filename,
+            file_path=pdf_url,
+            file_size=file_size,
+            file_type="pdf",
+            created_at=datetime.utcnow(),
+        )
+        db.add(doc_record)
+
         db.commit()
         db.refresh(consent_record)
 
@@ -150,5 +172,5 @@ class ConsentService:
             "patient_id": patient_id,
             "clinic_id": clinic_id,
             "file_name": filename,
-            "url": storage_key
+            "url": pdf_url
         }
