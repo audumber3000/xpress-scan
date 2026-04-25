@@ -631,12 +631,20 @@ async def complete_onboarding(
                 detail="Clinic name is required"
             )
 
+        # Number of chairs comes in as a string from the form; clamp to a sane integer.
+        try:
+            chairs = int(data.get("number_of_chairs", 1) or 1)
+        except (TypeError, ValueError):
+            chairs = 1
+        chairs = max(1, min(chairs, 50))
+
         clinic_data = {
             "name": data.get("clinic_name"),
             "address": data.get("clinic_address", ""),
             "phone": data.get("clinic_phone", ""),
             "email": data.get("clinic_email", user.email),
             "specialization": data.get("specialization", "dental"),
+            "number_of_chairs": chairs,
             "subscription_plan": "free",
             "clinic_label": "main_branch",
             "referred_by_code": data.get("referred_by_code")
