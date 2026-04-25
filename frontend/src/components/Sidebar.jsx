@@ -248,7 +248,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
         />
       )}
       
-      <aside className={`${mobileClasses} ${desktopClasses} ${collapsed && !isMobile ? 'shadow-2xl' : ''} ${collapsed && !isMobile ? 'overflow-visible' : ''} relative`}>
+      <aside className={`${mobileClasses} ${desktopClasses} ${collapsed && !isMobile ? 'shadow-2xl' : ''} ${collapsed && !isMobile ? 'overflow-visible' : ''} ${!isMobile ? 'relative' : ''}`}>
         {/* Dotted pattern effect at bottom - color changes based on admin/main */}
         <div 
           className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none opacity-30"

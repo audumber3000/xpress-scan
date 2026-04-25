@@ -131,11 +131,11 @@ const ChartCard = ({
   loading, 
   isEmpty, 
   onAISparkle, 
-  minWidth = "min-w-[300px]",
+  minWidth = "md:min-w-[300px]",
   flexClass = "flex-1"
 }) => {
   return (
-    <div className={`bg-white border border-gray-200 rounded-2xl p-6 flex flex-col ${flexClass} ${minWidth} relative shadow-sm hover:shadow-md transition-all duration-300`}>
+    <div className={`bg-white border border-gray-200 rounded-2xl p-6 flex flex-col ${flexClass} min-w-0 ${minWidth} relative shadow-sm hover:shadow-md transition-all duration-300`}>
       {/* AI Sparkle Icon Button */}
       {onAISparkle && (
         <button
@@ -521,20 +521,20 @@ const Dashboard = () => {
 
 
   return (
-    <div className="w-full h-full min-h-screen bg-gray-50 p-8 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+    <div className="w-full h-full min-h-screen bg-gray-50 p-4 md:p-8 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
       {/* Heading and date */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
+      <div className="mb-6 md:mb-8 mt-12 md:mt-0">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-[#2a276e] tracking-tight">
+            <h1 className="text-2xl md:text-3xl font-bold text-[#2a276e] tracking-tight">
               Dashboard
             </h1>
-            <div className="text-gray-500 font-medium mt-1">
+            <div className="text-sm md:text-base text-gray-500 font-medium mt-1">
               Welcome back to your {getClinicTypeDescription(clinicData?.specialization || 'medical clinic')}
             </div>
           </div>
-          
-          <div className="flex items-center gap-3">
+
+          <div className="flex items-center gap-3 flex-wrap">
             {/* Global Time Filter */}
             <div className="relative group">
               <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2.5 shadow-sm hover:shadow-md transition-all duration-200 group-hover:border-[#9B8CFF]/50">
@@ -577,7 +577,7 @@ const Dashboard = () => {
         {visibleWidgets.patientStats && (
           <ChartCard
             title="Patient Statistics"
-            minWidth="min-w-[500px]"
+            minWidth="md:min-w-[500px]"
             flexClass="flex-[2]"
             onAISparkle={() => setShowChatPanel(true)}
             loading={loadingPatientStats}
