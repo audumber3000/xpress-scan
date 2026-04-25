@@ -72,8 +72,10 @@ try:
     engine = create_engine("$DB_URL")
     with engine.connect() as conn:
         for col, ddl in [
-            ("is_trial",      "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS is_trial BOOLEAN DEFAULT FALSE"),
-            ("trial_ends_at", "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP"),
+            ("is_trial",         "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS is_trial BOOLEAN DEFAULT FALSE"),
+            ("trial_ends_at",    "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP"),
+            ("clinic_label",     "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS clinic_label VARCHAR"),
+            ("parent_clinic_id", "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS parent_clinic_id INTEGER REFERENCES clinics(id)"),
         ]:
             try:
                 conn.execute(text(ddl))
@@ -105,6 +107,7 @@ try:
             "number_of_chairs", "timings",
             "created_at", "updated_at", "synced_at", "sync_status",
             "referred_by_code",
+            "clinic_label", "parent_clinic_id",
         },
         "users": {
             "id", "email", "name", "first_name", "last_name",
