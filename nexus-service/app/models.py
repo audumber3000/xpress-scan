@@ -14,9 +14,6 @@ class Clinic(Base):
     email = Column(String)
     logo_url = Column(String)
     primary_color = Column(String)
-    tagline = Column(String)
-    doctor_name = Column(String)
-    reg_number = Column(String)
 
 class ConsentTemplate(Base):
     __tablename__ = "consent_templates"

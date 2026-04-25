@@ -29,6 +29,7 @@ const ConsentForms = () => {
     const [patientSearch, setPatientSearch] = useState("");
     const [sending, setSending] = useState(false);
     const [generatedLink, setGeneratedLink] = useState("");
+    const [generatedToken, setGeneratedToken] = useState("");
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [messageSent, setMessageSent] = useState(false);
     const [linksRefreshKey, setLinksRefreshKey] = useState(0);
@@ -84,10 +85,10 @@ const ConsentForms = () => {
                 templateName: selectedTemplate.name,
                 content: selectedTemplate.content,
                 clinicId: user.clinic_id,
-                sendWhatsApp: false // Only generate link first
             });
 
             setGeneratedLink(res.data.signUrl);
+            setGeneratedToken(res.data.token);
             setSelectedPatient(patient);
             setLinksRefreshKey(k => k + 1); // Trigger sidebar refresh
             toast.success("Link generated successfully");
@@ -99,25 +100,19 @@ const ConsentForms = () => {
     };
 
     const handleSendWhatsApp = async () => {
-        if (!selectedPatient || !selectedTemplate || !user) return;
-        
+        if (!selectedPatient || !generatedToken) return;
+
         setSending(true);
         try {
-            await axios.post(`${NEXUS_API_URL}/consent/generate`, {
-                patientId: selectedPatient.id,
-                patientName: selectedPatient.name,
-                phone: selectedPatient.phone,
-                templateId: selectedTemplate.id,
-                templateName: selectedTemplate.name,
-                content: selectedTemplate.content,
-                clinicId: user.clinic_id,
-                sendWhatsApp: true
+            const fullLink = `${window.location.origin}${generatedLink}`;
+            await axios.post(`${NEXUS_API_URL}/consent/send-whatsapp/${generatedToken}`, {
+                consentLink: fullLink,
             });
 
             setMessageSent(true);
             toast.success(`Consent link sent to ${selectedPatient.name} via WhatsApp`);
         } catch (error) {
-            toast.error(error.response?.data?.error || "Failed to send WhatsApp message");
+            toast.error(error.response?.data?.detail || error.response?.data?.error || "Failed to send WhatsApp message");
         } finally {
             setSending(false);
         }
@@ -338,7 +333,7 @@ const ConsentForms = () => {
                 <div className="fixed inset-0 z-50 flex justify-end">
                     <div 
                         className="fixed inset-0 bg-[#1F1c4f]/20 backdrop-blur-sm transition-opacity" 
-                        onClick={() => { setShowSendModal(false); setGeneratedLink(""); setPatientSearch(""); setSelectedPatient(null); setMessageSent(false); }}
+                        onClick={() => { setShowSendModal(false); setGeneratedLink(""); setGeneratedToken(""); setPatientSearch(""); setSelectedPatient(null); setMessageSent(false); }}
                     ></div>
                     <div className="bg-white w-full max-w-md relative z-10 h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
                         
@@ -349,7 +344,7 @@ const ConsentForms = () => {
                                 <p className="text-sm text-gray-500 mt-1">Select patient and generate link</p>
                             </div>
                             <button 
-                                onClick={() => { setShowSendModal(false); setGeneratedLink(""); setPatientSearch(""); setSelectedPatient(null); setMessageSent(false); }} 
+                                onClick={() => { setShowSendModal(false); setGeneratedLink(""); setGeneratedToken(""); setPatientSearch(""); setSelectedPatient(null); setMessageSent(false); }} 
                                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-600"
                             >
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -437,7 +432,7 @@ const ConsentForms = () => {
 
                                     <div className="pt-4">
                                         <button
-                                            onClick={() => { setShowSendModal(false); setGeneratedLink(""); setPatientSearch(""); setSelectedPatient(null); setMessageSent(false); }}
+                                            onClick={() => { setShowSendModal(false); setGeneratedLink(""); setGeneratedToken(""); setPatientSearch(""); setSelectedPatient(null); setMessageSent(false); }}
                                             className="text-gray-500 font-semibold text-sm hover:text-gray-700 transition-colors"
                                         >
                                             {messageSent ? 'Finish & Close' : 'Close without sending'}

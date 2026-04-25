@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.models import Clinic
 from app.services.medical.consent_service import ConsentService
+from app.services.infrastructure.notification_service import NotificationService
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import List
 
 router = APIRouter()
+notification_service = NotificationService()
 
 class ConsentGenerateRequest(BaseModel):
     patientId: int
@@ -15,7 +18,6 @@ class ConsentGenerateRequest(BaseModel):
     templateName: str
     content: str
     clinicId: int
-    sendWhatsApp: Optional[bool] = False
 
 class SignatureSubmitRequest(BaseModel):
     signature: str
@@ -27,6 +29,9 @@ class ConsentLinkResponse(BaseModel):
     templateName: str
     timeLeft: int
     used: bool
+
+class ConsentSendWhatsAppRequest(BaseModel):
+    consentLink: str
 
 @router.post("/generate")
 async def generate_consent_link(request_data: ConsentGenerateRequest):
@@ -62,6 +67,42 @@ async def validate_consent_token(token: str):
         "valid": True,
         "data": data
     }
+
+@router.post("/send-whatsapp/{token}")
+async def send_consent_whatsapp(
+    token: str,
+    payload: ConsentSendWhatsAppRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Send the consent link via WhatsApp for an already-generated token.
+    Reuses the existing token instead of creating a new one.
+    """
+    data = ConsentService.validate_token(token)
+    if not data:
+        raise HTTPException(status_code=404, detail="Link expired or invalid.")
+
+    clinic = db.query(Clinic).filter(Clinic.id == data.get("clinicId")).first()
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clinic not found.")
+
+    result = await notification_service.dispatch_event(
+        event_type="consent_form",
+        channel="whatsapp",
+        to_phone=data.get("phone", ""),
+        to_name=data.get("patientName", ""),
+        patient_name=data.get("patientName", ""),
+        clinic_name=clinic.name or "",
+        consent_link=payload.consentLink,
+        procedure_name=data.get("templateName", ""),
+        clinic_phone=clinic.phone or "",
+    )
+
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed to send WhatsApp message"))
+
+    return {"success": True, "token": token}
+
 
 @router.post("/submit/{token}")
 async def submit_consent_signature(
