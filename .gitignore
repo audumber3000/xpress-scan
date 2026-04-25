@@ -49,3 +49,6 @@ mobile/android/
 *.db
 *.sqlite3
 *.sqlite
+
+# Claude Code local session state
+.claude/

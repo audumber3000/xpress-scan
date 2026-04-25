@@ -1,17 +1,17 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import Card from "../components/Card";
 import GearLoader from "../components/GearLoader";
 import { api } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  Plus, 
-  Clock, 
-  User, 
-  Phone, 
-  Mail, 
+import { toast } from "react-toastify";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Clock,
+  User,
+  Phone,
+  Mail,
   ExternalLink,
   X,
   FileText,
@@ -19,6 +19,14 @@ import {
   AlertCircle,
   CheckCircle
 } from "lucide-react";
+import CalendarToolbar from "./appointments/components/CalendarToolbar";
+import TeamMembersPanel from "./appointments/components/TeamMembersPanel";
+import AppointmentCard from "./appointments/components/AppointmentCard";
+import MiniCalendar from "./appointments/components/MiniCalendar";
+import MonthGrid from "./appointments/components/MonthGrid";
+import DayGrid from "./appointments/components/DayGrid";
+import { getAppointmentColor } from "./appointments/utils/doctorColors";
+import { computeDayLayout } from "./appointments/utils/layout";
 
 const Calendar = () => {
   const { user } = useAuth();
@@ -63,9 +71,17 @@ const Calendar = () => {
     time: '',
     duration: '1',
     date: new Date().toISOString().split('T')[0], // Today's date as default
-    status: 'confirmed'
+    status: 'confirmed',
+    doctor_id: '' // optional — empty means unassigned (public bookings default here)
   });
   const [doctors, setDoctors] = useState([]);
+  // Reject confirmation dialog state — replaces the native confirm() + prompt() flow.
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectSubmitting, setRejectSubmitting] = useState(false);
+  // Phase 1 filter state: which doctors are visible, and whether to show unassigned (public) bookings
+  const [selectedDoctorIds, setSelectedDoctorIds] = useState(() => new Set());
+  const [showUnassigned, setShowUnassigned] = useState(true);
   const [showCheckInModal, setShowCheckInModal] = useState(false);
   const [checkingInAppointment, setCheckingInAppointment] = useState(null);
   const [checkInFormData, setCheckInFormData] = useState({
@@ -102,16 +118,6 @@ const Calendar = () => {
       
       // Transform API response to match calendar format
       const transformedAppointments = response.map(apt => {
-        // Generate color based on status or treatment
-        const colors = [
-          "bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#2a276e]",
-          "bg-purple-100 border-purple-200 text-purple-800",
-          "bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#2a276e]",
-          "bg-pink-100 border-pink-200 text-pink-800",
-          "bg-yellow-100 border-yellow-200 text-yellow-800"
-        ];
-        const colorIndex = apt.id % colors.length;
-        
         return {
           id: apt.id,
           patientId: apt.patient_id || null,
@@ -120,12 +126,12 @@ const Calendar = () => {
           patientPhone: apt.patient_phone || '',
           patientAvatar: apt.patient_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
           treatment: apt.treatment,
+          doctor_id: apt.doctor_id || null, // preserved for per-doctor coloring + filtering
           doctor: apt.doctor_name || 'Unassigned',
           startTime: apt.start_time,
           endTime: apt.end_time,
           date: apt.appointment_date,
           status: apt.status,
-          color: colors[colorIndex],
           notes: apt.notes || '',
           chair_number: apt.chair_number || '',
           patientAge: apt.patient_age || '',
@@ -151,12 +157,159 @@ const Calendar = () => {
     try {
       const response = await api.get('/clinic-users');
       // Filter for roles that can treat patients
-      const filteredDoctors = response.filter(u => 
+      const filteredDoctors = response.filter(u =>
         u.role === 'doctor' || u.role === 'clinic_owner'
       );
       setDoctors(filteredDoctors);
+      // Default the visibility filter to "all doctors on" the first time we learn about them.
+      // Only initialize if the set is empty so we don't override user toggles on refetch.
+      setSelectedDoctorIds(prev => {
+        if (prev.size > 0) return prev;
+        return new Set(filteredDoctors.map(d => d.id));
+      });
     } catch (error) {
       console.error('Error fetching doctors:', error);
+    }
+  };
+
+  // Keep the selected-doctors set in sync when new doctors appear (add them selected by default).
+  useEffect(() => {
+    setSelectedDoctorIds(prev => {
+      const next = new Set(prev);
+      let changed = false;
+      doctors.forEach(d => {
+        if (!next.has(d.id) && prev.size === 0) { next.add(d.id); changed = true; }
+      });
+      return changed ? next : prev;
+    });
+  }, [doctors]);
+
+  const toggleDoctorFilter = (doctorId) => {
+    setSelectedDoctorIds(prev => {
+      const next = new Set(prev);
+      if (next.has(doctorId)) next.delete(doctorId); else next.add(doctorId);
+      return next;
+    });
+  };
+
+  // Drag-and-drop reassign — used by the Today/Day grid. Updates doctor and/or
+  // start time. Optimistic local update + PUT, with revert on failure.
+  const handleReassign = async (appointmentId, newDoctorId, newStartTime) => {
+    const apt = appointments.find(a => a.id === appointmentId);
+    if (!apt) return;
+
+    // Compute new end time by preserving the original duration.
+    const toMinutes = (t) => {
+      const [h, m] = t.split(':').map(Number);
+      return h * 60 + m;
+    };
+    const fromMinutes = (mins) =>
+      `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+    const durationMins = toMinutes(apt.endTime) - toMinutes(apt.startTime);
+    const newEndTime = fromMinutes(toMinutes(newStartTime) + durationMins);
+
+    const dateStr = new Date(apt.date).toISOString().split('T')[0];
+    const targetDoctorId = newDoctorId ? Number(newDoctorId) : null;
+
+    // No-op detection (same doctor, same time) — avoid a wasted PUT.
+    if (targetDoctorId === (apt.doctor_id || null) && newStartTime === apt.startTime) {
+      return;
+    }
+
+    // Per-doctor conflict check on the destination.
+    const conflict = checkTimeConflict(dateStr, newStartTime, newEndTime, targetDoctorId, appointmentId);
+    if (conflict.hasConflict) {
+      const c = conflict.conflictingAppointment;
+      toast.error(
+        <div>
+          <div className="font-semibold">Cannot move here</div>
+          <div className="text-sm mt-1">
+            Overlaps with {c.patientName} ({c.doctor}) at {c.startTime}–{c.endTime}.
+          </div>
+        </div>
+      );
+      return;
+    }
+
+    // Optimistic update so the UI feels instant.
+    const targetDoctor = doctors.find(d => d.id === targetDoctorId);
+    const previous = apt;
+    const updated = {
+      ...apt,
+      doctor_id: targetDoctorId,
+      doctor: targetDoctor?.name || apt.doctor,
+      startTime: newStartTime,
+      endTime: newEndTime,
+    };
+    setAppointments(prev => prev.map(a => (a.id === appointmentId ? updated : a)));
+
+    try {
+      const payload = {
+        doctor_id: targetDoctorId,
+        appointment_date: dateStr,
+        start_time: newStartTime,
+        end_time: newEndTime,
+        duration: durationMins,
+      };
+      const response = await api.put(`/appointments/${appointmentId}`, payload);
+      // Reconcile with the server's authoritative response (doctor name, etc.).
+      setAppointments(prev => prev.map(a => (a.id === appointmentId ? {
+        ...a,
+        doctor_id: response.doctor_id || null,
+        doctor: response.doctor_name || 'Unassigned',
+        startTime: response.start_time,
+        endTime: response.end_time,
+        date: response.appointment_date,
+      } : a)));
+    } catch (error) {
+      console.error('Failed to reassign appointment:', error);
+      const msg = error.response?.data?.detail || error.message || 'Unknown error';
+      toast.error(`Failed to update appointment: ${msg}`);
+      // Revert the optimistic change.
+      setAppointments(prev => prev.map(a => (a.id === appointmentId ? previous : a)));
+    }
+  };
+
+  // Shared click handler — fetches fresh appointment data then opens the detail drawer.
+  const openAppointmentDetails = async (apt) => {
+    try {
+      const fullAppointment = await api.get(`/appointments/${apt.id}`);
+      setSelectedAppointment({
+        id: fullAppointment.id,
+        patientId: fullAppointment.patient_id || null,
+        patientName: fullAppointment.patient_name,
+        patientEmail: fullAppointment.patient_email || '',
+        patientPhone: fullAppointment.patient_phone || '',
+        patientAvatar: fullAppointment.patient_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+        treatment: fullAppointment.treatment,
+        doctor_id: fullAppointment.doctor_id || null,
+        doctor: fullAppointment.doctor_name || 'Unassigned',
+        startTime: fullAppointment.start_time,
+        endTime: fullAppointment.end_time,
+        date: fullAppointment.appointment_date,
+        status: fullAppointment.status,
+        notes: fullAppointment.notes || '',
+        chair_number: fullAppointment.chair_number || '',
+        patientAge: fullAppointment.patient_age || '',
+        patientGender: fullAppointment.patient_gender || '',
+        patientVillage: fullAppointment.patient_village || '',
+        patientReferredBy: fullAppointment.patient_referred_by || '',
+        visitNumber: fullAppointment.visit_number || null,
+      });
+    } catch (error) {
+      console.error('Error fetching appointment details:', error);
+      setSelectedAppointment(apt);
+    }
+  };
+
+  const toggleShowAll = () => {
+    const allOn = showUnassigned && doctors.every(d => selectedDoctorIds.has(d.id));
+    if (allOn) {
+      setSelectedDoctorIds(new Set());
+      setShowUnassigned(false);
+    } else {
+      setSelectedDoctorIds(new Set(doctors.map(d => d.id)));
+      setShowUnassigned(true);
     }
   };
 
@@ -166,6 +319,74 @@ const Calendar = () => {
     fetchTreatmentTypes();
     fetchDoctors();
   }, [currentDate]);
+
+  // Filtered appointments based on team-member panel selection.
+  const visibleAppointments = useMemo(() => {
+    return appointments.filter(a => {
+      if (a.doctor_id) return selectedDoctorIds.has(a.doctor_id);
+      return showUnassigned;
+    });
+  }, [appointments, selectedDoctorIds, showUnassigned]);
+
+  // Counts used by the team-members panel (all appointments in current month window).
+  const { countsByDoctorId, unassignedCount } = useMemo(() => {
+    const counts = {};
+    let unassigned = 0;
+    appointments.forEach(a => {
+      if (a.doctor_id) counts[a.doctor_id] = (counts[a.doctor_id] || 0) + 1;
+      else unassigned += 1;
+    });
+    return { countsByDoctorId: counts, unassignedCount: unassigned };
+  }, [appointments]);
+
+  // Set of yyyy-mm-dd strings for dates that have any visible appointment — used
+  // by the mini calendar to draw activity dots.
+  const appointmentDates = useMemo(() => {
+    const set = new Set();
+    visibleAppointments.forEach(a => {
+      if (a.date) set.add(new Date(a.date).toISOString().split('T')[0]);
+    });
+    return set;
+  }, [visibleAppointments]);
+
+  // Scroll-into-view on week mount: when the user opens the week (or switches
+  // to it), bring the current hour roughly into the middle of the viewport.
+  const weekScrollRef = useRef(null);
+  useEffect(() => {
+    if (viewMode !== 'week' || !weekScrollRef.current) return;
+    const HOUR_PX = 80;
+    const OPEN_HOUR = 8; // matches getWeekViewTimeSlots
+    const now = new Date();
+    const minutes = now.getHours() * 60 + now.getMinutes();
+    const y = Math.max(0, ((minutes - OPEN_HOUR * 60) * HOUR_PX) / 60 - 200);
+    weekScrollRef.current.scrollTop = y;
+  }, [viewMode]);
+
+  // Format the current week as a human-friendly range, handling cross-month
+  // and cross-year cases ("Apr 28 – May 4, 2026" / "Dec 29, 2025 – Jan 4, 2026").
+  const formatWeekRange = (dates) => {
+    if (!dates || dates.length === 0) return '';
+    const start = dates[0];
+    const end = dates[dates.length - 1];
+    const sm = start.toLocaleDateString('en-US', { month: 'short' });
+    const em = end.toLocaleDateString('en-US', { month: 'short' });
+    const sy = start.getFullYear();
+    const ey = end.getFullYear();
+    if (sy !== ey) return `${sm} ${start.getDate()}, ${sy} – ${em} ${end.getDate()}, ${ey}`;
+    if (sm === em) return `${sm} ${start.getDate()} – ${end.getDate()}, ${sy}`;
+    return `${sm} ${start.getDate()} – ${em} ${end.getDate()}, ${sy}`;
+  };
+
+  // Per-date counts for the week-view day-header badges.
+  const visibleCountsByDate = useMemo(() => {
+    const map = {};
+    visibleAppointments.forEach(a => {
+      if (!a.date) return;
+      const k = new Date(a.date).toISOString().split('T')[0];
+      map[k] = (map[k] || 0) + 1;
+    });
+    return map;
+  }, [visibleAppointments]);
 
   // Get relative date label (Today, Yesterday, Tomorrow)
   const getRelativeDateLabel = (date) => {
@@ -195,13 +416,18 @@ const Calendar = () => {
       const current = new Date(currentDate);
       current.setHours(0, 0, 0, 0);
       const diffDays = Math.round((current - today) / (1000 * 60 * 60 * 24));
-      
+
       if (diffDays > -1) {
         // Can go back to yesterday
         const newDate = new Date(currentDate);
         newDate.setDate(newDate.getDate() - 1);
         setCurrentDate(newDate);
       }
+    } else if (viewMode === 'month') {
+      // Month view: go back 1 month
+      const newDate = new Date(currentDate);
+      newDate.setMonth(newDate.getMonth() - 1);
+      setCurrentDate(newDate);
     } else {
       // Week view: go back 7 days
       const newDate = new Date(currentDate);
@@ -218,13 +444,17 @@ const Calendar = () => {
       const current = new Date(currentDate);
       current.setHours(0, 0, 0, 0);
       const diffDays = Math.round((current - today) / (1000 * 60 * 60 * 24));
-      
+
       if (diffDays < 1) {
         // Can go forward to tomorrow
         const newDate = new Date(currentDate);
         newDate.setDate(newDate.getDate() + 1);
         setCurrentDate(newDate);
       }
+    } else if (viewMode === 'month') {
+      const newDate = new Date(currentDate);
+      newDate.setMonth(newDate.getMonth() + 1);
+      setCurrentDate(newDate);
     } else {
       // Week view: go forward 7 days
       const newDate = new Date(currentDate);
@@ -288,15 +518,13 @@ const Calendar = () => {
     return slots;
   };
 
-  // Get appointments for a specific date
+  // Get appointments for a specific date — respects the team-member panel filter.
   const getAppointmentsForDate = (date) => {
     const dateStr = date.toISOString().split('T')[0];
-    const filtered = appointments.filter(apt => {
+    return visibleAppointments.filter(apt => {
       const aptDate = apt.date ? new Date(apt.date).toISOString().split('T')[0] : apt.date;
       return aptDate === dateStr;
     });
-    console.log(`📅 Looking for appointments on ${dateStr}:`, filtered.length, 'found');
-    return filtered;
   };
 
   // Calculate appointment position and height
@@ -314,15 +542,7 @@ const Calendar = () => {
     // Since overlay has top: 60px, we need to account for that offset
     const topPosition = (startTimeInMinutes - 8 * 60) * (80 / 60); // 80px per hour = 1.33px per minute
     const height = duration * (80 / 60); // 80px per hour = 1.33px per minute
-    
-    console.log(`Appointment ${appointment.patientName}:`, {
-      startTime: appointment.startTime,
-      startTimeInMinutes,
-      topPosition,
-      height,
-      calculation: `(${startTimeInMinutes} - ${8 * 60}) * (80/60) = ${topPosition}`
-    });
-    
+
     return {
       top: `${topPosition}px`,
       height: `${height}px`,
@@ -424,7 +644,7 @@ const Calendar = () => {
             endTime: fullAppointment.end_time,
             date: fullAppointment.appointment_date,
             status: newStatus,
-            color: selectedAppointment.color, // Keep the color from the existing appointment
+            doctor_id: fullAppointment.doctor_id || null,
             notes: fullAppointment.notes || ''
           };
           console.log('🔄 Updated appointment details:', transformedAppointment);
@@ -452,13 +672,11 @@ const Calendar = () => {
     if (name === 'time' && value && newAppointment.date) {
       const timeValidation = isTimeWithinOperatingHours(newAppointment.date, value);
       if (!timeValidation.valid) {
-        setTimeout(() => {
-          alert(`⚠️ CLINIC HOURS WARNING:\n\n${timeValidation.message}\n\nPlease select a time within clinic operating hours or leave empty for auto-assignment.`);
-        }, 100);
+        toast.warning(`Outside clinic hours — ${timeValidation.message}`);
         return;
       }
 
-      // Check for conflicts when time is valid
+      // Check for conflicts when time is valid (per-doctor, matching create flow)
       const durationMinutes = parseFloat(newAppointment.duration) * 60;
       const [startHour, startMinute] = value.split(':').map(Number);
       const endTimeInMinutes = (startHour * 60 + startMinute) + durationMinutes;
@@ -468,25 +686,24 @@ const Calendar = () => {
       const startTime = `${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}`;
       const endTime = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
 
-      const conflict = checkTimeConflict(newAppointment.date, startTime, endTime);
+      const conflict = checkTimeConflict(newAppointment.date, startTime, endTime, newAppointment.doctor_id || null);
       if (conflict.hasConflict) {
-        const conflictApt = conflict.conflictingAppointment;
-        setTimeout(() => {
-          alert(
-            `⚠️ WARNING: Time Conflict Detected!\n\n` +
-            `Selected time overlaps with:\n` +
-            `Patient: ${conflictApt.patientName}\n` +
-            `Time: ${conflictApt.startTime} - ${conflictApt.endTime}\n\n` +
-            `Please choose a different time or leave empty for auto-assignment.`
-          );
-        }, 100);
+        const c = conflict.conflictingAppointment;
+        toast.warning(
+          <div>
+            <div className="font-semibold">Time conflict</div>
+            <div className="text-sm mt-1">{c.patientName} is booked {c.startTime}–{c.endTime}.</div>
+          </div>
+        );
       }
     }
   };
 
-  // Check if time slot overlaps with existing appointments
-  const checkTimeConflict = (date, startTime, endTime, excludeId = null) => {
-    // Convert time strings to minutes for easier comparison
+  // Check if time slot overlaps with existing appointments for the SAME doctor.
+  // Two appointments with different assigned doctors don't conflict. An unassigned
+  // booking only conflicts with other unassigned bookings — the receptionist will
+  // assign a doctor on check-in, at which point the chair/doctor check kicks in.
+  const checkTimeConflict = (date, startTime, endTime, doctorId = null, excludeId = null) => {
     const timeToMinutes = (time) => {
       const [hours, minutes] = time.split(':').map(Number);
       return hours * 60 + minutes;
@@ -495,27 +712,28 @@ const Calendar = () => {
     const newStart = timeToMinutes(startTime);
     const newEnd = timeToMinutes(endTime);
 
-    // Get appointments for the same date
     const dateStr = date;
     const dayAppointments = appointments.filter(apt => {
       const aptDate = new Date(apt.date).toISOString().split('T')[0];
       return aptDate === dateStr && apt.id !== excludeId;
     });
 
-    // Check for conflicts
+    const targetDoctor = doctorId ? Number(doctorId) : null;
+
     for (const apt of dayAppointments) {
+      // Only count as conflict if both refer to the same resource:
+      // - same doctor id, OR
+      // - both unassigned (both null)
+      const aptDoctor = apt.doctor_id ? Number(apt.doctor_id) : null;
+      if (aptDoctor !== targetDoctor) continue;
+
       const aptStart = timeToMinutes(apt.startTime);
       const aptEnd = timeToMinutes(apt.endTime);
 
-      // Check if times overlap
-      // Overlap conditions:
-      // 1. New appointment starts during existing appointment
-      // 2. New appointment ends during existing appointment
-      // 3. New appointment completely contains existing appointment
       if (
-        (newStart >= aptStart && newStart < aptEnd) || // New starts during existing
-        (newEnd > aptStart && newEnd <= aptEnd) ||     // New ends during existing
-        (newStart <= aptStart && newEnd >= aptEnd)     // New contains existing
+        (newStart >= aptStart && newStart < aptEnd) ||
+        (newEnd > aptStart && newEnd <= aptEnd) ||
+        (newStart <= aptStart && newEnd >= aptEnd)
       ) {
         return {
           hasConflict: true,
@@ -662,20 +880,16 @@ const Calendar = () => {
       appointmentTime = findNextAvailableSlot(newAppointment.date, durationHours);
 
       if (!appointmentTime) {
-        alert('No available time slots for the selected date. Please choose another date.');
+        toast.error('No available time slots for this date. Please choose another date.');
         return;
       }
-
-      // Show user the auto-assigned time
-      const confirmMessage = `No time selected. Auto-assigning next available slot: ${appointmentTime}. Continue?`;
-      if (!confirm(confirmMessage)) {
-        return;
-      }
+      // Auto-assigning silently — user knows what they asked for; surface the chosen slot via info toast.
+      toast.info(`Auto-assigned to next available slot: ${appointmentTime}`);
     } else {
       // Validate selected time is within operating hours
       const timeValidation = isTimeWithinOperatingHours(newAppointment.date, appointmentTime);
       if (!timeValidation.valid) {
-        alert(`⚠️ INVALID TIME: ${timeValidation.message}\n\nPlease select a time within clinic operating hours.`);
+        toast.error(`Invalid time — ${timeValidation.message}`);
         return;
       }
     }
@@ -691,16 +905,17 @@ const Calendar = () => {
     const startTime = `${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}`;
     const endTime = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
     
-      // Check for time conflicts
-      const conflict = checkTimeConflict(newAppointment.date, startTime, endTime);
+      // Check for time conflicts (per-doctor; unassigned only conflicts with unassigned)
+      const conflict = checkTimeConflict(newAppointment.date, startTime, endTime, newAppointment.doctor_id || null);
       if (conflict.hasConflict) {
-        const conflictApt = conflict.conflictingAppointment;
-        alert(
-          `⚠️ TIME SLOT CONFLICT!\n\n` +
-          `This time overlaps with:\n` +
-          `Patient: ${conflictApt.patientName}\n` +
-          `Time: ${conflictApt.startTime} - ${conflictApt.endTime}\n` +
-          `Please choose a different time.`
+        const c = conflict.conflictingAppointment;
+        toast.error(
+          <div>
+            <div className="font-semibold">Time slot conflict</div>
+            <div className="text-sm mt-1">
+              Overlaps with {c.patientName} ({c.doctor}) at {c.startTime}–{c.endTime}. Pick another time or doctor.
+            </div>
+          </div>
         );
         return;
       }
@@ -709,7 +924,7 @@ const Calendar = () => {
       const clinicId = clinicData?.id || user?.clinic_id;
       
       if (!clinicId) {
-        alert('Clinic information not available. Please refresh the page and try again.');
+        toast.error('Clinic info not available. Please refresh and try again.');
         return;
       }
       
@@ -725,23 +940,13 @@ const Calendar = () => {
         end_time: endTime,
         duration: parseInt(durationMinutes),
         status: newAppointment.status,
+        doctor_id: newAppointment.doctor_id ? parseInt(newAppointment.doctor_id) : null,
         clinic_id: clinicId // Required by backend schema (even though it uses current_user.clinic_id internally)
       };
-      
+
       const response = await api.post('/appointments', appointmentData);
-      
-      // Generate color for display
-    const colors = [
-      'bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#2a276e]',
-      'bg-purple-100 border-purple-200 text-purple-800',
-      'bg-[#9B8CFF]/20 border-[#9B8CFF] text-[#2a276e]',
-      'bg-yellow-100 border-yellow-200 text-yellow-800',
-      'bg-pink-100 border-pink-200 text-pink-800',
-      'bg-indigo-100 border-indigo-200 text-indigo-800'
-    ];
-      const colorIndex = response.id % colors.length;
-      
-      // Add to local state with transformed format
+
+      // Add to local state with transformed format (color is derived at render time via getAppointmentColor)
       const newApt = {
         id: response.id,
         patientId: response.patient_id || null,
@@ -750,17 +955,17 @@ const Calendar = () => {
         patientPhone: response.patient_phone || '',
         patientAvatar: response.patient_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
         treatment: response.treatment,
+        doctor_id: response.doctor_id || null,
         doctor: response.doctor_name || 'Unassigned',
         startTime: response.start_time,
         endTime: response.end_time,
         date: response.appointment_date,
         status: response.status,
-        color: colors[colorIndex],
         notes: response.notes || ''
       };
-      
+
       setAppointments(prev => [...prev, newApt]);
-      
+
       // Reset form and close drawer
       setNewAppointment({
         patientName: '',
@@ -771,15 +976,16 @@ const Calendar = () => {
         time: '',
         duration: '1',
         date: new Date().toISOString().split('T')[0],
-        status: 'confirmed'
+        status: 'confirmed',
+        doctor_id: ''
       });
     setShowAddForm(false);
     
-    alert('✅ Appointment created successfully!');
+    toast.success('Appointment created');
   } catch (error) {
     console.error('Error creating appointment:', error);
     const errorMessage = error.response?.data?.detail || error.message || 'Unknown error';
-    alert(`Failed to create appointment: ${errorMessage}`);
+    toast.error(`Failed to create appointment: ${errorMessage}`);
   }
 };
 
@@ -856,7 +1062,7 @@ const Calendar = () => {
       await handleFinalizeCheckIn();
     } catch (error) {
       console.error('❌ Error during duplicate check:', error);
-      alert('Failed to verify patient records. Please try again.');
+      toast.error('Failed to verify patient records. Please try again.');
       setIsCheckingDuplicates(false);
     }
   };
@@ -911,11 +1117,11 @@ const Calendar = () => {
       setShowCheckInModal(false);
       setShowDuplicateModal(false);
       setCheckingInAppointment(null);
-      alert(existingPatientId ? 'Patient linked and checked in!' : 'Patient checked in successfully! New file created.');
+      toast.success(existingPatientId ? 'Patient linked and checked in' : 'Checked in — new patient file created');
       
     } catch (error) {
       console.error('❌ Error during check-in:', error);
-      alert(`Failed to check in: ${error.response?.data?.detail || error.message}`);
+      toast.error(`Failed to check in: ${error.response?.data?.detail || error.message}`);
     } finally {
       setIsCheckingDuplicates(false);
     }
@@ -942,40 +1148,40 @@ const Calendar = () => {
         patientId: null  // No auto-create patient file
       });
       
-      alert('Appointment accepted! You can now create a patient file from the appointment details.');
+      toast.success('Appointment accepted — you can now create a patient file from the details panel.');
     } catch (error) {
       console.error('Error accepting appointment:', error);
-      alert('Failed to accept appointment. Please try again.');
+      toast.error('Failed to accept appointment. Please try again.');
     }
   };
 
   // Handle appointment rejection
-  const handleRejectAppointment = async () => {
-    if (!confirm('Are you sure you want to reject this appointment?')) {
-      return;
-    }
-    
-    // Prompt for rejection reason (optional custom message for email)
-    const rejectionReason = prompt('Please provide a reason for rejection (optional - this will be included in the email to the patient):') || null;
-    
+  // Open the in-page reject dialog (replaces the native confirm + prompt flow).
+  const handleRejectAppointment = () => {
+    setRejectReason('');
+    setRejectDialogOpen(true);
+  };
+
+  // Actually submit the rejection. Called by the dialog's Reject button.
+  const submitRejection = async () => {
+    if (!selectedAppointment) return;
+    setRejectSubmitting(true);
     try {
-      const response = await api.put(`/appointments/${selectedAppointment.id}`, {
+      await api.put(`/appointments/${selectedAppointment.id}`, {
         status: 'rejected',
-        rejection_reason: rejectionReason
+        rejection_reason: rejectReason.trim() || null,
       });
-      
-      // Update local state
-      setAppointments(prev => prev.map(apt => 
-        apt.id === selectedAppointment.id 
-          ? { ...apt, status: 'rejected' }
-          : apt
+      setAppointments(prev => prev.map(apt =>
+        apt.id === selectedAppointment.id ? { ...apt, status: 'rejected' } : apt
       ));
-      
       setSelectedAppointment({ ...selectedAppointment, status: 'rejected' });
-      alert('Appointment rejected successfully.');
+      setRejectDialogOpen(false);
+      toast.success('Appointment rejected');
     } catch (error) {
       console.error('Error rejecting appointment:', error);
-      alert('Failed to reject appointment. Please try again.');
+      toast.error('Failed to reject appointment. Please try again.');
+    } finally {
+      setRejectSubmitting(false);
     }
   };
 
@@ -1007,7 +1213,7 @@ const Calendar = () => {
       console.error('❌ Error checking duplicates:', error);
       console.error('Error response:', error.response?.data);
       console.error('Error status:', error.response?.status);
-      alert(`Failed to check for duplicate patients: ${error.response?.data?.detail || error.message}`);
+      toast.error(`Failed to check for duplicate patients: ${error.response?.data?.detail || error.message}`);
     }
   };
 
@@ -1103,7 +1309,7 @@ const Calendar = () => {
           endTime: fullAppointment.end_time,
           date: fullAppointment.appointment_date,
           status: fullAppointment.status,
-          color: selectedAppointment.color, // Keep the color from the existing appointment
+          doctor_id: fullAppointment.doctor_id || null,
           notes: fullAppointment.notes || ''
         };
         console.log('✅ Patient registration complete - Updated appointment:', transformedAppointment);
@@ -1121,7 +1327,7 @@ const Calendar = () => {
       }
       
       // Show success message
-      alert('Patient registered successfully!');
+      toast.success('Patient registered successfully');
       
       // Close the patient registration form
       setShowPatientForm(false);
@@ -1146,7 +1352,7 @@ const Calendar = () => {
       
       // Show more detailed error message
       const errorMessage = error.message || 'Unknown error';
-      alert(`Failed to register patient.\n\nError: ${errorMessage}\n\nPlease check the console for more details.`);
+      toast.error(`Failed to register patient: ${errorMessage}`);
     }
   };
 
@@ -1185,7 +1391,7 @@ const Calendar = () => {
       setShowPatientForm(true);
     } catch (error) {
       console.error('Error creating new patient:', error);
-      alert('Failed to create new patient. Please try again.');
+      toast.error('Failed to create new patient. Please try again.');
     }
   };
 
@@ -1210,10 +1416,10 @@ const Calendar = () => {
       });
       
       setShowDuplicateWarning(false);
-      alert('✅ Appointment linked to existing patient successfully!');
+      toast.success('Appointment linked to existing patient');
     } catch (error) {
       console.error('Error linking to existing patient:', error);
-      alert('Failed to link appointment. Please try again.');
+      toast.error('Failed to link appointment. Please try again.');
     }
   };
 
@@ -1243,405 +1449,195 @@ const Calendar = () => {
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
+        {/* Top toolbar — Today / arrows / date / view toggle / booking link / New */}
+        <CalendarToolbar
+          title={viewMode === 'today'
+            ? getRelativeDateLabel(currentDate)
+            : viewMode === 'week'
+              ? formatWeekRange(weekDates)
+              : currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+          viewMode={viewMode}
+          onPrev={goToPrevious}
+          onNext={goToNext}
+          onToday={goToToday}
+          onSetViewMode={(mode) => {
+            if (mode === 'today') setCurrentDate(new Date());
+            setViewMode(mode);
+          }}
+          onOpenCreate={() => setShowAddForm(true)}
+          publicBookingUrl={getBookingUrl()}
+          prevDisabled={viewMode === 'today' && (() => {
+            const today = new Date(); today.setHours(0,0,0,0);
+            const current = new Date(currentDate); current.setHours(0,0,0,0);
+            return Math.round((current - today) / (1000 * 60 * 60 * 24)) <= -1;
+          })()}
+          nextDisabled={viewMode === 'today' && (() => {
+            const today = new Date(); today.setHours(0,0,0,0);
+            const current = new Date(currentDate); current.setHours(0,0,0,0);
+            return Math.round((current - today) / (1000 * 60 * 60 * 24)) >= 1;
+          })()}
+        />
 
-      {/* Calendar Container */}
-      <Card>
-        {/* Navigation Bar */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={goToPrevious}
-              className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={viewMode === 'today' && (() => {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const current = new Date(currentDate);
-                current.setHours(0, 0, 0, 0);
-                const diffDays = Math.round((current - today) / (1000 * 60 * 60 * 24));
-                return diffDays <= -1; // Disable if already at yesterday
-              })()}
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            
-            <div className="text-2xl font-bold text-gray-900">
-              {viewMode === 'today' ? getRelativeDateLabel(currentDate) : currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-            </div>
-            
-            <button
-              onClick={goToNext}
-              className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={viewMode === 'today' && (() => {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const current = new Date(currentDate);
-                current.setHours(0, 0, 0, 0);
-                const diffDays = Math.round((current - today) / (1000 * 60 * 60 * 24));
-                return diffDays >= 1; // Disable if already at tomorrow
-              })()}
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </div>
+        {/* Two-column layout: team members rail + calendar content */}
+        <div className="flex gap-4 min-h-[700px]">
+          <TeamMembersPanel
+            doctors={doctors}
+            countsByDoctorId={countsByDoctorId}
+            unassignedCount={unassignedCount}
+            selectedDoctorIds={selectedDoctorIds}
+            showUnassigned={showUnassigned}
+            onToggleDoctor={toggleDoctorFilter}
+            onToggleUnassigned={() => setShowUnassigned(v => !v)}
+            onToggleAll={toggleShowAll}
+            header={
+              <MiniCalendar
+                currentDate={currentDate}
+                appointmentDates={appointmentDates}
+                onSelectDate={(d) => {
+                  setCurrentDate(d);
+                  // Clicking a specific date from the mini calendar is best paired
+                  // with the single-day view; keep week view if currently there.
+                  if (viewMode === 'month') setViewMode('week');
+                }}
+              />
+            }
+          />
 
-          <div className="flex items-center gap-3">
-            <Link
-              to={getBookingUrl()}
-              target="_blank"
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
-              Public Booking
-            </Link>
-            <button 
-              onClick={() => setShowAddForm(true)}
-              className="bg-[#2a276e] text-white px-4 py-2 rounded-lg hover:bg-[#1a1548] transition-colors flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Add new Appointment
-            </button>
-            {/* View Toggle Button */}
-            <button
-              onClick={() => {
-                if (viewMode === 'week') {
-                  setCurrentDate(new Date());
-                  setViewMode('today');
-                } else {
-                  setViewMode('week');
-                }
-              }}
-              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"
-            >
-              {viewMode === 'week' ? (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Today
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  Week View
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
+          <div className="flex-1 min-w-0">
         {/* Calendar Content */}
         {loading ? (
           <div className="text-center py-12">
             <GearLoader size="w-12 h-12" className="mx-auto" />
             <p className="mt-4 text-gray-600">Loading appointments...</p>
           </div>
+        ) : viewMode === 'month' ? (
+          /* Month View — full month grid with doctor-colored chips */
+          <MonthGrid
+            currentDate={currentDate}
+            appointments={visibleAppointments}
+            onSelectDate={(d) => { setCurrentDate(d); setViewMode('today'); }}
+            onSelectAppointment={openAppointmentDetails}
+          />
         ) : viewMode === 'today' ? (
-          /* Today's View - List of appointments */
-          <div className="space-y-4">
-            {/* Header */}
-            <div className="mb-4">
-              <h2 className="text-xl font-bold text-gray-900">
-                {(() => {
-                  const label = getRelativeDateLabel(currentDate);
-                  const possessive = label === "Today" ? "Today's" : label === "Yesterday" ? "Yesterday's" : "Tomorrow's";
-                  return `${possessive} Appointments - ${currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`;
-                })()}
-              </h2>
-            </div>
-
-            {(() => {
-              const targetDateStr = currentDate.toISOString().split('T')[0];
-              const todaysAppointments = appointments.filter(apt => {
-                const aptDate = apt.date ? new Date(apt.date).toISOString().split('T')[0] : apt.date;
-                return aptDate === targetDateStr;
-              }).sort((a, b) => {
-                const timeA = a.startTime.split(':').map(Number);
-                const timeB = b.startTime.split(':').map(Number);
-                return (timeA[0] * 60 + timeA[1]) - (timeB[0] * 60 + timeB[1]);
-              });
-
-              if (todaysAppointments.length === 0) {
-                return (
-                  <div className="text-center py-20 bg-white rounded-lg border-2 border-dashed border-gray-300">
-                    <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    <h3 className="text-xl font-semibold text-gray-700 mb-2">No Appointments Today</h3>
-                    <p className="text-gray-500">You have a clear schedule for today!</p>
-                  </div>
-                );
-              }
-
-              return (
-                <div className="grid gap-4">
-                  {todaysAppointments.map((apt, index) => (
-                    <div
-                      key={apt.id}
-                      onClick={async () => {
-                        console.log('Selected appointment from today view:', apt);
-                        console.log('Patient ID:', apt.patientId);
-                        // Fetch full appointment data to ensure we have latest patient_id
-                        try {
-                          const fullAppointment = await api.get(`/appointments/${apt.id}`);
-                          const transformedAppointment = {
-                            id: fullAppointment.id,
-                            patientId: fullAppointment.patient_id || null,
-                            patientName: fullAppointment.patient_name,
-                            patientEmail: fullAppointment.patient_email || '',
-                            patientPhone: fullAppointment.patient_phone || '',
-                            patientAvatar: fullAppointment.patient_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
-                            treatment: fullAppointment.treatment,
-                            doctor: fullAppointment.doctor_name || 'Unassigned',
-                            startTime: fullAppointment.start_time,
-                            endTime: fullAppointment.end_time,
-                            date: fullAppointment.appointment_date,
-                            status: fullAppointment.status,
-                            color: apt.color, // Keep the color from the list
-                            notes: fullAppointment.notes || ''
-                          };
-                          console.log('Fetched full appointment:', transformedAppointment);
-                          setSelectedAppointment(transformedAppointment);
-                        } catch (error) {
-                          console.error('Error fetching appointment details:', error);
-                          // Fallback to using the appointment from the list
-                          setSelectedAppointment(apt);
-                        }
-                      }}
-                      className={`bg-white rounded-lg shadow-md hover:shadow-lg transition-all cursor-pointer border-l-4 ${apt.color} p-6`}
-                    >
-                      <div className="flex items-center justify-between">
-                        {/* Left: Time & Patient Info */}
-                        <div className="flex items-center gap-6 flex-1">
-                          {/* Time Badge */}
-                          <div className="flex flex-col items-center bg-gray-50 rounded-lg px-4 py-3 min-w-[100px]">
-                            <div className="text-2xl font-bold text-gray-900">{formatTime(apt.startTime)}</div>
-                            <div className="text-xs text-gray-500">to</div>
-                            <div className="text-sm font-medium text-gray-600">{formatTime(apt.endTime)}</div>
-                          </div>
-
-                          {/* Patient Info */}
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <div className="w-12 h-12 bg-[#9B8CFF]/20 rounded-full flex items-center justify-center text-lg font-semibold text-[#2a276e]">
-                                {apt.patientAvatar}
-                              </div>
-                              <div>
-                                <h3 className="text-lg font-bold text-gray-900">{apt.patientName}</h3>
-                                <div className="flex items-center gap-4 text-sm text-gray-600">
-                                  <div className="flex items-center gap-1">
-                                    <Phone className="w-3 h-3" />
-                                    {apt.patientPhone}
-                                  </div>
-                                  {apt.patientEmail && (
-                                    <div className="flex items-center gap-1">
-                                      <Mail className="w-3 h-3" />
-                                      {apt.patientEmail}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-4 ml-15">
-                              <span className="text-sm text-gray-700">
-                                <strong>Doctor:</strong> {apt.doctor}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Right: Status Badge */}
-                        <div className="flex flex-col items-end gap-2">
-                          {apt.status === 'accepted' && (
-                            <div className="flex items-center gap-2 px-3 py-2 bg-[#9B8CFF]/20 text-[#2a276e] rounded-full">
-                              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                              </svg>
-                              <span className="text-sm font-semibold">Accepted</span>
-                            </div>
-                          )}
-                          {apt.status === 'rejected' && (
-                            <div className="flex items-center gap-2 px-3 py-2 bg-red-100 text-red-800 rounded-full">
-                              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                              </svg>
-                              <span className="text-sm font-semibold">Rejected</span>
-                            </div>
-                          )}
-                          {apt.status === 'confirmed' && (
-                            <div className="flex items-center gap-2 px-3 py-2 bg-yellow-100 text-yellow-800 rounded-full">
-                              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-                              </svg>
-                              <span className="text-sm font-semibold">Pending</span>
-                            </div>
-                          )}
-                          <button className="text-[#9B8CFF] hover:text-[#2a276e] text-sm font-medium flex items-center gap-1">
-                            View Details
-                            <ChevronRight className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
+          /* Today's View — multi-resource day grid (one column per visible doctor) */
+          <div>
+            <DayGrid
+              date={currentDate}
+              appointments={visibleAppointments}
+              doctors={doctors}
+              selectedDoctorIds={selectedDoctorIds}
+              showUnassigned={showUnassigned}
+              unassignedCount={unassignedCount}
+              clinicTimings={clinicTimings}
+              onAppointmentClick={openAppointmentDetails}
+              onReassign={handleReassign}
+            />
           </div>
         ) : (
           <div className="border border-gray-200 rounded-lg overflow-hidden">
             {/* Calendar Grid Container with Scroll */}
-            <div className="max-h-[600px] overflow-y-auto relative">
+            <div ref={weekScrollRef} className="max-h-[640px] overflow-y-auto relative">
               <div className="grid grid-cols-8 min-h-[800px] relative">
                 {/* Time column header */}
                 <div className="p-3 text-center font-semibold text-gray-700 bg-gray-50 sticky top-0 z-20">
                   {clientTimezone.offset}
                 </div>
-                
-                {/* Day headers */}
-                {weekDates.map((date, index) => (
-                  <div key={index} className="p-3 text-center bg-gray-50 border-l border-gray-100 sticky top-0 z-20">
-                    <div className="text-sm font-medium text-gray-600">
-                      {date.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()}
-                    </div>
-                    <div className={`text-lg font-bold ${
-                      date.toDateString() === new Date().toDateString() 
-                        ? 'text-white bg-blue-600 rounded-full w-8 h-8 flex items-center justify-center mx-auto' 
-                        : 'text-gray-900'
-                    }`}>
-                      {date.getDate()}
-                    </div>
-                  </div>
-                ))}
 
-                {/* Time slots and appointments */}
-                {timeSlots.map((slot, slotIndex) => (
+                {/* Day headers — weekday, date, and appointment count */}
+                {weekDates.map((date, index) => {
+                  const iso = date.toISOString().split('T')[0];
+                  const count = visibleCountsByDate[iso] || 0;
+                  const isToday = date.toDateString() === new Date().toDateString();
+                  return (
+                    <div key={index} className="p-3 text-center bg-gray-50 border-l border-gray-100 sticky top-0 z-20">
+                      <div className="text-sm font-medium text-gray-600">
+                        {date.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()}
+                      </div>
+                      <div className={`text-lg font-bold ${
+                        isToday
+                          ? 'text-white bg-[#2a276e] rounded-full w-8 h-8 flex items-center justify-center mx-auto'
+                          : 'text-gray-900'
+                      }`}>
+                        {date.getDate()}
+                      </div>
+                      {count > 0 && (
+                        <div className="text-[10px] text-gray-500 mt-0.5">
+                          {count} appt{count === 1 ? '' : 's'}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Time slots — empty cells with half-hour divider for easier reading */}
+                {timeSlots.map((slot) => (
                   <React.Fragment key={slot.time}>
                     {/* Time label */}
                     <div className="p-3 text-sm font-medium text-gray-600 bg-white border-t border-gray-100">
                       {slot.displayTime}
                     </div>
-                    
-                    {/* Appointment slots for each day */}
-                    {weekDates.map((date, dayIndex) => {
-                      const dayAppointments = getAppointmentsForDate(date);
-                      const isCurrentTime = new Date().getHours() === slot.hour;
-                      
-                      return (
-                        <div 
-                          key={`${slot.time}-${dayIndex}`} 
-                          className="min-h-[80px] bg-white border-t border-l border-gray-100 relative"
-                        >
-                          {/* Current time indicator */}
-                          {isCurrentTime && (
-                            <div 
-                              className="absolute left-0 right-0 h-0.5 bg-[#9B8CFF]/100 z-10"
-                              style={{ top: currentTimeIndicator.top }}
-                            >
-                              <div className="absolute left-0 top-0 w-2 h-2 bg-[#9B8CFF]/100 rounded-full -translate-y-1"></div>
-                              <div className="absolute left-0 -top-6 text-xs text-[#9B8CFF] font-medium">
-                                {currentTimeIndicator.time}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+
+                    {weekDates.map((date, dayIndex) => (
+                      <div
+                        key={`${slot.time}-${dayIndex}`}
+                        className="min-h-[80px] bg-white border-t border-l border-gray-100 relative"
+                      >
+                        {/* Half-hour divider — faint dashed line at the 30-minute mark */}
+                        <div className="absolute left-0 right-0 top-[40px] border-t border-dashed border-gray-100 pointer-events-none" />
+                      </div>
+                    ))}
                   </React.Fragment>
                 ))}
 
                 {/* Appointments Overlay - positioned relative to the grid */}
                 <div className="absolute inset-0 pointer-events-none" style={{ top: '60px' }}>
+                  {/* Single "current time" indicator — one line spanning all 7 day columns */}
+                  {(() => {
+                    const todayIdx = weekDates.findIndex(d => d.toDateString() === new Date().toDateString());
+                    if (todayIdx === -1) return null;
+                    return (
+                      <div
+                        className="absolute h-0.5 bg-red-500 z-30"
+                        style={{ top: currentTimeIndicator.top, left: '12.5%', right: 0 }}
+                      >
+                        <div className="absolute -left-1 -top-1 w-2.5 h-2.5 bg-red-500 rounded-full" />
+                        <div className="absolute -left-12 -top-2 text-[11px] font-semibold text-red-500">
+                          {currentTimeIndicator.time}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {weekDates.map((date, dayIndex) => {
                     const dayAppointments = getAppointmentsForDate(date);
-                    console.log(`Day ${dayIndex} (${date.toISOString().split('T')[0]}):`, dayAppointments);
+                    const dayLayout = computeDayLayout(dayAppointments);
+                    // Grid has 8 equal columns: 1 time col + 7 day cols, so each day is 12.5% of the grid width.
+                    // Inset a small margin inside the day column so cards don't touch the grid lines.
+                    const DAY_WIDTH = 12.5;
+                    const DAY_INSET = 0.5; // percent padding on each side
+                    const usableDayWidth = DAY_WIDTH - 2 * DAY_INSET;
+
                     return dayAppointments.map((appointment) => {
-                      const style = getAppointmentStyle(appointment);
+                      const posStyle = getAppointmentStyle(appointment);
+                      const { colIndex = 0, colCount = 1 } = dayLayout[appointment.id] || {};
+                      const subWidth = usableDayWidth / colCount;
+                      const leftPct = (dayIndex + 1) * DAY_WIDTH + DAY_INSET + colIndex * subWidth;
+
                       return (
-                        <div
+                        <AppointmentCard
                           key={appointment.id}
-                          className={`absolute pointer-events-auto cursor-pointer hover:shadow-md transition-shadow rounded border-l-4 ${appointment.color}`}
+                          appointment={appointment}
+                          variant="week"
                           style={{
-                            left: `${(dayIndex + 1) * 12.5}%`, // Position in day column
-                            top: style.top,
-                            height: style.height,
-                            width: style.width,
-                            minHeight: style.minHeight,
-                            zIndex: style.zIndex
+                            left: `${leftPct}%`,
+                            top: posStyle.top,
+                            height: posStyle.height,
+                            width: `${subWidth}%`,
+                            minHeight: posStyle.minHeight,
+                            zIndex: posStyle.zIndex,
                           }}
-                          onClick={async () => {
-                            console.log('Selected appointment:', appointment);
-                            console.log('Patient ID:', appointment.patientId);
-                            // Fetch full appointment data to ensure we have latest patient_id
-                            try {
-                              const fullAppointment = await api.get(`/appointments/${appointment.id}`);
-                              const transformedAppointment = {
-                                id: fullAppointment.id,
-                                patientId: fullAppointment.patient_id || null,
-                                patientName: fullAppointment.patient_name,
-                                patientEmail: fullAppointment.patient_email || '',
-                                patientPhone: fullAppointment.patient_phone || '',
-                                patientAvatar: fullAppointment.patient_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
-                                treatment: fullAppointment.treatment,
-                                doctor: fullAppointment.doctor_name || 'Unassigned',
-                                startTime: fullAppointment.start_time,
-                                endTime: fullAppointment.end_time,
-                                date: fullAppointment.appointment_date,
-                                status: fullAppointment.status,
-                                color: appointment.color, // Keep the color from the list
-                                notes: fullAppointment.notes || ''
-                              };
-                              console.log('Fetched full appointment:', transformedAppointment);
-                              setSelectedAppointment(transformedAppointment);
-                            } catch (error) {
-                              console.error('Error fetching appointment details:', error);
-                              // Fallback to using the appointment from the list
-                              setSelectedAppointment(appointment);
-                            }
-                          }}
-                        >
-                          <div className="p-2 h-full flex flex-col justify-center relative">
-                            {/* File icon indicator - show if patient file exists */}
-                            {appointment.patientId && (
-                              <div className="absolute top-1 left-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center z-10" title="Patient file exists">
-                                <FileText className="w-3 h-3 text-white" />
-                              </div>
-                            )}
-                            
-                            {/* Status indicator badge */}
-                            {appointment.status === 'accepted' && (
-                              <div className="absolute top-1 right-1 w-5 h-5 bg-[#2a276e] rounded-full flex items-center justify-center z-10">
-                                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                </svg>
-                              </div>
-                            )}
-                            {appointment.status === 'checking' && (
-                              <div className="absolute top-1 right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center z-10" title="Patient Checked In">
-                                <CheckCircle className="w-3 h-3 text-white" />
-                              </div>
-                            )}
-                            {appointment.status === 'rejected' && (
-                              <div className="absolute top-1 right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center z-10">
-                                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                                </svg>
-                              </div>
-                            )}
-                            <div className="text-sm font-medium truncate">
-                              {appointment.patientName}
-                            </div>
-                            <div className="text-xs opacity-75 truncate">
-                              {appointment.doctor}
-                            </div>
-                            <div className="text-xs opacity-75">
-                              {formatTime(appointment.startTime)} - {formatTime(appointment.endTime)}
-                            </div>
-                          </div>
-                        </div>
+                          onClick={() => openAppointmentDetails(appointment)}
+                        />
                       );
                     });
                   })}
@@ -1650,7 +1646,8 @@ const Calendar = () => {
             </div>
           </div>
         )}
-      </Card>
+          </div>
+        </div>
 
       {/* Appointment Detail Modal */}
       {selectedAppointment && (
@@ -2098,6 +2095,26 @@ const Calendar = () => {
 
 
 
+              {/* Doctor */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Doctor <span className="text-gray-500 text-xs">(optional — leave unassigned for public-style bookings)</span>
+                </label>
+                <select
+                  name="doctor_id"
+                  value={newAppointment.doctor_id}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent bg-white"
+                >
+                  <option value="">Unassigned — assign at check-in</option>
+                  {doctors.map(d => (
+                    <option key={d.id} value={d.id}>
+                      {d.name || d.email || `Doctor #${d.id}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Date */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -2225,80 +2242,107 @@ const Calendar = () => {
         </div>
       )}
 
-      {/* Duplicate Patient Warning Modal */}
-      {showDuplicateWarning && (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 backdrop-blur-sm bg-black/30" onClick={() => setShowDuplicateWarning(false)}></div>
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
-            <div className="flex items-center gap-3 p-6 border-b border-gray-200 bg-yellow-50">
-              <AlertTriangle className="w-6 h-6 text-yellow-600" />
-              <h3 className="text-xl font-semibold text-gray-900">Similar Patient Found</h3>
-            </div>
-            <div className="p-6 max-h-96 overflow-y-auto">
-              <p className="text-gray-700 mb-4">
-                We found {duplicatePatients.length} patient(s) with similar details in your records:
+      {/* Reject appointment dialog — replaces native confirm + prompt */}
+      {rejectDialogOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30" onClick={() => !rejectSubmitting && setRejectDialogOpen(false)}></div>
+          <div className="relative bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden">
+            <div className="px-6 pt-7 pb-5 text-center">
+              <div className="mx-auto w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mb-4">
+                <AlertTriangle className="w-7 h-7 text-red-500" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900">Reject this appointment?</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                The patient will be notified by email. You can include an optional reason below.
               </p>
-              
+            </div>
+
+            <div className="px-6 pb-2">
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Reason (optional) — e.g. doctor unavailable, fully booked"
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#2a276e] focus:border-transparent resize-none"
+              />
+            </div>
+
+            <div className="px-6 py-5 mt-2 space-y-2">
+              <button
+                onClick={submitRejection}
+                disabled={rejectSubmitting}
+                className="w-full py-3 bg-red-500 text-white rounded-xl font-semibold hover:bg-red-600 transition-colors disabled:opacity-60"
+              >
+                {rejectSubmitting ? 'Rejecting…' : 'Reject appointment'}
+              </button>
+              <button
+                onClick={() => setRejectDialogOpen(false)}
+                disabled={rejectSubmitting}
+                className="w-full py-3 border border-gray-200 text-gray-600 rounded-xl font-semibold hover:bg-gray-50 transition-colors disabled:opacity-60"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Patient Warning Modal — registration flow, same clean style */}
+      {showDuplicateWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setShowDuplicateWarning(false)}></div>
+          <div className="relative bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden">
+            <div className="px-6 pt-7 pb-5 text-center">
+              <div className="mx-auto w-14 h-14 rounded-full bg-[#9B8CFF]/15 flex items-center justify-center mb-4">
+                <User className="w-7 h-7 text-[#2a276e]" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900">Existing patient found</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                {duplicatePatients.length} record{duplicatePatients.length === 1 ? '' : 's'} matched these details. Link to an existing one or create a new file.
+              </p>
+            </div>
+
+            <div className="px-6 pb-2 max-h-[50vh] overflow-y-auto space-y-2">
               {duplicatePatients.map((patient) => (
-                <div key={patient.id} className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-gray-900">{patient.name}</h4>
-                      <div className="mt-2 space-y-1 text-sm text-gray-600">
-                        {patient.phone && (
-                          <div className="flex items-center gap-2">
-                            <Phone className="w-4 h-4" />
-                            <span>{patient.phone}</span>
-                          </div>
-                        )}
-                        {patient.email && (
-                          <div className="flex items-center gap-2">
-                            <Mail className="w-4 h-4" />
-                            <span>{patient.email}</span>
-                          </div>
-                        )}
-                        {patient.age && <span>Age: {patient.age}</span>}
-                        {patient.gender && <span> • Gender: {patient.gender}</span>}
+                <div key={patient.id} className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-gray-900 truncate">{patient.name}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        {patient.phone && <span>{patient.phone}</span>}
+                        {patient.email && <span> · {patient.email}</span>}
+                        {patient.age && <span> · Age {patient.age}</span>}
                       </div>
                     </div>
                     <button
                       onClick={() => window.open(`/patient-profile/${patient.id}`, '_blank')}
-                      className="ml-4 px-3 py-1.5 text-sm bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition-colors flex items-center gap-1"
+                      className="text-xs font-semibold text-[#2a276e] hover:underline shrink-0"
                     >
-                      <ExternalLink className="w-3 h-3" />
-                      View Records
+                      View
                     </button>
                   </div>
                   <button
                     onClick={() => handleLinkToExistingPatient(patient.id)}
-                    className="mt-3 w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                    className="mt-3 w-full py-2 bg-white border border-[#2a276e]/20 text-[#2a276e] rounded-lg text-sm font-semibold hover:bg-[#9B8CFF]/10 transition-colors"
                   >
-                    Link to This Patient
+                    Link to this patient
                   </button>
                 </div>
               ))}
-              
-              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-900 font-medium mb-2">What would you like to do?</p>
-                <p className="text-sm text-blue-700">
-                  • <strong>Link to Existing Patient:</strong> Click the button above to merge this appointment with an existing patient record<br/>
-                  • <strong>Create New Patient:</strong> Click below to create a separate patient file (name will have a suffix like "(2)")
-                </p>
-              </div>
             </div>
-            <div className="p-6 border-t border-gray-200 flex gap-3">
-              <button
-                onClick={() => setShowDuplicateWarning(false)}
-                className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-              >
-                Cancel
-              </button>
+
+            <div className="px-6 py-5 mt-2 space-y-2">
               <button
                 onClick={handleCreateNewPatientWithSuffix}
-                className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center gap-2"
+                className="w-full py-3 bg-[#2a276e] text-white rounded-xl font-semibold hover:bg-[#1a1548] transition-colors"
               >
-                <Plus className="w-4 h-4" />
-                Create New Patient File
+                Create new patient file
+              </button>
+              <button
+                onClick={() => setShowDuplicateWarning(false)}
+                className="w-full py-3 border border-gray-200 text-gray-600 rounded-xl font-semibold hover:bg-gray-50 transition-colors"
+              >
+                Cancel
               </button>
             </div>
           </div>
@@ -2497,62 +2541,53 @@ const Calendar = () => {
           </div>
         </div>
       )}
-      {/* Duplicate Patient Modal */}
+      {/* Duplicate Patient Modal — clean, minimal, matching booking-confirm aesthetic */}
       {showDuplicateModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-[#2a276e]/40 backdrop-blur-sm" onClick={() => setShowDuplicateModal(false)}></div>
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl relative overflow-hidden animate-in fade-in zoom-in duration-200 border border-white/20">
-            <div className="bg-[#2a276e] p-6 text-white">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="p-2 bg-yellow-400 rounded-lg">
-                  <AlertCircle className="w-6 h-6 text-[#2a276e]" />
-                </div>
-                <h3 className="text-xl font-bold">Similar Patients Found</h3>
+          <div className="absolute inset-0 bg-black/30" onClick={() => setShowDuplicateModal(false)}></div>
+          <div className="relative bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden">
+            <div className="px-6 pt-7 pb-5 text-center">
+              <div className="mx-auto w-14 h-14 rounded-full bg-[#9B8CFF]/15 flex items-center justify-center mb-4">
+                <User className="w-7 h-7 text-[#2a276e]" />
               </div>
-              <p className="text-blue-100 text-sm">We found some existing files that match this patient. Would you like to use one or create a new one?</p>
+              <h3 className="text-xl font-bold text-gray-900">Existing patient found</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                We found {duplicateMatches.length} record{duplicateMatches.length === 1 ? '' : 's'} that may be the same patient. Use an existing record or create a new one.
+              </p>
             </div>
-            
-            <div className="p-6 max-h-[60vh] overflow-y-auto space-y-3">
+
+            <div className="px-6 pb-2 max-h-[50vh] overflow-y-auto space-y-2">
               {duplicateMatches.map(patient => (
-                <div key={patient.id} className="p-4 bg-gray-50 hover:bg-blue-50 border border-gray-100 rounded-2xl transition-colors group">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="font-bold text-gray-900 group-hover:text-[#2a276e]">{patient.name}</div>
-                      <div className="text-sm text-gray-500">{patient.phone}</div>
-                      <div className="flex gap-2 mt-2">
-                        <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold uppercase">
-                          Patient ID: {patient.id}
-                        </span>
-                        {patient.village && (
-                          <span className="text-[10px] bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full font-bold uppercase">
-                            {patient.village}
-                          </span>
-                        )}
-                      </div>
+                <button
+                  key={patient.id}
+                  onClick={() => handleFinalizeCheckIn(patient.id)}
+                  className="w-full text-left bg-gray-50 hover:bg-[#9B8CFF]/10 border border-gray-200 hover:border-[#2a276e]/30 rounded-xl px-4 py-3 transition-colors flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <div className="font-semibold text-gray-900 truncate">{patient.name}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      {patient.phone}
+                      {patient.village && <span> · {patient.village}</span>}
+                      <span> · ID #{patient.id}</span>
                     </div>
-                    <button 
-                      onClick={() => handleFinalizeCheckIn(patient.id)}
-                      className="px-4 py-2 bg-white border border-[#2a276e]/20 text-[#2a276e] rounded-xl font-bold text-sm hover:bg-[#2a276e] hover:text-white transition-all shadow-sm"
-                    >
-                      Select Match
-                    </button>
                   </div>
-                </div>
+                  <span className="text-xs font-semibold text-[#2a276e] shrink-0">Use this →</span>
+                </button>
               ))}
             </div>
-            
-            <div className="p-6 bg-gray-50 border-t border-gray-100 flex gap-3">
-              <button
-                onClick={() => setShowDuplicateModal(false)}
-                className="flex-1 px-4 py-3 bg-white border border-gray-200 text-gray-600 rounded-xl font-semibold hover:bg-gray-100 transition-all"
-              >
-                Go Back
-              </button>
+
+            <div className="px-6 py-5 mt-2 space-y-2">
               <button
                 onClick={() => handleFinalizeCheckIn(null)}
-                className="flex-1 px-4 py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 shadow-lg shadow-green-600/20 transition-all"
+                className="w-full py-3 bg-[#2a276e] text-white rounded-xl font-semibold hover:bg-[#1a1548] transition-colors"
               >
-                Create New Patient
+                Create new patient instead
+              </button>
+              <button
+                onClick={() => setShowDuplicateModal(false)}
+                className="w-full py-3 border border-gray-200 text-gray-600 rounded-xl font-semibold hover:bg-gray-50 transition-colors"
+              >
+                Cancel
               </button>
             </div>
           </div>
