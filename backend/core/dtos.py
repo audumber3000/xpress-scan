@@ -52,6 +52,8 @@ class PatientUpdateDTO(BaseModel):
 class PatientResponseDTO(PatientBaseDTO):
     id: int
     clinic_id: int
+    display_id: Optional[str] = None
+    last_visit: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
     synced_at: Optional[datetime] = None

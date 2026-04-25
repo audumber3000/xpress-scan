@@ -5,7 +5,8 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 from core.interfaces import PatientServiceProtocol, PatientRepositoryProtocol, ClinicRepositoryProtocol, PaymentRepositoryProtocol
 from core.dtos import PatientCreateDTO, PatientUpdateDTO, PatientResponseDTO, PatientSummaryDTO
-from models import Patient, Clinic, TreatmentType, Invoice, InvoiceLineItem
+from models import Patient, Clinic, TreatmentType, Invoice, InvoiceLineItem, Appointment
+from sqlalchemy import func, cast, Integer
 
 
 class PatientService(PatientServiceProtocol):
@@ -55,21 +56,64 @@ class PatientService(PatientServiceProtocol):
         patient_dict = patient_data.copy()
         patient_dict['clinic_id'] = clinic_id
 
+        # Generate a 6-digit display_id per clinic (MAX(numeric display_id) + 1, starting at 100001).
+        # Using MAX rather than COUNT defends against collisions when patients are deleted.
+        if not patient_dict.get('display_id'):
+            db = self.patient_repo.db
+            max_id = db.query(func.max(cast(Patient.display_id, Integer))).filter(
+                Patient.clinic_id == clinic_id,
+                Patient.display_id.isnot(None),
+                Patient.display_id.op('~')(r'^[0-9]+$'),
+            ).scalar() or 100000
+            patient_dict['display_id'] = str(max_id + 1)
+
         patient = Patient(**patient_dict)
         created_patient = self.patient_repo.create(patient)
 
         return created_patient
 
     def get_patient(self, patient_id: int, clinic_id: int) -> Optional[Patient]:
-        """Get a patient with clinic validation"""
+        """Get a patient with clinic validation, enriched with last_visit."""
         patient = self.patient_repo.get_by_id(patient_id)
         if not patient or patient.clinic_id != clinic_id:
             return None
+        self._attach_last_visit([patient])
         return patient
 
     def get_patients(self, clinic_id: int, skip: int = 0, limit: int = 100) -> List[Patient]:
-        """Get patients for a clinic"""
-        return self.patient_repo.get_by_clinic_id(clinic_id, skip, limit)
+        """Get patients for a clinic, enriched with `last_visit` (transient attr).
+
+        last_visit prefers the most recent real appointment (checking/completed/accepted),
+        falls back to the most recent invoice, finally to the patient's created_at.
+        """
+        patients = self.patient_repo.get_by_clinic_id(clinic_id, skip, limit)
+        self._attach_last_visit(patients)
+        return patients
+
+    def _attach_last_visit(self, patients: List[Patient]) -> None:
+        """Set the transient `last_visit` attribute on each patient via two bulk queries."""
+        if not patients:
+            return
+        db = self.patient_repo.db
+        patient_ids = [p.id for p in patients]
+
+        appt_rows = db.query(
+            Appointment.patient_id,
+            func.max(Appointment.appointment_date).label('last_date'),
+        ).filter(
+            Appointment.patient_id.in_(patient_ids),
+            Appointment.status.in_(['checking', 'completed', 'accepted']),
+        ).group_by(Appointment.patient_id).all()
+        appt_map = {row.patient_id: row.last_date for row in appt_rows}
+
+        inv_rows = db.query(
+            Invoice.patient_id,
+            func.max(Invoice.created_at).label('last_date'),
+        ).filter(Invoice.patient_id.in_(patient_ids)).group_by(Invoice.patient_id).all()
+        inv_map = {row.patient_id: row.last_date for row in inv_rows}
+
+        for p in patients:
+            p.last_visit = appt_map.get(p.id) or inv_map.get(p.id) or p.created_at
 
     def update_patient(self, patient_id: int, updates: Dict[str, Any], clinic_id: int) -> Optional[Patient]:
         """Update patient with business validations"""
@@ -125,11 +169,13 @@ class PatientService(PatientServiceProtocol):
         return self.patient_repo.delete(patient_id)
 
     def search_patients(self, clinic_id: int, query: str, skip: int = 0, limit: int = 100) -> List[Patient]:
-        """Search patients by name or phone"""
+        """Search patients by name or phone, enriched with last_visit."""
         if not query or len(query.strip()) < 2:
             return []
 
-        return self.patient_repo.search_by_name(clinic_id, query.strip(), skip, limit)
+        results = self.patient_repo.search_by_name(clinic_id, query.strip(), skip, limit)
+        self._attach_last_visit(results)
+        return results
 
     def check_duplicates(self, clinic_id: int, name: Optional[str] = None, phone: Optional[str] = None, email: Optional[str] = None) -> List[Patient]:
         """Check for potential duplicate patients"""
