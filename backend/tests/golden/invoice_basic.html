@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<style>
+:root {
+  --primary-color: #FF9800;
+  --bg-color: #f4f7f6;
+  --text-main: #333;
+  --text-muted: #555;
+  --border-light: #ddd;
+  --table-header-bg: #f8fafc;
+  --highlight-bg: #f0f4f8;
+}
+body {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color: var(--text-main);
+  line-height: 1.3;
+  background-color: #fff;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+}
+.invoice-container {
+  width: 100%;
+  min-height: 297mm;
+  margin: 0;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+.color-strip { height: 10px; background-color: var(--primary-color); }
+.invoice-body { padding: 40px 50px; flex-grow: 1; }
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 2px solid var(--border-light);
+  padding-bottom: 15px;
+  margin-bottom: 15px;
+}
+.header-left { display: flex; align-items: center; }
+.clinic-info-left h1 {
+  margin: 0;
+  color: var(--primary-color);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 24px;
+  line-height: 1.1;
+}
+.clinic-info-left .tagline { margin: 3px 0; font-size: 16px; color: var(--primary-color); font-weight: bold; }
+.clinic-info-left .services { margin: 0; font-size: 12px; font-weight: bold; color: var(--primary-color); }
+.clinic-info-right { text-align: right; }
+.clinic-info-right .doc-name { font-size: 14px; font-weight: bold; color: var(--primary-color); margin: 0 0 4px 0; }
+.clinic-info-right p { margin: 2px 0; font-size: 11px; color: var(--text-muted); font-weight: 500; }
+.invoice-title {
+  text-align: center;
+  font-size: 18px;
+  font-weight: bold;
+  margin: 10px 0 15px 0;
+  color: var(--text-main);
+  text-decoration: underline;
+}
+.info-table { width: 100%; margin-bottom: 15px; }
+.info-table td { vertical-align: top; width: 50%; }
+.info-table p { margin: 3px 0; }
+.info-table strong { display: inline-block; width: 120px; color: var(--primary-color); }
+.items-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+.items-table th, .items-table td {
+  border: 1px solid var(--border-light);
+  padding: 6px 8px;
+  text-align: center;
+}
+.items-table th {
+  background-color: var(--table-header-bg);
+  color: var(--primary-color);
+  font-weight: bold;
+  font-size: 11px;
+}
+.items-table .text-left { text-align: left; }
+.items-table .text-right { text-align: right; }
+.summary-wrapper { display: flex; justify-content: flex-end; margin-bottom: 15px; }
+.summary-table { width: 350px; border-collapse: collapse; }
+.summary-table td {
+  padding: 6px 8px;
+  text-align: right;
+  border-bottom: 1px solid var(--border-light);
+}
+.summary-table td:first-child { text-align: left; font-weight: bold; color: var(--text-muted); }
+.grand-total {
+  font-size: 15px;
+  font-weight: bold;
+  border-top: 2px solid var(--primary-color);
+  border-bottom: 2px solid var(--primary-color);
+  color: var(--primary-color);
+  background-color: var(--highlight-bg);
+}
+.amount-words {
+  font-style: italic;
+  margin-bottom: 15px;
+  background: var(--table-header-bg);
+  padding: 8px 12px;
+  border-left: 4px solid var(--primary-color);
+  color: #444;
+}
+.footer {
+  font-size: 11px;
+  color: #666;
+  margin-top: 20px;
+  display: flex;
+  justify-content: space-between;
+}
+.terms { width: 65%; }
+.terms h4 { margin-bottom: 4px; color: var(--primary-color); text-transform: uppercase; }
+.terms ul { padding-left: 15px; margin: 0; }
+.signature-box { width: 30%; text-align: center; margin-top: 10px; }
+.signature-line {
+  border-top: 1px solid var(--text-main);
+  margin-top: 40px;
+  padding-top: 5px;
+  font-weight: bold;
+  color: var(--primary-color);
+}
+</style>
+</head><body>
+
+<div class="invoice-container">
+  <div class="color-strip"></div>
+  <div class="invoice-body">
+
+    <!-- HEADER -->
+    <div class="header">
+      <div class="header-left">
+        <div style="margin-right:20px;flex-shrink:0;"><div style="width:75px;height:75px;background:#f0f4f8;border:2px dashed #FF9800;display:flex;justify-content:center;align-items:center;color:#FF9800;font-weight:bold;font-size:11px;text-align:center;">MO</div></div>
+        <div class="clinic-info-left">
+          <h1>MolarPlus Dental</h1>
+          <div class="tagline">Comprehensive Dental & Orthodontic Care</div>
+        </div>
+      </div>
+      <div class="clinic-info-right">
+        <div class="doc-name">Dr. R. Sharma</div>
+        <p>12 Marine Drive, Mumbai 400020</p>
+        <p>📞 +91 22 4000 1234</p>
+        <p>✉️ hello@molarplus.example</p>
+        <p>Reg No: MH/DC/12345 | <strong>GSTIN: 27ABCDE1234F1Z5</strong></p>
+      </div>
+    </div>
+
+    <div class="invoice-title">TAX INVOICE</div>
+
+    <!-- PATIENT / INVOICE INFO -->
+    <table class="info-table">
+      <tr>
+        <td>
+          <p><strong>Invoice No:</strong> INV-101</p>
+          <p><strong>Date:</strong> 27 April 2026</p>
+          <p><strong>Payment Method:</strong> UPI | UTR: UPI123456789</p>
+          <p><strong>Status:</strong> Paid</p>
+          <p><strong>Notes:</strong> Follow up in 2 weeks.</p>
+        </td>
+        <td>
+          <p><strong>Patient Name:</strong> Asha Mehta</p>
+          <p><strong>Patient ID:</strong> PT-42</p>
+          <p><strong>Age / Sex:</strong> 34 / Female &nbsp;&nbsp; <strong>Contact:</strong> 9876543210</p>
+        </td>
+      </tr>
+    </table>
+
+    <!-- LINE ITEMS TABLE -->
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th style="width:30px;">S.No.</th>
+          <th class="text-left" style="width:38%;">Service / Treatment Description</th>
+          <th style="width:65px;">SAC / HSN</th>
+          <th style="width:60px;">Tooth No.</th>
+          <th style="width:32px;">Qty</th>
+          <th class="text-right" style="width:85px;">Unit Price (₹)</th>
+          <th class="text-right" style="width:85px;">Total (₹)</th>
+        </tr>
+      </thead>
+      <tbody><tr><td>1</td><td class="text-left">Root canal treatment</td><td>9993</td><td>46</td><td>1</td><td class="text-right">4,500.00</td><td class="text-right">4,500.00</td></tr><tr><td>2</td><td class="text-left">Composite filling</td><td>9993</td><td>36</td><td>2</td><td class="text-right">750.00</td><td class="text-right">1,500.00</td></tr></tbody>
+    </table>
+
+    <!-- BILLING SUMMARY -->
+    <div class="summary-wrapper">
+      <table class="summary-table">
+        <tr><td>Subtotal</td><td>₹ 6,000.00</td></tr>
+        <tr><td>Discount</td><td>– ₹ 500.00</td></tr>
+        <tr><td>Net Taxable Amount</td><td>₹ 5,500.00</td></tr>
+        <tr><td>CGST @ 9%</td><td>₹ 495.00</td></tr>
+        <tr><td>SGST @ 9%</td><td>₹ 495.00</td></tr>
+        <tr class="grand-total"><td>Grand Total</td><td>₹ 6,490.00</td></tr>
+      </table>
+    </div>
+
+    <!-- AMOUNT IN WORDS -->
+    <div class="amount-words">
+      <strong>Amount in Words:</strong> Six Thousand Four Hundred Ninety Rupees Only
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <div class="terms">
+        <h4>Terms &amp; Conditions</h4>
+        <ul>
+          <li>Clinical treatments (Consultation, RCT, Crowns, Implants) are exempt from GST as per Indian Govt. regulations (SAC 9993). GST applies only to cosmetic procedures &amp; pharmacy products.</li>
+          <li>Warranties for crowns/bridges are valid only with this original invoice.</li>
+          <li>This is a computer-generated invoice and does not require a physical signature.</li>
+        </ul>
+      </div>
+      <div class="signature-box">
+        
+        <div class="signature-line">Authorized Signatory / Seal</div>
+        <p style="margin:5px 0 0 0;color:var(--text-muted);font-weight:bold;">MolarPlus Dental</p>
+      </div>
+    </div>
+
+    <div style="text-align:center;color:#888;font-size:10px;margin-top:16px;border-top:1px solid #eee;padding-top:10px;">This is a computer-generated invoice. No signature required.</div>
+
+  </div>
+  <div class="color-strip"></div>
+</div>
+
+</body></html>

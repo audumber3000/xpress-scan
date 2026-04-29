@@ -463,25 +463,70 @@ class MedicationResponseDTO(MedicationBaseDTO):
         from_attributes = True
 
 # Template Configuration DTOs
+_HEX_COLOR_RE = r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+_ALLOWED_CATEGORIES = {"invoice", "prescription", "consent"}
+_FOOTER_TEXT_MAX = 1000
+
+
+def _validate_logo_url(v: Optional[str]) -> Optional[str]:
+    """Reject anything that isn't an https URL pointing at a real host.
+    Blocks SSRF vectors (file://, http://169.254.169.254/, internal IPs)."""
+    if v is None or v == "":
+        return v or None
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(v)
+    except Exception:
+        raise ValueError("logo_url must be a valid URL")
+    if parsed.scheme != "https":
+        raise ValueError("logo_url must use https://")
+    if not parsed.netloc or parsed.netloc.startswith("localhost") or parsed.netloc.startswith("127.") \
+            or parsed.netloc.startswith("169.254.") or parsed.netloc.startswith("10.") \
+            or parsed.netloc.startswith("192.168.") or parsed.netloc.startswith("0."):
+        raise ValueError("logo_url host not allowed")
+    if len(v) > 2048:
+        raise ValueError("logo_url too long")
+    return v
+
+
 class TemplateConfigBase(BaseModel):
-    category: str
-    template_id: str
+    category: str = Field(..., min_length=1, max_length=32)
+    template_id: str = Field(..., min_length=1, max_length=64)
     logo_url: Optional[str] = None
-    footer_text: Optional[str] = None
-    primary_color: Optional[str] = None
-    secondary_color: Optional[str] = None
+    footer_text: Optional[str] = Field(None, max_length=_FOOTER_TEXT_MAX)
+    primary_color: Optional[str] = Field(None, pattern=_HEX_COLOR_RE)
+    secondary_color: Optional[str] = Field(None, pattern=_HEX_COLOR_RE)
     config_json: Optional[Dict[str, Any]] = None
+
+    @field_validator("category")
+    @classmethod
+    def _check_category(cls, v: str) -> str:
+        if v not in _ALLOWED_CATEGORIES:
+            raise ValueError(f"category must be one of {sorted(_ALLOWED_CATEGORIES)}")
+        return v
+
+    @field_validator("logo_url")
+    @classmethod
+    def _check_logo_url(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_logo_url(v)
+
 
 class TemplateConfigCreate(TemplateConfigBase):
     pass
 
+
 class TemplateConfigUpdate(BaseModel):
-    template_id: Optional[str] = None
+    template_id: Optional[str] = Field(None, min_length=1, max_length=64)
     logo_url: Optional[str] = None
-    footer_text: Optional[str] = None
-    primary_color: Optional[str] = None
-    secondary_color: Optional[str] = None
+    footer_text: Optional[str] = Field(None, max_length=_FOOTER_TEXT_MAX)
+    primary_color: Optional[str] = Field(None, pattern=_HEX_COLOR_RE)
+    secondary_color: Optional[str] = Field(None, pattern=_HEX_COLOR_RE)
     config_json: Optional[Dict[str, Any]] = None
+
+    @field_validator("logo_url")
+    @classmethod
+    def _check_logo_url(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_logo_url(v)
 
 class TemplateConfigResponse(TemplateConfigBase):
     id: Optional[int] = None

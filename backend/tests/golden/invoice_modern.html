@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<style>
+:root {
+  --accent: #0F766E;
+  --ink: #111827;
+  --muted: #6B7280;
+  --line: #E5E7EB;
+  --soft: #F9FAFB;
+}
+* { box-sizing: border-box; }
+body {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color: var(--ink);
+  background: #fff;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.page {
+  width: 100%;
+  min-height: 297mm;
+  padding: 32px 40px;
+}
+
+/* Letterhead */
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 16px;
+}
+.head .brand { display: flex; align-items: center; }
+.head .brand .meta { margin-left: 12px; }
+.head .brand .name { font-size: 16px; font-weight: 700; letter-spacing: 0.2px; color: var(--ink); }
+.head .brand .sub  { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.head .invoice-meta { text-align: right; }
+.head .invoice-meta .label {
+  font-size: 10px; color: var(--muted); text-transform: uppercase;
+  letter-spacing: 1px; margin-bottom: 4px;
+}
+.head .invoice-meta .number {
+  font-size: 22px; font-weight: 700; color: var(--accent); letter-spacing: 0.5px;
+}
+.head .invoice-meta .date { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* Bill-to / patient strip */
+.strip {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 18px;
+  margin-bottom: 18px;
+}
+.strip .col { width: 48%; }
+.strip .col h4 {
+  margin: 0 0 6px 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.strip .col p { margin: 1px 0; font-size: 11.5px; color: var(--ink); }
+.strip .col .tight { color: var(--muted); font-size: 10.5px; }
+
+/* Items table */
+.items {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 18px;
+}
+.items thead th {
+  text-align: left;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 10px 8px;
+  border-bottom: 2px solid var(--line);
+}
+.items thead th.num { width: 28px; text-align: center; }
+.items thead th.qty { width: 50px; text-align: center; }
+.items thead th.amt { width: 110px; text-align: right; }
+.items tbody td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--ink);
+}
+.items tbody td.num { text-align: center; color: var(--muted); }
+.items tbody td.qty { text-align: center; }
+.items tbody td.amt { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Totals block */
+.totals-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.totals {
+  width: 280px;
+  border-collapse: collapse;
+}
+.totals td {
+  padding: 6px 0;
+  font-size: 12px;
+  color: var(--ink);
+}
+.totals td:first-child { color: var(--muted); }
+.totals td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.totals .grand td {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.totals .grand td:last-child { color: var(--accent); }
+
+/* Footer */
+.foot {
+  margin-top: 28px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  font-size: 10.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.foot .terms { width: 60%; }
+.foot .sig { width: 35%; text-align: right; }
+.foot .sig .line {
+  display: inline-block;
+  width: 140px;
+  border-top: 1px solid var(--ink);
+  margin-top: 36px;
+  padding-top: 4px;
+  font-size: 10px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.disclaimer {
+  text-align: center;
+  margin-top: 14px;
+  padding-top: 10px;
+  font-size: 9.5px;
+  color: var(--muted);
+  font-style: italic;
+  border-top: 1px dashed var(--line);
+}
+</style>
+</head><body>
+<div class="page">
+
+  <!-- LETTERHEAD -->
+  <div class="head">
+    <div class="brand">
+      <div style="width:48px;height:48px;background:#0F766E;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;letter-spacing:0.5px;border-radius:6px;">MO</div>
+      <div class="meta">
+        <div class="name">MolarPlus Dental</div>
+        <div class="sub">Dr. R. Sharma · 12 Marine Drive, Mumbai 400020</div>
+        <div class="sub">📞 +91 22 4000 1234  · hello@molarplus.example</div>
+        <div class="sub">GSTIN: 27ABCDE1234F1Z5</div>
+      </div>
+    </div>
+    <div class="invoice-meta">
+      <div class="label">Invoice</div>
+      <div class="number">INV-101</div>
+      <div class="date">27 Apr 2026</div>
+    </div>
+  </div>
+
+  <!-- BILL TO / PATIENT -->
+  <div class="strip">
+    <div class="col">
+      <h4>Billed To</h4>
+      <p style="font-weight:600;">Asha Mehta</p>
+      <p class="tight">ID: PT-42</p>
+      <p class="tight">34 / Female  ·  9876543210</p>
+    </div>
+    <div class="col" style="text-align:right;">
+      <h4>Payment</h4>
+      <p>UPI</p>
+      <p class="tight">Follow up in 2 weeks.</p>
+    </div>
+  </div>
+
+  <!-- ITEMS -->
+  <table class="items">
+    <thead>
+      <tr>
+        <th class="num">#</th>
+        <th>Treatment / Service</th>
+        <th class="qty">Qty</th>
+        <th class="amt">Rate</th>
+        <th class="amt">Amount</th>
+      </tr>
+    </thead>
+    <tbody><tr><td class="num">1</td><td>Root canal treatment<span style="font-size:10px;color:#6b7280;margin-left:6px;">#46</span></td><td class="qty">1</td><td class="amt">₹ 4,500.00</td><td class="amt">₹ 4,500.00</td></tr><tr><td class="num">2</td><td>Composite filling<span style="font-size:10px;color:#6b7280;margin-left:6px;">#36</span></td><td class="qty">2</td><td class="amt">₹ 750.00</td><td class="amt">₹ 1,500.00</td></tr></tbody>
+  </table>
+
+  <!-- TOTALS -->
+  <div class="totals-wrap">
+    <table class="totals">
+      <tr><td>Subtotal</td><td>₹ 6,000.00</td></tr>
+      <tr><td>Discount</td><td>– ₹ 500.00</td></tr>
+      <tr><td>CGST 9%</td><td>₹ 495.00</td></tr>
+      <tr><td>SGST 9%</td><td>₹ 495.00</td></tr>
+      <tr class="grand"><td>Total Due</td><td>₹ 6,490.00</td></tr>
+    </table>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="foot">
+    <div class="terms">
+      Clinical treatments (consultation, RCT, crowns, implants) are GST-exempt under SAC 9993.
+      Warranties valid only with this original invoice. Computer-generated; no signature required.
+    </div>
+    <div class="sig">
+      
+      <span class="line">Authorised Signatory</span>
+    </div>
+  </div>
+
+  <div class="disclaimer">Thank you. Computer-generated invoice.</div>
+
+</div>
+</body></html>

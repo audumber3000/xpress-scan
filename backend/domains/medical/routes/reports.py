@@ -492,7 +492,7 @@ def generate_prescription_pdf(
 
     try:
         service = PrescriptionService(db)
-        pdf_key, file_name = service.generate_prescription_pdf(patient, clinic, prescription_data)
+        pdf_key, file_name = service.generate_prescription_pdf(patient, clinic, prescription_data, doctor=current_user)
         signed_url = get_presigned_url(pdf_key)
 
         # Determine visit number from appointment if provided

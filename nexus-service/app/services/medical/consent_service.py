@@ -1,12 +1,14 @@
 import redis
 import json
 import secrets
+import tempfile
 from datetime import datetime
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import PatientConsent, Patient, ConsentTemplate, Clinic, PatientDocument, TemplateConfiguration
 from app.services.infrastructure.pdf_service import PDFService
 import os
+import httpx
 
 # Connect to Redis (used for short-lived tokens)
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
@@ -102,22 +104,34 @@ class ConsentService:
         if not patient or not template or not clinic:
             raise ValueError(f"Incomplete data in DB for Nexus processing: Patient={bool(patient)}, Template={bool(template)}, Clinic={bool(clinic)}")
 
-        # Load template branding config (consent category)
-        config = db.query(TemplateConfiguration).filter(
-            TemplateConfiguration.clinic_id == clinic_id,
-            TemplateConfiguration.category == 'consent'
-        ).first()
+        # Phase 8: render via the main backend's consent_templates registry
+        # so layout / branding lives in one place. Main backend reads the
+        # TemplateConfiguration(category='consent') row server-side.
+        main_backend_url = os.environ.get("MAIN_BACKEND_URL", "http://localhost:8000")
+        internal_key = os.environ.get("INTERNAL_API_KEY", "")
+        try:
+            with httpx.Client(timeout=20.0) as client:
+                resp = client.post(
+                    f"{main_backend_url}/api/v1/internal/consent/render",
+                    json={
+                        "clinic_id": clinic_id,
+                        "patient_id": patient_id,
+                        "patient_name": patient.name,
+                        "template_name": template.name,
+                        "content": data.get('content', template.content),
+                        "signature_base64": signature_base64,
+                        "template_id": data.get('templateVariantId') or 'classic',
+                    },
+                    headers={"X-Internal-Auth": internal_key},
+                )
+        except httpx.HTTPError as e:
+            raise ValueError(f"Could not reach main backend for consent rendering: {e}")
+        if resp.status_code != 200:
+            raise ValueError(f"Main backend consent render failed: {resp.status_code} {resp.text[:200]}")
 
-        # Generate PDF via PDFService (branded, matching prescription/invoice style)
-        pdf_path = PDFService.generate_signed_consent_pdf(
-            clinic=clinic,
-            patient_name=patient.name,
-            patient_id=patient_id,
-            template_name=template.name,
-            content=data.get('content', template.content),
-            signature_base64=signature_base64,
-            config=config,
-        )
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+            tmp_file.write(resp.content)
+            pdf_path = tmp_file.name
 
         # Upload to R2 Storage via Nexus Storage Service
         filename = f"consent_{patient_id}_{int(datetime.now().timestamp())}.pdf"

@@ -10,11 +10,13 @@ const ConsentSign = () => {
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [tokenData, setTokenData] = useState(null);
+    const [branding, setBranding] = useState(null);  // real clinic letterhead
     const [error, setError] = useState(null);
     const [agreed, setAgreed] = useState(false);
     const sigPad = useRef(null);
 
     const NEXUS_API_URL = import.meta.env.VITE_NEXUS_API_URL || `http://${window.location.hostname}:8001/api/v1`;
+    const MAIN_API_URL = import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:8000/api/v1`;
 
     useEffect(() => {
         validateToken();
@@ -25,6 +27,14 @@ const ConsentSign = () => {
             const res = await axios.get(`${NEXUS_API_URL}/consent/validate/${token}`);
             if (res.data.valid) {
                 setTokenData(res.data.data);
+                // Phase 8: fetch real clinic branding so the signing page shows
+                // the actual clinic name / color / logo, not a hardcoded brand.
+                const clinicId = res.data.data?.clinicId;
+                if (clinicId) {
+                    axios.get(`${MAIN_API_URL}/clinics/${clinicId}/branding`)
+                        .then(r => setBranding(r.data))
+                        .catch(() => { /* branding is best-effort; fall back to defaults */ });
+                }
             } else {
                 setError(res.data.message);
             }
@@ -62,7 +72,13 @@ const ConsentSign = () => {
             setError("Thank you! Your consent has been recorded. You can close this window.");
         } catch (err) {
             console.error("Submission Error Complete Details: ", err);
-            const errorText = err.response?.data?.error || err.message || "Unknown Error";
+            // FastAPI returns `{ detail: "..." }`; older endpoints return `{ error }`.
+            // Fall through to whichever one we have so the underlying cause is visible.
+            const errorText =
+                err.response?.data?.detail ||
+                err.response?.data?.error ||
+                err.message ||
+                "Unknown Error";
             toast.error(`Error: ${errorText} (To: ${NEXUS_API_URL})`, { autoClose: 10000 });
         } finally {
             setSubmitting(false);
@@ -91,22 +107,44 @@ const ConsentSign = () => {
         );
     }
 
+    const accentColor = branding?.primary_color || '#2a276e';
+    const clinicName = branding?.name || 'Clinic';
+    const clinicTagline = branding?.tagline || '';
+
     return (
         <div className="min-h-screen bg-gray-200 flex flex-col items-center py-8 px-4 font-sans antialiased text-slate-900">
             {/* Document Container - A4-like on Desktop, responsive on Mobile */}
             <div className="w-full max-w-[800px] bg-white shadow-[0_0_50px_rgba(0,0,0,0.1)] min-h-[1000px] flex flex-col overflow-hidden rounded-sm border border-gray-300 relative">
-                
-                {/* Decorative PDF-style Header Line */}
-                <div className="h-1.5 bg-[#2a276e] w-full"></div>
+
+                {/* Decorative PDF-style Header Line — uses real clinic accent */}
+                <div className="h-1.5 w-full" style={{ backgroundColor: accentColor }}></div>
 
                 <div className="p-8 md:p-16 space-y-12 flex-1">
-                    {/* Clinic Header */}
+                    {/* Clinic Header — real branding (Phase 8) */}
                     <div className="flex justify-between items-start border-b-2 border-slate-100 pb-8">
-                        <div>
-                            <h2 className="text-2xl font-black tracking-tighter text-[#2a276e] uppercase">Clino Health</h2>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Smart Practice Management</p>
+                        <div className="flex items-center gap-4 min-w-0">
+                            {branding?.logo_url && (
+                                <img
+                                    src={branding.logo_url}
+                                    alt={clinicName}
+                                    className="w-14 h-14 object-contain shrink-0"
+                                />
+                            )}
+                            <div className="min-w-0">
+                                <h2
+                                    className="text-2xl font-black tracking-tighter uppercase truncate"
+                                    style={{ color: accentColor }}
+                                >
+                                    {clinicName}
+                                </h2>
+                                {clinicTagline && (
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1 truncate">
+                                        {clinicTagline}
+                                    </p>
+                                )}
+                            </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right shrink-0 ml-4">
                             <h1 className="text-xl font-bold text-slate-800">CONSENT FORM</h1>
                             <p className="text-slate-500 text-xs italic">{tokenData.templateName}</p>
                         </div>
@@ -170,14 +208,19 @@ const ConsentSign = () => {
                                     Clear Pad
                                 </button>
                             </div>
-                            <div className="bg-slate-50 border border-slate-200 rounded-sm overflow-hidden h-40 relative group touch-none">
-                                <SignatureCanvas 
+                            <div className="bg-slate-50 border border-slate-200 rounded-sm overflow-hidden h-72 sm:h-96 relative group touch-none">
+                                {/*
+                                  Bigger pad (h-72 mobile / h-96 desktop) for comfortable
+                                  finger / stylus signing. Bitmap dims bumped in lockstep so
+                                  the captured signature stays high-resolution.
+                                */}
+                                <SignatureCanvas
                                     ref={sigPad}
                                     penColor='#0f172a'
                                     canvasProps={{
                                         className: "w-full h-full cursor-crosshair",
-                                        width: 400,
-                                        height: 160
+                                        width: 800,
+                                        height: 360,
                                     }}
                                 />
                                 <div className="absolute inset-0 pointer-events-none border-4 border-transparent group-hover:border-blue-500/10 transition-all"></div>

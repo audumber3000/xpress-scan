@@ -35,6 +35,7 @@ import MessageTemplates from "./pages/MessageTemplates";
 import ReferringDoctors from "./pages/ReferringDoctors";
 import Notifications from "./pages/admin/Notifications";
 import PracticeSettings from "./pages/admin/PracticeSettings";
+import TemplatesEditor from "./pages/admin/TemplatesEditor";
 import Vendors from "./pages/Vendors";
 import ConsentForms from "./pages/ConsentForms";
 import Reports from "./pages/Reports";
@@ -44,7 +45,6 @@ import SelectClinic from "./pages/SelectClinic";
 import GoogleReviews from "./pages/marketing/GoogleReviews";
 import MarketingPosters from "./pages/marketing/MarketingPosters";
 import SupportTickets from "./pages/SupportTickets";
-import TemplatesManager from "./pages/TemplatesManager";
 import Checkout from "./pages/Checkout";
 
 // Components
@@ -276,7 +276,7 @@ function AppContent() {
                 <Route path="clinic" element={<ClinicInfo />} />
                 <Route path="templates" element={<MessageTemplates />} />
                 <Route path="doctors" element={<ReferringDoctors />} />
-                <Route path="templates-manager" element={<TemplatesManager />} />
+                <Route path="templates-editor" element={<TemplatesEditor />} />
                 <Route path="practice-settings/:category" element={<PracticeSettings />} />
                 <Route path="notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
                 <Route path="subscription" element={<Subscription />} />

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Prescription</title>
+<style>
+:root {
+  --accent: #2a276e;
+  --ink: #111827;
+  --muted: #6B7280;
+  --line: #E5E7EB;
+  --soft: #F9FAFB;
+}
+* { box-sizing: border-box; }
+body {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color: var(--ink);
+  background: #fff;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.page {
+  width: 100%;
+  min-height: 297mm;
+  padding: 30px 38px;
+}
+
+/* Letterhead (single-line) */
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 14px;
+}
+.head .brand { display: flex; align-items: center; }
+.head .brand .meta { margin-left: 12px; }
+.head .brand .name { font-size: 16px; font-weight: 700; color: var(--ink); letter-spacing: 0.2px; }
+.head .brand .sub  { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.head .doc { text-align: right; }
+.head .doc .doctor { font-size: 12px; font-weight: 700; color: var(--accent); }
+.head .doc p { margin: 1px 0; font-size: 10.5px; color: var(--muted); }
+
+.title-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 16px 0 8px 0;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--accent);
+}
+.title-strip .title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.title-strip .date { font-size: 11px; color: var(--muted); }
+
+/* Patient strip */
+.patient {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: var(--soft);
+  border-radius: 6px;
+}
+.patient .col h4 {
+  margin: 0 0 4px 0;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.patient .col p { margin: 1px 0; font-size: 11.5px; color: var(--ink); }
+
+/* Clinical notes */
+.clinical-notes { margin-bottom: 12px; }
+.clinical-notes h4 {
+  margin: 0 0 4px 0;
+  color: var(--accent);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.clinical-notes p { margin: 2px 0; font-size: 11.5px; color: var(--ink); }
+
+/* Medications table — compact, no SAC/HSN, no Rx ornament */
+.med-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+.med-table thead th {
+  text-align: left;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 9px 8px;
+  border-bottom: 2px solid var(--line);
+}
+.med-table thead th.num { width: 26px; text-align: center; }
+.med-table thead th.tight { width: 70px; text-align: center; }
+.med-table tbody td {
+  padding: 9px 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11.5px;
+  color: var(--ink);
+  vertical-align: top;
+}
+.med-table tbody td.num { text-align: center; color: var(--muted); }
+.med-table tbody td.tight { text-align: center; }
+.med-name { font-weight: 600; font-size: 12px; color: var(--ink); }
+.med-composition {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Advice */
+.advice-section { margin-top: 4px; margin-bottom: 12px; }
+.advice-section h4 {
+  margin: 0 0 4px 0;
+  color: var(--accent);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.advice-section ul { margin: 0; padding-left: 18px; }
+.advice-section li { margin: 2px 0; font-size: 11.5px; }
+
+/* Footer */
+.footer {
+  margin-top: 24px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+.follow-up {
+  font-size: 11px;
+  color: #b91c1c;
+  font-weight: 600;
+}
+.signature-box { text-align: right; }
+.signature-line {
+  display: inline-block;
+  width: 160px;
+  border-top: 1px solid var(--ink);
+  margin-top: 36px;
+  padding-top: 4px;
+  font-size: 10.5px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.signature-clinic {
+  margin: 3px 0 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- LETTERHEAD -->
+  <div class="head">
+    <div class="brand">
+      <div style="width:75px;height:75px;background:#f0f4f8;border:2px dashed #2a276e;display:flex;justify-content:center;align-items:center;color:#2a276e;font-weight:bold;font-size:12px;text-align:center;">MO</div>
+      <div class="meta">
+        <div class="name">MolarPlus Dental</div>
+        <div class="sub">Comprehensive Dental & Orthodontic Care</div>
+      </div>
+    </div>
+    <div class="doc">
+      <div class="doc-name">Dr. R. Sharma</div>
+      <p>12 Marine Drive, Mumbai 400020</p>
+      <p>📞 +91 22 4000 1234</p>
+      <p>✉️ hello@molarplus.example</p>
+      <p>Reg No: MH/DC/12345</p>
+    </div>
+  </div>
+
+  <!-- TITLE + DATE -->
+  <div class="title-strip">
+    <span class="title">Prescription</span>
+    <span class="date">28 April 2026</span>
+  </div>
+
+  <!-- PATIENT STRIP -->
+  <div class="patient">
+    <div class="col">
+      <h4>Patient</h4>
+      <p style="font-weight:600;">Asha Mehta</p>
+      <p style="color:#6B7280;font-size:10.5px;">ID: PT-42</p>
+    </div>
+    <div class="col" style="text-align:right;">
+      <h4>Details</h4>
+      <p>34 / Female</p>
+      <p style="color:#6B7280;font-size:10.5px;">9876543210</p>
+    </div>
+  </div>
+
+  <!-- CLINICAL NOTES -->
+  <div class="clinical-notes"><h4>Chief Complaint (C/O):</h4><p>Severe pain in lower right molar.</p></div><div class="clinical-notes"><h4>Diagnosis:</h4><p>Pulpitis #46.</p></div>
+
+  <!-- MEDICATIONS -->
+  <table class="med-table">
+    <thead>
+      <tr>
+        <th class="num">#</th>
+        <th>Medicine</th>
+        <th class="tight">Dosage</th>
+        <th class="tight">Duration</th>
+        <th>Instructions</th>
+      </tr>
+    </thead>
+    <tbody>
+      
+            <tr>
+                <td>1</td>
+                <td class="text-left">
+                    <span class="med-name">Amoxicillin 500mg</span>
+                    <span class="med-composition">(After meals)</span>
+                </td>
+                <td>1-0-1</td>
+                <td>5 days</td>
+                <td>10</td>
+            </tr>
+            <tr>
+                <td>2</td>
+                <td class="text-left">
+                    <span class="med-name">Ibuprofen 400mg</span>
+                    <span class="med-composition">(If pain persists)</span>
+                </td>
+                <td>0-0-1</td>
+                <td>3 days</td>
+                <td>3</td>
+            </tr>
+    </tbody>
+  </table>
+
+  <!-- ADVICE -->
+  <div class="advice-section"><h4>Instructions / Advice:</h4><ul><li>Avoid hard foods on the right side.</li></ul></div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <div class="follow-up">Next Appointment: 11 May 2026 for filling check-up.</div>
+    <div class="signature-box">
+      
+      <span class="signature-line">Dr. R. Sharma</span>
+      <p class="signature-clinic">MolarPlus Dental</p>
+    </div>
+  </div>
+
+  <div style="text-align:center;color:#888;font-size:10px;margin-top:14px;border-top:1px solid #eee;padding-top:10px;">Computer-generated.</div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 297" preserveAspectRatio="xMidYMid meet">
+  <rect width="210" height="297" fill="#ffffff"/>
+  <g transform="translate(18,18)">
+    <rect width="14" height="14" rx="1.6" fill="#0F766E"/>
+    <text x="7" y="10" text-anchor="middle" font-family="Helvetica" font-weight="bold" font-size="6" fill="#ffffff">DC</text>
+    <rect x="18" y="2" width="60" height="3" fill="#111827"/>
+    <rect x="18" y="7" width="58" height="1.6" fill="#6B7280"/>
+    <rect x="135" width="36" height="2" fill="#111827"/>
+    <rect x="135" y="4" width="42" height="1.5" fill="#6B7280"/>
+    <rect x="135" y="8" width="38" height="1.5" fill="#6B7280"/>
+  </g>
+  <line x1="18" y1="42" x2="192" y2="42" stroke="#E5E7EB" stroke-width="0.5"/>
+  <g transform="translate(18,52)">
+    <text x="0" y="6" font-family="Helvetica" font-weight="bold" font-size="6" fill="#0F766E" letter-spacing="2">PRESCRIPTION</text>
+    <rect x="155" y="2" width="20" height="2" fill="#9CA3AF"/>
+    <line y1="10" x1="0" x2="174" y2="10" stroke="#0F766E" stroke-width="1.4"/>
+  </g>
+  <rect x="18" y="68" width="174" height="20" rx="2" fill="#F9FAFB"/>
+  <g transform="translate(24,74)">
+    <rect width="20" height="1.4" fill="#6B7280"/>
+    <rect y="4" width="36" height="2" fill="#111827"/>
+    <rect y="9" width="28" height="1.4" fill="#6B7280"/>
+    <rect x="120" width="20" height="1.4" fill="#6B7280"/>
+    <rect x="120" y="4" width="36" height="2" fill="#111827"/>
+  </g>
+  <g transform="translate(18,98)">
+    <rect width="20" height="1.4" fill="#9CA3AF"/>
+    <rect x="60" width="20" height="1.4" fill="#9CA3AF"/>
+    <rect x="98" width="22" height="1.4" fill="#9CA3AF"/>
+    <rect x="135" width="22" height="1.4" fill="#9CA3AF"/>
+  </g>
+  <line x1="18" y1="104" x2="192" y2="104" stroke="#E5E7EB" stroke-width="0.6"/>
+  <g transform="translate(18,110)">
+    <rect width="60" height="2" fill="#111827"/>
+    <rect x="60" width="22" height="1.5" fill="#9CA3AF"/>
+    <rect x="98" width="22" height="1.5" fill="#9CA3AF"/>
+    <rect x="135" width="22" height="1.5" fill="#9CA3AF"/>
+  </g>
+  <line x1="18" y1="116" x2="192" y2="116" stroke="#E5E7EB" stroke-width="0.4"/>
+  <g transform="translate(18,122)">
+    <rect width="55" height="2" fill="#111827"/>
+    <rect x="60" width="22" height="1.5" fill="#9CA3AF"/>
+    <rect x="98" width="22" height="1.5" fill="#9CA3AF"/>
+    <rect x="135" width="22" height="1.5" fill="#9CA3AF"/>
+  </g>
+  <line x1="18" y1="128" x2="192" y2="128" stroke="#E5E7EB" stroke-width="0.4"/>
+  <g transform="translate(18,134)">
+    <rect width="50" height="2" fill="#111827"/>
+    <rect x="60" width="22" height="1.5" fill="#9CA3AF"/>
+    <rect x="98" width="22" height="1.5" fill="#9CA3AF"/>
+    <rect x="135" width="22" height="1.5" fill="#9CA3AF"/>
+  </g>
+  <line x1="18" y1="140" x2="192" y2="140" stroke="#E5E7EB" stroke-width="0.4"/>
+  <g transform="translate(18,150)">
+    <rect width="32" height="1.6" fill="#0F766E"/>
+    <rect y="4" width="80" height="1.4" fill="#9CA3AF"/>
+    <rect y="8" width="60" height="1.4" fill="#9CA3AF"/>
+  </g>
+  <line x1="18" y1="240" x2="192" y2="240" stroke="#E5E7EB" stroke-width="0.4"/>
+  <g transform="translate(135,250)">
+    <line x1="0" y1="0" x2="55" y2="0" stroke="#111827" stroke-width="0.5"/>
+    <text x="27.5" y="6" text-anchor="middle" font-family="Helvetica" font-weight="bold" font-size="3.2" fill="#0F766E">Doctor Signature</text>
+  </g>
+  <g transform="translate(18,250)">
+    <text x="0" y="0" font-family="Helvetica" font-weight="bold" font-size="3.6" fill="#b91c1c">Next visit: 11 May</text>
+  </g>
+</svg>

@@ -107,7 +107,7 @@ const AdminHub = () => {
             </div>
           )}
 
-          <SidebarItem id="templates" icon={FileText} label="Templates" path="/admin/templates-manager" />
+          <SidebarItem id="templates" icon={FileText} label="Templates" path="/admin/templates-editor" />
           <SidebarItem id="notifications" icon={Bell} label="Notifications" path="/admin/notifications" />
           <SidebarItem id="subscription" icon={CreditCard} label="Subscription" path="/admin/subscription" />
         </div>

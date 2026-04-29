@@ -11,7 +11,8 @@ requests
 psycopg2-binary
 html2text
 beautifulsoup4
-weasyprint
+weasyprint==68.1
+pypdfium2>=5.0  # used by scripts/generate_template_thumbnails.py to rasterise PDFs
 qrcode[pil]
 Pillow
 playwright

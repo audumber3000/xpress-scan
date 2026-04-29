@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<style>
+:root {
+  --primary-color: #2a276e;
+  --text-main: #333;
+  --text-muted: #555;
+  --border-light: #ddd;
+  --table-header-bg: #f8fafc;
+  --highlight-bg: #f0f4f8;
+}
+@page { size: A4; margin: 0; }
+body {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color: var(--text-main);
+  line-height: 1.4;
+  background: #fff;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+}
+.consent-container { width: 100%; background: #fff; }
+.color-strip { height: 10px; background-color: var(--primary-color); }
+.consent-body { padding: 40px 50px 200px 50px; }
+.footer-wrapper {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  padding: 0 50px;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 2px solid var(--border-light);
+  padding-bottom: 15px;
+  margin-bottom: 15px;
+}
+.header-left { display: flex; align-items: center; }
+.clinic-info-left h1 {
+  margin: 0;
+  color: var(--primary-color);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 24px;
+  line-height: 1.1;
+}
+.clinic-info-left .tagline { margin: 3px 0; font-size: 16px; color: var(--primary-color); font-weight: bold; }
+.clinic-info-right { text-align: right; }
+.clinic-info-right .doc-name { font-size: 14px; font-weight: bold; color: var(--primary-color); margin: 0 0 4px 0; }
+.clinic-info-right p { margin: 2px 0; font-size: 11px; color: var(--text-muted); font-weight: 500; }
+.consent-title {
+  text-align: center;
+  font-size: 18px;
+  font-weight: bold;
+  margin: 10px 0 15px 0;
+  color: var(--text-main);
+  text-decoration: underline;
+  letter-spacing: 2px;
+}
+.patient-box {
+  background: var(--highlight-bg);
+  padding: 10px 12px;
+  border-radius: 5px;
+  border: 1px solid var(--border-light);
+  margin-bottom: 15px;
+}
+.info-table { width: 100%; border-collapse: collapse; }
+.info-table td { vertical-align: top; width: 33%; padding: 2px 4px; }
+.info-table p { margin: 3px 0; font-size: 12px; }
+.info-table strong { display: inline-block; min-width: 100px; color: var(--primary-color); }
+.content-section { margin-bottom: 20px; }
+.content-section h4 {
+  margin: 0 0 8px 0;
+  color: var(--primary-color);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.content-section p { margin: 0 0 8px 0; font-size: 13px; line-height: 1.7; text-align: justify; }
+.signature-section {
+  margin-top: 30px;
+  padding-top: 15px;
+  border-top: 1px solid var(--border-light);
+}
+.signature-section h4 {
+  color: var(--primary-color);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0 0 10px 0;
+}
+.sig-line {
+  border-top: 1px solid var(--text-main);
+  margin-top: 5px;
+  padding-top: 5px;
+  font-weight: bold;
+  color: var(--primary-color);
+  font-size: 12px;
+}
+.footer {
+  font-size: 11px;
+  color: #666;
+  margin-top: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  border-top: 1px solid var(--border-light);
+  padding-top: 15px;
+}
+.terms { width: 65%; }
+.terms h4 { margin-bottom: 4px; color: var(--primary-color); text-transform: uppercase; }
+.terms ul { padding-left: 15px; margin: 0 0 8px 0; }
+.terms li { margin-bottom: 2px; }
+.signature-box { width: 30%; text-align: center; }
+.signature-line {
+  border-top: 1px solid var(--text-main);
+  margin-top: 40px;
+  padding-top: 5px;
+  font-weight: bold;
+  color: var(--primary-color);
+  font-size: 12px;
+}
+</style>
+</head><body>
+
+<div class="consent-container">
+  <div class="color-strip"></div>
+  <div class="consent-body">
+
+    <!-- HEADER -->
+    <div class="header">
+      <div class="header-left">
+        <div style="margin-right:20px;flex-shrink:0;"><div style="width:75px;height:75px;background:#f0f4f8;border:2px dashed #2a276e;display:flex;justify-content:center;align-items:center;color:#2a276e;font-weight:bold;font-size:11px;text-align:center;">MO</div></div>
+        <div class="clinic-info-left">
+          <h1>MolarPlus Dental</h1>
+          <div class="tagline">Comprehensive Dental &amp; Orthodontic Care</div>
+        </div>
+      </div>
+      <div class="clinic-info-right">
+        <div class="doc-name">Dr. R. Sharma</div>
+        <p>12 Marine Drive, Mumbai 400020</p>
+        <p>📞 +91 22 4000 1234</p>
+        <p>✉️ hello@molarplus.example</p>
+        <p>Reg No: MH/DC/12345</p>
+      </div>
+    </div>
+
+    <div class="consent-title">CONSENT FORM</div>
+
+    <!-- PATIENT INFO -->
+    <div class="patient-box">
+      <table class="info-table">
+        <tr>
+          <td>
+            <p><strong>Patient Name:</strong> Asha Mehta</p>
+            <p><strong>Patient ID:</strong> PT-42</p>
+          </td>
+          <td>
+            <p><strong>Document:</strong> Root Canal Treatment — Informed Consent</p>
+            <p><strong>Date Signed:</strong> 28 April 2026, 10:00 AM</p>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- CONSENT CONTENT -->
+    <div class="content-section">
+      <h4>Terms &amp; Conditions</h4>
+      <p>I, the undersigned, hereby authorise the dental surgeon and clinic staff to perform a root canal procedure on tooth #46.</p>
+<p>I understand that the procedure carries certain risks, including but not limited to post-operative discomfort, sensitivity, infection, and the rare possibility of treatment failure requiring re-intervention.</p>
+<p>I have been given the opportunity to ask questions and have received satisfactory answers. I voluntarily agree to undergo this procedure and confirm that I have read and understood the information provided to me.</p>
+
+    </div>
+
+    <!-- PATIENT SIGNATURE -->
+    <div class="signature-section">
+      <h4>Patient's Digital Signature</h4>
+      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=" alt="Patient signature" style="max-width:240px;max-height:110px;display:block;margin-bottom:6px;object-fit:contain;">
+      <p style="font-size:11px;color:#888;margin:5px 0 0 0;font-style:italic;">
+        Electronically signed on 28 April 2026, 10:00 AM
+      </p>
+    </div>
+
+    <div style="text-align:center;color:#888;font-size:10px;margin-top:16px;border-top:1px solid #eee;padding-top:10px;">Computer-generated.</div>
+
+  </div>
+
+  <!-- FIXED FOOTER -->
+  <div class="footer-wrapper">
+    <div class="footer">
+      <div class="terms">
+        <h4>Terms &amp; Conditions</h4>
+        <ul>
+          <li>This consent is specific to the procedure or treatment described above.</li>
+          <li>The patient has been given the opportunity to ask questions and receive satisfactory answers.</li>
+          <li>This consent may be withdrawn at any time prior to the commencement of the procedure.</li>
+          <li>This is a digitally signed document and is legally valid under the IT Act, 2000.</li>
+        </ul>
+      </div>
+      <div class="signature-box">
+        <div class="signature-line">Dr. R. Sharma</div>
+        <p style="margin:5px 0 0 0;color:var(--text-muted);font-weight:bold;">MolarPlus Dental</p>
+      </div>
+    </div>
+    <div class="color-strip"></div>
+  </div>
+</div>
+
+</body></html>

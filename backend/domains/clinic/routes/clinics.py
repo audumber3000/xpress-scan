@@ -214,6 +214,39 @@ async def create_clinic(
 
 
 @router.get(
+    "/{clinic_id}/branding",
+    summary="Public clinic branding (no auth)",
+    description=(
+        "Read-only, narrow slice of clinic info — name, primary_color, logo_url, "
+        "tagline. Used by the consent signing page (`/consent/sign/:token`) so "
+        "patients see the actual clinic letterhead, not a hardcoded brand."
+    ),
+)
+async def get_clinic_branding(
+    clinic_id: int,
+    db: Session = Depends(get_db),
+):
+    """Anonymous-readable subset. Returns only fields safe to expose."""
+    clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clinic not found")
+    # Layer in the consent-template config so the signing page header matches
+    # what the eventual signed PDF will look like.
+    from models import TemplateConfiguration
+    cfg = db.query(TemplateConfiguration).filter(
+        TemplateConfiguration.clinic_id == clinic_id,
+        TemplateConfiguration.category == "consent",
+    ).first()
+    return {
+        "clinic_id": clinic.id,
+        "name": clinic.name,
+        "tagline": getattr(clinic, "tagline", None),
+        "primary_color": (cfg.primary_color if cfg and cfg.primary_color else None) or getattr(clinic, "primary_color", None),
+        "logo_url": (cfg.logo_url if cfg and cfg.logo_url else None) or getattr(clinic, "logo_url", None),
+    }
+
+
+@router.get(
     "/me",
     response_model=ClinicResponseDTO,
     summary="Get current user's clinic",

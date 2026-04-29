@@ -40,13 +40,13 @@ from domains.communication.routes import notifications, message_templates
 from domains.scheduling.routes import attendance, attendance_mobile, appointments
 from domains.medical.routes import reports, xray, medications
 from domains.analytics.routes import dashboard, dashboard_reports
-from domains.infrastructure.routes import devices, sync, templates, template_configs
+from domains.infrastructure.routes import devices, sync, template_configs
 from domains.infrastructure.services.template_service import TemplateService
 from domains.gmail.routes import gmail_routes
 from domains.google_business.routes import google_business_routes, google_places_routes
 from domains.vendor.routes import vendors
 from domains.inventory.routes import inventory
-from domains.consent.routes import consents
+from domains.consent.routes import consents, consents_internal
 from domains.document.routes import documents
 from domains.clinical.routes import settings_router, case_papers_router, prescriptions_router, lab_orders_router
 from domains.notification.routes import notification_admin
@@ -99,6 +99,12 @@ async def lifespan(app: FastAPI):
             ))
             conn.execute(text(
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS signature_url TEXT"
+            ))
+            conn.execute(text(
+                "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS is_trial BOOLEAN DEFAULT FALSE"
+            ))
+            conn.execute(text(
+                "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP"
             ))
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS notification_preferences (
@@ -333,6 +339,11 @@ if os.path.exists(templates_assets_path):
 else:
     print(f"Warning: templates/assets not found at {templates_assets_path}")
 
+# Mount /static for template thumbnails + future static UI assets.
+static_path = os.path.join(BASE_PATH, "static")
+if os.path.exists(static_path):
+    app.mount("/static", StaticFiles(directory=static_path), name="static")
+
 # Register domain routers with clean architecture
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(clinic_users.router, prefix="/api/v1/clinic-users", tags=["clinic_users"])
@@ -361,13 +372,17 @@ app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["dashboar
 app.include_router(dashboard_reports.router, prefix="/api/v1/dashboard/reports", tags=["dashboard_reports"])
 app.include_router(devices.router, prefix="/api/v1/devices", tags=["devices"])
 app.include_router(sync.router, prefix="/api/v1/sync", tags=["sync"])
-app.include_router(templates.router, prefix="/api/v1/templates", tags=["templates"])
+# /api/v1/templates removed (Phase 3 cleanup) — was unauthenticated and
+# vulnerable to path traversal via PUT /{template_name}. Zero callers.
 app.include_router(gmail_routes.router, prefix="/api/v1/gmail", tags=["gmail"])
 app.include_router(google_business_routes.router, prefix="/api/v1/google-business", tags=["google_business"])
 app.include_router(google_places_routes.router, prefix="/api/v1/google-places", tags=["google_places"])
 app.include_router(vendors.router, prefix="/api/v1/vendors", tags=["vendors"])
 app.include_router(inventory.router, prefix="/api/v1/inventory", tags=["inventory"])
 app.include_router(consents.router, prefix="/api/v1/consents", tags=["consents"])
+# Internal service-to-service routes (Nexus calls these). Auth via shared
+# X-Internal-Auth header; never call from public clients.
+app.include_router(consents_internal.router, prefix="/api/v1/internal", tags=["internal"])
 app.include_router(documents.router, prefix="/api/v1/documents", tags=["documents"])
 
 # Notification Admin Domain

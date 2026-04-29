@@ -4,6 +4,7 @@ from typing import List, Dict, Any
 from core.dtos import PrescriptionRequestDTO, PrescriptionItemDTO
 from domains.infrastructure.services.template_service import TemplateService
 from domains.infrastructure.services.pdf_service import html_template_to_pdf, generate_pdf_filename, cleanup_temp_file
+from domains.infrastructure.services.pdf_safety import safe_color, safe_signature_data_uri, safe_text, safe_url
 from domains.infrastructure.services.r2_storage import upload_pdf_to_r2, StorageCategory
 from models import PatientDocument, Patient, Clinic, Prescription as PrescriptionModel
 from sqlalchemy.orm import Session
@@ -14,28 +15,41 @@ class PrescriptionService:
         self.db = db
         self.template_service = TemplateService()
 
-    def generate_prescription_pdf(self, patient: Patient, clinic: Clinic, prescription_data: PrescriptionRequestDTO):
-        """
-        Generate a prescription PDF, upload to R2, and register in PatientDocument
+    def render_prescription_html(self, patient, clinic, prescription_data, config_override=None, doctor=None) -> str:
+        """Render the prescription HTML using the same logic as production PDF
+        generation. Pass `config_override` (a config-shaped object with
+        primary_color/footer_text/logo_url) to skip the DB lookup — used by
+        the templates preview endpoint with the admin's unsaved changes.
+
+        `doctor` is the prescribing User; if their `signature_url` is set
+        (Phase 5) the signature image is embedded in the signature box.
         """
         # ── Branding ──────────────────────────────────────────────────────────
-        from models import TemplateConfiguration
-        config = self.db.query(TemplateConfiguration).filter(
-            TemplateConfiguration.clinic_id == clinic.id,
-            TemplateConfiguration.category == 'prescription'
-        ).first()
+        if config_override is not None:
+            config = config_override
+        else:
+            from models import TemplateConfiguration
+            config = self.db.query(TemplateConfiguration).filter(
+                TemplateConfiguration.clinic_id == clinic.id,
+                TemplateConfiguration.category == 'prescription'
+            ).first()
 
-        primary_color = (config.primary_color if config and config.primary_color else None) \
-                        or getattr(clinic, 'primary_color', None) or '#1a2a6c'
-        logo_url      = (config.logo_url if config and config.logo_url else None) \
-                        or getattr(clinic, 'logo_url', None)
-        footer_text   = (config.footer_text if config and config.footer_text else '') or ''
+        primary_color = safe_color(
+            (config.primary_color if config and config.primary_color else None)
+            or getattr(clinic, 'primary_color', None),
+            default='#1a2a6c',
+        )
+        logo_url = safe_url(
+            (config.logo_url if config and config.logo_url else None)
+            or getattr(clinic, 'logo_url', None)
+        )
+        footer_text = safe_text((config.footer_text if config and config.footer_text else '') or '')
 
         # ── Logo HTML ─────────────────────────────────────────────────────────
         if logo_url:
             logo_html = f'<img src="{logo_url}" alt="Logo" style="width:75px;height:75px;object-fit:contain;">'
         else:
-            initials = (clinic.name[:2].upper() if clinic and clinic.name else 'DC')
+            initials = safe_text(clinic.name[:2].upper() if clinic and clinic.name else 'DC')
             logo_html = (
                 f'<div style="width:75px;height:75px;background:#f0f4f8;'
                 f'border:2px dashed {primary_color};display:flex;justify-content:center;'
@@ -59,6 +73,15 @@ class PrescriptionService:
         clinic_reg_html     = f'<p>Reg No: {c_reg}</p>'                if c_reg     else ''
 
         doctor_signature_label = c_doctor if c_doctor else 'Doctor\'s Signature'
+
+        # Doctor signature image (Phase 5) — embedded above the signature line
+        # when the prescribing doctor has uploaded one.
+        doctor_signature_uri = safe_signature_data_uri(getattr(doctor, 'signature_url', None) if doctor else None)
+        signature_image_html = (
+            f'<img src="{doctor_signature_uri}" alt="Signature" '
+            f'style="display:block;max-width:140px;max-height:48px;'
+            f'margin-left:auto;margin-bottom:2px;object-fit:contain;">'
+        ) if doctor_signature_uri else ''
 
         # ── Patient fields ────────────────────────────────────────────────────
         p_name   = patient.name if patient else ''
@@ -183,21 +206,34 @@ class PrescriptionService:
             'advice_html':          advice_html,
             'follow_up_html':       follow_up_html,
             'footer_text_html':     footer_text_html,
+            'signature_image_html': signature_image_html,
         }
 
-        print(f"[PrescriptionService] Generating PDF for Patient: {patient.name} (ID: {patient.id})")
+        print(f"[PrescriptionService] Building HTML for Patient: {getattr(patient, 'name', '?')}")
         print(f"[PrescriptionService] Branding: color={primary_color}, logo={'yes' if logo_url else 'initials'}")
 
-        # ── Render template ───────────────────────────────────────────────────
+        # ── Render template (variant-aware via registry) ──────────────────────
+        from domains.medical.prescription_templates import resolve_variant
+        template_id = getattr(config, 'template_id', None) if config else None
+        variant = resolve_variant(template_id)
         try:
-            template_content = self.template_service.load_template("prescription_template.html")
+            template_content = self.template_service.load_template(variant['template_file'])
             html_content     = self.template_service.fill_template(template_content, template_data)
         except Exception as e:
             print(f"Error filling prescription template: {e}")
             raise e
 
+        return html_content
+
+    def generate_prescription_pdf(self, patient: Patient, clinic: Clinic, prescription_data: PrescriptionRequestDTO, doctor=None):
+        """
+        Generate a prescription PDF, upload to R2, and register in PatientDocument.
+        `doctor` is the prescribing User — if set, their signature is embedded.
+        """
+        html_content = self.render_prescription_html(patient, clinic, prescription_data, doctor=doctor)
+
         # ── Convert to PDF ────────────────────────────────────────────────────
-        temp_pdf_path = html_template_to_pdf(html_content, template_data)
+        temp_pdf_path = html_template_to_pdf(html_content, {'patient_name': patient.name})
 
         try:
             file_name    = generate_pdf_filename(patient.name, "Prescription")

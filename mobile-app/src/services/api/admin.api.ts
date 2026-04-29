@@ -387,6 +387,72 @@ export class AdminApiService extends BaseApiService {
         }
     }
 
+    async getTemplateVariants(category: 'invoice' | 'prescription' | 'consent'): Promise<{ id: string; name: string; description: string; thumbnail: string }[]> {
+        try {
+            const headers = await this.getAuthHeaders();
+            const r = await this.fetchWithTimeout(`${this.baseURL}/template-configs/variants/${category}`, { headers });
+            if (!r.ok) return [];
+            const data = await r.json();
+            return data?.variants || [];
+        } catch (error) {
+            console.error('❌ [API] Error fetching variants:', error);
+            return [];
+        }
+    }
+
+    async previewTemplate(payload: {
+        category: 'invoice' | 'prescription' | 'consent';
+        template_id?: string;
+        primary_color?: string;
+        footer_text?: string;
+        logo_url?: string | null;
+    }): Promise<string | null> {
+        try {
+            const headers = await this.getAuthHeaders();
+            const r = await this.fetchWithTimeout(`${this.baseURL}/template-configs/preview`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(payload),
+            });
+            if (!r.ok) {
+                console.warn('[API] Preview failed:', r.status);
+                return null;
+            }
+            const data = await r.json();
+            return data?.html ?? null;
+        } catch (error) {
+            console.error('❌ [API] Error fetching preview:', error);
+            return null;
+        }
+    }
+
+    async uploadTemplateLogo(
+        category: 'invoice' | 'prescription' | 'consent',
+        file: { uri: string; name: string; type: string },
+    ): Promise<{ logo_url: string; storage_key: string } | null> {
+        try {
+            const headers = await this.getAuthHeaders();
+            const formData = new FormData();
+            formData.append('category', category);
+            formData.append('file', file as any);
+
+            const r = await this.fetchWithTimeout(`${this.baseURL}/template-configs/logo`, {
+                method: 'POST',
+                headers: { ...headers, Accept: 'application/json' },
+                body: formData as any,
+            });
+            if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                console.error('❌ [API] Logo upload failed:', err);
+                return null;
+            }
+            return await r.json();
+        } catch (error) {
+            console.error('❌ [API] Error uploading logo:', error);
+            return null;
+        }
+    }
+
     async saveTemplateConfig(data: {
         category: string;
         template_id: string;

@@ -6,7 +6,7 @@
     <title>Prescription</title>
     <style>
         :root {
-            --primary-color: {{primary_color}};
+            --primary-color: #2a276e;
             --bg-color: #f4f7f6;
             --text-main: #333;
             --text-muted: #555;
@@ -185,18 +185,18 @@
         <!-- HEADER -->
         <div class="header">
             <div class="header-left">
-                <div style="margin-right:20px;flex-shrink:0;">{{logo_html}}</div>
+                <div style="margin-right:20px;flex-shrink:0;"><div style="width:75px;height:75px;background:#f0f4f8;border:2px dashed #2a276e;display:flex;justify-content:center;align-items:center;color:#2a276e;font-weight:bold;font-size:12px;text-align:center;">MO</div></div>
                 <div class="clinic-info-left">
-                    <h1>{{clinic_name}}</h1>
-                    <div class="tagline">{{clinic_tagline}}</div>
+                    <h1>MolarPlus Dental</h1>
+                    <div class="tagline">Comprehensive Dental & Orthodontic Care</div>
                 </div>
             </div>
             <div class="clinic-info-right">
-                {{doctor_name_html}}
-                {{clinic_address_html}}
-                {{clinic_phone_html}}
-                {{clinic_email_html}}
-                {{clinic_reg_html}}
+                <div class="doc-name">Dr. R. Sharma</div>
+                <p>12 Marine Drive, Mumbai 400020</p>
+                <p>📞 +91 22 4000 1234</p>
+                <p>✉️ hello@molarplus.example</p>
+                <p>Reg No: MH/DC/12345</p>
             </div>
         </div>
 
@@ -206,21 +206,21 @@
         <table class="info-table">
             <tr>
                 <td>
-                    <p><strong>Patient Name:</strong> {{patient_name}}</p>
-                    <p><strong>Patient ID:</strong> {{patient_id}}</p>
+                    <p><strong>Patient Name:</strong> Asha Mehta</p>
+                    <p><strong>Patient ID:</strong> PT-42</p>
                 </td>
                 <td>
-                    <p><strong>Age / Sex:</strong> {{patient_age}} / {{patient_gender}}</p>
-                    <p><strong>Date:</strong> {{current_date}}</p>
+                    <p><strong>Age / Sex:</strong> 34 / Female</p>
+                    <p><strong>Date:</strong> 28 April 2026</p>
                 </td>
                 <td>
-                    <p><strong>Contact:</strong> {{patient_phone}}</p>
+                    <p><strong>Contact:</strong> 9876543210</p>
                 </td>
             </tr>
         </table>
 
         <!-- CLINICAL NOTES -->
-        {{clinical_notes_html}}
+        <div class="clinical-notes"><h4>Chief Complaint (C/O):</h4><p>Severe pain in lower right molar.</p></div><div class="clinical-notes"><h4>Diagnosis:</h4><p>Pulpitis #46.</p></div>
 
         <!-- Rx SECTION -->
         <div class="rx-symbol">&#8478;</div>
@@ -235,24 +235,44 @@
                 </tr>
             </thead>
             <tbody>
-                {{prescription_items}}
+                
+            <tr>
+                <td>1</td>
+                <td class="text-left">
+                    <span class="med-name">Amoxicillin 500mg</span>
+                    <span class="med-composition">(After meals)</span>
+                </td>
+                <td>1-0-1</td>
+                <td>5 days</td>
+                <td>10</td>
+            </tr>
+            <tr>
+                <td>2</td>
+                <td class="text-left">
+                    <span class="med-name">Ibuprofen 400mg</span>
+                    <span class="med-composition">(If pain persists)</span>
+                </td>
+                <td>0-0-1</td>
+                <td>3 days</td>
+                <td>3</td>
+            </tr>
             </tbody>
         </table>
 
         <!-- ADVICE / GENERAL INSTRUCTIONS -->
-        {{advice_html}}
+        <div class="advice-section"><h4>Instructions / Advice:</h4><ul><li>Avoid hard foods on the right side.</li></ul></div>
 
         <!-- FOOTER -->
         <div class="footer">
-            <div class="follow-up">{{follow_up_html}}</div>
+            <div class="follow-up">Next Appointment: 11 May 2026 for filling check-up.</div>
             <div class="signature-box">
-                {{signature_image_html}}
-                <div class="signature-line">{{doctor_signature_label}}</div>
-                <p style="margin:5px 0 0 0;color:var(--text-muted);font-weight:bold;">{{clinic_name}}</p>
+                
+                <div class="signature-line">Dr. R. Sharma</div>
+                <p style="margin:5px 0 0 0;color:var(--text-muted);font-weight:bold;">MolarPlus Dental</p>
             </div>
         </div>
 
-        {{footer_text_html}}
+        <div style="text-align:center;color:#888;font-size:10px;margin-top:14px;border-top:1px solid #eee;padding-top:10px;">Computer-generated.</div>
 
     </div>
     <div class="color-strip"></div>

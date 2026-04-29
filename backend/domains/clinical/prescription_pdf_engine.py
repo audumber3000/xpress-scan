@@ -38,6 +38,23 @@ def generate_prescription_html(prescription, clinic, config=None) -> str:
 
     reg_line = f'<p>Reg No: {c_reg}</p>' if c_reg else ''
 
+    # Doctor signature (Phase 5): from prescription.appointment.doctor if linked.
+    from domains.infrastructure.services.pdf_safety import safe_signature_data_uri
+    doctor_signature_uri = ''
+    try:
+        appt = getattr(prescription, 'appointment', None)
+        if appt:
+            doc = getattr(appt, 'doctor', None)
+            if doc:
+                doctor_signature_uri = safe_signature_data_uri(getattr(doc, 'signature_url', None))
+    except Exception:
+        pass
+    signature_image_html = (
+        f'<img src="{doctor_signature_uri}" alt="Signature" '
+        f'style="display:block;max-width:140px;max-height:48px;'
+        f'margin-left:auto;margin-bottom:2px;object-fit:contain;">'
+    ) if doctor_signature_uri else ''
+
     # ── Patient fields ─────────────────────────────────────────────────────────
     patient  = prescription.patient
     p_name   = patient.name if patient else ''
@@ -321,6 +338,7 @@ body {{
         {follow_up_html}
       </div>
       <div class="signature-box">
+        {signature_image_html}
         <div class="signature-line">{c_doctor or 'Authorized Signatory'}</div>
         <p style="margin:5px 0 0 0;color:var(--text-muted);font-weight:bold;">{c_name}</p>
       </div>

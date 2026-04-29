@@ -47,6 +47,7 @@ class StorageCategory:
     WHATSAPP_MEDIA = "whatsapp-media"
     EXPENSES = "expenses"
     STAFF = "staff"
+    BRANDING = "branding"
 
 def get_r2_path(clinic_id: int, patient_id: Optional[int] = None, category: str = StorageCategory.DOCUMENTS, filename: str = "") -> str:
     """
