@@ -107,7 +107,14 @@ class ConsentService:
         # Phase 8: render via the main backend's consent_templates registry
         # so layout / branding lives in one place. Main backend reads the
         # TemplateConfiguration(category='consent') row server-side.
-        main_backend_url = os.environ.get("MAIN_BACKEND_URL", "http://localhost:8000")
+        # Use the existing BACKEND_URL env var (already set to http://backend:8000
+        # inside docker compose); MAIN_BACKEND_URL kept as an override for unusual
+        # deployments. Falls back to localhost so dev without compose still works.
+        main_backend_url = (
+            os.environ.get("MAIN_BACKEND_URL")
+            or os.environ.get("BACKEND_URL")
+            or "http://localhost:8000"
+        )
         internal_key = os.environ.get("INTERNAL_API_KEY", "")
         try:
             with httpx.Client(timeout=20.0) as client:
