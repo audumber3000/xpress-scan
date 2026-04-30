@@ -64,9 +64,11 @@ const TemplatesEditor = () => {
   const fileInputRef = useRef(null);
 
   // Resolve a backend-relative thumbnail path to a fully-qualified URL.
-  // The backend mounts /static — frontend may be on a different origin in dev,
-  // so we use the same origin as the rest of the API.
-  const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/api\/v1\/?$/, '');
+  // The backend mounts /static — frontend is on a different origin
+  // (app.molarplus.com), so prefix with the backend host. VITE_BACKEND_URL is
+  // the project's standard env var (see utils/api.js); falls back to localhost
+  // for dev so this still works on `vite dev` without an .env file.
+  const apiBase = import.meta.env.VITE_BACKEND_URL || `http://${window.location.hostname}:8000`;
   const thumbUrl = (path) => path?.startsWith('http') ? path : `${apiBase}${path}`;
 
   const cfg = configs[activeTab];

@@ -131,12 +131,16 @@ def preview_template(
         import re
         if not re.match(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$", primary_color):
             raise HTTPException(status_code=400, detail="primary_color must be a hex color")
+    # Preview is permissive on logo_url — pre-Phase-0 rows may carry http URLs
+    # that fail the strict save-time validator. Rather than 400-blocking the
+    # whole preview, drop the bad URL so the rest of the page renders. Save
+    # endpoint still rejects bad URLs strictly.
     logo_url = payload.get("logo_url")
     if logo_url:
         try:
             _validate_logo_url(logo_url)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+        except ValueError:
+            payload = {**payload, "logo_url": None}
     footer_text = payload.get("footer_text") or ""
     if len(footer_text) > 1000:
         raise HTTPException(status_code=400, detail="footer_text too long")

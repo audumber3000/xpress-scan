@@ -16,7 +16,9 @@ const ConsentSign = () => {
     const sigPad = useRef(null);
 
     const NEXUS_API_URL = import.meta.env.VITE_NEXUS_API_URL || `http://${window.location.hostname}:8001/api/v1`;
-    const MAIN_API_URL = import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:8000/api/v1`;
+    // Use VITE_BACKEND_URL (the project's standard env var, see utils/api.js).
+    // Append /api/v1 since VITE_BACKEND_URL is a host only, not a base path.
+    const MAIN_API_URL = `${import.meta.env.VITE_BACKEND_URL || `http://${window.location.hostname}:8000`}/api/v1`;
 
     useEffect(() => {
         validateToken();
