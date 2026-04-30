@@ -179,6 +179,7 @@ def _render_indian_tax(
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
 <style>
+@page {{ size: A4; margin: 2mm; }}
 :root {{
   --primary-color: {primary_color};
   --bg-color: #f4f7f6;
@@ -316,8 +317,8 @@ body {{
       <div class="clinic-info-right">
         {f'<div class="doc-name">{doctor_name}</div>' if doctor_name else ''}
         {f'<p>{c_address}</p>' if c_address else ''}
-        {f'<p>📞 {c_phone}</p>' if c_phone else ''}
-        {f'<p>✉️ {c_email}</p>' if c_email else ''}
+        {f'<p>Tel: {c_phone}</p>' if c_phone else ''}
+        {f'<p>Email: {c_email}</p>' if c_email else ''}
         {reg_gst_line}
       </div>
     </div>

@@ -68,8 +68,8 @@ class PrescriptionService:
 
         doctor_name_html  = f'<div class="doc-name">{c_doctor}</div>'  if c_doctor  else ''
         clinic_address_html = f'<p>{c_address}</p>'                    if c_address else ''
-        clinic_phone_html   = f'<p>📞 {c_phone}</p>'                   if c_phone   else ''
-        clinic_email_html   = f'<p>✉️ {c_email}</p>'                   if c_email   else ''
+        clinic_phone_html   = f'<p>Tel: {c_phone}</p>'                 if c_phone   else ''
+        clinic_email_html   = f'<p>Email: {c_email}</p>'               if c_email   else ''
         clinic_reg_html     = f'<p>Reg No: {c_reg}</p>'                if c_reg     else ''
 
         doctor_signature_label = c_doctor if c_doctor else 'Doctor\'s Signature'
@@ -288,8 +288,15 @@ class PrescriptionService:
 
     def generate_prescription_pdf_from_model(self, prescription: PrescriptionModel, clinic: Clinic, config=None):
         """
-        Generate prescription HTML using the prescription_pdf_engine.
-        Mirrors the invoice pattern: pure Python, no template files.
+        Render an HTML prescription for the WhatsApp + download flows.
+
+        Phase 8 cleanup: this used to call a parallel legacy engine that
+        ignored the variant registry — meaning a clinic that picked the
+        'compact' template still got the 'classic' layout when sending via
+        WhatsApp. Now both flows route through `render_prescription_html`
+        so the chosen variant (classic | compact | future…) is respected
+        consistently. Returns `(html, {})` to keep the existing call sites
+        in `clinical/routes/prescriptions.py` working unchanged.
         """
         if not config:
             from models import TemplateConfiguration
@@ -298,8 +305,41 @@ class PrescriptionService:
                 TemplateConfiguration.category == 'prescription'
             ).first()
 
-        from domains.clinical.prescription_pdf_engine import generate_prescription_html
-        html_content = generate_prescription_html(prescription, clinic, config)
+        # Coerce the JSON-stored item dicts into the dotted-attribute shape
+        # render_prescription_html expects (mirrors PrescriptionRequestDTO).
+        from types import SimpleNamespace
+        items = []
+        for raw in (prescription.items or []):
+            if isinstance(raw, dict):
+                items.append(SimpleNamespace(
+                    medicine_name=raw.get('medicine_name') or raw.get('name') or '',
+                    dosage=raw.get('dosage') or '',
+                    duration=raw.get('duration') or '',
+                    quantity=raw.get('quantity') or '',
+                    notes=raw.get('notes') or '',
+                ))
+            else:
+                items.append(raw)
+
+        prescription_data = SimpleNamespace(
+            items=items,
+            notes=prescription.notes or '',
+        )
+
+        # Prescribing doctor (for Phase 5 signature embed). May be None.
+        doctor = None
+        try:
+            appt = getattr(prescription, 'appointment', None)
+            if appt:
+                doctor = getattr(appt, 'doctor', None)
+        except Exception:
+            pass
+
+        patient = prescription.patient
+        html_content = self.render_prescription_html(
+            patient, clinic, prescription_data,
+            config_override=config, doctor=doctor,
+        )
         return html_content, {}
 
     def _generate_prescription_pdf_from_model_legacy(self, prescription: PrescriptionModel, clinic: Clinic, config=None):
@@ -387,8 +427,8 @@ class PrescriptionService:
             'clinic_tagline':       getattr(clinic, 'tagline', 'Dental Excellence'),
             'doctor_name_html':     f'<div class="doc-name">{getattr(clinic, "doctor_name", "")}</div>',
             'clinic_address_html':  f'<p>{clinic.address or ""}</p>',
-            'clinic_phone_html':    f'<p>📞 {clinic.phone or ""}</p>',
-            'clinic_email_html':    f'<p>✉️ {clinic.email or ""}</p>',
+            'clinic_phone_html':    f'<p>Tel: {clinic.phone or ""}</p>',
+            'clinic_email_html':    f'<p>Email: {clinic.email or ""}</p>',
             'clinic_reg_html':      f'<p>Reg: {getattr(clinic, "reg_number", "")}</p>',
             'doctor_signature_label': getattr(clinic, 'doctor_name', 'Authorized Signature'),
             'patient_name':         patient.name,

@@ -9,7 +9,6 @@ from datetime import datetime
 from domains.activity.routes.activity_log import push_activity
 from domains.medical.services.prescription_service import PrescriptionService
 from domains.infrastructure.services.pdf_service import html_template_to_pdf
-from domains.clinical.prescription_pdf_engine import generate_prescription_html
 from core.notification_dispatch import notify_event
 import os
 import requests
@@ -104,7 +103,10 @@ def download_prescription_pdf(
         TemplateConfiguration.category == 'prescription'
     ).first()
 
-    html_content = generate_prescription_html(prescription, clinic, config)
+    # Phase 8: route through the service so the chosen variant (classic /
+    # compact) is respected consistently with the WhatsApp send flow.
+    service = PrescriptionService(db)
+    html_content, _ = service.generate_prescription_pdf_from_model(prescription, clinic, config)
     pdf_path = html_template_to_pdf(html_content)
 
     with open(pdf_path, 'rb') as f:

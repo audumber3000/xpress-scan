@@ -105,6 +105,7 @@ def render_invoice(invoice, clinic, config=None) -> str:
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
 <style>
+@page {{ size: A4; margin: 2mm; }}
 :root {{
   --accent: {primary_color};
   --ink: #111827;
@@ -269,7 +270,7 @@ body {{
       <div class="meta">
         <div class="name">{c_name}</div>
         <div class="sub">{(doctor_name + ' · ') if doctor_name else ''}{c_address}</div>
-        <div class="sub">{('📞 ' + c_phone) if c_phone else ''}{('  · ' + c_email) if c_email else ''}</div>
+        <div class="sub">{('Tel: ' + c_phone) if c_phone else ''}{('  ·  ' + c_email) if c_email else ''}</div>
         {f'<div class="sub">GSTIN: {c_gst}</div>' if c_gst else ''}
       </div>
     </div>

@@ -94,7 +94,7 @@ def render_consent(clinic, patient_name, patient_id, template_name,
   --table-header-bg: #f8fafc;
   --highlight-bg: #f0f4f8;
 }}
-@page {{ size: A4; margin: 0; }}
+@page {{ size: A4; margin: 2mm; }}
 body {{
   font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
   color: var(--text-main);
@@ -227,8 +227,8 @@ body {{
       <div class="clinic-info-right">
         {f'<div class="doc-name">{c_doctor}</div>' if c_doctor else ''}
         {f'<p>{c_address}</p>' if c_address else ''}
-        {f'<p>📞 {c_phone}</p>' if c_phone else ''}
-        {f'<p>✉️ {c_email}</p>' if c_email else ''}
+        {f'<p>Tel: {c_phone}</p>' if c_phone else ''}
+        {f'<p>Email: {c_email}</p>' if c_email else ''}
         {reg_line}
       </div>
     </div>

@@ -17,6 +17,8 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     shared-mime-info \
     fonts-liberation \
+    fonts-dejavu \
+    fonts-noto-core \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file into the container at /app
