@@ -16,7 +16,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.molarplus.ios",
       "buildNumber": "5",
-      "googleServicesFile": "./GoogleService-Info.plist",
+      "googleServicesFile": "./ios/mobileapp/GoogleService-Info.plist",
       "infoPlist": {
         "CFBundleDisplayName": "MolarPlus",
         "ITSAppUsesNonExemptEncryption": false
