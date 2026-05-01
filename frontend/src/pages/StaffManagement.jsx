@@ -34,7 +34,7 @@ const StaffManagement = () => {
   // Add User state
   const [showAddModal, setShowAddModal] = useState(false);
   const [addingUser, setAddingUser] = useState(false);
-  const [formData, setFormData] = useState({ name: "", email: "", role: "receptionist", password: "" });
+  const [formData, setFormData] = useState({ name: "", email: "", username: "", role: "receptionist", password: "" });
   
   // Filter state
   const [selectedFilter, setSelectedFilter] = useState('All');
@@ -100,20 +100,27 @@ const StaffManagement = () => {
 
   const handleAddUser = async (e) => {
     e.preventDefault();
+    const email = (formData.email || "").trim();
+    const username = (formData.username || "").trim();
+    if (!email && !username) {
+      toast.error("Please provide either an email or a username");
+      return;
+    }
     setAddingUser(true);
     try {
       const userData = {
         name: formData.name,
-        email: formData.email,
         role: formData.role
       };
+      if (email) userData.email = email;
+      if (username) userData.username = username;
       if (formData.password && formData.password.trim()) {
         userData.password = formData.password;
       }
       await api.post("/clinic-users/", userData);
       toast.success("User added successfully");
       setShowAddModal(false);
-      setFormData({ name: "", email: "", role: "receptionist", password: "" });
+      setFormData({ name: "", email: "", username: "", role: "receptionist", password: "" });
       fetchUsers();
     } catch (error) {
       console.error("Error adding user:", error);
@@ -347,14 +354,30 @@ const StaffManagement = () => {
                   />
                 </div>
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email <span className="text-gray-400 font-normal">(required for owners; optional for staff)</span>
+                  </label>
                   <input
                     type="email"
                     name="email"
                     value={formData.email}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
-                    required
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Username <span className="text-gray-400 font-normal">(optional — staff can log in with username instead of email)</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="username"
+                    value={formData.username}
+                    onChange={handleInputChange}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
+                    placeholder="e.g. reception1"
                   />
                 </div>
                 <div className="mb-4">

@@ -38,7 +38,8 @@ class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True)
     clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=True)
-    email = Column(String)
+    email = Column(String, nullable=True)
+    username = Column(String, nullable=True)
     first_name = Column(String)
     last_name = Column(String)
     name = Column(String)

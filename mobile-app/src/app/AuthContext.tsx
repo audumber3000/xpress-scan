@@ -1,7 +1,7 @@
 import { createContext, FC, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import { User, onAuthStateChanged } from "firebase/auth"
 import { auth } from "../config/firebase"
-import { signOutUser } from "../services/auth/authService"
+import { signInWithEmail, signOutUser } from "../services/auth/authService"
 import { authApiService, type BackendUser } from "../services/api/auth.api"
 import { showAlert } from "../shared/components/alertService"
 
@@ -11,6 +11,7 @@ export type AuthContextType = {
   backendUser: BackendUser | null
   authEmail?: string
   setAuthEmail: (email: string) => void
+  signInEmail: (email: string, password: string) => Promise<{ error: string | null }>
   logout: () => Promise<void>
   validationError: string
   isLoading: boolean
@@ -102,8 +103,11 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
         if (storedUser) {
           const freshUser = await authApiService.getCurrentUser()
           if (freshUser) {
-            // Backend token still valid — keep the session alive
+            // Backend token still valid — keep the session alive (staff or
+            // post-restart session where Firebase persistence is missing)
             setBackendUser(freshUser)
+            setAuthEmail(freshUser.email || '')
+            setAuthProvider('email')
             setIsLoading(false)
             return
           }
@@ -122,17 +126,42 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
 
   const logout = useCallback(async () => {
     await signOutUser()
+    await authApiService.clearTokens()
     setAuthEmail("")
     setUser(null)
     setBackendUser(null)
+    setAuthProvider(null)
   }, [])
 
   const refreshBackendUser = useCallback(async () => {
     if (user) {
       const storedUser = await authApiService.getUserInfo()
       await syncBackendUser(user, storedUser)
+      return
     }
+    // Backend-only session (staff): hit /auth/me with the stored access token
+    const fresh = await authApiService.getCurrentUser()
+    if (fresh) setBackendUser(fresh)
   }, [user, syncBackendUser])
+
+  const signInEmail = useCallback(async (email: string, password: string) => {
+    const { user: fbUser, backendUser: be, error } = await signInWithEmail(email, password)
+    if (error) return { error }
+
+    if (fbUser) {
+      // Firebase path — onAuthStateChanged will populate state
+      return { error: null }
+    }
+
+    // Backend-only path (staff): no Firebase listener will fire, set state manually
+    if (be) {
+      setBackendUser(be)
+      setAuthEmail(be.email || '')
+      setAuthProvider('email')
+      setIsLoading(false)
+    }
+    return { error: null }
+  }, [])
 
   const switchBranch = useCallback(async (clinicId: string) => {
     try {
@@ -154,11 +183,12 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
   }, [authEmail])
 
   const value = {
-    isAuthenticated: !!user,
+    isAuthenticated: !!user || !!backendUser,
     user,
     backendUser,
     authEmail,
     setAuthEmail,
+    signInEmail,
     logout,
     validationError,
     isLoading,

@@ -2,6 +2,7 @@
 Auth repository implementation
 """
 from typing import Optional, Dict, Any
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from models import User
 from core.interfaces import AuthRepositoryProtocol
@@ -17,10 +18,21 @@ class AuthRepository(AuthRepositoryProtocol):
         """Get user by email address"""
         return self.db.query(User).filter(User.email == email).first()
 
-    def authenticate_user(self, email: str, password_hash: str) -> Optional[User]:
-        """Authenticate user with email and password hash"""
+    def get_user_by_identifier(self, identifier: str) -> Optional[User]:
+        """Look up a user by either email or username (login identifier)."""
         return self.db.query(User).filter(
-            User.email == email,
+            or_(User.email == identifier, User.username == identifier)
+        ).first()
+
+    def authenticate_user(self, email: str, password_hash: str) -> Optional[User]:
+        """Authenticate user by login identifier (email OR username) + password hash.
+
+        The first arg is named ``email`` for backward compatibility with the
+        ``AuthRepositoryProtocol`` interface, but it now accepts either an
+        email address or a username — staff accounts have no email.
+        """
+        return self.db.query(User).filter(
+            or_(User.email == email, User.username == email),
             User.password_hash == password_hash,
             User.is_active == True
         ).first()

@@ -27,7 +27,8 @@ import {
 } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../app/AppNavigator';
-import { signInWithEmail, signInWithGoogle } from '../../../services/auth/authService';
+import { signInWithGoogle } from '../../../services/auth/authService';
+import { useAuth } from '../../../app/AuthContext';
 import { colors } from '../../../shared/constants/colors';
 import { GoogleIcon } from '../../../shared/components/icons/GoogleIcon';
 import { AppleIcon } from '../../../shared/components/icons/AppleIcon';
@@ -43,6 +44,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isPasswordHidden, setIsPasswordHidden] = useState(true);
   const passwordInputRef = useRef<TextInput>(null);
+  const { signInEmail } = useAuth();
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
@@ -75,13 +77,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
 
   const handleEmailLogin = async () => {
     if (!email || !password) {
-      toast.warning('Please enter both email and password');
+      toast.warning('Please enter your email or username and password');
       return;
     }
 
     setIsLoading(true);
     try {
-      const { user, error } = await signInWithEmail(email, password);
+      const { error } = await signInEmail(email, password);
       if (error) {
         if (error.includes('User does not exist')) {
           Alert.alert('Register Required', 'User does not exist. Please register first to continue.', [
@@ -192,20 +194,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
         <ArrowLeft size={24} color={colors.gray900} />
       </TouchableOpacity>
 
-      <Text style={[styles.title, { fontSize: 36, marginBottom: 40 }]}>Login with Email</Text>
+      <Text style={[styles.title, { fontSize: 36, marginBottom: 40 }]}>Login with Email or Username</Text>
 
       <View style={styles.formCard}>
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Email Address</Text>
+          <Text style={styles.label}>Email or Username</Text>
           <View style={styles.inputWrapper}>
             <Mail size={20} color={colors.primary} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="doctor@molarplus.com"
+              placeholder="doctor@molarplus.com or reception1"
               value={email}
               onChangeText={setEmail}
-              keyboardType="email-address"
+              keyboardType={email.includes('@') ? 'email-address' : 'default'}
               autoCapitalize="none"
+              autoCorrect={false}
               onSubmitEditing={() => passwordInputRef.current?.focus()}
             />
           </View>

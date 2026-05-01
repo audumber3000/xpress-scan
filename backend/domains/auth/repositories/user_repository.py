@@ -38,10 +38,14 @@ class UserRepository(BaseRepository[User], UserRepositoryProtocol):
         return self.get_by_clinic_id_and_role(clinic_id, 'doctor')
 
     def authenticate_user(self, email: str, password_hash: str) -> Optional[User]:
-        """Authenticate user with email and password hash"""
+        """Authenticate user by login identifier (email OR username) + password hash.
+
+        First arg keeps the legacy ``email`` name for protocol compatibility but
+        now matches against either column.
+        """
         return self.db.query(User).filter(
             and_(
-                User.email == email,
+                or_(User.email == email, User.username == email),
                 User.password_hash == password_hash,
                 User.is_active == True
             )

@@ -290,19 +290,21 @@ const Login = () => {
               <div className="w-full border-t border-gray-200" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-white text-gray-500 font-medium">Or continue with email</span>
+              <span className="px-4 bg-white text-gray-500 font-medium">Or continue with email or username</span>
             </div>
           </div>
 
-          {/* Email/Password Form */}
+          {/* Email-or-Username / Password Form */}
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email address
+                Email or Username
               </label>
               <input
-                type="email"
-                placeholder="Enter your email"
+                type="text"
+                autoCapitalize="none"
+                autoCorrect="off"
+                placeholder="Enter your email or username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"

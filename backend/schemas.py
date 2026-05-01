@@ -40,7 +40,8 @@ class ClinicOut(ClinicBase):
 
 # User Schemas
 class UserBase(BaseModel):
-    email: str
+    email: Optional[str] = None  # Required for owners; staff may have only a username
+    username: Optional[str] = None  # Login identifier for staff
     name: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None

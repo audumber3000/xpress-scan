@@ -16,26 +16,29 @@ def hash_password(password: str) -> str:
 router = APIRouter()
 
 class ClinicUserIn(BaseModel):
-    email: str
+    email: Optional[str] = None  # Required for owners; optional for staff
+    username: Optional[str] = None  # Login identifier for staff (no email required)
     name: str
     role: str = "receptionist"
     permissions: Optional[dict] = {}
-    password: Optional[str] = None  # Password for desktop app login
+    password: Optional[str] = None  # Password for desktop / mobile login
 
 class ClinicUserUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
+    username: Optional[str] = None
     role: Optional[str] = None
     permissions: Optional[dict] = None
     is_active: Optional[bool] = None
-    password: Optional[str] = None  # Password for desktop app login
+    password: Optional[str] = None  # Password for desktop / mobile login
 
 class SetPasswordRequest(BaseModel):
     password: str
 
 class ClinicUserOut(BaseModel):
     id: int
-    email: str
+    email: Optional[str] = None
+    username: Optional[str] = None
     name: str
     role: str
     clinic_id: Optional[int] = None
@@ -43,7 +46,7 @@ class ClinicUserOut(BaseModel):
     created_at: datetime.datetime
     permissions: Optional[dict] = {}
     has_password: Optional[bool] = False  # Whether user has a password set
-    
+
     class Config:
         from_attributes = True
 
@@ -65,6 +68,7 @@ def get_clinic_users(db: Session = Depends(get_db), current_user = Depends(get_c
             ClinicUserOut(
                 id=user.id,
                 email=user.email,
+                username=user.username,
                 name=user.name,
                 role=user.role,
                 clinic_id=user.clinic_id,
@@ -88,28 +92,45 @@ def add_clinic_user(user_in: ClinicUserIn, db: Session = Depends(get_db), curren
         if not users_permissions.get("edit", False):
             raise HTTPException(status_code=403, detail="You don't have permission to edit users")
     
-    existing = db.query(User).filter(User.email == user_in.email).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="User already exists")
-    
+    # Normalise inputs — treat empty strings as missing
+    email = (user_in.email or "").strip() or None
+    username = (user_in.username or "").strip() or None
+
+    if not email and not username:
+        raise HTTPException(
+            status_code=400,
+            detail="Either an email or a username is required"
+        )
+
+    if email:
+        existing_email = db.query(User).filter(User.email == email).first()
+        if existing_email:
+            raise HTTPException(status_code=400, detail="A user with this email already exists")
+
+    if username:
+        existing_username = db.query(User).filter(User.username == username).first()
+        if existing_username:
+            raise HTTPException(status_code=400, detail="This username is already taken")
+
     # Split name into first_name and last_name
     name_parts = user_in.name.strip().split(maxsplit=1)
     first_name = name_parts[0] if name_parts else user_in.name
     last_name = name_parts[1] if len(name_parts) > 1 else ""
-    
+
     # Hash password if provided
     password_hash = None
     if user_in.password:
         if len(user_in.password) < 8:
             raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
         password_hash = hash_password(user_in.password)
-    
+
     user = User(
-        email=user_in.email,
+        email=email,
+        username=username,
         first_name=first_name,
         last_name=last_name,
         name=user_in.name,
-        role=user_in.role, 
+        role=user_in.role,
         clinic_id=current_user.clinic_id,
         created_by=current_user.id,
         permissions=user_in.permissions or {},
@@ -118,23 +139,24 @@ def add_clinic_user(user_in: ClinicUserIn, db: Session = Depends(get_db), curren
     db.add(user)
     db.commit()
     db.refresh(user)
-    
-    # Send invitation email to staff member
-    try:
-        clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
-        if clinic:
-            email_service = EmailService()
-            email_service.send_staff_invitation_email(
-                to_email=user_in.email,
-                staff_name=user_in.name,
-                clinic_name=clinic.name,
-                role=user_in.role,
-                inviter_name=current_user.name
-            )
-    except Exception as email_error:
-        # Log error but don't fail user creation
-        print(f"Failed to send staff invitation email: {email_error}")
-    
+
+    # Send invitation email only when an email address is on file
+    if email:
+        try:
+            clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+            if clinic:
+                email_service = EmailService()
+                email_service.send_staff_invitation_email(
+                    to_email=email,
+                    staff_name=user_in.name,
+                    clinic_name=clinic.name,
+                    role=user_in.role,
+                    inviter_name=current_user.name
+                )
+        except Exception as email_error:
+            # Log error but don't fail user creation
+            print(f"Failed to send staff invitation email: {email_error}")
+
     return user
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -181,7 +203,19 @@ def update_clinic_user(user_id: int, user_update: ClinicUserUpdate, db: Session 
     if user_update.name is not None:
         user.name = user_update.name
     if user_update.email is not None:
-        user.email = user_update.email
+        new_email = user_update.email.strip() or None
+        if new_email and new_email != user.email:
+            clash = db.query(User).filter(User.email == new_email, User.id != user.id).first()
+            if clash:
+                raise HTTPException(status_code=400, detail="A user with this email already exists")
+        user.email = new_email
+    if user_update.username is not None:
+        new_username = user_update.username.strip() or None
+        if new_username and new_username != user.username:
+            clash = db.query(User).filter(User.username == new_username, User.id != user.id).first()
+            if clash:
+                raise HTTPException(status_code=400, detail="This username is already taken")
+        user.username = new_username
     if user_update.role is not None:
         user.role = user_update.role
     if user_update.permissions is not None:

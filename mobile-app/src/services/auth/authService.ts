@@ -97,28 +97,65 @@ export const signUpWithEmail = async (email: string, password: string, role?: st
 }
 
 /**
- * Sign in an existing user with email and password
+ * Sign in an existing user with an identifier (email OR username) + password.
+ *
+ * - If the identifier looks like an email, try Firebase Auth first (covers
+ *   clinic owners with Firebase accounts). On a "no such Firebase user" /
+ *   bad-credential error, fall back to a direct backend login.
+ * - If the identifier has no "@", it's a username — go straight to the backend.
+ *   Staff accounts live only in the backend `users` table.
  */
-export const signInWithEmail = async (email: string, password: string) => {
-  try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password)
+export const signInWithEmail = async (identifier: string, password: string) => {
+  const looksLikeEmail = identifier.includes('@')
 
-    // Get Firebase ID token and sync with backend
+  const tryBackend = async () => {
+    const { user: backendUser, error: backendError } =
+      await authApiService.backendLogin(identifier, password)
+    if (backendUser) {
+      return { user: null, backendUser, error: null }
+    }
+    return {
+      user: null,
+      backendUser: null,
+      error: backendError || 'Invalid credentials',
+    }
+  }
+
+  if (!looksLikeEmail) {
+    // Username — Firebase doesn't apply
+    return tryBackend()
+  }
+
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, identifier, password)
+
     const firebaseIdToken = await userCredential.user.getIdToken()
     try {
       await authApiService.oauthLogin(firebaseIdToken)
     } catch (backendError) {
       console.warn('Backend sync failed:', backendError)
-      // Continue even if backend sync fails - user is still logged in to Firebase
     }
 
     return {
       user: userCredential.user,
+      backendUser: null,
       error: null,
     }
   } catch (error: any) {
+    const code = error?.code || ''
+    const isMissingFirebaseAccount =
+      code === 'auth/user-not-found' ||
+      code === 'auth/invalid-credential' ||
+      code === 'auth/wrong-password' ||
+      code === 'auth/invalid-login-credentials'
+
+    if (isMissingFirebaseAccount) {
+      return tryBackend()
+    }
+
     return {
       user: null,
+      backendUser: null,
       error: error.message || 'Failed to sign in',
     }
   }

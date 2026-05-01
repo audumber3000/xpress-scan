@@ -89,7 +89,8 @@ class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True, index=True)
     clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=True)  # Current/Default clinic
-    email = Column(String, nullable=False, unique=True)
+    email = Column(String, nullable=True, unique=True)  # Required for owners; staff may have only username
+    username = Column(String, nullable=True, unique=True, index=True)  # Login identifier for staff (no email required)
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)
     name = Column(String, nullable=False)  # Full name of the user (computed from first_name + last_name)

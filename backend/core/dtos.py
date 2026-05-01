@@ -196,7 +196,11 @@ class PaymentResponseDTO(PaymentBaseDTO):
 
 # Auth DTOs
 class LoginRequestDTO(BaseModel):
-    email: str = Field(..., pattern=r"^[^@]+@[^@]+\.[^@]+$")
+    # Login identifier: either an email address (owners, OAuth-linked accounts)
+    # or a username (staff). The field is still named ``email`` for backward
+    # compatibility with the existing web/mobile clients, but the pattern
+    # constraint has been removed so usernames pass validation.
+    email: str = Field(..., min_length=1)
     password: str = Field(..., min_length=1)
     device: Optional[Dict[str, Any]] = None
 

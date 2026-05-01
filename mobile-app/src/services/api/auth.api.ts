@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { BaseApiService } from './base.api';
 
 export interface ClinicInfo {
@@ -15,7 +16,8 @@ export interface ClinicInfo {
 
 export interface BackendUser {
   id: string;
-  email: string;
+  email?: string | null;       // Optional — staff may have only a username
+  username?: string | null;
   name: string;
   role: 'clinic_owner' | 'receptionist' | 'doctor';
   phone?: string;
@@ -47,7 +49,8 @@ export class AuthApiService extends BaseApiService {
     
     return {
       id: userData.id.toString(),
-      email: userData.email,
+      email: userData.email ?? null,
+      username: userData.username ?? null,
       name: userData.name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
       role: userData.role,
       phone: userData.phone,
@@ -124,6 +127,45 @@ export class AuthApiService extends BaseApiService {
     }
   }
 
+  async backendLogin(email: string, password: string): Promise<{ user: BackendUser | null; error?: string }> {
+    try {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          device: {
+            device_name: 'Mobile App',
+            device_type: 'mobile',
+            device_platform: Platform.OS === 'ios' ? 'iOS' : 'Android',
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.token) {
+        await AsyncStorage.setItem('access_token', data.token);
+      }
+
+      const user = this.transformUser(data);
+      await AsyncStorage.setItem('backend_user', JSON.stringify(user));
+
+      return { user };
+    } catch (error: any) {
+      console.error('Error during backend login:', error);
+      return { user: null, error: error.message };
+    }
+  }
+
   async oauthLogin(idToken: string, role?: string): Promise<{ user: BackendUser | null; error?: string }> {
     try {
       const response = await this.fetchWithTimeout(`${this.baseURL}/auth/oauth`, {
@@ -193,5 +235,4 @@ export class AuthApiService extends BaseApiService {
   }
 }
 
-import { Platform } from 'react-native';
 export const authApiService = new AuthApiService();
