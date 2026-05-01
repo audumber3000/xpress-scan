@@ -14,9 +14,12 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.audumber3000.mobileapp",
+      "bundleIdentifier": "com.molarplus.ios",
+      "buildNumber": "5",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
-        "CFBundleDisplayName": "MolarPlus"
+        "CFBundleDisplayName": "MolarPlus",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -36,10 +39,21 @@
           "icon": "./assets/icon.png",
           "color": "#2a276e"
         }
+      ],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.101419773058-le9cprspepcs51usevd9jn8t4i9maihl"
+        }
       ]
     ],
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "717ac180-38d3-4b89-ade1-678090b3e324"
+      }
     }
   }
 }

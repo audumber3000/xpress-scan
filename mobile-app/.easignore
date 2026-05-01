@@ -1,0 +1,24 @@
+# Dependencies (installed in cloud)
+node_modules/
+
+# Build artifacts
+ios/build/
+ios/Pods/
+android/build/
+android/app/build/
+build-output/
+
+# Logs
+*.log
+
+# IDE
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test output
+test_output.txt
+__tests__/

@@ -58,6 +58,7 @@ try {
   if (webClientId) {
     GoogleSignin.configure({
       webClientId: webClientId,
+      iosClientId: Platform.OS === 'ios' ? '101419773058-le9cprspepcs51usevd9jn8t4i9maihl.apps.googleusercontent.com' : undefined,
       offlineAccess: true,
     })
     isGoogleSignInConfigured = true
@@ -189,6 +190,7 @@ export const signInWithGoogle = async (role?: string) => {
       try {
         GoogleSignin.configure({
           webClientId: webClientId,
+          iosClientId: Platform.OS === 'ios' ? '101419773058-le9cprspepcs51usevd9jn8t4i9maihl.apps.googleusercontent.com' : undefined,
           offlineAccess: true,
         })
         isGoogleSignInConfigured = true
