@@ -14,5 +14,14 @@
     "production": {
       "autoIncrement": true
     }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "audumberchaudhari1003@gmail.com",
+        "ascAppId": "6765472713",
+        "appleTeamId": "Q345MSC4Z8"
+      }
+    }
   }
 }
