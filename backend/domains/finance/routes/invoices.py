@@ -17,7 +17,7 @@ def get_db():
         yield db
     finally:
         db.close()
-from models import Invoice, InvoiceLineItem, InvoiceAuditLog, Patient, User, Clinic
+from models import Invoice, InvoiceLineItem, InvoiceAuditLog, Patient, User, Clinic, Appointment
 from core.auth_utils import get_current_user
 from schemas import (
     InvoiceOut, InvoiceLineItemCreate, InvoiceLineItemOut,
@@ -169,7 +169,20 @@ async def create_invoice(
         ).first()
         if not patient:
             raise HTTPException(status_code=404, detail="Patient not found")
-            
+
+        # Resolve the appointment link, drop it silently if stale.
+        # The FK is nullable — invoice ↔ appointment is optional — so a deleted
+        # or wrong-clinic appointment_id should produce an unlinked invoice
+        # rather than a 500 ForeignKeyViolation.
+        appointment_id = invoice_data.appointment_id
+        if appointment_id is not None:
+            exists = db.query(Appointment.id).filter(
+                Appointment.id == appointment_id,
+                Appointment.clinic_id == current_user.clinic_id
+            ).first()
+            if not exists:
+                appointment_id = None
+
         # Generate generic invoice number
         year = datetime.utcnow().year
         last_invoice = db.query(Invoice).filter(
@@ -191,7 +204,7 @@ async def create_invoice(
         invoice = Invoice(
             clinic_id=current_user.clinic_id,
             patient_id=invoice_data.patient_id,
-            appointment_id=invoice_data.appointment_id,
+            appointment_id=appointment_id,
             invoice_number=invoice_number,
             status='draft',
             subtotal=0.0,
