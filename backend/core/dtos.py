@@ -129,7 +129,10 @@ class ClinicResponseDTO(ClinicBaseDTO):
 
 # User DTOs
 class UserBaseDTO(BaseModel):
-    email: str = Field(..., pattern=r"^[^@]+@[^@]+\.[^@]+$")
+    # Either email (owners) or username (staff) — at least one is always set,
+    # but each is independently optional on the response.
+    email: Optional[str] = Field(None)
+    username: Optional[str] = Field(None)
     first_name: str = Field(..., min_length=1, max_length=50)
     last_name: str = Field(..., min_length=1, max_length=50)
     role: str = Field(..., pattern="^(clinic_owner|doctor|receptionist)$")
