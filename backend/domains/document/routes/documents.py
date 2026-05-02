@@ -12,12 +12,12 @@ from domains.infrastructure.services.r2_storage import upload_bytes_to_r2, Stora
 router = APIRouter()
 
 def _ensure_case_paper_column(db: Session):
-    """Backfill missing patient_documents.case_paper_id column for older DBs."""
-    try:
-        db.execute(text("ALTER TABLE patient_documents ADD COLUMN IF NOT EXISTS case_paper_id INTEGER"))
-        db.commit()
-    except Exception:
-        db.rollback()
+    """No-op. Previously ran ALTER TABLE on every upload, which acquires an
+    ACCESS EXCLUSIVE lock on `patient_documents` from inside a request
+    handler — same class of bug that took prod down on 2026-05-02 in
+    invoices.py. The `case_paper_id` column now exists permanently and is
+    declared in models.py; future schema changes go through deploy.sh."""
+    return
 
 @router.post("/upload/{patient_id}", response_model=PatientDocumentResponseDTO)
 async def upload_document(

@@ -28,21 +28,16 @@ from domains.infrastructure.services.r2_storage import upload_pdf_to_r2
 
 router = APIRouter()
 
-_invoice_columns_ensured = False
-
 def _ensure_invoice_columns(db: Session):
-    """Backfill invoice lifecycle columns for older DBs — runs only once per process."""
-    global _invoice_columns_ensured
-    if _invoice_columns_ensured:
-        return
-    try:
-        db.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS finalized_at TIMESTAMP"))
-        db.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paid_amount DOUBLE PRECISION DEFAULT 0"))
-        db.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS due_amount DOUBLE PRECISION DEFAULT 0"))
-        db.commit()
-        _invoice_columns_ensured = True
-    except Exception:
-        db.rollback()
+    """No-op. Previously ran inline ALTER TABLE on every fresh worker process,
+    which acquired ACCESS EXCLUSIVE locks on `invoices` from inside request
+    handlers. Under concurrent load this deadlocked the connection pool
+    (prod incident 2026-05-02). The columns (finalized_at, paid_amount,
+    due_amount) now exist permanently and are declared in models.py;
+    future schema changes go through the migration block in deploy.sh.
+    Call sites are kept as no-op calls so we don't have to touch every
+    route handler — safe to remove entirely in a later cleanup."""
+    return
 
 def enrich_invoice(db: Session, invoice: Invoice):
     """Enrich invoice with related data"""
