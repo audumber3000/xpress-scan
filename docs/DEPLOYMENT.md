@@ -399,3 +399,24 @@ SMOKE_URL=http://localhost:8000 pytest tests/smoke/test_smoke.py -v --noconftest
 | `ModuleNotFoundError: sentry_sdk` | Added `sentry-sdk[fastapi]>=2.0.0` to both `backend/config/requirements.txt` and `nexus-service/requirements.txt` |
 | `ImportError: jinja2 must be installed` | Added `jinja2` to `backend/config/requirements.txt` |
 | `UndefinedColumn: clinics.referred_by_code` (April 2026) | Column added to `models.py` but `ALTER TABLE` never ran on prod. `create_all()` in tests masked it. Fix: added schema check to `deploy.sh` — now blocks deploy if any required column is missing. |
+| Backend hung after redeploy (May 2026) | `_ensure_invoice_columns()` and `_ensure_case_paper_column()` ran `ALTER TABLE` from inside request handlers. After a fresh container start, every uvicorn worker process simultaneously asked for `ACCESS EXCLUSIVE` → one blocked → others piled up holding idle-in-transaction sessions → connection pool exhausted → all requests hung. Fix: converted both functions to no-ops; the columns are now declared in `models.py` and any future schema changes go through the migration block in `deploy.sh`. |
+
+---
+
+## Anti-patterns to avoid
+
+These are concrete patterns that have caused outages — do not introduce them again.
+
+### ❌ Never run `ALTER TABLE` from inside a request handler
+
+Even with `IF NOT EXISTS`, `ALTER TABLE` requires `ACCESS EXCLUSIVE` on the table, which conflicts with **every** other lock — including plain `SELECT`. In a multi-worker uvicorn deployment, each worker process has its own module-level state, so per-process gate flags (`_ensured = True`) do not prevent N concurrent ALTERs after a restart. A single long-running transaction elsewhere (cron, webhook, dashboard polling) blocks the ALTER, the request handler's session stays open, the connection pool fills with idle-in-transaction sessions, and the entire backend hangs while CPU and memory look normal.
+
+**Correct path:** schema changes go in `deploy.sh`'s migration block, which runs serialised against the prod DB **before** the new container starts. Add the column there, declare it in `models.py`, ship.
+
+If you see `def _ensure_*_column(...)` or `db.execute(text("ALTER TABLE ..."))` inside `domains/*/routes/`, treat it as a P0 cleanup.
+
+### ❌ Never look up clinic owners through `user_clinics` joins
+
+The `user_clinics` association table exists but its `role` and `is_active` columns were never populated by the onboarding/signup paths. Any query of the form `JOIN user_clinics ON ... WHERE uc.role = 'clinic_owner' AND uc.is_active = TRUE` returns zero rows in production. This silently broke the `daily_summary_broadcast` job for ~23 days.
+
+**Correct path:** look up owners directly off the `users` table — `User.clinic_id == clinic.id AND User.role == 'clinic_owner' AND User.is_active == True`. This matches the pattern already used by `/me` and the rest of the codebase.

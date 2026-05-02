@@ -114,7 +114,7 @@ async def daily_summary_broadcast_job() -> None:
     """Daily at 20:00 IST: send today's stats to each clinic owner."""
     from database import SessionLocal
     from sqlalchemy import func, or_
-    from models import Appointment, Clinic, Invoice, User, user_clinics, NotificationLog
+    from models import Appointment, Clinic, Invoice, User, NotificationLog
 
     db = SessionLocal()
     try:
@@ -131,13 +131,17 @@ async def daily_summary_broadcast_job() -> None:
 
         sent = 0
         for clinic in clinics:
+            # Owner lookup via users.clinic_id — the user_clinics association
+            # table exists but its `role` and `is_active` columns are not
+            # populated, so a join through it returns zero rows. The rest of
+            # the codebase resolves clinic owners directly off the User row
+            # (see /me endpoint fallback in commit aed2eb81).
             owner = (
                 db.query(User)
-                .join(user_clinics, user_clinics.c.user_id == User.id)
                 .filter(
-                    user_clinics.c.clinic_id == clinic.id,
-                    user_clinics.c.role == "clinic_owner",
-                    user_clinics.c.is_active == True,
+                    User.clinic_id == clinic.id,
+                    User.role == "clinic_owner",
+                    User.is_active == True,
                 )
                 .first()
             )
