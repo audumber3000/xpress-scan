@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from database import get_db
-from models import CasePaper, User
+from models import CasePaper, User, Appointment
 from schemas import CasePaperCreate, CasePaperUpdate, CasePaperOut
 from core.auth_utils import get_current_user, require_doctor_or_owner
 from typing import List, Optional, Any
@@ -35,7 +35,18 @@ def create_case_paper(
         data['chief_complaint'] = json.dumps(data['chief_complaint'])
     if isinstance(data.get('dental_history'), list):
         data['dental_history'] = json.dumps(data['dental_history'])
-        
+
+    # Drop a stale appointment link silently — FK is nullable, so a deleted
+    # or wrong-clinic appointment_id should produce an unlinked case paper
+    # rather than a 500 ForeignKeyViolation.
+    if data.get("appointment_id") is not None:
+        exists = db.query(Appointment.id).filter(
+            Appointment.id == data["appointment_id"],
+            Appointment.clinic_id == current_user.clinic_id
+        ).first()
+        if not exists:
+            data["appointment_id"] = None
+
     db_paper = CasePaper(
         **data,
         clinic_id=current_user.clinic_id

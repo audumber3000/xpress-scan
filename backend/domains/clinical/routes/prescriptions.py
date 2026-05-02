@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, status, Response
 from sqlalchemy.orm import Session
 from database import get_db
-from models import Prescription, User, Patient
+from models import Prescription, User, Patient, Appointment
 from schemas import PrescriptionCreate, PrescriptionOut
 from core.auth_utils import get_current_user, require_doctor_or_owner
 from typing import List, Optional
@@ -43,9 +43,21 @@ def create_prescription(
     """
     # Convert item models to dicts for JSON storage
     items_data = [item.model_dump() for item in prescription.items]
-    
+
+    # Drop a stale appointment link silently — FK is nullable, so a deleted
+    # or wrong-clinic appointment_id should produce an unlinked prescription
+    # rather than a 500 ForeignKeyViolation.
+    payload = prescription.model_dump(exclude={"clinic_id", "items"})
+    if payload.get("appointment_id") is not None:
+        exists = db.query(Appointment.id).filter(
+            Appointment.id == payload["appointment_id"],
+            Appointment.clinic_id == current_user.clinic_id
+        ).first()
+        if not exists:
+            payload["appointment_id"] = None
+
     db_prescription = Prescription(
-        **prescription.model_dump(exclude={"clinic_id", "items"}),
+        **payload,
         items=items_data,
         clinic_id=current_user.clinic_id
     )
