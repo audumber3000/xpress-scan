@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, MessageSquare, Mail, RefreshCcw } from 'lucide-react';
+import { Send, MessageSquare, Mail, RefreshCcw, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'react-toastify';
 import api from '../utils/api';
 import { PageHeader, Card } from '../components/ui';
@@ -12,10 +12,14 @@ export default function MarketingCampaigns() {
     target_criteria: 'all',
     subject: '',
     template_name: '',
-    message_body: ''
+    message_body: '',
+    header_image_url: ''
   });
-  
+
   const [result, setResult] = useState(null);
+
+  const selectedTemplate = templates.find(t => t.name === formData.template_name) || null;
+  const requiresImage = !!selectedTemplate?.requires_image;
 
   React.useEffect(() => {
     async function loadTemplates() {
@@ -51,7 +55,18 @@ export default function MarketingCampaigns() {
       toast.error('Template selection is required for WhatsApp');
       return;
     }
-    
+    if (formData.channel === 'whatsapp' && requiresImage) {
+      const url = (formData.header_image_url || '').trim();
+      if (!url) {
+        toast.error('This template requires a header image URL');
+        return;
+      }
+      if (!/^https?:\/\//i.test(url)) {
+        toast.error('Image URL must start with http:// or https://');
+        return;
+      }
+    }
+
     // Safety check prompt (in real app, use a nicer modal)
     if (!window.confirm(`Are you sure you want to broadcast this ${formData.channel} to ${formData.target_criteria} clinics?`)) return;
 
@@ -115,24 +130,60 @@ export default function MarketingCampaigns() {
 
           <div className="space-y-4 pt-4 border-t border-slate-100">
             {formData.channel === 'whatsapp' ? (
-               <div>
-                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                    Select Template
-                  </label>
-                  <select name="template_name" value={formData.template_name} onChange={handleChange}
-                    className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400">
-                    {templates.map(t => (
-                       <option key={t.name} value={t.name}>{t.label}</option>
-                    ))}
-                  </select>
-                  {templates.length > 0 && (
-                    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                      <div className="text-xs font-semibold text-slate-700">
-                        {templates.find(t => t.name === formData.template_name)?.name || 'Template'}
+               <div className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                      Select Template
+                    </label>
+                    <select name="template_name" value={formData.template_name} onChange={handleChange}
+                      className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400">
+                      {templates.map(t => (
+                         <option key={t.name} value={t.name}>{t.label}{t.requires_image ? ' · Image' : ''}</option>
+                      ))}
+                    </select>
+                    {selectedTemplate && (
+                      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                        <div className="text-xs font-semibold text-slate-700 flex items-center gap-2">
+                          {selectedTemplate.name}
+                          {requiresImage && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-medium">
+                              <ImageIcon size={10} /> Image header required
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {selectedTemplate.description}
+                        </div>
                       </div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        {templates.find(t => t.name === formData.template_name)?.description}
+                    )}
+                  </div>
+
+                  {requiresImage && (
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                        Header Image URL
+                      </label>
+                      <input
+                        type="url"
+                        name="header_image_url"
+                        value={formData.header_image_url}
+                        onChange={handleChange}
+                        placeholder="https://your-cdn.example.com/banner.jpg"
+                        className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400"
+                      />
+                      <div className="mt-2 text-[11px] text-slate-500">
+                        Paste a publicly-accessible <strong>HTTPS</strong> URL (JPG / PNG). Meta and MSG91 fetch this image at send-time, so it must be reachable from the public internet — not <code className="bg-slate-100 px-1 rounded">localhost</code> or behind auth.
                       </div>
+                      {/^https?:\/\//i.test(formData.header_image_url || '') && (
+                        <div className="mt-3 inline-block rounded-lg border border-slate-200 bg-white p-2">
+                          <img
+                            src={formData.header_image_url}
+                            alt="header preview"
+                            className="max-h-32 max-w-[240px] object-contain rounded"
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                </div>

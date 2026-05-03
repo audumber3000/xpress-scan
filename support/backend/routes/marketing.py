@@ -50,6 +50,31 @@ class BulkMessage(BaseModel):
     template_name: Optional[str] = None # For whatsapp
     message_body: Optional[str] = None
     target_criteria: str # 'all', 'trial', 'active', 'suspended'
+    header_image_url: Optional[str] = None  # Required when the chosen WhatsApp template has an image header
+
+
+def _normalize_indian_mobile(raw: Optional[str]) -> Optional[str]:
+    """Return a 12-digit MSG91-ready Indian mobile number ("91XXXXXXXXXX")
+    or None if the input clearly isn't a valid 10-digit Indian number.
+
+    Replaces a buggy `lstrip('0+91')` call that stripped any of the
+    characters {0, +, 9, 1} from the left — e.g. "9876543210" became
+    "876543210" → "91876543210" (11 digits, invalid).
+    """
+    if not raw:
+        return None
+    digits = "".join(ch for ch in str(raw) if ch.isdigit())
+    if not digits:
+        return None
+    # Drop a leading 91 country code (covers "+91...", "0091...", "91...")
+    if digits.startswith("91") and len(digits) > 10:
+        digits = digits[2:]
+    # Drop a leading 0 STD prefix
+    if digits.startswith("0") and len(digits) > 10:
+        digits = digits.lstrip("0")
+    if len(digits) != 10:
+        return None
+    return f"91{digits}"
 
 def generate_ref_code(length=8):
     chars = string.ascii_uppercase + string.digits
@@ -217,40 +242,55 @@ async def send_bulk_message(data: BulkMessage, db: Session = Depends(get_db), cu
     if data.channel not in {"whatsapp", "email"}:
         raise HTTPException(status_code=400, detail="Unsupported channel")
 
+    template: Optional[Dict[str, Any]] = None
     if data.channel == "whatsapp":
         if not data.template_name:
             raise HTTPException(status_code=400, detail="template_name is required for WhatsApp campaigns")
         template = get_bulk_whatsapp_template(data.template_name)
         if not template:
             raise HTTPException(status_code=400, detail="Unknown or inactive WhatsApp bulk template")
+        # If the template carries an IMAGE header on the MSG91 side, the admin
+        # must supply a public URL — MSG91 will reject otherwise.
+        if template.get("requires_image") and not (data.header_image_url or "").strip():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Template '{data.template_name}' requires a header image URL",
+            )
 
     if data.channel == "email" and not data.message_body:
         raise HTTPException(status_code=400, detail="message_body is required for email campaigns")
 
     query = db.query(Clinic)
-    
+
     if data.target_criteria != 'all':
         if data.target_criteria == 'trial':
             query = query.filter(Clinic.subscription_plan == 'free')
         else:
             query = query.filter(Clinic.status == data.target_criteria)
-            
+
     clinics = query.all()
     count = 0
+    skipped = 0
     errors = []
-    
+
     for clinic in clinics:
-        if data.channel == 'whatsapp' and clinic.phone:
+        if data.channel == 'whatsapp':
+            mobile = _normalize_indian_mobile(clinic.phone)
+            if not mobile:
+                skipped += 1
+                errors.append(f"Skipped {clinic.name}: missing or invalid phone ({clinic.phone!r})")
+                continue
             res = await notification_service.send_whatsapp(
-                mobile_number=f"91{clinic.phone.lstrip('0+91')}", 
+                mobile_number=mobile,
                 template_name=data.template_name or "molarplus_update",
-                parameters=[] # Bulk whatsapp triggers typically don't require dynamic body parameters that UI provides for now
+                parameters=[],
+                header_image_url=(data.header_image_url or "").strip() or None,
             )
             if res.get("success"):
                 count += 1
             else:
                 errors.append(f"Failed to WA {clinic.name}: {res.get('error')}")
-                
+
         elif data.channel == 'email' and clinic.email:
             # Wrap message in basic HTML template
             html = f"<html><body><p>Hello {clinic.name},</p><p>{data.message_body.replace(chr(10), '<br>')}</p></body></html>"

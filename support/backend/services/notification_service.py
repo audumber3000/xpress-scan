@@ -36,11 +36,15 @@ class NotificationService:
         template_name: str,
         language_code: str = "en",
         parameters: Optional[list] = None,
+        header_image_url: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Send a WhatsApp template message via MSG91 WhatsApp API.
         mobile_number must include country code, e.g. "919876543210"
         parameters: simple list of strings to inject into the template body
+        header_image_url: public HTTPS URL of an image, set when the template
+            has an IMAGE header component on the MSG91 / Meta side. Sent as the
+            `header_1` component per MSG91's bulk message schema.
         """
         if not self.msg91_auth_key:
             return {"success": False, "error": "MSG91 Auth Key not configured"}
@@ -51,12 +55,17 @@ class NotificationService:
             "authkey": self.msg91_auth_key,
             "Content-Type": "application/json",
         }
-        
-        msg91_components = {}
+
+        msg91_components: Dict[str, Any] = {}
+        if header_image_url:
+            msg91_components["header_1"] = {
+                "type": "image",
+                "value": header_image_url,
+            }
         if parameters:
             for i, param in enumerate(parameters):
                 msg91_components[f"body_{i+1}"] = {"type": "text", "value": param}
-                
+
         payload: Dict[str, Any] = {
             "integrated_number": integrated_number,
             "content_type": "template",
