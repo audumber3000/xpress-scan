@@ -195,6 +195,23 @@ export class TransactionsApiService extends BaseApiService {
       throw error;
     }
   }
+
+  async sendInvoiceViaWhatsApp(invoiceId: string | number): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/invoices/${invoiceId}/send-whatsapp`, {
+      method: 'POST',
+      headers,
+    });
+    if (!response.ok) {
+      let detail = `HTTP ${response.status}`;
+      try {
+        const body = await response.json();
+        detail = body?.detail || detail;
+      } catch {}
+      throw new Error(detail);
+    }
+    return response.json();
+  }
 }
 
 export const transactionsApiService = new TransactionsApiService();

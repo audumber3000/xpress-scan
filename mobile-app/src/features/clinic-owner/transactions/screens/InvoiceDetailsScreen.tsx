@@ -41,10 +41,29 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [invoice, setInvoice] = useState<any>(null);
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
 
   useEffect(() => {
     fetchInvoiceDetails();
   }, [invoiceId]);
+
+  const handleSendWhatsApp = async () => {
+    if (!invoice?.id || sendingWhatsApp) return;
+    setSendingWhatsApp(true);
+    try {
+      await transactionsApiService.sendInvoiceViaWhatsApp(invoice.id);
+      toast.success('Invoice sent via WhatsApp');
+    } catch (error: any) {
+      const msg = (error?.message || '').toLowerCase();
+      if (msg.includes('phone')) {
+        toast.error('Patient phone number is required to send via WhatsApp');
+      } else {
+        toast.error(error?.message || 'Failed to send invoice');
+      }
+    } finally {
+      setSendingWhatsApp(false);
+    }
+  };
 
   const fetchInvoiceDetails = async () => {
     try {
@@ -145,9 +164,19 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
 
         {/* Action Buttons */}
         <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.actionButton} onPress={() => toast.info('Sending invoice PDF...')}>
-            <WhatsAppIcon size={22} />
-            <Text style={styles.actionButtonText}>Share via WhatsApp</Text>
+          <TouchableOpacity
+            style={[styles.actionButton, sendingWhatsApp && { opacity: 0.6 }]}
+            onPress={handleSendWhatsApp}
+            disabled={sendingWhatsApp}
+          >
+            {sendingWhatsApp ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <WhatsAppIcon size={22} />
+            )}
+            <Text style={styles.actionButtonText}>
+              {sendingWhatsApp ? 'Sending...' : 'Share via WhatsApp'}
+            </Text>
           </TouchableOpacity>
         </View>
 

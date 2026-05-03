@@ -472,7 +472,25 @@ export class PatientsApiService extends BaseApiService {
       `${this.baseURL}/invoices/${invoiceId}/send-whatsapp`,
       { method: 'POST', headers },
     );
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) {
+      let detail = `HTTP ${response.status}`;
+      try { detail = (await response.json())?.detail || detail; } catch {}
+      throw new Error(detail);
+    }
+    return await response.json();
+  }
+
+  async sendPrescriptionWhatsApp(prescriptionId: number | string): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(
+      `${this.baseURL}/clinical/prescriptions/${prescriptionId}/send-whatsapp`,
+      { method: 'POST', headers },
+    );
+    if (!response.ok) {
+      let detail = `HTTP ${response.status}`;
+      try { detail = (await response.json())?.detail || detail; } catch {}
+      throw new Error(detail);
+    }
     return await response.json();
   }
 

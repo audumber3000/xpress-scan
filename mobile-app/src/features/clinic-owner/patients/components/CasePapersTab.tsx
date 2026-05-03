@@ -10,6 +10,7 @@ import {
 import { patientsApiService, Patient } from '../../../../services/api/patients.api';
 import { colors } from '../../../../shared/constants/colors';
 import { DentalChart } from './DentalChart';
+import { WhatsAppIcon } from '../../../../shared/components/icons/WhatsAppIcon';
 
 // ─── Constants ────────────────────────────────────────────────
 const NEXT_VISIT_OPTIONS = [
@@ -212,6 +213,25 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
   const [labOrders, setLabOrders] = useState<any[]>([]);
   const [documents, setDocuments] = useState<any[]>([]);
   const [invoice, setInvoice] = useState<any | null>(null);
+  const [sendingRxId, setSendingRxId] = useState<number | string | null>(null);
+
+  const handleSendPrescriptionWhatsApp = async (rxId: number | string) => {
+    if (sendingRxId) return;
+    setSendingRxId(rxId);
+    try {
+      await patientsApiService.sendPrescriptionWhatsApp(rxId);
+      Alert.alert('Sent', 'Prescription sent to patient via WhatsApp.');
+    } catch (e: any) {
+      const msg = (e?.message || '').toLowerCase();
+      if (msg.includes('phone')) {
+        Alert.alert('Patient phone missing', 'Add the patient’s phone number to send via WhatsApp.');
+      } else {
+        Alert.alert('Failed to send', e?.message || 'Could not send prescription. Please try again.');
+      }
+    } finally {
+      setSendingRxId(null);
+    }
+  };
 
   // ─── Modals ──────────────────────────────────────────────
   const [treatmentModal, setTreatmentModal] = useState(false);
@@ -806,6 +826,18 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
                   ))}
                   {(!rx.medicines || rx.medicines.length === 0) && <Text style={s.rxText}>Prescription #{rx.id}</Text>}
                 </View>
+                {rx.id ? (
+                  <TouchableOpacity
+                    onPress={() => handleSendPrescriptionWhatsApp(rx.id)}
+                    disabled={sendingRxId === rx.id}
+                    style={{ padding: 6, opacity: sendingRxId === rx.id ? 0.5 : 1 }}
+                    accessibilityLabel="Send prescription via WhatsApp"
+                  >
+                    {sendingRxId === rx.id
+                      ? <ActivityIndicator size="small" color={colors.primary} />
+                      : <WhatsAppIcon size={18} />}
+                  </TouchableOpacity>
+                ) : null}
               </View>
             ))}
           </View>

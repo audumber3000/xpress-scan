@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, StatusBar } from 'react-native';
 import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowDownLeft, ArrowUpRight, ChevronLeft, Receipt } from 'lucide-react-native';
+import { ArrowDownLeft, ArrowUpRight, Receipt } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../../app/AppNavigator';
 import { GearLoader } from '../../../../shared/components/GearLoader';
+import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
 import { colors } from '../../../../shared/constants/colors';
 import { transactionsApiService, Transaction, LedgerItem } from '../../../../services/api/transactions.api';
 
@@ -92,19 +93,15 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () =>
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={[]}>
-      {/* Header */}
-      <View style={styles.header}>
-        {navigation.canGoBack() ? (
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <ChevronLeft size={24} color={colors.white} />
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.backButton} />
-        )}
-        <Text style={styles.headerTitle}>All Transactions</Text>
-        <View style={styles.backButton} />
-      </View>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
+      <ScreenHeader
+        variant="primary"
+        title="All Transactions"
+        titleIcon={<Receipt size={22} />}
+        onBackPress={navigation.canGoBack() ? () => navigation.goBack() : undefined}
+      />
+
 
       {/* Tabs */}
       <View style={styles.tabContainer}>
