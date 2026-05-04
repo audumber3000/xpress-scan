@@ -9,11 +9,6 @@ from sqlalchemy import or_
 
 from core.nexus_notify import notify
 from models import Clinic, LabOrder, NotificationLog, User
-from domains.notification.services.report_stats_service import (
-    get_weekly_stats,
-    get_monthly_stats,
-    get_review_stats,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -217,12 +212,13 @@ class PlatformNotificationService:
         return {channel: result.sent for channel, result in results.items()}
 
     def run_automation(self, now: Optional[dt.datetime] = None) -> dict:
+        # Weekly/monthly/review summaries are handled by their own dedicated cron
+        # jobs (weekly_summary_broadcast, monthly_summary_broadcast) — see
+        # backend/core/scheduler.py. This hourly job only handles trial nudges
+        # and lab-due reminders.
         now = now or dt.datetime.utcnow()
         today = now.date()
         summary = {
-            "weekly_reports": 0,
-            "monthly_reports": 0,
-            "review_reports": 0,
             "trial_messages": 0,
             "lab_due_tomorrow": 0,
         }
@@ -235,34 +231,6 @@ class PlatformNotificationService:
 
         for clinic in active_clinics:
             owner = _get_owner_for_clinic(self.db, clinic.id)
-
-            if today.weekday() == 0:
-                weekly_data = get_weekly_stats(self.db, clinic.id, today)
-                sent = self.send_whatsapp_event(
-                    clinic,
-                    "molarplus_weekly_report_mk",
-                    template_data=weekly_data,
-                    not_before=dt.datetime.combine(today, dt.time.min),
-                )
-                summary["weekly_reports"] += int(sent.sent)
-
-            if today.day == 1:
-                monthly_data = get_monthly_stats(self.db, clinic.id, today)
-                sent_monthly = self.send_whatsapp_event(
-                    clinic,
-                    "molarplus_monthly_report_mk",
-                    template_data=monthly_data,
-                    not_before=dt.datetime.combine(today, dt.time.min),
-                )
-                review_data = get_review_stats(self.db, clinic.id, today)
-                sent_review = self.send_whatsapp_event(
-                    clinic,
-                    "molarplus_review_report_mk",
-                    template_data=review_data,
-                    not_before=dt.datetime.combine(today, dt.time.min),
-                )
-                summary["monthly_reports"] += int(sent_monthly.sent)
-                summary["review_reports"] += int(sent_review.sent)
 
             if clinic.created_at and clinic.subscription_plan == "trial":
                 trial_day = (today - clinic.created_at.date()).days

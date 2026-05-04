@@ -54,6 +54,8 @@ def _register_jobs(sched: AsyncIOScheduler) -> None:
         run_platform_automation_job,
         appointment_reminder_scan_job,
         daily_summary_broadcast_job,
+        weekly_summary_broadcast_job,
+        monthly_summary_broadcast_job,
     )
 
     sched.add_job(
@@ -78,5 +80,26 @@ def _register_jobs(sched: AsyncIOScheduler) -> None:
         hour=20,
         minute=0,
         id="daily_summary_broadcast",
+        replace_existing=True,
+    )
+
+    sched.add_job(
+        weekly_summary_broadcast_job,
+        trigger="cron",
+        day_of_week="sun",
+        hour=20,
+        minute=0,
+        id="weekly_summary_broadcast",
+        replace_existing=True,
+    )
+
+    # day='last' fires on the actual last day of every month (Feb 28/29, Apr 30, May 31, ...)
+    sched.add_job(
+        monthly_summary_broadcast_job,
+        trigger="cron",
+        day="last",
+        hour=20,
+        minute=0,
+        id="monthly_summary_broadcast",
         replace_existing=True,
     )

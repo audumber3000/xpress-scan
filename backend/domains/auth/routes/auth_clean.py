@@ -129,10 +129,31 @@ def _get_clinic_for_user(db: Session, user) -> Optional[ClinicResponseDTO]:
 
 def _seed_clinic_defaults(db: Session, clinic_id: int):
     """Seed wallet credit, default procedures, and clinical settings for a new clinic."""
-    from models import TreatmentType, ClinicalSetting
+    from models import TreatmentType, ClinicalSetting, NotificationPreference
     from core.wallet_service import credit as wallet_credit
 
     wallet_credit(db, clinic_id, 50.0, "Welcome bonus — new clinic top-up")
+
+    # Default-enable platform summary notifications. Daily / weekly / monthly
+    # are system messages (not billed against the wallet) and should be on for
+    # every clinic out of the box. Without these rows the support-tool UI shows
+    # them as "disabled" even though delivery bypasses prefs.
+    for event_type in ("daily_summary", "molarplus_weekly_report_mk", "molarplus_monthly_report_mk"):
+        existing = (
+            db.query(NotificationPreference)
+            .filter(
+                NotificationPreference.clinic_id == clinic_id,
+                NotificationPreference.event_type == event_type,
+            )
+            .first()
+        )
+        if not existing:
+            db.add(NotificationPreference(
+                clinic_id=clinic_id,
+                event_type=event_type,
+                channels=["whatsapp"],
+                is_enabled=True,
+            ))
 
     procedures = [
         ("Consultation", 200), ("X-Ray", 500), ("Tooth Extraction", 800),

@@ -14,6 +14,7 @@ from core.notification_dispatch import (
     fmt_appt_time,
     InsufficientWalletBalance,
 )
+from core.nexus_notify import notify
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,10 @@ def _ist_now() -> dt.datetime:
 
 
 async def run_platform_automation_job() -> None:
-    """Hourly: run weekly/monthly/review/trial/lab_due reports."""
+    """Hourly: run trial nudges and lab-due-tomorrow reminders.
+
+    Daily/weekly/monthly summaries have their own dedicated cron jobs below.
+    """
     from database import SessionLocal
     from domains.notification.services.platform_notification_service import (
         run_platform_notification_automation,
@@ -110,8 +114,51 @@ async def appointment_reminder_scan_job() -> None:
         db.close()
 
 
+def _clean_phone(phone: str) -> str:
+    import re
+    digits = re.sub(r"\D", "", phone or "")
+    if len(digits) == 10:
+        digits = "91" + digits
+    return digits
+
+
+def _send_system_whatsapp(db, clinic_id: int, to_phone: str, event_type: str, template_data: dict) -> bool:
+    """Send a platform-driven WhatsApp notification, bypassing prefs and wallet.
+
+    Daily/weekly/monthly summaries are system notifications — they are part of
+    the platform service and are not billed against the clinic's wallet.
+    Writes a NotificationLog row so the support tool / UI can surface them.
+    """
+    from models import NotificationLog
+    phone = _clean_phone(to_phone)
+    if not phone:
+        return False
+    log_entry = NotificationLog(
+        clinic_id=clinic_id,
+        channel="whatsapp",
+        recipient=phone,
+        event_type=event_type,
+        template_name=event_type,
+        status="queued",
+        cost=0.0,
+        created_at=dt.datetime.utcnow(),
+        updated_at=dt.datetime.utcnow(),
+    )
+    db.add(log_entry)
+    db.commit()
+    db.refresh(log_entry)
+    notify(event_type, channel="whatsapp", to_phone=phone,
+           template_data=template_data, log_id=log_entry.id)
+    log_entry.status = "sent"
+    db.commit()
+    return True
+
+
 async def daily_summary_broadcast_job() -> None:
-    """Daily at 20:00 IST: send today's stats to each clinic owner."""
+    """Daily at 20:00 IST: send today's stats to each clinic owner.
+
+    System notification — bypasses notification_preferences and wallet balance.
+    """
     from database import SessionLocal
     from sqlalchemy import func, or_
     from models import Appointment, Clinic, Invoice, User, NotificationLog
@@ -131,11 +178,6 @@ async def daily_summary_broadcast_job() -> None:
 
         sent = 0
         for clinic in clinics:
-            # Owner lookup via users.clinic_id — the user_clinics association
-            # table exists but its `role` and `is_active` columns are not
-            # populated, so a join through it returns zero rows. The rest of
-            # the codebase resolves clinic owners directly off the User row
-            # (see /me endpoint fallback in commit aed2eb81).
             owner = (
                 db.query(User)
                 .filter(
@@ -148,9 +190,6 @@ async def daily_summary_broadcast_job() -> None:
             if not owner:
                 continue
 
-            recipient_key = owner.email or clinic.phone or ""
-            if not recipient_key:
-                continue
             already_sent = (
                 db.query(NotificationLog.id)
                 .filter(
@@ -201,14 +240,10 @@ async def daily_summary_broadcast_job() -> None:
             online_revenue = max(total_revenue - cash_revenue, 0.0)
 
             try:
-                notify_event(
+                if _send_system_whatsapp(
+                    db, clinic.id, clinic.phone or "",
                     "daily_summary",
-                    db=db,
-                    clinic_id=clinic.id,
-                    to_phone=clinic.phone or "",
-                    to_email=owner.email or "",
-                    to_name=owner.name or owner.email or "Doctor",
-                    template_data={
+                    {
                         "doctor_name": owner.name or "Doctor",
                         "clinic_name": clinic.name,
                         "date": today.strftime("%d %b %Y"),
@@ -218,15 +253,143 @@ async def daily_summary_broadcast_job() -> None:
                         "cash_revenue": round(float(cash_revenue), 2),
                         "online_revenue": round(float(online_revenue), 2),
                     },
-                )
-                sent += 1
-            except InsufficientWalletBalance:
-                logger.info("daily_summary skipped clinic=%s: low balance", clinic.id)
+                ):
+                    sent += 1
             except Exception as exc:
                 logger.warning("daily_summary error clinic=%s: %s", clinic.id, exc)
 
         logger.info("daily_summary_broadcast: sent=%d clinics=%d", sent, len(clinics))
     except Exception as exc:
         logger.error("daily_summary_broadcast fatal: %s", exc)
+    finally:
+        db.close()
+
+
+async def weekly_summary_broadcast_job() -> None:
+    """Sunday 20:00 IST: send last 7 days stats to each clinic owner.
+
+    System notification — bypasses notification_preferences and wallet balance.
+    """
+    from database import SessionLocal
+    from sqlalchemy import or_
+    from models import Clinic, NotificationLog
+    from domains.notification.services.report_stats_service import get_weekly_stats
+
+    db = SessionLocal()
+    try:
+        now = _ist_now()
+        today = now.date()
+        today_start = dt.datetime.combine(today, dt.time.min)
+
+        clinics = (
+            db.query(Clinic)
+            .filter(or_(Clinic.status.is_(None), ~Clinic.status.in_(["suspended", "cancelled"])))
+            .all()
+        )
+
+        sent = 0
+        for clinic in clinics:
+            already_sent = (
+                db.query(NotificationLog.id)
+                .filter(
+                    NotificationLog.clinic_id == clinic.id,
+                    NotificationLog.event_type == "molarplus_weekly_report_mk",
+                    NotificationLog.created_at >= today_start,
+                )
+                .first()
+            )
+            if already_sent:
+                continue
+            try:
+                template_data = get_weekly_stats(db, clinic.id, today)
+                if _send_system_whatsapp(
+                    db, clinic.id, clinic.phone or "",
+                    "molarplus_weekly_report_mk",
+                    template_data,
+                ):
+                    sent += 1
+            except Exception as exc:
+                logger.warning("weekly_summary error clinic=%s: %s", clinic.id, exc)
+
+        logger.info("weekly_summary_broadcast: sent=%d clinics=%d", sent, len(clinics))
+    except Exception as exc:
+        logger.error("weekly_summary_broadcast fatal: %s", exc)
+    finally:
+        db.close()
+
+
+async def monthly_summary_broadcast_job() -> None:
+    """Last day of month, 20:00 IST: send last 30 days stats to each clinic owner.
+
+    System notification — bypasses notification_preferences and wallet balance.
+    Also triggers the review report.
+    """
+    from database import SessionLocal
+    from sqlalchemy import or_
+    from models import Clinic, NotificationLog
+    from domains.notification.services.report_stats_service import (
+        get_monthly_stats, get_review_stats,
+    )
+
+    db = SessionLocal()
+    try:
+        now = _ist_now()
+        today = now.date()
+        today_start = dt.datetime.combine(today, dt.time.min)
+
+        clinics = (
+            db.query(Clinic)
+            .filter(or_(Clinic.status.is_(None), ~Clinic.status.in_(["suspended", "cancelled"])))
+            .all()
+        )
+
+        sent_monthly = 0
+        sent_review = 0
+        for clinic in clinics:
+            phone = clinic.phone or ""
+            already_monthly = (
+                db.query(NotificationLog.id)
+                .filter(
+                    NotificationLog.clinic_id == clinic.id,
+                    NotificationLog.event_type == "molarplus_monthly_report_mk",
+                    NotificationLog.created_at >= today_start,
+                )
+                .first()
+            )
+            if not already_monthly:
+                try:
+                    if _send_system_whatsapp(
+                        db, clinic.id, phone,
+                        "molarplus_monthly_report_mk",
+                        get_monthly_stats(db, clinic.id, today),
+                    ):
+                        sent_monthly += 1
+                except Exception as exc:
+                    logger.warning("monthly_summary error clinic=%s: %s", clinic.id, exc)
+
+            already_review = (
+                db.query(NotificationLog.id)
+                .filter(
+                    NotificationLog.clinic_id == clinic.id,
+                    NotificationLog.event_type == "molarplus_review_report_mk",
+                    NotificationLog.created_at >= today_start,
+                )
+                .first()
+            )
+            if not already_review:
+                try:
+                    if _send_system_whatsapp(
+                        db, clinic.id, phone,
+                        "molarplus_review_report_mk",
+                        get_review_stats(db, clinic.id, today),
+                    ):
+                        sent_review += 1
+                except Exception as exc:
+                    logger.warning("review_report error clinic=%s: %s", clinic.id, exc)
+
+        logger.info("monthly_summary_broadcast: monthly_sent=%d review_sent=%d clinics=%d",
+                    sent_monthly, sent_review, len(clinics))
+    except Exception as exc:
+        logger.error("monthly_summary_broadcast fatal: %s", exc)
     finally:
         db.close()
