@@ -491,8 +491,17 @@ async def finalize_invoice(
         db.commit()
         db.refresh(invoice)
 
-        # ── Notify patient that invoice is ready ──────────────────────
+        # ── Push notification to clinic — payment due ──────────────────
+        from core.push_notify import push_to_clinic
         patient = db.query(Patient).filter(Patient.id == invoice.patient_id).first()
+        push_to_clinic(
+            db, current_user.clinic_id,
+            "💰 Payment Due",
+            f"{patient.name if patient else 'Patient'} — ₹{invoice.due_amount:.0f} ({invoice.invoice_number})",
+            {"type": "invoice_due", "invoice_id": str(invoice.id)},
+        )
+
+        # ── Notify patient that invoice is ready ──────────────────────
         clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
         if patient and clinic:
             notify_event(

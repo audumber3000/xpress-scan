@@ -3,7 +3,9 @@ import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { toast } from 'react-toastify';
 import { api } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
+import { saveLastLogin } from '../utils/lastLogin';
 import LoadingButton from '../components/LoadingButton';
+import LastLoginCard from '../components/login/LastLoginCard';
 import loginImage from '../assets/login-page-left-side.png';
 
 const Signup = () => {
@@ -47,6 +49,7 @@ const Signup = () => {
       setToken(data.token);
       setUser(data.user);
       sessionStorage.removeItem('referred_by_code');
+      saveLastLogin({ provider: 'email', email, name: `${firstName} ${lastName}`.trim() });
 
       if (!data.user.clinic_id) {
         navigate("/onboarding");
@@ -107,6 +110,7 @@ const Signup = () => {
         setToken(data.token);
         setUser(userWithClinic);
         sessionStorage.removeItem('referred_by_code');
+        saveLastLogin({ provider: 'google', email: result.user.email, name: result.user.displayName });
 
         toast.success('Signup successful!');
 
@@ -151,6 +155,15 @@ const Signup = () => {
             </div>
           )}
           
+          {/* Last Login Card */}
+          <LastLoginCard
+            variant="register"
+            onContinue={(provider) => {
+              if (provider === 'google') handleGoogleSignup();
+            }}
+            loading={loading}
+          />
+
           {/* Google OAuth Button */}
           <LoadingButton 
             onClick={handleGoogleSignup}

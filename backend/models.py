@@ -931,3 +931,18 @@ class SupportMessage(Base):
 
     ticket = relationship("SupportTicket", back_populates="messages")
     sender = relationship("User")
+
+
+class PushToken(Base):
+    __tablename__ = 'push_tokens'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=True, index=True)
+    token = Column(String, nullable=False, unique=True)
+    platform = Column(String, nullable=False)  # 'ios' | 'android'
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    user = relationship("User")
+    clinic = relationship("Clinic")

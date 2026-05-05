@@ -49,7 +49,7 @@ from domains.inventory.routes import inventory
 from domains.consent.routes import consents, consents_internal
 from domains.document.routes import documents
 from domains.clinical.routes import settings_router, case_papers_router, prescriptions_router, lab_orders_router
-from domains.notification.routes import notification_admin
+from domains.notification.routes import notification_admin, push_notifications
 from domains.activity.routes import activity_log
 from domains.support.routes import support_tickets
 
@@ -387,6 +387,7 @@ app.include_router(documents.router, prefix="/api/v1/documents", tags=["document
 
 # Notification Admin Domain
 app.include_router(notification_admin.router, prefix="/api/v1/notification-admin", tags=["notification-admin"])
+app.include_router(push_notifications.router, prefix="/api/v1/push", tags=["push-notifications"])
 
 # Activity Log Domain
 app.include_router(activity_log.router, prefix="/api/v1/activity-log", tags=["activity-log"])

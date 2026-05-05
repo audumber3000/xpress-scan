@@ -81,6 +81,17 @@ async def update_inventory_item(
     
     db.commit()
     db.refresh(item)
+
+    # Push stock alert if quantity dropped below min level
+    if item.min_stock_level and item.quantity <= item.min_stock_level:
+        from core.push_notify import push_to_clinic
+        push_to_clinic(
+            db, item.clinic_id,
+            "⚠️ Low Stock Alert",
+            f"{item.name} — only {item.quantity} {item.unit or 'units'} left",
+            {"type": "stock_alert", "item_id": str(item.id)},
+        )
+
     return InventoryItemResponseDTO.from_orm(item)
 
 @router.delete("/{item_id}")

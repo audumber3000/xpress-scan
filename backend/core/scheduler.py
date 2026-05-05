@@ -56,6 +56,8 @@ def _register_jobs(sched: AsyncIOScheduler) -> None:
         daily_summary_broadcast_job,
         weekly_summary_broadcast_job,
         monthly_summary_broadcast_job,
+        morning_motivation_push_job,
+        evening_motivation_push_job,
     )
 
     sched.add_job(
@@ -101,5 +103,25 @@ def _register_jobs(sched: AsyncIOScheduler) -> None:
         hour=20,
         minute=0,
         id="monthly_summary_broadcast",
+        replace_existing=True,
+    )
+
+    # Morning motivation push — 9:00 AM IST daily
+    sched.add_job(
+        morning_motivation_push_job,
+        trigger="cron",
+        hour=9,
+        minute=0,
+        id="morning_motivation_push",
+        replace_existing=True,
+    )
+
+    # Evening motivation push — 8:00 PM IST daily
+    sched.add_job(
+        evening_motivation_push_job,
+        trigger="cron",
+        hour=20,
+        minute=0,
+        id="evening_motivation_push",
         replace_existing=True,
     )

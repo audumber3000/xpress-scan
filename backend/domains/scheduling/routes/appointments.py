@@ -146,6 +146,15 @@ async def create_appointment(
         # Get clinic information for email
         clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
         
+        # ── Push notification to all clinic devices ──────────────────
+        from core.push_notify import push_to_clinic
+        push_to_clinic(
+            db, current_user.clinic_id,
+            "📅 New Appointment",
+            f"{db_appointment.patient_name} — {db_appointment.start_time}",
+            {"type": "new_appointment", "appointment_id": str(db_appointment.id)},
+        )
+
         # ── Notify patient of new appointment ──────────────────────────
         if clinic:
             appt_date_str = db_appointment.appointment_date.strftime("%d %b %Y")
@@ -329,6 +338,15 @@ async def create_public_appointment(
         db.add(db_appointment)
         db.commit()
         db.refresh(db_appointment)
+
+        # ── Push notification to clinic — new online booking ──────────
+        from core.push_notify import push_to_clinic
+        push_to_clinic(
+            db, db_appointment.clinic_id,
+            "📅 New Online Booking",
+            f"{db_appointment.patient_name} — {db_appointment.start_time}",
+            {"type": "new_appointment", "appointment_id": str(db_appointment.id)},
+        )
 
         # Get doctor name if assigned
         doctor_name = None

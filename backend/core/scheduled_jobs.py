@@ -393,3 +393,70 @@ async def monthly_summary_broadcast_job() -> None:
         logger.error("monthly_summary_broadcast fatal: %s", exc)
     finally:
         db.close()
+
+
+# ── Daily motivation push notifications ──────────────────────────────────────
+
+MORNING_MESSAGES = [
+    "🌅 Good morning! A great day starts with a great smile. Let's make today count!",
+    "☀️ Rise and shine! Every patient you see today is a life you're improving.",
+    "🦷 New day, new opportunities. Let's deliver excellence today!",
+    "💪 Good morning, team! Stay focused, stay positive, and crush it today.",
+    "🌟 Another day to make a difference. You've got this!",
+    "🎯 Good morning! Small efforts every day lead to big results.",
+    "🚀 Let's start strong today. Your patients are counting on you!",
+]
+
+EVENING_MESSAGES = [
+    "🌙 Great work today! Rest well, you've earned it.",
+    "✨ Another successful day! Thank you for your dedication.",
+    "🎉 Day done! You've made patients smile today — that's priceless.",
+    "🙌 Well done, team! Tomorrow is a fresh start. Recharge tonight!",
+    "💫 Fantastic day! Your hard work doesn't go unnoticed.",
+    "🌛 Time to unwind. You gave your best today, and that's all that matters.",
+    "👏 Clinic closed for the day. You've all been amazing!",
+]
+
+
+async def morning_motivation_push_job() -> None:
+    """Send a motivational push notification to all clinics at start of day."""
+    import random
+    from database import SessionLocal
+    from models import Clinic
+    from domains.notification.services.push_service import push_service
+
+    db = SessionLocal()
+    try:
+        clinics = db.query(Clinic).filter(Clinic.is_active == True).all()
+        msg = random.choice(MORNING_MESSAGES)
+        sent = 0
+        for clinic in clinics:
+            result = push_service.send_to_clinic(db, clinic.id, "Good Morning! 🌞", msg, {"type": "motivation_morning"})
+            sent += result.get("sent", 0)
+        logger.info("morning_motivation_push: sent=%d clinics=%d", sent, len(clinics))
+    except Exception as exc:
+        logger.error("morning_motivation_push error: %s", exc)
+    finally:
+        db.close()
+
+
+async def evening_motivation_push_job() -> None:
+    """Send a motivational push notification to all clinics at end of day."""
+    import random
+    from database import SessionLocal
+    from models import Clinic
+    from domains.notification.services.push_service import push_service
+
+    db = SessionLocal()
+    try:
+        clinics = db.query(Clinic).filter(Clinic.is_active == True).all()
+        msg = random.choice(EVENING_MESSAGES)
+        sent = 0
+        for clinic in clinics:
+            result = push_service.send_to_clinic(db, clinic.id, "Great Day! 🌙", msg, {"type": "motivation_evening"})
+            sent += result.get("sent", 0)
+        logger.info("evening_motivation_push: sent=%d clinics=%d", sent, len(clinics))
+    except Exception as exc:
+        logger.error("evening_motivation_push error: %s", exc)
+    finally:
+        db.close()

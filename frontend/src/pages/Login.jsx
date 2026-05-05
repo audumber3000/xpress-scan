@@ -3,7 +3,9 @@ import { useNavigate, Link } from "react-router-dom";
 import { toast } from 'react-toastify';
 import { api } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
+import { saveLastLogin } from '../utils/lastLogin';
 import LoadingButton from '../components/LoadingButton';
+import LastLoginCard from '../components/login/LastLoginCard';
 import loginImage from '../assets/login-page-left-side.png';
 
 const Login = () => {
@@ -80,6 +82,7 @@ const Login = () => {
       setToken(data.token);
       setUser(userWithClinic);
 
+      saveLastLogin({ provider: 'email', email, name: data.user?.name });
       toast.success('Login successful!');
 
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -209,6 +212,7 @@ const Login = () => {
         setUser(userWithClinic);
         console.log('🔵 [LOGIN] AuthContext updated');
 
+        saveLastLogin({ provider: 'google', email: result.user.email, name: result.user.displayName });
         toast.success('Login successful!');
 
         // Small delay to ensure context is updated before navigation
@@ -269,6 +273,16 @@ const Login = () => {
             </div>
           )}
           
+          {/* Last Login Card */}
+          <LastLoginCard
+            variant="login"
+            onContinue={(provider) => {
+              if (provider === 'google') handleGoogleLogin();
+              // email provider: user must type credentials again
+            }}
+            loading={loading}
+          />
+
           {/* Google OAuth Button */}
           <LoadingButton 
             onClick={handleGoogleLogin}
