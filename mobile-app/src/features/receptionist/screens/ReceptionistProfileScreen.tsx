@@ -9,6 +9,7 @@ import { ArrowLeft, User, Clock, DollarSign, Mail, Phone, MapPin, Building2 } fr
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../app/AppNavigator';
 import { useAuth } from '../../../app/AuthContext';
+import { getCurrencySymbol } from '../../../shared/utils/currency';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ReceptionistProfile'>;
 
@@ -87,7 +88,7 @@ export const ReceptionistProfileScreen: React.FC<Props> = ({ navigation }) => {
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
       <View style={styles.salaryHero}>
         <Text style={styles.salaryHeroLabel}>Current Month Net Pay</Text>
-        <Text style={styles.salaryHeroValue}>₹18,500</Text>
+        <Text style={styles.salaryHeroValue}>{getCurrencySymbol()}18,500</Text>
         <View style={[styles.statusPill, { backgroundColor: '#E6F9F1', alignSelf: 'center', marginTop: 8 }]}>
           <Text style={[styles.statusPillText, { color: '#10B981' }]}>PAID</Text>
         </View>
@@ -98,17 +99,17 @@ export const ReceptionistProfileScreen: React.FC<Props> = ({ navigation }) => {
       </View>
 
       <View style={styles.infoCard}>
-        <SalaryRow label="Base Salary"   value="₹20,000" />
-        <SalaryRow label="Deductions"    value="− ₹1,500" valueColor="#EF4444" />
-        <SalaryRow label="Net Pay"       value="₹18,500"  valueColor={VIOLET} bold last />
+        <SalaryRow label="Base Salary"   value={`${getCurrencySymbol()}20,000`} />
+        <SalaryRow label="Deductions"    value={`− ${getCurrencySymbol()}1,500`} valueColor="#EF4444" />
+        <SalaryRow label="Net Pay"       value={`${getCurrencySymbol()}18,500`}  valueColor={VIOLET} bold last />
       </View>
 
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>History</Text>
       </View>
       <View style={styles.infoCard}>
-        <SalaryRow label="March 2025"    value="₹18,200" />
-        <SalaryRow label="February 2025" value="₹18,500" last />
+        <SalaryRow label="March 2025"    value={`${getCurrencySymbol()}18,200`} />
+        <SalaryRow label="February 2025" value={`${getCurrencySymbol()}18,500`} last />
       </View>
     </ScrollView>
   );

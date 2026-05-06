@@ -10,6 +10,7 @@ import { GearLoader } from '../../../../shared/components/GearLoader';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
 import { colors } from '../../../../shared/constants/colors';
 import { transactionsApiService, Transaction, LedgerItem } from '../../../../services/api/transactions.api';
+import { getCurrencySymbol } from '../../../../shared/utils/currency';
 
 interface AllTransactionsScreenProps {}
 
@@ -157,7 +158,7 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () =>
                           <Text style={styles.itemSubtitle}>{transaction.time || '10:30 AM'} • {transaction.treatment || 'Treatment'}</Text>
                         </View>
                         <View style={styles.transactionRight}>
-                          <Text style={styles.itemAmount}>₹{transaction.amount.toLocaleString()}</Text>
+                          <Text style={styles.itemAmount}>{getCurrencySymbol()}{transaction.amount.toLocaleString()}</Text>
                           <View style={[styles.statusBadge, { backgroundColor: statusBgColor }]}>
                             <Text style={[styles.statusText, { color: statusTextColor }]}>{statusLabel}</Text>
                           </View>
@@ -201,7 +202,7 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () =>
                           </View>
                         </View>
                         <View style={styles.transactionRight}>
-                          <Text style={[styles.itemAmount, { color: isExpense ? '#B91C1C' : '#10B981' }]}>{isExpense ? '-' : '+'}₹{item.amount.toLocaleString()}</Text>
+                          <Text style={[styles.itemAmount, { color: isExpense ? '#B91C1C' : '#10B981' }]}>{isExpense ? '-' : '+'}{getCurrencySymbol()}{item.amount.toLocaleString()}</Text>
                           <Text style={styles.paymentMethodText}>{item.payment_method || 'Cash'}</Text>
                         </View>
                       </TouchableOpacity>

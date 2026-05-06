@@ -12,6 +12,7 @@ import { ToothUnit } from './ToothUnit';
 import { colors } from '../../../../../shared/constants/colors';
 import { X, Search, ChevronDown } from 'lucide-react-native';
 import { patientsApiService } from '../../../../../services/api/patients.api';
+import { getCurrencySymbol } from '../../../../../shared/utils/currency';
 
 interface DentalChartProps {
     teethData?: any;
@@ -66,7 +67,7 @@ const AutoSuggestInput: React.FC<{
                             onPress={() => { onChange(s.name); onSelect?.(s); }}
                         >
                             <Text style={ss.chipText}>{s.name}</Text>
-                            {s.price ? <Text style={ss.chipPrice}> · ₹{s.price.toLocaleString('en-IN')}</Text> : null}
+                            {s.price ? <Text style={ss.chipPrice}> · {getCurrencySymbol()}{s.price.toLocaleString('en-US')}</Text> : null}
                         </TouchableOpacity>
                     ))}
                 </ScrollView>
@@ -288,7 +289,7 @@ export const DentalChart: React.FC<DentalChartProps> = ({
 
                                     {/* Price */}
                                     <View style={{ marginBottom: 14 }}>
-                                        <Text style={ss.fieldLabel}>Procedure Fee (₹)</Text>
+                                        <Text style={ss.fieldLabel}>Procedure Fee ({getCurrencySymbol()})</Text>
                                         <TextInput
                                             style={ss.plainInput}
                                             value={price}
@@ -300,7 +301,7 @@ export const DentalChart: React.FC<DentalChartProps> = ({
                                         {parseFloat(price) > 0 && (
                                             <View style={ss.priceHint}>
                                                 <Text style={ss.priceHintText}>
-                                                    ₹{parseFloat(price).toLocaleString('en-IN')} procedure fee
+                                                    {getCurrencySymbol()}{parseFloat(price).toLocaleString('en-US')} procedure fee
                                                 </Text>
                                             </View>
                                         )}

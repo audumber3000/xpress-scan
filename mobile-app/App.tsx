@@ -1,3 +1,4 @@
+import './src/services/notifications';
 import React from 'react';
 import { AuthProvider } from './src/app/AuthContext';
 import { AlertProvider } from './src/app/AlertProvider';
@@ -9,7 +10,6 @@ import { useAuth } from './src/app/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ClinicInfo } from './src/services/api/auth.api';
 
-import { usePushNotifications } from './src/hooks/usePushNotifications';
 
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -46,8 +46,6 @@ function AppContent() {
 }
 
 export default function App() {
-  const { expoPushToken } = usePushNotifications();
-
   return (
     <SafeAreaProvider>
       <ErrorBoundary>

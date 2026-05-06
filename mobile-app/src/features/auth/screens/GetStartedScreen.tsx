@@ -19,16 +19,20 @@ import {
 } from 'lucide-react-native';
 import { RootStackParamList } from '../../../app/AppNavigator';
 import { colors } from '../../../shared/constants/colors';
-import { signInWithGoogle } from '../../../services/auth/authService';
+import { signInWithGoogle, signInWithApple } from '../../../services/auth/authService';
 import { GoogleIcon } from '../../../shared/components/icons/GoogleIcon';
-import { AppleIcon } from '../../../shared/components/icons/AppleIcon';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { useAuth } from '../../../app/AuthContext';
+import { LastLoginCard } from '../components/LastLoginCard';
+import type { LastLoginProvider } from '../../../services/auth/lastLogin';
 
 type GetStartedScreenProps = NativeStackScreenProps<RootStackParamList, 'GetStarted'>;
 
 const { width } = Dimensions.get('window');
 
 export const GetStartedScreen: React.FC<GetStartedScreenProps> = ({ navigation }) => {
-  
+  const { setAppleFullName } = useAuth();
+
   const handleGoogleRegister = async () => {
     try {
       const { user, error } = await signInWithGoogle('clinic_owner');
@@ -38,12 +42,25 @@ export const GetStartedScreen: React.FC<GetStartedScreenProps> = ({ navigation }
     }
   };
 
-  const handleAppleRegister = () => {
-    if (Platform.OS === 'android') {
-      toast.info('Apple Sign-In is only supported on iOS devices.');
-    } else {
-      toast.info('Apple Sign-In for iOS is being finalized.');
+  const handleAppleRegister = async () => {
+    try {
+      const { user, appleFullName, error } = await signInWithApple('clinic_owner');
+      if (error) {
+        if (error !== 'Sign in was cancelled') toast.error(error);
+        return;
+      }
+      // Persist Apple's first-time-only name into context so SignupScreen
+      // can pre-fill it without re-prompting (App Store guideline 4).
+      if (appleFullName) setAppleFullName(appleFullName);
+    } catch (err: any) {
+      toast.error(err.message);
     }
+  };
+
+  const handleContinueLast = (provider: LastLoginProvider) => {
+    if (provider === 'google') return handleGoogleRegister();
+    if (provider === 'apple') return handleAppleRegister();
+    navigation.navigate('Login');
   };
 
   // 2/3 of total horizontal width (with 28 padding on each side)
@@ -77,6 +94,9 @@ export const GetStartedScreen: React.FC<GetStartedScreenProps> = ({ navigation }
           </TouchableOpacity>
         </View>
 
+        {/* Last-login one-tap shortcut for returning users */}
+        <LastLoginCard variant="register" onContinue={handleContinueLast} />
+
         {/* Auth Cards */}
         <View style={styles.cardsContainer}>
           {/* Row 1: Large Google Square (2/3 width) */}
@@ -93,20 +113,21 @@ export const GetStartedScreen: React.FC<GetStartedScreenProps> = ({ navigation }
             </View>
           </TouchableOpacity>
 
-          {/* Row 2: Apple and Email horizontal */}
+          {/* Row 2: Apple (iOS only — official Apple HIG button) and Email */}
           <View style={styles.horizontalRow}>
-            <TouchableOpacity 
-              style={styles.smallCard}
-              onPress={handleAppleRegister}
-            >
-              <AppleIcon size={24} color={colors.gray900} />
-              <View style={styles.smallCardLabels}>
-                <Text style={styles.withTextSmall}>with</Text>
-                <Text style={styles.providerNameSmall}>Apple</Text>
+            {Platform.OS === 'ios' && (
+              <View style={styles.appleButtonWrapper}>
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                  cornerRadius={24}
+                  style={styles.appleButton}
+                  onPress={handleAppleRegister}
+                />
               </View>
-            </TouchableOpacity>
+            )}
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.smallCard}
               onPress={() => navigation.navigate('Signup')}
             >
@@ -231,6 +252,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 15,
     elevation: 3,
+  },
+  appleButtonWrapper: {
+    flex: 1,
+    aspectRatio: 1,
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 15,
+    elevation: 3,
+  },
+  appleButton: {
+    width: '100%',
+    height: '100%',
   },
   smallCardLabels: {
     marginTop: 'auto',

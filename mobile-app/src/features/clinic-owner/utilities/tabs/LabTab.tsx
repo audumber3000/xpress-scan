@@ -18,6 +18,7 @@ import { patientsApiService, Patient } from '../../../../services/api/patients.a
 import { styles } from './sharedStyles';
 import { SwipeableRow } from './SwipeableRow';
 import { LAB_STATUSES, getLabStatusColors } from './helpers';
+import { getCurrencySymbol } from '../../../../shared/utils/currency';
 
 const EmptyState = () => (
   <View style={styles.emptyState}>
@@ -237,7 +238,7 @@ export const LabTab: React.FC = () => {
                       )}
                     </View>
                     <View style={styles.rowRight}>
-                      <Text style={styles.rowValue}>₹{(order.cost ?? 0).toLocaleString()}</Text>
+                      <Text style={styles.rowValue}>{getCurrencySymbol()}{(order.cost ?? 0).toLocaleString()}</Text>
                       <View style={[styles.badge, { backgroundColor: sc.bg }]}>
                         <Text style={[styles.badgeText, { color: sc.text }]}>{order.status.toUpperCase()}</Text>
                       </View>
@@ -269,7 +270,7 @@ export const LabTab: React.FC = () => {
             <View style={styles.actionSheetHeader}>
               <Text style={styles.actionSheetTitle}>{actionOrder?.work_type}</Text>
               <Text style={styles.actionSheetSubtitle}>
-                {actionOrder?.patient_name || `Patient #${actionOrder?.patient_id}`} • ₹{(actionOrder?.cost ?? 0).toLocaleString()}
+                {actionOrder?.patient_name || `Patient #${actionOrder?.patient_id}`} • {getCurrencySymbol()}{(actionOrder?.cost ?? 0).toLocaleString()}
               </Text>
             </View>
             <Text style={styles.actionSheetSectionLabel}>Change Status</Text>
@@ -320,7 +321,7 @@ export const LabTab: React.FC = () => {
               <TextInput style={[styles.input, styles.inputMulti]} multiline value={editForm.instructions || ''} onChangeText={v => setEditForm(p => ({ ...p, instructions: v }))} />
               <Text style={styles.inputLabel}>Due Date (YYYY-MM-DD)</Text>
               <TextInput style={styles.input} value={editForm.due_date || ''} onChangeText={v => setEditForm(p => ({ ...p, due_date: v }))} placeholder="2024-04-10" />
-              <Text style={styles.inputLabel}>Cost (₹)</Text>
+              <Text style={styles.inputLabel}>Cost ({getCurrencySymbol()})</Text>
               <TextInput style={styles.input} keyboardType="decimal-pad" value={editForm.cost?.toString() || ''} onChangeText={v => setEditForm(p => ({ ...p, cost: parseFloat(v) || 0 }))} />
               <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleUpdate} disabled={saving}>
                 {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
@@ -449,7 +450,7 @@ export const LabTab: React.FC = () => {
               <Text style={styles.inputLabel}>Instructions</Text>
               <TextInput style={[styles.input, styles.inputMulti]} placeholder="Special instructions…" multiline value={form.instructions || ''} onChangeText={v => setForm(p => ({ ...p, instructions: v }))} />
               
-              <Text style={styles.inputLabel}>Cost (₹)</Text>
+              <Text style={styles.inputLabel}>Cost ({getCurrencySymbol()})</Text>
               <TextInput style={styles.input} placeholder="0.00" keyboardType="decimal-pad" value={form.cost?.toString() || ''} onChangeText={v => setForm(p => ({ ...p, cost: parseFloat(v) || 0 }))} />
               
               <TouchableOpacity style={[styles.saveBtn, (!selectedPatient || !selectedCasePaper || !selectedVendor || !form.due_date || saving) && { opacity: 0.6 }]} onPress={handleCreate} disabled={saving}>

@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 
 // Import screens
 import { OnboardingScreen, ONBOARDING_KEY } from '../features/auth/screens/OnboardingScreen';
@@ -82,6 +83,9 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export const AppNavigator = () => {
   const { isAuthenticated, isLoading, backendUser } = useAuth();
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState<boolean | null>(null);
+
+  // Initialize push notifications (requests permission + registers token with backend)
+  const { expoPushToken } = usePushNotifications();
 
   useEffect(() => {
     AsyncStorage.getItem(ONBOARDING_KEY).then(val => {

@@ -16,6 +16,7 @@ import { checkNotificationPermissions } from '../../../../services/notifications
 import { adminColors } from '../../../../shared/constants/adminColors';
 import { colors } from '../../../../shared/constants/colors';
 import { BaseApiService } from '../../../../services/api/base.api';
+import { getCurrencySymbol } from '../../../../shared/utils/currency';
 
 const EVENT_LABELS: Record<string, string> = {
   appointment_confirmation: 'Appointment Confirmation',
@@ -152,7 +153,7 @@ export const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProp
     }
   };
 
-  const fmt = (n: number) => `₹${n?.toFixed(2) ?? '0.00'}`;
+  const fmt = (n: number) => `${getCurrencySymbol()}${n?.toFixed(2) ?? '0.00'}`;
 
   if (loading) {
     return (

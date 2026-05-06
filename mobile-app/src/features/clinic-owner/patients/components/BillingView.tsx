@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { IndianRupee, ReceiptText } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
+import { getCurrencySymbol } from '../../../../shared/utils/currency';
 
 interface PaymentItem {
     id: string;
@@ -32,7 +33,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ payments }) => {
             <View style={styles.summaryCard}>
                 <View>
                     <Text style={styles.summaryLabel}>Total Billing</Text>
-                    <Text style={styles.summaryAmount}>₹{totalAmount.toLocaleString('en-IN')}</Text>
+                    <Text style={styles.summaryAmount}>{getCurrencySymbol()}{totalAmount.toLocaleString('en-US')}</Text>
                 </View>
                 <View style={styles.summaryIcon}>
                     <IndianRupee size={24} color="#FFFFFF" />
@@ -66,7 +67,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ payments }) => {
                             </Text>
                         </View>
                     </View>
-                    <Text style={styles.paymentAmount}>₹{payment.amount.toLocaleString('en-IN')}</Text>
+                    <Text style={styles.paymentAmount}>{getCurrencySymbol()}{payment.amount.toLocaleString('en-US')}</Text>
                 </View>
             ))}
         </ScrollView>

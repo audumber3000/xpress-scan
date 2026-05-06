@@ -27,11 +27,13 @@ import {
 } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../app/AppNavigator';
-import { signInWithGoogle } from '../../../services/auth/authService';
+import { signInWithGoogle, signInWithApple } from '../../../services/auth/authService';
 import { useAuth } from '../../../app/AuthContext';
 import { colors } from '../../../shared/constants/colors';
 import { GoogleIcon } from '../../../shared/components/icons/GoogleIcon';
-import { AppleIcon } from '../../../shared/components/icons/AppleIcon';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { LastLoginCard } from '../components/LastLoginCard';
+import type { LastLoginProvider } from '../../../services/auth/lastLogin';
 
 const { width } = Dimensions.get('window');
 
@@ -44,7 +46,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isPasswordHidden, setIsPasswordHidden] = useState(true);
   const passwordInputRef = useRef<TextInput>(null);
-  const { signInEmail } = useAuth();
+  const { signInEmail, setAppleFullName } = useAuth();
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
@@ -67,11 +69,29 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     }
   };
 
-  const handleAppleLogin = () => {
-    if (Platform.OS === 'android') {
-      toast.info('Apple Sign-In is only supported on iOS devices.');
-    } else {
-      toast.info('Apple Sign-In for iOS is being finalized.');
+  const handleAppleLogin = async () => {
+    setIsLoading(true);
+    try {
+      const { user, appleFullName, error } = await signInWithApple();
+      if (error) {
+        if (error === 'Sign in was cancelled') return;
+        if (error.includes('User does not exist')) {
+          Alert.alert('Register Required', 'User does not exist. Please register first to continue.', [
+            { text: 'Register', onPress: () => navigation.navigate('GetStarted') },
+            { text: 'Cancel', style: 'cancel' }
+          ]);
+        } else {
+          toast.error(error);
+        }
+        return;
+      }
+      // Apple only returns fullName on the very first authorization for an
+      // Apple ID. For login (existing user) it'll be null — that's expected.
+      if (appleFullName) setAppleFullName(appleFullName);
+    } catch (err: any) {
+      toast.error(err.message || 'An error occurred');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -101,7 +121,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     }
   };
 
-  
+  const handleContinueLast = (provider: LastLoginProvider) => {
+    if (provider === 'google') return handleGoogleLogin();
+    if (provider === 'apple') return handleAppleLogin();
+    setViewMode('email');
+  };
+
   // 2/3 of total horizontal width (with 28 padding on each side)
   const googleCardWidth = (width - 56) * 2 / 3;
 
@@ -130,6 +155,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
+      {/* Last-login one-tap shortcut, if any */}
+      <LastLoginCard variant="login" onContinue={handleContinueLast} isLoading={isLoading} />
+
       {/* Auth Cards */}
       <View style={styles.cardsContainer}>
         {/* Row 1: Large Google Square (2/3 width) */}
@@ -153,20 +181,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
           )}
         </TouchableOpacity>
 
-        {/* Row 2: Apple and Email horizontal */}
+        {/* Row 2: Apple (iOS only — official Apple HIG button) and Email */}
         <View style={styles.horizontalRow}>
-          <TouchableOpacity 
-            style={styles.smallCard}
-            onPress={handleAppleLogin}
-          >
-            <AppleIcon size={24} color={colors.gray900} />
-            <View style={styles.smallCardLabels}>
-              <Text style={styles.withTextSmall}>with</Text>
-              <Text style={styles.providerNameSmall}>Apple</Text>
+          {Platform.OS === 'ios' && (
+            <View style={styles.appleButtonWrapper}>
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                cornerRadius={24}
+                style={styles.appleButton}
+                onPress={handleAppleLogin}
+              />
             </View>
-          </TouchableOpacity>
+          )}
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.smallCard}
             onPress={() => setViewMode('email')}
           >
@@ -372,6 +401,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 15,
     elevation: 3,
+  },
+  appleButtonWrapper: {
+    flex: 1,
+    aspectRatio: 1,
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 15,
+    elevation: 3,
+  },
+  appleButton: {
+    width: '100%',
+    height: '100%',
   },
   smallCardLabels: {
     marginTop: 'auto',

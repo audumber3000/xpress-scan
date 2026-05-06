@@ -2,7 +2,7 @@
   "expo": {
     "name": "MolarPlus",
     "slug": "molarplus",
-    "version": "3.13.0",
+    "version": "3.14.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -15,8 +15,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.molarplus.ios",
-      "buildNumber": "5",
+      "buildNumber": "11",
       "googleServicesFile": "./GoogleService-Info.plist",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "CFBundleDisplayName": "MolarPlus",
         "ITSAppUsesNonExemptEncryption": false

@@ -1,11 +1,15 @@
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getApiBaseUrl } from '../../config/api.config';
 
 export interface PushTokenResult {
     token?: string;
     error?: string;
 }
+
+const PUSH_TOKEN_KEY = '@molarplus/pushToken';
 
 /**
  * Get Expo Push Token for remote notifications
@@ -13,7 +17,6 @@ export interface PushTokenResult {
  */
 export async function getExpoPushToken(): Promise<PushTokenResult> {
     try {
-        // Get project ID from app config
         const projectId =
             Constants?.expoConfig?.extra?.eas?.projectId ??
             Constants?.easConfig?.projectId;
@@ -27,6 +30,8 @@ export async function getExpoPushToken(): Promise<PushTokenResult> {
         });
 
         console.log('✅ Expo Push Token:', tokenData.data);
+        // Cache locally so we can unregister on logout
+        await AsyncStorage.setItem(PUSH_TOKEN_KEY, tokenData.data);
         return { token: tokenData.data };
     } catch (error) {
         console.error('❌ Error getting push token:', error);
@@ -35,28 +40,26 @@ export async function getExpoPushToken(): Promise<PushTokenResult> {
 }
 
 /**
- * Register device token with your backend
- * Call this after getting the push token
+ * Register device token with backend
  */
-export async function registerPushTokenWithBackend(
-    token: string,
-    userId: string
-): Promise<boolean> {
+export async function registerPushTokenWithBackend(token: string): Promise<boolean> {
     try {
-        // TODO: Replace with your actual backend endpoint
-        const response = await fetch('YOUR_BACKEND_URL/api/push-tokens', {
+        const authToken = await AsyncStorage.getItem('access_token');
+        if (!authToken) {
+            console.warn('⚠️ No auth token — skipping push token registration');
+            return false;
+        }
+
+        const baseURL = `${getApiBaseUrl()}/api/v1`;
+        const response = await fetch(`${baseURL}/push/register-token`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`,
             },
             body: JSON.stringify({
                 token,
-                userId,
                 platform: Platform.OS,
-                deviceInfo: {
-                    os: Platform.OS,
-                    version: Platform.Version,
-                },
             }),
         });
 
@@ -73,15 +76,22 @@ export async function registerPushTokenWithBackend(
 }
 
 /**
- * Unregister push token (e.g., on logout)
+ * Unregister push token (call on logout)
  */
-export async function unregisterPushToken(token: string): Promise<boolean> {
+export async function unregisterPushToken(): Promise<boolean> {
     try {
-        // TODO: Replace with your actual backend endpoint
-        const response = await fetch('YOUR_BACKEND_URL/api/push-tokens', {
-            method: 'DELETE',
+        const token = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
+        if (!token) return true;
+
+        const authToken = await AsyncStorage.getItem('access_token');
+        if (!authToken) return true;
+
+        const baseURL = `${getApiBaseUrl()}/api/v1`;
+        const response = await fetch(`${baseURL}/push/unregister-token`, {
+            method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`,
             },
             body: JSON.stringify({ token }),
         });
@@ -90,6 +100,7 @@ export async function unregisterPushToken(token: string): Promise<boolean> {
             throw new Error('Failed to unregister push token');
         }
 
+        await AsyncStorage.removeItem(PUSH_TOKEN_KEY);
         console.log('✅ Push token unregistered');
         return true;
     } catch (error) {

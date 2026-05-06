@@ -18,6 +18,7 @@ import { RootStackParamList } from '../../../app/AppNavigator';
 import { useAuth } from '../../../app/AuthContext';
 import { dashboardApiService, DashboardMetrics } from '../../../services/api/dashboard.api';
 import { utilitiesApiService } from '../../../services/api/utilities.api';
+import { getCurrencySymbol } from '../../../shared/utils/currency';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ReceptionistHome'>;
 
@@ -340,7 +341,7 @@ export const ReceptionistHomeScreen: React.FC<Props> = ({ navigation }) => {
               <ArrowUpRight size={14} color="#10B981" strokeWidth={2.5} />
             </View>
             <Text style={styles.metricValue}>
-              ₹{(metrics?.revenue.value || 0).toLocaleString()}
+              {getCurrencySymbol()}{(metrics?.revenue.value || 0).toLocaleString()}
             </Text>
             <Text style={styles.metricLabel}>Today's Revenue</Text>
           </TouchableOpacity>

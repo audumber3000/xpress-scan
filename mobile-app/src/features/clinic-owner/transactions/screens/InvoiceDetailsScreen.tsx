@@ -30,6 +30,7 @@ import { WhatsAppIcon } from '../../../../shared/components/icons/WhatsAppIcon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../../../shared/constants/colors';
 import { transactionsApiService } from '../../../../services/api/transactions.api';
+import { getCurrencySymbol } from '../../../../shared/utils/currency';
 
 interface InvoiceDetailsScreenProps {
   route: any;
@@ -158,7 +159,7 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
           
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Grand Total</Text>
-            <Text style={styles.totalValue}>₹{invoice.total?.toLocaleString('en-IN')}</Text>
+            <Text style={styles.totalValue}>{getCurrencySymbol()}{invoice.total?.toLocaleString('en-US')}</Text>
           </View>
         </View>
 
@@ -213,7 +214,7 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
                 <Text style={styles.lineItemName}>{item.description}</Text>
                 <Text style={styles.lineItemQty}>Qty: {item.quantity}</Text>
               </View>
-              <Text style={styles.lineItemPrice}>₹{item.amount?.toLocaleString('en-IN')}</Text>
+              <Text style={styles.lineItemPrice}>{getCurrencySymbol()}{item.amount?.toLocaleString('en-US')}</Text>
             </View>
           ))}
           
@@ -221,19 +222,19 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
           <View style={styles.calcContainer}>
             <View style={styles.calcRow}>
               <Text style={styles.calcLabel}>Subtotal</Text>
-              <Text style={styles.calcValue}>₹{invoice.subtotal?.toLocaleString('en-IN')}</Text>
+              <Text style={styles.calcValue}>{getCurrencySymbol()}{invoice.subtotal?.toLocaleString('en-US')}</Text>
             </View>
             <View style={styles.calcRow}>
               <Text style={styles.calcLabel}>Discount ({invoice.discount_amount > 0 ? invoice.discount_type : 'None'})</Text>
-              <Text style={[styles.calcValue, { color: colors.error }]}>-₹{invoice.discount_amount?.toLocaleString('en-IN') || '0'}</Text>
+              <Text style={[styles.calcValue, { color: colors.error }]}>-{getCurrencySymbol()}{invoice.discount_amount?.toLocaleString('en-US') || '0'}</Text>
             </View>
             <View style={styles.calcRow}>
               <Text style={styles.calcLabel}>Tax</Text>
-              <Text style={styles.calcValue}>₹{(invoice.tax || 0).toLocaleString('en-IN')}</Text>
+              <Text style={styles.calcValue}>{getCurrencySymbol()}{(invoice.tax || 0).toLocaleString('en-US')}</Text>
             </View>
             <View style={[styles.calcRow, styles.finalRow]}>
               <Text style={styles.finalLabel}>Total Paid</Text>
-              <Text style={styles.finalValue}>₹{invoice.total?.toLocaleString('en-IN')}</Text>
+              <Text style={styles.finalValue}>{getCurrencySymbol()}{invoice.total?.toLocaleString('en-US')}</Text>
             </View>
           </View>
         </View>

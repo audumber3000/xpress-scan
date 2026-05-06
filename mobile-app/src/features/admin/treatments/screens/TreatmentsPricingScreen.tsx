@@ -6,6 +6,7 @@ import { ChevronLeft, Search, MoreVertical, Plus, Stethoscope, Sparkles, X, Smil
 import { adminColors } from '../../../../shared/constants/adminColors';
 import { adminApiService } from '../../../../services/api/admin.api';
 import { GearLoader } from '../../../../shared/components/GearLoader';
+import { getCurrencySymbol } from '../../../../shared/utils/currency';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -168,7 +169,7 @@ export const TreatmentsPricingScreen: React.FC<{ navigation: any }> = ({ navigat
                           </View>
                           <View>
                             <Text style={styles.itemName}>{t.name}</Text>
-                            <Text style={styles.itemPrice}>₹{t.price}</Text>
+                            <Text style={styles.itemPrice}>{getCurrencySymbol()}{t.price}</Text>
                           </View>
                         </View>
                         <View style={styles.itemActions}>
@@ -238,7 +239,7 @@ export const TreatmentsPricingScreen: React.FC<{ navigation: any }> = ({ navigat
 
               <View style={styles.inputRow}>
                 <View style={[styles.inputGroup, { flex: 1 }]}>
-                  <Text style={styles.label}>PRICE (₹)</Text>
+                  <Text style={styles.label}>PRICE ({getCurrencySymbol()})</Text>
                   <TextInput
                     style={styles.input}
                     placeholder="0.00"

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
 import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop, Rect, Circle, Line } from 'react-native-svg';
+import { getCurrencySymbol } from '../../utils/currency';
 
 const CHART_AREA_HEIGHT = 160;
 const SVG_HEIGHT = CHART_AREA_HEIGHT - 20; // room for x-axis labels below
@@ -112,7 +113,7 @@ export const RevenueChart: React.FC<RevenueChartProps> = ({
       <View style={styles.headerInfo}>
         <Text style={styles.chartTitle}>Revenue</Text>
         <View style={styles.valueRow}>
-          <Text style={styles.chartValue}>₹{totalRevenue.toLocaleString('en-IN')}</Text>
+          <Text style={styles.chartValue}>{getCurrencySymbol()}{totalRevenue.toLocaleString('en-IN')}</Text>
           <View style={[styles.changeBadge, { backgroundColor: isPositive ? '#E6F9F1' : '#FEE2E2' }]}>
             <Text style={[styles.changeBadgeText, { color: isPositive ? '#10B981' : '#EF4444' }]}>
               {isPositive ? '↗' : '↘'} {percentageChange.replace(/^[+-]/, '')}

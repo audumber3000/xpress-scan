@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput 
 import { showAlert } from '../../../../shared/components/alertService';
 import { Calendar, CheckCircle2, Clock, Plus, X, ListTodo, IndianRupee, PencilLine } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
+import { getCurrencySymbol } from '../../../../shared/utils/currency';
 
 interface TimelineItem {
     id: string;
@@ -96,7 +97,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ history, plan, onAdd
                                                 {new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                             </Text>
                                         </View>
-                                        {item.cost && <Text style={styles.costText}>₹{item.cost.toLocaleString('en-IN')}</Text>}
+                                        {item.cost && <Text style={styles.costText}>{getCurrencySymbol()}{item.cost.toLocaleString('en-US')}</Text>}
                                     </View>
                                     {item.notes && <Text style={styles.notesText}>"{item.notes}"</Text>}
                                     <View style={styles.badgeContainer}>
@@ -159,7 +160,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ history, plan, onAdd
                             <View style={styles.inputGroup}>
                                 <View style={styles.labelRow}>
                                     <IndianRupee size={14} color={colors.gray400} />
-                                    <Text style={styles.inputLabel}>ESTIMATED COST (₹)</Text>
+                                    <Text style={styles.inputLabel}>ESTIMATED COST ({getCurrencySymbol()})</Text>
                                 </View>
                                 <TextInput
                                     style={styles.input}

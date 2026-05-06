@@ -11,6 +11,7 @@ import {
 import { WhatsAppIcon } from '../../../../shared/components/icons/WhatsAppIcon';
 import { patientsApiService } from '../../../../services/api/patients.api';
 import { colors } from '../../../../shared/constants/colors';
+import { getCurrencySymbol } from '../../../../shared/utils/currency';
 
 interface BillingTabProps {
   patientId: string;
@@ -179,7 +180,7 @@ export const BillingTab: React.FC<BillingTabProps> = ({ patientId, patientPhone 
               </Text>
               <View style={s.invoiceBottom}>
                 <Text style={s.invoiceDate}>{fmtDate(inv.created_at)}</Text>
-                <Text style={s.invoiceAmount}>₹{calcTotal(inv)}</Text>
+                <Text style={s.invoiceAmount}>{getCurrencySymbol()}{calcTotal(inv)}</Text>
               </View>
               <View style={s.invoiceActions}>
                 <TouchableOpacity style={s.actionBtn} onPress={() => setSelectedInvoice(inv)}>
@@ -216,7 +217,7 @@ export const BillingTab: React.FC<BillingTabProps> = ({ patientId, patientPhone 
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                       <TextInput style={[s.fieldInput, { flex: 1, marginBottom: 0 }]} placeholder="Qty" placeholderTextColor="#9CA3AF"
                         value={li.quantity} onChangeText={v => updateLineItem(i, 'quantity', v)} keyboardType="number-pad" />
-                      <TextInput style={[s.fieldInput, { flex: 1, marginBottom: 0 }]} placeholder="Price (₹)" placeholderTextColor="#9CA3AF"
+                      <TextInput style={[s.fieldInput, { flex: 1, marginBottom: 0 }]} placeholder={`Price (${getCurrencySymbol()})`} placeholderTextColor="#9CA3AF"
                         value={li.unit_price} onChangeText={v => updateLineItem(i, 'unit_price', v)} keyboardType="numeric" />
                     </View>
                   </View>
@@ -279,13 +280,13 @@ export const BillingTab: React.FC<BillingTabProps> = ({ patientId, patientPhone 
                       <Text style={{ fontSize: 13, fontWeight: '500', color: '#111827' }}>{li.description}</Text>
                       <Text style={{ fontSize: 11, color: '#9CA3AF' }}>Qty: {li.quantity}</Text>
                     </View>
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#111827' }}>₹{(li.unit_price * (li.quantity || 1)).toLocaleString('en-IN')}</Text>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#111827' }}>{getCurrencySymbol()}{(li.unit_price * (li.quantity || 1)).toLocaleString('en-US')}</Text>
                   </View>
                 ))}
 
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingTop: 14, marginTop: 8 }}>
                   <Text style={{ fontSize: 15, fontWeight: '700', color: '#111827' }}>Total</Text>
-                  <Text style={{ fontSize: 15, fontWeight: '700', color: colors.primary }}>₹{calcTotal(selectedInvoice)}</Text>
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: colors.primary }}>{getCurrencySymbol()}{calcTotal(selectedInvoice)}</Text>
                 </View>
 
                 {selectedInvoice.notes ? (

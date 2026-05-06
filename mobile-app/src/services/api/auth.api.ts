@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { BaseApiService } from './base.api';
+import { setCurrencySymbol } from '../../shared/utils/currency';
 
 export interface ClinicInfo {
   id: string;
@@ -12,6 +13,7 @@ export interface ClinicInfo {
   is_trial?: boolean;
   plan_ends_at?: string | null;
   trial_days_remaining?: number | null;
+  currency_symbol?: string;
 }
 
 export interface BackendUser {
@@ -47,6 +49,10 @@ export class AuthApiService extends BaseApiService {
     const clinicSource = data.clinic || userData.clinic;
     const clinicsSource = data.clinics || userData.clinics;
     
+    // Prime currency symbol cache from clinic data
+    const symbol = clinicSource?.currency_symbol || clinicsSource?.[0]?.currency_symbol;
+    if (symbol) setCurrencySymbol(symbol);
+
     return {
       id: userData.id.toString(),
       email: userData.email ?? null,
@@ -64,6 +70,7 @@ export class AuthApiService extends BaseApiService {
         is_trial: !!clinicSource.is_trial,
         plan_ends_at: clinicSource.plan_ends_at ?? null,
         trial_days_remaining: clinicSource.trial_days_remaining ?? null,
+        currency_symbol: clinicSource.currency_symbol ?? '₹',
       } : undefined,
       clinics: clinicsSource ? clinicsSource.map((c: any) => ({
         id: c.id.toString(),
@@ -75,6 +82,7 @@ export class AuthApiService extends BaseApiService {
         is_trial: !!c.is_trial,
         plan_ends_at: c.plan_ends_at ?? null,
         trial_days_remaining: c.trial_days_remaining ?? null,
+        currency_symbol: c.currency_symbol ?? '₹',
       })) : [],
       permissions: userData.permissions || {},
     };

@@ -8,6 +8,7 @@ import {
   Pill, Upload, Save, X, Check, Trash2, Receipt, Eye, Edit3,
 } from 'lucide-react-native';
 import { patientsApiService, Patient } from '../../../../services/api/patients.api';
+import { getCurrencySymbol } from '../../../../shared/utils/currency';
 import { colors } from '../../../../shared/constants/colors';
 import { DentalChart } from './DentalChart';
 import { WhatsAppIcon } from '../../../../shared/components/icons/WhatsAppIcon';
@@ -790,7 +791,7 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
                     </View>
                     <Text style={s.txDetail}>
                       {item.tooth ? `Tooth #${item.tooth}` : 'General'}
-                      {item.cost > 0 ? ` · ₹${(item.cost || 0).toLocaleString('en-IN')}` : ''}
+                      {item.cost > 0 ? ` · ${getCurrencySymbol()}${(item.cost || 0).toLocaleString('en-US')}` : ''}
                       {item.diagnosis ? ` · ${item.diagnosis}` : ''}
                     </Text>
                     <Text style={s.txTapHint}>Tap to cycle status</Text>
@@ -954,7 +955,7 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
               <TextInput style={s.fieldInput} placeholder="Procedure *" placeholderTextColor="#9CA3AF" value={txProcedure} onChangeText={setTxProcedure} />
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <TextInput style={[s.fieldInput, { flex: 1 }]} placeholder="Tooth #" placeholderTextColor="#9CA3AF" value={txTooth} onChangeText={setTxTooth} keyboardType="number-pad" />
-                <TextInput style={[s.fieldInput, { flex: 1 }]} placeholder="Cost (₹)" placeholderTextColor="#9CA3AF" value={txCost} onChangeText={setTxCost} keyboardType="numeric" />
+                <TextInput style={[s.fieldInput, { flex: 1 }]} placeholder={`Cost (${getCurrencySymbol()})`} placeholderTextColor="#9CA3AF" value={txCost} onChangeText={setTxCost} keyboardType="numeric" />
               </View>
               <TextInput style={s.fieldInput} placeholder="Notes" placeholderTextColor="#9CA3AF" value={txNotes} onChangeText={setTxNotes} />
               <View style={s.modalBtns}>
@@ -1211,9 +1212,9 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
                   <View key={li.id} style={s.invLineRow}>
                     <View style={{ flex: 1 }}>
                       <Text style={s.invLineDesc}>{li.description}</Text>
-                      <Text style={s.invLineMeta}>{li.quantity} × ₹{li.unit_price?.toLocaleString('en-IN')}</Text>
+                      <Text style={s.invLineMeta}>{li.quantity} × {getCurrencySymbol()}{li.unit_price?.toLocaleString('en-US')}</Text>
                     </View>
-                    <Text style={s.invLineAmt}>₹{((li.quantity || 1) * (li.unit_price || 0)).toLocaleString('en-IN')}</Text>
+                    <Text style={s.invLineAmt}>{getCurrencySymbol()}{((li.quantity || 1) * (li.unit_price || 0)).toLocaleString('en-US')}</Text>
                     {invoiceIsDraft && (
                       <TouchableOpacity onPress={() => removeInvoiceItem(li.id.toString())} style={{ marginLeft: 8 }}>
                         <Trash2 size={14} color="#EF4444" />
@@ -1229,7 +1230,7 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
                       value={newItemDesc} onChangeText={setNewItemDesc} />
                     <TextInput style={[s.fieldInput, { flex: 0.6 }]} placeholder="Qty" placeholderTextColor="#9CA3AF"
                       value={newItemQty} onChangeText={setNewItemQty} keyboardType="number-pad" />
-                    <TextInput style={[s.fieldInput, { flex: 1 }]} placeholder="₹ Price" placeholderTextColor="#9CA3AF"
+                    <TextInput style={[s.fieldInput, { flex: 1 }]} placeholder={`${getCurrencySymbol()} Price`} placeholderTextColor="#9CA3AF"
                       value={newItemPrice} onChangeText={setNewItemPrice} keyboardType="numeric" />
                     <TouchableOpacity style={s.invAddBtn} onPress={addInvoiceItem} disabled={invoiceSaving}>
                       <Plus size={16} color="#fff" />
@@ -1241,7 +1242,7 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
                 <View style={s.invTotals}>
                   <View style={s.invTotalRow}>
                     <Text style={s.invTotalLabel}>Subtotal</Text>
-                    <Text style={s.invTotalValue}>₹{invoiceSubtotal.toLocaleString('en-IN')}</Text>
+                    <Text style={s.invTotalValue}>{getCurrencySymbol()}{invoiceSubtotal.toLocaleString('en-US')}</Text>
                   </View>
                   <View style={s.invTotalRow}>
                     <Text style={s.invTotalLabel}>Discount</Text>
@@ -1255,12 +1256,12 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
                         placeholderTextColor="#9CA3AF"
                       />
                     ) : (
-                      <Text style={s.invTotalValue}>₹{(parseFloat(discount) || 0).toLocaleString('en-IN')}</Text>
+                      <Text style={s.invTotalValue}>{getCurrencySymbol()}{(parseFloat(discount) || 0).toLocaleString('en-US')}</Text>
                     )}
                   </View>
                   <View style={[s.invTotalRow, s.invGrandTotal]}>
                     <Text style={s.invGrandLabel}>Total</Text>
-                    <Text style={s.invGrandValue}>₹{invoiceTotal.toLocaleString('en-IN')}</Text>
+                    <Text style={s.invGrandValue}>{getCurrencySymbol()}{invoiceTotal.toLocaleString('en-US')}</Text>
                   </View>
                 </View>
 
@@ -1306,7 +1307,7 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
           <View style={s.modalSheet}>
             <View style={s.sheetHandle} />
             <Text style={s.sheetTitle}>Payment Mode</Text>
-            <Text style={s.invNum}>Total: ₹{invoiceTotal.toLocaleString('en-IN')}</Text>
+            <Text style={s.invNum}>Total: {getCurrencySymbol()}{invoiceTotal.toLocaleString('en-US')}</Text>
             <View style={{ gap: 8, marginTop: 8 }}>
               {PAYMENT_MODES.map(pm => (
                 <TouchableOpacity

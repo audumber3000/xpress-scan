@@ -20,6 +20,8 @@ export type AuthContextType = {
   setIsClinicSwitcherVisible: (visible: boolean) => void
   switchBranch: (clinicId: string) => Promise<void>
   authProvider: 'google' | 'email' | 'apple' | null
+  appleFullName: string | null
+  setAppleFullName: (name: string | null) => void
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null)
@@ -33,6 +35,7 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
   const [isLoading, setIsLoading] = useState(true)
   const [isClinicSwitcherVisible, setIsClinicSwitcherVisible] = useState(false)
   const [authProvider, setAuthProvider] = useState<'google' | 'email' | 'apple' | null>(null)
+  const [appleFullName, setAppleFullName] = useState<string | null>(null)
 
   // Background-sync with backend — does NOT block loading
   const syncBackendUser = useCallback(async (firebaseUser: User, storedUser: BackendUser | null) => {
@@ -197,6 +200,8 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
     setIsClinicSwitcherVisible,
     switchBranch,
     authProvider,
+    appleFullName,
+    setAppleFullName,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

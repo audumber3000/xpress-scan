@@ -4,7 +4,7 @@ import {
     requestNotificationPermissions,
     setupAndroidNotificationChannel,
 } from '../services/notifications/permissions';
-import { getExpoPushToken } from '../services/notifications/pushToken';
+import { getExpoPushToken, registerPushTokenWithBackend } from '../services/notifications/pushToken';
 
 export interface PushNotificationState {
     expoPushToken?: string;
@@ -31,12 +31,11 @@ export function usePushNotifications(): PushNotificationState {
             setPermissionGranted(permissionResult.granted);
 
             if (permissionResult.granted) {
-                // Get push token
+                // Get push token and register with backend
                 const tokenResult = await getExpoPushToken();
                 if (tokenResult.token) {
                     setExpoPushToken(tokenResult.token);
-                    // TODO: Send token to your backend
-                    // await registerPushTokenWithBackend(tokenResult.token, userId);
+                    await registerPushTokenWithBackend(tokenResult.token);
                 }
             } else {
                 console.log('⚠️ Notification permissions not granted');

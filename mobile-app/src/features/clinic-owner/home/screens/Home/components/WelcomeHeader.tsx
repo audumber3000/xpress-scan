@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Bell, ChevronDown } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '../../../../../../shared/constants/colors';
+import { getCurrencySymbol } from '../../../../../../shared/utils/currency';
 
 interface WelcomeHeaderProps {
   userName: string;
@@ -145,7 +146,7 @@ export const WelcomeHeaderTopPart: React.FC<WelcomeHeaderProps> = ({
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>REVENUE</Text>
-            <Text style={styles.statValue}>₹{dailyRevenue.toLocaleString('en-IN')}</Text>
+            <Text style={styles.statValue}>{getCurrencySymbol()}{dailyRevenue.toLocaleString('en-IN')}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>PATIENTS</Text>

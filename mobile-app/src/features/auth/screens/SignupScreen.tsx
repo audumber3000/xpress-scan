@@ -37,6 +37,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../app/AppNavigator';
 import { signUpWithEmail } from '../../../services/auth/authService';
 import { authApiService } from '../../../services/api/auth.api';
+import { detectCountry } from '../../../shared/utils/detectCountry';
 import { colors } from '../../../shared/constants/colors';
 import { useAuth } from '../../../app/AuthContext';
 
@@ -46,13 +47,16 @@ type SignupScreenProps = NativeStackScreenProps<RootStackParamList, 'Signup'>;
 
 export const SignupScreen: React.FC<SignupScreenProps> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const { refreshBackendUser, authProvider, user: firebaseUser } = useAuth();
+  const { refreshBackendUser, authProvider, user: firebaseUser, appleFullName } = useAuth();
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
   // Step 1: Personal Details
-  const [fullName, setFullName] = useState('');
+  // For Apple sign-up, pre-fill the name from Apple's first-time-only
+  // AuthenticationServices response so we never re-prompt the user
+  // (App Store guideline 4 — required by Apple Review).
+  const [fullName, setFullName] = useState(appleFullName || '');
   const [personalPhone, setPersonalPhone] = useState('');
   const [specialty, setSpecialty] = useState('');
 
@@ -136,11 +140,14 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({ navigation }) => {
         clinic_name: clinicName,
         clinic_address: clinicAddress,
         clinic_phone: clinicPhone || personalPhone,
-        clinic_email: authProvider === 'google' ? firebaseUser?.email || '' : email,
+        clinic_email: (authProvider === 'google' || authProvider === 'apple')
+          ? (firebaseUser?.email || '')
+          : email,
         specialization: specialty,
         number_of_chairs: parseInt(numberOfChairs) || 1,
         full_name: fullName,
-        category: clinicCategory
+        category: clinicCategory,
+        country: detectCountry(),
       };
 
       const onboardingResult = await authApiService.completeOnboarding(onboardingData);

@@ -13,6 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../app/AppNavigator';
 import { AppSkeleton } from '../Skeleton';
+import { getCurrencySymbol } from '../../utils/currency';
 
 interface RecentTransactionsProps {
   transactions: Transaction[];
@@ -54,7 +55,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   };
 
   const formatAmount = (amount: number) => {
-    return `₹${amount.toLocaleString()}`;
+    return `${getCurrencySymbol()}${amount.toLocaleString()}`;
   };
 
 

@@ -20,6 +20,7 @@ import { colors } from '../../../../shared/constants/colors';
 import { patientsApiService } from '../../../../services/api/patients.api';
 import { treatmentApiService } from '../../../../services/api/treatment.api';
 import { appointmentsApiService } from '../../../../services/api/appointments.api';
+import { getCurrencySymbol } from '../../../../shared/utils/currency';
 
 interface AddPatientScreenProps {
   visible: boolean;
@@ -456,7 +457,7 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
                   }}
                 >
                   <Text style={styles.dropdownItemText}>General Consultation</Text>
-                  <Text style={styles.dropdownItemPrice}>₹2000</Text>
+                  <Text style={styles.dropdownItemPrice}>{getCurrencySymbol()}2000</Text>
                 </TouchableOpacity>
                 {treatmentTypes.length === 0 ? (
                   <View style={styles.dropdownItem}>
@@ -473,7 +474,7 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
                       }}
                     >
                       <Text style={styles.dropdownItemText}>{type.name}</Text>
-                      <Text style={styles.dropdownItemPrice}>₹{type.price}</Text>
+                      <Text style={styles.dropdownItemPrice}>{getCurrencySymbol()}{type.price}</Text>
                     </TouchableOpacity>
                   ))
                 )}

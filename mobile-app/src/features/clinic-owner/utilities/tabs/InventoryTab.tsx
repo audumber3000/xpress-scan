@@ -16,6 +16,7 @@ import {
 import { styles } from './sharedStyles';
 import { SwipeableRow } from './SwipeableRow';
 import { getInitials } from './helpers';
+import { getCurrencySymbol } from '../../../../shared/utils/currency';
 
 const EmptyState = () => (
   <View style={styles.emptyState}>
@@ -177,7 +178,7 @@ export const InventoryTab: React.FC = () => {
                       </Text>
                     </View>
                     <View style={styles.rowRight}>
-                      <Text style={styles.rowValue}>₹{item.price_per_unit}</Text>
+                      <Text style={styles.rowValue}>{getCurrencySymbol()}{item.price_per_unit}</Text>
                       <View style={[styles.badge, { backgroundColor: low ? '#FEE2E2' : '#E6F9F1' }]}>
                         <Text style={[styles.badgeText, { color: low ? '#B91C1C' : '#10B981' }]}>
                           {low ? 'LOW STOCK' : 'IN STOCK'}
@@ -226,7 +227,7 @@ export const InventoryTab: React.FC = () => {
                 </View>
                 <View style={styles.inventoryTrayStat}>
                   <Text style={styles.inventoryTrayStatLabel}>PRICE / UNIT</Text>
-                  <Text style={styles.inventoryTrayStatValue}>₹{actionItem?.price_per_unit}</Text>
+                  <Text style={styles.inventoryTrayStatValue}>{getCurrencySymbol()}{actionItem?.price_per_unit}</Text>
                 </View>
               </View>
               <Text style={styles.actionSheetSectionLabel}>Quick Restock</Text>
@@ -274,7 +275,7 @@ export const InventoryTab: React.FC = () => {
                   <TextInput style={styles.input} keyboardType="decimal-pad" value={editForm.min_stock_level?.toString() || ''} onChangeText={v => setEditForm(p => ({ ...p, min_stock_level: parseFloat(v) || 0 }))} />
                 </View>
                 <View style={styles.inputHalf}>
-                  <Text style={styles.inputLabel}>Price / Unit (₹)</Text>
+                  <Text style={styles.inputLabel}>Price / Unit ({getCurrencySymbol()})</Text>
                   <TextInput style={styles.input} keyboardType="decimal-pad" value={editForm.price_per_unit?.toString() || ''} onChangeText={v => setEditForm(p => ({ ...p, price_per_unit: parseFloat(v) || 0 }))} />
                 </View>
               </View>
@@ -316,7 +317,7 @@ export const InventoryTab: React.FC = () => {
                   <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="0" value={form.min_stock_level?.toString() || ''} onChangeText={v => setForm(p => ({ ...p, min_stock_level: parseFloat(v) || 0 }))} />
                 </View>
                 <View style={styles.inputHalf}>
-                  <Text style={styles.inputLabel}>Price / Unit (₹)</Text>
+                  <Text style={styles.inputLabel}>Price / Unit ({getCurrencySymbol()})</Text>
                   <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="0.00" value={form.price_per_unit?.toString() || ''} onChangeText={v => setForm(p => ({ ...p, price_per_unit: parseFloat(v) || 0 }))} />
                 </View>
               </View>

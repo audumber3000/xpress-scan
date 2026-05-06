@@ -13,6 +13,7 @@ import {
 import { adminColors } from '../../../../shared/constants/adminColors';
 import { colors } from '../../../../shared/constants/colors';
 import { adminApiService } from '../../../../services/api/admin.api';
+import { getCurrencySymbol } from '../../../../shared/utils/currency';
 
 const CATEGORY_META: Record<string, { icon: any; color: string; bg: string }> = {
   'procedures':         { icon: Stethoscope,   color: '#2D9596', bg: '#E0F2F2' },
@@ -198,7 +199,7 @@ export const PracticeSettingsScreen: React.FC<PracticeSettingsScreenProps> = ({ 
                 <Text style={styles.itemName}>{item.name}</Text>
                 {item.description ? <Text style={styles.itemDesc}>{item.description}</Text> : null}
                 {isAdditionalFees && item.cost != null ? (
-                  <Text style={[styles.itemCost, { color: meta.color }]}>₹{item.cost.toFixed(2)}</Text>
+                  <Text style={[styles.itemCost, { color: meta.color }]}>{getCurrencySymbol()}{item.cost.toFixed(2)}</Text>
                 ) : null}
               </View>
               <TouchableOpacity style={styles.editBtn} onPress={() => openEdit(item)}>
@@ -250,7 +251,7 @@ export const PracticeSettingsScreen: React.FC<PracticeSettingsScreenProps> = ({ 
 
             {isAdditionalFees && (
               <View style={styles.field}>
-                <Text style={styles.fieldLabel}>Cost (₹)</Text>
+                <Text style={styles.fieldLabel}>Cost ({getCurrencySymbol()})</Text>
                 <TextInput
                   style={styles.fieldInput}
                   placeholder="0.00"

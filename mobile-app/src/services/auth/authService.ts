@@ -7,11 +7,15 @@ import {
   User,
   signInWithCredential,
   GoogleAuthProvider,
+  OAuthProvider,
 } from 'firebase/auth'
 import { Platform } from 'react-native'
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin'
+import * as AppleAuthentication from 'expo-apple-authentication'
+import * as Crypto from 'expo-crypto'
 import { auth } from '../../config/firebase'
 import { authApiService } from '../api/auth.api'
+import { saveLastLogin } from './lastLogin'
 
 // Configure Google Sign-In
 // Get web client ID from Firebase Console → Project Settings → General → Your apps → Web app
@@ -112,6 +116,11 @@ export const signInWithEmail = async (identifier: string, password: string) => {
     const { user: backendUser, error: backendError } =
       await authApiService.backendLogin(identifier, password)
     if (backendUser) {
+      saveLastLogin({
+        provider: 'email',
+        email: identifier,
+        name: (backendUser as any).name || undefined,
+      })
       return { user: null, backendUser, error: null }
     }
     return {
@@ -135,6 +144,12 @@ export const signInWithEmail = async (identifier: string, password: string) => {
     } catch (backendError) {
       console.warn('Backend sync failed:', backendError)
     }
+
+    saveLastLogin({
+      provider: 'email',
+      email: identifier,
+      name: userCredential.user.displayName || undefined,
+    })
 
     return {
       user: userCredential.user,
@@ -166,6 +181,9 @@ export const signInWithEmail = async (identifier: string, password: string) => {
  */
 export const signOutUser = async () => {
   try {
+    // Unregister push token before clearing auth
+    const { unregisterPushToken } = await import('../notifications/pushToken')
+    await unregisterPushToken()
     // Clear backend tokens
     await authApiService.clearTokens()
     // Sign out from Firebase
@@ -294,6 +312,14 @@ export const signInWithGoogle = async (role?: string) => {
       // Continue even if backend sync fails - user is still logged in to Firebase
     }
 
+    if (userCredential.user.email) {
+      saveLastLogin({
+        provider: 'google',
+        email: userCredential.user.email,
+        name: userCredential.user.displayName || undefined,
+      })
+    }
+
     return {
       user: userCredential.user,
       error: null,
@@ -316,6 +342,117 @@ export const signInWithGoogle = async (role?: string) => {
     return {
       user: null,
       error: error.message || errorMessage,
+    }
+  }
+}
+
+/**
+ * Sign in with Apple (iOS only).
+ *
+ * Flow: native AppleAuthentication.signInAsync → wrap identityToken in a
+ * Firebase OAuthProvider('apple.com') credential → signInWithCredential →
+ * sync the resulting Firebase ID token with our backend (same /oauth endpoint
+ * Google uses).
+ *
+ * Apple returns `fullName` only on the FIRST authorization for an Apple ID
+ * against this app — subsequent calls return null for fullName/email. We
+ * surface it so the signup screen can pre-fill the name field; never
+ * re-prompt the user for it (Apple HIG / App Store guideline 4).
+ */
+export const signInWithApple = async (role?: string) => {
+  if (Platform.OS !== 'ios') {
+    return {
+      user: null,
+      appleFullName: null,
+      error: 'Sign in with Apple is only available on iOS.',
+    }
+  }
+
+  try {
+    const isAvailable = await AppleAuthentication.isAvailableAsync()
+    if (!isAvailable) {
+      return {
+        user: null,
+        appleFullName: null,
+        error: 'Sign in with Apple is not available on this device.',
+      }
+    }
+
+    // Firebase requires the SHA-256 of the nonce passed to Apple, with the raw
+    // nonce sent alongside the credential — Apple signs the hash, Firebase
+    // verifies it matches the raw nonce we send.
+    const rawNonce = Math.random().toString(36).slice(2) + Date.now().toString(36)
+    const hashedNonce = await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      rawNonce,
+    )
+
+    const credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+      nonce: hashedNonce,
+    })
+
+    if (!credential.identityToken) {
+      return {
+        user: null,
+        appleFullName: null,
+        error: 'Apple did not return an identity token. Please try again.',
+      }
+    }
+
+    const provider = new OAuthProvider('apple.com')
+    const firebaseCredential = provider.credential({
+      idToken: credential.identityToken,
+      rawNonce,
+    })
+
+    const userCredential = await signInWithCredential(auth, firebaseCredential)
+
+    // Compose full name from Apple's response (first sign-in only)
+    let appleFullName: string | null = null
+    if (credential.fullName) {
+      const parts = [
+        credential.fullName.givenName,
+        credential.fullName.familyName,
+      ].filter(Boolean)
+      if (parts.length) appleFullName = parts.join(' ')
+    }
+
+    // Sync with backend — same endpoint as Google. Backend verifies the
+    // Firebase token and creates the user from the email/name claims Firebase
+    // extracts from Apple's identity token.
+    const firebaseIdToken = await userCredential.user.getIdToken()
+    try {
+      await authApiService.oauthLogin(firebaseIdToken, role)
+    } catch (backendError) {
+      console.warn('Backend sync failed:', backendError)
+    }
+
+    if (userCredential.user.email) {
+      saveLastLogin({
+        provider: 'apple',
+        email: userCredential.user.email,
+        name: appleFullName || userCredential.user.displayName || undefined,
+      })
+    }
+
+    return {
+      user: userCredential.user,
+      appleFullName,
+      error: null,
+    }
+  } catch (error: any) {
+    // Cancellation is not an error to surface to the user.
+    if (error?.code === 'ERR_REQUEST_CANCELED') {
+      return { user: null, appleFullName: null, error: 'Sign in was cancelled' }
+    }
+    return {
+      user: null,
+      appleFullName: null,
+      error: error?.message || 'Failed to sign in with Apple',
     }
   }
 }
