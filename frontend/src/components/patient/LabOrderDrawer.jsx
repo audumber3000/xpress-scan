@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Beaker, Calendar, Search, Trash2, Plus, Info, User } from 'lucide-react';
 import { api } from '../../utils/api';
 import { toast } from 'react-toastify';
+import { getCurrencySymbol } from '../../utils/currency';
 
 const LabOrderDrawer = ({ isOpen, onClose, patientId, casePaperId, onSave, order = null }) => {
     const [vendors, setVendors] = useState([]);
@@ -283,7 +284,7 @@ const LabOrderDrawer = ({ isOpen, onClose, patientId, casePaperId, onSave, order
 
                         {/* Cost */}
                         <div className="space-y-1.5">
-                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Lab Cost (₹)</label>
+                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Lab Cost ({getCurrencySymbol()})</label>
                             <input
                                 type="number"
                                 min="0"

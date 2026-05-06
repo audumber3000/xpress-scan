@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../../utils/api";
+import { getCurrencySymbol } from "../../utils/currency";
 
 const InvoiceLineItemForm = ({ lineItem, onSave, onCancel }) => {
   const [itemType, setItemType] = useState('Treatment'); // 'Treatment', 'Product', 'Custom'
@@ -136,7 +137,7 @@ const InvoiceLineItemForm = ({ lineItem, onSave, onCancel }) => {
           >
             <option value="">-- Select Treatment --</option>
             {treatments.map(t => (
-              <option key={t.id} value={t.id}>{t.name} (₹{t.price})</option>
+              <option key={t.id} value={t.id}>{t.name} ({getCurrencySymbol()}{t.price})</option>
             ))}
           </select>
         ) : itemType === 'Medication' ? (
@@ -148,7 +149,7 @@ const InvoiceLineItemForm = ({ lineItem, onSave, onCancel }) => {
           >
             <option value="">-- Select Medication --</option>
             {medications.map(m => (
-              <option key={m.id} value={m.id}>{m.name} {m.dosage ? `(${m.dosage})` : ''} - ₹{m.unit_price || 0}</option>
+              <option key={m.id} value={m.id}>{m.name} {m.dosage ? `(${m.dosage})` : ''} - {getCurrencySymbol()}{m.unit_price || 0}</option>
             ))}
           </select>
         ) : itemType === 'Product' ? (
@@ -160,7 +161,7 @@ const InvoiceLineItemForm = ({ lineItem, onSave, onCancel }) => {
           >
             <option value="">-- Select Inventory Product --</option>
             {inventory.map(p => (
-              <option key={p.id} value={p.id}>{p.name} {p.price_per_unit ? `(₹${p.price_per_unit})` : ''}</option>
+              <option key={p.id} value={p.id}>{p.name} {p.price_per_unit ? `(${getCurrencySymbol()}${p.price_per_unit})` : ''}</option>
             ))}
           </select>
         ) : null}
@@ -193,7 +194,7 @@ const InvoiceLineItemForm = ({ lineItem, onSave, onCancel }) => {
 
         <div>
            <label className="block text-sm font-medium text-gray-700 mb-1">
-            Unit Price (₹)
+            Unit Price ({getCurrencySymbol()})
           </label>
           <input
             type="number"
@@ -210,7 +211,7 @@ const InvoiceLineItemForm = ({ lineItem, onSave, onCancel }) => {
         <div className="flex justify-between items-center">
           <span className="text-sm font-medium text-gray-700">Amount:</span>
           <span className="text-lg font-semibold text-gray-900">
-            ₹{amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            {getCurrencySymbol()}{amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
           </span>
         </div>
       </div>

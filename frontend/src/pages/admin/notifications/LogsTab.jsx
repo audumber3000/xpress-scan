@@ -5,6 +5,7 @@ import {
   Clock, Send, CheckCircle2, Eye, XCircle,
 } from 'lucide-react';
 import { EVENT_LABELS, CHANNEL_META } from './constants';
+import { getCurrencySymbol } from '../../../utils/currency';
 
 const LogsTab = ({ logs, logsTotal, logsPage, logsFilter, setLogsFilter, setLogsPage, fetchLogs }) => (
   <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
@@ -101,7 +102,7 @@ const LogsTab = ({ logs, logsTotal, logsPage, logsFilter, setLogsFilter, setLogs
                     </span>
                   </td>
                   <td className="px-5 py-3.5 text-xs font-medium text-gray-600 text-right pr-6">
-                    {log.cost > 0 ? `₹${log.cost.toFixed(4)}` : '—'}
+                    {log.cost > 0 ? `${getCurrencySymbol()}${log.cost.toFixed(4)}` : '—'}
                   </td>
                 </tr>
               );

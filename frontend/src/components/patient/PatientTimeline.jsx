@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import ToothSurfaceMap from './ToothSurfaceMap';
+import { getCurrencySymbol } from '../../utils/currency';
 
 /**
  * PatientTimeline - Flush Kanban Board, edge-to-edge buttons, Tooth Diagram integration
@@ -258,11 +259,11 @@ const PatientTimeline = ({
                     </div>
                     <div>
                         <p className="text-[10px] text-gray-500 mb-1 font-bold uppercase tracking-wider">Price</p>
-                        <p className="font-bold text-gray-600 text-sm">₹{itemPrice.toLocaleString('en-IN')}</p>
+                        <p className="font-bold text-gray-600 text-sm">{getCurrencySymbol()}{itemPrice.toLocaleString('en-US')}</p>
                     </div>
                     <div className="text-right flex flex-col items-end">
                         <p className="text-[10px] text-gray-500 mb-1 font-bold uppercase tracking-wider text-[rgb(0,190,129)]">Total</p>
-                        <p className="font-black text-[rgb(0,210,143)] text-[16px] leading-none drop-shadow-sm">₹{total.toLocaleString('en-IN')}</p>
+                        <p className="font-black text-[rgb(0,210,143)] text-[16px] leading-none drop-shadow-sm">{getCurrencySymbol()}{total.toLocaleString('en-US')}</p>
                     </div>
                 </div>
 

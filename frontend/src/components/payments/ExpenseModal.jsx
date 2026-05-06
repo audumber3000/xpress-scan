@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
 import { toast } from 'react-toastify';
+import { getCurrencySymbol } from '../../utils/currency';
 import GearLoader from '../GearLoader';
 
 const ExpenseModal = ({ expenseId, onClose, onSave }) => {
@@ -178,7 +179,7 @@ const ExpenseModal = ({ expenseId, onClose, onSave }) => {
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Amount (₹)*</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Amount ({getCurrencySymbol()})*</label>
                     <input
                       type="number"
                       name="amount"

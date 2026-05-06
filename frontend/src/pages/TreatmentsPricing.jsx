@@ -6,6 +6,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import { ChevronLeft, Search, Plus, Pill, Layers, Info } from 'lucide-react';
 import GearLoader from "../components/GearLoader";
+import { getCurrencySymbol } from "../utils/currency";
 
 /* ── GST Info Popover (reusable) ─────────────────────────────────────────── */
 const GST_DATA = {
@@ -459,7 +460,7 @@ const TreatmentsPricing = () => {
                       </td>
                       {activeTab === 'services' ? (
                         <td className="px-6 py-4 text-sm font-mono text-[#2D9596] font-bold">
-                          ₹{item.price}
+                          {getCurrencySymbol()}{item.price}
                         </td>
                       ) : (
                         <>
@@ -556,7 +557,7 @@ const TreatmentsPricing = () => {
                   {activeTab === 'services' ? (
                     <div className="space-y-2">
                       <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-1">
-                        Price (₹)
+                        Price ({getCurrencySymbol()})
                       </label>
                       <input
                         type="number"

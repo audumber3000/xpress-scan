@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
 import { toast } from 'react-toastify';
+import { getCurrencySymbol } from '../../utils/currency';
 
 const CreateInvoiceModal = ({ isOpen, onClose, patientId, appointments = [], onSuccess }) => {
     const [loading, setLoading] = useState(false);
@@ -165,7 +166,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, patientId, appointments = [], onS
                                     </div>
                                     <div className="w-32">
                                         <div className="relative">
-                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">{getCurrencySymbol()}</span>
                                             <input
                                                 type="number"
                                                 placeholder="Price"
@@ -207,7 +208,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, patientId, appointments = [], onS
                     <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
                         <div className="text-gray-500">
                             <span className="text-sm">Total Amount:</span>
-                            <span className="ml-2 text-2xl font-black text-gray-900">₹{calculateTotal().toLocaleString('en-IN')}</span>
+                            <span className="ml-2 text-2xl font-black text-gray-900">{getCurrencySymbol()}{calculateTotal().toLocaleString('en-US')}</span>
                         </div>
                         <div className="flex gap-3">
                             <button

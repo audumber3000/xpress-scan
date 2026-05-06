@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { ExternalLink } from 'lucide-react';
+import { getCurrencySymbol } from '../../utils/currency';
 
 const formatTime = (value) => {
   if (!value) return null;
@@ -59,7 +60,7 @@ const PatientVisitHistory = ({ appointments = [], prescriptions = [], invoices =
         type: 'invoice',
         id: inv.id,
         time: formatTime(inv.created_at),
-        title: `Invoice — ₹${inv.total_amount || inv.amount || 0}`,
+        title: `Invoice — ${getCurrencySymbol()}${inv.total_amount || inv.amount || 0}`,
         status: inv.status === 'paid' ? 'Paid' : 'Unpaid',
       });
     });

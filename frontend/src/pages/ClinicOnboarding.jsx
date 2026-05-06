@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
 import { api } from '../utils/api';
+import { getCurrencySymbol } from '../utils/currency';
+import { detectCountry } from '../utils/detectCountry';
 import {
   Building2,
   MapPin,
@@ -15,6 +17,7 @@ import {
   Check,
   Minus,
   MessageCircle,
+  Globe,
 } from 'lucide-react';
 
 const STEPS = [
@@ -39,6 +42,7 @@ const ClinicOnboarding = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
+  const [countries, setCountries] = useState([]);
   const [formData, setFormData] = useState({
     full_name: "",
     specialty: "",
@@ -46,6 +50,7 @@ const ClinicOnboarding = () => {
     clinic_address: "",
     clinic_phone: "",
     clinic_email: "",
+    country: detectCountry(),
     number_of_chairs: 1,
     category: "General Dentistry",
     subscription_plan: "free",
@@ -63,6 +68,17 @@ const ClinicOnboarding = () => {
         full_name: u.name || u.full_name || "",
       }));
     }
+    // Fetch supported countries for the dropdown.
+    // If the locale-detected country isn't in the supported list, snap back
+    // to "IN" so the dropdown doesn't render an invalid/blank selection.
+    api.get('/clinics/countries').then((list) => {
+      setCountries(list);
+      setFormData((prev) =>
+        list.some((c) => c.code === prev.country)
+          ? prev
+          : { ...prev, country: 'IN' }
+      );
+    }).catch(() => {});
   }, []);
 
   const handleInputChange = (e) => {
@@ -81,7 +97,7 @@ const ClinicOnboarding = () => {
     if (currentStep === 1) return formData.full_name.trim() && formData.specialty.trim();
     if (currentStep === 2) {
       const phone = formData.clinic_phone.replace(/\D/g, '');
-      return formData.clinic_name.trim() && formData.clinic_address.trim() && phone.length >= 10;
+      return formData.clinic_name.trim() && formData.clinic_address.trim() && phone.length >= 4;
     }
     if (currentStep === 3) return formData.number_of_chairs >= 1 && !!formData.category;
     return true;
@@ -91,7 +107,7 @@ const ClinicOnboarding = () => {
     setLoading(true);
     try {
       const cleanPhone = formData.clinic_phone.replace(/\D/g, '');
-      if (cleanPhone.length < 10) throw new Error("Enter a valid 10-digit phone number.");
+      if (cleanPhone.length < 4) throw new Error("Enter a valid phone number.");
 
       const referralCode = sessionStorage.getItem('referred_by_code');
       const payload = {
@@ -246,6 +262,28 @@ const ClinicOnboarding = () => {
                 <div>
                   <label className={labelCls}>
                     <span className="flex items-center gap-1.5">
+                      <Globe className="w-4 h-4 text-gray-400" /> Country *
+                    </span>
+                  </label>
+                  <select
+                    name="country"
+                    value={formData.country}
+                    onChange={handleInputChange}
+                    className={inputCls}
+                  >
+                    {countries.length > 0 ? countries.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.name} ({c.currency_symbol})
+                      </option>
+                    )) : (
+                      <option value="IN">India (₹)</option>
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className={labelCls}>
+                    <span className="flex items-center gap-1.5">
                       <Building2 className="w-4 h-4 text-gray-400" /> Clinic name *
                     </span>
                   </label>
@@ -262,7 +300,7 @@ const ClinicOnboarding = () => {
                 <div>
                   <label className={labelCls}>
                     <span className="flex items-center gap-1.5">
-                      <MessageCircle className="w-4 h-4 text-green-600" /> WhatsApp number *
+                      <MessageCircle className="w-4 h-4 text-green-600" /> WhatsApp / Phone number *
                     </span>
                   </label>
                   <input
@@ -270,7 +308,7 @@ const ClinicOnboarding = () => {
                     name="clinic_phone"
                     value={formData.clinic_phone}
                     onChange={handleInputChange}
-                    placeholder="+91 98765 43210"
+                    placeholder={countries.find(c => c.code === formData.country)?.phone_code + ' ...' || '+91 98765 43210'}
                     className={inputCls}
                   />
                   <p className="mt-1.5 text-xs text-gray-500">
@@ -415,7 +453,7 @@ const ClinicOnboarding = () => {
                         <CheckCircle className="w-5 h-5 text-[#2a276e]" />
                       )}
                     </div>
-                    <div className="text-2xl font-bold text-gray-900">₹0</div>
+                    <div className="text-2xl font-bold text-gray-900">{getCurrencySymbol()}0</div>
                     <p className="text-xs text-gray-500 mb-3">Forever — get started</p>
                     <ul className="space-y-1.5 text-xs text-gray-600">
                       {['Up to 50 patients', 'Basic appointments', 'Single user'].map((f) => (
@@ -445,17 +483,17 @@ const ClinicOnboarding = () => {
                     {formData.billing_cycle === 'annual' ? (
                       <>
                         <div className="flex items-baseline gap-1.5">
-                          <span className="text-2xl font-bold text-gray-900">₹675</span>
+                          <span className="text-2xl font-bold text-gray-900">{getCurrencySymbol()}675</span>
                           <span className="text-xs text-gray-500">/month</span>
                         </div>
                         <p className="text-xs text-gray-500 mb-3">
-                          Billed ₹8,100/year — save ₹2,688
+                          Billed {getCurrencySymbol()}8,100/year — save {getCurrencySymbol()}2,688
                         </p>
                       </>
                     ) : (
                       <>
                         <div className="flex items-baseline gap-1.5">
-                          <span className="text-2xl font-bold text-gray-900">₹899</span>
+                          <span className="text-2xl font-bold text-gray-900">{getCurrencySymbol()}899</span>
                           <span className="text-xs text-gray-500">/month</span>
                         </div>
                         <p className="text-xs text-gray-500 mb-3">Billed monthly</p>

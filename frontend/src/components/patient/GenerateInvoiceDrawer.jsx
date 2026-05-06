@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
 import { toast } from 'react-toastify';
+import { getCurrencySymbol } from '../../utils/currency';
 
 /**
  * GenerateInvoiceDrawer - Literally copied from InvoiceEditor.jsx style
@@ -48,7 +49,7 @@ const GenerateInvoiceDrawer = ({ isOpen, onClose, patientId, draftItems = [], on
             toast.success("Invoice generated successfully!");
             if (sendWhatsApp && patientPhone) {
                 const total = calculateTotal();
-                const msg = `Hello! A new invoice has been generated for your recent visit. Total: ₹${total.toLocaleString('en-IN')}. Thank you!`;
+                const msg = `Hello! A new invoice has been generated for your recent visit. Total: ${getCurrencySymbol()}${total.toLocaleString('en-US')}. Thank you!`;
                 window.open(`https://wa.me/${patientPhone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
             }
             if (onSuccess) onSuccess();
@@ -182,7 +183,7 @@ const GenerateInvoiceDrawer = ({ isOpen, onClose, patientId, draftItems = [], on
                                                     />
                                                 </td>
                                                 <td className="px-4 py-3 text-right text-sm font-bold text-gray-900 w-24">
-                                                    ₹{(parseFloat(item.quantity || 0) * parseFloat(item.unit_price || 0)).toLocaleString('en-IN')}
+                                                    {getCurrencySymbol()}{(parseFloat(item.quantity || 0) * parseFloat(item.unit_price || 0)).toLocaleString('en-US')}
                                                 </td>
                                                 <td className="px-4 py-3 text-right">
                                                     <button onClick={() => setLineItems(lineItems.filter((_, i) => i !== index))} className="text-gray-300 hover:text-red-500 transition-colors">
@@ -206,12 +207,12 @@ const GenerateInvoiceDrawer = ({ isOpen, onClose, patientId, draftItems = [], on
                                 <div className="w-[300px] flex flex-col gap-2">
                                     <div className="flex justify-between text-sm text-gray-600">
                                         <span>Subtotal:</span>
-                                        <span className="font-medium text-gray-900">₹{calculateSubtotal().toLocaleString('en-IN')}</span>
+                                        <span className="font-medium text-gray-900">{getCurrencySymbol()}{calculateSubtotal().toLocaleString('en-US')}</span>
                                     </div>
                                     <div className="flex justify-between text-sm text-gray-600">
                                         <span>Discount:</span>
                                         <div className="flex items-center gap-1">
-                                            <span className="text-red-500">- ₹</span>
+                                            <span className="text-red-500">- {getCurrencySymbol()}</span>
                                             <input 
                                                 className="w-16 border-none focus:ring-0 p-0 text-right text-red-500 font-medium"
                                                 type="number"
@@ -222,7 +223,7 @@ const GenerateInvoiceDrawer = ({ isOpen, onClose, patientId, draftItems = [], on
                                     </div>
                                     <div className="flex justify-between text-lg font-bold border-t border-gray-200 pt-2 mt-1">
                                         <span className="text-gray-900">Total:</span>
-                                        <span className="text-[#25D366]">₹{calculateTotal().toLocaleString('en-IN')}</span>
+                                        <span className="text-[#25D366]">{getCurrencySymbol()}{calculateTotal().toLocaleString('en-US')}</span>
                                     </div>
                                 </div>
                             </div>

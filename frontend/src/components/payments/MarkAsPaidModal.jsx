@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { toast } from "react-toastify";
+import { getCurrencySymbol } from "../../utils/currency";
 
 const MarkAsPaidModal = ({ invoice, onClose, onConfirm }) => {
   const [paymentMode, setPaymentMode] = useState("UPI");
@@ -111,7 +112,7 @@ const MarkAsPaidModal = ({ invoice, onClose, onConfirm }) => {
             {isPartial && (
               <div className="mt-3">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Amount Paid (₹)
+                  Amount Paid ({getCurrencySymbol()})
                 </label>
                 <input
                   type="number"
@@ -122,7 +123,7 @@ const MarkAsPaidModal = ({ invoice, onClose, onConfirm }) => {
                   placeholder="Enter partial amount"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#25D366] focus:border-transparent"
                 />
-                <p className="text-xs text-gray-500 mt-1">Must be less than due amount ₹{dueAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                <p className="text-xs text-gray-500 mt-1">Must be less than due amount {getCurrencySymbol()}{dueAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
               </div>
             )}
           </div>
@@ -131,19 +132,19 @@ const MarkAsPaidModal = ({ invoice, onClose, onConfirm }) => {
             <div className="flex justify-between text-sm mb-2">
               <span className="text-gray-600">Invoice Total:</span>
               <span className="font-semibold text-gray-900">
-                ₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                {getCurrencySymbol()}{total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </span>
             </div>
             <div className="flex justify-between text-sm mb-2">
               <span className="text-gray-600">Already Paid:</span>
               <span className="font-semibold text-gray-900">
-                ₹{alreadyPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                {getCurrencySymbol()}{alreadyPaid.toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Due Amount:</span>
               <span className="font-semibold text-red-600">
-                ₹{dueAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                {getCurrencySymbol()}{dueAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </span>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertCircle, CreditCard, Wallet, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { CHANNEL_META } from './constants';
+import { getCurrencySymbol } from '../../../utils/currency';
 
 const StatCard = ({ channel, stats, channelStatus }) => {
   const meta = CHANNEL_META[channel] || {};
@@ -28,7 +29,7 @@ const StatCard = ({ channel, stats, channelStatus }) => {
       <h4 className="text-3xl font-bold text-gray-900 mb-4">{data.sent.toLocaleString()}</h4>
       <div className="pt-3 border-t border-gray-100 flex justify-between items-center">
         <span className="text-xs text-gray-400">Total spend</span>
-        <span className="text-sm font-semibold text-gray-700">₹{(data.total_cost || 0).toFixed(2)}</span>
+        <span className="text-sm font-semibold text-gray-700">{getCurrencySymbol()}{(data.total_cost || 0).toFixed(2)}</span>
       </div>
     </div>
   );
@@ -60,7 +61,7 @@ const OverviewTab = ({ stats, channelStatus, wallet, topUpAmount, setTopUpAmount
                 </div>
                 <div className="text-right">
                   <p className={`text-sm font-bold ${txn.transaction_type === 'credit' ? 'text-green-600' : 'text-red-500'}`}>
-                    {txn.transaction_type === 'credit' ? '+' : '-'}₹{txn.amount.toFixed(2)}
+                    {txn.transaction_type === 'credit' ? '+' : '-'}{getCurrencySymbol()}{txn.amount.toFixed(2)}
                   </p>
                   <span className={`text-[11px] font-medium ${txn.status === 'completed' ? 'text-green-600' : txn.status === 'pending' ? 'text-amber-500' : 'text-red-500'}`}>
                     {txn.status}
@@ -85,7 +86,7 @@ const OverviewTab = ({ stats, channelStatus, wallet, topUpAmount, setTopUpAmount
           </div>
           <div>
             <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">Wallet Balance</p>
-            <h2 className="text-3xl font-bold text-gray-900">₹{(wallet.balance || 0).toFixed(2)}</h2>
+            <h2 className="text-3xl font-bold text-gray-900">{getCurrencySymbol()}{(wallet.balance || 0).toFixed(2)}</h2>
           </div>
         </div>
 
@@ -116,7 +117,7 @@ const OverviewTab = ({ stats, channelStatus, wallet, topUpAmount, setTopUpAmount
                     : 'border-gray-200 text-gray-600 bg-white hover:border-gray-300'
                 }`}
               >
-                ₹{amt}
+                {getCurrencySymbol()}{amt}
               </button>
             ))}
           </div>
@@ -124,7 +125,7 @@ const OverviewTab = ({ stats, channelStatus, wallet, topUpAmount, setTopUpAmount
             type="number"
             min={100}
             className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#29828a]/20 focus:border-[#29828a] outline-none mb-3 transition-all"
-            placeholder="Custom amount (min ₹100)"
+            placeholder={`Custom amount (min ${getCurrencySymbol()}100)`}
             value={topUpAmount}
             onChange={e => setTopUpAmount(Number(e.target.value))}
           />
@@ -133,7 +134,7 @@ const OverviewTab = ({ stats, channelStatus, wallet, topUpAmount, setTopUpAmount
             disabled={toppingUp}
             className="w-full py-2.5 bg-[#29828a] hover:bg-[#1f6b72] disabled:bg-gray-300 text-white font-semibold rounded-lg transition-all text-sm flex items-center justify-center gap-2"
           >
-            {toppingUp ? <><Loader2 size={14} className="animate-spin" /> Processing...</> : `Add ₹${topUpAmount} via Cashfree`}
+            {toppingUp ? <><Loader2 size={14} className="animate-spin" /> Processing...</> : `Add ${getCurrencySymbol()}${topUpAmount} via Cashfree`}
           </button>
         </div>
       </div>

@@ -3,6 +3,7 @@ import Card from "../components/Card";
 import GearLoader from "../components/GearLoader";
 import { useAuth } from "../contexts/AuthContext";
 import { api } from "../utils/api";
+import { getCurrencySymbol } from "../utils/currency";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList, PieChart, Pie, Cell, CartesianGrid, ReferenceLine, Label, LineChart, Line, Area, AreaChart, RadialBarChart, RadialBar } from "recharts";
 
 
@@ -197,7 +198,7 @@ const MetricCard = ({ title, value, change, changeType, onClick, icon }) => {
         </button>
       </div>
       <div className="text-2xl font-bold text-gray-900 leading-tight">
-        {icon === 'revenue' ? '₹' : ''}{value.toLocaleString()}
+        {icon === 'revenue' ? getCurrencySymbol() : ''}{value.toLocaleString()}
       </div>
       <div className="flex items-center gap-1 text-xs">
         <span className={changeType === "up" ? "text-green-600" : "text-red-500"}>
@@ -698,12 +699,12 @@ const Dashboard = () => {
                   axisLine={false} 
                   tickLine={false} 
                   tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }}
-                  tickFormatter={(val) => `₹${formatToK(val)}`}
+                  tickFormatter={(val) => `${getCurrencySymbol()}${formatToK(val)}`}
                   domain={calculateYAxisDomain(revenueDataState, ['revenue'], 0.15)} 
                 />
                 <Tooltip 
                   contentStyle={{ borderRadius: 12, border: 'none', background: '#111', color: '#fff', fontSize: 12, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} 
-                  formatter={(value) => [`₹${formatToK(value)}`, 'Revenue']} 
+                  formatter={(value) => [`${getCurrencySymbol()}${formatToK(value)}`, 'Revenue']} 
                 />
                 <Bar 
                   dataKey="revenue" 
@@ -715,7 +716,7 @@ const Dashboard = () => {
                   <LabelList 
                     dataKey="revenue" 
                     position="top" 
-                    formatter={(val) => val > 0 ? `₹${formatToK(val)}` : ''}
+                    formatter={(val) => val > 0 ? `${getCurrencySymbol()}${formatToK(val)}` : ''}
                     style={{ fontSize: 10, fontWeight: 700, fill: '#2a276e' }}
                   />
                 </Bar>

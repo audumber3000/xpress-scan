@@ -32,6 +32,7 @@ import {
   Bot,
 } from 'lucide-react';
 import GearLoader from '../components/GearLoader';
+import { getCurrencySymbol } from '../utils/currency';
 
 const PRO_FEATURES = [
   { icon: Users,        label: 'Patient Management',       starter: true,    pro: true },
@@ -227,11 +228,11 @@ const Subscription = () => {
         <tr>
           <td><strong>${inv.plan}</strong><br/><span style="font-size:12px;color:#888">Monthly subscription — MolarPlus Professional</span></td>
           <td style="color:#888">${inv.date}</td>
-          <td style="text-align:right">₹${inv.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+          <td style="text-align:right">${getCurrencySymbol()}${inv.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
         </tr>
         <tr class="total-row">
           <td colspan="2">Total</td>
-          <td style="text-align:right">₹${inv.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+          <td style="text-align:right">${getCurrencySymbol()}${inv.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
         </tr>
       </tbody>
     </table>
@@ -328,7 +329,7 @@ const Subscription = () => {
                     onClick={() => handleUpgrade('monthly')}
                     className="px-3 py-2 border border-[#29828a] text-[#29828a] text-xs font-bold rounded-lg hover:bg-[#29828a]/5 transition-all"
                   >
-                    ₹899/mo
+                    {getCurrencySymbol()}899/mo
                   </button>
                   <button
                     onClick={() => handleUpgrade('annual')}
@@ -359,13 +360,13 @@ const Subscription = () => {
                     onClick={() => handleUpgrade('monthly')}
                     className="px-3 py-2 border border-red-300 text-red-600 text-xs font-bold rounded-lg hover:bg-red-100 transition-all"
                   >
-                    ₹899/mo
+                    {getCurrencySymbol()}899/mo
                   </button>
                   <button
                     onClick={() => handleUpgrade('annual')}
                     className="flex items-center gap-1.5 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-all"
                   >
-                    ₹675/mo — Annual <ArrowRight size={11} />
+                    {getCurrencySymbol()}675/mo — Annual <ArrowRight size={11} />
                   </button>
                 </div>
               </div>
@@ -416,7 +417,7 @@ const Subscription = () => {
                         {isPro ? 'Professional Plan' : isTrial ? '7-Day Free Trial' : isExpired ? 'Professional Plan' : 'Starter Plan'}
                       </p>
                       {isPro && (
-                        <span className="text-xs font-semibold text-[#29828a]">₹899 / month</span>
+                        <span className="text-xs font-semibold text-[#29828a]">{getCurrencySymbol()}899 / month</span>
                       )}
                       {isTrial && (
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#29828a]/10 text-[#29828a]">Trial</span>
@@ -460,12 +461,12 @@ const Subscription = () => {
                       onClick={() => handleUpgrade('monthly')}
                       className="flex items-center gap-1.5 px-4 py-2 bg-[#29828a] hover:bg-[#1f6b72] text-white text-xs font-semibold rounded-lg transition-all flex-shrink-0"
                     >
-                      ₹899/mo <ArrowRight size={12} />
+                      {getCurrencySymbol()}899/mo <ArrowRight size={12} />
                     </button>
                   </div>
                   <div className="flex items-center justify-between px-4 py-2.5 bg-green-50 border-t border-green-100">
                     <p className="text-xs text-green-700 font-medium">
-                      💰 Save ₹1,488/year — pay <strong>₹675/month</strong> billed annually
+                      💰 Save {getCurrencySymbol()}1,488/year — pay <strong>{getCurrencySymbol()}675/month</strong> billed annually
                     </p>
                     <button
                       onClick={() => handleUpgrade('annual')}
@@ -508,7 +509,7 @@ const Subscription = () => {
                 </div>
                 {!isPro && (
                   <div className="flex items-center justify-between gap-3 px-4 py-3.5 bg-[#29828a]/5 border-t border-[#29828a]/10">
-                    <p className="text-xs text-gray-600 font-medium">₹899/month or <strong className="text-[#29828a]">₹675/month</strong> billed annually — save 25%</p>
+                    <p className="text-xs text-gray-600 font-medium">{getCurrencySymbol()}899/month or <strong className="text-[#29828a]">{getCurrencySymbol()}675/month</strong> billed annually — save 25%</p>
                     <div className="flex gap-2 flex-shrink-0">
                       <button
                         onClick={() => handleUpgrade('monthly')}
@@ -550,7 +551,7 @@ const Subscription = () => {
                       <div key={inv.id} className="grid grid-cols-5 px-5 py-4 items-center hover:bg-gray-50/40 transition-colors">
                         <span className="text-xs font-mono text-gray-500">{inv.invoice}</span>
                         <span className="text-sm text-gray-700">{inv.plan}</span>
-                        <span className="text-sm font-semibold text-gray-900">₹{inv.amount.toLocaleString('en-IN')}</span>
+                        <span className="text-sm font-semibold text-gray-900">{getCurrencySymbol()}{inv.amount.toLocaleString('en-US')}</span>
                         <span className="text-xs text-gray-500">{inv.date}</span>
                         <div className="flex items-center gap-2">
                           <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-full ${inv.status === 'PAID' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>

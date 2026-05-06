@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import InvoiceLineItemForm from "./InvoiceLineItemForm";
+import { getCurrencySymbol } from "../../utils/currency";
 
 /* ── GST Info Popover ─────────────────────────────────────────────────────── */
 const GST_INFO = {
@@ -279,7 +280,7 @@ const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdat
                     <div className="flex items-center gap-2">
                        <div className="flex items-center bg-gray-100 rounded-lg p-0.5 border border-gray-200">
                         <button type="button" onClick={() => setLocalDiscountType('percentage')} className={`px-2 py-0.5 text-xs font-semibold rounded-md ${localDiscountType === 'percentage' ? 'bg-white shadow-sm text-[#2a276e]' : 'text-gray-500'}`}>%</button>
-                        <button type="button" onClick={() => setLocalDiscountType('amount')} className={`px-2 py-0.5 text-xs font-semibold rounded-md ${localDiscountType === 'amount' ? 'bg-white shadow-sm text-[#2a276e]' : 'text-gray-500'}`}>₹</button>
+                        <button type="button" onClick={() => setLocalDiscountType('amount')} className={`px-2 py-0.5 text-xs font-semibold rounded-md ${localDiscountType === 'amount' ? 'bg-white shadow-sm text-[#2a276e]' : 'text-gray-500'}`}>{getCurrencySymbol()}</button>
                       </div>
                       <input 
                         type="number"

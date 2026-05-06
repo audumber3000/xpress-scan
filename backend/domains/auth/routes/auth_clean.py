@@ -731,6 +731,11 @@ async def complete_onboarding(
             chairs = 1
         chairs = max(1, min(chairs, 50))
 
+        # Resolve locale from country code (defaults to India)
+        from core.countries import get_country_config
+        country_code = (data.get("country") or "IN").upper()
+        country_cfg = get_country_config(country_code)
+
         clinic_data = {
             "name": data.get("clinic_name"),
             "address": data.get("clinic_address", ""),
@@ -740,7 +745,12 @@ async def complete_onboarding(
             "number_of_chairs": chairs,
             "subscription_plan": "free",
             "clinic_label": "main_branch",
-            "referred_by_code": data.get("referred_by_code")
+            "referred_by_code": data.get("referred_by_code"),
+            "country": country_code,
+            "currency_code": country_cfg["currency_code"],
+            "currency_symbol": country_cfg["currency_symbol"],
+            "timezone": country_cfg["timezone"],
+            "tax_label": country_cfg["tax_label"],
         }
 
         result = user_service.complete_onboarding(user.id, clinic_data)

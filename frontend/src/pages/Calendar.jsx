@@ -27,6 +27,7 @@ import MonthGrid from "./appointments/components/MonthGrid";
 import DayGrid from "./appointments/components/DayGrid";
 import { getAppointmentColor } from "./appointments/utils/doctorColors";
 import { computeDayLayout } from "./appointments/utils/layout";
+import { getCurrencySymbol } from "../utils/currency";
 
 const Calendar = () => {
   const { user } = useAuth();
@@ -1963,7 +1964,7 @@ const Calendar = () => {
                     <option value="">Select treatment type</option>
                     {treatmentTypes.map((type) => (
                       <option key={type.id} value={type.name}>
-                        {type.name} - ₹{type.price}
+                        {type.name} - {getCurrencySymbol()}{type.price}
                       </option>
                     ))}
                   </select>

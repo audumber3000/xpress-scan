@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import GearLoader from '../components/GearLoader';
 import { cashfreeService } from '../services/payments/cashfree/cashfree_service';
+import { getCurrencySymbol } from '../utils/currency';
 
 const Checkout = () => {
   const navigate = useNavigate();
@@ -129,13 +130,13 @@ const Checkout = () => {
                     </div>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600">{isAnnual ? '₹675/month × 12' : 'Monthly price'}</span>
-                    <span className="font-bold text-gray-900">₹{basePrice.toLocaleString('en-IN')}</span>
+                    <span className="text-gray-600">{isAnnual ? `${getCurrencySymbol()}675/month × 12` : 'Monthly price'}</span>
+                    <span className="font-bold text-gray-900">{getCurrencySymbol()}{basePrice.toLocaleString('en-US')}</span>
                   </div>
                   {isAnnual && (
                     <div className="flex justify-between items-center mt-2">
-                      <span className="text-xs text-gray-400 line-through">₹899 × 12 = ₹10,788</span>
-                      <span className="text-xs font-semibold text-green-600">You save ₹1,488</span>
+                      <span className="text-xs text-gray-400 line-through">{getCurrencySymbol()}899 × 12 = {getCurrencySymbol()}10,788</span>
+                      <span className="text-xs font-semibold text-green-600">You save {getCurrencySymbol()}1,488</span>
                     </div>
                   )}
                 </div>
@@ -147,12 +148,12 @@ const Checkout = () => {
                         <Tag className="w-3.5 h-3.5" />
                         Discount Applied
                       </span>
-                      <span className="font-bold">-₹{discountInfo.discount_amount}</span>
+                      <span className="font-bold">-{getCurrencySymbol()}{discountInfo.discount_amount}</span>
                     </div>
                   )}
                   <div className="flex justify-between items-center pt-3 border-t border-gray-200">
                     <span className="font-bold text-gray-900 uppercase text-xs tracking-wider">Total to Pay</span>
-                    <span className="text-xl font-black text-[#2a276e]">₹{discountInfo ? discountInfo.final_amount : basePrice}</span>
+                    <span className="text-xl font-black text-[#2a276e]">{getCurrencySymbol()}{discountInfo ? discountInfo.final_amount : basePrice}</span>
                   </div>
                 </div>
               </div>
@@ -192,7 +193,7 @@ const Checkout = () => {
                   {discountInfo && (
                     <p className="text-[11px] text-green-700 font-bold mt-3 flex items-center gap-1.5">
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      Awesome! {discountInfo.message} (₹{discountInfo.discount_amount} savings)
+                      Awesome! {discountInfo.message} ({getCurrencySymbol()}{discountInfo.discount_amount} savings)
                     </p>
                   )}
                 </div>
@@ -213,7 +214,7 @@ const Checkout = () => {
                   onClick={handlePayNow}
                   className="w-full bg-[#2a276e] text-white py-4 rounded-xl font-bold text-sm shadow-lg hover:bg-[#1A1640] transition-all active:scale-[0.98] flex items-center justify-center gap-2 group uppercase tracking-widest"
                 >
-                  Pay ₹{discountInfo ? discountInfo.final_amount : basePrice} Securely
+                  Pay {getCurrencySymbol()}{discountInfo ? discountInfo.final_amount : basePrice} Securely
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </button>
 

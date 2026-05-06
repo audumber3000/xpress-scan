@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { api } from "../../utils/api";
 import { toast } from 'react-toastify';
+import { getCurrencySymbol } from '../../utils/currency';
 import { Eye, MessageCircle } from 'lucide-react';
 import InvoiceEditor from '../payments/InvoiceEditor';
 
@@ -103,7 +104,7 @@ const PatientBilling = ({
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-gray-900">
-                                            ₹{parseFloat(inv.total || 0).toLocaleString('en-IN')}
+                                            {getCurrencySymbol()}{parseFloat(inv.total || 0).toLocaleString('en-US')}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                             <div className="flex justify-end gap-3 text-gray-400">
@@ -155,7 +156,7 @@ const PatientBilling = ({
                                     <tr key={p.id}>
                                         <td className="px-6 py-3 text-sm text-gray-600">{p.procedure}</td>
                                         <td className="px-6 py-3 text-xs text-gray-400">{p.date}</td>
-                                        <td className="px-6 py-3 text-right text-sm font-semibold text-gray-700">₹{p.amount.toLocaleString('en-IN')}</td>
+                                        <td className="px-6 py-3 text-right text-sm font-semibold text-gray-700">{getCurrencySymbol()}{p.amount.toLocaleString('en-US')}</td>
                                     </tr>
                                 ))}
                             </tbody>

@@ -9,6 +9,7 @@ import StaffTableHeader from "../components/settings/StaffTableHeader";
 import UserDetailsPanel from "../components/settings/UserDetailsPanel";
 import EditUserTab from "../components/settings/EditUserTab";
 import PermissionsTab from "../components/settings/PermissionsTab";
+import { getCurrencySymbol } from "../utils/currency";
 
 // Settings page with Security tab for password management
 const Settings = () => {
@@ -1558,7 +1559,7 @@ const Settings = () => {
                         <div key={treatment.id} className="flex justify-between items-center p-4 border border-gray-200 rounded-lg">
                             <div>
                               <span className="font-medium text-gray-900">{treatment.name}</span>
-                              <span className="ml-4 text-gray-600">₹{treatment.price}</span>
+                              <span className="ml-4 text-gray-600">{getCurrencySymbol()}{treatment.price}</span>
                             </div>
                             {hasPermission("billing:edit") && (
                             <div className="flex gap-2">
@@ -2257,7 +2258,7 @@ const Settings = () => {
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Price (₹)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Price ({getCurrencySymbol()})</label>
                 <input
                   type="number"
                   name="price"
@@ -2326,7 +2327,7 @@ const Settings = () => {
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Price (₹)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Price ({getCurrencySymbol()})</label>
                 <input
                   type="number"
                   name="price"

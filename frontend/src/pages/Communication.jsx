@@ -72,7 +72,7 @@ const Communication = () => {
       icon: "💳",
       description: "Send automated payment confirmation and receipt to patients",
       enabled: false,
-      message: "Thank you for your payment! Your receipt has been generated. Amount: ₹{amount}. For any queries, please contact us."
+      message: "Thank you for your payment! Your receipt has been generated. Amount: {currency_symbol}{amount}. For any queries, please contact us."
     }
   ]);
 

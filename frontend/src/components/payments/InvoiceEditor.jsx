@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { api } from "../../utils/api";
 import { toast } from "react-toastify";
+import { getCurrencySymbol } from "../../utils/currency";
 import GearLoader from "../GearLoader";
 import InvoiceHeader from "./InvoiceHeader";
 import InvoiceLineItems from "./InvoiceLineItems";
@@ -242,7 +243,7 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
       setInvoice(updated);
       if (updated.status === 'partially_paid') {
         const due = Number(updated.due_amount || 0);
-        toast.success(`Partial payment recorded. ₹${due.toLocaleString('en-IN', { minimumFractionDigits: 2 })} still due.`);
+        toast.success(`Partial payment recorded. ${getCurrencySymbol()}${due.toLocaleString('en-US', { minimumFractionDigits: 2 })} still due.`);
       } else {
         toast.success("Invoice marked as paid successfully");
         if (onSave) onSave();

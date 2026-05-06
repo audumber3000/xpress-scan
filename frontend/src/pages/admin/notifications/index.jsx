@@ -14,6 +14,7 @@ import OverviewTab from './OverviewTab';
 import PreferencesTab from './PreferencesTab';
 import LogsTab from './LogsTab';
 import IntegrationsTab from './IntegrationsTab';
+import { getCurrencySymbol } from '../../../utils/currency';
 
 const TABS = [
   { id: 'overview',    label: 'Overview',     icon: BarChart2     },
@@ -89,7 +90,7 @@ const Notifications = () => {
       api.get(`/notification-admin/wallet/verify?order_id=${orderId}`)
         .then(res => {
           if (res.success) {
-            toast.success(`🎉 Wallet top-up successful! ₹${res.balance?.toFixed(2)} is your new balance.`);
+            toast.success(`🎉 Wallet top-up successful! ${getCurrencySymbol()}${res.balance?.toFixed(2)} is your new balance.`);
             api.get('/notification-admin/wallet').then(w => setWallet(w)).catch(() => {});
           } else {
             toast.error(`Payment not confirmed yet. Status: ${res.status || 'unknown'}`);
@@ -120,7 +121,7 @@ const Notifications = () => {
         channel: selectedChannel,
         recipient,
       });
-      toast.success(`✅ Sent! ₹${res.cost?.toFixed(2)} deducted. New balance: ₹${res.new_balance?.toFixed(2)}`);
+      toast.success(`✅ Sent! ${getCurrencySymbol()}${res.cost?.toFixed(2)} deducted. New balance: ${getCurrencySymbol()}${res.new_balance?.toFixed(2)}`);
       setWallet(w => ({ ...w, balance: res.new_balance }));
       setTestDrawer(d => ({ ...d, open: false }));
     } catch (err) {
@@ -156,7 +157,7 @@ const Notifications = () => {
   };
 
   const handleWalletTopup = async () => {
-    if (topUpAmount < 100) { toast.error('Minimum top-up is ₹100'); return; }
+    if (topUpAmount < 100) { toast.error(`Minimum top-up is ${getCurrencySymbol()}100`); return; }
     setToppingUp(true);
     try {
       const sessionData = await api.post('/notification-admin/wallet/topup', { amount: topUpAmount });
@@ -194,7 +195,7 @@ const Notifications = () => {
           .replace(/\{clinic_name\}/g, 'Your Clinic')
           .replace(/\{appointment_date\}/g, 'Tomorrow, 10:30 AM')
           .replace(/\{appointment_time\}/g, '10:30 AM')
-          .replace(/\{invoice_amount\}/g, '₹850')
+          .replace(/\{invoice_amount\}/g, `${getCurrencySymbol()}850`)
           .replace(/\{invoice_number\}/g, 'INV-001')
           .replace(/\{review_link\}/g, 'https://g.page/r/example')
           .replace(/\{consent_link\}/g, 'https://molarplus.com/consent/demo')
@@ -293,12 +294,12 @@ const Notifications = () => {
             <div className="bg-[#29828a]/5 border border-[#29828a]/15 rounded-xl p-4 flex items-center justify-between">
               <div>
                 <p className="text-xs text-gray-500 font-medium">Cost of this test</p>
-                <p className="text-lg font-bold text-[#29828a]">₹{cost.toFixed(2)}</p>
+                <p className="text-lg font-bold text-[#29828a]">{getCurrencySymbol()}{cost.toFixed(2)}</p>
               </div>
               <div className="text-right">
                 <p className="text-xs text-gray-500 font-medium">Wallet balance</p>
                 <p className={`text-lg font-bold ${wallet.balance < cost ? 'text-red-500' : 'text-gray-800'}`}>
-                  ₹{(wallet.balance || 0).toFixed(2)}
+                  {getCurrencySymbol()}{(wallet.balance || 0).toFixed(2)}
                 </p>
               </div>
             </div>
@@ -318,7 +319,7 @@ const Notifications = () => {
             >
               {testDrawer.sending
                 ? <><Loader2 size={14} className="animate-spin" /> Sending...</>
-                : <><Send size={14} /> Send Test — ₹{cost.toFixed(2)} deducted</>}
+                : <><Send size={14} /> Send Test — {getCurrencySymbol()}{cost.toFixed(2)} deducted</>}
             </button>
           </div>
         </div>

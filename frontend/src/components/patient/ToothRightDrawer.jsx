@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import CleanToothSVG from './CleanToothSVG';
 import ToothSurfaceMap from './ToothSurfaceMap';
+import { getCurrencySymbol } from '../../utils/currency';
 import { TOOTH_NAMES, CONDITION_LABELS } from './dentalConstants';
 import AnatomyIcon from './AnatomyIcons';
 import ClinicalAutocomplete from './ClinicalAutocomplete';
@@ -168,7 +169,7 @@ const ToothRightDrawer = ({
                         {price > 0 && (
                             <div className="flex items-center gap-3 px-4 py-2.5 bg-green-50 border border-green-100 rounded-xl">
                                 <span className="text-xs font-bold text-green-600 uppercase tracking-widest">Procedure Fee</span>
-                                <span className="ml-auto text-lg font-black text-green-700">₹{Number(price).toLocaleString('en-IN')}</span>
+                                <span className="ml-auto text-lg font-black text-green-700">{getCurrencySymbol()}{Number(price).toLocaleString('en-US')}</span>
                             </div>
                         )}
 

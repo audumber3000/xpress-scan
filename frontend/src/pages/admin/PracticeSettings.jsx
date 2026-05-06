@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Search, Plus, Edit2, Trash2, ArrowLeft } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { api } from '../../utils/api';
+import { getCurrencySymbol } from '../../utils/currency';
 
 const PracticeSettings = () => {
   const { category } = useParams();
@@ -207,7 +208,7 @@ const PracticeSettings = () => {
               <thead>
                 <tr className="bg-gray-50/80 border-b border-gray-200/60 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   <th className="px-6 py-4 w-1/4">Name</th>
-                  <th className="px-6 py-4 w-2/4">{category === 'procedures' ? 'Price (₹)' : 'Description'}</th>
+                  <th className="px-6 py-4 w-2/4">{category === 'procedures' ? `Price (${getCurrencySymbol()})` : 'Description'}</th>
                   <th className="px-6 py-4 w-1/6">Status</th>
                   <th className="px-6 py-4 w-1/6 text-right">Actions</th>
                 </tr>
@@ -222,7 +223,7 @@ const PracticeSettings = () => {
                       <td className="px-6 py-4">
                         {category === 'procedures' ? (
                           <span className="text-sm font-bold text-gray-900">
-                            ₹{Number(item.price || 0).toLocaleString('en-IN')}
+                            {getCurrencySymbol()}{Number(item.price || 0).toLocaleString('en-US')}
                           </span>
                         ) : (
                           <span className="text-sm text-gray-600 truncate block max-w-sm" title={item.description}>
@@ -310,7 +311,7 @@ const PracticeSettings = () => {
 
                 {category === 'procedures' ? (
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">Price (₹)</label>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">Price ({getCurrencySymbol()})</label>
                     <input
                       type="number"
                       value={formData.price || ''}

@@ -58,6 +58,7 @@ const ClinicInfo = () => {
         email: data.email || '',
         logo_url: data.logo_url || data.logo || '',
         gst_number: data.gst_number || '',
+        tax_label: data.tax_label || 'GST No.',
         timings: data.timings || clinicData.timings
       });
     } catch (error) {
@@ -193,15 +194,15 @@ const ClinicInfo = () => {
                   />
                 </div>
 
-                {/* GST Number */}
+                {/* Tax ID (GST / VAT / TIN etc.) */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">GST Number</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{clinicData.tax_label || 'GST No.'}</label>
                   <input
                     type="text"
                     value={clinicData.gst_number}
                     onChange={(e) => setClinicData({ ...clinicData, gst_number: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2D9596] focus:border-transparent"
-                    placeholder="Enter GST number (optional)"
+                    placeholder={`Enter ${clinicData.tax_label || 'GST No.'} (optional)`}
                   />
                 </div>
 

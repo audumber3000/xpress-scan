@@ -76,6 +76,12 @@ try:
             ("trial_ends_at",    "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP"),
             ("clinic_label",     "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS clinic_label VARCHAR"),
             ("parent_clinic_id", "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS parent_clinic_id INTEGER REFERENCES clinics(id)"),
+            ("country",          "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS country VARCHAR(2) DEFAULT 'IN'"),
+            ("currency_code",    "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS currency_code VARCHAR(3) DEFAULT 'INR'"),
+            ("currency_symbol",  "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS currency_symbol VARCHAR(5) DEFAULT '₹'"),
+            ("timezone",         "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS timezone VARCHAR(50) DEFAULT 'Asia/Kolkata'"),
+            ("tax_label",        "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS tax_label VARCHAR(20) DEFAULT 'GST No.'"),
+            ("tax_id",           "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS tax_id VARCHAR(50)"),
         ]:
             try:
                 conn.execute(text(ddl))
@@ -108,6 +114,8 @@ try:
             "created_at", "updated_at", "synced_at", "sync_status",
             "referred_by_code",
             "clinic_label", "parent_clinic_id",
+            "country", "currency_code", "currency_symbol",
+            "timezone", "tax_label", "tax_id",
         },
         "users": {
             "id", "email", "name", "first_name", "last_name",

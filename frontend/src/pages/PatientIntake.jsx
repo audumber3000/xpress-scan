@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
+import { getCurrencySymbol } from "../utils/currency";
 
 const PatientIntake = () => {
   const { user } = useAuth();
@@ -319,7 +320,7 @@ const PatientIntake = () => {
             </div>
             {/* Auto-display price */}
             {selectedPrice && (
-              <div className="mt-2 text-[#2a276e] font-semibold">Price: ₹{selectedPrice}</div>
+              <div className="mt-2 text-[#2a276e] font-semibold">Price: {getCurrencySymbol()}{selectedPrice}</div>
             )}
             {/* Payment Type */}
             <div className="mt-4">

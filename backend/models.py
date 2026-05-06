@@ -76,6 +76,12 @@ class Clinic(Base):
     referred_by_code = Column(String, nullable=True)  # Which referral code was used to sign up
     clinic_label = Column(String, nullable=True)  # e.g. "Main Branch", "Branch"
     parent_clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=True)  # set on branch clinics
+    country = Column(String(2), default='IN')  # ISO 3166-1 alpha-2
+    currency_code = Column(String(3), default='INR')  # ISO 4217
+    currency_symbol = Column(String(5), default='₹')
+    timezone = Column(String(50), default='Asia/Kolkata')  # IANA timezone
+    tax_label = Column(String(20), default='GST No.')  # GST, VAT, TIN, ABN...
+    tax_id = Column(String(50), nullable=True)  # replaces gst_number for intl
 
     # Relationships
     users = relationship("User", secondary=user_clinics, back_populates="clinics")

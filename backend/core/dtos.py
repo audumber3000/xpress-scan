@@ -81,7 +81,7 @@ class PatientSummaryDTO(BaseModel):
 class ClinicBaseDTO(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     address: Optional[str] = None
-    phone: Optional[str] = Field(None, min_length=10, max_length=15)
+    phone: Optional[str] = Field(None, max_length=20)
     email: Optional[str] = Field(None, pattern=r"^[^@]+@[^@]+\.[^@]+$")
     gst_number: Optional[str] = None
     specialization: str = "dental"
@@ -89,16 +89,23 @@ class ClinicBaseDTO(BaseModel):
     logo_url: Optional[str] = None
     primary_color: str = "#10B981"
     number_of_chairs: int = 1
+    country: str = "IN"
+    currency_code: str = "INR"
+    currency_symbol: str = "₹"
+    timezone: str = "Asia/Kolkata"
+    tax_label: str = "GST No."
+    tax_id: Optional[str] = None
 
 
 class ClinicCreateDTO(ClinicBaseDTO):
     referred_by_code: Optional[str] = None
+    country: str = "IN"  # ISO 3166-1 alpha-2 — determines currency, timezone, tax defaults
 
 
 class ClinicUpdateDTO(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     address: Optional[str] = None
-    phone: Optional[str] = Field(None, min_length=10, max_length=15)
+    phone: Optional[str] = Field(None, max_length=20)
     email: Optional[str] = Field(None, pattern=r"^[^@]+@[^@]+\.[^@]+$")
     gst_number: Optional[str] = None
     specialization: Optional[str] = None
@@ -107,6 +114,12 @@ class ClinicUpdateDTO(BaseModel):
     primary_color: Optional[str] = None
     number_of_chairs: Optional[int] = None
     timings: Optional[dict] = None
+    country: Optional[str] = None
+    currency_code: Optional[str] = None
+    currency_symbol: Optional[str] = None
+    timezone: Optional[str] = None
+    tax_label: Optional[str] = None
+    tax_id: Optional[str] = None
 
 
 class ClinicResponseDTO(ClinicBaseDTO):

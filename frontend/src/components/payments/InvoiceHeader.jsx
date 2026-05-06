@@ -70,7 +70,7 @@ const InvoiceHeader = ({ invoice }) => {
               <div>Paid: {formatDate(invoice.paid_at)}</div>
             )}
             {typeof invoice.due_amount === 'number' && (
-              <div>Due: ₹{Number(invoice.due_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+              <div>Due: {(invoice.currency_symbol || '₹')}{Number(invoice.due_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
             )}
           </div>
         </div>

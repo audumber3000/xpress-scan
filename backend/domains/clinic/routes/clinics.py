@@ -23,6 +23,13 @@ import datetime
 router = APIRouter()
 
 
+@router.get("/countries")
+async def list_countries():
+    """Return list of supported countries for signup dropdown (public, no auth)."""
+    from core.countries import get_all_countries
+    return get_all_countries()
+
+
 @router.post(
     "/owner/add",
     response_model=ClinicResponseDTO,
@@ -86,6 +93,9 @@ async def owner_add_clinic(
             new_label = "branch"
             new_parent_id = first.id
 
+        # Inherit locale from parent clinic (or use defaults)
+        parent_clinic = db.query(Clinic).filter(Clinic.id == new_parent_id).first() if new_parent_id else None
+
         # Create the new clinic
         new_clinic = Clinic(
             name=clinic_data.name,
@@ -98,6 +108,11 @@ async def owner_add_clinic(
             subscription_plan=branch_plan,
             clinic_label=new_label,
             parent_clinic_id=new_parent_id,
+            country=parent_clinic.country if parent_clinic else getattr(clinic_data, 'country', 'IN'),
+            currency_code=parent_clinic.currency_code if parent_clinic else getattr(clinic_data, 'currency_code', 'INR'),
+            currency_symbol=parent_clinic.currency_symbol if parent_clinic else getattr(clinic_data, 'currency_symbol', '₹'),
+            timezone=parent_clinic.timezone if parent_clinic else getattr(clinic_data, 'timezone', 'Asia/Kolkata'),
+            tax_label=parent_clinic.tax_label if parent_clinic else getattr(clinic_data, 'tax_label', 'GST No.'),
             created_at=datetime.datetime.utcnow(),
             updated_at=datetime.datetime.utcnow(),
         )
