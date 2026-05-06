@@ -325,7 +325,21 @@ class AuthService(AuthServiceProtocol):
             firebase_uid = decoded_token.get("uid")
             email = decoded_token.get("email")
             name = decoded_token.get("name", "")
-            
+
+            # Apple Sign-In quirk: Apple only includes the email claim on the
+            # very first authorization. Subsequent identity tokens omit it,
+            # so the Firebase ID token built from them has no email either.
+            # Firebase Auth stores the email permanently though — fall back
+            # to looking it up by UID before giving up.
+            if not email and firebase_uid:
+                try:
+                    fb_user = firebase_auth.get_user(firebase_uid)
+                    email = fb_user.email
+                    if not name and fb_user.display_name:
+                        name = fb_user.display_name
+                except Exception as fb_err:
+                    print(f"Firebase user lookup failed for {firebase_uid}: {fb_err}")
+
             if not email or not firebase_uid:
                 raise ValueError("Email and Firebase UID are required")
 
