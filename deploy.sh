@@ -100,7 +100,7 @@ echo "▶ Running schema migration check against prod DB..."
 declare -A REQUIRED_COLS=(
   ["clinics"]="id clinic_code name address phone email gst_number specialization subscription_plan status razorpay_customer_id cashfree_customer_id logo_url invoice_template primary_color number_of_chairs timings created_at updated_at synced_at sync_status referred_by_code clinic_label parent_clinic_id country currency_code currency_symbol timezone tax_label tax_id"
   ["users"]="id email name first_name last_name role is_active permissions created_at updated_at"
-  ["user_clinics"]="id user_id clinic_id"
+  ["user_clinics"]="user_id clinic_id role is_active created_at"
   ["patients"]="id clinic_id name phone created_at updated_at"
   ["appointments"]="id clinic_id patient_name appointment_date start_time end_time status created_at updated_at"
   ["subscriptions"]="id plan_name status current_start current_end is_trial trial_ends_at"
