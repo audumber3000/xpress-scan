@@ -327,20 +327,49 @@ class AuthService(AuthServiceProtocol):
             name = decoded_token.get("name", "")
 
             # Apple Sign-In quirk: Apple only includes the email claim on the
-            # very first authorization. Subsequent identity tokens omit it,
-            # so the Firebase ID token built from them has no email either.
-            # Firebase Auth stores the email permanently though — fall back
-            # to looking it up by UID before giving up.
+            # very first authorization. Subsequent identity tokens omit it.
+            # Try a few fallback paths before giving up:
+            #   1. firebase.identities.email[0] in the decoded token
+            #   2. firebase_auth.get_user(uid).email — Firebase stores it
+            #   3. firebase_auth.get_user(uid).provider_data[*].email
+            if not email and firebase_uid:
+                try:
+                    identities = decoded_token.get("firebase", {}).get("identities", {})
+                    id_emails = identities.get("email") or []
+                    if id_emails:
+                        email = id_emails[0]
+                except Exception as e:
+                    print(f"identities.email lookup failed: {e}")
+
             if not email and firebase_uid:
                 try:
                     fb_user = firebase_auth.get_user(firebase_uid)
                     email = fb_user.email
-                    if not name and fb_user.display_name:
+                    if not email and getattr(fb_user, "provider_data", None):
+                        for p in fb_user.provider_data:
+                            if getattr(p, "email", None):
+                                email = p.email
+                                break
+                    if not name and getattr(fb_user, "display_name", None):
                         name = fb_user.display_name
+                    if not email:
+                        provider_emails = [
+                            getattr(p, "email", None)
+                            for p in (fb_user.provider_data or [])
+                        ]
+                        print(
+                            f"Firebase user {firebase_uid} has no email — "
+                            f"top: {fb_user.email!r}, providers: {provider_emails!r}, "
+                            f"sign_in_provider: {decoded_token.get('firebase', {}).get('sign_in_provider')!r}"
+                        )
                 except Exception as fb_err:
                     print(f"Firebase user lookup failed for {firebase_uid}: {fb_err}")
 
             if not email or not firebase_uid:
+                print(
+                    f"OAuth missing creds — email={email!r}, uid={firebase_uid!r}, "
+                    f"provider={decoded_token.get('firebase', {}).get('sign_in_provider')!r}"
+                )
                 raise ValueError("Email and Firebase UID are required")
 
             # Parse name into first and last name
