@@ -127,9 +127,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     setViewMode('email');
   };
 
-  // 2/3 of total horizontal width (with 28 padding on each side)
-  const googleCardWidth = (width - 56) * 2 / 3;
-
   const renderGateway = () => (
     <ScrollView 
       style={{ flex: 1 }}
@@ -158,56 +155,45 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       {/* Last-login one-tap shortcut, if any */}
       <LastLoginCard variant="login" onContinue={handleContinueLast} isLoading={isLoading} />
 
-      {/* Auth Cards */}
+      {/* Auth Pills — three full-width horizontal buttons.
+          Apple gets its own native HIG button (iOS only); Google and
+          Email use matching custom pills sized to the same dimensions. */}
       <View style={styles.cardsContainer}>
-        {/* Row 1: Large Google Square (2/3 width) */}
-        <TouchableOpacity 
-          style={[styles.googleCard, { width: googleCardWidth, height: googleCardWidth }]}
+        {Platform.OS === 'ios' && (
+          <AppleAuthentication.AppleAuthenticationButton
+            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+            cornerRadius={26}
+            style={styles.applePill}
+            onPress={handleAppleLogin}
+          />
+        )}
+
+        <TouchableOpacity
+          style={styles.providerPill}
           onPress={handleGoogleLogin}
           disabled={isLoading}
+          activeOpacity={0.85}
         >
           {isLoading ? (
-            <ActivityIndicator size="large" color={colors.primary} />
+            <ActivityIndicator size="small" color={colors.primary} />
           ) : (
             <>
-              <View style={styles.googleIconContainer}>
-                <GoogleIcon size={48} />
-              </View>
-              <View style={styles.cardLabelContainer}>
-                <Text style={styles.withText}>with</Text>
-                <Text style={styles.providerName}>Google</Text>
-              </View>
+              <GoogleIcon size={22} />
+              <Text style={styles.providerPillText}>Continue with Google</Text>
             </>
           )}
         </TouchableOpacity>
 
-        {/* Row 2: Apple (iOS only — official Apple HIG button) and Email */}
-        <View style={styles.horizontalRow}>
-          {Platform.OS === 'ios' && (
-            <View style={styles.appleButtonWrapper}>
-              <AppleAuthentication.AppleAuthenticationButton
-                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                cornerRadius={24}
-                style={styles.appleButton}
-                onPress={handleAppleLogin}
-              />
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={styles.smallCard}
-            onPress={() => setViewMode('email')}
-          >
-            <Mail size={24} color="#EF4444" />
-            <View style={styles.smallCardLabels}>
-              <Text style={styles.withTextSmall}>with</Text>
-              <Text style={styles.providerNameSmall}>Email</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-              </View>
+        <TouchableOpacity
+          style={styles.providerPill}
+          onPress={() => setViewMode('email')}
+          activeOpacity={0.85}
+        >
+          <Mail size={22} color={colors.gray900} />
+          <Text style={styles.providerPillText}>Continue with Email</Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 
@@ -354,80 +340,32 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   cardsContainer: {
-    gap: 16,
+    gap: 12,
     marginBottom: 40,
   },
-  googleCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 32,
-    padding: 24,
-    justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.05,
-    shadowRadius: 20,
-    elevation: 4,
-  },
-  googleIconContainer: {
-    width: 48,
-    height: 48,
-  },
-  cardLabelContainer: {
-    marginTop: 'auto',
-  },
-  withText: {
-    fontSize: 14,
-    color: colors.gray500,
-    fontWeight: '500',
-  },
-  providerName: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: colors.gray900,
-  },
-  horizontalRow: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  smallCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    aspectRatio: 1, // Small square
-    padding: 24,
-    justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.05,
-    shadowRadius: 15,
-    elevation: 3,
-  },
-  appleButtonWrapper: {
-    flex: 1,
-    aspectRatio: 1,
-    borderRadius: 24,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.05,
-    shadowRadius: 15,
-    elevation: 3,
-  },
-  appleButton: {
+  applePill: {
     width: '100%',
-    height: '100%',
+    height: 52,
   },
-  smallCardLabels: {
-    marginTop: 'auto',
+  providerPill: {
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
-  withTextSmall: {
-    fontSize: 12,
-    color: colors.gray500,
-    fontWeight: '500',
-  },
-  providerNameSmall: {
-    fontSize: 16,
-    fontWeight: '800',
+  providerPillText: {
+    fontSize: 17,
+    fontWeight: '600',
     color: colors.gray900,
   },
   formCard: {
