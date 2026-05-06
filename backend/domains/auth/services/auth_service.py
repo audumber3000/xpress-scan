@@ -439,7 +439,9 @@ class AuthService(AuthServiceProtocol):
         except firebase_auth.RevokedIdTokenError:
             raise ValueError("Firebase ID token has been revoked")
         except Exception as e:
-            print(f"OAuth verification error: {e}")
+            import traceback
+            print(f"OAuth verification error: {e!r}", flush=True)
+            print(traceback.format_exc(), flush=True)
             raise ValueError(f"OAuth verification failed: {str(e)}")
 
     @property
