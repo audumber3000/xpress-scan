@@ -388,14 +388,17 @@ class AuthService(AuthServiceProtocol):
                     )
                     raise ValueError("Email is required for non-Apple sign-in")
 
-            # Parse name into first and last name
+            # Parse name into first and last name. UserResponseDTO requires
+            # both fields to be at least 1 char, so fill in placeholders for
+            # OAuth users (especially Apple Hide-My-Email) that won't share
+            # their real name. They can edit it later in profile settings.
             if name:
                 name_parts = name.split(" ", 1)
-                first_name = name_parts[0]
-                last_name = name_parts[1] if len(name_parts) > 1 else ""
+                first_name = name_parts[0] or "User"
+                last_name = (name_parts[1] if len(name_parts) > 1 else "") or "Account"
             else:
-                first_name = email.split("@")[0]
-                last_name = ""
+                first_name = email.split("@")[0] or "User"
+                last_name = "Account"
 
             # Check if user exists — by Firebase UID first (stable across
             # Apple Sign-In email changes / Hide My Email), then by email.
@@ -417,11 +420,20 @@ class AuthService(AuthServiceProtocol):
                 user = self.create_user(user_data)
 
             # Update Firebase UID if it's missing or different
+            db = self.auth_repo.db
+            dirty = False
             if not user.supabase_user_id or user.supabase_user_id.startswith("local_"):
                 user.supabase_user_id = firebase_uid
-                # Commit the change
-                from sqlalchemy.orm import Session
-                db = self.auth_repo.db
+                dirty = True
+            # Backfill name fields for users created before DTO validation
+            # was enforced — UserResponseDTO requires both to be ≥1 char.
+            if not (user.first_name or "").strip():
+                user.first_name = "User"
+                dirty = True
+            if not (user.last_name or "").strip():
+                user.last_name = "Account"
+                dirty = True
+            if dirty:
                 db.commit()
 
             # Register device if device data provided
