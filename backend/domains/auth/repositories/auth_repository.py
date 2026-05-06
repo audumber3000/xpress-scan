@@ -18,6 +18,13 @@ class AuthRepository(AuthRepositoryProtocol):
         """Get user by email address"""
         return self.db.query(User).filter(User.email == email).first()
 
+    def get_user_by_supabase_id(self, supabase_user_id: str) -> Optional[User]:
+        """Get user by stored Firebase UID (also used for Apple Sign-In where
+        the email may be hidden or absent)."""
+        return self.db.query(User).filter(
+            User.supabase_user_id == supabase_user_id
+        ).first()
+
     def get_user_by_identifier(self, identifier: str) -> Optional[User]:
         """Look up a user by either email or username (login identifier)."""
         return self.db.query(User).filter(

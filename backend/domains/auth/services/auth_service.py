@@ -365,12 +365,28 @@ class AuthService(AuthServiceProtocol):
                 except Exception as fb_err:
                     print(f"Firebase user lookup failed for {firebase_uid}: {fb_err}")
 
-            if not email or not firebase_uid:
-                print(
-                    f"OAuth missing creds — email={email!r}, uid={firebase_uid!r}, "
-                    f"provider={decoded_token.get('firebase', {}).get('sign_in_provider')!r}"
-                )
-                raise ValueError("Email and Firebase UID are required")
+            if not firebase_uid:
+                raise ValueError("Firebase UID is required")
+
+            sign_in_provider = decoded_token.get("firebase", {}).get("sign_in_provider")
+
+            # If we *still* don't have an email, the user is most likely an
+            # Apple Sign-In user who picked "Hide My Email" or who first
+            # authorized this app under a previous version that didn't
+            # request the email scope. Apple won't re-send the email on
+            # subsequent sign-ins, so synthesize a stable internal one
+            # tied to the Firebase UID. Real email can be backfilled later
+            # if the user ever shares it.
+            if not email:
+                if sign_in_provider == "apple.com":
+                    email = f"{firebase_uid}@apple.molarplus.local"
+                    print(f"OAuth: synthesized Apple email for uid={firebase_uid}")
+                else:
+                    print(
+                        f"OAuth missing creds — email={email!r}, uid={firebase_uid!r}, "
+                        f"provider={sign_in_provider!r}"
+                    )
+                    raise ValueError("Email is required for non-Apple sign-in")
 
             # Parse name into first and last name
             if name:
@@ -381,8 +397,12 @@ class AuthService(AuthServiceProtocol):
                 first_name = email.split("@")[0]
                 last_name = ""
 
-            # Check if user exists in our database
-            user = self.auth_repo.get_user_by_email(email)
+            # Check if user exists — by Firebase UID first (stable across
+            # Apple Sign-In email changes / Hide My Email), then by email.
+            user = self.auth_repo.get_user_by_supabase_id(firebase_uid) \
+                if hasattr(self.auth_repo, "get_user_by_supabase_id") else None
+            if not user:
+                user = self.auth_repo.get_user_by_email(email)
 
             if not user:
                 # Create new user from OAuth data
