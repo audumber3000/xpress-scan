@@ -59,111 +59,72 @@ if [ "$ERRORS" -gt 0 ]; then
 fi
 
 # 5. Auto-run DB migrations before schema check
+#    Runs each ALTER via `docker exec molarplus-db-1 psql ...` so it works
+#    regardless of whether the host can resolve the docker-internal `db` hostname
+#    in DATABASE_URL. Fails loud if the container isn't running.
 echo ""
 echo "▶ Running DB migrations against prod DB..."
-DB_URL=$(grep -E "^DATABASE_URL=" .env.production | cut -d'=' -f2-)
 
-python3 - <<PYEOF
-import sys, os
-sys.path.insert(0, 'backend')
-os.environ.setdefault('DATABASE_URL', "$DB_URL")
-try:
-    from sqlalchemy import create_engine, text
-    engine = create_engine("$DB_URL")
-    with engine.connect() as conn:
-        for col, ddl in [
-            ("is_trial",         "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS is_trial BOOLEAN DEFAULT FALSE"),
-            ("trial_ends_at",    "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP"),
-            ("clinic_label",     "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS clinic_label VARCHAR"),
-            ("parent_clinic_id", "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS parent_clinic_id INTEGER REFERENCES clinics(id)"),
-            ("country",          "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS country VARCHAR(2) DEFAULT 'IN'"),
-            ("currency_code",    "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS currency_code VARCHAR(3) DEFAULT 'INR'"),
-            ("currency_symbol",  "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS currency_symbol VARCHAR(5) DEFAULT '₹'"),
-            ("timezone",         "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS timezone VARCHAR(50) DEFAULT 'Asia/Kolkata'"),
-            ("tax_label",        "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS tax_label VARCHAR(20) DEFAULT 'GST No.'"),
-            ("tax_id",           "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS tax_id VARCHAR(50)"),
-        ]:
-            try:
-                conn.execute(text(ddl))
-                conn.commit()
-                print(f"  ✅ Migration applied: {col}")
-            except Exception as e:
-                conn.rollback()
-                print(f"  ⚠️  {col}: {e}")
-    engine.dispose()
-except Exception as e:
-    print(f"  ⚠️  Migration error (non-fatal): {e}")
-PYEOF
+if ! docker ps --format '{{.Names}}' | grep -q '^molarplus-db-1$'; then
+  echo "  ❌ molarplus-db-1 container is not running — cannot apply migrations"
+  exit 1
+fi
+
+run_migration() {
+  local label="$1"
+  local ddl="$2"
+  if docker exec molarplus-db-1 psql -U postgres -d molarplus -v ON_ERROR_STOP=1 -c "$ddl" >/dev/null 2>&1; then
+    echo "  ✅ $label"
+  else
+    echo "  ❌ $label — failed:"
+    docker exec molarplus-db-1 psql -U postgres -d molarplus -c "$ddl" 2>&1 | sed 's/^/     /'
+    exit 1
+  fi
+}
+
+run_migration "is_trial"         "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS is_trial BOOLEAN DEFAULT FALSE"
+run_migration "trial_ends_at"    "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP"
+run_migration "clinic_label"     "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS clinic_label VARCHAR"
+run_migration "parent_clinic_id" "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS parent_clinic_id INTEGER REFERENCES clinics(id)"
+run_migration "country"          "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS country VARCHAR(2) DEFAULT 'IN'"
+run_migration "currency_code"    "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS currency_code VARCHAR(3) DEFAULT 'INR'"
+run_migration "currency_symbol"  "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS currency_symbol VARCHAR(5) DEFAULT '₹'"
+run_migration "timezone"         "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS timezone VARCHAR(50) DEFAULT 'Asia/Kolkata'"
+run_migration "tax_label"        "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS tax_label VARCHAR(20) DEFAULT 'GST No.'"
+run_migration "tax_id"           "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS tax_id VARCHAR(50)"
 
 # 6. Schema migration check — catch missing ALTER TABLE migrations before deploy
 echo ""
 echo "▶ Running schema migration check against prod DB..."
 
-SCHEMA_RESULT=$(python3 - <<PYEOF
-import sys
-try:
-    from sqlalchemy import create_engine, text
-    engine = create_engine("$DB_URL")
-    REQUIRED = {
-        "clinics": {
-            "id", "clinic_code", "name", "address", "phone", "email",
-            "gst_number", "specialization", "subscription_plan", "status",
-            "razorpay_customer_id", "cashfree_customer_id",
-            "logo_url", "invoice_template", "primary_color",
-            "number_of_chairs", "timings",
-            "created_at", "updated_at", "synced_at", "sync_status",
-            "referred_by_code",
-            "clinic_label", "parent_clinic_id",
-            "country", "currency_code", "currency_symbol",
-            "timezone", "tax_label", "tax_id",
-        },
-        "users": {
-            "id", "email", "name", "first_name", "last_name",
-            "role", "is_active", "permissions", "created_at", "updated_at",
-        },
-        "user_clinics": {"id", "user_id", "clinic_id"},
-        "patients": {"id", "clinic_id", "name", "phone", "created_at", "updated_at"},
-        "appointments": {
-            "id", "clinic_id", "patient_name",
-            "appointment_date", "start_time", "end_time",
-            "status", "created_at", "updated_at",
-        },
-        "subscriptions": {
-            "id", "plan_name", "status", "current_start", "current_end",
-            "is_trial", "trial_ends_at",
-        },
-    }
-    failures = []
-    with engine.connect() as conn:
-        for table, required in REQUIRED.items():
-            rows = conn.execute(
-                text("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=:t"),
-                {"t": table}
-            )
-            actual = {r[0] for r in rows}
-            missing = required - actual
-            if missing:
-                failures.append(f"  {table}: missing {sorted(missing)}")
-    engine.dispose()
-    if failures:
-        print("FAIL")
-        for f in failures:
-            print(f)
-    else:
-        print("OK")
-except Exception as e:
-    print(f"ERROR: {e}")
-PYEOF
+declare -A REQUIRED_COLS=(
+  ["clinics"]="id clinic_code name address phone email gst_number specialization subscription_plan status razorpay_customer_id cashfree_customer_id logo_url invoice_template primary_color number_of_chairs timings created_at updated_at synced_at sync_status referred_by_code clinic_label parent_clinic_id country currency_code currency_symbol timezone tax_label tax_id"
+  ["users"]="id email name first_name last_name role is_active permissions created_at updated_at"
+  ["user_clinics"]="id user_id clinic_id"
+  ["patients"]="id clinic_id name phone created_at updated_at"
+  ["appointments"]="id clinic_id patient_name appointment_date start_time end_time status created_at updated_at"
+  ["subscriptions"]="id plan_name status current_start current_end is_trial trial_ends_at"
 )
 
-if echo "$SCHEMA_RESULT" | grep -q "^OK"; then
+SCHEMA_OK=true
+for table in "${!REQUIRED_COLS[@]}"; do
+  ACTUAL=$(docker exec molarplus-db-1 psql -U postgres -d molarplus -tA -c \
+    "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='$table'" 2>/dev/null)
+  if [ -z "$ACTUAL" ]; then
+    echo "  ❌ Schema check could not query table '$table' — DB unreachable"
+    exit 1
+  fi
+  for col in ${REQUIRED_COLS[$table]}; do
+    if ! echo "$ACTUAL" | grep -qx "$col"; then
+      echo "  ❌ $table is missing column: $col"
+      SCHEMA_OK=false
+    fi
+  done
+done
+
+if [ "$SCHEMA_OK" = true ]; then
   echo "  ✅ Schema check passed — all required columns exist"
-elif echo "$SCHEMA_RESULT" | grep -q "^ERROR"; then
-  echo "  ⚠️  Could not connect to DB for schema check — proceeding anyway"
-  echo "     $SCHEMA_RESULT"
 else
-  echo "  ❌ Schema check FAILED — missing columns detected:"
-  echo "$SCHEMA_RESULT" | grep -v "^FAIL"
   echo ""
   echo "  Run the missing ALTER TABLE migrations on prod before deploying."
   echo "  Example: docker exec molarplus-db-1 psql -U postgres molarplus -c \\"
