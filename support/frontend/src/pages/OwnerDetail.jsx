@@ -3,10 +3,11 @@ import { useParams, Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   ArrowLeft, User, Building2, Users, CalendarDays, Receipt,
-  Trash2, Loader2, AlertTriangle, Mail, Phone,
+  Trash2, Loader2, AlertTriangle, Mail, Phone, Globe,
 } from 'lucide-react';
 import api from '../utils/api';
 import { StatCard, Card, Badge, StatusBadge, Spinner, fmt } from '../components/ui';
+import { flag } from '../utils/country';
 
 const PLAN_MAP = { free: 'slate', professional: 'violet', professional_annual: 'sky', enterprise: 'amber' };
 const ROLE_MAP = { clinic_owner: 'violet', doctor: 'sky', receptionist: 'slate' };
@@ -19,6 +20,28 @@ export default function OwnerDetail() {
   const [deletePassword, setDeletePassword] = useState('');
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [countryOptions, setCountryOptions] = useState([]);
+  const [pickedCountry, setPickedCountry] = useState('');
+  const [savingCountry, setSavingCountry] = useState(false);
+
+  useEffect(() => {
+    api.get('/clinics/countries').then(setCountryOptions).catch(() => {});
+  }, []);
+
+  const handleCountrySave = async () => {
+    if (!pickedCountry) return toast.error('Pick a country');
+    setSavingCountry(true);
+    try {
+      const res = await api.patch(`/owners/${id}/country`, { country: pickedCountry });
+      toast.success(`Country set to ${pickedCountry} on ${res.clinics_updated} clinic(s)`);
+      setPickedCountry('');
+      await load();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Update failed');
+    } finally {
+      setSavingCountry(false);
+    }
+  };
 
   const load = async () => {
     try {
@@ -110,6 +133,41 @@ export default function OwnerDetail() {
         <StatCard label="Revenue" value={fmt.inr(impact.total_revenue)} icon={Receipt} color="amber" />
       </div>
 
+      {/* Country (cascades to all clinics) */}
+      {clinics.length > 0 && (
+        <Card>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 text-sm text-slate-700 font-medium flex-1 min-w-[180px]">
+              <Globe size={14} className="text-slate-400" />
+              <span>Country</span>
+              <span className="text-xs text-slate-400 font-normal">
+                — applied to all {clinics.length} clinic{clinics.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-sm text-slate-600">
+              {Array.from(new Set(clinics.map(c => c.country).filter(Boolean))).map(cc => (
+                <span key={cc} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 text-xs font-medium">
+                  <span className="text-base leading-none">{flag(cc)}</span>{cc}
+                </span>
+              ))}
+              {clinics.every(c => !c.country) && <span className="text-xs text-slate-400">— not set —</span>}
+            </div>
+            <select value={pickedCountry} onChange={e => setPickedCountry(e.target.value)}
+              className="h-8 px-2.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400">
+              <option value="">Change to…</option>
+              {countryOptions.map(c => (
+                <option key={c.code} value={c.code}>{c.name} ({c.currency_symbol})</option>
+              ))}
+            </select>
+            <button onClick={handleCountrySave} disabled={!pickedCountry || savingCountry}
+              className="h-8 px-3 text-xs font-semibold rounded-lg bg-brand-600 hover:bg-brand-700 text-white disabled:opacity-50 flex items-center gap-1.5">
+              {savingCountry ? <Loader2 size={12} className="animate-spin" /> : null}
+              Apply
+            </button>
+          </div>
+        </Card>
+      )}
+
       {/* Clinics */}
       <div>
         <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Owned Clinics ({clinics.length})</h3>
@@ -131,6 +189,12 @@ export default function OwnerDetail() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {c.country && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-[11px] font-medium text-slate-600">
+                          <span className="text-sm leading-none">{flag(c.country)}</span>
+                          {c.country}
+                        </span>
+                      )}
                       {c.clinic_label && (
                         <Badge color={c.clinic_label === 'main_branch' ? 'violet' : 'sky'}>{c.clinic_label}</Badge>
                       )}

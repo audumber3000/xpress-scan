@@ -137,6 +137,7 @@ def get_owner(owner_id: int, db: Session = Depends(get_db), _=Depends(get_curren
                 "clinic_label": c.clinic_label, "parent_clinic_id": c.parent_clinic_id,
                 "subscription_plan": c.subscription_plan, "status": c.status,
                 "phone": c.phone, "email": c.email, "address": c.address,
+                "country": c.country, "currency_symbol": c.currency_symbol,
             }
             for c in clinics
         ],
@@ -209,4 +210,45 @@ def delete_owner(
         "users_deleted": len(user_ids),
         "firebase_users_deleted": fb_deleted,
         "firebase_users_total": len(firebase_uids),
+    }
+
+
+# --- Country cascade: update country on every clinic owned by this user --
+class OwnerCountryBody(BaseModel):
+    country: str  # ISO 3166-1 alpha-2
+
+
+@router.patch("/{owner_id}/country")
+def update_owner_country(
+    owner_id: int,
+    body: OwnerCountryBody,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_admin),
+):
+    """Set country (and cascade the matching locale defaults) on every
+    clinic this user owns. Useful when a clinic owner moves regions and
+    you want to update them all in one shot — the user explicitly asked
+    for this on the support tool's Owner Detail page."""
+    from routes.clinics import _apply_country
+
+    owner = db.query(User).filter(User.id == owner_id).first()
+    if not owner:
+        raise HTTPException(status_code=404, detail="Owner not found")
+
+    clinic_ids, _user_ids, _info = discover_owner_scope(db, owner_id)
+    if not clinic_ids:
+        raise HTTPException(status_code=400, detail="Owner has no clinics")
+
+    clinics = db.query(Clinic).filter(Clinic.id.in_(clinic_ids)).all()
+    import datetime as _dt
+    now = _dt.datetime.utcnow()
+    for c in clinics:
+        _apply_country(c, body.country)
+        c.updated_at = now
+    db.commit()
+    return {
+        "success": True,
+        "owner_id": owner_id,
+        "country": body.country.upper(),
+        "clinics_updated": len(clinics),
     }

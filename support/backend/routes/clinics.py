@@ -403,6 +403,30 @@ class ClinicUpdateBody(BaseModel):
     status: Optional[str] = None
     clinic_label: Optional[str] = None
     parent_clinic_id: Optional[int] = None
+    country: Optional[str] = None  # ISO 3166-1 alpha-2 — cascades currency/timezone/tax_label
+    tax_id: Optional[str] = None
+
+
+def _apply_country(clinic: Clinic, country_code: str):
+    """When country changes, cascade the matching locale defaults from
+    core/countries.py. Admin-edited tax_id is preserved (only tax_label
+    follows the country)."""
+    from core.countries import get_country_config
+    cfg = get_country_config(country_code)
+    clinic.country = country_code.upper()
+    clinic.currency_code = cfg["currency_code"]
+    clinic.currency_symbol = cfg["currency_symbol"]
+    clinic.timezone = cfg["timezone"]
+    clinic.tax_label = cfg["tax_label"]
+
+
+@router.get("/countries")
+def list_supported_countries(_=Depends(get_current_admin)):
+    """Return the supported-country list for dropdowns. Mirrors the
+    main backend's identical endpoint so the support tool can stay
+    self-contained (no cross-service call)."""
+    from core.countries import get_all_countries
+    return get_all_countries()
 
 
 @router.patch("/{clinic_id}")
@@ -410,8 +434,12 @@ def update_clinic(clinic_id: int, body: ClinicUpdateBody, db: Session = Depends(
     clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
     if not clinic:
         raise HTTPException(status_code=404, detail="Clinic not found")
-    for field, value in body.dict(exclude_none=True).items():
+    payload = body.dict(exclude_none=True)
+    country = payload.pop("country", None)
+    for field, value in payload.items():
         setattr(clinic, field, value)
+    if country:
+        _apply_country(clinic, country)
     clinic.updated_at = datetime.datetime.utcnow()
     db.commit()
     db.refresh(clinic)

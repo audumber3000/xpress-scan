@@ -55,6 +55,11 @@ export default function ClinicDetail() {
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
   const [activatingTrial, setActivatingTrial] = useState(false);
+  const [countryOptions, setCountryOptions] = useState([]);
+
+  useEffect(() => {
+    api.get('/clinics/countries').then(setCountryOptions).catch(() => {});
+  }, []);
 
   const load = async () => {
     try {
@@ -69,6 +74,8 @@ export default function ClinicDetail() {
         subscription_plan: res.clinic.subscription_plan || 'free',
         clinic_label: res.clinic.clinic_label || '',
         parent_clinic_id: res.clinic.parent_clinic_id || null,
+        country: res.clinic.country || '',
+        tax_id: res.clinic.tax_id || res.clinic.gst_number || '',
       });
     } catch { toast.error('Failed to load clinic'); }
     finally { setLoading(false); }
@@ -219,6 +226,23 @@ export default function ClinicDetail() {
               <label className="block text-[11px] font-semibold text-slate-500 mb-1">Parent Clinic ID (if branch)</label>
               <input type="number" value={editForm.parent_clinic_id || ''} onChange={e => setEditForm(f => ({ ...f, parent_clinic_id: e.target.value ? parseInt(e.target.value) : null }))}
                 placeholder="e.g. 3"
+                className="w-full h-8 px-2.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                Country <span className="text-slate-400 font-normal">(cascades currency / timezone / tax label)</span>
+              </label>
+              <select value={editForm.country || ''} onChange={e => setEditForm(f => ({ ...f, country: e.target.value }))}
+                className="w-full h-8 px-2.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400">
+                <option value="">— Keep current —</option>
+                {countryOptions.map(c => (
+                  <option key={c.code} value={c.code}>{c.name} ({c.currency_symbol})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 mb-1">Tax ID ({clinic.tax_label || 'GST No.'})</label>
+              <input type="text" value={editForm.tax_id || ''} onChange={e => setEditForm(f => ({ ...f, tax_id: e.target.value }))}
                 className="w-full h-8 px-2.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400" />
             </div>
           </div>
