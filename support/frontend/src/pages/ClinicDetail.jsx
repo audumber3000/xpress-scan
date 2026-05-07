@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import api from '../utils/api';
 import { StatCard, Card, Badge, StatusBadge, TabBar, Spinner, fmt } from '../components/ui';
+import { flag } from '../utils/country';
 
 const PLAN_MAP = { free: 'slate', professional: 'violet', professional_annual: 'sky', enterprise: 'amber' };
 const ROLE_MAP = { clinic_owner: 'violet', doctor: 'sky', receptionist: 'slate' };
@@ -269,7 +270,10 @@ export default function ClinicDetail() {
                 <InfoRow label="Email" value={clinic.email} />
                 <InfoRow label="Phone" value={clinic.phone} />
                 <InfoRow label="Address" value={clinic.address} />
-                <InfoRow label="GST" value={clinic.gst_number} />
+                <InfoRow label="Country" value={clinic.country ? `${flag(clinic.country)} ${clinic.country}` : null} />
+                <InfoRow label="Currency" value={clinic.currency_code ? `${clinic.currency_symbol || ''} ${clinic.currency_code}`.trim() : null} />
+                <InfoRow label="Timezone" value={clinic.timezone} />
+                <InfoRow label={clinic.tax_label || 'Tax ID'} value={clinic.tax_id || clinic.gst_number} />
                 <InfoRow label="Chairs" value={clinic.number_of_chairs} />
                 <InfoRow label="Cashfree ID" value={clinic.cashfree_customer_id} />
               </dl>

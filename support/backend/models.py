@@ -32,6 +32,12 @@ class Clinic(Base):
     referred_by_code = Column(String, nullable=True)
     clinic_label = Column(String, nullable=True)
     parent_clinic_id = Column(Integer, nullable=True)
+    country = Column(String(2), nullable=True)
+    currency_code = Column(String(3), nullable=True)
+    currency_symbol = Column(String(5), nullable=True)
+    timezone = Column(String(50), nullable=True)
+    tax_label = Column(String(20), nullable=True)
+    tax_id = Column(String(50), nullable=True)
 
 
 class User(Base):
@@ -338,3 +344,23 @@ class GrowthLeadActivity(Base):
     created_at = Column(DateTime)
 
     lead = relationship("GrowthLead")
+
+
+class MarketingCampaign(Base):
+    """Audit log for every bulk-message dispatch from the support tool.
+    One row per send action; recipient-level breakdown lives in the
+    `errors_summary` JSON for now (upgrade to a child table later if needed)."""
+    __tablename__ = 'marketing_campaigns'
+    id = Column(Integer, primary_key=True)
+    channel = Column(String, nullable=False)        # 'whatsapp' | 'email'
+    template_name = Column(String, nullable=True)   # WA template name
+    subject = Column(String, nullable=True)         # email subject
+    target_kind = Column(String, nullable=False)    # 'clinics' | 'leads' | 'numbers' | 'test'
+    target_filter = Column(JSON, nullable=True)     # criteria used (status, stage, etc.)
+    total_recipients = Column(Integer, default=0)
+    sent_count = Column(Integer, default=0)
+    failed_count = Column(Integer, default=0)
+    skipped_count = Column(Integer, default=0)
+    errors_summary = Column(JSON, nullable=True)    # list of failure messages, capped
+    sent_by = Column(String, nullable=True)         # admin user that fired it
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)

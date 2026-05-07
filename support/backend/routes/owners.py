@@ -57,7 +57,8 @@ def list_owners(
     for r in rows:
         owner_id = r[0]
         clinics = db.execute(text("""
-            SELECT DISTINCT c.id, c.name, c.clinic_code, c.clinic_label, c.subscription_plan, c.status
+            SELECT DISTINCT c.id, c.name, c.clinic_code, c.clinic_label, c.subscription_plan, c.status,
+                            c.country, c.currency_symbol
             FROM clinics c
             WHERE c.id IN (
                 SELECT uc.clinic_id FROM user_clinics uc
@@ -92,6 +93,7 @@ def list_owners(
                 {
                     "id": c[0], "name": c[1], "clinic_code": c[2],
                     "clinic_label": c[3], "subscription_plan": c[4], "status": c[5],
+                    "country": c[6], "currency_symbol": c[7],
                 }
                 for c in clinics
             ],

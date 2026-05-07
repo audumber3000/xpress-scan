@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Search, Building2, ChevronRight, Users, User, Crown } from 'lucide-react';
 import api from '../utils/api';
 import { PageHeader, Card, Badge, StatusBadge as SBadge, Pagination, Spinner, TabBar, fmt } from '../components/ui';
+import { flag } from '../utils/country';
 
 const PLAN_MAP = { free: 'slate', professional: 'violet', professional_annual: 'sky', enterprise: 'amber' };
 const STATUS_TABS = ['all', 'active', 'suspended'];
@@ -80,7 +81,7 @@ function ClinicsTab() {
             <table className="w-full text-left text-sm min-w-[700px]">
               <thead>
                 <tr className="border-b border-slate-100">
-                  {['Clinic', 'Plan', 'Status', 'Patients', 'Revenue', 'Joined', ''].map(h => (
+                  {['Clinic', 'Country', 'Plan', 'Status', 'Patients', 'Revenue', 'Joined', ''].map(h => (
                     <th key={h} className="py-2.5 px-4 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
@@ -98,6 +99,13 @@ function ClinicsTab() {
                           <p className="text-[11px] text-slate-400">{c.clinic_code}</p>
                         </div>
                       </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                        <span className="text-base leading-none">{flag(c.country)}</span>
+                        <span>{c.country || '—'}</span>
+                        {c.currency_symbol && <span className="text-slate-400">·{c.currency_symbol}</span>}
+                      </span>
                     </td>
                     <td className="py-3 px-4"><Badge color={PLAN_MAP[c.subscription_plan] || 'slate'}>{c.subscription_plan || 'free'}</Badge></td>
                     <td className="py-3 px-4"><SBadge status={c.status} /></td>
@@ -189,10 +197,13 @@ function OwnersTab() {
                       </div>
                     </td>
                     <td className="py-3 px-4">
-                      <div className="flex flex-wrap gap-1">
+                      <div className="flex flex-wrap gap-1.5 items-center">
                         <Badge color="violet">{o.clinic_count}</Badge>
                         {(o.clinics || []).slice(0, 3).map(c => (
-                          <span key={c.id} className="text-[11px] text-slate-500 truncate max-w-[140px]">{c.name}</span>
+                          <span key={c.id} className="text-[11px] text-slate-500 truncate max-w-[140px] inline-flex items-center gap-0.5">
+                            {c.country && <span className="text-sm leading-none">{flag(c.country)}</span>}
+                            {c.name}
+                          </span>
                         ))}
                       </div>
                     </td>

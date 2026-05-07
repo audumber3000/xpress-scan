@@ -33,6 +33,24 @@ app.include_router(growth.router, prefix="/api/v1/growth", tags=["Growth"])
 app.include_router(marketing.router, prefix="/api/v1/marketing", tags=["Marketing"])
 
 
+@app.on_event("startup")
+def ensure_marketing_campaigns_table():
+    """Create the marketing_campaigns audit table if it doesn't exist yet.
+    Safe-by-design — only emits CREATE TABLE IF NOT EXISTS, never ALTERs
+    existing tables (per docs/DEPLOYMENT.md anti-pattern #1)."""
+    try:
+        from sqlalchemy import inspect
+        from database import engine
+        from models import MarketingCampaign
+        insp = inspect(engine)
+        if not insp.has_table("marketing_campaigns"):
+            MarketingCampaign.__table__.create(bind=engine)
+    except Exception as e:
+        # Don't crash the whole API if this fails — campaigns history just
+        # won't work until the table is created manually.
+        print(f"[support] marketing_campaigns table check failed: {e}")
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "support-backend"}

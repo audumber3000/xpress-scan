@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from database import get_db
-from models import User, SubscriptionCoupon, ReferralCode, Clinic
+from models import User, SubscriptionCoupon, ReferralCode, Clinic, GrowthLead, MarketingCampaign
 from .auth import get_current_admin
 from services.notification_service import notification_service
 from services.marketing_template_registry import (
@@ -12,6 +12,8 @@ from services.marketing_template_registry import (
 )
 import string
 import random
+import re
+import datetime
 
 router = APIRouter()
 
@@ -52,6 +54,22 @@ class BulkMessage(BaseModel):
     target_criteria: str # 'all', 'trial', 'active', 'suspended'
     header_image_url: Optional[str] = None  # Required when the chosen WhatsApp template has an image header
 
+class BulkMessageLeads(BaseModel):
+    template_name: str
+    stages: Optional[List[str]] = None        # filter by lead.stage; None = all
+    sources: Optional[List[str]] = None       # filter by lead.source; None = all
+    header_image_url: Optional[str] = None
+
+class BulkMessageNumbers(BaseModel):
+    template_name: str
+    numbers: List[str]                        # raw numbers, any format
+    header_image_url: Optional[str] = None
+
+class TestMessage(BaseModel):
+    template_name: str
+    phone: str
+    header_image_url: Optional[str] = None
+
 
 def _normalize_indian_mobile(raw: Optional[str]) -> Optional[str]:
     """Return a 12-digit MSG91-ready Indian mobile number ("91XXXXXXXXXX")
@@ -75,6 +93,75 @@ def _normalize_indian_mobile(raw: Optional[str]) -> Optional[str]:
     if len(digits) != 10:
         return None
     return f"91{digits}"
+
+
+def _parse_phone_blob(raw: str) -> Dict[str, Any]:
+    """Split a paste of phone numbers (newline / comma / space / ; separated)
+    into normalized + invalid + duplicate buckets. Currently India-only via
+    MSG91; revisit when we onboard non-IN clinics on a different gateway."""
+    if not raw:
+        return {"valid": [], "invalid": [], "duplicates": [], "total_pasted": 0}
+    tokens = [t.strip() for t in re.split(r"[\s,;]+", raw) if t.strip()]
+    seen = set()
+    valid: List[str] = []
+    invalid: List[str] = []
+    duplicates: List[str] = []
+    for t in tokens:
+        norm = _normalize_indian_mobile(t)
+        if not norm:
+            invalid.append(t)
+            continue
+        if norm in seen:
+            duplicates.append(t)
+            continue
+        seen.add(norm)
+        valid.append(norm)
+    return {
+        "valid": valid,
+        "invalid": invalid,
+        "duplicates": duplicates,
+        "total_pasted": len(tokens),
+    }
+
+
+def _admin_email(current_user: User) -> Optional[str]:
+    return getattr(current_user, "email", None) or getattr(current_user, "username", None)
+
+
+def _log_campaign(
+    db: Session,
+    *,
+    channel: str,
+    template_name: Optional[str],
+    subject: Optional[str],
+    target_kind: str,
+    target_filter: Optional[Dict[str, Any]],
+    total: int,
+    sent: int,
+    failed: int,
+    skipped: int,
+    errors: List[str],
+    sent_by: Optional[str],
+):
+    """Insert a row into marketing_campaigns. Errors capped to 50 entries
+    so a 1000-recipient blast doesn't bloat the row."""
+    record = MarketingCampaign(
+        channel=channel,
+        template_name=template_name,
+        subject=subject,
+        target_kind=target_kind,
+        target_filter=target_filter,
+        total_recipients=total,
+        sent_count=sent,
+        failed_count=failed,
+        skipped_count=skipped,
+        errors_summary=errors[:50] if errors else None,
+        sent_by=sent_by,
+        created_at=datetime.datetime.utcnow(),
+    )
+    db.add(record)
+    db.commit()
+    return record
 
 def generate_ref_code(length=8):
     chars = string.ascii_uppercase + string.digits
@@ -304,11 +391,321 @@ async def send_bulk_message(data: BulkMessage, db: Session = Depends(get_db), cu
                 count += 1
             else:
                 errors.append(f"Failed to Email {clinic.name}: {res.get('error')}")
-                
+
+    failed = len(clinics) - count - skipped
+    _log_campaign(
+        db,
+        channel=data.channel,
+        template_name=data.template_name,
+        subject=data.subject,
+        target_kind="clinics",
+        target_filter={"target_criteria": data.target_criteria},
+        total=len(clinics),
+        sent=count,
+        failed=max(failed, 0),
+        skipped=skipped,
+        errors=errors,
+        sent_by=_admin_email(current_user),
+    )
+
     return {
         "success": True,
         "sent_count": count,
         "total_attempted": len(clinics),
         "template_name": data.template_name,
         "errors": errors
+    }
+
+
+# --- Send to Growth Leads ---
+@router.post("/bulk-message-leads")
+async def send_bulk_to_leads(
+    data: BulkMessageLeads,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+):
+    template = get_bulk_whatsapp_template(data.template_name)
+    if not template:
+        raise HTTPException(status_code=400, detail="Unknown or inactive WhatsApp bulk template")
+    if template.get("requires_image") and not (data.header_image_url or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Template '{data.template_name}' requires a header image URL",
+        )
+
+    query = db.query(GrowthLead)
+    if data.stages:
+        query = query.filter(GrowthLead.stage.in_(data.stages))
+    if data.sources:
+        query = query.filter(GrowthLead.source.in_(data.sources))
+    leads = query.all()
+
+    sent = 0
+    skipped = 0
+    errors: List[str] = []
+    seen_numbers: set = set()
+
+    for lead in leads:
+        mobile = _normalize_indian_mobile(lead.phone)
+        if not mobile:
+            skipped += 1
+            errors.append(f"Skipped {lead.lead_name}: invalid phone ({lead.phone!r})")
+            continue
+        if mobile in seen_numbers:
+            skipped += 1
+            continue
+        seen_numbers.add(mobile)
+        res = await notification_service.send_whatsapp(
+            mobile_number=mobile,
+            template_name=data.template_name,
+            parameters=[],
+            header_image_url=(data.header_image_url or "").strip() or None,
+        )
+        if res.get("success"):
+            sent += 1
+        else:
+            errors.append(f"Failed {lead.lead_name}: {res.get('error')}")
+
+    failed = len(leads) - sent - skipped
+    _log_campaign(
+        db,
+        channel="whatsapp",
+        template_name=data.template_name,
+        subject=None,
+        target_kind="leads",
+        target_filter={"stages": data.stages, "sources": data.sources},
+        total=len(leads),
+        sent=sent,
+        failed=max(failed, 0),
+        skipped=skipped,
+        errors=errors,
+        sent_by=_admin_email(current_user),
+    )
+    return {
+        "success": True,
+        "sent_count": sent,
+        "total_attempted": len(leads),
+        "skipped": skipped,
+        "template_name": data.template_name,
+        "errors": errors,
+    }
+
+
+# --- Send to a raw list of phone numbers ---
+@router.post("/bulk-message-numbers/preview")
+def preview_phone_blob(payload: Dict[str, str], _=Depends(get_current_admin)):
+    """Live preview as the admin types — counts valid / invalid / duplicates
+    so they know exactly what they're about to broadcast to."""
+    raw = payload.get("raw") or ""
+    parsed = _parse_phone_blob(raw)
+    return {
+        "total_pasted": parsed["total_pasted"],
+        "valid_count": len(parsed["valid"]),
+        "invalid_count": len(parsed["invalid"]),
+        "duplicate_count": len(parsed["duplicates"]),
+        "preview_valid": parsed["valid"][:5],
+        "preview_invalid": parsed["invalid"][:5],
+    }
+
+
+@router.post("/bulk-message-numbers")
+async def send_bulk_to_numbers(
+    data: BulkMessageNumbers,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+):
+    template = get_bulk_whatsapp_template(data.template_name)
+    if not template:
+        raise HTTPException(status_code=400, detail="Unknown or inactive WhatsApp bulk template")
+    if template.get("requires_image") and not (data.header_image_url or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Template '{data.template_name}' requires a header image URL",
+        )
+
+    parsed = _parse_phone_blob("\n".join(data.numbers or []))
+    valid = parsed["valid"]
+
+    sent = 0
+    errors: List[str] = []
+    for mobile in valid:
+        res = await notification_service.send_whatsapp(
+            mobile_number=mobile,
+            template_name=data.template_name,
+            parameters=[],
+            header_image_url=(data.header_image_url or "").strip() or None,
+        )
+        if res.get("success"):
+            sent += 1
+        else:
+            errors.append(f"Failed {mobile}: {res.get('error')}")
+
+    skipped = parsed["total_pasted"] - len(valid)
+    failed = len(valid) - sent
+    _log_campaign(
+        db,
+        channel="whatsapp",
+        template_name=data.template_name,
+        subject=None,
+        target_kind="numbers",
+        target_filter={
+            "total_pasted": parsed["total_pasted"],
+            "invalid_count": len(parsed["invalid"]),
+            "duplicate_count": len(parsed["duplicates"]),
+        },
+        total=parsed["total_pasted"],
+        sent=sent,
+        failed=max(failed, 0),
+        skipped=skipped,
+        errors=errors,
+        sent_by=_admin_email(current_user),
+    )
+    return {
+        "success": True,
+        "sent_count": sent,
+        "total_pasted": parsed["total_pasted"],
+        "valid_count": len(valid),
+        "invalid_count": len(parsed["invalid"]),
+        "duplicate_count": len(parsed["duplicates"]),
+        "errors": errors,
+    }
+
+
+# --- Single test send (verify a template renders before broadcasting) ---
+@router.post("/test-message")
+async def send_test_message(
+    data: TestMessage,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+):
+    template = get_bulk_whatsapp_template(data.template_name)
+    if not template:
+        raise HTTPException(status_code=400, detail="Unknown or inactive WhatsApp bulk template")
+    mobile = _normalize_indian_mobile(data.phone)
+    if not mobile:
+        raise HTTPException(status_code=400, detail=f"Invalid phone: {data.phone!r}")
+
+    res = await notification_service.send_whatsapp(
+        mobile_number=mobile,
+        template_name=data.template_name,
+        parameters=[],
+        header_image_url=(data.header_image_url or "").strip() or None,
+    )
+    _log_campaign(
+        db,
+        channel="whatsapp",
+        template_name=data.template_name,
+        subject=None,
+        target_kind="test",
+        target_filter={"phone": mobile},
+        total=1,
+        sent=1 if res.get("success") else 0,
+        failed=0 if res.get("success") else 1,
+        skipped=0,
+        errors=[] if res.get("success") else [str(res.get("error"))],
+        sent_by=_admin_email(current_user),
+    )
+    if not res.get("success"):
+        raise HTTPException(status_code=502, detail=f"Send failed: {res.get('error')}")
+    return {"success": True, "phone": mobile}
+
+
+# --- Campaign history ---
+@router.get("/campaigns")
+def list_campaigns(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_admin),
+):
+    rows = (
+        db.query(MarketingCampaign)
+        .order_by(MarketingCampaign.created_at.desc())
+        .limit(min(max(limit, 1), 200))
+        .all()
+    )
+    return [
+        {
+            "id": r.id,
+            "channel": r.channel,
+            "template_name": r.template_name,
+            "subject": r.subject,
+            "target_kind": r.target_kind,
+            "target_filter": r.target_filter,
+            "total_recipients": r.total_recipients,
+            "sent_count": r.sent_count,
+            "failed_count": r.failed_count,
+            "skipped_count": r.skipped_count,
+            "errors_summary": r.errors_summary,
+            "sent_by": r.sent_by,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ]
+
+
+# --- Lead filter options (stages / sources we have leads for) ---
+@router.get("/leads/options")
+def lead_filter_options(db: Session = Depends(get_db), _=Depends(get_current_admin)):
+    """Distinct stages + sources currently in the leads table — drives
+    the multi-select dropdowns on the 'To Leads' campaigns tab."""
+    stages = [s for (s,) in db.query(GrowthLead.stage).distinct().all() if s]
+    sources = [s for (s,) in db.query(GrowthLead.source).distinct().all() if s]
+    counts = (
+        db.query(GrowthLead.stage, GrowthLead.source)
+        .all()
+    )
+    by_stage: Dict[str, int] = {}
+    by_source: Dict[str, int] = {}
+    for stage, source in counts:
+        if stage:
+            by_stage[stage] = by_stage.get(stage, 0) + 1
+        if source:
+            by_source[source] = by_source.get(source, 0) + 1
+    return {
+        "stages": sorted(stages),
+        "sources": sorted(sources),
+        "by_stage": by_stage,
+        "by_source": by_source,
+        "total_leads": db.query(GrowthLead).count(),
+    }
+
+
+@router.post("/leads/preview")
+def preview_lead_targets(
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    _=Depends(get_current_admin),
+):
+    """Given the same filters the admin will use to broadcast, return
+    valid / invalid / duplicate counts so they see what they're committing to."""
+    stages = payload.get("stages") or None
+    sources = payload.get("sources") or None
+    query = db.query(GrowthLead)
+    if stages:
+        query = query.filter(GrowthLead.stage.in_(stages))
+    if sources:
+        query = query.filter(GrowthLead.source.in_(sources))
+    leads = query.all()
+
+    valid: set = set()
+    invalid_count = 0
+    duplicate_count = 0
+    sample = []
+    for lead in leads:
+        norm = _normalize_indian_mobile(lead.phone)
+        if not norm:
+            invalid_count += 1
+            continue
+        if norm in valid:
+            duplicate_count += 1
+            continue
+        valid.add(norm)
+        if len(sample) < 5:
+            sample.append({"name": lead.lead_name, "phone": norm, "stage": lead.stage})
+    return {
+        "total_leads": len(leads),
+        "valid_count": len(valid),
+        "invalid_count": invalid_count,
+        "duplicate_count": duplicate_count,
+        "preview": sample,
     }

@@ -62,6 +62,7 @@ def list_clinics(
     q: str = "",
     status: str = "",
     plan: str = "",
+    country: str = "",
     page: int = 1,
     limit: int = 20,
     db: Session = Depends(get_db),
@@ -74,6 +75,8 @@ def list_clinics(
         query = query.filter(Clinic.status == status)
     if plan:
         query = query.filter(Clinic.subscription_plan == plan)
+    if country:
+        query = query.filter(Clinic.country == country.upper())
 
     total = query.count()
     clinics = query.order_by(Clinic.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
@@ -93,6 +96,8 @@ def list_clinics(
             "email": c.email,
             "subscription_plan": c.subscription_plan,
             "status": c.status,
+            "country": c.country,
+            "currency_symbol": c.currency_symbol,
             "patient_count": patient_count,
             "total_revenue": round(float(revenue), 2),
             "created_at": c.created_at.isoformat() if c.created_at else None,
@@ -279,6 +284,12 @@ def get_clinic(clinic_id: int, db: Session = Depends(get_db), _=Depends(get_curr
             "parent_clinic_id": clinic.parent_clinic_id,
             "parent_clinic_name": parent_clinic.name if parent_clinic else None,
             "branches": [{"id": b.id, "name": b.name, "clinic_code": b.clinic_code, "status": b.status, "clinic_label": b.clinic_label} for b in branch_clinics],
+            "country": clinic.country,
+            "currency_code": clinic.currency_code,
+            "currency_symbol": clinic.currency_symbol,
+            "timezone": clinic.timezone,
+            "tax_label": clinic.tax_label,
+            "tax_id": clinic.tax_id,
             "created_at": clinic.created_at.isoformat() if clinic.created_at else None,
             "updated_at": clinic.updated_at.isoformat() if clinic.updated_at else None,
         },
