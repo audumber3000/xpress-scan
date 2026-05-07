@@ -22,3 +22,6 @@ Thumbs.db
 # Test output
 test_output.txt
 __tests__/
+
+# Secrets — read locally by `eas submit`, never needs to be in the build archive
+play-service-account.json

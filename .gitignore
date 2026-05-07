@@ -5,6 +5,10 @@
 # Firebase service account (contains private keys - never commit)
 **/betterclinic-*-firebase-adminsdk-*.json
 **/firebase-service-account*.json
+
+# Google Play service account for eas submit (private key — never commit)
+**/play-service-account*.json
+mobile-app/betterclinic-f1179-*.json
 .env.local
 .env.*.local
 **/.env
