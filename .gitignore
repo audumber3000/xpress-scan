@@ -9,6 +9,9 @@
 # Google Play service account for eas submit (private key — never commit)
 **/play-service-account*.json
 mobile-app/betterclinic-f1179-*.json
+
+# EAS local credentials (Android keystore passwords — never commit)
+mobile-app/credentials.json
 .env.local
 .env.*.local
 **/.env
