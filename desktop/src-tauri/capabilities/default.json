@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capabilities for the MolarPlus main window. The remote app at app.molarplus.com is intentionally NOT granted Tauri IPC access — this is a thin wrapper. Only core capabilities are enabled.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}

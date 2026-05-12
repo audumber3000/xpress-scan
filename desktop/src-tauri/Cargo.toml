@@ -1,0 +1,33 @@
+[package]
+name = "molarplus-desktop"
+version = "0.1.0"
+description = "MolarPlus desktop app — thin Tauri wrapper around https://app.molarplus.com"
+authors = ["MolarPlus"]
+edition = "2021"
+
+[lib]
+name = "molarplus_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-deep-link = "2"
+tauri-plugin-updater = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+open = "5"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

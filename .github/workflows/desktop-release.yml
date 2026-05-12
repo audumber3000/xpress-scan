@@ -1,0 +1,137 @@
+name: Desktop release
+
+# Only fires on tags shaped `desktop-vX.Y.Z` so this workflow is fully isolated
+# from web-app CI. Web-app workflows live in this same `.github/workflows/`
+# directory but trigger on different events (branch pushes, PRs, etc.) and must
+# not share this tag namespace.
+on:
+  push:
+    tags:
+      - 'desktop-v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: '--target universal-apple-darwin'
+            rust-targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
+          - platform: windows-latest
+            args: ''
+            rust-targets: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - name: Cache cargo build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: 'desktop/src-tauri -> target'
+
+      - name: Install desktop npm dependencies
+        working-directory: desktop
+        run: npm install
+
+      # Builds the unsigned/signed installer locally on the runner. We do NOT
+      # use tauri-action's GitHub-Release publishing here — distribution lives
+      # entirely in Cloudflare R2 (next step).
+      - name: Build installer
+        uses: tauri-apps/tauri-action@v0
+        env:
+          # macOS Developer ID code signing + notarization.
+          # Missing values => unsigned .dmg.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+          # Windows EV / standard code signing.
+          # Missing values => unsigned .msi/.exe.
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+
+          # Updater signing key. Only relevant once `bundle.createUpdaterArtifacts`
+          # is flipped to true in tauri.conf.json.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: desktop
+          args: ${{ matrix.args }}
+
+      # Upload to Cloudflare R2 (bucket: molarplus-installers) with stable
+      # filenames so the marketing site can use permanent download URLs that
+      # don't change between releases. Reuses the account-wide R2 API token
+      # that's already configured for the backend.
+      - name: Upload installer to Cloudflare R2
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          # Bucket name is fixed for the desktop installer distribution and
+          # intentionally hardcoded — not a secret, never changes.
+          BUCKET="molarplus-installers"
+
+          if [[ -z "${R2_ENDPOINT_URL:-}" ]]; then
+            echo "ERROR: R2_ENDPOINT_URL secret is not set." >&2
+            echo "Expected format: https://<ACCOUNT_ID>.r2.cloudflarestorage.com" >&2
+            exit 1
+          fi
+
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            SRC=$(find desktop/src-tauri/target -path '*/bundle/dmg/*.dmg' | head -1)
+            STABLE="MolarPlus-mac.dmg"
+            VERSIONED="MolarPlus-mac-${TAG}.dmg"
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
+            SRC=$(find desktop/src-tauri/target -path '*/bundle/msi/*.msi' | head -1)
+            STABLE="MolarPlus-windows.msi"
+            VERSIONED="MolarPlus-windows-${TAG}.msi"
+          else
+            echo "Unsupported runner: $RUNNER_OS" >&2
+            exit 1
+          fi
+
+          if [[ -z "$SRC" || ! -f "$SRC" ]]; then
+            echo "ERROR: installer not found under desktop/src-tauri/target" >&2
+            find desktop/src-tauri/target -name '*.dmg' -o -name '*.msi' >&2 || true
+            exit 1
+          fi
+
+          echo "Uploading $SRC"
+          echo "  → s3://${BUCKET}/${STABLE}      (stable URL — overwritten each release)"
+          echo "  → s3://${BUCKET}/${VERSIONED}   (versioned archive)"
+
+          # Stable filename: the marketing site download button points here.
+          # `no-cache` lets CDN/browser cache but forces revalidation, so users
+          # always get the newest installer immediately after a release.
+          aws s3 cp "$SRC" "s3://${BUCKET}/${STABLE}" \
+            --endpoint-url "$R2_ENDPOINT_URL" \
+            --cache-control "public, no-cache"
+
+          # Versioned filename: permanent archive for rollbacks / changelogs.
+          aws s3 cp "$SRC" "s3://${BUCKET}/${VERSIONED}" \
+            --endpoint-url "$R2_ENDPOINT_URL" \
+            --cache-control "public, max-age=31536000, immutable"

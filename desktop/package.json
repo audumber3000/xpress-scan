@@ -1,0 +1,14 @@
+{
+  "name": "molarplus-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MolarPlus desktop app — thin Tauri v2 wrapper around https://app.molarplus.com",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
+  }
+}
