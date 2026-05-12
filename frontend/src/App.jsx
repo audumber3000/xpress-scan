@@ -54,6 +54,7 @@ import Header from "./components/Header";
 import PWAInstall from "./components/PWAInstall";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ConnectivityBanner from "./components/ConnectivityBanner";
+import DeviceUpsellModal from "./components/DeviceUpsellModal";
 
 const BANNER_KEY = 'mp_mobile_banner_dismissed';
 
@@ -243,6 +244,11 @@ function AppContent() {
 
           {/* Mobile browser notice */}
           <MobileAppBanner />
+
+          {/* Post-login device upsell — pitches the desktop or mobile app
+              based on user-agent. Suppresses itself when running inside a
+              MolarPlus native shell. */}
+          <DeviceUpsellModal />
 
           {/* Main content area */}
           <main className="flex-1 w-full overflow-auto">

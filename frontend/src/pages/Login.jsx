@@ -376,6 +376,31 @@ const Login = () => {
               </Link>
             </p>
           </div>
+
+          {/* Mobile app download — same badges marketing uses on molarplus.com */}
+          <div className="pt-4 border-t border-gray-100">
+            <p className="text-xs text-gray-500 text-center mb-3">Also available on mobile</p>
+            <div className="flex gap-3 items-center justify-center">
+              <a
+                href="https://apps.apple.com/app/molarplus"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Download on the App Store"
+                className="hover:opacity-80 transition-opacity"
+              >
+                <img src="/badges/app-store.svg" alt="Download on the App Store" className="h-10 w-auto" />
+              </a>
+              <a
+                href="https://play.google.com/store/apps/details?id=com.molarplus.app&pcampaignid=web_share"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Get it on Google Play"
+                className="hover:opacity-80 transition-opacity"
+              >
+                <img src="/badges/google-play.svg" alt="Get it on Google Play" className="h-[3.4rem] w-auto" />
+              </a>
+            </div>
+          </div>
         </div>
       </div>
     </div>
