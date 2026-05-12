@@ -1,5 +1,12 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import {
+  browserLocalPersistence,
+  browserPopupRedirectResolver,
+  browserSessionPersistence,
+  getAuth,
+  indexedDBLocalPersistence,
+  initializeAuth,
+} from 'firebase/auth';
 
 // Firebase configuration from environment variables
 const firebaseConfig = {
@@ -26,7 +33,19 @@ let auth;
 
 try {
   app = initializeApp(firebaseConfig);
-  auth = getAuth(app);
+  try {
+    auth = initializeAuth(app, {
+      persistence: [
+        indexedDBLocalPersistence,
+        browserLocalPersistence,
+        browserSessionPersistence,
+      ],
+      popupRedirectResolver: browserPopupRedirectResolver,
+    });
+  } catch (authInitError) {
+    console.warn('Firebase auth was already initialized, reusing existing instance:', authInitError.message);
+    auth = getAuth(app);
+  }
   
   // For development, use localhost:5173
   console.log('✅ Firebase initialized successfully');
@@ -50,4 +69,3 @@ try {
 // Initialize Firebase Authentication and get a reference to the service
 export { auth };
 export default app;
-

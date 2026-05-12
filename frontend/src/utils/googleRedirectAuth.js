@@ -1,4 +1,4 @@
-import { getRedirectResult } from 'firebase/auth';
+import { getRedirectResult, onAuthStateChanged } from 'firebase/auth';
 import { toast } from 'react-toastify';
 import { auth } from '../firebaseClient';
 import { api } from './api';
@@ -63,6 +63,28 @@ export const getDeviceInfo = () => {
   };
 };
 
+const waitForFirebaseUser = (timeoutMs = 5000) => {
+  if (auth.currentUser) return Promise.resolve(auth.currentUser);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      unsubscribe();
+      resolve(auth.currentUser);
+    }, timeoutMs);
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (settled || !user) return;
+      settled = true;
+      clearTimeout(timeout);
+      unsubscribe();
+      resolve(user);
+    });
+  });
+};
+
 export const completeGoogleRedirectAuth = async ({
   navigate,
   setUser,
@@ -79,7 +101,7 @@ export const completeGoogleRedirectAuth = async ({
 
   try {
     const result = await getRedirectResult(auth);
-    const firebaseUser = result?.user || auth.currentUser;
+    const firebaseUser = result?.user || auth.currentUser || await waitForFirebaseUser();
 
     if (!firebaseUser) {
       throw new Error('No authentication result found. Please try logging in again.');
