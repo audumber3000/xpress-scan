@@ -185,6 +185,38 @@ const AuthCallback = () => {
       console.log('🔄 [AUTH CALLBACK] Current search params:', window.location.search);
       console.log('🔄 [AUTH CALLBACK] Current hash:', window.location.hash);
       
+      const urlParams = new URLSearchParams(window.location.search);
+      const desktopToken = urlParams.get('token');
+
+      if (desktopToken) {
+        try {
+          localStorage.setItem('auth_token', desktopToken);
+          const userData = await api.get('/auth/me');
+          const apiUser = userData.user || userData;
+          const userWithClinic = userData.clinic ? { ...apiUser, clinic: userData.clinic } : apiUser;
+
+          localStorage.setItem('user', JSON.stringify(userWithClinic));
+          setToken(desktopToken);
+          setUser(userWithClinic);
+          toast.success('Authentication successful!');
+
+          await new Promise(resolve => setTimeout(resolve, 200));
+
+          const redirectPath = !apiUser.clinic_id
+            ? '/onboarding'
+            : (apiUser.role === 'clinic_owner' && apiUser.clinics?.length > 1)
+              ? '/select-clinic'
+              : '/dashboard';
+          navigate(redirectPath, { replace: true });
+          return;
+        } catch (desktopError) {
+          console.error('❌ [AUTH CALLBACK] Desktop deep link error:', desktopError);
+          setLoading(false);
+          setError('Could not complete desktop sign-in. Please try again.');
+          return;
+        }
+      }
+
       // Set a timeout to prevent getting stuck
       timeout = setTimeout(() => {
         console.error('🔄 [AUTH CALLBACK] ⏱️ TIMEOUT - Redirecting to login');
@@ -226,7 +258,6 @@ const AuthCallback = () => {
             });
 
             // Check if this is a mobile callback
-            const urlParams = new URLSearchParams(window.location.search);
             const isMobile = urlParams.get('mobile') === 'true';
             
             if (isMobile) {

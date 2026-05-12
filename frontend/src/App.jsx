@@ -16,6 +16,7 @@ import DoctorProfile from "./pages/DoctorProfile";
 import Settings from "./pages/Settings";
 import ClinicOnboarding from "./pages/ClinicOnboarding";
 import AuthCallback from "./pages/AuthCallback";
+import DesktopAuthStart from "./pages/DesktopAuthStart";
 import LoadingTest from "./pages/LoadingTest";
 import Mail from "./pages/Mail";
 import MailCallback from "./pages/MailCallback";
@@ -190,7 +191,7 @@ function AppContent() {
   }, [location.pathname, loading, user, navigate]);
 
   // Check if current route is auth page, booking page, or public page
-  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/onboarding' || location.pathname === '/auth/callback';
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/onboarding' || location.pathname === '/auth/callback' || location.pathname === '/desktop-auth/start';
   const isBookingPage = location.pathname === '/booking';
   const isPublicPage = location.pathname === '/dental-demo' || location.pathname.startsWith('/consent/sign/') || location.pathname === '/checkout';
 
@@ -217,6 +218,7 @@ function AppContent() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/onboarding" element={<ClinicOnboarding />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/desktop-auth/start" element={<DesktopAuthStart />} />
           <Route path="/booking" element={<BookingPage />} />
           <Route path="/dental-demo" element={<DentalChartDemo />} />
           <Route path="/consent/sign/:token" element={<ConsentSign />} />

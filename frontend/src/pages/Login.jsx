@@ -139,11 +139,11 @@ const Login = () => {
       provider.addScope('profile');
 
       // Popups don't work inside the MolarPlus desktop wrapper (Tauri webview).
-      // Fall back to redirect-based auth, which AuthCallback.jsx finishes via getRedirectResult().
+      // Use the system browser so Google can return through the molarplus:// deep link.
       if (window.__MOLARPLUS_DESKTOP__) {
-        console.log('🔵 [LOGIN] Desktop wrapper detected — using signInWithRedirect');
+        console.log('🔵 [LOGIN] Desktop wrapper detected — opening browser OAuth flow');
         markGoogleRedirectPending('login');
-        await signInWithRedirect(auth, provider);
+        window.location.href = `${window.location.origin}/desktop-auth/start?mode=login`;
         return;
       }
 

@@ -109,6 +109,12 @@ pub fn run() {
             .devtools(true)
             .initialization_script(INIT_SCRIPT)
             .on_navigation(|url| {
+                if url.host_str() == Some("app.molarplus.com")
+                    && url.path() == "/desktop-auth/start"
+                {
+                    let _ = open::that(url.to_string());
+                    return false;
+                }
                 if host_is_allowed(url.host_str()) {
                     return true;
                 }
