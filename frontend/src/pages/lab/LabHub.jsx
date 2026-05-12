@@ -88,9 +88,27 @@ const LabHub = () => {
     const getStatusColor = (status) => {
         switch (status) {
             case 'Sent': return 'bg-blue-50 text-blue-700 border-blue-100';
+            case 'In Progress': return 'bg-amber-50 text-amber-700 border-amber-100';
             case 'Received': return 'bg-green-50 text-green-700 border-green-100';
             case 'Cancelled': return 'bg-red-50 text-red-700 border-red-100';
             default: return 'bg-gray-50 text-gray-700 border-gray-100';
+        }
+    };
+
+    const ORDER_STATUSES = ['Draft', 'Sent', 'In Progress', 'Received', 'Cancelled'];
+
+    const updateOrderStatus = async (orderId, newStatus) => {
+        try {
+            await api.put(`/clinical/lab-orders/${orderId}`, { status: newStatus });
+            setOrders(prev => prev.map(o => (o.id === orderId ? { ...o, status: newStatus } : o)));
+            toast.success(`Status updated to "${newStatus}"`);
+        } catch (err) {
+            console.error("Failed to update status:", err);
+            toast.error(getPermissionAwareErrorMessage(
+                err,
+                "Failed to update order status",
+                "You don't have permission to update lab orders."
+            ));
         }
     };
 
@@ -98,24 +116,39 @@ const LabHub = () => {
         <div className="flex-1 bg-gray-50/50 min-h-screen pb-10">
             <div className="px-8 mt-6 max-w-7xl mx-auto space-y-6">
 
-                {/* Page Header */}
-                <div className="flex justify-between items-start mb-8">
-                    <div>
-                        <h1 className="text-3xl font-bold text-gray-900">Laboratory</h1>
-                        <p className="text-sm text-gray-500 mt-1">Manage lab partners and clinical work orders</p>
+                {/* Tabs row with primary action on the right — page title is already in the global header */}
+                <div className="flex justify-between items-end border-b border-gray-200">
+                    <div className="flex gap-10">
+                        {[
+                            { id: 'orders', label: 'Clinical Orders', icon: Beaker },
+                            { id: 'vendors', label: 'Technical Partners', icon: Building2 }
+                        ].map(tab => (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`pb-4 flex items-center gap-2 text-sm font-semibold transition-all whitespace-nowrap border-b-2 relative top-[1px] ${
+                                    activeTab === tab.id
+                                        ? 'border-[#2a276e] text-[#2a276e]'
+                                        : 'border-transparent text-gray-400 hover:text-gray-600'
+                                }`}
+                            >
+                                <tab.icon size={16} strokeWidth={activeTab === tab.id ? 3 : 2} />
+                                {tab.label}
+                            </button>
+                        ))}
                     </div>
-                    <div>
+                    <div className="pb-3">
                         {activeTab === 'orders' ? (
-                            <button 
-                                onClick={() => setIsOrderDrawerOpen(true)} 
+                            <button
+                                onClick={() => setIsOrderDrawerOpen(true)}
                                 className="bg-[#2a276e] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#1a1548] transition-colors shadow-sm flex items-center gap-2"
                             >
                                 <Plus size={18} />
                                 Create Order
                             </button>
                         ) : (
-                            <button 
-                                onClick={() => setIsVendorDrawerOpen(true)} 
+                            <button
+                                onClick={() => setIsVendorDrawerOpen(true)}
                                 className="bg-[#2a276e] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#1a1548] transition-colors shadow-sm flex items-center gap-2"
                             >
                                 <Plus size={18} />
@@ -123,27 +156,6 @@ const LabHub = () => {
                             </button>
                         )}
                     </div>
-                </div>
-
-                {/* Navigation Tabs */}
-                <div className="flex gap-10 border-b border-gray-200">
-                    {[
-                        { id: 'orders', label: 'Clinical Orders', icon: Beaker },
-                        { id: 'vendors', label: 'Technical Partners', icon: Building2 }
-                    ].map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`pb-4 flex items-center gap-2 text-sm font-semibold transition-all whitespace-nowrap border-b-2 relative top-[1px] ${
-                                activeTab === tab.id 
-                                    ? 'border-[#2a276e] text-[#2a276e]' 
-                                    : 'border-transparent text-gray-400 hover:text-gray-600'
-                            }`}
-                        >
-                            <tab.icon size={16} strokeWidth={activeTab === tab.id ? 3 : 2} />
-                            {tab.label}
-                        </button>
-                    ))}
                 </div>
 
                 {/* Tab Views */}
@@ -164,6 +176,7 @@ const LabHub = () => {
                                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
                                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lab Partner</th>
                                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
                                                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                             </tr>
                                         </thead>
@@ -206,10 +219,26 @@ const LabHub = () => {
                                                             <span className="text-sm text-gray-400">Not set</span>
                                                         )}
                                                     </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-gray-900 tabular-nums">
+                                                        {order.cost && parseFloat(order.cost) > 0
+                                                            ? `₹${parseFloat(order.cost).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+                                                            : <span className="text-gray-300">—</span>}
+                                                    </td>
                                                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                                                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(order.status).replace('border-', 'border ')}`}>
-                                                            {order.status}
-                                                        </span>
+                                                        <select
+                                                            value={order.status || 'Draft'}
+                                                            onChange={(e) => updateOrderStatus(order.id, e.target.value)}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            className={`px-2.5 py-1 pr-7 text-xs leading-5 font-semibold rounded-full border cursor-pointer appearance-none bg-[length:14px] bg-[right_6px_center] bg-no-repeat focus:outline-none focus:ring-2 focus:ring-[#2a276e]/30 ${getStatusColor(order.status)}`}
+                                                            style={{
+                                                                backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='currentColor' stroke-width='3'><path stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/></svg>")`,
+                                                            }}
+                                                            title="Update status"
+                                                        >
+                                                            {ORDER_STATUSES.map(s => (
+                                                                <option key={s} value={s}>{s}</option>
+                                                            ))}
+                                                        </select>
                                                     </td>
                                                 </tr>
                                             ))}
