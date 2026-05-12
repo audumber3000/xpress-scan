@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useCallback, useContext, useState } from 'react';
 
 const HeaderContext = createContext();
 
@@ -22,7 +22,12 @@ export const HeaderProvider = ({ children }) => {
   const [refreshPath, setRefreshPath] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleRefresh = async () => {
+  // All callbacks are wrapped in useCallback so their identity is stable across
+  // re-renders. Without this, consumers that put `setTitle` / `setRefreshFunction`
+  // in a useEffect dependency array would re-run the effect on every provider
+  // render, causing infinite render + API-call loops on pages like /payments
+  // and /patients (which both set the refresh function inside an effect).
+  const handleRefresh = useCallback(async () => {
     if (refreshFunction) {
       setLoading(true);
       try {
@@ -31,14 +36,14 @@ export const HeaderProvider = ({ children }) => {
         setLoading(false);
       }
     }
-  };
+  }, [refreshFunction]);
 
-  const updateTitle = (nextTitle) => {
+  const updateTitle = useCallback((nextTitle) => {
     setTitle(nextTitle);
     setTitlePath(window.location.pathname);
-  };
+  }, []);
 
-  const updateRefreshFunction = (nextRefreshFunction) => {
+  const updateRefreshFunction = useCallback((nextRefreshFunction) => {
     setRefreshFunction(() => {
       if (typeof nextRefreshFunction === 'function') {
         return nextRefreshFunction();
@@ -46,7 +51,7 @@ export const HeaderProvider = ({ children }) => {
       return nextRefreshFunction || null;
     });
     setRefreshPath(window.location.pathname);
-  };
+  }, []);
 
   return (
     <HeaderContext.Provider
@@ -65,9 +70,3 @@ export const HeaderProvider = ({ children }) => {
     </HeaderContext.Provider>
   );
 };
-
-
-
-
-
-
