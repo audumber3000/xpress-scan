@@ -10,7 +10,7 @@ const Header = () => {
   const { user, signOut, switchClinic } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { title, refreshFunction, loading, handleRefresh } = useHeader();
+  const { title, titlePath, refreshFunction, refreshPath, loading, handleRefresh } = useHeader();
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showClinicDropdown, setShowClinicDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -27,6 +27,67 @@ const Header = () => {
   const searchInputRef = useRef(null);
 
   const isDashboardPage = location.pathname === '/dashboard';
+
+  const getRouteTitle = (pathname) => {
+    const staticTitles = {
+      '/dashboard': 'Dashboard',
+      '/calendar': 'Appointments',
+      '/patients': 'Patients',
+      '/patient-files': 'Patient Files',
+      '/payments': 'Payments',
+      '/vendors': 'Inventory & Vendors',
+      '/consent-forms': 'Consent Forms',
+      '/lab': 'Laboratory',
+      '/reports': 'Reports',
+      '/marketing/reviews': 'Google Reviews',
+      '/marketing/posters': 'Marketing Posters',
+      '/admin': 'Admin Hub',
+      '/admin/attendance': 'Attendance',
+      '/admin/staff': 'Staff Management',
+      '/admin/treatments': 'Treatments & Pricing',
+      '/admin/permissions': 'Permissions',
+      '/admin/clinic': 'Clinic Info',
+      '/admin/templates': 'Message Templates',
+      '/admin/doctors': 'Referring Doctors',
+      '/admin/templates-editor': 'Templates Editor',
+      '/admin/notifications': 'Notifications',
+      '/admin/subscription': 'Subscription & Billing',
+      '/settings': 'Settings',
+      '/user-management': 'Settings',
+      '/doctor-profile': 'Profile Settings',
+      '/subscription': 'Subscription & Billing',
+      '/support': 'Support',
+      '/support-tickets': 'Support',
+      '/add-clinic': 'Add Branch',
+      '/checkout': 'Checkout',
+      '/mail': 'Mail',
+      '/mail/callback': 'Mail',
+      '/patient-intake': 'Patient Intake',
+    };
+
+    if (staticTitles[pathname]) return staticTitles[pathname];
+    if (pathname.startsWith('/admin/practice-settings/')) return 'Practice Settings';
+    if (pathname.startsWith('/patient-profile/')) return 'Patient Profile';
+    if (pathname.startsWith('/consent/sign/')) return 'Consent Form';
+    return '';
+  };
+
+  const routeTitle = getRouteTitle(location.pathname);
+  const routeOwnsTitle = titlePath === location.pathname;
+  const customTitle = routeOwnsTitle ? title : '';
+  const customTitleIsText = typeof customTitle === 'string' && customTitle.trim();
+  const customTitleIsNode = customTitle && typeof customTitle !== 'string';
+  const pageTitle = routeTitle || customTitleIsText || '';
+  const activeRefreshFunction = refreshPath === location.pathname ? refreshFunction : null;
+  const canShowPageHeader = !isDashboardPage && pageTitle;
+
+  const handleHeaderRefresh = () => {
+    if (activeRefreshFunction) {
+      handleRefresh();
+      return;
+    }
+    window.location.reload();
+  };
 
   // Improved user info extraction
   const userName =
@@ -294,21 +355,22 @@ const Header = () => {
           )}
         </div>
 
-        {!isDashboardPage && title && (
+        {canShowPageHeader && (
           <>
             <div className="h-6 w-px bg-gray-200 mx-1 hidden md:block"></div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-gray-900">{title}</h1>
-              {refreshFunction && (
-                <button
-                  onClick={handleRefresh}
-                  disabled={loading}
-                  className="p-1 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
-                  title={typeof title === 'string' ? `Refresh ${title.toLowerCase()}` : 'Refresh'}
-                >
-                  <FaSync className={`w-4 h-4 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
-                </button>
+            <div className="flex items-center gap-2 min-w-0">
+              {customTitleIsNode && (
+                <div className="hidden sm:flex items-center shrink-0">{customTitle}</div>
               )}
+              <h1 className="text-xl font-bold text-gray-900 truncate">{pageTitle}</h1>
+              <button
+                onClick={handleHeaderRefresh}
+                disabled={loading}
+                className="p-1 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50 shrink-0"
+                title={`Refresh ${pageTitle.toLowerCase()}`}
+              >
+                <FaSync className={`w-4 h-4 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
+              </button>
             </div>
           </>
         )}
@@ -569,4 +631,3 @@ const Header = () => {
 };
 
 export default Header;
-

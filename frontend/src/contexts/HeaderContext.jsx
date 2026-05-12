@@ -17,7 +17,9 @@ export const useHeader = () => {
 
 export const HeaderProvider = ({ children }) => {
   const [title, setTitle] = useState('');
+  const [titlePath, setTitlePath] = useState('');
   const [refreshFunction, setRefreshFunction] = useState(null);
+  const [refreshPath, setRefreshPath] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleRefresh = async () => {
@@ -31,14 +33,31 @@ export const HeaderProvider = ({ children }) => {
     }
   };
 
+  const updateTitle = (nextTitle) => {
+    setTitle(nextTitle);
+    setTitlePath(window.location.pathname);
+  };
+
+  const updateRefreshFunction = (nextRefreshFunction) => {
+    setRefreshFunction(() => {
+      if (typeof nextRefreshFunction === 'function') {
+        return nextRefreshFunction();
+      }
+      return nextRefreshFunction || null;
+    });
+    setRefreshPath(window.location.pathname);
+  };
+
   return (
     <HeaderContext.Provider
       value={{
         title,
+        titlePath,
         refreshFunction,
+        refreshPath,
         loading,
-        setTitle,
-        setRefreshFunction,
+        setTitle: updateTitle,
+        setRefreshFunction: updateRefreshFunction,
         handleRefresh,
       }}
     >
@@ -46,7 +65,6 @@ export const HeaderProvider = ({ children }) => {
     </HeaderContext.Provider>
   );
 };
-
 
 
 
