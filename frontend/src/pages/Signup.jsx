@@ -80,12 +80,20 @@ const Signup = () => {
     try {
       console.log('🔵 [SIGNUP] Starting Google signup with POPUP...');
 
-      const { signInWithPopup, GoogleAuthProvider } = await import('firebase/auth');
+      const { signInWithPopup, signInWithRedirect, GoogleAuthProvider } = await import('firebase/auth');
       const { auth } = await import('../firebaseClient');
 
       const provider = new GoogleAuthProvider();
       provider.addScope('email');
       provider.addScope('profile');
+
+      // Popups don't work inside the MolarPlus desktop wrapper (Tauri webview).
+      // Fall back to redirect-based auth, which AuthCallback.jsx finishes via getRedirectResult().
+      if (window.__MOLARPLUS_DESKTOP__) {
+        console.log('🔵 [SIGNUP] Desktop wrapper detected — using signInWithRedirect');
+        await signInWithRedirect(auth, provider);
+        return;
+      }
 
       console.log('🔵 [SIGNUP] About to open popup...');
 
