@@ -4,18 +4,24 @@ use tauri_plugin_deep_link::DeepLinkExt;
 const REMOTE_URL: &str = "https://app.molarplus.com";
 
 // Hosts that are allowed to navigate INSIDE the wrapper. Everything else gets
-// kicked to the system browser by the `on_navigation` hook below. This is the
-// minimal set needed for Firebase Google OAuth to complete via redirect mode.
-const ALLOWED_HOSTS: &[&str] = &[
-    "app.molarplus.com",
-    "betterclinic-f1179.firebaseapp.com", // Firebase Auth handler
-    "accounts.google.com",                // Google OAuth sign-in
-    "accounts.youtube.com",               // Google sometimes redirects through here
+// kicked to the system browser by the `on_navigation` hook below. We match by
+// suffix because Google's OAuth flow bounces between several subdomains
+// (accounts.google.com, oauth2.googleapis.com, *.googleusercontent.com, ...)
+// and a strict allow-list misses any of them.
+const ALLOWED_HOST_SUFFIXES: &[&str] = &[
+    "molarplus.com",         // app.molarplus.com and any subdomain
+    "firebaseapp.com",       // Firebase Auth handler (<project>.firebaseapp.com)
+    "google.com",            // accounts.google.com, oauth2.google.com, www.google.com
+    "googleapis.com",        // oauth2.googleapis.com — token exchange
+    "googleusercontent.com", // OAuth intermediate redirects
+    "gstatic.com",           // static assets used by Google sign-in pages
 ];
 
 fn host_is_allowed(host: Option<&str>) -> bool {
     let Some(h) = host else { return false };
-    ALLOWED_HOSTS.iter().any(|allowed| *allowed == h)
+    ALLOWED_HOST_SUFFIXES
+        .iter()
+        .any(|sfx| h == *sfx || h.ends_with(&format!(".{}", sfx)))
 }
 
 // Runs before any page script. Two jobs:
@@ -54,12 +60,16 @@ const INIT_SCRIPT: &str = r#"
     }
   } catch (_) {}
 
-  const ALLOWED_HOSTS = new Set([
-    'app.molarplus.com',
-    'betterclinic-f1179.firebaseapp.com',
-    'accounts.google.com',
-    'accounts.youtube.com',
-  ]);
+  const ALLOWED_SUFFIXES = [
+    'molarplus.com',
+    'firebaseapp.com',
+    'google.com',
+    'googleapis.com',
+    'googleusercontent.com',
+    'gstatic.com',
+  ];
+  const hostAllowed = (host) =>
+    ALLOWED_SUFFIXES.some((s) => host === s || host.endsWith('.' + s));
 
   document.addEventListener('click', (event) => {
     const anchor = event.target && event.target.closest && event.target.closest('a[href]');
@@ -68,7 +78,7 @@ const INIT_SCRIPT: &str = r#"
     if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
     try {
       const dest = new URL(href, location.href);
-      if (!ALLOWED_HOSTS.has(dest.host)) {
+      if (!hostAllowed(dest.host)) {
         // External link in a new tab — redirect top-level so Rust catches it.
         event.preventDefault();
         window.location.href = dest.href;
@@ -96,6 +106,7 @@ pub fn run() {
             .min_inner_size(1024.0, 768.0)
             .center()
             .resizable(true)
+            .devtools(true)
             .initialization_script(INIT_SCRIPT)
             .on_navigation(|url| {
                 if host_is_allowed(url.host_str()) {

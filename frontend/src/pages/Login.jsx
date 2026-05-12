@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { toast } from 'react-toastify';
 import { api } from '../utils/api';
@@ -7,6 +7,7 @@ import { saveLastLogin } from '../utils/lastLogin';
 import LoadingButton from '../components/LoadingButton';
 import LastLoginCard from '../components/login/LastLoginCard';
 import loginImage from '../assets/login-page-left-side.png';
+import { completeGoogleRedirectAuth, markGoogleRedirectPending } from '../utils/googleRedirectAuth';
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -15,6 +16,17 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { setUser, setToken } = useAuth();
+
+  useEffect(() => {
+    completeGoogleRedirectAuth({
+      navigate,
+      setUser,
+      setToken,
+      setError,
+      setLoading,
+      successMessage: 'Login successful!',
+    });
+  }, [navigate, setUser, setToken]);
 
   const getDeviceInfo = () => {
     const userAgent = navigator.userAgent;
@@ -130,6 +142,7 @@ const Login = () => {
       // Fall back to redirect-based auth, which AuthCallback.jsx finishes via getRedirectResult().
       if (window.__MOLARPLUS_DESKTOP__) {
         console.log('🔵 [LOGIN] Desktop wrapper detected — using signInWithRedirect');
+        markGoogleRedirectPending('login');
         await signInWithRedirect(auth, provider);
         return;
       }

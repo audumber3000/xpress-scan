@@ -7,6 +7,7 @@ import { saveLastLogin } from '../utils/lastLogin';
 import LoadingButton from '../components/LoadingButton';
 import LastLoginCard from '../components/login/LastLoginCard';
 import loginImage from '../assets/login-page-left-side.png';
+import { completeGoogleRedirectAuth, markGoogleRedirectPending } from '../utils/googleRedirectAuth';
 
 const Signup = () => {
   const [email, setEmail] = useState("");
@@ -27,6 +28,18 @@ const Signup = () => {
       console.log('🔗 [REFERRAL] Captured code:', ref);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    completeGoogleRedirectAuth({
+      navigate,
+      setUser,
+      setToken,
+      setError,
+      setLoading,
+      referredBy: sessionStorage.getItem('referred_by_code'),
+      successMessage: 'Signup successful!',
+    });
+  }, [navigate, setUser, setToken]);
 
   const handleSignup = async (e) => {
     e.preventDefault();
@@ -91,6 +104,7 @@ const Signup = () => {
       // Fall back to redirect-based auth, which AuthCallback.jsx finishes via getRedirectResult().
       if (window.__MOLARPLUS_DESKTOP__) {
         console.log('🔵 [SIGNUP] Desktop wrapper detected — using signInWithRedirect');
+        markGoogleRedirectPending('signup');
         await signInWithRedirect(auth, provider);
         return;
       }
@@ -290,4 +304,4 @@ const Signup = () => {
   );
 };
 
-export default Signup; 
+export default Signup;
