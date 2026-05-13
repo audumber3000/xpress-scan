@@ -118,8 +118,8 @@ const LabHub = () => {
     };
 
     return (
-        <div className="flex-1 bg-gray-50/50 min-h-screen pb-10">
-            <div className="px-8 mt-6 max-w-7xl mx-auto space-y-6">
+        <div className="flex-1 bg-gray-50/50 min-h-screen">
+            <div className="p-8 max-w-[1600px] mx-auto space-y-6">
 
                 {/* Tabs row with primary action on the right — page title is already in the global header */}
                 <div className="flex justify-between items-end border-b border-gray-200">
