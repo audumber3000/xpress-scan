@@ -5,7 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { toast } from "react-toastify";
 import Card from "../components/Card";
 import axios from "axios";
-import { FileText, Layout } from 'lucide-react';
+import { FileText, Layout, Share2, CheckCircle, Clock, XCircle, Printer, ExternalLink } from 'lucide-react';
 import ConsentRecentLinks from "../components/consents/ConsentRecentLinks";
 import FeatureLock from "../components/FeatureLock";
 
@@ -33,6 +33,10 @@ const ConsentForms = () => {
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [messageSent, setMessageSent] = useState(false);
     const [linksRefreshKey, setLinksRefreshKey] = useState(0);
+
+    // Sent Links tab — full history of consent links generated for this clinic
+    const [sentLinks, setSentLinks] = useState([]);
+    const [linksLoading, setLinksLoading] = useState(false);
 
     const NEXUS_API_URL = import.meta.env.VITE_NEXUS_API_URL || `http://${window.location.hostname}:8001/api/v1`;
 
@@ -64,6 +68,45 @@ const ConsentForms = () => {
             setPatients(data);
         } catch (error) {
             console.error("Failed to fetch patients");
+        }
+    };
+
+    const fetchSentLinks = async () => {
+        if (!user?.clinic_id) return;
+        setLinksLoading(true);
+        try {
+            const res = await axios.get(`${NEXUS_API_URL}/consent/list/${user.clinic_id}`);
+            setSentLinks(res.data || []);
+        } catch (error) {
+            console.error("Failed to fetch sent consent links:", error);
+            setSentLinks([]);
+        } finally {
+            setLinksLoading(false);
+        }
+    };
+
+    // Refresh sent-links list when the tab is opened or after a new link is generated.
+    useEffect(() => {
+        if (activeTab === 'links') fetchSentLinks();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab, linksRefreshKey, user?.clinic_id]);
+
+    const getLinkStatus = (link) => {
+        if (link.used) return { label: 'Signed', color: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200', icon: CheckCircle };
+        if (link.timeLeft <= 0) return { label: 'Expired', color: 'text-gray-500', bg: 'bg-gray-50', border: 'border-gray-200', icon: XCircle };
+        return { label: 'Sent', color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200', icon: Clock };
+    };
+
+    const openSignedConsent = (token) => {
+        window.open(`${window.location.origin}/consent/sign/${token}`, '_blank', 'noopener,noreferrer');
+    };
+
+    const printSignedConsent = (token) => {
+        // Opens the signed consent in a new tab and triggers the browser's print
+        // dialog, which lets the user "Save as PDF" via the native print sheet.
+        const w = window.open(`${window.location.origin}/consent/sign/${token}?print=1`, '_blank');
+        if (!w) {
+            toast.error("Pop-up blocked — please allow pop-ups to print the consent.");
         }
     };
 
@@ -154,6 +197,7 @@ const ConsentForms = () => {
                     <div className="flex gap-10">
                         {[
                             { id: 'templates', label: 'Templates', icon: Layout },
+                            { id: 'links', label: 'Sent Links', icon: Share2 },
                             { id: 'custom', label: 'Custom Forms', icon: FileText }
                         ].map(tab => (
                             <button
@@ -171,27 +215,131 @@ const ConsentForms = () => {
                         ))}
                     </div>
                     <div className="pb-3 flex gap-3">
-                        <button className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-50 flex items-center gap-2 transition-colors">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                            </svg>
-                            Export
-                        </button>
-                        <button
-                            onClick={() => { setEditingTemplate(null); setShowModal(true); }}
-                            className="bg-[#2a276e] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#1a1548] transition-colors shadow-sm flex items-center gap-2"
-                        >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
-                            </svg>
-                            {activeTab === 'templates' ? 'Add New Template' : 'Add Custom Form'}
-                        </button>
+                        {activeTab === 'links' ? (
+                            <button
+                                onClick={fetchSentLinks}
+                                className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-50 flex items-center gap-2 transition-colors"
+                            >
+                                <svg className={`w-4 h-4 ${linksLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                Refresh
+                            </button>
+                        ) : (
+                            <button className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-50 flex items-center gap-2 transition-colors">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                Export
+                            </button>
+                        )}
+                        {activeTab !== 'links' && (
+                            <button
+                                onClick={() => { setEditingTemplate(null); setShowModal(true); }}
+                                className="bg-[#2a276e] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#1a1548] transition-colors shadow-sm flex items-center gap-2"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
+                                </svg>
+                                {activeTab === 'templates' ? 'Add New Template' : 'Add Custom Form'}
+                            </button>
+                        )}
                     </div>
                 </div>
 
                 {loading ? (
                     <div className="flex justify-center items-center h-64">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2a276e]"></div>
+                    </div>
+                ) : activeTab === 'links' ? (
+                    /* Sent Links tab — full history of consent links with Status + Print PDF */
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Template</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {linksLoading ? (
+                                    <tr>
+                                        <td colSpan="5" className="px-6 py-12 text-center">
+                                            <div className="inline-flex items-center gap-2 text-sm text-gray-400">
+                                                <div className="w-4 h-4 border-2 border-[#2a276e]/20 border-t-[#2a276e] rounded-full animate-spin" />
+                                                Loading sent links...
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ) : sentLinks.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="5" className="px-6 py-12">
+                                            <div className="flex flex-col items-center justify-center text-center">
+                                                <Share2 className="w-12 h-12 mb-3 text-gray-300" strokeWidth={1.5} />
+                                                <p className="text-sm font-bold text-gray-900">No consent links yet</p>
+                                                <p className="text-sm text-gray-500 mt-1">Send a template to a patient from the Templates tab to track it here.</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ) : sentLinks.map(link => {
+                                    const status = getLinkStatus(link);
+                                    const StatusIcon = status.icon;
+                                    return (
+                                        <tr key={link.token} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-9 h-9 rounded-lg bg-[#2a276e]/5 text-[#2a276e] flex items-center justify-center flex-shrink-0 font-semibold text-sm">
+                                                        {(link.patientName || '?').charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <p className="text-sm font-medium text-gray-900">{link.patientName || 'Unknown patient'}</p>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <p className="text-sm text-gray-700">{link.templateName || '—'}</p>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className={`px-2.5 py-1 inline-flex items-center gap-1.5 text-xs font-semibold rounded-full border ${status.bg} ${status.color} ${status.border}`}>
+                                                    <StatusIcon size={12} strokeWidth={2.5} />
+                                                    {status.label}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                {link.used
+                                                    ? 'Signed'
+                                                    : link.timeLeft > 0
+                                                        ? `${Math.floor(link.timeLeft / 60)}m ${link.timeLeft % 60}s left`
+                                                        : 'Expired'}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        onClick={() => openSignedConsent(link.token)}
+                                                        className="px-3 py-1.5 text-xs font-semibold text-gray-600 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-1.5"
+                                                        title="Open consent in new tab"
+                                                    >
+                                                        <ExternalLink size={12} />
+                                                        Open
+                                                    </button>
+                                                    {link.used && (
+                                                        <button
+                                                            onClick={() => printSignedConsent(link.token)}
+                                                            className="px-3 py-1.5 text-xs font-semibold text-[#2a276e] bg-[#2a276e]/5 rounded-lg hover:bg-[#2a276e]/10 transition-colors flex items-center gap-1.5"
+                                                            title="Open signed consent — use the browser print dialog to save as PDF"
+                                                        >
+                                                            <Printer size={12} />
+                                                            Print / PDF
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
                     </div>
                 ) : activeTab === 'templates' ? (
                     <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6">

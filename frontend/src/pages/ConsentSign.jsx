@@ -24,6 +24,17 @@ const ConsentSign = () => {
         validateToken();
     }, [token]);
 
+    // When opened with ?print=1 (from the Sent Links tab on the Consent Forms page),
+    // auto-trigger the browser's print dialog once the consent has finished loading.
+    // The native print sheet lets the user "Save as PDF" without us needing a PDF lib.
+    useEffect(() => {
+        if (loading) return;
+        const shouldPrint = new URLSearchParams(window.location.search).get('print') === '1';
+        if (!shouldPrint) return;
+        const t = setTimeout(() => window.print(), 600);
+        return () => clearTimeout(t);
+    }, [loading]);
+
     const validateToken = async () => {
         try {
             const res = await axios.get(`${NEXUS_API_URL}/consent/validate/${token}`);
