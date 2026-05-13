@@ -1,6 +1,6 @@
-import React from "react";
+import React, { memo } from "react";
 
-const InvoiceItem = ({ invoice, onSelect }) => {
+const InvoiceItem = memo(({ invoice, onSelect }) => {
   const formatAmount = (amount) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -64,7 +64,9 @@ const InvoiceItem = ({ invoice, onSelect }) => {
       <td className="px-6 py-4 whitespace-nowrap text-gray-900">{formatDate(invoice.created_at)}</td>
     </tr>
   );
-};
+});
+
+InvoiceItem.displayName = "InvoiceItem";
 
 export default InvoiceItem;
 

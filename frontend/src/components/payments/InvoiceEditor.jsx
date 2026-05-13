@@ -349,7 +349,9 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
   if (loading || autoCreatingFromPrefill) {
     return (
       <div className="fixed inset-0 z-50">
-        <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={onClose} />
+        {/* Plain semi-transparent backdrop — backdrop-blur is GPU-heavy during the
+            slide-in animation and was causing visible jank. */}
+        <div className="absolute inset-0 bg-black/30" onClick={onClose} />
         <div className="absolute right-0 top-0 h-full w-full max-w-3xl bg-white shadow-2xl z-50 flex flex-col">
           <div className="flex-1 flex items-center justify-center">
             <GearLoader size="w-8 h-8" />
@@ -362,7 +364,9 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
   return (
     <>
       <div className="fixed inset-0 z-50">
-        <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={onClose} />
+        {/* Plain semi-transparent backdrop — backdrop-blur is GPU-heavy during the
+            slide-in animation and was causing visible jank. */}
+        <div className="absolute inset-0 bg-black/30" onClick={onClose} />
 
         <div className="absolute right-0 top-0 h-full w-full max-w-3xl bg-white shadow-2xl z-50 flex flex-col animate-slide-in-right">
           {/* Header */}

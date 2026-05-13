@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
 import GearLoader from "../components/GearLoader";
@@ -162,9 +162,10 @@ const Payments = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, ledgerPage, debouncedSearch, activeTab]);
 
-  const handleInvoiceSelect = (invoiceId) => {
+  // Stable identity so memoized InvoiceItem rows don't re-render on selection change.
+  const handleInvoiceSelect = useCallback((invoiceId) => {
     setSelectedInvoiceId(invoiceId);
-  };
+  }, []);
 
   const handleInvoiceClose = () => {
     setSelectedInvoiceId(null);
