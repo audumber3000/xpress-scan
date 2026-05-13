@@ -10,7 +10,9 @@ import MarkAsPaidModal from "./MarkAsPaidModal";
 
 const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
   const [invoice, setInvoice] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // For "new", there's nothing to fetch — start in the form view immediately.
+  // For an existing id, start in the spinner view until fetchInvoice resolves.
+  const [loading, setLoading] = useState(invoiceId !== 'new');
   const [showMarkPaidModal, setShowMarkPaidModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
