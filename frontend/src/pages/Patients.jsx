@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import { FaEye, FaEdit, FaTrash, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import { Search, Plus, User, Folder, X, Edit2, Trash2, Eye, UploadCloud, UserPlus } from "lucide-react";
 import GearLoader from "../components/GearLoader";
+import Pagination from "../components/Pagination";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
 
@@ -433,53 +434,12 @@ const Patients = () => {
             </div>
           )}
 
-          {/* Pagination Matching Old Style */}
-          {totalPages > 1 && (
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
-              <div className="text-sm text-gray-700">
-                Page <span className="font-medium">{page}</span> of <span className="font-medium">{totalPages}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                >
-                  Previous
-                </button>
-                <div className="flex items-center gap-1">
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pNum;
-                  if (totalPages <= 5) pNum = i + 1;
-                  else if (page <= 3) pNum = i + 1;
-                  else if (page >= totalPages - 2) pNum = totalPages - 4 + i;
-                  else pNum = page - 2 + i;
-                  
-                  return (
-                    <button
-                      key={pNum}
-                      onClick={() => setPage(pNum)}
-                      className={`w-8 h-8 rounded-md text-sm font-medium transition-all ${
-                        page === pNum 
-                          ? 'bg-[#2a276e] text-white' 
-                          : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      {pNum}
-                    </button>
-                  );
-                })}
-                </div>
-                <button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          )}
+          <Pagination
+            page={page}
+            pageSize={PATIENTS_PER_PAGE}
+            totalItems={filteredData.length}
+            onPageChange={setPage}
+          />
         </div>
       </div>
 

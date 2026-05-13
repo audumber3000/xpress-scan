@@ -3,6 +3,9 @@ import { useHeader } from '../../contexts/HeaderContext';
 import { api, getPermissionAwareErrorMessage } from '../../utils/api';
 import { toast } from 'react-toastify';
 import LabOrderDrawer from '../../components/patient/LabOrderDrawer';
+import Pagination from '../../components/Pagination';
+
+const LAB_PAGE_SIZE = 10;
 import { 
     Beaker, 
     Building2, 
@@ -27,6 +30,8 @@ const LabHub = () => {
     const [orders, setOrders] = useState([]);
     const [vendors, setVendors] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [ordersPage, setOrdersPage] = useState(1);
+    const [vendorsPage, setVendorsPage] = useState(1);
     const [isVendorDrawerOpen, setIsVendorDrawerOpen] = useState(false);
     const [isOrderDrawerOpen, setIsOrderDrawerOpen] = useState(false);
     
@@ -181,7 +186,7 @@ const LabHub = () => {
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-200">
-                                            {orders.map(order => (
+                                            {orders.slice((ordersPage - 1) * LAB_PAGE_SIZE, ordersPage * LAB_PAGE_SIZE).map(order => (
                                                 <tr key={order.id} className="hover:bg-gray-50 transition-colors">
                                                     <td className="px-6 py-4 whitespace-nowrap">
                                                         <div className="flex items-center gap-3">
@@ -244,6 +249,12 @@ const LabHub = () => {
                                             ))}
                                         </tbody>
                                     </table>
+                                    <Pagination
+                                        page={ordersPage}
+                                        pageSize={LAB_PAGE_SIZE}
+                                        totalItems={orders.length}
+                                        onPageChange={setOrdersPage}
+                                    />
                                 </div>
                             ) : (
                                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-12 flex flex-col items-center justify-center text-center">
@@ -271,7 +282,7 @@ const LabHub = () => {
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-200">
-                                            {vendors.map(vendor => (
+                                            {vendors.slice((vendorsPage - 1) * LAB_PAGE_SIZE, vendorsPage * LAB_PAGE_SIZE).map(vendor => (
                                                 <tr key={vendor.id} className="hover:bg-gray-50 transition-colors">
                                                     <td className="px-6 py-4 whitespace-nowrap">
                                                         <div className="flex items-center gap-3">
@@ -304,6 +315,12 @@ const LabHub = () => {
                                             ))}
                                         </tbody>
                                     </table>
+                                    <Pagination
+                                        page={vendorsPage}
+                                        pageSize={LAB_PAGE_SIZE}
+                                        totalItems={vendors.length}
+                                        onPageChange={setVendorsPage}
+                                    />
                                 </div>
                             ) : (
                                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-12 flex flex-col items-center justify-center text-center">

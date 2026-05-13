@@ -8,6 +8,9 @@ import axios from "axios";
 import { FileText, Layout, Share2, CheckCircle, Clock, XCircle, Printer, ExternalLink } from 'lucide-react';
 import ConsentRecentLinks from "../components/consents/ConsentRecentLinks";
 import FeatureLock from "../components/FeatureLock";
+import Pagination from "../components/Pagination";
+
+const CONSENT_PAGE_SIZE = 10;
 
 const ConsentForms = () => {
     const { setTitle } = useHeader();
@@ -37,6 +40,8 @@ const ConsentForms = () => {
     // Sent Links tab — full history of consent links generated for this clinic
     const [sentLinks, setSentLinks] = useState([]);
     const [linksLoading, setLinksLoading] = useState(false);
+    const [templatesPage, setTemplatesPage] = useState(1);
+    const [linksPage, setLinksPage] = useState(1);
 
     const NEXUS_API_URL = import.meta.env.VITE_NEXUS_API_URL || `http://${window.location.hostname}:8001/api/v1`;
 
@@ -284,7 +289,7 @@ const ConsentForms = () => {
                                             </div>
                                         </td>
                                     </tr>
-                                ) : sentLinks.map(link => {
+                                ) : sentLinks.slice((linksPage - 1) * CONSENT_PAGE_SIZE, linksPage * CONSENT_PAGE_SIZE).map(link => {
                                     const status = getLinkStatus(link);
                                     const StatusIcon = status.icon;
                                     return (
@@ -340,6 +345,12 @@ const ConsentForms = () => {
                                 })}
                             </tbody>
                         </table>
+                        <Pagination
+                            page={linksPage}
+                            pageSize={CONSENT_PAGE_SIZE}
+                            totalItems={sentLinks.length}
+                            onPageChange={setLinksPage}
+                        />
                     </div>
                 ) : activeTab === 'templates' ? (
                     <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -356,7 +367,7 @@ const ConsentForms = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
-                                        {templates.map((template) => (
+                                        {templates.slice((templatesPage - 1) * CONSENT_PAGE_SIZE, templatesPage * CONSENT_PAGE_SIZE).map((template) => (
                                             <tr key={template.id} className="hover:bg-gray-50 transition-colors">
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-3">
@@ -412,6 +423,12 @@ const ConsentForms = () => {
                                         ))}
                                     </tbody>
                                 </table>
+                                <Pagination
+                                    page={templatesPage}
+                                    pageSize={CONSENT_PAGE_SIZE}
+                                    totalItems={templates.length}
+                                    onPageChange={setTemplatesPage}
+                                />
                                 {templates.length === 0 && (
                                     <tr>
                                         <td colSpan="4" className="px-6 py-12">

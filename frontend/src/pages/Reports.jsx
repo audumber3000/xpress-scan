@@ -5,6 +5,9 @@ import GearLoader from "../components/GearLoader";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
 import FeatureLock from "../components/FeatureLock";
+import Pagination from "../components/Pagination";
+
+const REPORTS_PER_PAGE = 10;
 
 // ─── Report definitions ──────────────────────────────────────────────────────
 
@@ -434,6 +437,7 @@ const ReportDrawer = ({ report, onClose, onGenerated }) => {
 
 const GeneratedReportsTab = ({ refreshKey }) => {
   const [records, setRecords] = useState([]);
+  const [recordsPage, setRecordsPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
@@ -510,7 +514,7 @@ const GeneratedReportsTab = ({ refreshKey }) => {
                 </td>
               </tr>
             ) : (
-              records.map((rec) => {
+              records.slice((recordsPage - 1) * REPORTS_PER_PAGE, recordsPage * REPORTS_PER_PAGE).map((rec) => {
                 const meta = reportMeta(rec.report_type);
                 return (
                   <tr key={rec.id} className="hover:bg-gray-50 transition-colors">
@@ -606,6 +610,12 @@ const GeneratedReportsTab = ({ refreshKey }) => {
             )}
           </tbody>
         </table>
+        <Pagination
+          page={recordsPage}
+          pageSize={REPORTS_PER_PAGE}
+          totalItems={records.length}
+          onPageChange={setRecordsPage}
+        />
       </div>
     </div>
   );

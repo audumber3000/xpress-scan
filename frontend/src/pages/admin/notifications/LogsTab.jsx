@@ -1,11 +1,11 @@
 import React from 'react';
 import {
   MessageCircle, FileText, RefreshCw,
-  ChevronLeft, ChevronRight,
   Clock, Send, CheckCircle2, Eye, XCircle,
 } from 'lucide-react';
 import { EVENT_LABELS, CHANNEL_META } from './constants';
 import { getCurrencySymbol } from '../../../utils/currency';
+import Pagination from '../../../components/Pagination';
 
 const LogsTab = ({ logs, logsTotal, logsPage, logsFilter, setLogsFilter, setLogsPage, fetchLogs }) => (
   <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
@@ -112,32 +112,12 @@ const LogsTab = ({ logs, logsTotal, logsPage, logsFilter, setLogsFilter, setLogs
       </table>
     </div>
 
-    {logsTotal > 20 && (
-      <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
-        <p className="text-xs text-gray-400">
-          Showing {((logsPage - 1) * 20) + 1}–{Math.min(logsPage * 20, logsTotal)} of {logsTotal}
-        </p>
-        <div className="flex gap-2">
-          <button
-            disabled={logsPage <= 1}
-            onClick={() => { const p = logsPage - 1; setLogsPage(p); fetchLogs(p); }}
-            className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 transition-all"
-          >
-            <ChevronLeft size={14} />
-          </button>
-          <span className="px-3 py-1 text-xs font-medium text-gray-600 bg-gray-50 rounded-lg border border-gray-200">
-            {logsPage}
-          </span>
-          <button
-            disabled={logsPage * 20 >= logsTotal}
-            onClick={() => { const p = logsPage + 1; setLogsPage(p); fetchLogs(p); }}
-            className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 transition-all"
-          >
-            <ChevronRight size={14} />
-          </button>
-        </div>
-      </div>
-    )}
+    <Pagination
+      page={logsPage}
+      pageSize={20}
+      totalItems={logsTotal}
+      onPageChange={(p) => { setLogsPage(p); fetchLogs(p); }}
+    />
   </div>
 );
 

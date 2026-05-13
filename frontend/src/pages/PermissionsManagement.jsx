@@ -6,7 +6,10 @@ import { useAuth } from "../contexts/AuthContext";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import GearLoader from "../components/GearLoader";
 import FeatureLock from "../components/FeatureLock";
+import Pagination from "../components/Pagination";
 import { ChevronLeft, X, Shield, ChevronRight, Search } from 'lucide-react';
+
+const USERS_PER_PAGE = 10;
 
 const MODULES = [
   { key: 'dashboard',     label: 'Dashboard',     actions: ['read'] },
@@ -188,6 +191,8 @@ const PermissionsManagement = () => {
     u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     u.email?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+  const [usersPage, setUsersPage] = useState(1);
+  const paginatedUsers = filteredUsers.slice((usersPage - 1) * USERS_PER_PAGE, usersPage * USERS_PER_PAGE);
 
   const initials = (name) => name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?';
 
@@ -238,7 +243,7 @@ const PermissionsManagement = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filteredUsers.map(u => {
+                {paginatedUsers.map(u => {
                   const perms = (u.permissions && typeof Object.values(u.permissions)[0] === 'object') ? u.permissions : {};
                   const accessCount = MODULES.filter(m => m.actions.some(a => perms[m.key]?.[a])).length;
                   return (
@@ -278,6 +283,12 @@ const PermissionsManagement = () => {
               </tbody>
             </table>
           )}
+          <Pagination
+            page={usersPage}
+            pageSize={USERS_PER_PAGE}
+            totalItems={filteredUsers.length}
+            onPageChange={setUsersPage}
+          />
         </div>
 
         {/* Permissions Drawer */}

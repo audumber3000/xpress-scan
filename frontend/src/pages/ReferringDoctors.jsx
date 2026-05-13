@@ -7,6 +7,9 @@ import { toast } from 'react-toastify';
 import { ChevronLeft } from 'lucide-react';
 import GearLoader from '../components/GearLoader';
 import FeatureLock from "../components/FeatureLock";
+import Pagination from '../components/Pagination';
+
+const DOCTORS_PER_PAGE = 10;
 
 const ReferringDoctors = () => {
   const { setTitle } = useHeader();
@@ -19,6 +22,7 @@ const ReferringDoctors = () => {
   const [editingDoctor, setEditingDoctor] = useState(null);
   const [formData, setFormData] = useState({ name: '', hospital: '' });
   const [saving, setSaving] = useState(false);
+  const [doctorsPage, setDoctorsPage] = useState(1);
 
   useEffect(() => {
     setTitle(
@@ -147,7 +151,7 @@ const ReferringDoctors = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {referringDoctors.map((doctor) => (
+                {referringDoctors.slice((doctorsPage - 1) * DOCTORS_PER_PAGE, doctorsPage * DOCTORS_PER_PAGE).map((doctor) => (
                   <tr key={doctor.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{doctor.name}</div>
@@ -173,6 +177,12 @@ const ReferringDoctors = () => {
                 ))}
               </tbody>
             </table>
+            <Pagination
+              page={doctorsPage}
+              pageSize={DOCTORS_PER_PAGE}
+              totalItems={referringDoctors.length}
+              onPageChange={setDoctorsPage}
+            />
 
             {referringDoctors.length === 0 && (
               <div className="text-center py-12">
