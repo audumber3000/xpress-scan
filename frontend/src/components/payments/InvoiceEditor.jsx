@@ -345,30 +345,24 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
   };
 
   const canEdit = invoice?.status === 'draft';
+  const isLoadingDrawer = loading || autoCreatingFromPrefill;
 
-  if (loading || autoCreatingFromPrefill) {
-    return (
-      <div className="fixed inset-0 z-50">
-        {/* Plain semi-transparent backdrop — backdrop-blur is GPU-heavy during the
-            slide-in animation and was causing visible jank. */}
-        <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="absolute right-0 top-0 h-full w-full max-w-3xl bg-white shadow-2xl z-50 flex flex-col">
-          <div className="flex-1 flex items-center justify-center">
-            <GearLoader size="w-8 h-8" />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  // One persistent drawer element. The slide-in animation runs exactly once on
+  // mount; the inner content swaps between a loader and the full form when the
+  // invoice fetch completes — so we no longer get the "drawer pops in, then
+  // slides in again" double-mount jank.
   return (
     <>
       <div className="fixed inset-0 z-50">
-        {/* Plain semi-transparent backdrop — backdrop-blur is GPU-heavy during the
-            slide-in animation and was causing visible jank. */}
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
 
         <div className="absolute right-0 top-0 h-full w-full max-w-3xl bg-white shadow-2xl z-50 flex flex-col animate-slide-in-right">
+          {isLoadingDrawer ? (
+            <div className="flex-1 flex items-center justify-center">
+              <GearLoader size="w-8 h-8" />
+            </div>
+          ) : (
+            <>
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-900">{isCreating ? "Invoice" : "Invoice Details"}</h2>
@@ -503,6 +497,8 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
                 finalizing={finalizing}
               />
             </div>
+          )}
+            </>
           )}
         </div>
       </div>
