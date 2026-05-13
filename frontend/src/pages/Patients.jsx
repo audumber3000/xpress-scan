@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import { toast } from 'react-toastify';
 import { FaEye, FaEdit, FaTrash, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
-import { Search, Plus, User, Folder, X, Edit2, Trash2, Eye, UploadCloud, UserPlus } from "lucide-react";
+import { Search, Plus, User, Folder, X, Edit2, Trash2, UploadCloud, UserPlus } from "lucide-react";
 import GearLoader from "../components/GearLoader";
 import Pagination from "../components/Pagination";
 import { useAuth } from "../contexts/AuthContext";
@@ -382,14 +382,7 @@ const Patients = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{patient.treatment_type}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDate(patient.last_visit)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); navigate(`/patient-profile/${patient.id}`); }}
-                            className="p-1.5 text-[#2a276e] hover:bg-indigo-50 rounded-md transition-colors inline-flex"
-                            title="View Profile"
-                          >
-                            <Eye size={16} />
-                          </button>
-                          <button 
+                          <button
                             onClick={(e) => { e.stopPropagation(); handleEditPatient(patient); }}
                             className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors inline-flex"
                             title="Edit"
