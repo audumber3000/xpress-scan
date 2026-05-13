@@ -52,32 +52,9 @@ jobs:
           echo "name=$MSI_NAME" >> "$GITHUB_OUTPUT"
           echo "Found: $MSI_NAME"
 
-      - name: Upload MSI to Cloudflare R2
-        shell: bash
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT_URL }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
-        run: |
-          pip install awscli
-          MSI_NAME="${{ steps.msi.outputs.name }}"
-          R2_KEY="desktop/${MSI_NAME}"
-
-          aws s3 cp "${{ steps.msi.outputs.path }}" \
-            "s3://${R2_BUCKET}/${R2_KEY}" \
-            --endpoint-url "${R2_ENDPOINT}" \
-            --content-type "application/x-msi"
-
-          echo "### ✅ MSI uploaded to R2" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**R2 key:** \`${R2_KEY}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Public URL:** \`https://pub-376f22e59eee415286747973b95ba075.r2.dev/${R2_KEY}\`" >> $GITHUB_STEP_SUMMARY
-
-      - name: Upload MSI as artifact (backup)
+      - name: Upload MSI as artifact
         uses: actions/upload-artifact@v4
         with:
           name: MolarPlus-Windows-MSI
           path: ${{ steps.msi.outputs.path }}
-          retention-days: 30
+          retention-days: 90
