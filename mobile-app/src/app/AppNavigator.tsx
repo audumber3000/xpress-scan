@@ -10,6 +10,8 @@ import { OnboardingScreen, ONBOARDING_KEY } from '../features/auth/screens/Onboa
 import { GetStartedScreen } from '../features/auth/screens/GetStartedScreen';
 import { LoginScreen } from '../features/auth/screens/LoginScreen';
 import { SignupScreen } from '../features/auth/screens/SignupScreen';
+import { NoClinicLinkedScreen } from '../features/auth/screens/NoClinicLinkedScreen';
+import { IS_SIGNUP_ENABLED } from '../shared/constants/platform';
 import { ClinicOwnerTabNavigator } from './ClinicOwnerTabNavigator';
 import { ReceptionistHomeScreen } from '../features/receptionist/screens/ReceptionistHomeScreen';
 import { ReceptionistProfileScreen } from '../features/receptionist/screens/ReceptionistProfileScreen';
@@ -47,6 +49,7 @@ export type RootStackParamList = {
   GetStarted: undefined;
   Login: undefined;
   Signup: undefined;
+  NoClinicLinked: undefined;
   ClinicOwnerTabs: undefined;
   ReceptionistHome: undefined;
   ReceptionistProfile: undefined;
@@ -109,11 +112,17 @@ export const AppNavigator = () => {
 
   const getInitialRoute = () => {
     if (!isAuthenticated) {
+      // iOS has no Onboarding/GetStarted/Signup screens registered (Path A,
+      // sign-in-only). Always land on Login.
+      if (!IS_SIGNUP_ENABLED) return 'Login';
       if (!hasSeenOnboarding) return 'Onboarding';
       return 'Login';
     }
     if (backendUser?.role === 'clinic_owner' && !backendUser?.clinic?.id) {
-      return 'Signup';
+      // On iOS we don't expose new-clinic registration (App Store 3.1.3(b)
+      // multiplatform-services exemption). Send the user to a sign-in-only
+      // dead-end screen that tells them to set up their clinic on the web.
+      return IS_SIGNUP_ENABLED ? 'Signup' : 'NoClinicLinked';
     }
     if (backendUser?.role === 'receptionist') return 'ReceptionistHome';
     return 'ClinicOwnerTabs';
@@ -132,11 +141,19 @@ export const AppNavigator = () => {
         >
           {isAuthenticated ? (
             backendUser?.role === 'clinic_owner' && !backendUser?.clinic?.id ? (
-              <>
-                <Stack.Screen name="Login" component={LoginScreen} />
-                <Stack.Screen name="GetStarted" component={GetStartedScreen} />
-                <Stack.Screen name="Signup" component={SignupScreen} />
-              </>
+              IS_SIGNUP_ENABLED ? (
+                <>
+                  <Stack.Screen name="Login" component={LoginScreen} />
+                  <Stack.Screen name="GetStarted" component={GetStartedScreen} />
+                  <Stack.Screen name="Signup" component={SignupScreen} />
+                </>
+              ) : (
+                // iOS path: user is signed in but has no clinic. Show only the
+                // sign-in-only dead-end screen — no signup, no GetStarted.
+                <>
+                  <Stack.Screen name="NoClinicLinked" component={NoClinicLinkedScreen} />
+                </>
+              )
             ) : backendUser?.role === 'receptionist' ? (
               <>
                 <Stack.Screen name="ReceptionistHome" component={ReceptionistHomeScreen} />
@@ -182,12 +199,19 @@ export const AppNavigator = () => {
                 <Stack.Screen name="GoogleReviews" component={GoogleReviewsScreen} />
               </>
             )
-          ) : (
+          ) : IS_SIGNUP_ENABLED ? (
             <>
               <Stack.Screen name="Onboarding" component={OnboardingScreen} />
               <Stack.Screen name="GetStarted" component={GetStartedScreen} />
               <Stack.Screen name="Login" component={LoginScreen} />
               <Stack.Screen name="Signup" component={SignupScreen} />
+            </>
+          ) : (
+            // iOS: sign-in-only. No Onboarding (which sells the product),
+            // no GetStarted (which is the registration entry point), and no
+            // SignupScreen. Login screen is the only entry.
+            <>
+              <Stack.Screen name="Login" component={LoginScreen} />
             </>
           )}
         </Stack.Navigator>

@@ -108,8 +108,10 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({ navigation }) => {
     if (step > 1) setStep(step - 1);
   };
 
+  const isSocialAuth = authProvider === 'google' || authProvider === 'apple';
+
   const handleFinalSubmit = async () => {
-    if (authProvider !== 'google') {
+    if (!isSocialAuth) {
       if (!email || !password || password !== confirmPassword) {
         setError(password !== confirmPassword ? 'Passwords do not match' : 'Please complete all security fields');
         return;
@@ -347,8 +349,10 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({ navigation }) => {
       <View style={styles.illustrationPlace}>
         <Lock size={64} color={colors.primary} />
         <Text style={styles.dentistLine}>
-          {authProvider === 'google' 
+          {authProvider === 'google'
             ? "Your account is linked to Google. Your data is safe and secured by Google's world-class protection."
+            : authProvider === 'apple'
+            ? "Your account is linked with Sign in with Apple. Authentication is handled securely by Apple."
             : "Stay secure. Your clinical data is encrypted and protected with us."
           }
         </Text>
@@ -356,15 +360,19 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({ navigation }) => {
 
       <View style={styles.inputCard}>
         <Text style={styles.cardTitle}>Account Security</Text>
-        
-        {authProvider === 'google' ? (
+
+        {isSocialAuth ? (
           <View style={styles.socialAuthInfo}>
             <View style={styles.socialAuthBadge}>
               <Check size={20} color={colors.success} />
-              <Text style={styles.socialAuthText}>Linked with Google</Text>
+              <Text style={styles.socialAuthText}>
+                {authProvider === 'apple' ? 'Linked with Apple' : 'Linked with Google'}
+              </Text>
             </View>
             <Text style={styles.socialAuthSubtext}>
-              No separate password is required. You can continue to use your Google account ({firebaseUser?.email}) to access MolarPlus.
+              {authProvider === 'apple'
+                ? `No password needed. Your account is secured by Sign in with Apple${firebaseUser?.email ? ` (${firebaseUser.email})` : ''}.`
+                : `No separate password is required. You can continue to use your Google account (${firebaseUser?.email}) to access MolarPlus.`}
             </Text>
           </View>
         ) : (

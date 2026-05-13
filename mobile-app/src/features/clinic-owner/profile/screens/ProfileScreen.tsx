@@ -17,6 +17,7 @@ import { AppSkeleton } from '../../../../shared/components/Skeleton';
 import { ClinicSwitcherSheet } from '../../../../shared/components/ClinicSwitcherSheet';
 import { ClinicInfo } from '../../../../services/api/admin.api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { IS_PURCHASE_UI_ENABLED } from '../../../../shared/constants/platform';
 
 interface ProfileScreenProps {
   navigation: any;
@@ -159,18 +160,24 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
               onPress={handleNotificationSettings}
             />
 
-            {/* Accounting */}
-            <Text style={[styles.sectionTitle, styles.sectionTitleSpacing]}>ACCOUNTING</Text>
-            <SettingsMenuItem
-              icon={CreditCard}
-              iconColor={colors.primary}
-              iconBgColor={colors.primaryBg}
-              title="Subscription & Billing"
-              subtitle="Manage plans & invoices"
-              badge={backendUser?.clinic?.subscription_plan === 'professional' ? "PRO" : "FREE"}
-              badgeColor={backendUser?.clinic?.subscription_plan === 'professional' ? "#10B981" : "#F59E0B"}
-              onPress={handleSubscription}
-            />
+            {/* Accounting — hidden on iOS (App Store guideline 3.1.3(b),
+                Path A multiplatform-services exemption). Plan & billing are
+                managed on the web. */}
+            {IS_PURCHASE_UI_ENABLED && (
+              <>
+                <Text style={[styles.sectionTitle, styles.sectionTitleSpacing]}>ACCOUNTING</Text>
+                <SettingsMenuItem
+                  icon={CreditCard}
+                  iconColor={colors.primary}
+                  iconBgColor={colors.primaryBg}
+                  title="Subscription & Billing"
+                  subtitle="Manage plans & invoices"
+                  badge={backendUser?.clinic?.subscription_plan === 'professional' ? "PRO" : "FREE"}
+                  badgeColor={backendUser?.clinic?.subscription_plan === 'professional' ? "#10B981" : "#F59E0B"}
+                  onPress={handleSubscription}
+                />
+              </>
+            )}
           </View>
         )}
 

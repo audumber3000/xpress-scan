@@ -28,6 +28,7 @@ import {
 } from 'cashfree-pg-api-contract';
 import { paymentService } from '../services/PaymentService';
 import { useAuth } from '../../../../app/AuthContext';
+import { IS_PURCHASE_UI_ENABLED, MARKETING_SITE_TEXT } from '../../../../shared/constants/platform';
 
 const { width } = Dimensions.get('window');
 
@@ -35,7 +36,38 @@ interface PurchaseScreenProps {
   navigation: any;
 }
 
+// Defense-in-depth for App Store guideline 3.1.1 / 3.1.3(b): on iOS we render
+// this placeholder instead of the purchase UI even if some stale CTA somehow
+// navigates here. No prices, no plans, no promo codes, no payment SDK init.
+const IosPurchasePlaceholder: React.FC<{ navigation: any }> = ({ navigation }) => (
+  <View style={[styles.container, { padding: 32, justifyContent: 'center' }]}>
+    <SafeAreaView style={styles.backButtonContainer}>
+      <TouchableOpacity
+        style={[styles.backButton, { backgroundColor: '#1E1B4B' }]}
+        onPress={() => navigation.goBack()}
+      >
+        <ChevronLeft size={24} color="#FFFFFF" />
+      </TouchableOpacity>
+    </SafeAreaView>
+
+    <Text style={[styles.brandName, { textAlign: 'center', marginBottom: 8 }]}>
+      MolarPlus subscription
+    </Text>
+    <Text style={[styles.tagline, { textAlign: 'center', marginBottom: 8 }]}>
+      Your MolarPlus plan is managed from your clinic account on the web.
+    </Text>
+    <Text style={[styles.tagline, { textAlign: 'center' }]}>
+      Visit {MARKETING_SITE_TEXT} from a browser to view your plan, change
+      billing, or upgrade your clinic.
+    </Text>
+  </View>
+);
+
 export const PurchaseScreen: React.FC<PurchaseScreenProps> = ({ navigation }) => {
+  if (!IS_PURCHASE_UI_ENABLED) {
+    return <IosPurchasePlaceholder navigation={navigation} />;
+  }
+
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('monthly');
   const [promoCode, setPromoCode] = useState('');
   const [isPromoApplied, setIsPromoApplied] = useState(false);

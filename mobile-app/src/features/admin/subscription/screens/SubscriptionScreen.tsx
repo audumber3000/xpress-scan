@@ -12,6 +12,7 @@ import { adminColors } from '../../../../shared/constants/adminColors';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
 import { BaseApiService } from '../../../../services/api/base.api';
 import { useAuth } from '../../../../app/AuthContext';
+import { IS_PURCHASE_UI_ENABLED, MARKETING_SITE_TEXT } from '../../../../shared/constants/platform';
 
 const PLAN_META: Record<string, { label: string; Icon: any; gradient: [string, string] }> = {
   free:         { label: 'Free',         Icon: Gift,  gradient: ['#374151', '#6B7280'] },
@@ -262,7 +263,7 @@ export const SubscriptionScreen: React.FC<SubscriptionScreenProps> = ({ navigati
         </View>
 
         {/* Upgrade / Manage CTA */}
-        {isFree ? (
+        {isFree && IS_PURCHASE_UI_ENABLED ? (
           <>
             <Text style={s.sectionTitle}>UPGRADE YOUR PLAN</Text>
             <TouchableOpacity style={s.upgradeCta} onPress={() => navigation.navigate('Purchase')} activeOpacity={0.85}>
@@ -277,6 +278,20 @@ export const SubscriptionScreen: React.FC<SubscriptionScreenProps> = ({ navigati
                 <ArrowRight size={20} color="#fff" />
               </LinearGradient>
             </TouchableOpacity>
+          </>
+        ) : isFree ? (
+          // iOS: no in-app upgrade CTA. Plain copy mentioning the website.
+          <>
+            <Text style={s.sectionTitle}>MANAGE YOUR PLAN</Text>
+            <View style={s.card}>
+              <View style={{ paddingHorizontal: 16, paddingVertical: 14 }}>
+                <Text style={{ fontSize: 13, color: '#374151', lineHeight: 20, fontWeight: '500' }}>
+                  Your plan is managed from your clinic account on the web.
+                  Visit {MARKETING_SITE_TEXT} from a browser to upgrade or
+                  change billing for this clinic.
+                </Text>
+              </View>
+            </View>
           </>
         ) : (
           <>

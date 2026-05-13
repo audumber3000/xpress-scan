@@ -34,6 +34,7 @@ import { GoogleIcon } from '../../../shared/components/icons/GoogleIcon';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { LastLoginCard } from '../components/LastLoginCard';
 import type { LastLoginProvider } from '../../../services/auth/lastLogin';
+import { IS_SIGNUP_ENABLED, MARKETING_SITE_TEXT } from '../../../shared/constants/platform';
 
 const { width } = Dimensions.get('window');
 
@@ -54,10 +55,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       const { user, error } = await signInWithGoogle();
       if (error) {
         if (error.includes('User does not exist')) {
-          Alert.alert('Register Required', 'User does not exist. Please register first to continue.', [
-            { text: 'Register', onPress: () => navigation.navigate('GetStarted') },
-            { text: 'Cancel', style: 'cancel' }
-          ]);
+          if (IS_SIGNUP_ENABLED) {
+            Alert.alert('Register Required', 'User does not exist. Please register first to continue.', [
+              { text: 'Register', onPress: () => navigation.navigate('GetStarted') },
+              { text: 'Cancel', style: 'cancel' }
+            ]);
+          } else {
+            // iOS: cannot direct user to in-app registration. Tell them to
+            // set up a clinic on the web instead.
+            Alert.alert(
+              'No clinic found',
+              `We couldn't find a clinic linked to that account. Please set up your clinic on ${MARKETING_SITE_TEXT} and then sign in here.`,
+              [{ text: 'OK', style: 'cancel' }]
+            );
+          }
         } else {
           toast.error(error || 'Login failed');
         }
@@ -76,10 +87,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       if (error) {
         if (error === 'Sign in was cancelled') return;
         if (error.includes('User does not exist')) {
-          Alert.alert('Register Required', 'User does not exist. Please register first to continue.', [
-            { text: 'Register', onPress: () => navigation.navigate('GetStarted') },
-            { text: 'Cancel', style: 'cancel' }
-          ]);
+          if (IS_SIGNUP_ENABLED) {
+            Alert.alert('Register Required', 'User does not exist. Please register first to continue.', [
+              { text: 'Register', onPress: () => navigation.navigate('GetStarted') },
+              { text: 'Cancel', style: 'cancel' }
+            ]);
+          } else {
+            // iOS: cannot direct user to in-app registration. Tell them to
+            // set up a clinic on the web instead.
+            Alert.alert(
+              'No clinic found',
+              `We couldn't find a clinic linked to that account. Please set up your clinic on ${MARKETING_SITE_TEXT} and then sign in here.`,
+              [{ text: 'OK', style: 'cancel' }]
+            );
+          }
         } else {
           toast.error(error);
         }
@@ -106,10 +127,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       const { error } = await signInEmail(email, password);
       if (error) {
         if (error.includes('User does not exist')) {
-          Alert.alert('Register Required', 'User does not exist. Please register first to continue.', [
-            { text: 'Register', onPress: () => setViewMode('gateway') }, // or navigation.navigate('GetStarted')
-            { text: 'Cancel', style: 'cancel' }
-          ]);
+          if (IS_SIGNUP_ENABLED) {
+            Alert.alert('Register Required', 'User does not exist. Please register first to continue.', [
+              { text: 'Register', onPress: () => setViewMode('gateway') },
+              { text: 'Cancel', style: 'cancel' }
+            ]);
+          } else {
+            Alert.alert(
+              'No clinic found',
+              `We couldn't find a clinic linked to that account. Please set up your clinic on ${MARKETING_SITE_TEXT} and then sign in here.`,
+              [{ text: 'OK', style: 'cancel' }]
+            );
+          }
         } else {
           toast.error(error || 'Login failed');
         }
@@ -141,15 +170,28 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
           resizeMode="contain"
         />
         <Text style={styles.title}>Login</Text>
-        
-        <TouchableOpacity 
-          style={styles.subtitleRow}
-          onPress={() => navigation.navigate('GetStarted')}
-        >
-          <Text style={styles.subtitleText}>New here? </Text>
-          <Text style={styles.linkText}>Register here</Text>
-          <ChevronRight size={16} color={colors.info} style={styles.chevron} />
-        </TouchableOpacity>
+
+        {IS_SIGNUP_ENABLED ? (
+          <TouchableOpacity
+            style={styles.subtitleRow}
+            onPress={() => navigation.navigate('GetStarted')}
+          >
+            <Text style={styles.subtitleText}>New here? </Text>
+            <Text style={styles.linkText}>Register here</Text>
+            <ChevronRight size={16} color={colors.info} style={styles.chevron} />
+          </TouchableOpacity>
+        ) : (
+          // iOS: no in-app registration. Plain, non-tappable copy that
+          // mentions the website without a CTA verb. Apple forbids buttons
+          // or links that direct users to external purchase mechanisms.
+          <View style={styles.subtitleRow}>
+            <Text style={styles.subtitleText}>
+              Don't have a clinic yet? Visit{' '}
+              <Text style={styles.subtitleSiteText}>{MARKETING_SITE_TEXT}</Text>
+              {' '}to set one up.
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Last-login one-tap shortcut, if any */}
@@ -333,6 +375,11 @@ const styles = StyleSheet.create({
   linkText: {
     fontSize: 16,
     color: colors.info,
+    fontWeight: '700',
+  },
+  subtitleSiteText: {
+    fontSize: 16,
+    color: colors.gray900,
     fontWeight: '700',
   },
   chevron: {

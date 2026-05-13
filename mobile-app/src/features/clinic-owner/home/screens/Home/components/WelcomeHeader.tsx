@@ -5,6 +5,7 @@ import { Bell, ChevronDown } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '../../../../../../shared/constants/colors';
 import { getCurrencySymbol } from '../../../../../../shared/utils/currency';
+import { IS_PURCHASE_UI_ENABLED } from '../../../../../../shared/constants/platform';
 
 interface WelcomeHeaderProps {
   userName: string;
@@ -104,7 +105,11 @@ export const WelcomeHeaderTopPart: React.FC<WelcomeHeaderProps> = ({
               >
                 <Text style={styles.trialBadgeText}>
                   🕐 Trial
-                  {typeof trialDaysRemaining === 'number'
+                  {/* Suppress trial countdown on iOS — Apple reviewers can read
+                      "X days left" as steering toward an external purchase. */}
+                  {!IS_PURCHASE_UI_ENABLED
+                    ? ''
+                    : typeof trialDaysRemaining === 'number'
                     ? ` · ${trialDaysRemaining}d left`
                     : ''}
                 </Text>
@@ -117,12 +122,14 @@ export const WelcomeHeaderTopPart: React.FC<WelcomeHeaderProps> = ({
               >
                 <Text style={styles.proBadgeText}>
                   ✦ PRO
-                  {typeof trialDaysRemaining === 'number'
+                  {!IS_PURCHASE_UI_ENABLED
+                    ? ''
+                    : typeof trialDaysRemaining === 'number'
                     ? ` · ${trialDaysRemaining}d left`
                     : ''}
                 </Text>
               </TouchableOpacity>
-            ) : (
+            ) : IS_PURCHASE_UI_ENABLED ? (
               <TouchableOpacity
                 style={styles.upgradeBadge}
                 onPress={onUpgradePress}
@@ -130,7 +137,7 @@ export const WelcomeHeaderTopPart: React.FC<WelcomeHeaderProps> = ({
               >
                 <Text style={styles.upgradeBadgeText}>⚡ Upgrade</Text>
               </TouchableOpacity>
-            )}
+            ) : null}
             <TouchableOpacity
               style={styles.iconButton}
               onPress={onNotificationPress}

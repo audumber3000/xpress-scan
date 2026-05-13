@@ -19,6 +19,7 @@ import { colors } from '../../../../shared/constants/colors';
 import { adminApiService, ClinicInfo } from '../../../../services/api/admin.api';
 import { GearLoader } from '../../../../shared/components/GearLoader';
 import { useAuth } from '../../../../app/AuthContext';
+import { IS_PURCHASE_UI_ENABLED } from '../../../../shared/constants/platform';
 
 const DRAWER_WIDTH = 280;
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -35,7 +36,9 @@ const ADMIN_SCREEN_REGISTRY: Record<string, { label: string; icon: any; bg: stri
   ClinicSettings:      { label: 'Clinic Settings',   icon: Settings2,  bg: '#FFF4E6', color: '#FF8C42' },
 };
 
-const DEFAULT_RECENT = ['Team', 'NotificationSettings', 'Subscription'];
+const DEFAULT_RECENT = IS_PURCHASE_UI_ENABLED
+  ? ['Team', 'NotificationSettings', 'Subscription']
+  : ['Team', 'NotificationSettings', 'ClinicSettings'];
 
 async function recordAdminVisit(screenName: string) {
   try {
@@ -358,8 +361,11 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
             {/* Notifications */}
             <DrawerItem icon={Bell} label="Notifications" onPress={() => navigateTo('NotificationSettings')} hasArrow />
 
-            {/* Subscription */}
-            <DrawerItem icon={CreditCard} label="Subscription" onPress={() => navigateTo('Subscription')} hasArrow />
+            {/* Subscription — hidden on iOS (App Store guideline 3.1.3(b),
+                Path A multiplatform-services exemption). */}
+            {IS_PURCHASE_UI_ENABLED && (
+              <DrawerItem icon={CreditCard} label="Subscription" onPress={() => navigateTo('Subscription')} hasArrow />
+            )}
 
             {/* Clinic Settings */}
             <DrawerItem icon={Settings2} label="Clinic Settings" onPress={() => navigateTo('ClinicSettings')} hasArrow />

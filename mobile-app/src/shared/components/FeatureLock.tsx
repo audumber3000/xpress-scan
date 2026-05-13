@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Lock, Zap } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../app/AuthContext';
+import { IS_PURCHASE_UI_ENABLED, MARKETING_SITE_TEXT } from '../constants/platform';
 
 interface FeatureLockProps {
   children: React.ReactNode;
@@ -43,29 +44,40 @@ export const FeatureLock: React.FC<FeatureLockProps> = ({
             <Lock size={28} color="#fff" strokeWidth={2.5} />
           </LinearGradient>
 
-          <Text style={s.title}>Unlock {featureName}</Text>
-          <Text style={s.body}>
-            {description ||
-              `${featureName} is a premium feature. Upgrade to Professional to streamline your clinic workflow.`}
-          </Text>
+          <Text style={s.title}>{featureName}</Text>
+          {IS_PURCHASE_UI_ENABLED ? (
+            <>
+              <Text style={s.body}>
+                {description ||
+                  `${featureName} is a premium feature. Upgrade to Professional to streamline your clinic workflow.`}
+              </Text>
 
-          <TouchableOpacity
-            style={s.btn}
-            onPress={() => navigation.navigate('Purchase')}
-            activeOpacity={0.85}
-          >
-            <LinearGradient
-              colors={['#2E2A85', '#4338CA']}
-              style={s.btnGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            >
-              <Zap size={16} color="#fff" fill="#fff" />
-              <Text style={s.btnText}>Upgrade to Pro</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={s.btn}
+                onPress={() => navigation.navigate('Purchase')}
+                activeOpacity={0.85}
+              >
+                <LinearGradient
+                  colors={['#2E2A85', '#4338CA']}
+                  style={s.btnGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Zap size={16} color="#fff" fill="#fff" />
+                  <Text style={s.btnText}>Upgrade to Pro</Text>
+                </LinearGradient>
+              </TouchableOpacity>
 
-          <Text style={s.hint}>Starting at ₹1,200 / month</Text>
+              <Text style={s.hint}>Starting at ₹1,200 / month</Text>
+            </>
+          ) : (
+            // iOS: no in-app upgrade CTA. Plain text mentioning the website.
+            <Text style={s.body}>
+              {description
+                ? `${description} Manage your plan from your clinic account on ${MARKETING_SITE_TEXT}.`
+                : `${featureName} is included with the MolarPlus Professional plan. Manage your plan from your clinic account on ${MARKETING_SITE_TEXT}.`}
+            </Text>
+          )}
         </View>
       </View>
     </View>
