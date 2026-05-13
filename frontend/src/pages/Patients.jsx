@@ -368,7 +368,14 @@ const Patients = () => {
                         onClick={() => navigate(`/patient-profile/${patient.id}`)}
                       >
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-600">{patient.display_id || '---'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{patient.name}</td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-full bg-[#2a276e]/10 text-[#2a276e] flex items-center justify-center flex-shrink-0 font-semibold text-sm">
+                              {(patient.name || '?').charAt(0).toUpperCase()}
+                            </div>
+                            <span className="text-sm font-medium text-gray-900">{patient.name}</span>
+                          </div>
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{patient.phone}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{patient.village}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{patient.gender}/{patient.age}</td>

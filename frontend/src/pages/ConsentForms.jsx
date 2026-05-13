@@ -5,7 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { toast } from "react-toastify";
 import Card from "../components/Card";
 import axios from "axios";
-import { FileText, Layout, Share2, CheckCircle, Clock, XCircle, Printer, ExternalLink } from 'lucide-react';
+import { Layout, Share2, CheckCircle, Clock, XCircle, Printer, ExternalLink } from 'lucide-react';
 import ConsentRecentLinks from "../components/consents/ConsentRecentLinks";
 import FeatureLock from "../components/FeatureLock";
 import Pagination from "../components/Pagination";
@@ -201,9 +201,8 @@ const ConsentForms = () => {
                 <div className="flex justify-between items-end border-b border-gray-200 mb-6">
                     <div className="flex gap-10">
                         {[
-                            { id: 'templates', label: 'Templates', icon: Layout },
-                            { id: 'links', label: 'Sent Links', icon: Share2 },
-                            { id: 'custom', label: 'Custom Forms', icon: FileText }
+                            { id: 'templates', label: 'Form Templates', icon: Layout },
+                            { id: 'links', label: 'Link History', icon: Share2 }
                         ].map(tab => (
                             <button
                                 key={tab.id}
@@ -246,7 +245,7 @@ const ConsentForms = () => {
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
                                 </svg>
-                                {activeTab === 'templates' ? 'Add New Template' : 'Add Custom Form'}
+                                Add New Template
                             </button>
                         )}
                     </div>
@@ -450,42 +449,7 @@ const ConsentForms = () => {
                             <ConsentRecentLinks clinicId={user?.clinic_id} refreshKey={linksRefreshKey} />
                         </div>
                     </div>
-                ) : (
-                    /* Custom Forms Tab */
-                    <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        <div className="lg:col-span-2 xl:col-span-3">
-                            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                                <table className="min-w-full divide-y divide-gray-200">
-                                    <thead className="bg-gray-50">
-                                        <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Form Name</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created Date</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
-                                        <tr>
-                                            <td colSpan="5" className="px-6 py-12">
-                                                <div className="flex flex-col items-center justify-center text-center">
-                                                    <svg className="w-16 h-16 mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                    </svg>
-                                                    <p className="text-sm font-bold text-gray-900">No Custom Forms</p>
-                                                    <p className="text-sm text-gray-500 mt-1">Custom forms for specific patients will appear here</p>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        <div className="lg:col-span-1 xl:col-span-1 h-full">
-                            <ConsentRecentLinks clinicId={user?.clinic_id} refreshKey={linksRefreshKey} />
-                        </div>
-                    </div>
-                )}
+                ) : null}
             </FeatureLock>
 
             {showSendModal && (

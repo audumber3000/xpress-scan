@@ -47,9 +47,14 @@ const InvoiceItem = ({ invoice, onSelect }) => {
         </span>
       </td>
       <td className="px-6 py-5 whitespace-nowrap">
-        <div>
-          <div className="font-semibold text-gray-900">{invoice.patient_name || 'Unknown Patient'}</div>
-          <div className="text-sm text-gray-500">Patient</div>
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-full bg-[#2a276e]/10 text-[#2a276e] flex items-center justify-center flex-shrink-0 font-semibold text-sm">
+            {(invoice.patient_name || '?').charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <div className="font-semibold text-gray-900">{invoice.patient_name || 'Unknown Patient'}</div>
+            <div className="text-sm text-gray-500">Patient</div>
+          </div>
         </div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-gray-900">{invoice.patient_phone || 'N/A'}</td>
