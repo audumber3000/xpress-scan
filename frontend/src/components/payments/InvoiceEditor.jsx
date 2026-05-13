@@ -93,10 +93,13 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
   const fetchPatients = async (query = "") => {
     try {
       setIsSearching(true);
-      const data = await api.get('/appointments/search-patients', { params: { query, limit: 10 } });
+      // Backend reads the query param as `q` (not `query`) — see
+      // domains/scheduling/routes/appointments.py search_patients_for_checkin.
+      const data = await api.get('/appointments/search-patients', { params: { q: query } });
       setPatients(data || []);
     } catch (error) {
       console.error("Error searching patients:", error);
+      setPatients([]);
     } finally {
       setIsSearching(false);
     }
@@ -383,15 +386,16 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
             {isCreating ? (
               <div className="max-w-md mx-auto mt-10">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Create Invoice</h3>
-                
+
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Search Patient</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Patient</label>
                   <div className="relative">
                     <input
                       type="text"
-                      placeholder="Name or Phone..."
+                      placeholder="Search by name or phone..."
                       value={patientSearch}
-                      onChange={(e) => setPatientSearch(e.target.value)}
+                      onChange={(e) => { setPatientSearch(e.target.value); setSelectedPatientId(""); }}
+                      autoFocus
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
                     />
                     {isSearching && (
@@ -400,25 +404,51 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
                       </div>
                     )}
                   </div>
-                </div>
 
-                {patients.length > 0 && (
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Select Patient</label>
-                    <select
-                      value={selectedPatientId}
-                      onChange={(e) => setSelectedPatientId(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
-                    >
-                      <option value="">-- Select Patient --</option>
-                      {patients.map(p => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} ({p.phone || 'No phone'}) - {p.visits_count || 0} visits
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                  {/* Inline autocomplete list — clickable patients show right below the input */}
+                  {!isSearching && (
+                    <div className="mt-2 border border-gray-200 rounded-lg max-h-64 overflow-y-auto divide-y divide-gray-100 bg-white">
+                      {patients.length === 0 ? (
+                        <div className="px-4 py-6 text-center text-sm text-gray-500">
+                          {patientSearch
+                            ? `No patient matches "${patientSearch}". Check spelling or register a new patient first.`
+                            : 'No patients yet. Register a patient before creating an invoice.'}
+                        </div>
+                      ) : (
+                        patients.map(p => {
+                          const isSelected = String(selectedPatientId) === String(p.id);
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => { setSelectedPatientId(p.id); setPatientSearch(p.name); }}
+                              className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-colors ${
+                                isSelected ? 'bg-[#2a276e]/5' : 'hover:bg-gray-50'
+                              }`}
+                            >
+                              <div className={`w-9 h-9 rounded-full flex items-center justify-center font-semibold text-sm flex-shrink-0 ${
+                                isSelected ? 'bg-[#2a276e] text-white' : 'bg-[#2a276e]/10 text-[#2a276e]'
+                              }`}>
+                                {(p.name || '?').charAt(0).toUpperCase()}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
+                                <p className="text-xs text-gray-500 truncate">
+                                  {p.phone || 'No phone'} · {p.visit_count ?? 0} visit{(p.visit_count ?? 0) === 1 ? '' : 's'}
+                                </p>
+                              </div>
+                              {isSelected && (
+                                <svg className="w-5 h-5 text-[#2a276e] flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 {selectedPatientId && visits.length > 0 && (
                   <div className="mb-6 animate-fade-in">
