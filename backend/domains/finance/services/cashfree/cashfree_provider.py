@@ -66,6 +66,14 @@ class CashfreeProvider(BasePaymentProvider):
         if not email or "@" not in email:
             email = "support@molarplus.com" # Fallback
             
+        # Cashfree requires {order_id} placeholder in return_url
+        return_url = (notes.get("return_url") if notes else None) or os.getenv("CASHFREE_RETURN_URL", "http://localhost:5173/subscription")
+        if "{order_id}" not in return_url:
+            separator = "&" if "?" in return_url else "?"
+            return_url = f"{return_url}{separator}order_id={{order_id}}"
+
+        notify_url = (notes.get("notify_url") if notes else None) or os.getenv("CASHFREE_NOTIFY_URL", "https://api.molarplus.com/api/v1/subscriptions/webhook/cashfree")
+
         payload = {
             "order_amount": round(float(amount), 2),
             "order_currency": "INR",
@@ -76,8 +84,8 @@ class CashfreeProvider(BasePaymentProvider):
                 "customer_email": email
             },
             "order_meta": {
-                "return_url": notes.get("return_url") if notes else None or os.getenv("CASHFREE_RETURN_URL", "http://localhost:5173/subscription"),
-                "notify_url": notes.get("notify_url") if notes else None or os.getenv("CASHFREE_NOTIFY_URL", "https://api.molarplus.com/api/v1/subscriptions/webhook/cashfree")
+                "return_url": return_url,
+                "notify_url": notify_url
             },
             "order_note": notes.get("plan", "Pro Plan Subscription") if notes else "Pro Plan Subscription"
         }

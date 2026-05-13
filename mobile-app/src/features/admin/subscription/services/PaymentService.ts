@@ -46,6 +46,24 @@ class PaymentService extends BaseApiService {
 
     return response.json();
   }
+  async validateCoupon(code: string, planName: string): Promise<{ is_valid: boolean; discount_amount: number; final_amount: number; message: string }> {
+    const headers = await this.getAuthHeaders();
+    const response = await fetch(`${this.baseURL}/subscriptions/validate-coupon`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        code,
+        plan_name: planName,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || 'Failed to validate coupon');
+    }
+
+    return response.json();
+  }
 }
 
 export const paymentService = new PaymentService();

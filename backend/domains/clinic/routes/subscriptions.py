@@ -95,9 +95,17 @@ async def get_current_subscription(
     is_expired = (
         subscription.current_end is not None
         and subscription.current_end < now
-        and subscription.status != "active"
     )
     is_trial = bool(getattr(subscription, 'is_trial', False) and subscription.status == 'active' and not is_expired)
+
+    # Auto-downgrade: if the subscription has expired, reset the clinic to 'free'
+    # so that /auth/me also reflects the correct plan for mobile and other clients.
+    if is_expired and subscription.clinic_id:
+        clinic = db.query(Clinic).filter(Clinic.id == subscription.clinic_id).first()
+        if clinic and clinic.subscription_plan != 'free':
+            clinic.subscription_plan = 'free'
+            subscription.status = 'expired'
+            db.commit()
     trial_ends_at = None
     trial_days_remaining = None
     if is_trial and subscription.current_end:
@@ -285,7 +293,7 @@ async def cashfree_webhook(
         if secret and signature and timestamp:
             signed_payload = timestamp.encode() + raw_body
             expected = base64.b64encode(
-                hmac.new(secret.encode(), signed_payload, hashlib.sha256).digest()
+                hmac.HMAC(secret.encode(), signed_payload, hashlib.sha256).digest()
             ).decode()
             if not hmac.compare_digest(expected, signature):
                 print("WEBHOOK SIGNATURE MISMATCH — rejecting")

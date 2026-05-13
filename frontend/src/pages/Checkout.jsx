@@ -30,6 +30,8 @@ const Checkout = () => {
 
   const billing = queryParams.get('billing') || 'monthly';
   const isAnnual = billing === 'annual';
+  // Build the actual plan identifier sent to the backend
+  const checkoutPlanName = isAnnual ? `${planName}_annual` : planName;
   const basePrice = planName === 'professional' ? (isAnnual ? 8100 : 899) : 0;
 
   const handleApplyCoupon = async () => {
@@ -38,7 +40,7 @@ const Checkout = () => {
     try {
       const resp = await api.post('/subscriptions/validate-coupon', {
         code: couponCode,
-        plan_name: planName
+        plan_name: checkoutPlanName
       });
       if (resp.is_valid) {
         setDiscountInfo(resp);
@@ -57,7 +59,7 @@ const Checkout = () => {
   const handlePayNow = async () => {
     setLoading(true);
     try {
-      await cashfreeService.initiateCheckout(planName, discountInfo ? couponCode : null);
+      await cashfreeService.initiateCheckout(checkoutPlanName, discountInfo ? couponCode : null);
     } catch (error) {
       toast.error(error.message || 'Failed to initiate checkout');
     } finally {

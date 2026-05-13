@@ -132,8 +132,8 @@ export const PurchaseScreen: React.FC<PurchaseScreenProps> = ({ navigation }) =>
     }
   }, [isPromoApplied]);
 
-  const baseMonthly = 1200;
-  const baseYearly = 10800;
+  const baseMonthly = 899;
+  const baseYearly = 8100;
 
   const triggerConfetti = () => {
     const particles = Array.from({ length: 40 }).map((_, i) => ({
@@ -165,20 +165,41 @@ export const PurchaseScreen: React.FC<PurchaseScreenProps> = ({ navigation }) =>
     ]).start();
   };
 
-  const handleApplyPromo = () => {
-    if (promoCode.toUpperCase() === 'MOLAR20') {
-      setIsPromoApplied(true);
-      setPromoError('');
-      triggerConfetti();
-      triggerPulse();
-    } else {
+  const handleApplyPromo = async () => {
+    if (!promoCode) return;
+    try {
+      const planName = selectedPlan === 'monthly' ? 'professional' : 'professional_annual';
+      const res = await paymentService.validateCoupon(promoCode, planName);
+      if (res.is_valid) {
+        setIsPromoApplied(true);
+        setPromoError('');
+        setDiscountInfo(res);
+        triggerConfetti();
+        triggerPulse();
+      } else {
+        setIsPromoApplied(false);
+        setPromoError(res.message || 'Invalid promo code');
+        setDiscountInfo(null);
+      }
+    } catch (error) {
       setIsPromoApplied(false);
-      setPromoError('Invalid promo code');
+      setPromoError('Failed to validate promo code');
+      setDiscountInfo(null);
     }
   };
 
+  const [discountInfo, setDiscountInfo] = useState<any>(null);
+
   const getDiscountedPrice = (price: number) => {
-    return isPromoApplied ? Math.floor(price * 0.8) : price;
+    if (isPromoApplied && discountInfo) {
+      // Use the server-calculated final amount for the selected plan
+      const selectedPrice = selectedPlan === 'monthly' ? baseMonthly : baseYearly;
+      if (price === selectedPrice) return discountInfo.final_amount;
+      // For the non-selected plan, calculate proportionally
+      const discountRatio = discountInfo.final_amount / selectedPrice;
+      return Math.floor(price * discountRatio);
+    }
+    return price;
   };
 
   const features = [
@@ -192,7 +213,7 @@ export const PurchaseScreen: React.FC<PurchaseScreenProps> = ({ navigation }) =>
     try {
       setIsPaymentLoading(true);
       
-      const planName = selectedPlan === 'monthly' ? 'professional' : 'professional_yearly';
+      const planName = selectedPlan === 'monthly' ? 'professional' : 'professional_annual';
       const checkoutRes = await paymentService.createCheckoutSession(planName, isPromoApplied ? promoCode : undefined);
       
       console.log('🚀 Initiating Cashfree Checkout:', checkoutRes.order_id);
@@ -287,7 +308,7 @@ export const PurchaseScreen: React.FC<PurchaseScreenProps> = ({ navigation }) =>
             </View>
             <View style={styles.planDetails}>
               <Text style={styles.planTitle}>Monthly Subscription</Text>
-              <Text style={styles.planSubtext}>₹1,200 / billed monthly</Text>
+              <Text style={styles.planSubtext}>₹899 / billed monthly</Text>
             </View>
             <View style={styles.priceContainer}>
               <Text style={styles.currencySymbol}>₹</Text>
@@ -295,7 +316,7 @@ export const PurchaseScreen: React.FC<PurchaseScreenProps> = ({ navigation }) =>
                 {getDiscountedPrice(baseMonthly).toLocaleString()}
               </Text>
               {isPromoApplied && (
-                <Text style={styles.originalPriceStrikethrough}>₹1,200</Text>
+                <Text style={styles.originalPriceStrikethrough}>₹899</Text>
               )}
             </View>
           </TouchableOpacity>
@@ -330,7 +351,7 @@ export const PurchaseScreen: React.FC<PurchaseScreenProps> = ({ navigation }) =>
                 {getDiscountedPrice(baseYearly).toLocaleString()}
               </Text>
               {isPromoApplied && (
-                <Text style={styles.originalPriceStrikethrough}>₹10,800</Text>
+                <Text style={styles.originalPriceStrikethrough}>₹8,100</Text>
               )}
             </View>
           </TouchableOpacity>

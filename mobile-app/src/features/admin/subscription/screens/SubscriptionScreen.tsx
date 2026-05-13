@@ -272,7 +272,7 @@ export const SubscriptionScreen: React.FC<SubscriptionScreenProps> = ({ navigati
                   <Award size={22} color="#fff" />
                   <View>
                     <Text style={s.upgradeTitle}>Go Professional</Text>
-                    <Text style={s.upgradePrice}>₹1,200 / month</Text>
+                    <Text style={s.upgradePrice}>₹899 / month</Text>
                   </View>
                 </View>
                 <ArrowRight size={20} color="#fff" />

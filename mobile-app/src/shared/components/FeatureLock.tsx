@@ -20,7 +20,8 @@ export const FeatureLock: React.FC<FeatureLockProps> = ({
   const { backendUser } = useAuth();
   const navigation = useNavigation<any>();
 
-  const isLocked = backendUser?.clinic?.subscription_plan !== 'professional';
+  const plan = backendUser?.clinic?.subscription_plan;
+  const isLocked = plan !== 'professional' && plan !== 'professional_annual';
 
   if (!isLocked) return <>{children}</>;
 
@@ -68,7 +69,7 @@ export const FeatureLock: React.FC<FeatureLockProps> = ({
                 </LinearGradient>
               </TouchableOpacity>
 
-              <Text style={s.hint}>Starting at ₹1,200 / month</Text>
+              <Text style={s.hint}>Starting at ₹899 / month</Text>
             </>
           ) : (
             // iOS: no in-app upgrade CTA. Plain text mentioning the website.

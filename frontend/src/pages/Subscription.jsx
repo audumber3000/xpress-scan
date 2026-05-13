@@ -88,9 +88,7 @@ const Subscription = () => {
   const [activeTab, setActiveTab] = useState('subscription');
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState(null);
-  const [billingHistory, setBillingHistory] = useState([
-    { id: 1, plan: 'Professional Plan', invoice: 'INV-CF-0001', amount: 1200.00, date: 'Mar 12, 2024', status: 'PAID' },
-  ]);
+  const [billingHistory, setBillingHistory] = useState([]);
 
   useEffect(() => {
     setTitle('Subscription & Billing');
@@ -414,7 +412,7 @@ const Subscription = () => {
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-gray-900">
-                        {isPro ? 'Professional Plan' : isTrial ? '7-Day Free Trial' : isExpired ? 'Professional Plan' : 'Starter Plan'}
+                        {isPro ? 'Professional Plan' : isTrial ? '7-Day Free Trial' : 'Starter Plan'}
                       </p>
                       {isPro && (
                         <span className="text-xs font-semibold text-[#29828a]">{getCurrencySymbol()}899 / month</span>

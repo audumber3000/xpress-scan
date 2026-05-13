@@ -62,10 +62,18 @@ def _enrich_clinic_dto(db: Session, clinic: Clinic) -> ClinicResponseDTO:
         return dto
     now = _dt.utcnow()
     is_expired = bool(
-        sub.current_end and sub.current_end < now and sub.status != "active"
+        sub.current_end and sub.current_end < now
     )
-    dto.plan_name = sub.plan_name
     dto.is_trial = bool(getattr(sub, "is_trial", False) and sub.status == "active" and not is_expired)
+
+    # Auto-downgrade: if expired, reflect 'free' so all clients see the right plan
+    if is_expired and clinic.subscription_plan != 'free':
+        clinic.subscription_plan = 'free'
+        sub.status = 'expired'
+        db.commit()
+        dto.subscription_plan = 'free'
+
+    dto.plan_name = sub.plan_name
     if sub.current_end:
         dto.plan_ends_at = sub.current_end.isoformat()
         dto.trial_days_remaining = max(0, (sub.current_end.date() - now.date()).days)
