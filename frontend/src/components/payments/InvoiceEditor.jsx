@@ -90,15 +90,17 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceId]);
 
-  const fetchPatients = async (query = "") => {
+  // Fetches all patients once via the proven /patients/ endpoint. We filter
+  // client-side as the user types — no extra request per keystroke, no
+  // dependence on /appointments/search-patients (which had a permission /
+  // shape quirk that surfaced as an empty result on real accounts).
+  const fetchPatients = async () => {
     try {
       setIsSearching(true);
-      // Backend reads the query param as `q` (not `query`) — see
-      // domains/scheduling/routes/appointments.py search_patients_for_checkin.
-      const data = await api.get('/appointments/search-patients', { params: { q: query } });
+      const data = await api.get('/patients/');
       setPatients(data || []);
     } catch (error) {
-      console.error("Error searching patients:", error);
+      console.error("Error loading patients:", error);
       setPatients([]);
     } finally {
       setIsSearching(false);
@@ -133,14 +135,7 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
     }
   };
 
-  useEffect(() => {
-    if (isCreating && patientSearch.length >= 2) {
-      const timer = setTimeout(() => fetchPatients(patientSearch), 300);
-      return () => clearTimeout(timer);
-    } else if (isCreating && patientSearch.length === 0) {
-      fetchPatients("");
-    }
-  }, [patientSearch, isCreating]);
+  // Patients are filtered client-side now (see filteredPatients below).
 
   useEffect(() => {
     if (selectedPatientId) {
@@ -352,6 +347,17 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
   const canEdit = invoice?.status === 'draft';
   const isLoadingDrawer = loading || autoCreatingFromPrefill;
 
+  // Client-side patient filter — searches name or phone, case-insensitive.
+  // Limit to first 20 matches so the dropdown stays scrollable.
+  const filteredPatients = (() => {
+    const q = patientSearch.trim().toLowerCase();
+    if (!q) return patients.slice(0, 20);
+    return patients.filter(p =>
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.phone || '').toLowerCase().includes(q)
+    ).slice(0, 20);
+  })();
+
   // One persistent drawer element. The slide-in animation runs exactly once on
   // mount; the inner content swaps between a loader and the full form when the
   // invoice fetch completes — so we no longer get the "drawer pops in, then
@@ -408,14 +414,14 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
                   {/* Inline autocomplete list — clickable patients show right below the input */}
                   {!isSearching && (
                     <div className="mt-2 border border-gray-200 rounded-lg max-h-64 overflow-y-auto divide-y divide-gray-100 bg-white">
-                      {patients.length === 0 ? (
+                      {filteredPatients.length === 0 ? (
                         <div className="px-4 py-6 text-center text-sm text-gray-500">
-                          {patientSearch
-                            ? `No patient matches "${patientSearch}". Check spelling or register a new patient first.`
-                            : 'No patients yet. Register a patient before creating an invoice.'}
+                          {patients.length === 0
+                            ? 'No patients yet. Register a patient before creating an invoice.'
+                            : `No patient matches "${patientSearch}". Check the spelling.`}
                         </div>
                       ) : (
-                        patients.map(p => {
+                        filteredPatients.map(p => {
                           const isSelected = String(selectedPatientId) === String(p.id);
                           return (
                             <button
