@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
 import GearLoader from "../components/GearLoader";
@@ -6,6 +6,7 @@ import { api } from "../utils/api";
 import InvoiceEditor from "../components/payments/InvoiceEditor";
 import InvoiceItem from "../components/payments/InvoiceItem";
 import ExpenseModal from "../components/payments/ExpenseModal";
+import FilterDropdown from "../components/FilterDropdown";
 
 const INVOICES_PER_PAGE = 10;
 const LEDGER_PER_PAGE = 10;
@@ -31,6 +32,11 @@ const Payments = () => {
   const [ledgerStats, setLedgerStats] = useState({ inflow: 0, outflow: 0, net: 0, expensesCount: 0 });
   const [ledgerPage, setLedgerPage] = useState(1);
   const [selectedExpenseId, setSelectedExpenseId] = useState(null);
+
+  // Filter states
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterMode, setFilterMode] = useState('');
+  const [filterLedgerType, setFilterLedgerType] = useState('');
 
   // Debounce search term to avoid too many API calls
   useEffect(() => {
@@ -178,26 +184,33 @@ const Payments = () => {
     fetchLedger();
   };
 
-  // Filter items client-side for search
-  const filteredInvoices = invoices.filter((invoice) => {
-    if (!searchTerm.trim()) return true;
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      invoice.patient_name?.toLowerCase().includes(searchLower) ||
-      invoice.invoice_number?.toLowerCase().includes(searchLower) ||
-      invoice.patient_phone?.toLowerCase().includes(searchLower)
-    );
-  });
+  // Filter items client-side for search + filters
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter((invoice) => {
+      if (searchTerm.trim()) {
+        const searchLower = searchTerm.toLowerCase();
+        if (!invoice.patient_name?.toLowerCase().includes(searchLower) &&
+            !invoice.invoice_number?.toLowerCase().includes(searchLower) &&
+            !invoice.patient_phone?.toLowerCase().includes(searchLower)) return false;
+      }
+      if (filterStatus && invoice.status !== filterStatus) return false;
+      if (filterMode && invoice.payment_method?.toLowerCase() !== filterMode.toLowerCase()) return false;
+      return true;
+    });
+  }, [invoices, searchTerm, filterStatus, filterMode]);
   
-  const filteredLedger = ledgerItems.filter((item) => {
-    if (!searchTerm.trim()) return true;
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      item.entity_name?.toLowerCase().includes(searchLower) ||
-      item.description?.toLowerCase().includes(searchLower) ||
-      item.category?.toLowerCase().includes(searchLower)
-    );
-  });
+  const filteredLedger = useMemo(() => {
+    return ledgerItems.filter((item) => {
+      if (searchTerm.trim()) {
+        const searchLower = searchTerm.toLowerCase();
+        if (!item.entity_name?.toLowerCase().includes(searchLower) &&
+            !item.description?.toLowerCase().includes(searchLower) &&
+            !item.category?.toLowerCase().includes(searchLower)) return false;
+      }
+      if (filterLedgerType && item.type !== filterLedgerType) return false;
+      return true;
+    });
+  }, [ledgerItems, searchTerm, filterLedgerType]);
 
   const totalPages = activeTab === 'payments' 
     ? Math.ceil(totalCount / INVOICES_PER_PAGE) || 1
@@ -361,12 +374,12 @@ const Payments = () => {
           
         </div>
 
-        {/* Search & Actions */}
+        {/* Search, Filters & Actions */}
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4">
-          <div className="w-full sm:max-w-md">
-            <div className="relative border border-gray-200 rounded-lg bg-white focus-within:ring-1 focus-within:ring-[#2a276e] focus-within:border-[#2a276e] transition-colors shadow-sm">
+          <div className="flex items-center gap-3 w-full sm:w-auto flex-1">
+            <div className="w-full sm:max-w-sm relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                <svg className="h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
                 </svg>
               </div>
@@ -375,9 +388,41 @@ const Payments = () => {
                 placeholder="Search transactions..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 border-none bg-transparent focus:outline-none text-sm placeholder-gray-500"
+                className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] transition-all"
               />
             </div>
+            {activeTab === 'payments' ? (
+              <>
+                <FilterDropdown
+                  label="Status"
+                  value={filterStatus}
+                  onChange={(v) => { setFilterStatus(v); setPage(1); }}
+                  options={[
+                    { value: 'draft', label: 'Draft' },
+                    { value: 'finalized', label: 'Finalized' },
+                    { value: 'partially_paid', label: 'Partial' },
+                    { value: 'paid_verified', label: 'Paid (Verified)' },
+                    { value: 'paid_unverified', label: 'Paid (Unverified)' }
+                  ]}
+                />
+                <FilterDropdown
+                  label="Mode"
+                  value={filterMode}
+                  onChange={(v) => { setFilterMode(v); setPage(1); }}
+                  options={['Cash', 'UPI', 'Card', 'Bank Transfer', 'Other']}
+                />
+              </>
+            ) : (
+              <FilterDropdown
+                label="Type"
+                value={filterLedgerType}
+                onChange={(v) => { setFilterLedgerType(v); setLedgerPage(1); }}
+                options={[
+                  { value: 'invoice', label: 'Invoice' },
+                  { value: 'expense', label: 'Expense' }
+                ]}
+              />
+            )}
           </div>
           <div className="w-full sm:w-auto flex space-x-3">
             {activeTab === 'payments' ? (

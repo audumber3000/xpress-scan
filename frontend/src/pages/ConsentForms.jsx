@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import { useHeader } from "../contexts/HeaderContext";
 import { useAuth } from "../contexts/AuthContext";
 import { toast } from "react-toastify";
 import Card from "../components/Card";
 import axios from "axios";
-import { Layout, Share2, CheckCircle, Clock, XCircle, Printer, ExternalLink } from 'lucide-react';
+import { Layout, Share2, CheckCircle, Clock, XCircle, Printer, ExternalLink, Search } from 'lucide-react';
 import ConsentRecentLinks from "../components/consents/ConsentRecentLinks";
 import FeatureLock from "../components/FeatureLock";
 import Pagination from "../components/Pagination";
+import FilterDropdown from "../components/FilterDropdown";
 
 const CONSENT_PAGE_SIZE = 10;
 
@@ -42,6 +43,11 @@ const ConsentForms = () => {
     const [linksLoading, setLinksLoading] = useState(false);
     const [templatesPage, setTemplatesPage] = useState(1);
     const [linksPage, setLinksPage] = useState(1);
+
+    // Search & filter states
+    const [tableSearch, setTableSearch] = useState('');
+    const [filterLinkStatus, setFilterLinkStatus] = useState('');
+    const [filterTemplateStatus, setFilterTemplateStatus] = useState('');
 
     const NEXUS_API_URL = import.meta.env.VITE_NEXUS_API_URL || `http://${window.location.hostname}:8001/api/v1`;
 
@@ -101,6 +107,33 @@ const ConsentForms = () => {
         if (link.timeLeft <= 0) return { label: 'Expired', color: 'text-gray-500', bg: 'bg-gray-50', border: 'border-gray-200', icon: XCircle };
         return { label: 'Sent', color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200', icon: Clock };
     };
+
+    // Helper to get link status as a string for filtering
+    const getLinkStatusLabel = (link) => {
+        if (link.used) return 'Signed';
+        if (link.timeLeft <= 0) return 'Expired';
+        return 'Sent';
+    };
+
+    // Filtered data
+    const filteredLinks = useMemo(() => {
+        return sentLinks.filter(link => {
+            const term = tableSearch.toLowerCase();
+            if (term && !link.patientName?.toLowerCase().includes(term) && !link.templateName?.toLowerCase().includes(term)) return false;
+            if (filterLinkStatus && getLinkStatusLabel(link) !== filterLinkStatus) return false;
+            return true;
+        });
+    }, [sentLinks, tableSearch, filterLinkStatus]);
+
+    const filteredTemplates = useMemo(() => {
+        return templates.filter(t => {
+            const term = tableSearch.toLowerCase();
+            if (term && !t.name?.toLowerCase().includes(term) && !t.content?.toLowerCase().includes(term)) return false;
+            if (filterTemplateStatus === 'Active' && !t.is_active) return false;
+            if (filterTemplateStatus === 'Draft' && t.is_active) return false;
+            return true;
+        });
+    }, [templates, tableSearch, filterTemplateStatus]);
 
     const openSignedConsent = (token) => {
         window.open(`${window.location.origin}/consent/sign/${token}`, '_blank', 'noopener,noreferrer');
@@ -195,7 +228,7 @@ const ConsentForms = () => {
     ).slice(0, 5);
 
     return (
-        <div className="p-8 max-w-[1600px] mx-auto min-h-screen bg-gray-50/50">
+        <div className="flex flex-col h-screen p-8 max-w-[1600px] mx-auto bg-gray-50/50 overflow-hidden">
             <FeatureLock featureName="Digital Consent Forms">
                 {/* Tabs row with action buttons on the right — page title is in the global header */}
                 <div className="flex justify-between items-end border-b border-gray-200 mb-6">
@@ -251,24 +284,56 @@ const ConsentForms = () => {
                     </div>
                 </div>
 
+                {/* Search & Filters toolbar */}
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-full max-w-sm relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Search className="h-4 w-4 text-gray-400" />
+                        </div>
+                        <input
+                            type="text"
+                            placeholder={activeTab === 'links' ? 'Search links...' : 'Search templates...'}
+                            value={tableSearch}
+                            onChange={(e) => { setTableSearch(e.target.value); setLinksPage(1); setTemplatesPage(1); }}
+                            className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] transition-all"
+                        />
+                    </div>
+                    {activeTab === 'links' ? (
+                        <FilterDropdown
+                            label="Status"
+                            value={filterLinkStatus}
+                            onChange={(v) => { setFilterLinkStatus(v); setLinksPage(1); }}
+                            options={['Signed', 'Sent', 'Expired']}
+                        />
+                    ) : activeTab === 'templates' ? (
+                        <FilterDropdown
+                            label="Status"
+                            value={filterTemplateStatus}
+                            onChange={(v) => { setFilterTemplateStatus(v); setTemplatesPage(1); }}
+                            options={['Active', 'Draft']}
+                        />
+                    ) : null}
+                </div>
+
                 {loading ? (
                     <div className="flex justify-center items-center h-64">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2a276e]"></div>
                     </div>
                 ) : activeTab === 'links' ? (
                     /* Sent Links tab — full history of consent links with Status + Print PDF */
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col flex-1 min-h-0">
+                        <div className="flex-1 overflow-x-auto overflow-y-auto">
+                        <table className="w-full divide-y divide-gray-200">
+                            <thead className="bg-[#f8fafc] sticky top-0 z-10">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Template</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Patient</th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Template</th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Time</th>
+                                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
+                            <tbody className="bg-white divide-y divide-gray-100">
                                 {linksLoading ? (
                                     <tr>
                                         <td colSpan="5" className="px-6 py-12 text-center">
@@ -278,27 +343,30 @@ const ConsentForms = () => {
                                             </div>
                                         </td>
                                     </tr>
-                                ) : sentLinks.length === 0 ? (
+                                ) : filteredLinks.length === 0 ? (
                                     <tr>
                                         <td colSpan="5" className="px-6 py-12">
                                             <div className="flex flex-col items-center justify-center text-center">
                                                 <Share2 className="w-12 h-12 mb-3 text-gray-300" strokeWidth={1.5} />
-                                                <p className="text-sm font-bold text-gray-900">No consent links yet</p>
-                                                <p className="text-sm text-gray-500 mt-1">Send a template to a patient from the Templates tab to track it here.</p>
+                                                <p className="text-sm font-medium text-gray-900">No consent links yet</p>
+                                                <p className="text-xs text-gray-400 mt-1">Send a template to a patient from the Templates tab to track it here.</p>
                                             </div>
                                         </td>
                                     </tr>
-                                ) : sentLinks.slice((linksPage - 1) * CONSENT_PAGE_SIZE, linksPage * CONSENT_PAGE_SIZE).map(link => {
+                                ) : filteredLinks.slice((linksPage - 1) * CONSENT_PAGE_SIZE, linksPage * CONSENT_PAGE_SIZE).map(link => {
                                     const status = getLinkStatus(link);
                                     const StatusIcon = status.icon;
                                     return (
-                                        <tr key={link.token} className="hover:bg-gray-50 transition-colors">
-                                            <td className="px-6 py-4">
+                                        <tr key={link.token} className="hover:bg-indigo-50/30 transition-colors duration-150 group">
+                                            <td className="px-6 py-5">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-9 h-9 rounded-lg bg-[#2a276e]/5 text-[#2a276e] flex items-center justify-center flex-shrink-0 font-semibold text-sm">
+                                                    <div className="w-9 h-9 rounded-full bg-[#2a276e]/10 text-[#2a276e] flex items-center justify-center flex-shrink-0 font-semibold text-sm">
                                                         {(link.patientName || '?').charAt(0).toUpperCase()}
                                                     </div>
-                                                    <p className="text-sm font-medium text-gray-900">{link.patientName || 'Unknown patient'}</p>
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-gray-900">{link.patientName || 'Unknown patient'}</p>
+                                                        <p className="text-xs text-gray-400">Patient</p>
+                                                    </div>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
@@ -344,40 +412,54 @@ const ConsentForms = () => {
                                 })}
                             </tbody>
                         </table>
+                        </div>
                         <Pagination
                             page={linksPage}
                             pageSize={CONSENT_PAGE_SIZE}
-                            totalItems={sentLinks.length}
+                            totalItems={filteredLinks.length}
                             onPageChange={setLinksPage}
                         />
                     </div>
                 ) : activeTab === 'templates' ? (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6 flex-1 min-h-0">
                         {/* Main Templates Area - Table Format */}
-                        <div className="lg:col-span-2 xl:col-span-3">
-                            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                                <table className="min-w-full divide-y divide-gray-200">
-                                    <thead className="bg-gray-50">
+                        <div className="lg:col-span-2 xl:col-span-3 flex flex-col min-h-0">
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col flex-1 min-h-0">
+                                <div className="flex-1 overflow-x-auto overflow-y-auto">
+                                <table className="w-full divide-y divide-gray-200">
+                                    <thead className="bg-[#f8fafc] sticky top-0 z-10">
                                         <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Template Name</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Content Preview</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Template Name</th>
+                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Content Preview</th>
+                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
-                                        {templates.slice((templatesPage - 1) * CONSENT_PAGE_SIZE, templatesPage * CONSENT_PAGE_SIZE).map((template) => (
-                                            <tr key={template.id} className="hover:bg-gray-50 transition-colors">
-                                                <td className="px-6 py-4">
+                                    <tbody className="bg-white divide-y divide-gray-100">
+                                        {templates.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="4" className="px-6 py-12">
+                                                    <div className="flex flex-col items-center justify-center text-center">
+                                                        <svg className="w-16 h-16 mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                        </svg>
+                                                        <p className="text-sm font-medium text-gray-900">No Templates Found</p>
+                                                        <p className="text-xs text-gray-400 mt-1">Create your first consent template to get started</p>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ) : filteredTemplates.slice((templatesPage - 1) * CONSENT_PAGE_SIZE, templatesPage * CONSENT_PAGE_SIZE).map((template) => (
+                                            <tr key={template.id} className="hover:bg-indigo-50/30 transition-colors duration-150 group">
+                                                <td className="px-6 py-5">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 rounded-lg bg-[#2a276e]/5 text-[#2a276e] flex items-center justify-center flex-shrink-0">
-                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <div className="w-9 h-9 rounded-full bg-[#2a276e]/10 text-[#2a276e] flex items-center justify-center flex-shrink-0">
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                                             </svg>
                                                         </div>
                                                         <div>
-                                                            <p className="text-sm font-medium text-gray-900">{template.name}</p>
-                                                            <p className="text-xs text-gray-500">Consent Form</p>
+                                                            <p className="text-sm font-semibold text-gray-900">{template.name}</p>
+                                                            <p className="text-xs text-gray-400">Consent Form</p>
                                                         </div>
                                                     </div>
                                                 </td>
@@ -387,7 +469,8 @@ const ConsentForms = () => {
                                                     </p>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
-                                                    <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${template.is_active ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-gray-100 text-gray-700 border border-gray-200'}`}>
+                                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${template.is_active ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${template.is_active ? 'bg-green-500' : 'bg-gray-400'}`}></span>
                                                         {template.is_active ? 'Active' : 'Draft'}
                                                     </span>
                                                 </td>
@@ -422,25 +505,13 @@ const ConsentForms = () => {
                                         ))}
                                     </tbody>
                                 </table>
+                                </div>
                                 <Pagination
                                     page={templatesPage}
                                     pageSize={CONSENT_PAGE_SIZE}
-                                    totalItems={templates.length}
+                                    totalItems={filteredTemplates.length}
                                     onPageChange={setTemplatesPage}
                                 />
-                                {templates.length === 0 && (
-                                    <tr>
-                                        <td colSpan="4" className="px-6 py-12">
-                                            <div className="flex flex-col items-center justify-center text-center">
-                                                <svg className="w-16 h-16 mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                </svg>
-                                                <p className="text-sm font-bold text-gray-900">No Templates Found</p>
-                                                <p className="text-sm text-gray-500 mt-1">Create your first consent template to get started</p>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )}
                             </div>
                         </div>
 

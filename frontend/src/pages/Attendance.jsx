@@ -6,6 +6,7 @@ import AttendanceMarkDrawer from "../components/attendance/AttendanceMarkDrawer"
 import AttendanceEmployeeDrawer from "../components/attendance/AttendanceEmployeeDrawer";
 import { useHeader } from "../contexts/HeaderContext";
 import { api } from "../utils/api";
+import { generateAvatarUrl } from "../utils/avatar";
 import { startOfWeek, endOfWeek, addWeeks, subWeeks, format, eachDayOfInterval } from "date-fns";
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Search } from 'lucide-react';
@@ -60,7 +61,7 @@ const Attendance = () => {
         role: emp.role,
         designation: emp.role, // Use role as designation
         phone: emp.phone || "",
-        avatar: emp.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name)}&background=6C4CF3&color=fff`,
+        avatar: emp.avatar || generateAvatarUrl(emp.email || emp.name),
         attendance: emp.attendance || {}
       }));
       

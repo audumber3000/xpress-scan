@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useHeader } from '../../contexts/HeaderContext';
 import { api, getPermissionAwareErrorMessage } from '../../utils/api';
 import { toast } from 'react-toastify';
 import LabOrderDrawer from '../../components/patient/LabOrderDrawer';
 import Pagination from '../../components/Pagination';
+import FilterDropdown from '../../components/FilterDropdown';
 
 const LAB_PAGE_SIZE = 10;
 import { 
@@ -34,6 +35,10 @@ const LabHub = () => {
     const [vendorsPage, setVendorsPage] = useState(1);
     const [isVendorDrawerOpen, setIsVendorDrawerOpen] = useState(false);
     const [isOrderDrawerOpen, setIsOrderDrawerOpen] = useState(false);
+
+    // Search & filter states
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterStatus, setFilterStatus] = useState('');
     
     // New Vendor Form
     const [vendorForm, setVendorForm] = useState({
@@ -117,9 +122,27 @@ const LabHub = () => {
         }
     };
 
+    // Filtered data
+    const filteredOrders = useMemo(() => {
+        return orders.filter(o => {
+            const term = searchTerm.toLowerCase();
+            if (term && !o.work_type?.toLowerCase().includes(term) && !o.patient_name?.toLowerCase().includes(term) && !o.vendor_name?.toLowerCase().includes(term)) return false;
+            if (filterStatus && o.status !== filterStatus) return false;
+            return true;
+        });
+    }, [orders, searchTerm, filterStatus]);
+
+    const filteredLabVendors = useMemo(() => {
+        return vendors.filter(v => {
+            const term = searchTerm.toLowerCase();
+            if (term && !v.name?.toLowerCase().includes(term) && !v.phone?.includes(term) && !v.email?.toLowerCase().includes(term)) return false;
+            return true;
+        });
+    }, [vendors, searchTerm]);
+
     return (
-        <div className="flex-1 bg-gray-50/50 min-h-screen">
-            <div className="p-8 max-w-[1600px] mx-auto space-y-6">
+        <div className="flex flex-col h-screen bg-gray-50/50">
+            <div className="flex-1 flex flex-col px-6 pt-4 max-w-[1600px] mx-auto w-full overflow-hidden">
 
                 {/* Tabs row with primary action on the right — page title is already in the global header */}
                 <div className="flex justify-between items-end border-b border-gray-200">
@@ -163,68 +186,100 @@ const LabHub = () => {
                     </div>
                 </div>
 
+                {/* Search & Filters toolbar */}
+                <div className="flex items-center gap-3 py-4">
+                    <div className="w-full max-w-sm relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Search className="h-4 w-4 text-gray-400" />
+                        </div>
+                        <input
+                            type="text"
+                            placeholder={activeTab === 'orders' ? 'Search orders...' : 'Search lab partners...'}
+                            value={searchTerm}
+                            onChange={(e) => { setSearchTerm(e.target.value); setOrdersPage(1); setVendorsPage(1); }}
+                            className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] transition-all"
+                        />
+                    </div>
+                    {activeTab === 'orders' && (
+                        <FilterDropdown
+                            label="Status"
+                            value={filterStatus}
+                            onChange={(v) => { setFilterStatus(v); setOrdersPage(1); }}
+                            options={ORDER_STATUSES}
+                        />
+                    )}
+                </div>
+
                 {/* Tab Views */}
-                <div className="animate-fade-in relative pt-4">
+                <div className="animate-fade-in relative flex-1 flex flex-col min-h-0">
                     {loading ? (
                         <div className="flex flex-col items-center justify-center py-32 space-y-4">
                             <div className="w-12 h-12 border-4 border-[#2a276e]/10 border-t-[#2a276e] rounded-full animate-spin" />
                             <p className="text-sm text-gray-500">Loading...</p>
                         </div>
                     ) : activeTab === 'orders' ? (
-                        <div className="space-y-4">
+                        <div className="flex flex-col flex-1 min-h-0">
                             {orders.length > 0 ? (
-                                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                                    <table className="min-w-full divide-y divide-gray-200">
-                                        <thead className="bg-gray-50">
+                                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col flex-1 min-h-0">
+                                    <div className="flex-1 overflow-x-auto overflow-y-auto">
+                                    <table className="w-full divide-y divide-gray-200">
+                                        <thead className="bg-[#f8fafc] sticky top-0 z-10">
                                             <tr>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order Details</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lab Partner</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
-                                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
-                                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Order Details</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Patient</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Lab Partner</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Due Date</th>
+                                                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Cost</th>
+                                                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="bg-white divide-y divide-gray-200">
-                                            {orders.slice((ordersPage - 1) * LAB_PAGE_SIZE, ordersPage * LAB_PAGE_SIZE).map(order => (
-                                                <tr key={order.id} className="hover:bg-gray-50 transition-colors">
-                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <tbody className="bg-white divide-y divide-gray-100">
+                                            {filteredOrders.slice((ordersPage - 1) * LAB_PAGE_SIZE, ordersPage * LAB_PAGE_SIZE).map(order => {
+                                                const isTerminal = order.status === 'Received' || order.status === 'Cancelled';
+                                                const daysUntil = order.due_date ? Math.ceil((new Date(order.due_date) - new Date()) / (1000 * 60 * 60 * 24)) : null;
+                                                const dueDateColor = isTerminal ? 'text-green-600' : daysUntil === null ? '' : daysUntil < 0 ? 'text-red-600' : daysUntil <= 2 ? 'text-amber-600' : 'text-gray-500';
+                                                const dueDateLabel = isTerminal
+                                                    ? (order.status === 'Received' ? 'Delivered' : 'Cancelled')
+                                                    : daysUntil === null ? ''
+                                                    : daysUntil < 0 ? `Overdue by ${Math.abs(daysUntil)} days`
+                                                    : daysUntil === 0 ? 'Due today'
+                                                    : daysUntil === 1 ? 'Due tomorrow'
+                                                    : `In ${daysUntil} days`;
+                                                return (
+                                                <tr key={order.id} className="hover:bg-indigo-50/30 transition-colors duration-150 group">
+                                                    <td className="px-6 py-5 whitespace-nowrap">
                                                         <div className="flex items-center gap-3">
-                                                            <div className="w-10 h-10 bg-[#2a276e]/5 rounded-lg flex items-center justify-center text-[#2a276e]">
-                                                                <Beaker size={18} />
+                                                            <div className="w-9 h-9 bg-[#2a276e]/10 rounded-full flex items-center justify-center text-[#2a276e] flex-shrink-0">
+                                                                <Beaker size={16} />
                                                             </div>
                                                             <div>
-                                                                <p className="text-sm font-medium text-gray-900">{order.work_type}</p>
-                                                                {order.tooth_number && <p className="text-xs text-gray-500">Tooth #{order.tooth_number} • Shade {order.shade}</p>}
+                                                                <p className="text-sm font-semibold text-gray-900">{order.work_type}</p>
+                                                                {order.tooth_number && <p className="text-xs text-gray-400">Tooth #{order.tooth_number} • Shade {order.shade}</p>}
                                                             </div>
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap">
-                                                        <p className="text-sm font-medium text-gray-900">{order.patient_name}</p>
-                                                        <p className="text-xs text-gray-500">ID: {order.patient_id}</p>
+                                                        <div>
+                                                            <p className="text-sm font-medium text-gray-900">{order.patient_name}</p>
+                                                            <p className="text-xs text-gray-400">ID: {order.patient_id}</p>
+                                                        </div>
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap">
-                                                        <p className="text-sm text-gray-900">{order.vendor_name}</p>
+                                                        <span className="text-sm text-gray-700">{order.vendor_name}</span>
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap">
                                                         {order.due_date ? (
                                                             <div>
-                                                                <p className="text-sm text-gray-900">{new Date(order.due_date).toLocaleDateString()}</p>
-                                                                <p className="text-xs text-gray-500">
-                                                                    {(() => {
-                                                                        const daysUntil = Math.ceil((new Date(order.due_date) - new Date()) / (1000 * 60 * 60 * 24));
-                                                                        if (daysUntil < 0) return `Overdue by ${Math.abs(daysUntil)} days`;
-                                                                        if (daysUntil === 0) return 'Due today';
-                                                                        if (daysUntil === 1) return 'Due tomorrow';
-                                                                        return `In ${daysUntil} days`;
-                                                                    })()}
+                                                                <p className="text-sm font-medium text-gray-900">{new Date(order.due_date).toLocaleDateString()}</p>
+                                                                <p className={`text-xs font-medium ${dueDateColor}`}>
+                                                                    {dueDateLabel}
                                                                 </p>
                                                             </div>
                                                         ) : (
                                                             <span className="text-sm text-gray-400">Not set</span>
                                                         )}
                                                     </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-gray-900 tabular-nums">
+                                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-gray-900 tabular-nums">
                                                         {order.cost && parseFloat(order.cost) > 0
                                                             ? `₹${parseFloat(order.cost).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
                                                             : <span className="text-gray-300">—</span>}
@@ -246,13 +301,15 @@ const LabHub = () => {
                                                         </select>
                                                     </td>
                                                 </tr>
-                                            ))}
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
+                                    </div>
                                     <Pagination
                                         page={ordersPage}
                                         pageSize={LAB_PAGE_SIZE}
-                                        totalItems={orders.length}
+                                        totalItems={filteredOrders.length}
                                         onPageChange={setOrdersPage}
                                     />
                                 </div>
@@ -268,46 +325,48 @@ const LabHub = () => {
                         </div>
                     ) : (
                         /* Vendors Table */
-                        <div className="space-y-4">
+                        <div className="flex flex-col flex-1 min-h-0">
                             {vendors.length > 0 ? (
-                                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                                    <table className="min-w-full divide-y divide-gray-200">
-                                        <thead className="bg-gray-50">
+                                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col flex-1 min-h-0">
+                                    <div className="flex-1 overflow-x-auto overflow-y-auto">
+                                    <table className="w-full divide-y divide-gray-200">
+                                        <thead className="bg-[#f8fafc] sticky top-0 z-10">
                                             <tr>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lab Partner</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
-                                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Lab Partner</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Contact</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Address</th>
+                                                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="bg-white divide-y divide-gray-200">
-                                            {vendors.slice((vendorsPage - 1) * LAB_PAGE_SIZE, vendorsPage * LAB_PAGE_SIZE).map(vendor => (
-                                                <tr key={vendor.id} className="hover:bg-gray-50 transition-colors">
-                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <tbody className="bg-white divide-y divide-gray-100">
+                                            {filteredLabVendors.slice((vendorsPage - 1) * LAB_PAGE_SIZE, vendorsPage * LAB_PAGE_SIZE).map(vendor => (
+                                                <tr key={vendor.id} className="hover:bg-indigo-50/30 transition-colors duration-150 group">
+                                                    <td className="px-6 py-5 whitespace-nowrap">
                                                         <div className="flex items-center gap-3">
-                                                            <div className="w-10 h-10 bg-[#2a276e]/5 rounded-lg flex items-center justify-center text-[#2a276e]">
-                                                                <Building2 size={18} />
+                                                            <div className="w-9 h-9 bg-[#2a276e]/10 rounded-full flex items-center justify-center text-[#2a276e] flex-shrink-0">
+                                                                <Building2 size={16} />
                                                             </div>
                                                             <div>
-                                                                <p className="text-sm font-medium text-gray-900">{vendor.name}</p>
-                                                                <p className="text-xs text-gray-500">Lab Partner</p>
+                                                                <p className="text-sm font-semibold text-gray-900">{vendor.name}</p>
+                                                                <p className="text-xs text-gray-400">Lab Partner</p>
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                        {vendor.phone || '-'}
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                                        {vendor.phone || '—'}
                                                     </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                        {vendor.email || '-'}
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                        {vendor.email || '—'}
                                                     </td>
                                                     <td className="px-6 py-4 text-sm text-gray-500">
                                                         <div className="max-w-xs truncate">
-                                                            {vendor.address || '-'}
+                                                            {vendor.address || '—'}
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                                                        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800 border border-green-200">
+                                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-green-50 text-green-700 border-green-200">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
                                                             Active
                                                         </span>
                                                     </td>
@@ -315,10 +374,11 @@ const LabHub = () => {
                                             ))}
                                         </tbody>
                                     </table>
+                                    </div>
                                     <Pagination
                                         page={vendorsPage}
                                         pageSize={LAB_PAGE_SIZE}
-                                        totalItems={vendors.length}
+                                        totalItems={filteredLabVendors.length}
                                         onPageChange={setVendorsPage}
                                     />
                                 </div>

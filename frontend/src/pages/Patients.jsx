@@ -6,6 +6,7 @@ import { FaEye, FaEdit, FaTrash, FaChevronLeft, FaChevronRight } from 'react-ico
 import { Search, Plus, User, Folder, X, Edit2, Trash2, UploadCloud, UserPlus } from "lucide-react";
 import GearLoader from "../components/GearLoader";
 import Pagination from "../components/Pagination";
+import FilterDropdown from "../components/FilterDropdown";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
 
@@ -26,6 +27,10 @@ const Patients = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
+
+  // Filter states
+  const [filterTreatment, setFilterTreatment] = useState('');
+  const [filterGender, setFilterGender] = useState('');
 
   // Edit/Create states
   const [editDrawerOpen, setEditDrawerOpen] = useState(false);
@@ -127,8 +132,24 @@ const Patients = () => {
     });
   }, [patients, debouncedSearch]);
 
-  const totalPages = Math.ceil(filteredData.length / PATIENTS_PER_PAGE) || 1;
-  const paginatedData = filteredData.slice(
+  // Unique treatment types for the filter dropdown
+  const uniqueTreatmentTypes = useMemo(() => {
+    const types = new Set();
+    patients.forEach(p => { if (p.treatment_type) types.add(p.treatment_type); });
+    return [...types].sort();
+  }, [patients]);
+
+  // Apply filters on top of search
+  const fullyFilteredData = useMemo(() => {
+    return filteredData.filter(p => {
+      if (filterTreatment && p.treatment_type !== filterTreatment) return false;
+      if (filterGender && p.gender?.toLowerCase() !== filterGender.toLowerCase()) return false;
+      return true;
+    });
+  }, [filteredData, filterTreatment, filterGender]);
+
+  const totalPages = Math.ceil(fullyFilteredData.length / PATIENTS_PER_PAGE) || 1;
+  const paginatedData = fullyFilteredData.slice(
     (page - 1) * PATIENTS_PER_PAGE,
     page * PATIENTS_PER_PAGE
   );
@@ -261,6 +282,49 @@ const Patients = () => {
     });
   };
 
+  const getRelativeTime = (dateString) => {
+    if (!dateString) return { relative: 'Never', exact: '' };
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    let relative;
+    if (diffMins < 1) relative = 'Just now';
+    else if (diffMins < 60) relative = `${diffMins}m ago`;
+    else if (diffHours < 24) relative = `${diffHours}h ago`;
+    else if (diffDays === 1) relative = 'Yesterday';
+    else if (diffDays < 7) relative = `${diffDays} days ago`;
+    else if (diffDays < 30) relative = `${Math.floor(diffDays / 7)}w ago`;
+    else if (diffDays < 365) relative = `${Math.floor(diffDays / 30)}mo ago`;
+    else relative = `${Math.floor(diffDays / 365)}y ago`;
+    return { relative, exact: formatDate(dateString) };
+  };
+
+  const getTreatmentBadge = (type) => {
+    if (!type) return { bg: 'bg-gray-100 text-gray-700 border-gray-200', dot: 'bg-gray-400' };
+    const t = type.toLowerCase();
+    if (t.includes('crown') || t.includes('bridge')) return { bg: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' };
+    if (t.includes('root') || t.includes('rct')) return { bg: 'bg-red-50 text-red-700 border-red-200', dot: 'bg-red-500' };
+    if (t.includes('cleaning') || t.includes('scaling')) return { bg: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-500' };
+    if (t.includes('implant')) return { bg: 'bg-purple-50 text-purple-700 border-purple-200', dot: 'bg-purple-500' };
+    if (t.includes('extraction')) return { bg: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500' };
+    if (t.includes('filling') || t.includes('restoration')) return { bg: 'bg-teal-50 text-teal-700 border-teal-200', dot: 'bg-teal-500' };
+    if (t.includes('ortho') || t.includes('braces')) return { bg: 'bg-indigo-50 text-indigo-700 border-indigo-200', dot: 'bg-indigo-500' };
+    if (t.includes('consultation') || t.includes('general')) return { bg: 'bg-gray-100 text-gray-700 border-gray-200', dot: 'bg-gray-400' };
+    if (t.includes('denture')) return { bg: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' };
+    return { bg: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-500' };
+  };
+
+  const getGenderStyle = (gender) => {
+    if (!gender) return 'bg-gray-100 text-gray-600';
+    const g = gender.toLowerCase();
+    if (g === 'male') return 'bg-blue-50 text-blue-600';
+    if (g === 'female') return 'bg-pink-50 text-pink-600';
+    return 'bg-gray-100 text-gray-600';
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-50/30">
       
@@ -290,19 +354,37 @@ const Patients = () => {
         </nav>
       </div>
 
-      {/* Search & Actions Area */}
+      {/* Search, Filters & Actions Area */}
       <div className="px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="w-full md:max-w-md relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="h-4 w-4 text-gray-400" />
+        <div className="flex items-center gap-3 w-full md:w-auto flex-1">
+          <div className="w-full md:max-w-sm relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-gray-400" />
+            </div>
+            <input
+              type="text"
+              placeholder={activeTab === 'list' ? "Search for patients..." : "Search patient files..."}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] transition-all"
+            />
           </div>
-          <input
-            type="text"
-            placeholder={activeTab === 'list' ? "Search for patients..." : "Search patient files..."}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] transition-all"
-          />
+          {activeTab === 'list' && (
+            <>
+              <FilterDropdown
+                label="Treatment"
+                value={filterTreatment}
+                onChange={(v) => { setFilterTreatment(v); setPage(1); }}
+                options={uniqueTreatmentTypes}
+              />
+              <FilterDropdown
+                label="Gender"
+                value={filterGender}
+                onChange={(v) => { setFilterGender(v); setPage(1); }}
+                options={['Male', 'Female', 'Other']}
+              />
+            </>
+          )}
         </div>
         
         <div className="flex items-center gap-3">
@@ -340,66 +422,113 @@ const Patients = () => {
             </div>
           ) : activeTab === 'list' ? (
             <div className="flex-1 overflow-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+              <table className="w-full divide-y divide-gray-200">
                 <thead className="bg-[#f8fafc] sticky top-0 z-10">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Patient ID</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Village/City</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Gender/Age</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Treatment Type</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Last Visit</th>
-                    <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Patient ID</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Patient Details</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Contact</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Gender / Age</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Treatment</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Last Visit</th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white divide-y divide-gray-100">
                   {paginatedData.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
-                        No patients found.
+                        <div>
+                          <svg className="mx-auto h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <p className="mt-2 text-sm font-medium text-gray-900">No patients found</p>
+                          <p className="text-xs text-gray-400 mt-1">Try adjusting your search or add a new patient.</p>
+                        </div>
                       </td>
                     </tr>
                   ) : (
-                    paginatedData.map((patient) => (
-                      <tr
-                        key={patient.id}
-                        className="hover:bg-indigo-50/40 cursor-pointer transition-colors"
-                        onClick={() => navigate(`/patient-profile/${patient.id}`)}
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-600">{patient.display_id || '---'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-[#2a276e]/10 text-[#2a276e] flex items-center justify-center flex-shrink-0 font-semibold text-sm">
-                              {(patient.name || '?').charAt(0).toUpperCase()}
+                    paginatedData.map((patient) => {
+                      const treatmentStyle = getTreatmentBadge(patient.treatment_type);
+                      const lastVisit = getRelativeTime(patient.last_visit);
+                      return (
+                        <tr
+                          key={patient.id}
+                          className="hover:bg-indigo-50/30 cursor-pointer transition-colors duration-150 group"
+                          onClick={() => navigate(`/patient-profile/${patient.id}`)}
+                        >
+                          {/* Patient ID */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-sm font-semibold text-[#2a276e]">{patient.display_id || '---'}</span>
+                          </td>
+
+                          {/* Patient Details — Name + Village */}
+                          <td className="px-6 py-5 whitespace-nowrap">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-full bg-[#2a276e]/10 text-[#2a276e] flex items-center justify-center flex-shrink-0 font-semibold text-sm">
+                                {(patient.name || '?').charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <div className="text-sm font-semibold text-gray-900">{patient.name}</div>
+                                <div className="text-xs text-gray-400">{patient.village || 'No location'}</div>
+                              </div>
                             </div>
-                            <span className="text-sm font-medium text-gray-900">{patient.name}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{patient.phone}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{patient.village}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{patient.gender}/{patient.age}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{patient.treatment_type}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDate(patient.last_visit)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleEditPatient(patient); }}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors inline-flex"
-                            title="Edit"
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleDeletePatient(patient); }}
-                            disabled={deleteLoading === patient.id}
-                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors inline-flex disabled:opacity-30"
-                            title="Delete"
-                          >
-                            {deleteLoading === patient.id ? <GearLoader size="w-4 h-4" /> : <Trash2 size={16} />}
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                          </td>
+
+                          {/* Contact — Phone */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-sm text-gray-700">{patient.phone || '—'}</span>
+                          </td>
+
+                          {/* Gender / Age */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getGenderStyle(patient.gender)}`}>
+                                {patient.gender || '—'}
+                              </span>
+                              <span className="text-sm text-gray-500">{patient.age ? `${patient.age}y` : ''}</span>
+                            </div>
+                          </td>
+
+                          {/* Treatment Type — Pill Badge */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${treatmentStyle.bg}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${treatmentStyle.dot}`}></span>
+                              {patient.treatment_type || 'General'}
+                            </span>
+                          </td>
+
+                          {/* Last Visit — Relative + Exact */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">{lastVisit.relative}</div>
+                              <div className="text-xs text-gray-400">{lastVisit.exact}</div>
+                            </div>
+                          </td>
+
+                          {/* Actions */}
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleEditPatient(patient); }}
+                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors inline-flex"
+                                title="Edit"
+                              >
+                                <Edit2 size={15} />
+                              </button>
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); handleDeletePatient(patient); }}
+                                disabled={deleteLoading === patient.id}
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors inline-flex disabled:opacity-30"
+                                title="Delete"
+                              >
+                                {deleteLoading === patient.id ? <GearLoader size="w-4 h-4" /> : <Trash2 size={15} />}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -437,7 +566,7 @@ const Patients = () => {
           <Pagination
             page={page}
             pageSize={PATIENTS_PER_PAGE}
-            totalItems={filteredData.length}
+            totalItems={fullyFilteredData.length}
             onPageChange={setPage}
           />
         </div>

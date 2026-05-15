@@ -1,13 +1,17 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import { useHeader } from "../contexts/HeaderContext";
 import { toast } from "react-toastify";
-import { Package, Building2 } from "lucide-react";
+import { Package, Building2, Edit2, Trash2, Search } from "lucide-react";
 import InventoryAlerts from "../components/vendors/InventoryAlerts";
 import InventoryTable from "../components/vendors/InventoryTable";
 import VendorDrawer from "../components/vendors/VendorDrawer";
 
 import FeatureLock from "../components/FeatureLock";
+import Pagination from "../components/Pagination";
+import FilterDropdown from "../components/FilterDropdown";
+
+const VENDORS_PAGE_SIZE = 10;
 
 const Vendors = () => {
     const { setTitle } = useHeader();
@@ -22,6 +26,12 @@ const Vendors = () => {
     const [showAddInventoryModal, setShowAddInventoryModal] = useState(false);
     const [editingVendor, setEditingVendor] = useState(null);
     const [editingInventoryItem, setEditingInventoryItem] = useState(null);
+    const [vendorsPage, setVendorsPage] = useState(1);
+
+    // Search & filter states
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterCategory, setFilterCategory] = useState('');
+    const [filterStockStatus, setFilterStockStatus] = useState('');
     const [showEditInventoryModal, setShowEditInventoryModal] = useState(false);
     const [editInventoryFormData, setEditInventoryFormData] = useState({
         name: "",
@@ -76,6 +86,44 @@ const Vendors = () => {
             setLoading(false);
         }
     };
+
+    // Filtered data memos
+    const filteredInventory = useMemo(() => {
+        return inventory.filter(item => {
+            const term = searchTerm.toLowerCase();
+            if (term && !item.name?.toLowerCase().includes(term) && !item.vendor_name?.toLowerCase().includes(term) && !item.category?.toLowerCase().includes(term)) return false;
+            if (filterCategory && item.category !== filterCategory) return false;
+            if (filterStockStatus) {
+                const isLow = item.quantity <= item.min_stock_level;
+                const isGettingLow = item.quantity <= item.min_stock_level * 1.5 && !isLow;
+                if (filterStockStatus === 'Low Stock' && !isLow) return false;
+                if (filterStockStatus === 'Getting Low' && !isGettingLow) return false;
+                if (filterStockStatus === 'Healthy' && (isLow || isGettingLow)) return false;
+            }
+            return true;
+        });
+    }, [inventory, searchTerm, filterCategory, filterStockStatus]);
+
+    const filteredVendors = useMemo(() => {
+        return vendors.filter(v => {
+            const term = searchTerm.toLowerCase();
+            if (term && !v.name?.toLowerCase().includes(term) && !v.contact_name?.toLowerCase().includes(term) && !v.email?.toLowerCase().includes(term) && !v.phone?.includes(term)) return false;
+            if (filterCategory && v.category !== filterCategory) return false;
+            return true;
+        });
+    }, [vendors, searchTerm, filterCategory]);
+
+    const uniqueInventoryCategories = useMemo(() => {
+        const cats = new Set();
+        inventory.forEach(i => { if (i.category) cats.add(i.category); });
+        return [...cats].sort();
+    }, [inventory]);
+
+    const uniqueVendorCategories = useMemo(() => {
+        const cats = new Set();
+        vendors.forEach(v => { if (v.category) cats.add(v.category); });
+        return [...cats].sort();
+    }, [vendors]);
 
     const handleVendorSubmit = async (e) => {
         e.preventDefault();
@@ -287,6 +335,38 @@ const Vendors = () => {
                     </div>
                 </div>
 
+                {/* Search & Filters toolbar */}
+                <div className="flex flex-col md:flex-row items-center justify-between gap-4 pb-4">
+                    <div className="flex items-center gap-3 w-full md:w-auto flex-1">
+                        <div className="w-full md:max-w-sm relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <Search className="h-4 w-4 text-gray-400" />
+                            </div>
+                            <input
+                                type="text"
+                                placeholder={activeTab === 'inventory' ? 'Search inventory...' : 'Search vendors...'}
+                                value={searchTerm}
+                                onChange={(e) => { setSearchTerm(e.target.value); setVendorsPage(1); }}
+                                className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] transition-all"
+                            />
+                        </div>
+                        <FilterDropdown
+                            label="Category"
+                            value={filterCategory}
+                            onChange={(v) => { setFilterCategory(v); setVendorsPage(1); }}
+                            options={activeTab === 'inventory' ? uniqueInventoryCategories : uniqueVendorCategories}
+                        />
+                        {activeTab === 'inventory' && (
+                            <FilterDropdown
+                                label="Status"
+                                value={filterStockStatus}
+                                onChange={(v) => { setFilterStockStatus(v); setVendorsPage(1); }}
+                                options={['Healthy', 'Getting Low', 'Low Stock']}
+                            />
+                        )}
+                    </div>
+                </div>
+
                 {loading ? (
                     <div className="flex justify-center items-center h-64">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2a276e]"></div>
@@ -298,7 +378,7 @@ const Vendors = () => {
                         <div className="flex-1 min-w-0 flex flex-col h-full">
                             {activeTab === 'inventory' ? (
                                 <InventoryTable 
-                                    inventory={inventory} 
+                                    inventory={filteredInventory} 
                                     onUpdateItem={handleUpdateInventoryItem}
                                     onOpenAdd={() => setShowAddInventoryModal(true)}
                                     onEditItem={handleEditInventoryItem}
@@ -306,73 +386,83 @@ const Vendors = () => {
                                 />
                             ) : (
                                 /* Vendors Table */
-                                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden h-full overflow-y-auto">
-                                    <table className="min-w-full divide-y divide-gray-200">
-                                        <thead className="bg-gray-50 sticky top-0 z-10">
+                                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden h-full flex flex-col">
+                                    <div className="flex-1 overflow-x-auto overflow-y-auto">
+                                    <table className="w-full divide-y divide-gray-200">
+                                        <thead className="bg-[#f8fafc] sticky top-0 z-10">
                                             <tr>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vendor Name</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
-                                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Vendor Details</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Category</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Contact</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
+                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</th>
+                                                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="bg-white divide-y divide-gray-200">
-                                            {vendors.map(vendor => (
-                                                <tr key={vendor.id} className="hover:bg-gray-50 transition-colors">
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="w-10 h-10 bg-[#2a276e]/5 rounded-lg flex items-center justify-center text-[#2a276e]">
-                                                                <Building2 size={18} />
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-sm font-medium text-gray-900">{vendor.name}</p>
-                                                                <p className="text-xs text-gray-500">Vendor</p>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-                                                            {vendor.category || 'General'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{vendor.contact_name || '-'}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{vendor.email || '-'}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{vendor.phone || '-'}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                                                        <div className="flex items-center justify-end gap-2">
-                                                            <button 
-                                                                onClick={() => handleEditVendor(vendor)}
-                                                                className="px-3 py-1.5 text-xs font-semibold text-[#2a276e] bg-[#2a276e]/5 rounded-lg hover:bg-[#2a276e]/10 transition-colors"
-                                                            >
-                                                                Edit
-                                                            </button>
-                                                            <button 
-                                                                onClick={() => handleDeleteVendor(vendor.id)}
-                                                                className="px-3 py-1.5 text-xs font-semibold text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
-                                                            >
-                                                                Delete
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                            {vendors.length === 0 && (
+                                        <tbody className="bg-white divide-y divide-gray-100">
+                                            {vendors.length === 0 ? (
                                                 <tr>
                                                     <td colSpan="6" className="px-6 py-12">
                                                         <div className="flex flex-col items-center justify-center text-center">
                                                             <div className="w-16 h-16 bg-gray-50 rounded-lg flex items-center justify-center text-gray-300 mb-4">
                                                                 <Building2 size={32} />
                                                             </div>
-                                                            <p className="text-sm font-bold text-gray-900">No Vendors</p>
-                                                            <p className="text-sm text-gray-500 mt-1">Add vendors to manage your supply partners</p>
+                                                            <p className="text-sm font-medium text-gray-900">No Vendors</p>
+                                                            <p className="text-xs text-gray-400 mt-1">Add vendors to manage your supply partners</p>
                                                         </div>
                                                     </td>
                                                 </tr>
-                                            )}
+                                            ) : filteredVendors.slice((vendorsPage - 1) * VENDORS_PAGE_SIZE, vendorsPage * VENDORS_PAGE_SIZE).map(vendor => (
+                                                <tr key={vendor.id} className="hover:bg-indigo-50/30 transition-colors duration-150 group">
+                                                    <td className="px-6 py-5 whitespace-nowrap">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-9 h-9 bg-[#2a276e]/10 rounded-full flex items-center justify-center text-[#2a276e] flex-shrink-0">
+                                                                <Building2 size={16} />
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-sm font-semibold text-gray-900">{vendor.name}</p>
+                                                                <p className="text-xs text-gray-400">{vendor.contact_name || 'No contact person'}</p>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-blue-50 text-blue-700 border-blue-200">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                                            {vendor.category || 'General'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{vendor.contact_name || '—'}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{vendor.phone || '—'}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{vendor.email || '—'}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                                                        <div className="flex items-center justify-end gap-1">
+                                                            <button 
+                                                                onClick={() => handleEditVendor(vendor)}
+                                                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors inline-flex"
+                                                                title="Edit"
+                                                            >
+                                                                <Edit2 size={15} />
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleDeleteVendor(vendor.id)}
+                                                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors inline-flex"
+                                                                title="Delete"
+                                                            >
+                                                                <Trash2 size={15} />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}                                            
                                         </tbody>
                                     </table>
+                                    </div>
+                                    <Pagination
+                                        page={vendorsPage}
+                                        pageSize={VENDORS_PAGE_SIZE}
+                                        totalItems={filteredVendors.length}
+                                        onPageChange={setVendorsPage}
+                                    />
                                 </div>
                             )}
                         </div>

@@ -1,17 +1,10 @@
 import React from "react";
+import { generateAvatarUrl } from "../../utils/avatar";
 
 const EmployeeDetailsPanel = ({ employee, onClose }) => {
   if (!employee) return null;
 
-  const defaultAvatar = (name) => {
-    const initials = name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=E5E7EB&color=374151&size=120&rounded=true&bold=true`;
-  };
+
 
   const calculateStatistics = () => {
     if (!employee.attendance) return { onTime: 0, late: 0, absent: 0, total: 0 };
@@ -57,7 +50,7 @@ const EmployeeDetailsPanel = ({ employee, onClose }) => {
           {/* Employee Profile */}
           <div className="flex flex-col items-center mb-6 pb-6 border-b border-gray-200">
             <img
-              src={employee.avatar || defaultAvatar(employee.name)}
+              src={employee.avatar || generateAvatarUrl(employee.email || employee.name, 120)}
               alt={employee.name}
               className="w-24 h-24 rounded-full object-cover mb-4"
             />

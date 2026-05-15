@@ -5,6 +5,7 @@ import { useHeader } from "../contexts/HeaderContext";
 import { Gem, Crown, Search, X, Clock } from "lucide-react";
 import { FaSync } from "react-icons/fa";
 import { api } from "../utils/api";
+import { generateAvatarUrl } from "../utils/avatar";
 
 const Header = () => {
   const { user, signOut, switchClinic } = useAuth();
@@ -90,18 +91,23 @@ const Header = () => {
   };
 
   // Improved user info extraction
-  const userName =
+  const userRole = user?.role || "staff";
+  const userNameRaw =
     user?.user_metadata?.full_name ||
     user?.user_metadata?.name ||
     user?.name ||
     user?.email?.split("@")[0] ||
     "User";
 
+  // Add professional title based on role
+  const titlePrefix = (userRole === 'clinic_owner' || userRole === 'doctor') ? 'Dr. ' : '';
+  const userName = `${titlePrefix}${userNameRaw}`;
+
   const userEmail = user?.email || "";
   const userAvatar =
     user?.user_metadata?.avatar_url ||
     user?.user_metadata?.picture ||
-    "https://randomuser.me/api/portraits/men/32.jpg";
+    generateAvatarUrl(userEmail || userName);
 
   // Get role info
   const getRoleInfo = (role) => {
@@ -117,7 +123,6 @@ const Header = () => {
     }
   };
 
-  const userRole = user?.role || "staff";
   const roleInfo = getRoleInfo(userRole);
 
   const handleSignOut = async () => {

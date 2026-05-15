@@ -1,6 +1,7 @@
 import React from "react";
 import AttendanceCell from "./AttendanceCell";
 import { format } from "date-fns";
+import { generateAvatarUrl } from "../../utils/avatar";
 
 const AttendanceGrid = ({ employees, weekDays, onEmployeeProfileClick, onCellClick }) => {
   const getDayName = (date) => {
@@ -38,15 +39,7 @@ const AttendanceGrid = ({ employees, weekDays, onEmployeeProfileClick, onCellCli
     return holidays[format(date, 'yyyy-MM-dd')] || null;
   };
 
-  const defaultAvatar = (name) => {
-    const initials = name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=E5E7EB&color=374151&size=40&rounded=true&bold=true`;
-  };
+
 
   return (
     <div className="p-6">
@@ -80,8 +73,12 @@ const AttendanceGrid = ({ employees, weekDays, onEmployeeProfileClick, onCellCli
                 className="px-6 py-4 border-r border-gray-100 sticky left-0 bg-white hover:bg-gray-50 z-10 cursor-pointer"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-full bg-[#E0F2F2] flex items-center justify-center text-[#2D9596] font-semibold text-sm">
-                    {employee.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                  <div className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0 bg-gray-100">
+                    <img
+                      src={employee.avatar || generateAvatarUrl(employee.email || employee.name, 44)}
+                      alt={employee.name}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                   <div>
                     <div className="font-semibold text-gray-900 text-sm">{employee.name}</div>
