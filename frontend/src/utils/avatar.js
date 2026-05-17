@@ -48,10 +48,10 @@ export const generatePatientPersona = (patient, size = 80) => {
 
   // Gender specific
   if (isFemale) {
-    options += "&hair=bob,bun,curly,curlyB,curlyHighTop,extraLong,long,pigtails,straightAndStrand";
+    options += "&hair=bobCut,curlyBun,straightBun,long,extraLong,pigtails,curly,bobBangs";
     options += "&facialHairProbability=0";
   } else {
-    options += "&hair=bald,balding,buzzcut,shortCombover,shortCurly,shortFrizzle,shortSlicked,shortVolumed";
+    options += "&hair=bald,balding,buzzcut,shortCombover,shortComboverChops,fade,mohawk,sideShave,bunUndercut";
     if (age > 15) {
       options += "&facialHairProbability=40";
     } else {
@@ -67,7 +67,7 @@ export const generatePatientPersona = (patient, size = 80) => {
     // Older patients
     if (!isFemale) {
        // Higher chance of balding
-       options += "&hair=balding,bald,shortSlicked";
+       options += "&hair=balding,bald,shortCombover";
     }
     // Grey/White hair colors
     options += "&hairColor=e8e1e1,c8c8c8,a5a5a5,d6b370"; 
