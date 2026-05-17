@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, FlatList, RefreshControl } from 'react-native';
 import { PatientCard } from './PatientCard';
 import { colors } from '../../../../shared/constants/colors';
 import { AppSkeleton } from '../../../../shared/components/Skeleton';
+import { EmptyState } from '../../../../shared/components/EmptyState';
+import { Users } from 'lucide-react-native';
 
 interface Patient {
   id: string;
@@ -37,8 +39,12 @@ export const PatientsList: React.FC<PatientsListProps> = ({
 }) => {
   if (!loading && patients.length === 0) {
     return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyText}>{emptyMessage}</Text>
+      <View style={{ paddingTop: 60 }}>
+        <EmptyState 
+          icon={Users}
+          title={emptyMessage}
+          description="Try a different search or filter criteria."
+        />
       </View>
     );
   }

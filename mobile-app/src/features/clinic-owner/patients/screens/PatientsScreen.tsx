@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, Linking, StatusBar } from 'react-native';
 import { showAlert } from '../../../../shared/components/alertService';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Plus, Users } from 'lucide-react-native';
 import { patientsApiService, Patient } from '../../../../services/api/patients.api';
 import { useAuth } from '../../../../app/AuthContext';
@@ -30,6 +30,7 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showAddPatient, setShowAddPatient] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const { backendUser } = useAuth();
 
@@ -173,7 +174,7 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
 
       {/* Floating Action Button */}
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { bottom: Math.max(insets.bottom + 20, 20) }]}
         onPress={() => setShowAddPatient(true)}
       >
         <Plus color="#FFFFFF" size={24} />

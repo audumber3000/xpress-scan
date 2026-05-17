@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -44,7 +44,8 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
 }) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const slideAnim = new Animated.Value(300);
+  const slideAnim = useRef(new Animated.Value(300)).current;
+  const scrollViewRef = useRef<ScrollView>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -144,6 +145,7 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
 
   const handleSubmit = async () => {
     if (!validateForm()) {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
 
@@ -224,6 +226,9 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
   };
 
   const updateFormData = (field: string, value: string) => {
+    if (field === 'age') {
+      value = value.replace(/[^0-9]/g, '');
+    }
     setFormData(prev => ({ ...prev, [field]: value }));
     // Clear error when user starts typing
     if (errors[field]) {
@@ -253,7 +258,11 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
         </View>
 
         {/* Form Content */}
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          ref={scrollViewRef}
+          style={styles.content} 
+          showsVerticalScrollIndicator={false}
+        >
           {loading ? (
             <View style={styles.loadingContainer}>
               <GearLoader text="Registering patient..." />

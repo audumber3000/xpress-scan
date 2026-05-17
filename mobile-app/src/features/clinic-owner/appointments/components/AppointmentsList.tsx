@@ -2,11 +2,16 @@ import React from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { AppointmentCard } from './AppointmentCard';
 import { colors } from '../../../../shared/constants/colors';
+import { EmptyState } from '../../../../shared/components/EmptyState';
+import { Calendar } from 'lucide-react-native';
 
 interface AppointmentsListProps {
   appointments: any[];
   selectedDate: Date;
   onAppointmentPress: (appointment: any) => void;
+  ListHeaderComponent?: React.ReactElement;
+  refreshControl?: React.ReactElement;
+  loading?: boolean;
 }
 
 const formatDate = (date: Date) => {
@@ -16,40 +21,54 @@ const formatDate = (date: Date) => {
 export const AppointmentsList: React.FC<AppointmentsListProps> = ({ 
   appointments, 
   selectedDate,
-  onAppointmentPress 
+  onAppointmentPress,
+  ListHeaderComponent,
+  refreshControl,
+  loading = false,
 }) => {
   return (
-    <View style={styles.appointmentsSection}>
-      <View style={styles.appointmentsHeader}>
-        <Text style={styles.appointmentsDate}>
-          {(formatDate(selectedDate) || '').toUpperCase()}
-        </Text>
-        <Text style={styles.appointmentsCount}>
-          {appointments.length} Appointments
-        </Text>
-      </View>
-
       <FlatList
         data={appointments}
         keyExtractor={(item) => item.id.toString()}
+        ListHeaderComponent={
+          <>
+            {ListHeaderComponent}
+            <View style={styles.appointmentsHeader}>
+              <Text style={styles.appointmentsDate}>
+                {(formatDate(selectedDate) || '').toUpperCase()}
+              </Text>
+              <Text style={styles.appointmentsCount}>
+                {appointments.length} Appointments
+              </Text>
+            </View>
+          </>
+        }
         renderItem={({ item }) => (
           <AppointmentCard
             appointment={item}
             onPress={() => onAppointmentPress(item)}
           />
         )}
-        scrollEnabled={false} // Nested inside ScrollView in parent
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.listContent}
+        refreshControl={refreshControl}
         ListEmptyComponent={
-          <Text style={styles.noAppointments}>No more appointments today</Text>
+          loading ? null : (
+            <EmptyState 
+              icon={Calendar}
+              title="No Appointments"
+              description="You have no appointments scheduled for this day."
+            />
+          )
         }
       />
-    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  appointmentsSection: {
+  listContent: {
     paddingHorizontal: 20,
+    paddingBottom: 100,
   },
   appointmentsHeader: {
     flexDirection: 'row',

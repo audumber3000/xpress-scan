@@ -266,6 +266,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               keyboardType={email.includes('@') ? 'email-address' : 'default'}
               autoCapitalize="none"
               autoCorrect={false}
+              autoFocus={true}
               onSubmitEditing={() => passwordInputRef.current?.focus()}
             />
           </View>
@@ -283,7 +284,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               value={password}
               onChangeText={setPassword}
             />
-            <TouchableOpacity onPress={() => setIsPasswordHidden(!isPasswordHidden)}>
+            <TouchableOpacity 
+              onPress={() => setIsPasswordHidden(!isPasswordHidden)}
+              hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+            >
               {isPasswordHidden ? <EyeOff size={18} color={colors.gray400} /> : <Eye size={18} color={colors.gray400} />}
             </TouchableOpacity>
           </View>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, StatusBar } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, Calendar as CalendarIcon, Plus, MapPin } from 'lucide-react-native';
 import { appointmentsApiService, Appointment } from '../../../../services/api/appointments.api';
 import { adminApiService, ClinicInfo } from '../../../../services/api/admin.api';
@@ -28,6 +28,7 @@ export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigati
   const [refreshing, setRefreshing] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [showClinicSwitcher, setShowClinicSwitcher] = useState(false);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     // Load persisted view mode
@@ -189,84 +190,82 @@ export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigati
         }
       />
 
-      <ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
+      <AppointmentsList
+        appointments={filteredAppointments}
+        selectedDate={selectedDate}
+        onAppointmentPress={handleAppointmentPress}
+        loading={loading}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
-      >
-        {/* View Mode Toggle */}
-        <View style={styles.toggleContainer}>
-          <TouchableOpacity
-            style={[styles.toggleButton, viewMode === 'Week' && styles.toggleButtonActive]}
-            onPress={() => toggleViewMode('Week')}
-          >
-            <Text style={[styles.toggleText, viewMode === 'Week' && styles.toggleTextActive]}>
-              Week
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.toggleButton, viewMode === 'Month' && styles.toggleButtonActive]}
-            onPress={() => toggleViewMode('Month')}
-          >
-            <Text style={[styles.toggleText, viewMode === 'Month' && styles.toggleTextActive]}>
-              Month
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {viewMode === 'Month' ? (
-          loading ? (
-            <View style={{ paddingHorizontal: 20 }}>
-              <AppSkeleton show={true} width="100%" height={320} radius={16} />
+        ListHeaderComponent={
+          <>
+            {/* View Mode Toggle */}
+            <View style={styles.toggleContainer}>
+              <TouchableOpacity
+                style={[styles.toggleButton, viewMode === 'Week' && styles.toggleButtonActive]}
+                onPress={() => toggleViewMode('Week')}
+              >
+                <Text style={[styles.toggleText, viewMode === 'Week' && styles.toggleTextActive]}>
+                  Week
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.toggleButton, viewMode === 'Month' && styles.toggleButtonActive]}
+                onPress={() => toggleViewMode('Month')}
+              >
+                <Text style={[styles.toggleText, viewMode === 'Month' && styles.toggleTextActive]}>
+                  Month
+                </Text>
+              </TouchableOpacity>
             </View>
-          ) : (
-            <>
-              <MonthNavigationHeader
-                currentMonth={currentMonth}
-                onPrevMonth={() => navigateMonth('prev')}
-                onNextMonth={() => navigateMonth('next')}
-              />
-              <MonthCalendarView
-                calendarDays={getMonthCalendar()}
-                onDateSelect={setSelectedDate}
-              />
-            </>
-          )
-        ) : (
-          loading ? (
-            <View style={{ paddingHorizontal: 20 }}>
-              <AppSkeleton show={true} width="100%" height={100} radius={16} />
-            </View>
-          ) : (
-            <WeekDaysView
-              weekDays={getWeekDays()}
-              onDateSelect={setSelectedDate}
-            />
-          )
-        )}
 
-        {loading ? (
-          <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
-            <AppSkeleton show={true} width="100%" height={80} radius={16} />
-            <View style={{ height: 12 }} />
-            <AppSkeleton show={true} width="100%" height={80} radius={16} />
-          </View>
-        ) : (
-          <View style={styles.listWrapper}>
-            <AppointmentsList
-              appointments={filteredAppointments}
-              selectedDate={selectedDate}
-              onAppointmentPress={handleAppointmentPress}
-            />
-          </View>
-        )}
-      </ScrollView>
+            {viewMode === 'Month' ? (
+              loading ? (
+                <View style={{ paddingHorizontal: 0 }}>
+                  <AppSkeleton show={true} width="100%" height={320} radius={16} />
+                </View>
+              ) : (
+                <>
+                  <MonthNavigationHeader
+                    currentMonth={currentMonth}
+                    onPrevMonth={() => navigateMonth('prev')}
+                    onNextMonth={() => navigateMonth('next')}
+                  />
+                  <MonthCalendarView
+                    calendarDays={getMonthCalendar()}
+                    onDateSelect={setSelectedDate}
+                  />
+                </>
+              )
+            ) : (
+              loading ? (
+                <View style={{ paddingHorizontal: 0 }}>
+                  <AppSkeleton show={true} width="100%" height={100} radius={16} />
+                </View>
+              ) : (
+                <WeekDaysView
+                  weekDays={getWeekDays()}
+                  onDateSelect={setSelectedDate}
+                />
+              )
+            )}
+
+            {loading && (
+              <View style={{ marginTop: 20 }}>
+                <AppSkeleton show={true} width="100%" height={80} radius={16} />
+                <View style={{ height: 12 }} />
+                <AppSkeleton show={true} width="100%" height={80} radius={16} />
+              </View>
+            )}
+            <View style={{ height: 16 }} />
+          </>
+        }
+      />
       
       {/* Floating Action Button */}
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { bottom: Math.max(insets.bottom + 20, 20) }]}
         onPress={() => navigation.navigate('AddAppointment')}
       >
         <Plus color="#FFFFFF" size={24} />
@@ -329,7 +328,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#F3F4F6',
     borderRadius: 12,
-    marginHorizontal: 20,
+    marginHorizontal: 0,
     marginVertical: 16,
     padding: 4,
   },

@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, FlatList } from 'react-native';
 import { FeatureLock } from '../../../../shared/components/FeatureLock';
 import { showAlert } from '../../../../shared/components/alertService';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Search, Menu, Plus, UserCircle2, Mail, Shield, UserCheck } from 'lucide-react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChevronLeft, Search, Menu, Plus, UserCircle2, Mail, Shield, UserCheck, Users } from 'lucide-react-native';
 import { StaffMemberCard } from '../components/StaffMemberCard';
 import { adminColors } from '../../../../shared/constants/adminColors';
 import { adminApiService, StaffMember } from '../../../../services/api/admin.api';
 import { GearLoader } from '../../../../shared/components/GearLoader';
+import { EmptyState } from '../../../../shared/components/EmptyState';
 
 interface StaffManagementScreenProps {
   navigation: any;
@@ -18,6 +19,7 @@ export const StaffManagementScreen: React.FC<StaffManagementScreenProps> = ({ na
   const [searchQuery, setSearchQuery] = useState('');
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const insets = useSafeAreaInsets();
 
   const filters = ['All', 'Dentists', 'Receptionist', 'Inactive'];
 
@@ -72,74 +74,78 @@ export const StaffManagementScreen: React.FC<StaffManagementScreenProps> = ({ na
               <GearLoader text="Loading staff records..." />
             </View>
           ) : (
-            <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-              {/* Search Bar */}
-              <View style={styles.searchContainer}>
-                <Search size={20} color="#9CA3AF" />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search staff by name..."
-                  placeholderTextColor="#9CA3AF"
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                />
-              </View>
-
-              {/* Filters */}
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.filtersContainer}
-              >
-                {filters.map((filter) => (
-                  <TouchableOpacity
-                    key={filter}
-                    style={[
-                      styles.filterButton,
-                      selectedFilter === filter && styles.filterButtonActive,
-                    ]}
-                    onPress={() => setSelectedFilter(filter)}
-                  >
-                    <Text style={[
-                      styles.filterText,
-                      selectedFilter === filter && styles.filterTextActive,
-                    ]}>
-                      {filter}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-
-              {/* Staff List */}
-              <View style={styles.staffList}>
-                {filteredStaff.length === 0 ? (
-                  <View style={styles.empty}>
-                    <Text style={styles.emptyText}>No staff members found.</Text>
+            <FlatList
+              style={styles.content}
+              showsVerticalScrollIndicator={false}
+              data={filteredStaff}
+              keyExtractor={(item) => item.id.toString()}
+              ListHeaderComponent={
+                <>
+                  {/* Search Bar */}
+                  <View style={styles.searchContainer}>
+                    <Search size={20} color="#9CA3AF" />
+                    <TextInput
+                      style={styles.searchInput}
+                      placeholder="Search staff by name..."
+                      placeholderTextColor="#9CA3AF"
+                      value={searchQuery}
+                      onChangeText={setSearchQuery}
+                    />
                   </View>
-                ) : (
-                  filteredStaff.map((staff, index) => (
-                    <View key={staff.id}>
-                      <StaffMemberCard
-                        staff={{
-                          ...staff,
-                          isOnline: staff.is_active,
-                          role: staff.role.toUpperCase().replace('_', ' ')
-                        }}
-                        onPress={() => { }}
-                      />
-                      {index < filteredStaff.length - 1 && <View style={styles.separator} />}
-                    </View>
-                  ))
-                )}
-              </View>
 
-              <View style={{ height: 100 }} />
-            </ScrollView>
+                  {/* Filters */}
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.filtersContainer}
+                  >
+                    {filters.map((filter) => (
+                      <TouchableOpacity
+                        key={filter}
+                        style={[
+                          styles.filterButton,
+                          selectedFilter === filter && styles.filterButtonActive,
+                        ]}
+                        onPress={() => setSelectedFilter(filter)}
+                      >
+                        <Text style={[
+                          styles.filterText,
+                          selectedFilter === filter && styles.filterTextActive,
+                        ]}>
+                          {filter}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </>
+              }
+              contentContainerStyle={{ paddingBottom: 100 }}
+              ItemSeparatorComponent={() => <View style={styles.separator} />}
+              renderItem={({ item: staff }) => (
+                <View style={styles.staffListItemWrapper}>
+                  <StaffMemberCard
+                    staff={{
+                      ...staff,
+                      isOnline: staff.is_active,
+                      role: staff.role.toUpperCase().replace('_', ' ')
+                    }}
+                    onPress={() => { }}
+                  />
+                </View>
+              )}
+              ListEmptyComponent={
+                <EmptyState 
+                  icon={Users}
+                  title="No staff members found"
+                  description="Try adjusting your search or filters."
+                />
+              }
+            />
           )}
 
           {/* FAB */}
           <TouchableOpacity
-            style={styles.fab}
+            style={[styles.fab, { bottom: Math.max(insets.bottom + 20, 20) }]}
             onPress={() => showAlert('Coming Soon', 'Staff onboarding via mobile is coming in the next update.')}
           >
             <Plus size={28} color="#FFFFFF" strokeWidth={3} />
@@ -222,16 +228,17 @@ const styles = StyleSheet.create({
   filterTextActive: {
     color: '#FFFFFF',
   },
-  staffList: {
+  staffListItemWrapper: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
     marginHorizontal: 20,
+    borderRadius: 16,
     overflow: 'hidden',
   },
   separator: {
     height: 1,
     backgroundColor: '#F3F4F6',
-    marginLeft: 80,
+    marginLeft: 100,
+    marginRight: 20,
   },
   fab: {
     position: 'absolute',
