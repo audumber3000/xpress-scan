@@ -8,6 +8,7 @@ import GearLoader from "../components/GearLoader";
 import FeatureLock from "../components/FeatureLock";
 import Pagination from "../components/Pagination";
 import { ChevronLeft, X, Shield, ChevronRight, Search } from 'lucide-react';
+import { generateAvatarUrl } from "../utils/avatar";
 
 const USERS_PER_PAGE = 10;
 
@@ -213,7 +214,7 @@ const PermissionsManagement = () => {
       </div>
 
       <FeatureLock featureName="Advanced Permissions & RBAC">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden bg-white rounded-xl shadow-sm border border-gray-100 p-2">
           {/* Table toolbar */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <p className="text-sm font-semibold text-gray-700">{filteredUsers.length} staff members</p>
@@ -232,6 +233,7 @@ const PermissionsManagement = () => {
           {loading ? (
             <div className="flex items-center justify-center py-20"><GearLoader /></div>
           ) : (
+            <div className="flex-1 overflow-auto">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
@@ -250,9 +252,11 @@ const PermissionsManagement = () => {
                     <tr key={u.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => openDrawer(u)}>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-[#E0F2F2] text-[#1F6B72] font-bold text-xs flex items-center justify-center shrink-0">
-                            {initials(u.name)}
-                          </div>
+                          <img 
+                            src={u.avatar || generateAvatarUrl(u.email || u.name)} 
+                            alt={u.name}
+                            className="w-9 h-9 rounded-full object-cover shrink-0 bg-gray-100"
+                          />
                           <span className="text-sm font-semibold text-gray-900">{u.name}</span>
                         </div>
                       </td>
@@ -282,6 +286,7 @@ const PermissionsManagement = () => {
                 })}
               </tbody>
             </table>
+            </div>
           )}
           <Pagination
             page={usersPage}
@@ -299,9 +304,11 @@ const PermissionsManagement = () => {
               {/* Drawer header */}
               <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[#E0F2F2] text-[#1F6B72] font-bold text-sm flex items-center justify-center">
-                    {initials(drawerUser.name)}
-                  </div>
+                  <img 
+                    src={drawerUser.avatar || generateAvatarUrl(drawerUser.email || drawerUser.name)} 
+                    alt={drawerUser.name}
+                    className="w-10 h-10 rounded-full object-cover shrink-0 bg-gray-100"
+                  />
                   <div>
                     <p className="font-bold text-gray-900 text-sm leading-tight">{drawerUser.name}</p>
                     <p className="text-xs text-gray-500">{drawerUser.email}</p>

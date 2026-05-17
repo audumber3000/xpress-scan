@@ -1,4 +1,5 @@
 import React from 'react';
+import { generateAvatarUrl } from '../../utils/avatar';
 
 const StaffTable = ({ 
   users, 
@@ -68,9 +69,11 @@ const StaffTable = ({
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-10 w-10 relative">
-                        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#2a276e] to-[#9B8CFF] flex items-center justify-center text-white font-semibold text-sm">
-                          {getUserInitials(u.name)}
-                        </div>
+                        <img 
+                          src={u.avatar || generateAvatarUrl(u.email || u.name)} 
+                          alt={u.name}
+                          className="h-10 w-10 rounded-full object-cover bg-gray-100"
+                        />
                         {isInactive && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-gray-400 border-2 border-white rounded-full" />
                         )}

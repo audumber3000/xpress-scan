@@ -263,9 +263,9 @@ const StaffManagement = () => {
       </div>
 
       <FeatureLock featureName="Staff Management & Roles">
-        <div className="flex-1 flex overflow-hidden bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="flex-1 flex overflow-hidden bg-white rounded-xl shadow-sm border border-gray-100 p-2">
         <div className={`flex-1 overflow-y-auto transition-all duration-300 ${showUserPanel ? 'mr-96' : ''}`}>
-          <div className="p-6">
+          <div className="p-4">
             <StaffTableHeader
               userCount={filteredUsers.length}
               searchQuery={searchQuery}
