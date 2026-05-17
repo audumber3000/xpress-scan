@@ -7,6 +7,7 @@ import InvoiceHeader from "./InvoiceHeader";
 import InvoiceLineItems from "./InvoiceLineItems";
 import InvoiceActions from "./InvoiceActions";
 import MarkAsPaidModal from "./MarkAsPaidModal";
+import { generatePatientPersona, generateInitialsAvatar } from "../../utils/avatar";
 
 const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
   const [invoice, setInvoice] = useState(null);
@@ -432,11 +433,12 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
                                 isSelected ? 'bg-[#2a276e]/5' : 'hover:bg-gray-50'
                               }`}
                             >
-                              <div className={`w-9 h-9 rounded-full flex items-center justify-center font-semibold text-sm flex-shrink-0 ${
-                                isSelected ? 'bg-[#2a276e] text-white' : 'bg-[#2a276e]/10 text-[#2a276e]'
-                              }`}>
-                                {(p.name || '?').charAt(0).toUpperCase()}
-                              </div>
+                              <img 
+                                src={generatePatientPersona(p, 80)} 
+                                onError={(e) => { e.target.onerror = null; e.target.src = generateInitialsAvatar(p.name || 'Patient'); }}
+                                alt={p.name} 
+                                className={`w-9 h-9 rounded-full flex-shrink-0 object-cover border ${isSelected ? 'border-[#2a276e] border-2' : 'border-gray-100'}`}
+                              />
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
                                 <p className="text-xs text-gray-500 truncate">

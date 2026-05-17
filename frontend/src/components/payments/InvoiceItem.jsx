@@ -1,4 +1,5 @@
 import React, { memo } from "react";
+import { generatePatientPersona, generateInitialsAvatar } from "../../utils/avatar";
 
 const InvoiceItem = memo(({ invoice, onSelect }) => {
   const formatAmount = (amount) => {
@@ -48,9 +49,12 @@ const InvoiceItem = memo(({ invoice, onSelect }) => {
       </td>
       <td className="px-6 py-5 whitespace-nowrap">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-[#2a276e]/10 text-[#2a276e] flex items-center justify-center flex-shrink-0 font-semibold text-sm">
-            {(invoice.patient_name || '?').charAt(0).toUpperCase()}
-          </div>
+          <img 
+            src={generatePatientPersona({ name: invoice.patient_name }, 80)} 
+            onError={(e) => { e.target.onerror = null; e.target.src = generateInitialsAvatar(invoice.patient_name || 'Patient'); }}
+            alt={invoice.patient_name || 'Patient'} 
+            className="w-9 h-9 rounded-full flex-shrink-0 object-cover border border-gray-100"
+          />
           <div>
             <div className="font-semibold text-gray-900">{invoice.patient_name || 'Unknown Patient'}</div>
             <div className="text-sm text-gray-500">Patient</div>

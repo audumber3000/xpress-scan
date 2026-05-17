@@ -1,6 +1,7 @@
 import React from 'react';
 import { Clock } from 'lucide-react';
 import PatientVisitHistory from './PatientVisitHistory';
+import { generatePatientPersona, generateInitialsAvatar } from '../../utils/avatar';
 
 /**
  * PatientInfo - Renders detailed information about a patient
@@ -36,9 +37,12 @@ const PatientInfo = ({
 
                 <div className="space-y-6">
                     <div className="flex items-center space-x-4">
-                        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#9B8CFF] to-[#2a276e] flex items-center justify-center text-2xl font-bold text-white shadow-lg">
-                            {getPatientInitials(patientData.name)}
-                        </div>
+                        <img 
+                            src={generatePatientPersona(patientData, 160)} 
+                            onError={(e) => { e.target.onerror = null; e.target.src = generateInitialsAvatar(patientData.name || 'Patient'); }}
+                            alt={patientData.name} 
+                            className="w-20 h-20 rounded-2xl shadow-lg border border-gray-100 object-cover"
+                        />
                         <div>
                             <h4 className="text-xl font-bold text-gray-900">{patientData.name}</h4>
                             <p className="text-gray-500 font-medium">{patientData.gender}, {patientData.age} years</p>

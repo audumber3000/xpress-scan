@@ -10,6 +10,7 @@ import ConsentRecentLinks from "../components/consents/ConsentRecentLinks";
 import FeatureLock from "../components/FeatureLock";
 import Pagination from "../components/Pagination";
 import FilterDropdown from "../components/FilterDropdown";
+import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
 
 const CONSENT_PAGE_SIZE = 10;
 
@@ -360,9 +361,12 @@ const ConsentForms = () => {
                                         <tr key={link.token} className="hover:bg-indigo-50/30 transition-colors duration-150 group">
                                             <td className="px-6 py-5">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-9 h-9 rounded-full bg-[#2a276e]/10 text-[#2a276e] flex items-center justify-center flex-shrink-0 font-semibold text-sm">
-                                                        {(link.patientName || '?').charAt(0).toUpperCase()}
-                                                    </div>
+                                                    <img 
+                                                        src={generatePatientPersona({ name: link.patientName }, 80)} 
+                                                        onError={(e) => { e.target.onerror = null; e.target.src = generateInitialsAvatar(link.patientName || 'Patient'); }}
+                                                        alt={link.patientName || 'Patient'} 
+                                                        className="w-9 h-9 rounded-full flex-shrink-0 object-cover border border-gray-100"
+                                                    />
                                                     <div>
                                                         <p className="text-sm font-semibold text-gray-900">{link.patientName || 'Unknown patient'}</p>
                                                         <p className="text-xs text-gray-400">Patient</p>

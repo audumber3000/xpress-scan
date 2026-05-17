@@ -7,6 +7,7 @@ import { Search, Plus, User, Folder, X, Edit2, Trash2, UploadCloud, UserPlus } f
 import GearLoader from "../components/GearLoader";
 import Pagination from "../components/Pagination";
 import FilterDropdown from "../components/FilterDropdown";
+import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
 
@@ -465,9 +466,12 @@ const Patients = () => {
                           {/* Patient Details — Name + Village */}
                           <td className="px-6 py-5 whitespace-nowrap">
                             <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-full bg-[#2a276e]/10 text-[#2a276e] flex items-center justify-center flex-shrink-0 font-semibold text-sm">
-                                {(patient.name || '?').charAt(0).toUpperCase()}
-                              </div>
+                              <img 
+                                src={generatePatientPersona(patient, 80)} 
+                                onError={(e) => { e.target.onerror = null; e.target.src = generateInitialsAvatar(patient.name || 'Patient'); }}
+                                alt={patient.name} 
+                                className="w-9 h-9 rounded-full flex-shrink-0 object-cover border border-gray-100"
+                              />
                               <div>
                                 <div className="text-sm font-semibold text-gray-900">{patient.name}</div>
                                 <div className="text-xs text-gray-400">{patient.village || 'No location'}</div>
