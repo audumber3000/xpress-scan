@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import LabOrderDrawer from '../../components/patient/LabOrderDrawer';
 import Pagination from '../../components/Pagination';
 import FilterDropdown from '../../components/FilterDropdown';
+import { generatePatientPersona, generateInitialsAvatar } from '../../utils/avatar';
 
 const LAB_PAGE_SIZE = 10;
 import { 
@@ -259,9 +260,17 @@ const LabHub = () => {
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap">
-                                                        <div>
-                                                            <p className="text-sm font-medium text-gray-900">{order.patient_name}</p>
-                                                            <p className="text-xs text-gray-400">ID: {order.patient_id}</p>
+                                                        <div className="flex items-center gap-3">
+                                                            <img 
+                                                                src={generatePatientPersona({ name: order.patient_name }, 80)} 
+                                                                onError={(e) => { e.target.onerror = null; e.target.src = generateInitialsAvatar(order.patient_name || 'Patient'); }}
+                                                                alt={order.patient_name} 
+                                                                className="w-8 h-8 rounded-full flex-shrink-0 object-cover border border-gray-100"
+                                                            />
+                                                            <div>
+                                                                <p className="text-sm font-medium text-gray-900">{order.patient_name}</p>
+                                                                <p className="text-xs text-gray-400">ID: {order.patient_id}</p>
+                                                            </div>
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap">

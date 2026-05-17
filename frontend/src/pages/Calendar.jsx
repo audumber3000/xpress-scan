@@ -28,6 +28,7 @@ import DayGrid from "./appointments/components/DayGrid";
 import { getAppointmentColor } from "./appointments/utils/doctorColors";
 import { computeDayLayout } from "./appointments/utils/layout";
 import { getCurrencySymbol } from "../utils/currency";
+import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
 
 const Calendar = () => {
   const { user } = useAuth();
@@ -1665,10 +1666,15 @@ const Calendar = () => {
             </div>
             <div className="flex-1 overflow-y-auto p-6">
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 bg-[#9B8CFF]/20 rounded-full flex items-center justify-center text-xl font-semibold text-[#2a276e] relative">
-                  {selectedAppointment.patientAvatar}
+                <div className="relative">
+                  <img 
+                    src={generatePatientPersona({ name: selectedAppointment.patientName }, 160)} 
+                    onError={(e) => { e.target.onerror = null; e.target.src = generateInitialsAvatar(selectedAppointment.patientName || 'Patient'); }}
+                    alt={selectedAppointment.patientName} 
+                    className="w-16 h-16 rounded-full object-cover border border-gray-100 shadow-sm"
+                  />
                   {selectedAppointment.patientId && (
-                    <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center" title="Patient file exists">
+                    <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-2 border-white flex items-center justify-center" title="Patient file exists">
                       <FileText className="w-3 h-3 text-white" />
                     </div>
                   )}
