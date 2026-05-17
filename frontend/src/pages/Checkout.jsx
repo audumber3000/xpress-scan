@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { api } from '../utils/api';
+import posthog from 'posthog-js';
 import { 
   ChevronLeft, 
   CreditCard, 
@@ -58,6 +59,11 @@ const Checkout = () => {
 
   const handlePayNow = async () => {
     setLoading(true);
+    posthog.capture('Payment Button Clicked', { 
+        plan: checkoutPlanName, 
+        amount: discountInfo ? discountInfo.final_amount : basePrice,
+        has_discount: !!discountInfo
+    });
     try {
       await cashfreeService.initiateCheckout(checkoutPlanName, discountInfo ? couponCode : null);
     } catch (error) {

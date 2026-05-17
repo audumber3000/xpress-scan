@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { api } from '../utils/api';
 import { useHeader } from '../contexts/HeaderContext';
+import posthog from 'posthog-js';
 import {
   CheckCircle2,
   XCircle,
@@ -134,7 +135,10 @@ const Subscription = () => {
     }
   };
 
-  const handleUpgrade = (billing = 'monthly') => navigate(`/checkout?plan=professional&billing=${billing}`);
+  const handleUpgrade = (billing = 'monthly') => {
+    posthog.capture('Subscription Button Clicked', { billing_cycle: billing, plan: 'professional' });
+    navigate(`/checkout?plan=professional&billing=${billing}`);
+  };
 
   const downloadInvoice = (inv) => {
     const html = `<!DOCTYPE html>

@@ -29,6 +29,7 @@ import {
 import { paymentService } from '../services/PaymentService';
 import { useAuth } from '../../../../app/AuthContext';
 import { IS_PURCHASE_UI_ENABLED, MARKETING_SITE_TEXT } from '../../../../shared/constants/platform';
+import { usePostHog } from 'posthog-react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -64,6 +65,7 @@ const IosPurchasePlaceholder: React.FC<{ navigation: any }> = ({ navigation }) =
 );
 
 export const PurchaseScreen: React.FC<PurchaseScreenProps> = ({ navigation }) => {
+  const posthog = usePostHog();
   if (!IS_PURCHASE_UI_ENABLED) {
     return <IosPurchasePlaceholder navigation={navigation} />;
   }
@@ -214,6 +216,13 @@ export const PurchaseScreen: React.FC<PurchaseScreenProps> = ({ navigation }) =>
       setIsPaymentLoading(true);
       
       const planName = selectedPlan === 'monthly' ? 'professional' : 'professional_annual';
+      
+      posthog.capture('Payment Button Clicked', { 
+        plan: planName, 
+        amount: getDiscountedPrice(selectedPlan === 'monthly' ? baseMonthly : baseYearly),
+        has_discount: isPromoApplied
+      });
+
       const checkoutRes = await paymentService.createCheckoutSession(planName, isPromoApplied ? promoCode : undefined);
       
       console.log('🚀 Initiating Cashfree Checkout:', checkoutRes.order_id);

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { api } from '../utils/api';
+import posthog from 'posthog-js';
 
 const AuthContext = createContext({});
 
@@ -138,6 +139,24 @@ export const AuthProvider = ({ children }) => {
       console.warn('[AuthContext] refreshUser failed:', error.message);
     }
   };
+
+  // Identify user in PostHog when user state changes
+  useEffect(() => {
+    if (user) {
+      posthog.identify(user.id, {
+        email: user.email,
+        name: user.name,
+        role: user.role
+      });
+      if (user.clinic_id) {
+        posthog.group('clinic', user.clinic_id, {
+          name: user.clinic?.name || `Clinic ${user.clinic_id}`
+        });
+      }
+    } else if (!loading) {
+      posthog.reset();
+    }
+  }, [user, loading]);
 
   const value = {
     user,

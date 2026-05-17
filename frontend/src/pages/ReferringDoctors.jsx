@@ -115,16 +115,16 @@ const ReferringDoctors = () => {
   }
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
+    <div className="flex flex-col h-screen p-6 bg-gray-50 overflow-hidden">
       <FeatureLock featureName="Referring Doctor Management">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-6xl mx-auto flex flex-col flex-1 min-h-0">
         {/* Header with teal theme */}
         <div className="bg-gradient-to-r from-[#2D9596] to-[#1F6B72] rounded-lg p-6 mb-6 text-white">
           <h2 className="text-2xl font-bold mb-2">Referring Doctors</h2>
           <p className="text-white/90">Manage doctors who refer patients to your clinic</p>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm">
+        <div className="bg-white rounded-lg shadow-sm flex flex-col flex-1 min-h-0">
           <div className="p-6 border-b border-gray-200 flex justify-between items-center">
             <h3 className="text-lg font-semibold text-gray-900">Doctor List</h3>
             <button
@@ -135,8 +135,8 @@ const ReferringDoctors = () => {
             </button>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+          <div className="flex-1 overflow-x-auto overflow-y-auto">
+            <table className="w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -151,7 +151,16 @@ const ReferringDoctors = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {referringDoctors.slice((doctorsPage - 1) * DOCTORS_PER_PAGE, doctorsPage * DOCTORS_PER_PAGE).map((doctor) => (
+                {referringDoctors.length === 0 ? (
+                  <tr>
+                    <td colSpan="3" className="px-6 py-12">
+                      <div className="flex flex-col items-center justify-center text-center">
+                        <p className="text-sm font-bold text-gray-900">No Referring Doctors</p>
+                        <p className="text-sm text-gray-500 mt-1">No referring doctors added yet</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : referringDoctors.slice((doctorsPage - 1) * DOCTORS_PER_PAGE, doctorsPage * DOCTORS_PER_PAGE).map((doctor) => (
                   <tr key={doctor.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{doctor.name}</div>
@@ -183,12 +192,6 @@ const ReferringDoctors = () => {
               totalItems={referringDoctors.length}
               onPageChange={setDoctorsPage}
             />
-
-            {referringDoctors.length === 0 && (
-              <div className="text-center py-12">
-                <p className="text-gray-500">No referring doctors added yet</p>
-              </div>
-            )}
           </div>
         </div>
 

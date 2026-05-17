@@ -7,6 +7,7 @@ from core.interfaces import PatientServiceProtocol, PatientRepositoryProtocol, C
 from core.dtos import PatientCreateDTO, PatientUpdateDTO, PatientResponseDTO, PatientSummaryDTO
 from models import Patient, Clinic, TreatmentType, Invoice, InvoiceLineItem, Appointment
 from sqlalchemy import func, cast, Integer
+from core.posthog_client import track_event
 
 
 class PatientService(PatientServiceProtocol):
@@ -69,6 +70,15 @@ class PatientService(PatientServiceProtocol):
 
         patient = Patient(**patient_dict)
         created_patient = self.patient_repo.create(patient)
+
+        track_event(
+            f"clinic_{clinic_id}", 
+            "Patient Created", 
+            {
+                "treatment_type": patient_dict.get('treatment_type'),
+                "$groups": {"clinic": clinic_id}
+            }
+        )
 
         return created_patient
 
@@ -165,6 +175,19 @@ class PatientService(PatientServiceProtocol):
         # Check if patient has reports (prevent deletion if they do)
         if hasattr(patient, 'reports') and patient.reports:
             raise ValueError("Cannot delete patient with existing reports.")
+
+        # Delete related records to prevent foreign key constraint violations
+        try:
+            from models import Appointment, Prescription, CasePaper, PatientDocument, PatientConsent
+            db = self.patient_repo.db
+            db.query(Appointment).filter(Appointment.patient_id == patient_id).delete(synchronize_session=False)
+            db.query(Prescription).filter(Prescription.patient_id == patient_id).delete(synchronize_session=False)
+            db.query(CasePaper).filter(CasePaper.patient_id == patient_id).delete(synchronize_session=False)
+            db.query(PatientDocument).filter(PatientDocument.patient_id == patient_id).delete(synchronize_session=False)
+            db.query(PatientConsent).filter(PatientConsent.patient_id == patient_id).delete(synchronize_session=False)
+            db.flush()
+        except Exception as e:
+            print(f"Warning: Failed to delete related patient records: {e}")
 
         return self.patient_repo.delete(patient_id)
 

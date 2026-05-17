@@ -401,7 +401,7 @@ const PatientProfile = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
                   </svg>
                 </button>
-                <h1 className="text-3xl font-bold text-gray-900 tracking-tight">{patientData.name}</h1>
+                <h1 className="text-3xl font-bold text-gray-900 tracking-tight ph-no-capture">{patientData.name}</h1>
               </div>
               <div className="flex items-center gap-3">
                 <button
@@ -453,7 +453,7 @@ const PatientProfile = () => {
           )}
 
           {/* Tab Content */}
-          <div className="pb-10">
+          <div className="pb-10 ph-no-capture">
             {activeTab === "case-papers" && (
               <CasePapersTab
                 patientData={patientData}

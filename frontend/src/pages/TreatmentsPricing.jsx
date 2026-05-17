@@ -422,7 +422,8 @@ const TreatmentsPricing = () => {
             </div>
 
             <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
-              <table className="min-w-full divide-y divide-gray-100">
+              <div className="overflow-x-auto">
+              <table className="w-full divide-y divide-gray-100">
                 <thead className="bg-gray-50/50">
                   <tr>
                     <th className="px-6 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">
@@ -492,6 +493,7 @@ const TreatmentsPricing = () => {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         ))}

@@ -160,6 +160,17 @@ def delete_patient(
     
     if not db_patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+        
+    try:
+        from models import Appointment, Prescription, CasePaper, PatientDocument, PatientConsent
+        db.query(Appointment).filter(Appointment.patient_id == patient_id).delete(synchronize_session=False)
+        db.query(Prescription).filter(Prescription.patient_id == patient_id).delete(synchronize_session=False)
+        db.query(CasePaper).filter(CasePaper.patient_id == patient_id).delete(synchronize_session=False)
+        db.query(PatientDocument).filter(PatientDocument.patient_id == patient_id).delete(synchronize_session=False)
+        db.query(PatientConsent).filter(PatientConsent.patient_id == patient_id).delete(synchronize_session=False)
+        db.flush()
+    except Exception as e:
+        print(f"Warning: Failed to delete related patient records: {e}")
     
     db.delete(db_patient)
     db.commit()

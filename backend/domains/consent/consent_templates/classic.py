@@ -33,6 +33,20 @@ def render_consent(clinic, patient_name, patient_id, template_name,
     raw_logo_url = (config.logo_url if config and config.logo_url else None) if config else None
     raw_logo_url = raw_logo_url or getattr(clinic, 'logo_url', None)
     logo_url = safe_url(raw_logo_url)
+    
+    if logo_url:
+        try:
+            import requests, base64
+            resp = requests.get(logo_url, timeout=5)
+            if resp.status_code == 200:
+                b64 = base64.b64encode(resp.content).decode('utf-8')
+                ct = resp.headers.get('content-type', 'image/png')
+                logo_url = f"data:{ct};base64,{b64}"
+            else:
+                logo_url = None
+        except Exception:
+            logo_url = None
+
     if logo_url:
         logo_html = f'<img src="{logo_url}" alt="Logo" style="width:75px;height:75px;object-fit:contain;">'
     else:

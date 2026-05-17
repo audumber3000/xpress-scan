@@ -2,11 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from database import SessionLocal
 from models import Appointment, Patient, User, Clinic
-from typing import List, Optional
+from sqlalchemy import and_, or_, cast, Date
 from datetime import datetime, timedelta
-from pydantic import BaseModel
+from typing import List, Optional
+from core.posthog_client import track_event
 from core.auth_utils import get_current_user
 from core.notification_dispatch import notify_event, fmt_appt_time
+from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -135,6 +137,16 @@ async def create_appointment(
         db.add(db_appointment)
         db.commit()
         db.refresh(db_appointment)
+
+        track_event(
+            str(current_user.id),
+            "Appointment Scheduled",
+            {
+                "status": appointment.status,
+                "treatment": appointment.treatment,
+                "$groups": {"clinic": current_user.clinic_id}
+            }
+        )
         
         # Get doctor name if assigned
         doctor_name = None
@@ -885,7 +897,7 @@ async def get_patient_visits(
     ).order_by(Appointment.appointment_date.desc()).all()
 
     # Get clinic name once
-    clinic = db.query(models.Clinic).filter(models.Clinic.id == current_user.clinic_id).first()
+    clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
     clinic_name = clinic.name if clinic else "Clinic"
 
     return [

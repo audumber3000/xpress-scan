@@ -4,6 +4,7 @@ import { auth } from "../config/firebase"
 import { signInWithEmail, signOutUser } from "../services/auth/authService"
 import { authApiService, type BackendUser } from "../services/api/auth.api"
 import { showAlert } from "../shared/components/alertService"
+import { usePostHog } from 'posthog-react-native'
 
 export type AuthContextType = {
   isAuthenticated: boolean
@@ -29,6 +30,7 @@ export const AuthContext = createContext<AuthContextType | null>(null)
 export interface AuthProviderProps { }
 
 export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ children }) => {
+  const posthog = usePostHog()
   const [user, setUser] = useState<User | null>(null)
   const [backendUser, setBackendUser] = useState<BackendUser | null>(null)
   const [authEmail, setAuthEmail] = useState("")
@@ -134,7 +136,23 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
     setUser(null)
     setBackendUser(null)
     setAuthProvider(null)
-  }, [])
+    posthog.reset()
+  }, [posthog])
+
+  useEffect(() => {
+    if (backendUser) {
+      posthog.identify(backendUser.id.toString(), {
+        name: backendUser.name,
+        role: backendUser.role,
+        email: backendUser.email
+      });
+      if (backendUser.clinic?.id) {
+        posthog.group('clinic', backendUser.clinic.id.toString(), {
+          name: backendUser.clinic.name
+        });
+      }
+    }
+  }, [backendUser, posthog])
 
   const refreshBackendUser = useCallback(async () => {
     if (user) {

@@ -1449,7 +1449,7 @@ const Calendar = () => {
   const clientTimezone = getClientTimezone();
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
+    <div className="flex flex-col h-screen p-6 bg-gray-50 overflow-hidden">
         {/* Top toolbar — Today / arrows / date / view toggle / booking link / New */}
         <CalendarToolbar
           title={viewMode === 'today'
@@ -1480,7 +1480,7 @@ const Calendar = () => {
         />
 
         {/* Two-column layout: team members rail + calendar content */}
-        <div className="flex gap-4 min-h-[700px]">
+        <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
           <TeamMembersPanel
             doctors={doctors}
             countsByDoctorId={countsByDoctorId}
@@ -1504,7 +1504,7 @@ const Calendar = () => {
             }
           />
 
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 overflow-y-auto">
         {/* Calendar Content */}
         {loading ? (
           <div className="text-center py-12">

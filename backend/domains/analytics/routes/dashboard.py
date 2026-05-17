@@ -409,7 +409,7 @@ def get_patients_details(
         "gender": p.gender,
         "phone": p.phone,
         "village": p.village,
-        "treatment_type": p.scan_type,
+        "treatment_type": p.treatment_type,
         "created_at": p.created_at.isoformat() if p.created_at else None
     } for p in patients]
 
@@ -564,15 +564,15 @@ def get_treatment_statistics(
     
     # Get treatment type counts
     treatment_counts = db.query(
-        Patient.scan_type,
+        Patient.treatment_type,
         func.count(Patient.id).label('count')
     ).filter(
         and_(
             Patient.clinic_id == final_clinic_id,
             Patient.created_at >= start_date,
-            Patient.scan_type.isnot(None)
+            Patient.treatment_type.isnot(None)
         )
-    ).group_by(Patient.scan_type).all()
+    ).group_by(Patient.treatment_type).all()
     
     # Format response
     treatments = []
@@ -584,7 +584,7 @@ def get_treatment_statistics(
     for idx, treatment in enumerate(treatment_counts):
         percentage = (treatment.count / total * 100) if total > 0 else 0
         treatments.append({
-            "name": treatment.scan_type,
+            "name": treatment.treatment_type,
             "count": treatment.count,
             "percentage": round(percentage, 1),
             "color": colors[idx % len(colors)]

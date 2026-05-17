@@ -46,7 +46,8 @@
         {
           "iosUrlScheme": "com.googleusercontent.apps.101419773058-le9cprspepcs51usevd9jn8t4i9maihl"
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "web": {
       "favicon": "./assets/favicon.png"

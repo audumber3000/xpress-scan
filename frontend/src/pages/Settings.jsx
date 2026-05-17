@@ -4,6 +4,7 @@ import GearLoader from "../components/GearLoader";
 import { api } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
+import posthog from "posthog-js";
 import StaffTable from "../components/settings/StaffTable";
 import StaffTableHeader from "../components/settings/StaffTableHeader";
 import UserDetailsPanel from "../components/settings/UserDetailsPanel";
@@ -341,6 +342,7 @@ const Settings = () => {
 
       console.log('✅ Clinic data saved successfully!');
       toast.success('Clinic information updated successfully!');
+      posthog.capture('Settings Updated', { type: 'clinic_profile' });
 
       // Wait a moment then refresh clinic data
       console.log('🔄 Refreshing clinic data...');
@@ -1140,7 +1142,7 @@ const Settings = () => {
           <div className="mb-4">
             <h5 className="text-md font-medium mb-3">Permissions Matrix</h5>
             <div className="overflow-x-auto">
-              <table className="min-w-full border">
+              <table className="w-full border">
                 <thead>
                   <tr className="bg-gray-50">
                     <th className="text-left px-3 py-2 border">Section</th>

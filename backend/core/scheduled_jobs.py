@@ -427,7 +427,7 @@ async def morning_motivation_push_job() -> None:
 
     db = SessionLocal()
     try:
-        clinics = db.query(Clinic).filter(Clinic.is_active == True).all()
+        clinics = db.query(Clinic).filter(Clinic.status == 'active').all()
         msg = random.choice(MORNING_MESSAGES)
         sent = 0
         for clinic in clinics:
@@ -449,7 +449,7 @@ async def evening_motivation_push_job() -> None:
 
     db = SessionLocal()
     try:
-        clinics = db.query(Clinic).filter(Clinic.is_active == True).all()
+        clinics = db.query(Clinic).filter(Clinic.status == 'active').all()
         msg = random.choice(EVENING_MESSAGES)
         sent = 0
         for clinic in clinics:

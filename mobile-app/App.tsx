@@ -9,7 +9,7 @@ import { ClinicSwitcherSheet } from './src/shared/components/ClinicSwitcherSheet
 import { useAuth } from './src/app/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ClinicInfo } from './src/services/api/auth.api';
-
+import { PostHogProvider } from 'posthog-react-native';
 
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -49,13 +49,18 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
-        <AuthProvider>
-          <AlertProvider>
-            <ToastProvider>
-              <AppContent />
-            </ToastProvider>
-          </AlertProvider>
-        </AuthProvider>
+        <PostHogProvider 
+          apiKey={process.env.EXPO_PUBLIC_POSTHOG_API_KEY} 
+          options={{ host: process.env.EXPO_PUBLIC_POSTHOG_HOST }}
+        >
+          <AuthProvider>
+            <AlertProvider>
+              <ToastProvider>
+                <AppContent />
+              </ToastProvider>
+            </AlertProvider>
+          </AuthProvider>
+        </PostHogProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
   );

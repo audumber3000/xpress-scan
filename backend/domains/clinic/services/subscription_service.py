@@ -7,6 +7,7 @@ from dateutil.relativedelta import relativedelta
 from models import Subscription, Clinic, User, SubscriptionPayment
 from domains.finance.services.cashfree.cashfree_provider import CashfreeProvider
 from domains.notification.services.platform_notification_service import PlatformNotificationService
+from core.posthog_client import track_event
 
 class SubscriptionService:
     def __init__(self, db: Session):
@@ -128,6 +129,7 @@ class SubscriptionService:
             return
 
         PLAN_PRICES = {"professional": 899, "professional_annual": 8100}
+        payment_amount = amount or PLAN_PRICES.get(sub.plan_name, 899)
         payment = SubscriptionPayment(
             subscription_id=sub.id,
             clinic_id=sub.clinic_id,
@@ -136,12 +138,26 @@ class SubscriptionService:
             provider_order_id=sub.provider_order_id,
             provider_payment_id=provider_payment_id,
             plan_name=sub.plan_name,
-            amount=amount or PLAN_PRICES.get(sub.plan_name, 899),
+            amount=payment_amount,
             currency="INR",
             status="paid",
             paid_at=paid_at or datetime.utcnow(),
         )
         self.db.add(payment)
+
+        try:
+            track_event(
+                str(sub.user_id) if sub.user_id else f"clinic_{sub.clinic_id}",
+                "Invoice Paid",
+                {
+                    "amount": payment_amount,
+                    "plan": sub.plan_name,
+                    "provider": payment.provider,
+                    "$groups": {"clinic": sub.clinic_id}
+                }
+            )
+        except Exception:
+            pass
 
     def verify_payment(self, user_id: int, order_id: str) -> Dict[str, Any]:
         """

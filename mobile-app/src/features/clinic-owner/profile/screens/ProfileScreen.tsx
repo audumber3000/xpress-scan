@@ -18,12 +18,14 @@ import { ClinicSwitcherSheet } from '../../../../shared/components/ClinicSwitche
 import { ClinicInfo } from '../../../../services/api/admin.api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { IS_PURCHASE_UI_ENABLED } from '../../../../shared/constants/platform';
+import { usePostHog } from 'posthog-react-native';
 
 interface ProfileScreenProps {
   navigation: any;
 }
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
+  const posthog = usePostHog();
   const { user, backendUser, logout, isLoading, switchBranch } = useAuth();
   const [showClinicSwitcher, setShowClinicSwitcher] = useState(false);
 
@@ -40,6 +42,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
   };
 
   const handleSubscription = () => {
+    posthog.capture('Subscription Button Clicked', { source: 'Mobile Profile' });
     navigation.navigate('Admin');
     navigation.navigate('Subscription');
   };
