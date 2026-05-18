@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from database import get_db
-from models import User, SubscriptionCoupon, ReferralCode, Clinic, GrowthLead, MarketingCampaign
+from models import User, SubscriptionCoupon, ReferralCode, Clinic, GrowthLead, MarketingCampaign, PushToken
 from .auth import get_current_admin
 from services.notification_service import notification_service
 from services.marketing_template_registry import (
@@ -69,6 +69,22 @@ class TestMessage(BaseModel):
     template_name: str
     phone: str
     header_image_url: Optional[str] = None
+
+
+class BulkPushMessage(BaseModel):
+    title: str
+    body: str
+    target_criteria: str  # 'all', 'trial', 'active', 'suspended'
+    screen_target: Optional[str] = None
+    custom_data: Optional[Dict[str, Any]] = None
+
+
+class TestPushMessage(BaseModel):
+    title: str
+    body: str
+    phone: str
+    screen_target: Optional[str] = None
+
 
 
 def _normalize_indian_mobile(raw: Optional[str]) -> Optional[str]:
@@ -709,3 +725,192 @@ def preview_lead_targets(
         "duplicate_count": duplicate_count,
         "preview": sample,
     }
+
+
+# --- Push Notification Campaign Endpoints ---
+
+@router.get("/push/options")
+def get_push_options(db: Session = Depends(get_db), _=Depends(get_current_admin)):
+    """Get counts of active push tokens grouped by target criteria: all, active, trial, suspended."""
+    base_query = db.query(PushToken).filter(PushToken.is_active == True)
+    
+    # total push tokens connected to a valid clinic
+    total = base_query.join(Clinic, PushToken.clinic_id == Clinic.id).count()
+    
+    # 'trial' target (clinic.subscription_plan == 'free')
+    trial = base_query.join(Clinic, PushToken.clinic_id == Clinic.id).filter(Clinic.subscription_plan == 'free').count()
+    
+    # 'active' target (clinic.status == 'active')
+    active = base_query.join(Clinic, PushToken.clinic_id == Clinic.id).filter(Clinic.status == 'active').count()
+    
+    # 'suspended' target (clinic.status == 'suspended')
+    suspended = base_query.join(Clinic, PushToken.clinic_id == Clinic.id).filter(Clinic.status == 'suspended').count()
+    
+    return {
+        "total_devices": total,
+        "active_devices": active,
+        "trial_devices": trial,
+        "suspended_devices": suspended
+    }
+
+
+@router.post("/push/preview")
+def preview_push_targets(
+    payload: Dict[str, str],
+    db: Session = Depends(get_db),
+    _=Depends(get_current_admin),
+):
+    """Return count of active devices and sample clinic/user preview based on target criteria."""
+    criteria = payload.get("target_criteria", "all")
+    query = db.query(PushToken).join(Clinic, PushToken.clinic_id == Clinic.id).filter(PushToken.is_active == True)
+    
+    if criteria == 'trial':
+        query = query.filter(Clinic.subscription_plan == 'free')
+    elif criteria in ('active', 'suspended'):
+        query = query.filter(Clinic.status == criteria)
+        
+    tokens = query.all()
+    
+    sample = []
+    seen_clinics = set()
+    for t in tokens:
+        clinic_name = t.clinic.name if t.clinic else "Unknown Clinic"
+        if clinic_name not in seen_clinics and len(sample) < 5:
+            seen_clinics.add(clinic_name)
+            sample.append({
+                "clinic_name": clinic_name,
+                "platform": t.platform,
+                "user_name": t.user.name if t.user else "Unknown User"
+            })
+            
+    return {
+        "total_devices": len(tokens),
+        "preview": sample
+    }
+
+
+@router.post("/push/test")
+async def send_test_push(
+    data: TestPushMessage,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+):
+    """Send a test push notification to a specific user's active devices resolved by phone number."""
+    norm_phone = _normalize_indian_mobile(data.phone)
+    target_user = None
+    
+    # Resolve the user from standard inputs
+    if norm_phone:
+        target_user = db.query(User).filter(User.username == norm_phone).first()
+        if not target_user:
+            target_user = db.query(User).filter(User.username.like(f"%{norm_phone}%")).first()
+            
+    if not target_user:
+        target_user = db.query(User).filter(User.username == data.phone.strip()).first()
+        
+    if not target_user and norm_phone:
+        # Fallback to clinic phone search
+        clinic = db.query(Clinic).filter(Clinic.phone == norm_phone).first()
+        if clinic:
+            target_user = db.query(User).filter(User.clinic_id == clinic.id).first()
+            
+    if not target_user:
+        raise HTTPException(status_code=404, detail=f"No user found registered with phone {data.phone}")
+        
+    tokens = db.query(PushToken).filter(PushToken.user_id == target_user.id, PushToken.is_active == True).all()
+    if not tokens:
+        raise HTTPException(status_code=400, detail="No active device tokens found for this user")
+        
+    token_strings = [t.token for t in tokens]
+    
+    payload_data = {}
+    if data.screen_target and data.screen_target != "none":
+        payload_data["screen"] = data.screen_target
+        
+    res = await notification_service.send_bulk_push(
+        tokens=token_strings,
+        title=data.title,
+        body=data.body,
+        data=payload_data
+    )
+    
+    _log_campaign(
+        db,
+        channel="push",
+        template_name="test_push",
+        subject=data.title,
+        target_kind="test",
+        target_filter={"phone": data.phone, "screen_target": data.screen_target},
+        total=len(token_strings),
+        sent=res.get("sent", 0),
+        failed=len(res.get("errors", [])),
+        skipped=0,
+        errors=res.get("errors", []),
+        sent_by=_admin_email(current_user),
+    )
+    
+    if res.get("sent", 0) == 0:
+        raise HTTPException(status_code=502, detail=f"Failed to send test: {', '.join(res.get('errors', []))}")
+        
+    return {"success": True, "sent_count": res.get("sent", 0), "devices": len(token_strings)}
+
+
+@router.post("/bulk-push")
+async def send_bulk_push_campaign(
+    data: BulkPushMessage,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+):
+    """Broadcast bulk push notification to all active devices matching target criteria."""
+    query = db.query(PushToken).join(Clinic, PushToken.clinic_id == Clinic.id).filter(PushToken.is_active == True)
+    
+    if data.target_criteria == 'trial':
+        query = query.filter(Clinic.subscription_plan == 'free')
+    elif data.target_criteria in ('active', 'suspended'):
+        query = query.filter(Clinic.status == data.target_criteria)
+        
+    tokens = query.all()
+    if not tokens:
+        raise HTTPException(status_code=400, detail="No active device tokens found matching targeting criteria")
+        
+    token_strings = [t.token for t in tokens]
+    
+    payload_data = {}
+    if data.screen_target and data.screen_target != "none":
+        payload_data["screen"] = data.screen_target
+    if data.custom_data:
+        payload_data.update(data.custom_data)
+        
+    res = await notification_service.send_bulk_push(
+        tokens=token_strings,
+        title=data.title,
+        body=data.body,
+        data=payload_data
+    )
+    
+    _log_campaign(
+        db,
+        channel="push",
+        template_name=None,
+        subject=data.title,
+        target_kind="push",
+        target_filter={
+            "target_criteria": data.target_criteria,
+            "screen_target": data.screen_target,
+            "custom_data": data.custom_data
+        },
+        total=len(token_strings),
+        sent=res.get("sent", 0),
+        failed=len(res.get("errors", [])),
+        skipped=0,
+        errors=res.get("errors", []),
+        sent_by=_admin_email(current_user),
+    )
+    
+    return {
+        "success": True,
+        "sent_count": res.get("sent", 0),
+        "total_attempted": len(token_strings),
+        "errors": res.get("errors", [])
+    }
+

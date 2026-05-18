@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Send, MessageSquare, Mail, RefreshCcw, Image as ImageIcon,
-  Building2, Sprout, Phone, History, Beaker, AlertTriangle, CheckCircle2, X,
+  Building2, Sprout, Phone, History, Beaker, AlertTriangle, CheckCircle2, X, Bell,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import api from '../utils/api';
@@ -11,8 +11,10 @@ const TABS = [
   { id: 'clinics',  label: 'To Clinics',  icon: Building2 },
   { id: 'leads',    label: 'To Leads',    icon: Sprout },
   { id: 'numbers',  label: 'Bulk Phone',  icon: Phone },
+  { id: 'push',     label: 'Push Notification', icon: Bell },
   { id: 'history',  label: 'History',     icon: History },
 ];
+
 
 // ---------- Shared bits ----------------------------------------------------
 
@@ -625,10 +627,248 @@ function NumbersTab() {
   );
 }
 
+
+// ---------- Tab 3.5: Push Notification -------------------------------------
+
+function PushTestSendButton({ title, body, screenTarget }) {
+  const [open, setOpen] = useState(false);
+  const [phone, setPhone] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const send = async () => {
+    if (!title.trim() || !body.trim()) return toast.error('Enter title and body first');
+    if (!phone.trim()) return toast.error('Enter a phone number');
+    setBusy(true);
+    try {
+      await api.post('/marketing/push/test', {
+        title: title.trim(),
+        body: body.trim(),
+        phone: phone.trim(),
+        screen_target: screenTarget !== 'none' ? screenTarget : undefined,
+      });
+      toast.success(`Test push sent to devices of user: ${phone}`);
+      setOpen(false);
+    } catch (err) {
+      toast.error(err?.detail || 'Test send failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="h-9 px-3 text-xs font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-lg flex items-center gap-1.5 transition-colors"
+      >
+        <Beaker size={14} /> Send test push to one phone number
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 space-y-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800">Send test push</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Verify your push notification triggers correctly.</p>
+              </div>
+              <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={16} />
+              </button>
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">User's registered phone number</label>
+              <input
+                type="tel"
+                autoFocus
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="98xxx xxxxx"
+                className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setOpen(false)} className="h-9 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg">
+                Cancel
+              </button>
+              <button onClick={send} disabled={busy}
+                className="h-9 px-4 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 disabled:opacity-60">
+                {busy ? <RefreshCcw size={12} className="animate-spin" /> : <Send size={12} />}
+                Send test
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function PushTab() {
+  const [counts, setCounts] = useState({ total_devices: 0, active_devices: 0, trial_devices: 0, suspended_devices: 0 });
+  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  const [result, setResult] = useState(null);
+  const [preview, setPreview] = useState(null);
+  
+  const [form, setForm] = useState({
+    title: '',
+    body: '',
+    target_criteria: 'all',
+    screen_target: 'none',
+  });
+
+  const change = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    api.get('/marketing/push/options')
+      .then(setCounts)
+      .catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    api.post('/marketing/push/preview', { target_criteria: form.target_criteria })
+      .then((r) => { if (alive) setPreview(r); })
+      .catch(console.error);
+    return () => { alive = false; };
+  }, [form.target_criteria]);
+
+  const validate = () => {
+    if (!form.title.trim()) return 'Notification title is required';
+    if (!form.body.trim()) return 'Notification body is required';
+    return null;
+  };
+
+  const send = async () => {
+    const err = validate();
+    if (err) return toast.error(err);
+    setConfirm(true);
+  };
+
+  const dispatch = async () => {
+    setBusy(true);
+    setResult(null);
+    try {
+      const res = await api.post('/marketing/bulk-push', {
+        title: form.title.trim(),
+        body: form.body.trim(),
+        target_criteria: form.target_criteria,
+        screen_target: form.screen_target !== 'none' ? form.screen_target : undefined,
+      });
+      setResult(res);
+      toast.success(`Broadcast sent to ${res.sent_count} device(s)`);
+      setConfirm(false);
+      
+      // Update options count
+      api.get('/marketing/push/options')
+        .then(setCounts)
+        .catch(console.error);
+    } catch (err) {
+      toast.error('Failed to dispatch');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <div className="space-y-5">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Target Criteria</label>
+            <select value={form.target_criteria} onChange={(e) => change('target_criteria', e.target.value)}
+              className="w-full h-[44px] px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400">
+              <option value="all">All clinics ({counts.total_devices} devices)</option>
+              <option value="active">Active clinics ({counts.active_devices} devices)</option>
+              <option value="trial">Free / trial clinics ({counts.trial_devices} devices)</option>
+              <option value="suspended">Suspended clinics ({counts.suspended_devices} devices)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Navigate To (On Click)</label>
+            <select value={form.screen_target} onChange={(e) => change('screen_target', e.target.value)}
+              className="w-full h-[44px] px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400">
+              <option value="none">Default Dashboard</option>
+              <option value="Appointments">Appointments Screen</option>
+              <option value="Patients">Patients Screen</option>
+              <option value="Payments">Payments Screen</option>
+              <option value="Profile">Profile Screen</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Notification Title</label>
+            <input type="text" value={form.title} onChange={(e) => change('title', e.target.value)}
+              placeholder="New Feature / Important Update"
+              className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400" />
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Notification Message Body</label>
+            <textarea rows={4} value={form.body} onChange={(e) => change('body', e.target.value)}
+              placeholder="Type your push message here..."
+              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400" />
+          </div>
+        </div>
+
+        {preview && (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+            <div className="font-semibold text-slate-700 mb-1">
+              {preview.total_devices} active mobile device(s) ready
+            </div>
+            {preview.preview?.length > 0 && (
+              <div className="text-slate-500 space-y-0.5 mt-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Sample Target Recipients</div>
+                {preview.preview.map((p, i) => (
+                  <div key={i} className="flex justify-between border-b border-slate-100/50 py-0.5">
+                    <span className="font-medium text-slate-600">{p.clinic_name}</span>
+                    <span className="text-slate-400">{p.user_name} ({p.platform})</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+          <PushTestSendButton title={form.title} body={form.body} screenTarget={form.screen_target} />
+          <button onClick={send}
+            className="h-10 px-5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-semibold flex items-center gap-2">
+            <Send size={14} /> Broadcast Push
+          </button>
+        </div>
+
+        <ResultCard result={result} />
+      </div>
+
+      <ConfirmModal
+        open={confirm}
+        busy={busy}
+        title={`Broadcast Push Notification?`}
+        summary={
+          <>
+            Target: <strong>{form.target_criteria === 'all' ? 'All Clinics' : `${form.target_criteria} clinics`}</strong> ({preview?.total_devices || 0} active devices).
+            <div className="mt-2 p-2 bg-slate-50 border border-slate-100 rounded text-slate-500 font-mono text-[11px] leading-relaxed">
+              <strong>[{form.title || 'No Title'}]</strong><br/>
+              {form.body || 'No Body'}
+            </div>
+            This action will deliver immediate alerts to clinic mobile apps.
+          </>
+        }
+        onConfirm={dispatch}
+        onClose={() => setConfirm(false)}
+      />
+    </Card>
+  );
+}
+
+
 // ---------- Tab 4: History ------------------------------------------------
 
-const KIND_ICON = { clinics: Building2, leads: Sprout, numbers: Phone, test: Beaker };
-const KIND_TONE = { clinics: 'brand', leads: 'emerald', numbers: 'sky', test: 'slate' };
+const KIND_ICON = { clinics: Building2, leads: Sprout, numbers: Phone, test: Beaker, push: Bell };
+const KIND_TONE = { clinics: 'brand', leads: 'emerald', numbers: 'sky', test: 'slate', push: 'amber' };
 
 function HistoryTab() {
   const [rows, setRows] = useState([]);
@@ -742,6 +982,7 @@ export default function MarketingCampaigns() {
       {tab === 'clinics' && <ClinicsTab />}
       {tab === 'leads' && <LeadsTab />}
       {tab === 'numbers' && <NumbersTab />}
+      {tab === 'push' && <PushTab />}
       {tab === 'history' && <HistoryTab />}
     </div>
   );

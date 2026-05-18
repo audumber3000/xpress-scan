@@ -364,3 +364,19 @@ class MarketingCampaign(Base):
     errors_summary = Column(JSON, nullable=True)    # list of failure messages, capped
     sent_by = Column(String, nullable=True)         # admin user that fired it
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class PushToken(Base):
+    __tablename__ = 'push_tokens'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=True)
+    token = Column(String, nullable=False, unique=True)
+    platform = Column(String, nullable=False)  # 'ios' | 'android'
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User")
+    clinic = relationship("Clinic")
+

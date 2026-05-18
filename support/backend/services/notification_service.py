@@ -136,4 +136,53 @@ class NotificationService:
             logger.error(f"ZeptoMail error: {e}")
             return {"success": False, "error": str(e)}
 
+    async def send_bulk_push(
+        self,
+        tokens: List[str],
+        title: str,
+        body: str,
+        data: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Send push messages via Expo Push API in batches of 100."""
+        expo_push_url = "https://exp.host/--/api/v2/push/send"
+        messages = [
+            {
+                "to": token,
+                "sound": "default",
+                "title": title,
+                "body": body,
+                "data": data or {},
+            }
+            for token in tokens
+        ]
+
+        errors = []
+        sent = 0
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            for i in range(0, len(messages), 100):
+                batch = messages[i : i + 100]
+                try:
+                    resp = await client.post(
+                        expo_push_url,
+                        json=batch,
+                        headers={
+                            "Accept": "application/json",
+                            "Content-Type": "application/json",
+                        },
+                    )
+                    resp.raise_for_status()
+                    result = resp.json()
+                    tickets = result.get("data", [])
+                    for ticket in tickets:
+                        if ticket.get("status") == "ok":
+                            sent += 1
+                        else:
+                            errors.append(ticket.get("message", "Unknown error"))
+                except Exception as e:
+                    logger.error(f"Expo push notification error: {e}")
+                    errors.append(str(e))
+
+        return {"sent": sent, "total": len(tokens), "errors": errors}
+
+
 notification_service = NotificationService()
