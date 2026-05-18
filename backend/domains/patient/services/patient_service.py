@@ -187,7 +187,9 @@ class PatientService(PatientServiceProtocol):
             db.query(PatientConsent).filter(PatientConsent.patient_id == patient_id).delete(synchronize_session=False)
             db.flush()
         except Exception as e:
+            db.rollback()
             print(f"Warning: Failed to delete related patient records: {e}")
+            raise ValueError("Cannot delete patient: Associated records could not be safely removed.")
 
         return self.patient_repo.delete(patient_id)
 

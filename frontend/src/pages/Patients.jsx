@@ -496,8 +496,7 @@ const Patients = () => {
 
                           {/* Treatment Type — Pill Badge */}
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${treatmentStyle.bg}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${treatmentStyle.dot}`}></span>
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${treatmentStyle.bg}`}>
                               {patient.treatment_type || 'General'}
                             </span>
                           </td>

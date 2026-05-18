@@ -22,8 +22,9 @@ const Payments = () => {
   const [error, setError] = useState("");
   const [totalCount, setTotalCount] = useState(0);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
-  const [stats, setStats] = useState({ revenue: 0, pending: 0, total: 0, paidCount: 0 });
+  const [stats, setStats] = useState({ revenue: 0, pending: 0, total: 0, paidCount: 0, todayRevenue: 0, todayCash: 0, todayOnline: 0 });
   const [statsLoading, setStatsLoading] = useState(true);
+  const [todayInvoices, setTodayInvoices] = useState([]);
 
   // Ledger states
   const [activeTab, setActiveTab] = useState('payments'); // 'payments' or 'ledger'
@@ -55,25 +56,45 @@ const Payments = () => {
       const allInvoices = await api.get('/invoices', { params: { skip: 0, limit: 10000 } });
       let totalRevenue = 0;
       let totalPending = 0;
-      
       let paidCount = 0;
+      let todayRevenue = 0;
+      let todayCash = 0;
+      let todayOnline = 0;
+      const todayDate = new Date().toDateString();
+      const todaysInvs = [];
       
       (allInvoices || []).forEach(inv => {
         const amount = parseFloat(inv.total) || 0;
         const due = parseFloat(inv.due_amount ?? amount) || 0;
+        const invDate = inv.created_at ? new Date(inv.created_at).toDateString() : '';
+        
+        if (invDate === todayDate) {
+          todaysInvs.push(inv);
+        }
+
         if (inv.status === 'paid_verified' || inv.status === 'paid_unverified') {
           totalRevenue += amount;
           paidCount += 1;
+          if (invDate === todayDate) {
+            todayRevenue += amount;
+            if (inv.payment_mode === 'Cash') todayCash += amount;
+            else todayOnline += amount;
+          }
         } else if (inv.status === 'draft' || inv.status === 'finalized' || inv.status === 'partially_paid') {
           totalPending += due;
         }
       });
       
+      setTodayInvoices(todaysInvs);
+      
       setStats({
         revenue: totalRevenue,
         pending: totalPending,
         total: (allInvoices || []).length,
-        paidCount
+        paidCount,
+        todayRevenue,
+        todayCash,
+        todayOnline
       });
     } catch (err) {
       console.error('Error fetching stats:', err);
@@ -186,7 +207,8 @@ const Payments = () => {
 
   // Filter items client-side for search + filters
   const filteredInvoices = useMemo(() => {
-    return invoices.filter((invoice) => {
+    const baseInvoices = activeTab === 'today' ? todayInvoices : invoices;
+    return baseInvoices.filter((invoice) => {
       if (searchTerm.trim()) {
         const searchLower = searchTerm.toLowerCase();
         if (!invoice.patient_name?.toLowerCase().includes(searchLower) &&
@@ -194,10 +216,10 @@ const Payments = () => {
             !invoice.patient_phone?.toLowerCase().includes(searchLower)) return false;
       }
       if (filterStatus && invoice.status !== filterStatus) return false;
-      if (filterMode && invoice.payment_method?.toLowerCase() !== filterMode.toLowerCase()) return false;
+      if (filterMode && invoice.payment_mode?.toLowerCase() !== filterMode.toLowerCase() && invoice.payment_method?.toLowerCase() !== filterMode.toLowerCase()) return false;
       return true;
     });
-  }, [invoices, searchTerm, filterStatus, filterMode]);
+  }, [invoices, todayInvoices, activeTab, searchTerm, filterStatus, filterMode]);
   
   const filteredLedger = useMemo(() => {
     return ledgerItems.filter((item) => {
@@ -214,11 +236,12 @@ const Payments = () => {
 
   const totalPages = activeTab === 'payments' 
     ? Math.ceil(totalCount / INVOICES_PER_PAGE) || 1
+    : activeTab === 'today' ? 1 
     : Math.ceil(ledgerTotalCount / LEDGER_PER_PAGE) || 1;
     
-  const currentPageDisplay = activeTab === 'payments' ? page : ledgerPage;
+  const currentPageDisplay = activeTab === 'payments' ? page : activeTab === 'today' ? 1 : ledgerPage;
 
-  const currentItems = activeTab === 'payments' ? filteredInvoices : filteredLedger;
+  const currentItems = activeTab === 'ledger' ? filteredLedger : filteredInvoices;
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', {
@@ -235,6 +258,16 @@ const Payments = () => {
       <div className="px-6 pt-4 border-b border-gray-200">
         <nav className="-mb-px flex space-x-8">
           <button
+            onClick={() => setActiveTab('today')}
+            className={`${
+              activeTab === 'today'
+                ? 'border-[#2a276e] text-[#2a276e]'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+          >
+            Today's Collection
+          </button>
+          <button
             onClick={() => setActiveTab('payments')}
             className={`${
               activeTab === 'payments'
@@ -242,7 +275,7 @@ const Payments = () => {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
           >
-            Payments (Patients)
+            All payments
           </button>
           <button
             onClick={() => setActiveTab('ledger')}
@@ -252,15 +285,56 @@ const Payments = () => {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
           >
-            Ledger (All Transactions)
+            Ledger
           </button>
         </nav>
       </div>
       {/* Summary Cards Section */}
       <div className="px-6 pt-6 pb-2">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className={`grid gap-6 mb-8 ${activeTab === 'today' ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'}`}>
           
-          {activeTab === 'payments' ? (
+          {activeTab === 'today' ? (
+            <>
+              {/* Today Card 1: Total */}
+              <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm flex items-center">
+                <div className="p-3 rounded-lg bg-green-50 text-green-600 mr-4">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Today's Total</p>
+                  <h4 className="text-2xl font-bold text-gray-900 mt-1">{statsLoading ? "..." : formatCurrency(stats.todayRevenue || 0)}</h4>
+                </div>
+              </div>
+              
+              {/* Today Card 2: Cash */}
+              <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm flex items-center">
+                <div className="p-3 rounded-lg bg-amber-50 text-amber-600 mr-4">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Cash Collection</p>
+                  <h4 className="text-2xl font-bold text-gray-900 mt-1">{statsLoading ? "..." : formatCurrency(stats.todayCash || 0)}</h4>
+                </div>
+              </div>
+
+              {/* Today Card 3: Online */}
+              <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm flex items-center">
+                <div className="p-3 rounded-lg bg-blue-50 text-blue-600 mr-4">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Online Collection</p>
+                  <h4 className="text-2xl font-bold text-gray-900 mt-1">{statsLoading ? "..." : formatCurrency(stats.todayOnline || 0)}</h4>
+                </div>
+              </div>
+            </>
+          ) : activeTab === 'payments' ? (
             <>
               {/* Card 1: Revenue */}
               <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm flex items-center">
@@ -391,7 +465,7 @@ const Payments = () => {
                 className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] transition-all"
               />
             </div>
-            {activeTab === 'payments' ? (
+            {activeTab === 'payments' || activeTab === 'today' ? (
               <>
                 <FilterDropdown
                   label="Status"
@@ -425,7 +499,7 @@ const Payments = () => {
             )}
           </div>
           <div className="w-full sm:w-auto flex space-x-3">
-            {activeTab === 'payments' ? (
+            {activeTab === 'payments' || activeTab === 'today' ? (
               <button
                  onClick={() => setSelectedInvoiceId('new')}
                  className="w-full sm:w-auto inline-flex justify-center items-center px-4 py-2.5 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-[#2a276e] hover:bg-[#1e1c4f] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2a276e] transition-colors"
@@ -482,7 +556,7 @@ const Payments = () => {
                 </div>
               </div>
             </div>
-          ) : activeTab === 'payments' ? (
+          ) : activeTab === 'payments' || activeTab === 'today' ? (
             <table className="w-full">
               <thead className="bg-[#f8fafc] border-b border-gray-100 sticky top-0 z-10">
                 <tr>
@@ -491,8 +565,8 @@ const Payments = () => {
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Amount</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Mode</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Date & Time</th>
+                  <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -503,7 +577,7 @@ const Payments = () => {
                         <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
-                        <p className="mt-2 text-lg font-medium text-gray-900">No ledgers found</p>
+                        <p className="mt-2 text-lg font-medium text-gray-900">No transactions found</p>
                         <p className="text-sm text-gray-500 mt-1">Invoices and transactions will appear here.</p>
                       </div>
                     </td>
