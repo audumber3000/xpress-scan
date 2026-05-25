@@ -1,9 +1,8 @@
 name: Desktop release
 
-# Only fires on tags shaped `desktop-vX.Y.Z` so this workflow is fully isolated
-# from web-app CI. Web-app workflows live in this same `.github/workflows/`
-# directory but trigger on different events (branch pushes, PRs, etc.) and must
-# not share this tag namespace.
+# Tag-triggered Windows-only build that produces the MSIX for Microsoft Store
+# submission. Artifacts are attached to the workflow run; nothing is pushed to
+# R2 — download the MSIX from the Actions tab and upload it to Partner Center.
 on:
   push:
     tags:
@@ -12,18 +11,7 @@ on:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: macos-latest
-            args: '--target universal-apple-darwin'
-            rust-targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
-          - platform: windows-latest
-            args: ''
-            rust-targets: ''
-
-    runs-on: ${{ matrix.platform }}
+    runs-on: windows-latest
 
     steps:
       - name: Checkout
@@ -36,8 +24,6 @@ jobs:
 
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.rust-targets }}
 
       - name: Cache cargo build
         uses: swatinem/rust-cache@v2
@@ -48,116 +34,44 @@ jobs:
         working-directory: desktop
         run: npm install
 
-      # Builds the unsigned/signed installer locally on the runner. We do NOT
-      # use tauri-action's GitHub-Release publishing here — distribution lives
-      # entirely in Cloudflare R2 (next step).
-      - name: Build installer
-        uses: tauri-apps/tauri-action@v0
-        env:
-          # macOS Developer ID code signing + notarization.
-          # Missing values => unsigned .dmg.
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      # Builds the unsigned MSI + the raw MolarPlus exe under target/release/.
+      # The MSI itself isn't shipped to the Store (it was rejected for being
+      # unsigned under policy 10.2.9); we keep it as a side-output for QA /
+      # potential direct distribution later.
+      - name: Build Tauri (Windows MSI)
+        working-directory: desktop
+        run: npx tauri build
 
-          # Windows EV / standard code signing.
-          # Missing values => unsigned .msi/.exe.
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      # Wrap the raw exe into an MSIX with the Partner Center identity. The
+      # MSIX is intentionally unsigned — Microsoft signs it at Store submission.
+      - name: Build MSIX
+        shell: pwsh
+        run: pwsh -File desktop/src-tauri/msix/build-msix.ps1
 
-          # Updater signing key. Only relevant once `bundle.createUpdaterArtifacts`
-          # is flipped to true in tauri.conf.json.
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          projectPath: desktop
-          args: ${{ matrix.args }}
-
-      # Build the MSIX package for the Microsoft Store. Tauri only emits MSI
-      # natively, so we wrap the raw MolarPlus.exe with makeappx + a manifest
-      # whose <Identity> matches the Partner Center listing exactly. The MSIX
-      # is intentionally unsigned — Microsoft signs it at submission time.
-      - name: Build MSIX (Windows only)
-        if: runner.os == 'Windows'
+      - name: Locate MSIX
+        id: msix
         shell: pwsh
         run: |
-          pwsh -File desktop/src-tauri/msix/build-msix.ps1
+          $path = Get-ChildItem -Path desktop/src-tauri/target/release/bundle/msix -Filter *.msix -File -ErrorAction Stop |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $path) { throw "No MSIX found under target/release/bundle/msix" }
+          "path=$path"  | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "name=$(Split-Path -Leaf $path)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Found: $path"
 
-      # Upload to Cloudflare R2 (bucket: molarplus-installers) with stable
-      # filenames so the marketing site can use permanent download URLs that
-      # don't change between releases. Reuses the account-wide R2 API token
-      # that's already configured for the backend.
-      - name: Upload installer to Cloudflare R2
-        shell: bash
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
+      - name: Upload MSIX as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MolarPlus-Windows-MSIX
+          path: ${{ steps.msix.outputs.path }}
+          retention-days: 90
 
-          # Bucket name is fixed for the desktop installer distribution and
-          # intentionally hardcoded — not a secret, never changes.
-          BUCKET="molarplus-installers"
-
-          if [[ -z "${R2_ENDPOINT_URL:-}" ]]; then
-            echo "ERROR: R2_ENDPOINT_URL secret is not set." >&2
-            echo "Expected format: https://<ACCOUNT_ID>.r2.cloudflarestorage.com" >&2
-            exit 1
-          fi
-
-          # Each artifact gets two R2 keys: a stable filename (overwritten each
-          # release — what the marketing site / Partner Center points at) and a
-          # versioned filename (immutable archive for rollbacks).
-          declare -a ARTIFACTS=()
-
-          if [[ "$RUNNER_OS" == "macOS" ]]; then
-            DMG=$(find desktop/src-tauri/target -path '*/bundle/dmg/*.dmg' | head -1)
-            ARTIFACTS+=("${DMG}|MolarPlus-mac.dmg|MolarPlus-mac-${TAG}.dmg")
-          elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            MSI=$(find desktop/src-tauri/target -path '*/bundle/msi/*.msi' | head -1)
-            MSIX=$(find desktop/src-tauri/target -path '*/bundle/msix/*.msix' | head -1)
-            if [[ -n "$MSI" ]]; then
-              ARTIFACTS+=("${MSI}|MolarPlus-windows.msi|MolarPlus-windows-${TAG}.msi")
-            fi
-            if [[ -n "$MSIX" ]]; then
-              ARTIFACTS+=("${MSIX}|MolarPlus-windows.msix|MolarPlus-windows-${TAG}.msix")
-            fi
-          else
-            echo "Unsupported runner: $RUNNER_OS" >&2
-            exit 1
-          fi
-
-          if [[ ${#ARTIFACTS[@]} -eq 0 ]]; then
-            echo "ERROR: no installer artifacts found under desktop/src-tauri/target" >&2
-            find desktop/src-tauri/target -name '*.dmg' -o -name '*.msi' -o -name '*.msix' >&2 || true
-            exit 1
-          fi
-
-          for entry in "${ARTIFACTS[@]}"; do
-            IFS='|' read -r SRC STABLE VERSIONED <<< "$entry"
-            if [[ -z "$SRC" || ! -f "$SRC" ]]; then
-              echo "WARN: skipping missing artifact entry: $entry" >&2
-              continue
-            fi
-            echo "Uploading $SRC"
-            echo "  → s3://${BUCKET}/${STABLE}      (stable URL — overwritten each release)"
-            echo "  → s3://${BUCKET}/${VERSIONED}   (versioned archive)"
-
-            # Stable filename: marketing site / Partner Center points here.
-            # `no-cache` lets CDN/browser cache but forces revalidation so users
-            # always get the newest installer immediately after a release.
-            aws s3 cp "$SRC" "s3://${BUCKET}/${STABLE}" \
-              --endpoint-url "$R2_ENDPOINT_URL" \
-              --cache-control "public, no-cache"
-
-            # Versioned filename: permanent archive for rollbacks / changelogs.
-            aws s3 cp "$SRC" "s3://${BUCKET}/${VERSIONED}" \
-              --endpoint-url "$R2_ENDPOINT_URL" \
-              --cache-control "public, max-age=31536000, immutable"
-          done
+      # Optional secondary artifact — useful if you ever want the unsigned MSI
+      # for QA. Not shipped to the Store. Safe to delete this step if unused.
+      - name: Upload MSI as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MolarPlus-Windows-MSI
+          path: desktop/src-tauri/target/release/bundle/msi/*.msi
+          retention-days: 90
+          if-no-files-found: warn

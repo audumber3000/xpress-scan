@@ -109,11 +109,36 @@ $tauriRoot       = Join-Path $desktopRootFull 'src-tauri'
 $confPath        = Join-Path $tauriRoot 'tauri.conf.json'
 $manifestSrc     = Join-Path $tauriRoot 'msix\AppxManifest.xml'
 $iconSource      = Join-Path $tauriRoot 'icons\icon.png'
-$exePath         = Join-Path $tauriRoot 'target\release\MolarPlus.exe'
+$releaseDir      = Join-Path $tauriRoot 'target\release'
 
-foreach ($p in @($confPath, $manifestSrc, $iconSource, $exePath)) {
+foreach ($p in @($confPath, $manifestSrc, $iconSource)) {
     if (-not (Test-Path $p)) { throw "Required input missing: $p" }
 }
+
+# Tauri's cargo binary name comes from Cargo.toml's [package].name ("molarplus-desktop"),
+# not from tauri.conf.json's productName. The bundle step renames it to MolarPlus.exe
+# inside the MSI, but the raw cargo output keeps the cargo name. Search both names.
+$exeCandidates = @(
+    'molarplus-desktop.exe',
+    'molarplus_desktop.exe',
+    'MolarPlus.exe'
+) | ForEach-Object { Join-Path $releaseDir $_ }
+
+$exePath = $exeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $exePath) {
+    Write-Host "ERROR: MolarPlus exe not found. Checked:" -ForegroundColor Red
+    $exeCandidates | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    if (Test-Path $releaseDir) {
+        Write-Host "Contents of $releaseDir`:" -ForegroundColor Yellow
+        Get-ChildItem -Path $releaseDir -File | ForEach-Object {
+            Write-Host "  $($_.Name)" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "Release directory does not exist: $releaseDir" -ForegroundColor Red
+    }
+    throw "MolarPlus exe not found in $releaseDir"
+}
+Write-Host "Found exe: $exePath"
 
 $version = Get-TauriVersion -ConfPath $confPath
 Write-Host "MSIX version: $version"
