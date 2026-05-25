@@ -1,6 +1,6 @@
 [package]
 name = "molarplus-desktop"
-version = "0.1.0"
+version = "0.1.1"
 description = "MolarPlus desktop app — thin Tauri wrapper around https://app.molarplus.com"
 authors = ["MolarPlus"]
 edition = "2021"

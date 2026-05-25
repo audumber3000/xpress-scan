@@ -39,7 +39,7 @@ const INIT_SCRIPT: &str = r#"
   // instead of `signInWithPopup`, since popups don't work in thin webviews.
   try {
     Object.defineProperty(window, '__MOLARPLUS_DESKTOP__', {
-      value: { version: '0.1.0', platform: 'tauri' },
+      value: { version: '0.1.1', platform: 'tauri' },
       writable: false,
       configurable: false,
     });

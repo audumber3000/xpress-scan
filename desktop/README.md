@@ -44,8 +44,8 @@ npm run build
 ```
 
 Output:
-- **macOS:** `src-tauri/target/release/bundle/dmg/MolarPlus_0.1.0_<arch>.dmg`
-- **Windows:** `src-tauri/target/release/bundle/msi/MolarPlus_0.1.0_x64_en-US.msi`
+- **macOS:** `src-tauri/target/release/bundle/dmg/MolarPlus_0.1.1_<arch>.dmg`
+- **Windows:** `src-tauri/target/release/bundle/msi/MolarPlus_0.1.1_x64_en-US.msi`
 
 This produces an **unsigned** installer — fine for testing, but macOS Gatekeeper will warn users on first open (right-click → Open) and Windows SmartScreen will likely block it. See [Code signing](#code-signing) below for the production setup.
 
@@ -101,10 +101,11 @@ git push origin main --tags
 
 The workflow:
 1. Builds the macOS Universal binary (aarch64 + x86_64) and the Windows x86_64 installer in parallel.
-2. Signs each one if the relevant GitHub secrets exist (see below); otherwise produces unsigned artifacts.
-3. Uploads each installer to R2 under **two** keys:
-   - `MolarPlus-mac.dmg` / `MolarPlus-windows.msi` — the **stable** filename the marketing-site download button points at. Overwritten on every release.
-   - `MolarPlus-mac-desktop-vX.Y.Z.dmg` / `MolarPlus-windows-desktop-vX.Y.Z.msi` — the **versioned** archive. Never overwritten. Useful for rollbacks and audit.
+2. On Windows, additionally wraps `MolarPlus.exe` into an **MSIX** package via `desktop/src-tauri/msix/build-msix.ps1` for Microsoft Store submission. The MSIX is intentionally unsigned — Microsoft signs it at submission time when distributed via the Store. See [Microsoft Store submission (MSIX)](#microsoft-store-submission-msix) below.
+3. Signs the MSI/DMG if the relevant GitHub secrets exist (see below); otherwise produces unsigned artifacts.
+4. Uploads each artifact to R2 under **two** keys:
+   - `MolarPlus-mac.dmg` / `MolarPlus-windows.msi` / `MolarPlus-windows.msix` — the **stable** filename. The marketing-site download button points at the `.dmg`/`.msi`. The `.msix` is for Partner Center submission. Overwritten on every release.
+   - `MolarPlus-mac-desktop-vX.Y.Z.dmg` / `MolarPlus-windows-desktop-vX.Y.Z.msi` / `MolarPlus-windows-desktop-vX.Y.Z.msix` — the **versioned** archive. Never overwritten. Useful for rollbacks and audit.
 
 The first run with no secrets configured is the expected smoke test — it will fail at the R2 upload step (no R2 credentials yet). Once secrets are in place, you'll get a clean unsigned-but-uploaded build, and signing kicks in once those certs are added.
 
@@ -196,6 +197,46 @@ Then in `src-tauri/tauri.conf.json`:
 Until you do all three, the updater plugin is loaded but no `latest.json` is produced and no auto-update check fires at runtime.
 
 ---
+
+## Microsoft Store submission (MSIX)
+
+The Windows build also produces an MSIX package alongside the MSI. The MSIX is what goes to **Microsoft Store** (which signs it for free at submission); the MSI stays on R2 for direct downloads from the marketing site.
+
+### How it's built
+
+Tauri does not natively emit MSIX. The CI runs [`src-tauri/msix/build-msix.ps1`](src-tauri/msix/build-msix.ps1) on the Windows runner after `tauri build`, which:
+1. Reads the version from `tauri.conf.json` (padded to MSIX's 4-part scheme, e.g. `0.1.0` → `0.1.0.0`).
+2. Stages `MolarPlus.exe` (and any top-level DLLs) into a temp folder.
+3. Substitutes the version into [`src-tauri/msix/AppxManifest.xml`](src-tauri/msix/AppxManifest.xml).
+4. Generates the seven Store-required PNG assets from `src-tauri/icons/icon.png` using .NET `System.Drawing` (44×44, 71×71, 150×150, 310×310, 310×150 wide, 50×50 StoreLogo, 620×300 SplashScreen).
+5. Runs `makeappx pack` from the Windows SDK to produce `MolarPlus_<version>_x64.msix`.
+
+The MSIX ships **unsigned** to R2. Do not try to install it by double-click — Windows will refuse without sideloading + a trusted cert. It exists only for Partner Center submission.
+
+### Partner Center identity (do not change without updating Partner Center too)
+
+The `<Identity>` block in [`AppxManifest.xml`](src-tauri/msix/AppxManifest.xml) is locked to the Store listing:
+
+| Field | Value |
+|---|---|
+| `Identity/@Name` | `UPCLICKLABSOPCPRIVATELIMI.MolarPlus-DentalClinicSo` |
+| `Identity/@Publisher` | `CN=719DAD3B-8131-4D82-87D8-E108CF66CE98` |
+| `PublisherDisplayName` | `UPCLICK LABS (OPC) PRIVATE LIMITED` |
+| Package Family Name | `UPCLICKLABSOPCPRIVATELIMI.MolarPlus-DentalClinicSo_6h4xpcgy2327g` |
+| Store ID | `9N78RX7PHV9K` |
+
+If Microsoft ever reissues these (e.g. a new listing), update Partner Center first, then mirror the values into `AppxManifest.xml`. Mismatch == automatic certification rejection.
+
+### Submitting a new build to Partner Center
+
+1. Cut a release tag as below — CI uploads the fresh `.msix` to R2 at `https://pub-376f22e59eee415286747973b95ba075.r2.dev/MolarPlus-windows.msix`.
+2. Download that file.
+3. In Partner Center → MolarPlus → **Packages**, upload it as a new package.
+4. Submit for certification. The MSI on R2 is unaffected — direct downloads keep working.
+
+### Notes for certification (paste into Partner Center → Notes for certification)
+
+The Microsoft Store demo account, dependencies, and feature-access instructions for the reviewer are tracked separately and should be re-pasted on each submission. See the message thread that produced these notes for the full block.
 
 ## What this wrapper deliberately does NOT include
 

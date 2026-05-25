@@ -76,6 +76,16 @@ jobs:
           projectPath: desktop
           args: ${{ matrix.args }}
 
+      # Build the MSIX package for the Microsoft Store. Tauri only emits MSI
+      # natively, so we wrap the raw MolarPlus.exe with makeappx + a manifest
+      # whose <Identity> matches the Partner Center listing exactly. The MSIX
+      # is intentionally unsigned — Microsoft signs it at submission time.
+      - name: Build MSIX (Windows only)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          pwsh -File desktop/src-tauri/msix/build-msix.ps1
+
       # Upload to Cloudflare R2 (bucket: molarplus-installers) with stable
       # filenames so the marketing site can use permanent download URLs that
       # don't change between releases. Reuses the account-wide R2 API token
@@ -101,37 +111,53 @@ jobs:
             exit 1
           fi
 
+          # Each artifact gets two R2 keys: a stable filename (overwritten each
+          # release — what the marketing site / Partner Center points at) and a
+          # versioned filename (immutable archive for rollbacks).
+          declare -a ARTIFACTS=()
+
           if [[ "$RUNNER_OS" == "macOS" ]]; then
-            SRC=$(find desktop/src-tauri/target -path '*/bundle/dmg/*.dmg' | head -1)
-            STABLE="MolarPlus-mac.dmg"
-            VERSIONED="MolarPlus-mac-${TAG}.dmg"
+            DMG=$(find desktop/src-tauri/target -path '*/bundle/dmg/*.dmg' | head -1)
+            ARTIFACTS+=("${DMG}|MolarPlus-mac.dmg|MolarPlus-mac-${TAG}.dmg")
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            SRC=$(find desktop/src-tauri/target -path '*/bundle/msi/*.msi' | head -1)
-            STABLE="MolarPlus-windows.msi"
-            VERSIONED="MolarPlus-windows-${TAG}.msi"
+            MSI=$(find desktop/src-tauri/target -path '*/bundle/msi/*.msi' | head -1)
+            MSIX=$(find desktop/src-tauri/target -path '*/bundle/msix/*.msix' | head -1)
+            if [[ -n "$MSI" ]]; then
+              ARTIFACTS+=("${MSI}|MolarPlus-windows.msi|MolarPlus-windows-${TAG}.msi")
+            fi
+            if [[ -n "$MSIX" ]]; then
+              ARTIFACTS+=("${MSIX}|MolarPlus-windows.msix|MolarPlus-windows-${TAG}.msix")
+            fi
           else
             echo "Unsupported runner: $RUNNER_OS" >&2
             exit 1
           fi
 
-          if [[ -z "$SRC" || ! -f "$SRC" ]]; then
-            echo "ERROR: installer not found under desktop/src-tauri/target" >&2
-            find desktop/src-tauri/target -name '*.dmg' -o -name '*.msi' >&2 || true
+          if [[ ${#ARTIFACTS[@]} -eq 0 ]]; then
+            echo "ERROR: no installer artifacts found under desktop/src-tauri/target" >&2
+            find desktop/src-tauri/target -name '*.dmg' -o -name '*.msi' -o -name '*.msix' >&2 || true
             exit 1
           fi
 
-          echo "Uploading $SRC"
-          echo "  → s3://${BUCKET}/${STABLE}      (stable URL — overwritten each release)"
-          echo "  → s3://${BUCKET}/${VERSIONED}   (versioned archive)"
+          for entry in "${ARTIFACTS[@]}"; do
+            IFS='|' read -r SRC STABLE VERSIONED <<< "$entry"
+            if [[ -z "$SRC" || ! -f "$SRC" ]]; then
+              echo "WARN: skipping missing artifact entry: $entry" >&2
+              continue
+            fi
+            echo "Uploading $SRC"
+            echo "  → s3://${BUCKET}/${STABLE}      (stable URL — overwritten each release)"
+            echo "  → s3://${BUCKET}/${VERSIONED}   (versioned archive)"
 
-          # Stable filename: the marketing site download button points here.
-          # `no-cache` lets CDN/browser cache but forces revalidation, so users
-          # always get the newest installer immediately after a release.
-          aws s3 cp "$SRC" "s3://${BUCKET}/${STABLE}" \
-            --endpoint-url "$R2_ENDPOINT_URL" \
-            --cache-control "public, no-cache"
+            # Stable filename: marketing site / Partner Center points here.
+            # `no-cache` lets CDN/browser cache but forces revalidation so users
+            # always get the newest installer immediately after a release.
+            aws s3 cp "$SRC" "s3://${BUCKET}/${STABLE}" \
+              --endpoint-url "$R2_ENDPOINT_URL" \
+              --cache-control "public, no-cache"
 
-          # Versioned filename: permanent archive for rollbacks / changelogs.
-          aws s3 cp "$SRC" "s3://${BUCKET}/${VERSIONED}" \
-            --endpoint-url "$R2_ENDPOINT_URL" \
-            --cache-control "public, max-age=31536000, immutable"
+            # Versioned filename: permanent archive for rollbacks / changelogs.
+            aws s3 cp "$SRC" "s3://${BUCKET}/${VERSIONED}" \
+              --endpoint-url "$R2_ENDPOINT_URL" \
+              --cache-control "public, max-age=31536000, immutable"
+          done

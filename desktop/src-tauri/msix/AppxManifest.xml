@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MSIX manifest for the MolarPlus Microsoft Store submission.
+
+  Identity values come from Partner Center → Product identity. Do NOT change
+  them — Microsoft validates the entire <Identity/> block against the listing
+  during submission. Mismatch == automatic rejection.
+
+  The <Version> attribute is replaced at build time by build-msix.ps1 using
+  the tauri.conf.json version (zero-padded to MSIX's 4-part scheme).
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity
+    Name="UPCLICKLABSOPCPRIVATELIMI.MolarPlus-DentalClinicSo"
+    Publisher="CN=719DAD3B-8131-4D82-87D8-E108CF66CE98"
+    Version="0.0.0.0"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>MolarPlus : Dental Clinic Software</DisplayName>
+    <PublisherDisplayName>UPCLICK LABS (OPC) PRIVATE LIMITED</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Capabilities>
+    <Capability Name="internetClient" />
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+
+  <Applications>
+    <Application Id="MolarPlus" Executable="MolarPlus.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="MolarPlus"
+        Description="Dental clinic management — patients, appointments, prescriptions, lab orders, payments and reports."
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile
+          ShortName="MolarPlus"
+          Square71x71Logo="Assets\Square71x71Logo.png"
+          Square310x310Logo="Assets\Square310x310Logo.png"
+          Wide310x150Logo="Assets\Wide310x150Logo.png" />
+        <uap:SplashScreen Image="Assets\SplashScreen.png" BackgroundColor="#FFFFFF" />
+      </uap:VisualElements>
+
+      <Extensions>
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="molarplus">
+            <uap:DisplayName>MolarPlus</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+</Package>
