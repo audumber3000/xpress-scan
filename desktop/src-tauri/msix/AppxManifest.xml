@@ -22,7 +22,7 @@
     ProcessorArchitecture="x64" />
 
   <Properties>
-    <DisplayName>MolarPlus : Dental Clinic Software</DisplayName>
+    <DisplayName>MolarPlus - Dental Clinic Software</DisplayName>
     <PublisherDisplayName>UPCLICK LABS (OPC) PRIVATE LIMITED</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
