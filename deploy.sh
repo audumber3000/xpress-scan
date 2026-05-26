@@ -92,6 +92,7 @@ run_migration "currency_symbol"  "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS c
 run_migration "timezone"         "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS timezone VARCHAR(50) DEFAULT 'Asia/Kolkata'"
 run_migration "tax_label"        "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS tax_label VARCHAR(20) DEFAULT 'GST No.'"
 run_migration "tax_id"           "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS tax_id VARCHAR(50)"
+run_migration "email_report_unsubscribed" "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_report_unsubscribed BOOLEAN DEFAULT FALSE"
 
 # 6. Schema migration check — catch missing ALTER TABLE migrations before deploy
 echo ""
@@ -99,7 +100,7 @@ echo "▶ Running schema migration check against prod DB..."
 
 declare -A REQUIRED_COLS=(
   ["clinics"]="id clinic_code name address phone email gst_number specialization subscription_plan status razorpay_customer_id cashfree_customer_id logo_url invoice_template primary_color number_of_chairs timings created_at updated_at synced_at sync_status referred_by_code clinic_label parent_clinic_id country currency_code currency_symbol timezone tax_label tax_id"
-  ["users"]="id email name first_name last_name role is_active permissions created_at updated_at"
+  ["users"]="id email name first_name last_name role is_active permissions created_at updated_at email_report_unsubscribed"
   ["user_clinics"]="user_id clinic_id role is_active created_at"
   ["patients"]="id clinic_id name phone created_at updated_at"
   ["appointments"]="id clinic_id patient_name appointment_date start_time end_time status created_at updated_at"

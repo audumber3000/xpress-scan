@@ -940,3 +940,98 @@ async def msg91_delivery_webhook(request: Request, db: Session = Depends(get_db)
 
     logger.debug(f"MSG91 webhook: no log found for requestId={request_id}")
     return {"ok": True, "updated": 0}
+
+
+# ─── Email Report Unsubscribe / Re-subscribe ──────────────────────────────────
+
+@router.get("/email-reports/unsubscribe")
+def unsubscribe_email_reports(
+    user_id: int = Query(...),
+    token: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    """Public endpoint — no auth required. Uses HMAC token to verify identity.
+
+    Clicking the link in a report email sets `email_report_unsubscribed = True`
+    so the user stops receiving daily/weekly/monthly email reports (WhatsApp is
+    unaffected).
+    """
+    import hmac
+    import hashlib
+
+    secret = os.getenv("JWT_SECRET", os.getenv("SECRET_KEY", "fallback-secret"))
+    expected = hmac.new(secret.encode(), str(user_id).encode(), hashlib.sha256).hexdigest()
+
+    if not hmac.compare_digest(token, expected):
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(
+            content="""\
+<!DOCTYPE html><html><head><title>Invalid Link</title>
+<style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#f4f5f7;}
+.card{background:#fff;border-radius:12px;padding:40px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,0.08);max-width:420px;}
+h1{color:#dc2626;font-size:24px;margin-bottom:12px;} p{color:#6b7280;font-size:15px;}</style></head>
+<body><div class="card"><h1>❌ Invalid Link</h1><p>This unsubscribe link is invalid or has expired.</p></div></body></html>""",
+            status_code=400,
+        )
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(
+            content="""\
+<!DOCTYPE html><html><head><title>User Not Found</title>
+<style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#f4f5f7;}
+.card{background:#fff;border-radius:12px;padding:40px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,0.08);max-width:420px;}
+h1{color:#dc2626;font-size:24px;margin-bottom:12px;} p{color:#6b7280;font-size:15px;}</style></head>
+<body><div class="card"><h1>❌ Not Found</h1><p>We couldn't find your account.</p></div></body></html>""",
+            status_code=404,
+        )
+
+    user.email_report_unsubscribed = True
+    db.commit()
+
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(content=f"""\
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unsubscribed — MolarPlus</title>
+<style>
+  body {{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+         display:flex; justify-content:center; align-items:center; height:100vh;
+         margin:0; background:#f4f5f7; }}
+  .card {{ background:#fff; border-radius:16px; padding:48px 40px; text-align:center;
+           box-shadow:0 4px 24px rgba(0,0,0,0.08); max-width:460px; }}
+  .icon {{ font-size:48px; margin-bottom:16px; }}
+  h1 {{ color:#10B981; font-size:24px; margin-bottom:12px; font-weight:700; }}
+  p {{ color:#6b7280; font-size:15px; line-height:1.6; margin:8px 0; }}
+  .email {{ color:#111827; font-weight:600; }}
+  .note {{ margin-top:20px; padding:12px 16px; background:#ecfdf5; border-radius:8px;
+           font-size:13px; color:#065f46; }}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">✅</div>
+  <h1>Successfully Unsubscribed</h1>
+  <p>You will no longer receive daily, weekly, or monthly report emails at <span class="email">{user.email}</span>.</p>
+  <p>Your WhatsApp report notifications are not affected.</p>
+  <div class="note">
+    💡 Changed your mind? You can re-enable report emails anytime from<br>
+    <strong>Settings → Notifications</strong> in the MolarPlus dashboard.
+  </div>
+</div>
+</body>
+</html>""")
+
+
+@router.post("/email-reports/resubscribe")
+def resubscribe_email_reports(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Re-subscribe the current user to email reports (requires authentication)."""
+    current_user.email_report_unsubscribed = False
+    db.commit()
+    return {"success": True, "message": "You will now receive email report notifications."}
+

@@ -154,10 +154,255 @@ def _send_system_whatsapp(db, clinic_id: int, to_phone: str, event_type: str, te
     return True
 
 
+def _build_unsubscribe_url(user_id: int) -> str:
+    """Build an HMAC-signed unsubscribe URL for email report opt-out."""
+    import hmac
+    import hashlib
+    import os
+    import urllib.parse
+
+    secret = os.getenv("JWT_SECRET", os.getenv("SECRET_KEY", "fallback-secret"))
+    token = hmac.new(secret.encode(), str(user_id).encode(), hashlib.sha256).hexdigest()
+    base = os.getenv("MAIN_BACKEND_URL", "http://localhost:8000")
+    return f"{base}/api/v1/notification-admin/email-reports/unsubscribe?user_id={user_id}&token={token}"
+
+
+def _email_wrapper(title: str, body_html: str, unsubscribe_url: str) -> str:
+    """Wrap email body in a branded MolarPlus HTML template with unsubscribe footer."""
+    return f"""\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{title}</title>
+<style>
+  body {{ margin:0; padding:0; background:#f4f5f7; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#1f2937; }}
+  .wrapper {{ max-width:600px; margin:0 auto; background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 4px 24px rgba(0,0,0,0.06); }}
+  .header {{ background:linear-gradient(135deg,#10B981 0%,#059669 100%); padding:32px 24px; text-align:center; }}
+  .header h1 {{ color:#ffffff; font-size:22px; margin:0 0 4px; font-weight:700; }}
+  .header p {{ color:rgba(255,255,255,0.85); font-size:13px; margin:0; }}
+  .body {{ padding:28px 24px; }}
+  .stat-row {{ display:flex; gap:12px; margin-bottom:16px; }}
+  .stat-card {{ flex:1; background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:16px; text-align:center; }}
+  .stat-card .label {{ font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:#6b7280; margin-bottom:6px; }}
+  .stat-card .value {{ font-size:26px; font-weight:700; color:#111827; }}
+  .stat-card .change {{ font-size:12px; margin-top:4px; }}
+  .up {{ color:#059669; }}
+  .down {{ color:#dc2626; }}
+  .neutral {{ color:#6b7280; }}
+  .section-title {{ font-size:14px; font-weight:600; color:#374151; margin:20px 0 10px; border-bottom:2px solid #10B981; padding-bottom:4px; display:inline-block; }}
+  .insight {{ background:#ecfdf5; border-left:4px solid #10B981; padding:12px 16px; border-radius:0 8px 8px 0; margin:16px 0; font-size:14px; color:#065f46; }}
+  .footer {{ background:#f9fafb; padding:20px 24px; text-align:center; border-top:1px solid #e5e7eb; }}
+  .footer p {{ font-size:12px; color:#9ca3af; margin:4px 0; }}
+  .footer a {{ color:#10B981; text-decoration:none; }}
+  .unsub {{ margin-top:12px; padding-top:12px; border-top:1px solid #e5e7eb; }}
+  .unsub a {{ color:#9ca3af; font-size:11px; text-decoration:underline; }}
+  @media (max-width:480px) {{
+    .stat-row {{ flex-direction:column; }}
+    .body {{ padding:20px 16px; }}
+  }}
+</style>
+</head>
+<body>
+<div style="padding:20px 0;">
+<div class="wrapper">
+  <div class="header">
+    <h1>🦷 MolarPlus</h1>
+    <p>{title}</p>
+  </div>
+  <div class="body">
+    {body_html}
+  </div>
+  <div class="footer">
+    <p>Sent by <strong>MolarPlus</strong> — Your Clinic Management Partner</p>
+    <p>notification@molarplus.com</p>
+    <div class="unsub">
+      <a href="{unsubscribe_url}">Unsubscribe from report emails</a>
+    </div>
+  </div>
+</div>
+</div>
+</body>
+</html>"""
+
+
+def _change_class(change_str: str) -> str:
+    """Return CSS class based on change indicator."""
+    if "▲" in change_str:
+        return "up"
+    elif "▼" in change_str:
+        return "down"
+    return "neutral"
+
+
+def _build_daily_email_html(data: dict, unsubscribe_url: str) -> str:
+    """Build the daily summary email HTML."""
+    body = f"""\
+<p style="font-size:15px;color:#374151;">Hi <strong>{data.get('doctor_name', 'Doctor')}</strong>, here's your clinic summary for <strong>{data.get('date', 'today')}</strong>.</p>
+
+<div class="stat-row">
+  <div class="stat-card">
+    <div class="label">Patients</div>
+    <div class="value">{data.get('total_patients', 0)}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Appointments</div>
+    <div class="value">{data.get('total_appointments', 0)}</div>
+  </div>
+</div>
+
+<div class="stat-row">
+  <div class="stat-card">
+    <div class="label">Total Revenue</div>
+    <div class="value">₹{data.get('total_revenue', 0):,.0f}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Cash</div>
+    <div class="value">₹{data.get('cash_revenue', 0):,.0f}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Online</div>
+    <div class="value">₹{data.get('online_revenue', 0):,.0f}</div>
+  </div>
+</div>
+
+<div class="insight">💡 Keep up the great work! Review your dashboard for detailed insights.</div>
+"""
+    return _email_wrapper(f"Daily Report — {data.get('clinic_name', 'Your Clinic')}", body, unsubscribe_url)
+
+
+def _build_weekly_email_html(data: dict, unsubscribe_url: str) -> str:
+    """Build the weekly summary email HTML."""
+    body = f"""\
+<p style="font-size:15px;color:#374151;">Here's your weekly performance for the week of <strong>{data.get('week_date', '')}</strong>.</p>
+
+<div class="stat-row">
+  <div class="stat-card">
+    <div class="label">Appointments</div>
+    <div class="value">{data.get('appointments', 0)}</div>
+    <div class="change {_change_class(data.get('appt_change', ''))}">{data.get('appt_change', '—')}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">New Patients</div>
+    <div class="value">{data.get('new_patients', 0)}</div>
+    <div class="change {_change_class(data.get('patients_change', ''))}">{data.get('patients_change', '—')}</div>
+  </div>
+</div>
+
+<div class="stat-row">
+  <div class="stat-card">
+    <div class="label">Revenue</div>
+    <div class="value">₹{data.get('revenue', '0')}</div>
+    <div class="change {_change_class(data.get('revenue_change', ''))}">{data.get('revenue_change', '—')}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">No-Shows</div>
+    <div class="value">{data.get('noshows', 0)}</div>
+  </div>
+</div>
+
+<div class="insight">💡 {data.get('insight', 'Check your dashboard for more details.')}</div>
+"""
+    return _email_wrapper("Weekly Performance Report", body, unsubscribe_url)
+
+
+def _build_monthly_email_html(data: dict, unsubscribe_url: str) -> str:
+    """Build the monthly summary email HTML."""
+    body = f"""\
+<p style="font-size:15px;color:#374151;">Here's your monthly summary for <strong>{data.get('month', '')}</strong>.</p>
+
+<div class="section-title">📊 Patient Overview</div>
+<div class="stat-row">
+  <div class="stat-card">
+    <div class="label">Total Patients</div>
+    <div class="value">{data.get('total_patients', 0)}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">New Patients</div>
+    <div class="value">{data.get('new_patients', 0)}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Returning</div>
+    <div class="value">{data.get('returning_patients', 0)}</div>
+  </div>
+</div>
+
+<div class="section-title">💰 Revenue</div>
+<div class="stat-row">
+  <div class="stat-card">
+    <div class="label">Total Revenue</div>
+    <div class="value">₹{data.get('total_revenue', '0')}</div>
+    <div class="change {_change_class(data.get('change', ''))}">{data.get('change', '—')} vs last month</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Avg / Patient</div>
+    <div class="value">₹{data.get('avg_revenue', '0')}</div>
+  </div>
+</div>
+
+<div class="section-title">🦷 Top Treatments</div>
+<div class="insight">{data.get('top_treatments', '—')}</div>
+
+<div class="section-title">⚠️ No-Shows</div>
+<div class="stat-row">
+  <div class="stat-card">
+    <div class="label">No-Shows</div>
+    <div class="value">{data.get('noshows', 0)}</div>
+    <div class="change neutral">{data.get('noshows_pct', 0)}% of appointments</div>
+  </div>
+</div>
+"""
+    return _email_wrapper(f"Monthly Summary — {data.get('month', '')}", body, unsubscribe_url)
+
+
+def _send_system_email(
+    db, clinic_id: int, to_email: str, owner_name: str, user_id: int,
+    event_type: str, subject: str, html_content: str,
+) -> bool:
+    """Send a platform-driven email notification, bypassing prefs and wallet.
+
+    Mirrors _send_system_whatsapp but for the email channel.
+    Writes a NotificationLog row and fires via nexus_notify.
+    """
+    from models import NotificationLog
+
+    if not to_email or not to_email.strip():
+        return False
+
+    log_entry = NotificationLog(
+        clinic_id=clinic_id,
+        channel="email",
+        recipient=to_email,
+        event_type=event_type,
+        template_name=event_type,
+        status="queued",
+        cost=0.0,
+        created_at=dt.datetime.utcnow(),
+        updated_at=dt.datetime.utcnow(),
+    )
+    db.add(log_entry)
+    db.commit()
+    db.refresh(log_entry)
+
+    notify(
+        event_type,
+        channel="email",
+        to_email=to_email,
+        to_name=owner_name,
+        template_data={"subject": subject, "html_content": html_content},
+        log_id=log_entry.id,
+    )
+    log_entry.status = "sent"
+    db.commit()
+    return True
+
+
 async def daily_summary_broadcast_job() -> None:
     """Daily at 20:00 IST: send today's stats to each clinic owner.
 
     System notification — bypasses notification_preferences and wallet balance.
+    Sends WhatsApp + email (if owner has not unsubscribed from email reports).
     """
     from database import SessionLocal
     from sqlalchemy import func, or_
@@ -176,7 +421,8 @@ async def daily_summary_broadcast_job() -> None:
             .all()
         )
 
-        sent = 0
+        sent_wa = 0
+        sent_email = 0
         for clinic in clinics:
             owner = (
                 db.query(User)
@@ -190,17 +436,17 @@ async def daily_summary_broadcast_job() -> None:
             if not owner:
                 continue
 
-            already_sent = (
+            # Dedup check — per channel
+            already_sent_wa = (
                 db.query(NotificationLog.id)
                 .filter(
                     NotificationLog.clinic_id == clinic.id,
                     NotificationLog.event_type == "daily_summary",
+                    NotificationLog.channel == "whatsapp",
                     NotificationLog.created_at >= today_start,
                 )
                 .first()
             )
-            if already_sent:
-                continue
 
             total_appts = (
                 db.query(func.count(Appointment.id))
@@ -239,26 +485,54 @@ async def daily_summary_broadcast_job() -> None:
             )
             online_revenue = max(total_revenue - cash_revenue, 0.0)
 
-            try:
-                if _send_system_whatsapp(
-                    db, clinic.id, clinic.phone or "",
-                    "daily_summary",
-                    {
-                        "doctor_name": owner.name or "Doctor",
-                        "clinic_name": clinic.name,
-                        "date": today.strftime("%d %b %Y"),
-                        "total_patients": int(total_patients),
-                        "total_appointments": int(total_appts),
-                        "total_revenue": round(float(total_revenue), 2),
-                        "cash_revenue": round(float(cash_revenue), 2),
-                        "online_revenue": round(float(online_revenue), 2),
-                    },
-                ):
-                    sent += 1
-            except Exception as exc:
-                logger.warning("daily_summary error clinic=%s: %s", clinic.id, exc)
+            template_data = {
+                "doctor_name": owner.name or "Doctor",
+                "clinic_name": clinic.name,
+                "date": today.strftime("%d %b %Y"),
+                "total_patients": int(total_patients),
+                "total_appointments": int(total_appts),
+                "total_revenue": round(float(total_revenue), 2),
+                "cash_revenue": round(float(cash_revenue), 2),
+                "online_revenue": round(float(online_revenue), 2),
+            }
 
-        logger.info("daily_summary_broadcast: sent=%d clinics=%d", sent, len(clinics))
+            # ── WhatsApp ──
+            if not already_sent_wa:
+                try:
+                    if _send_system_whatsapp(
+                        db, clinic.id, clinic.phone or "",
+                        "daily_summary", template_data,
+                    ):
+                        sent_wa += 1
+                except Exception as exc:
+                    logger.warning("daily_summary WA error clinic=%s: %s", clinic.id, exc)
+
+            # ── Email ──
+            if owner.email and not getattr(owner, "email_report_unsubscribed", False):
+                already_sent_email = (
+                    db.query(NotificationLog.id)
+                    .filter(
+                        NotificationLog.clinic_id == clinic.id,
+                        NotificationLog.event_type == "daily_summary",
+                        NotificationLog.channel == "email",
+                        NotificationLog.created_at >= today_start,
+                    )
+                    .first()
+                )
+                if not already_sent_email:
+                    try:
+                        unsub_url = _build_unsubscribe_url(owner.id)
+                        html = _build_daily_email_html(template_data, unsub_url)
+                        if _send_system_email(
+                            db, clinic.id, owner.email, owner.name or "Doctor",
+                            owner.id, "daily_summary",
+                            f"📊 Your Daily Report — {clinic.name}", html,
+                        ):
+                            sent_email += 1
+                    except Exception as exc:
+                        logger.warning("daily_summary email error clinic=%s: %s", clinic.id, exc)
+
+        logger.info("daily_summary_broadcast: wa=%d email=%d clinics=%d", sent_wa, sent_email, len(clinics))
     except Exception as exc:
         logger.error("daily_summary_broadcast fatal: %s", exc)
     finally:
@@ -269,10 +543,11 @@ async def weekly_summary_broadcast_job() -> None:
     """Sunday 20:00 IST: send last 7 days stats to each clinic owner.
 
     System notification — bypasses notification_preferences and wallet balance.
+    Sends WhatsApp + email (if owner has not unsubscribed from email reports).
     """
     from database import SessionLocal
     from sqlalchemy import or_
-    from models import Clinic, NotificationLog
+    from models import Clinic, User, NotificationLog
     from domains.notification.services.report_stats_service import get_weekly_stats
 
     db = SessionLocal()
@@ -287,31 +562,64 @@ async def weekly_summary_broadcast_job() -> None:
             .all()
         )
 
-        sent = 0
+        sent_wa = 0
+        sent_email = 0
         for clinic in clinics:
-            already_sent = (
+            # ── WhatsApp ──
+            already_sent_wa = (
                 db.query(NotificationLog.id)
                 .filter(
                     NotificationLog.clinic_id == clinic.id,
                     NotificationLog.event_type == "molarplus_weekly_report_mk",
+                    NotificationLog.channel == "whatsapp",
                     NotificationLog.created_at >= today_start,
                 )
                 .first()
             )
-            if already_sent:
-                continue
-            try:
-                template_data = get_weekly_stats(db, clinic.id, today)
-                if _send_system_whatsapp(
-                    db, clinic.id, clinic.phone or "",
-                    "molarplus_weekly_report_mk",
-                    template_data,
-                ):
-                    sent += 1
-            except Exception as exc:
-                logger.warning("weekly_summary error clinic=%s: %s", clinic.id, exc)
+            template_data = get_weekly_stats(db, clinic.id, today)
 
-        logger.info("weekly_summary_broadcast: sent=%d clinics=%d", sent, len(clinics))
+            if not already_sent_wa:
+                try:
+                    if _send_system_whatsapp(
+                        db, clinic.id, clinic.phone or "",
+                        "molarplus_weekly_report_mk",
+                        template_data,
+                    ):
+                        sent_wa += 1
+                except Exception as exc:
+                    logger.warning("weekly_summary WA error clinic=%s: %s", clinic.id, exc)
+
+            # ── Email ──
+            owner = (
+                db.query(User)
+                .filter(User.clinic_id == clinic.id, User.role == "clinic_owner", User.is_active == True)
+                .first()
+            )
+            if owner and owner.email and not getattr(owner, "email_report_unsubscribed", False):
+                already_sent_email = (
+                    db.query(NotificationLog.id)
+                    .filter(
+                        NotificationLog.clinic_id == clinic.id,
+                        NotificationLog.event_type == "molarplus_weekly_report_mk",
+                        NotificationLog.channel == "email",
+                        NotificationLog.created_at >= today_start,
+                    )
+                    .first()
+                )
+                if not already_sent_email:
+                    try:
+                        unsub_url = _build_unsubscribe_url(owner.id)
+                        html = _build_weekly_email_html(template_data, unsub_url)
+                        if _send_system_email(
+                            db, clinic.id, owner.email, owner.name or "Doctor",
+                            owner.id, "molarplus_weekly_report_mk",
+                            f"📈 Weekly Performance — {clinic.name}", html,
+                        ):
+                            sent_email += 1
+                    except Exception as exc:
+                        logger.warning("weekly_summary email error clinic=%s: %s", clinic.id, exc)
+
+        logger.info("weekly_summary_broadcast: wa=%d email=%d clinics=%d", sent_wa, sent_email, len(clinics))
     except Exception as exc:
         logger.error("weekly_summary_broadcast fatal: %s", exc)
     finally:
@@ -323,10 +631,11 @@ async def monthly_summary_broadcast_job() -> None:
 
     System notification — bypasses notification_preferences and wallet balance.
     Also triggers the review report.
+    Sends WhatsApp + email (if owner has not unsubscribed from email reports).
     """
     from database import SessionLocal
     from sqlalchemy import or_
-    from models import Clinic, NotificationLog
+    from models import Clinic, User, NotificationLog
     from domains.notification.services.report_stats_service import (
         get_monthly_stats, get_review_stats,
     )
@@ -343,30 +652,67 @@ async def monthly_summary_broadcast_job() -> None:
             .all()
         )
 
-        sent_monthly = 0
+        sent_monthly_wa = 0
+        sent_monthly_email = 0
         sent_review = 0
         for clinic in clinics:
             phone = clinic.phone or ""
-            already_monthly = (
+
+            # ── Monthly WhatsApp ──
+            already_monthly_wa = (
                 db.query(NotificationLog.id)
                 .filter(
                     NotificationLog.clinic_id == clinic.id,
                     NotificationLog.event_type == "molarplus_monthly_report_mk",
+                    NotificationLog.channel == "whatsapp",
                     NotificationLog.created_at >= today_start,
                 )
                 .first()
             )
-            if not already_monthly:
+            monthly_data = get_monthly_stats(db, clinic.id, today)
+
+            if not already_monthly_wa:
                 try:
                     if _send_system_whatsapp(
                         db, clinic.id, phone,
                         "molarplus_monthly_report_mk",
-                        get_monthly_stats(db, clinic.id, today),
+                        monthly_data,
                     ):
-                        sent_monthly += 1
+                        sent_monthly_wa += 1
                 except Exception as exc:
-                    logger.warning("monthly_summary error clinic=%s: %s", clinic.id, exc)
+                    logger.warning("monthly_summary WA error clinic=%s: %s", clinic.id, exc)
 
+            # ── Monthly Email ──
+            owner = (
+                db.query(User)
+                .filter(User.clinic_id == clinic.id, User.role == "clinic_owner", User.is_active == True)
+                .first()
+            )
+            if owner and owner.email and not getattr(owner, "email_report_unsubscribed", False):
+                already_monthly_email = (
+                    db.query(NotificationLog.id)
+                    .filter(
+                        NotificationLog.clinic_id == clinic.id,
+                        NotificationLog.event_type == "molarplus_monthly_report_mk",
+                        NotificationLog.channel == "email",
+                        NotificationLog.created_at >= today_start,
+                    )
+                    .first()
+                )
+                if not already_monthly_email:
+                    try:
+                        unsub_url = _build_unsubscribe_url(owner.id)
+                        html = _build_monthly_email_html(monthly_data, unsub_url)
+                        if _send_system_email(
+                            db, clinic.id, owner.email, owner.name or "Doctor",
+                            owner.id, "molarplus_monthly_report_mk",
+                            f"📋 Monthly Summary — {clinic.name}", html,
+                        ):
+                            sent_monthly_email += 1
+                    except Exception as exc:
+                        logger.warning("monthly_summary email error clinic=%s: %s", clinic.id, exc)
+
+            # ── Review Report (WhatsApp only — stays as-is) ──
             already_review = (
                 db.query(NotificationLog.id)
                 .filter(
@@ -387,8 +733,8 @@ async def monthly_summary_broadcast_job() -> None:
                 except Exception as exc:
                     logger.warning("review_report error clinic=%s: %s", clinic.id, exc)
 
-        logger.info("monthly_summary_broadcast: monthly_sent=%d review_sent=%d clinics=%d",
-                    sent_monthly, sent_review, len(clinics))
+        logger.info("monthly_summary_broadcast: wa=%d email=%d review=%d clinics=%d",
+                    sent_monthly_wa, sent_monthly_email, sent_review, len(clinics))
     except Exception as exc:
         logger.error("monthly_summary_broadcast fatal: %s", exc)
     finally:

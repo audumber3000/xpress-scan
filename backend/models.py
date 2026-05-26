@@ -112,6 +112,7 @@ class User(Base):
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     synced_at = Column(DateTime, nullable=True)
     sync_status = Column(String, default='local')  # 'local', 'synced', 'pending'
+    email_report_unsubscribed = Column(Boolean, default=False)  # Opt-out of daily/weekly/monthly email reports
     
     # Relationships
     clinics = relationship("Clinic", secondary=user_clinics, back_populates="users")
