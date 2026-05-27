@@ -1417,7 +1417,7 @@ const s = StyleSheet.create({
   actionSaveText: { fontSize: 13, fontWeight: '700', color: colors.primary },
   actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 10, paddingVertical: 10, position: 'relative' },
   actionBtnText: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
-  actionBadge: { position: 'absolute', top: -5, right: -5, backgroundColor: '#10B981', borderRadius: 8, minWidth: 16, height: 16, justifyContent: 'center', alignItems: 'center' },
+  actionBadge: { position: 'absolute', top: -5, right: -5, backgroundColor: colors.success, borderRadius: 8, minWidth: 16, height: 16, justifyContent: 'center', alignItems: 'center' },
   actionBadgeText: { fontSize: 10, color: '#fff', fontWeight: '700' },
 
   // Modals

@@ -10,6 +10,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../app/AppNavigator';
 import { useAuth } from '../../../app/AuthContext';
 import { getCurrencySymbol } from '../../../shared/utils/currency';
+import { UserAvatar } from '../../../shared/components/UserAvatar';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ReceptionistProfile'>;
 
@@ -20,11 +21,8 @@ const VIOLET_LIGHT = '#F3F2F9';
 const VIOLET_MID  = '#e8e7f5';
 
 export const ReceptionistProfileScreen: React.FC<Props> = ({ navigation }) => {
-  const { backendUser, logout } = useAuth();
+  const { user, backendUser, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('Profile');
-
-  const initials = (backendUser?.name || 'R')
-    .split(' ').map((w: string) => w[0] || '').join('').toUpperCase().slice(0, 2);
 
   const TABS: Tab[] = ['Profile', 'Attendance', 'Salary'];
 
@@ -33,7 +31,14 @@ export const ReceptionistProfileScreen: React.FC<Props> = ({ navigation }) => {
       {/* Avatar card */}
       <View style={styles.avatarCard}>
         <View style={styles.bigAvatar}>
-          <Text style={styles.bigAvatarText}>{initials}</Text>
+          <UserAvatar
+            size={70}
+            photoURL={user?.photoURL}
+            seed={user?.email || backendUser?.email}
+            name={backendUser?.name || 'Receptionist'}
+            fallbackBg={VIOLET_LIGHT}
+            fallbackColor={VIOLET}
+          />
         </View>
         <Text style={styles.profileName}>{backendUser?.name || 'Receptionist'}</Text>
         <View style={styles.rolePill}>
@@ -209,8 +214,7 @@ const styles = StyleSheet.create({
       android: { elevation: 3 },
     }),
   },
-  bigAvatar: { width: 76, height: 76, borderRadius: 38, backgroundColor: VIOLET_LIGHT, borderWidth: 3, borderColor: VIOLET, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  bigAvatarText: { fontSize: 26, fontWeight: '700', color: VIOLET },
+  bigAvatar: { width: 76, height: 76, borderRadius: 38, borderWidth: 3, borderColor: VIOLET, justifyContent: 'center', alignItems: 'center', marginBottom: 12, overflow: 'hidden' },
   profileName: { fontSize: 20, fontWeight: '700', color: '#111827', marginBottom: 6 },
   rolePill: { backgroundColor: VIOLET_LIGHT, paddingHorizontal: 14, paddingVertical: 4, borderRadius: 20, borderWidth: 1, borderColor: VIOLET_MID },
   rolePillText: { fontSize: 12, fontWeight: '700', color: VIOLET, letterSpacing: 0.3 },

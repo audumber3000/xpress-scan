@@ -119,6 +119,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
             name={userName}
             role={backendUser?.role?.toUpperCase() || "LEAD DENTIST"}
             clinic={backendUser?.clinic?.name || ""}
+            photoURL={user?.photoURL}
+            avatarSeed={user?.email || backendUser?.email}
             onEditPress={handleEditProfile}
           />
         </AppSkeleton>

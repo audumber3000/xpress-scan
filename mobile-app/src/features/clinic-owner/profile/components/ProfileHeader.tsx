@@ -1,13 +1,17 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Edit2 } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
+import { UserAvatar } from '../../../../shared/components/UserAvatar';
 
 interface ProfileHeaderProps {
   name: string;
   role: string;
   clinic: string;
-  avatarUrl?: string;
+  /** Firebase photoURL — Google / Apple profile picture */
+  photoURL?: string | null;
+  /** Email used as seed for the DiceBear fallback avatar */
+  avatarSeed?: string | null;
   onEditPress: () => void;
 }
 
@@ -15,28 +19,23 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
   name,
   role,
   clinic,
-  avatarUrl,
+  photoURL,
+  avatarSeed,
   onEditPress,
 }) => {
-  const getInitials = (name: string) => {
-    const names = name.split(' ');
-    return names.length > 1 
-      ? `${names[0][0]}${names[1][0]}`.toUpperCase()
-      : name.substring(0, 2).toUpperCase();
-  };
-
   return (
     <View style={styles.container}>
       {/* Avatar with Edit Button */}
       <View style={styles.avatarContainer}>
-        <View style={styles.avatar}>
-          {avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-          ) : (
-            <Text style={styles.avatarText}>{getInitials(name)}</Text>
-          )}
-        </View>
-        <TouchableOpacity 
+        <UserAvatar
+          size={120}
+          photoURL={photoURL}
+          seed={avatarSeed || name}
+          name={name}
+          fallbackBg="#6B9B9E"
+          fallbackColor="#FFFFFF"
+        />
+        <TouchableOpacity
           style={styles.editButton}
           onPress={onEditPress}
           activeOpacity={0.7}
@@ -62,24 +61,6 @@ const styles = StyleSheet.create({
   avatarContainer: {
     position: 'relative',
     marginBottom: 16,
-  },
-  avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#6B9B9E',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarText: {
-    fontSize: 40,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
   },
   editButton: {
     position: 'absolute',

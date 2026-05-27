@@ -631,6 +631,7 @@ export const layout = {
   fabBottomOffset: 80,
   headerCurve: radius.headerBottom,      // 30
   listSeparatorIndent: 82,               // avatar (50) + gap (12) + left padding (20)
+  headerOverlap: 80,                     // chart/card overlap that hangs over curved header
 } as const;
 
 // ─────────────────────────────────────────────

@@ -5,6 +5,7 @@ import { Bell, ChevronDown } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '../../../../../../shared/constants/colors';
 import { getCurrencySymbol } from '../../../../../../shared/utils/currency';
+import { UserAvatar } from '../../../../../../shared/components/UserAvatar';
 import { IS_PURCHASE_UI_ENABLED } from '../../../../../../shared/constants/platform';
 
 interface WelcomeHeaderProps {
@@ -21,6 +22,10 @@ interface WelcomeHeaderProps {
   trialDaysRemaining?: number | null;
   onUpgradePress?: () => void;
   onPlanPress?: () => void;
+  /** Firebase photoURL (Google / Apple profile picture) */
+  photoURL?: string | null;
+  /** Email used as seed for the DiceBear fallback avatar */
+  avatarSeed?: string | null;
 }
 
 // 1. Background backdrop (lowest layer)
@@ -50,15 +55,9 @@ export const WelcomeHeaderTopPart: React.FC<WelcomeHeaderProps> = ({
   trialDaysRemaining = null,
   onUpgradePress,
   onPlanPress,
+  photoURL,
+  avatarSeed,
 }) => {
-  // Derive initials for avatar
-  const initials = userName
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-
   return (
     <LinearGradient
       colors={['#2E2A85', '#393399']}
@@ -71,11 +70,18 @@ export const WelcomeHeaderTopPart: React.FC<WelcomeHeaderProps> = ({
         <View style={styles.headerContent}>
           {/* Left: Avatar */}
           <TouchableOpacity
-            style={styles.avatarCircle}
+            style={styles.avatarBorder}
             onPress={onProfilePress}
             activeOpacity={0.8}
           >
-            <Text style={styles.avatarInitials}>{initials || 'DR'}</Text>
+            <UserAvatar
+              size={44}
+              photoURL={photoURL}
+              seed={avatarSeed || userName}
+              name={userName}
+              fallbackBg="rgba(255,255,255,0.25)"
+              fallbackColor="#FFFFFF"
+            />
           </TouchableOpacity>
 
           {/* Center: Name + Clinic */}
@@ -205,21 +211,15 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   // Avatar circle (tappable → profile)
-  avatarCircle: {
+  avatarBorder: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.25)',
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  avatarInitials: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
+    overflow: 'hidden',
   },
   // Name + clinic block
   nameBlock: {

@@ -30,6 +30,7 @@ import { RootStackParamList } from '../../../app/AppNavigator';
 import { signInWithGoogle, signInWithApple } from '../../../services/auth/authService';
 import { useAuth } from '../../../app/AuthContext';
 import { colors } from '../../../shared/constants/colors';
+import { spacing } from '../../../shared/constants/theme';
 import { GoogleIcon } from '../../../shared/components/icons/GoogleIcon';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { LastLoginCard } from '../components/LastLoginCard';
@@ -327,14 +328,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   scrollContent: {
-    paddingHorizontal: 28,
+    paddingHorizontal: spacing[7],
     paddingTop: 40,
     paddingBottom: 60,
     flexGrow: 1,
     justifyContent: 'flex-end',
   },
   content: {
-    paddingHorizontal: 28,
+    paddingHorizontal: spacing[7],
     paddingTop: 60,
   },
   header: {

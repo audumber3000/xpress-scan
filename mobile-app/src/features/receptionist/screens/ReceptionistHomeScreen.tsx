@@ -9,7 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Bell, Calendar, Users, FlaskConical,
   Package, FileText, UserCircle, Search,
-  CreditCard, BarChart3, Megaphone,
+  CreditCard,
   Briefcase, ArrowUpRight, TrendingUp, X,
   HelpCircle
 } from 'lucide-react-native';
@@ -19,6 +19,7 @@ import { useAuth } from '../../../app/AuthContext';
 import { dashboardApiService, DashboardMetrics } from '../../../services/api/dashboard.api';
 import { utilitiesApiService } from '../../../services/api/utilities.api';
 import { getCurrencySymbol } from '../../../shared/utils/currency';
+import { UserAvatar } from '../../../shared/components/UserAvatar';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ReceptionistHome'>;
 
@@ -91,24 +92,8 @@ const MODULES: SectionItem[] = [
     params: { initialTab: 'lab' },
     theme: { bg: '#EFF6FF', icon: '#2563EB', text: '#1E40AF' }
   },
-  { 
-    id: 'reports',      
-    label: 'Reports',       
-    Icon: BarChart3,       
-    nav: null,                 
-    permissionKey: 'reports',
-    theme: { bg: '#F8FAFC', icon: '#475569', text: '#1E293B' }
-  },
-  { 
-    id: 'marketing',    
-    label: 'Marketing',     
-    Icon: Megaphone,       
-    nav: null,                 
-    permissionKey: 'marketing',
-    theme: { bg: '#FFF7ED', icon: '#EA580C', text: '#9A3412' }
-  },
-  { 
-    id: 'profile',      
+  {
+    id: 'profile',
     label: 'My Profile',    
     Icon: UserCircle,      
     nav: 'ReceptionistProfile',
@@ -126,7 +111,7 @@ const MODULES: SectionItem[] = [
 ];
 
 export const ReceptionistHomeScreen: React.FC<Props> = ({ navigation }) => {
-  const { backendUser } = useAuth();
+  const { user, backendUser } = useAuth();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [lowStockCount, setLowStockCount] = useState(0);
   const [overdueLabsCount, setOverdueLabsCount] = useState(0);
@@ -239,7 +224,7 @@ export const ReceptionistHomeScreen: React.FC<Props> = ({ navigation }) => {
             </View>
           )}
         </View>
-        <Text style={[styles.tileLabel, { color: theme.text }]} numberOfLines={1}>{item.label}</Text>
+        <Text style={[styles.tileLabel, { color: theme.text }]} numberOfLines={2}>{item.label}</Text>
       </TouchableOpacity>
     );
   };
@@ -257,7 +242,14 @@ export const ReceptionistHomeScreen: React.FC<Props> = ({ navigation }) => {
               onPress={() => navigation.navigate('ReceptionistProfile' as any)}
               activeOpacity={0.8}
             >
-              <Text style={styles.avatarText}>{initials || 'RC'}</Text>
+              <UserAvatar
+                size={42}
+                photoURL={user?.photoURL}
+                seed={user?.email || backendUser?.email}
+                name={backendUser?.name || 'Staff'}
+                fallbackBg="rgba(255,255,255,0.25)"
+                fallbackColor="#FFFFFF"
+              />
             </TouchableOpacity>
 
             <View style={styles.nameBlock}>
@@ -367,11 +359,10 @@ const styles = StyleSheet.create({
   },
   avatarCircle: {
     width: 46, height: 46, borderRadius: 23,
-    backgroundColor: 'rgba(255,255,255,0.25)',
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.5)',
     justifyContent: 'center', alignItems: 'center',
+    overflow: 'hidden',
   },
-  avatarText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.5 },
   nameBlock: { flex: 1 },
   hiText: { fontSize: 17, fontWeight: '700', color: '#FFFFFF', letterSpacing: -0.2 },
   clinicText: { fontSize: 13, color: 'rgba(255,255,255,0.75)', fontWeight: '500', marginTop: 2 },

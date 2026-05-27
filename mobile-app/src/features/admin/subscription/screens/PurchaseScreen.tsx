@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Check, X, Star, Shield, Layout, Users, BarChart3, ChevronLeft } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '../../../../shared/constants/colors';
+import { layout } from '../../../../shared/constants/theme';
 import { showAlert } from '../../../../shared/components/alertService';
 import { 
   CFErrorResponse, 
@@ -541,7 +542,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    marginTop: -80, // More overlap
+    marginTop: -layout.headerOverlap,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     backgroundColor: '#FFFFFF',

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, ScrollView, StyleSheet, StatusBar, RefreshControl, Dimensions } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, ScrollView, StyleSheet, StatusBar, RefreshControl, Dimensions, Animated } from 'react-native';
 import { useAuth } from '../../../../../app/AuthContext';
 import { transactionsApiService, Transaction } from '../../../../../services/api/transactions.api';
 import { analyticsApiService, Analytics } from '../../../../../services/api/analytics.api';
@@ -15,8 +15,29 @@ import { RevenueSection } from './components/RevenueSection';
 import { ErrorBanner } from './components/ErrorBanner';
 import { GoogleReviewsRow } from '../../../../../shared/components/home/GoogleReviewsRow';
 import { googleReviewsApiService, GooglePlaceStatus } from '../../../../../services/api/google-reviews.api';
+import { colors } from '../../../../../shared/constants/colors';
+import { layout } from '../../../../../shared/constants/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+const DOT_INACTIVE_WIDTH = 6;
+const DOT_ACTIVE_WIDTH = 18;
+
+const PaginationDot: React.FC<{ active: boolean }> = ({ active }) => {
+  const width = useRef(new Animated.Value(active ? DOT_ACTIVE_WIDTH : DOT_INACTIVE_WIDTH)).current;
+  useEffect(() => {
+    Animated.timing(width, {
+      toValue: active ? DOT_ACTIVE_WIDTH : DOT_INACTIVE_WIDTH,
+      duration: 220,
+      useNativeDriver: false,
+    }).start();
+  }, [active, width]);
+  return (
+    <Animated.View
+      style={[styles.dot, { width, backgroundColor: active ? colors.primary : '#D1D5DB' }]}
+    />
+  );
+};
 
 interface HomeScreenProps {
   navigation: any;
@@ -140,9 +161,9 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#FFFFFF"
-            colors={['#2E2A85']}
-            progressBackgroundColor="#F3F4F6"
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+            progressBackgroundColor={colors.gray100}
           />
         }
       >
@@ -160,6 +181,8 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
           trialDaysRemaining={backendUser?.clinic?.trial_days_remaining}
           onUpgradePress={() => navigation.navigate('Purchase')}
           onPlanPress={() => navigation.navigate('Subscription')}
+          photoURL={user?.photoURL}
+          avatarSeed={user?.email || backendUser?.email}
         />
 
         {/* Part 2: Tiny Rounded Bottom component */}
@@ -195,8 +218,8 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
           </ScrollView>
           {/* Pagination dots */}
           <View style={styles.dots}>
-            <View style={[styles.dot, activePage === 0 && styles.dotActive]} />
-            <View style={[styles.dot, activePage === 1 && styles.dotActive]} />
+            <PaginationDot active={activePage === 0} />
+            <PaginationDot active={activePage === 1} />
           </View>
         </View>
 
@@ -235,7 +258,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   chartWrapper: {
-    marginTop: -80,
+    marginTop: -layout.headerOverlap,
     zIndex: 5,
     elevation: 2,
     marginBottom: 8,
@@ -248,13 +271,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   dot: {
-    width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#D1D5DB',
-  },
-  dotActive: {
-    width: 18,
-    backgroundColor: '#2E2A85',
   },
 });
