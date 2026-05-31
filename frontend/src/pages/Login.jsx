@@ -6,6 +6,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { saveLastLogin } from '../utils/lastLogin';
 import LoadingButton from '../components/LoadingButton';
 import LastLoginCard from '../components/login/LastLoginCard';
+import ValidatedInput from '../components/forms/ValidatedInput';
+import { isNonEmpty } from '../utils/validators';
 import loginImage from '../assets/login-page-left-side.png';
 import { completeGoogleRedirectAuth, markGoogleRedirectPending } from '../utils/googleRedirectAuth';
 
@@ -331,35 +333,29 @@ const Login = () => {
 
           {/* Email-or-Username / Password Form */}
           <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email or Username
-              </label>
-              <input
-                type="text"
-                autoCapitalize="none"
-                autoCorrect="off"
-                placeholder="Enter your email or username"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Password
-              </label>
-              <input
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-                required
-              />
-            </div>
-            <button 
+            <ValidatedInput
+              label="Email or Username"
+              type="text"
+              autoCapitalize="none"
+              autoCorrect="off"
+              placeholder="Enter your email or username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              isValid={isNonEmpty(email)}
+              autoComplete="username"
+              required
+            />
+            <ValidatedInput
+              label="Password"
+              type="password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              isValid={isNonEmpty(password)}
+              autoComplete="current-password"
+              required
+            />
+            <button
               type="submit" 
               disabled={loading}
               className="w-full bg-[#2a276e] text-white py-3 px-4 rounded-lg hover:bg-[#1a1548] focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:ring-offset-2 disabled:opacity-50 font-medium transition-colors"

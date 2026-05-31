@@ -6,6 +6,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { saveLastLogin } from '../utils/lastLogin';
 import LoadingButton from '../components/LoadingButton';
 import LastLoginCard from '../components/login/LastLoginCard';
+import ValidatedInput from '../components/forms/ValidatedInput';
+import { isValidEmail, isValidPassword, isNonEmpty } from '../utils/validators';
 import loginImage from '../assets/login-page-left-side.png';
 import { completeGoogleRedirectAuth, markGoogleRedirectPending } from '../utils/googleRedirectAuth';
 
@@ -14,7 +16,6 @@ const Signup = () => {
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [role, setRole] = useState("clinic_owner");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -53,7 +54,7 @@ const Signup = () => {
         password,
         first_name: firstName,
         last_name: lastName,
-        role,
+        role: 'clinic_owner',
         ...(referredBy && { referred_by_code: referredBy }),
       });
 
@@ -217,75 +218,51 @@ const Signup = () => {
           {/* Email/Password Form */}
           <form onSubmit={handleSignup} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  First Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="John"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Last Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="Doe"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-                  required
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email address
-              </label>
-              <input
-                type="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
+              <ValidatedInput
+                label="First Name"
+                placeholder="John"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                isValid={isNonEmpty(firstName)}
+                errorText="First name is required"
+                autoComplete="given-name"
+                required
+              />
+              <ValidatedInput
+                label="Last Name"
+                placeholder="Doe"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                isValid={isNonEmpty(lastName)}
+                errorText="Last name is required"
+                autoComplete="family-name"
                 required
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Password
-              </label>
-              <input
-                type="password"
-                placeholder="Create a password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Role
-              </label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-              >
-                <option value="clinic_owner">Clinic Owner</option>
-                <option value="doctor">Doctor</option>
-                <option value="receptionist">Receptionist</option>
-              </select>
-            </div>
-            <button 
-              type="submit" 
+            <ValidatedInput
+              label="Email address"
+              type="email"
+              placeholder="Enter your email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              isValid={isValidEmail(email)}
+              errorText="Enter a valid email address"
+              autoComplete="email"
+              required
+            />
+            <ValidatedInput
+              label="Password"
+              type="password"
+              placeholder="Create a password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              isValid={isValidPassword(password)}
+              errorText="Use at least 8 characters"
+              autoComplete="new-password"
+              required
+            />
+            <button
+              type="submit"
               disabled={loading}
               className="w-full bg-[#2a276e] text-white py-3 px-4 rounded-lg hover:bg-[#1a1548] focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:ring-offset-2 disabled:opacity-50 font-medium transition-colors"
             >

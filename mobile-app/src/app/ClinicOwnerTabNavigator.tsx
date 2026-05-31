@@ -41,10 +41,10 @@ export const ClinicOwnerTabNavigator = () => {
         }}
       />
       <Tab.Screen
-        name="Appointments"
-        component={AppointmentsScreen}
+        name="Patients"
+        component={PatientsScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <Calendar size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Users size={size} color={color} />,
         }}
       />
       {isAdmin && (
@@ -57,10 +57,10 @@ export const ClinicOwnerTabNavigator = () => {
         />
       )}
       <Tab.Screen
-        name="Patients"
-        component={PatientsScreen}
+        name="Appointments"
+        component={AppointmentsScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <Users size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Calendar size={size} color={color} />,
         }}
       />
       <Tab.Screen

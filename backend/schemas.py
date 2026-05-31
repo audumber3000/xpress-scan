@@ -365,6 +365,7 @@ class SubscriptionOut(SubscriptionBase):
     current_end: Optional[datetime] = None
     is_trial: bool = False
     trial_ends_at: Optional[datetime] = None
+    trial_available: bool = True
     quantity: int = 1
     notes: Optional[Dict[str, Any]] = None
     created_at: datetime

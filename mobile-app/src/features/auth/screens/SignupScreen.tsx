@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,9 @@ import {
   Platform,
   StyleSheet,
   Dimensions,
-  Alert
+  Alert,
+  Modal,
+  FlatList,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { 
@@ -31,15 +33,27 @@ import {
   Stethoscope,
   ChevronRight,
   ArrowLeft,
-  Users
+  Users,
+  Globe,
+  Search,
+  X,
 } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../app/AppNavigator';
 import { signUpWithEmail } from '../../../services/auth/authService';
 import { authApiService } from '../../../services/api/auth.api';
-import { detectCountry } from '../../../shared/utils/detectCountry';
+import { detectCountryAsync, flagEmoji } from '../../../shared/utils/detectCountry';
 import { colors } from '../../../shared/constants/colors';
 import { useAuth } from '../../../app/AuthContext';
+import { getApiBaseUrl } from '../../../config/api.config';
+
+interface CountryOption {
+  code: string;
+  name: string;
+  currency_symbol: string;
+  currency_code: string;
+  phone_code: string;
+}
 
 const { width } = Dimensions.get('window');
 
@@ -64,6 +78,24 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({ navigation }) => {
   const [clinicName, setClinicName] = useState('');
   const [clinicAddress, setClinicAddress] = useState('');
   const [clinicPhone, setClinicPhone] = useState('');
+  const [country, setCountry] = useState('');
+  const [countries, setCountries] = useState<CountryOption[]>([]);
+  const [countryModalVisible, setCountryModalVisible] = useState(false);
+  const [countrySearch, setCountrySearch] = useState('');
+
+  // Load the supported-country list and auto-detect the user's country (still changeable).
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${getApiBaseUrl()}/api/v1/clinics/countries`);
+        if (res.ok) setCountries(await res.json());
+      } catch {
+        /* offline — picker just shows the detected code */
+      }
+      const detected = await detectCountryAsync();
+      setCountry(detected);
+    })();
+  }, []);
 
   // Step 3: Practice Metrics
   const [numberOfChairs, setNumberOfChairs] = useState('1');
@@ -149,7 +181,7 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({ navigation }) => {
         number_of_chairs: parseInt(numberOfChairs) || 1,
         full_name: fullName,
         category: clinicCategory,
-        country: detectCountry(),
+        country: country || (await detectCountryAsync()),
       };
 
       const onboardingResult = await authApiService.completeOnboarding(onboardingData);
@@ -261,6 +293,23 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({ navigation }) => {
               onChangeText={setClinicName}
             />
           </View>
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Country</Text>
+          <TouchableOpacity
+            style={styles.inputWrapper}
+            onPress={() => setCountryModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <Globe size={20} color={colors.primary} style={styles.inputIcon} />
+            <Text style={[styles.input, { color: country ? '#111827' : '#9CA3AF' }]}>
+              {country
+                ? `${flagEmoji(country)}  ${countries.find((c) => c.code === country)?.name || country}`
+                : 'Select country'}
+            </Text>
+            <ChevronDown size={18} color="#9CA3AF" />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.inputGroup}>
@@ -481,6 +530,65 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({ navigation }) => {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Country picker */}
+      <Modal
+        visible={countryModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setCountryModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select country</Text>
+              <TouchableOpacity onPress={() => setCountryModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <X size={22} color="#111827" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.searchWrapper}>
+              <Search size={18} color="#9CA3AF" />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search country"
+                placeholderTextColor="#9CA3AF"
+                value={countrySearch}
+                onChangeText={setCountrySearch}
+                autoCorrect={false}
+              />
+            </View>
+
+            <FlatList
+              data={countries.filter((c) =>
+                c.name.toLowerCase().includes(countrySearch.trim().toLowerCase())
+              )}
+              keyExtractor={(c) => c.code}
+              keyboardShouldPersistTaps="handled"
+              initialNumToRender={20}
+              renderItem={({ item }) => {
+                const selected = item.code === country;
+                return (
+                  <TouchableOpacity
+                    style={styles.countryRow}
+                    onPress={() => {
+                      setCountry(item.code);
+                      setCountrySearch('');
+                      setCountryModalVisible(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.countryFlag}>{flagEmoji(item.code)}</Text>
+                    <Text style={styles.countryName} numberOfLines={1}>{item.name}</Text>
+                    <Text style={styles.countryCur}>{item.currency_symbol}</Text>
+                    {selected && <Check size={18} color={colors.primary} />}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -693,6 +801,72 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     fontWeight: '500',
+  },
+  // Country picker modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 12,
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  searchWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    paddingHorizontal: 14,
+    height: 48,
+    marginBottom: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#111827',
+  },
+  countryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  countryFlag: {
+    fontSize: 22,
+  },
+  countryName: {
+    flex: 1,
+    fontSize: 15,
+    color: '#111827',
+    fontWeight: '500',
+  },
+  countryCur: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    fontWeight: '600',
   },
 });
 

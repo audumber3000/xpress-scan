@@ -5,6 +5,7 @@ import { Lock, Zap } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../app/AuthContext';
 import { IS_PURCHASE_UI_ENABLED, MARKETING_SITE_TEXT } from '../constants/platform';
+import { getSubscriptionPricing } from '../utils/pricing';
 
 interface FeatureLockProps {
   children: React.ReactNode;
@@ -19,9 +20,13 @@ export const FeatureLock: React.FC<FeatureLockProps> = ({
 }) => {
   const { backendUser } = useAuth();
   const navigation = useNavigation<any>();
+  const pricing = getSubscriptionPricing(backendUser?.clinic);
 
-  const plan = backendUser?.clinic?.subscription_plan;
-  const isLocked = plan !== 'professional' && plan !== 'professional_annual';
+  const plan = backendUser?.clinic?.subscription_plan as string | undefined;
+  const isPro = plan === 'professional' || plan === 'professional_annual';
+  // Trial users get full access to premium features for the duration of the trial.
+  const isTrial = !!backendUser?.clinic?.is_trial;
+  const isLocked = !isPro && !isTrial;
 
   if (!isLocked) return <>{children}</>;
 
@@ -69,7 +74,7 @@ export const FeatureLock: React.FC<FeatureLockProps> = ({
                 </LinearGradient>
               </TouchableOpacity>
 
-              <Text style={s.hint}>Starting at ₹899 / month</Text>
+              <Text style={s.hint}>Starting at {pricing.symbol}{pricing.monthly} / month</Text>
             </>
           ) : (
             // iOS: no in-app upgrade CTA. Plain text mentioning the website.

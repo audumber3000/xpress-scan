@@ -60,6 +60,10 @@ const CasePapersTab = ({
   const [invoiceEditId, setInvoiceEditId] = useState(null);
   // Tracks if a finalized invoice already exists for this case paper
   const [existingCasePaperInvoiceId, setExistingCasePaperInvoiceId] = useState(null);
+
+  // Unsaved-changes guard: flips true on any edit, resets after save/load.
+  const [dirty, setDirty] = useState(false);
+  const [exitPrompt, setExitPrompt] = useState(false);
   
   // Form state for Lab Order
   const [labOrderForm, setLabOrderForm] = useState({
@@ -200,6 +204,7 @@ const CasePapersTab = ({
       };
       const saved = await api.post('/clinical/case-papers', payload);
       setSelectedCasePaper(saved);
+      setDirty(false);
       fetchCasePapers();
       if (typeof onSaveClinicalRecords === 'function') {
         onSaveClinicalRecords({ dental_chart: sessionTeethData, treatment_plan: sessionTreatmentPlan, tooth_notes: sessionToothNotes }).catch(() => {});
@@ -276,6 +281,7 @@ const CasePapersTab = ({
       setLabOrders([]);
       setVisitPrescriptions([]);
       setDraftCharges([]);
+      setDirty(false);
       onCasePaperStateChange?.(true);
   };
 
@@ -311,6 +317,7 @@ const CasePapersTab = ({
           }
 
           fetchCasePapers();
+          setDirty(false);
           setSelectedCasePaper(null);
           setForm({
               chief_complaint: [],
@@ -331,6 +338,7 @@ const CasePapersTab = ({
 
   const onUpdatePlan = (updatedPlan) => {
     // Update local session plan
+    setDirty(true);
     setSessionTreatmentPlan(updatedPlan);
 
     // Detect newly completed items for billing
@@ -405,6 +413,7 @@ const CasePapersTab = ({
 
   // Local Handlers for Clinical Session
   const handleSurfaceConditionChange = (toothId, surface, condition) => {
+    setDirty(true);
     setSessionTeethData(prev => {
       const toothData = prev[toothId] || { surfaces: {}, status: 'healthy', isAdult: true };
       const newSurfaces = { ...toothData.surfaces, [surface]: condition };
@@ -413,6 +422,7 @@ const CasePapersTab = ({
   };
 
   const handleToothStatusChange = (toothId, status) => {
+    setDirty(true);
     setSessionTeethData(prev => {
       const toothData = prev[toothId] || { surfaces: {}, status: 'healthy', isAdult: true };
       return { ...prev, [toothId]: { ...toothData, status } };
@@ -420,7 +430,28 @@ const CasePapersTab = ({
   };
 
   const handleNotesChange = (toothId, notes) => {
+    setDirty(true);
     setSessionToothNotes(prev => ({ ...prev, [toothId]: notes }));
+  };
+
+  // Form edits from the clinical sections — mark the session dirty.
+  const handleFormChange = (f) => {
+    setDirty(true);
+    setForm(f);
+  };
+
+  // Exit the case paper back to the history list.
+  const doExit = () => {
+    setDirty(false);
+    setExitPrompt(false);
+    setSelectedCasePaper(null);
+    onCasePaperStateChange?.(false);
+  };
+
+  // Guarded exit: if there are unsaved edits, ask first.
+  const requestExit = () => {
+    if (dirty) setExitPrompt(true);
+    else doExit();
   };
 
   const formatStatus = (status) => {
@@ -441,6 +472,7 @@ const CasePapersTab = ({
         onSelectCasePaper={(paper, formData) => {
           setSelectedCasePaper(paper);
           setForm(formData);
+          setDirty(false);
           onCasePaperStateChange?.(true);
         }}
       />
@@ -453,11 +485,8 @@ const CasePapersTab = ({
       {/* 1. Standard Header (Non-sticky) */}
       <div className="bg-white border-b border-gray-100 -mx-6 px-8 py-4 flex items-center justify-between mb-8">
         <div className="flex items-center gap-5">
-            <button 
-                onClick={() => {
-                  setSelectedCasePaper(null);
-                  onCasePaperStateChange?.(false);
-                }}
+            <button
+                onClick={requestExit}
                 className="w-10 h-10 rounded-full border border-gray-100 flex items-center justify-center text-gray-400 hover:text-[#2a276e] hover:bg-gray-50 transition-all active:scale-95"
             >
                 <ChevronLeft size={20} strokeWidth={2.5} />
@@ -493,7 +522,7 @@ const CasePapersTab = ({
 
       <div className="space-y-12 pb-32">
         {/* 2. Clinical Examination Profile (Pills) */}
-        <ClinicalExamSection form={form} onFormChange={setForm} />
+        <ClinicalExamSection form={form} onFormChange={handleFormChange} />
 
         {/* 3. Dental Charting Tabbed View */}
         <DentalChartSection
@@ -556,7 +585,7 @@ const CasePapersTab = ({
         <DocumentsNotesGrid
           patientDocuments={patientDocuments}
           form={form}
-          onFormChange={setForm}
+          onFormChange={handleFormChange}
           onUploadClick={() => {
             handleAutoSaveForDrawer(() => setScanOpen(true));
           }}
@@ -566,13 +595,24 @@ const CasePapersTab = ({
       {/* 7. Sticky Bottom Action Bar */}
       <CasePaperActionBar
         form={form}
-        onFormChange={setForm}
+        onFormChange={handleFormChange}
         onSave={handleSaveCasePaper}
         onPrescription={() => {
           handleAutoSaveForDrawer(() => setPrescriptionOpen(true));
         }}
         hasExistingInvoice={!!existingCasePaperInvoiceId}
         onInvoice={() => {
+          // Warn about treatments not yet marked complete — only completed ones
+          // flow into billing, so pending ones would be silently left out.
+          const pending = (sessionTreatmentPlan || []).filter((t) => {
+            const s = (t.status || '').toLowerCase();
+            return s !== 'completed' && s !== 'cancelled';
+          });
+          if (pending.length > 0) {
+            toast.warn(
+              `${pending.length} treatment${pending.length > 1 ? 's are' : ' is'} still pending — mark ${pending.length > 1 ? 'them' : 'it'} complete to add to billing.`
+            );
+          }
           if (existingCasePaperInvoiceId) {
             setInvoiceEditId(String(existingCasePaperInvoiceId));
             return;
@@ -689,6 +729,41 @@ const CasePapersTab = ({
           onAddTreatment={handleAddTreatment}
           editingTreatment={editingTreatment}
       />
+
+      {/* Unsaved-changes guard when leaving the case paper */}
+      {exitPrompt && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setExitPrompt(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-4">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">Unsaved changes</h3>
+            <p className="text-sm text-gray-500 mt-1">You have unsaved changes in this case paper. What would you like to do?</p>
+            <div className="flex flex-col gap-2.5 mt-6">
+              <button
+                onClick={() => { setExitPrompt(false); handleSaveCasePaper(); }}
+                className="w-full px-4 py-2.5 bg-[#2a276e] text-white rounded-lg text-sm font-semibold hover:bg-[#1a1548] transition-colors shadow-sm"
+              >
+                Save &amp; exit
+              </button>
+              <button
+                onClick={doExit}
+                className="w-full px-4 py-2.5 bg-red-50 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-100 transition-colors"
+              >
+                Don't save
+              </button>
+              <button
+                onClick={() => setExitPrompt(false)}
+                className="w-full px-4 py-2.5 bg-gray-50 text-gray-600 rounded-lg text-sm font-semibold hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,7 +1,9 @@
 import React, { useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, PanResponder } from 'react-native';
 import { showAlert } from '../../../../shared/components/alertService';
-import { Phone, Trash2 } from 'lucide-react-native';
+import { Trash2 } from 'lucide-react-native';
+import { PatientAvatar } from '../../../../shared/components/PatientAvatar';
+import { WhatsAppIcon } from '../../../../shared/components/icons/WhatsAppIcon';
 
 interface PatientCardProps {
   patient: {
@@ -10,8 +12,8 @@ interface PatientCardProps {
     phone: string;
     status: 'Active' | 'Inactive';
     lastVisit: string;
-    initials: string;
-    avatarColor: string;
+    age: number;
+    gender: string;
   };
   onPress: () => void;
   onPhonePress: () => void;
@@ -109,9 +111,13 @@ export const PatientCard: React.FC<PatientCardProps> = ({ patient, onPress, onPh
           activeOpacity={0.7}
         >
           {/* Avatar */}
-          <View style={[styles.avatar, { backgroundColor: patient.avatarColor }]}>
-            <Text style={styles.avatarText}>{patient.initials}</Text>
-          </View>
+          <PatientAvatar
+            name={patient.name}
+            age={patient.age}
+            gender={patient.gender}
+            size={50}
+            style={styles.avatar}
+          />
 
           {/* Patient Info */}
           <View style={styles.patientInfo}>
@@ -125,7 +131,7 @@ export const PatientCard: React.FC<PatientCardProps> = ({ patient, onPress, onPh
             <Text style={styles.lastVisit}>Last visit: {patient.lastVisit}</Text>
           </View>
 
-          {/* Phone Icon */}
+          {/* Contact button — opens Call / WhatsApp action sheet */}
           <TouchableOpacity
             style={styles.phoneButton}
             onPress={(e) => {
@@ -133,8 +139,9 @@ export const PatientCard: React.FC<PatientCardProps> = ({ patient, onPress, onPh
               onPhonePress();
             }}
             activeOpacity={0.6}
+            accessibilityLabel={`Contact ${patient.name}`}
           >
-            <Phone size={20} color="#9CA3AF" />
+            <WhatsAppIcon size={28} />
           </TouchableOpacity>
         </TouchableOpacity>
       </Animated.View>
@@ -185,17 +192,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
     marginRight: 12,
-  },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
   },
   patientInfo: {
     flex: 1,
@@ -229,7 +226,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F9FAFB',
     justifyContent: 'center',
     alignItems: 'center',
   },

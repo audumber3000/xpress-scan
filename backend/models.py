@@ -375,6 +375,7 @@ class Subscription(Base):
     current_end = Column(DateTime, nullable=True)  # Current billing period end
     is_trial = Column(Boolean, default=False)
     trial_ends_at = Column(DateTime, nullable=True)
+    trial_used = Column(Boolean, default=False)  # True once a free trial has ever been started (blocks re-trial)
     quantity = Column(Integer, default=1)  # Number of subscriptions
     notes = Column(JSON, nullable=True)  # Additional metadata from Razorpay
     created_at = Column(DateTime, default=datetime.datetime.utcnow)

@@ -232,7 +232,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
           ? 'bg-gradient-to-b from-[#0d2a2d] via-[#1F6B72] to-[#29828a]' 
           : 'bg-gradient-to-b from-[#0d0a2d] via-[#1a1548] to-[#2a276e]'
       }`
-    : `flex flex-col h-full w-64 p-5 ${
+    : `flex flex-col h-full w-[82%] max-w-[320px] p-5 shadow-2xl ${
         isAdminRoute
           ? 'bg-gradient-to-b from-[#0d2a2d] via-[#1F6B72] to-[#29828a]'
           : 'bg-gradient-to-b from-[#0d0a2d] via-[#1a1548] to-[#2a276e]'
@@ -240,10 +240,10 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
 
   return (
     <>
-      {/* Mobile overlay */}
+      {/* Mobile overlay — tap to close */}
       {isMobile && isMobileOpen && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40"
+        <div
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[45]"
           onClick={onMobileClose}
         />
       )}
@@ -268,8 +268,10 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
         {/* Mobile close button */}
         {isMobile && (
           <button
+            type="button"
             onClick={onMobileClose}
-            className="absolute top-4 right-4 p-2 rounded-lg bg-[#1A1640] hover:bg-[#2A2550] transition-colors"
+            aria-label="Close menu"
+            className="absolute top-3 right-3 z-20 p-2.5 rounded-lg bg-[#1A1640] hover:bg-[#2A2550] active:scale-95 transition-all"
           >
             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -386,8 +388,9 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
                     )}
                   </button>
                 ) : (
-                  <Link 
-                    to={item.path} 
+                  <Link
+                    to={item.path}
+                    onClick={() => isMobile && onMobileClose?.()}
                     className={`${linkClass(item.path)} ${collapsed ? 'group' : ''}`}
                     title={collapsed ? item.name : ''}
                   >
@@ -404,25 +407,22 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
                   </Link>
                 )}
                 
-                {/* Submenu items */}
+                {/* Submenu items — same styling as main nav, just indented */}
                 {item.hasSubmenu && expandedMenus[item.name] && !collapsed && (
-                  <div className="ml-8 mt-1 flex flex-col gap-1">
+                  <div className="ml-4 mt-1 flex flex-col gap-1.5">
                     {item.submenu.map((subItem) => {
                       const isSubActive = location.pathname === subItem.path;
                       return (
                         <Link
                           key={subItem.name}
                           to={subItem.path}
-                          className={`flex items-center gap-2 py-2 px-3 rounded-lg transition-all text-sm ${
-                            isSubActive
-                              ? 'bg-white/20 text-white font-medium'
-                              : 'text-white/70 hover:bg-white/10 hover:text-white'
-                          }`}
+                          onClick={() => isMobile && onMobileClose?.()}
+                          className={linkClass(subItem.path)}
                         >
-                          <div className="w-4 h-4 flex items-center justify-center">
+                          <div className={`w-6 h-6 flex items-center justify-center transition-all ${isSubActive ? 'text-gray-900' : 'text-white/80'}`}>
                             {subItem.icon}
                           </div>
-                          <span>{subItem.name}</span>
+                          <span className="text-[15px] flex-1">{subItem.name}</span>
                         </Link>
                       );
                     })}
@@ -445,9 +445,10 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
           {visibleAdminNav.map((item) => {
             const isActive = location.pathname === item.path;
             return (
-              <Link 
-                key={item.name} 
-                to={item.path} 
+              <Link
+                key={item.name}
+                to={item.path}
+                onClick={() => isMobile && onMobileClose?.()}
                 className={`${linkClass(item.path)} ${collapsed ? 'group' : ''}`}
                 title={collapsed ? item.name : ''}
               >

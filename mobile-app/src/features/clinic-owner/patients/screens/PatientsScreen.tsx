@@ -12,24 +12,21 @@ import { AddPatientScreen } from './AddPatientScreen';
 import { colors } from '../../../../shared/constants/colors';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
 import { AppSkeleton } from '../../../../shared/components/Skeleton';
+import { ContactActionSheet } from '../../../../shared/components/ContactActionSheet';
 
 interface PatientsScreenProps {
   navigation: any;
   route?: any;
 }
 
-interface UIPatient extends Patient {
-  initials: string;
-  avatarColor: string;
-}
-
 export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, route }) => {
   const [searchQuery, setSearchQuery] = useState(route?.params?.initialSearchQuery || '');
   const [selectedTab, setSelectedTab] = useState('all');
-  const [patients, setPatients] = useState<UIPatient[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showAddPatient, setShowAddPatient] = useState(false);
+  const [contactPatient, setContactPatient] = useState<Patient | null>(null);
   const insets = useSafeAreaInsets();
 
   const { backendUser } = useAuth();
@@ -51,29 +48,11 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
     setRefreshing(false);
   };
 
-  const getInitials = (name: string) => {
-    if (!name) return '??';
-    const parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-    }
-    return name.substring(0, 2).toUpperCase();
-  };
-
-  const getAvatarColor = () => {
-    return colors.primary;
-  };
-
   const loadPatients = async () => {
     setLoading(true);
     try {
       const data = await patientsApiService.getPatients();
-      const augmentedData = data.map(p => ({
-        ...p,
-        initials: getInitials(p.name),
-        avatarColor: getAvatarColor()
-      }));
-      setPatients(augmentedData);
+      setPatients(data);
     } catch (err: any) {
       console.error('Error loading patients:', err);
       showAlert('Error', `Failed to load patients: ${err.message}`);
@@ -104,19 +83,32 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
     return filtered;
   };
 
-  const handlePatientPress = (patient: UIPatient) => {
+  const handlePatientPress = (patient: Patient) => {
     navigation.navigate('PatientDetails', { patientId: patient.id });
   };
 
-  const handleCallPatient = (patient: UIPatient) => {
-    if (patient.phone) {
-      Linking.openURL(`tel:${patient.phone}`);
-    } else {
+  const handleContactPatient = (patient: Patient) => {
+    if (!patient.phone) {
       showAlert('Error', 'Patient has no phone number');
+      return;
+    }
+    setContactPatient(patient);
+  };
+
+  const handleCall = () => {
+    if (contactPatient?.phone) {
+      Linking.openURL(`tel:${contactPatient.phone.replace(/[^0-9+]/g, '')}`);
     }
   };
 
-  const handleDeletePatient = (patient: UIPatient) => {
+  const handleWhatsApp = () => {
+    if (contactPatient?.phone) {
+      const num = contactPatient.phone.replace(/[^0-9]/g, '');
+      Linking.openURL(`https://wa.me/${num}`);
+    }
+  };
+
+  const handleDeletePatient = (patient: Patient) => {
     showAlert('Delete Patient', `Are you sure you want to delete ${patient.name}?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => {} } // Delete logic not implemented yet
@@ -165,7 +157,7 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
         <PatientsList
           patients={filterPatients()}
           onPatientPress={handlePatientPress}
-          onPhonePress={handleCallPatient}
+          onPhonePress={handleContactPatient}
           onDelete={handleDeletePatient}
           refreshing={refreshing}
           onRefresh={onRefresh}
@@ -187,6 +179,15 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
           setShowAddPatient(false);
           loadPatients();
         }}
+      />
+
+      <ContactActionSheet
+        isVisible={!!contactPatient}
+        onClose={() => setContactPatient(null)}
+        name={contactPatient?.name}
+        phone={contactPatient?.phone}
+        onCall={handleCall}
+        onWhatsApp={handleWhatsApp}
       />
     </SafeAreaView>
   );

@@ -135,6 +135,8 @@ class ClinicResponseDTO(ClinicBaseDTO):
     is_trial: bool = False
     plan_ends_at: Optional[str] = None
     trial_days_remaining: Optional[int] = None
+    # True when this clinic is eligible to start a free trial (never used one and not currently Pro/trial)
+    trial_available: bool = True
 
     class Config:
         from_attributes = True

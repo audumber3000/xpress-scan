@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
 import { api } from '../utils/api';
-import { getCurrencySymbol } from '../utils/currency';
-import { detectCountry } from '../utils/detectCountry';
+import { detectCountry, detectCountryAsync, flagEmoji } from '../utils/detectCountry';
+import ValidatedInput from '../components/forms/ValidatedInput';
+import { isNonEmpty, isValidPhone } from '../utils/validators';
+import { getSubscriptionPricing } from '../utils/pricing';
 import {
   Building2,
   MapPin,
@@ -71,10 +73,14 @@ const ClinicOnboarding = () => {
     // Fetch supported countries for the dropdown.
     // If the locale-detected country isn't in the supported list, snap back
     // to "IN" so the dropdown doesn't render an invalid/blank selection.
-    api.get('/clinics/countries').then((list) => {
+    api.get('/clinics/countries').then(async (list) => {
       setCountries(list);
+      // Refine to the IP-detected country (most accurate); fall back gracefully.
+      const detected = await detectCountryAsync();
       setFormData((prev) =>
-        list.some((c) => c.code === prev.country)
+        list.some((c) => c.code === detected)
+          ? { ...prev, country: detected }
+          : list.some((c) => c.code === prev.country)
           ? prev
           : { ...prev, country: 'IN' }
       );
@@ -123,7 +129,13 @@ const ClinicOnboarding = () => {
 
       localStorage.setItem('user', JSON.stringify(result.user));
       setAuthUser(result.user);
-      toast.success("Clinic ready — welcome to MolarPlus.");
+      // Show the one-time welcome on the dashboard, and keep the recurring
+      // device-app upsell quiet for this first session so they don't stack —
+      // the welcome already carries a soft "get the app" nudge.
+      localStorage.setItem('mp_welcome_pending', '1');
+      try {
+        localStorage.setItem('mp_device_upsell_v1', JSON.stringify({ dismissedAt: Date.now() }));
+      } catch (_) { /* ignore */ }
       navigate("/dashboard");
     } catch (error) {
       toast.error(error.response?.data?.detail || error.message || "Onboarding failed.");
@@ -193,6 +205,8 @@ const ClinicOnboarding = () => {
   const inputCls =
     "w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent text-sm";
   const labelCls = "block text-sm font-medium text-gray-700 mb-1.5";
+  // Currency-aware pricing based on the chosen country (₹ for India, $ elsewhere).
+  const pricing = getSubscriptionPricing(formData.country);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#2a276e]/5 to-indigo-50 py-8 px-4">
@@ -216,37 +230,37 @@ const ClinicOnboarding = () => {
                   </p>
                 </div>
 
-                <div>
-                  <label className={labelCls}>
+                <ValidatedInput
+                  label={
                     <span className="flex items-center gap-1.5">
                       <User className="w-4 h-4 text-gray-400" /> Full name *
                     </span>
-                  </label>
-                  <input
-                    type="text"
-                    name="full_name"
-                    value={formData.full_name}
-                    onChange={handleInputChange}
-                    placeholder="Dr. Rajesh Kumar"
-                    className={inputCls}
-                  />
-                </div>
+                  }
+                  labelClassName={labelCls}
+                  className="text-sm"
+                  name="full_name"
+                  value={formData.full_name}
+                  onChange={handleInputChange}
+                  placeholder="Dr. Rajesh Kumar"
+                  isValid={isNonEmpty(formData.full_name)}
+                  errorText="Full name is required"
+                />
 
-                <div>
-                  <label className={labelCls}>
+                <ValidatedInput
+                  label={
                     <span className="flex items-center gap-1.5">
                       <GraduationCap className="w-4 h-4 text-gray-400" /> Specialty / Degree *
                     </span>
-                  </label>
-                  <input
-                    type="text"
-                    name="specialty"
-                    value={formData.specialty}
-                    onChange={handleInputChange}
-                    placeholder="BDS, MDS (Orthodontics)"
-                    className={inputCls}
-                  />
-                </div>
+                  }
+                  labelClassName={labelCls}
+                  className="text-sm"
+                  name="specialty"
+                  value={formData.specialty}
+                  onChange={handleInputChange}
+                  placeholder="BDS, MDS (Orthodontics)"
+                  isValid={isNonEmpty(formData.specialty)}
+                  errorText="Specialty is required"
+                />
               </div>
             )}
 
@@ -271,66 +285,73 @@ const ClinicOnboarding = () => {
                     onChange={handleInputChange}
                     className={inputCls}
                   >
-                    {countries.length > 0 ? countries.map((c) => (
-                      <option key={c.code} value={c.code}>
-                        {c.name} ({c.currency_symbol})
-                      </option>
-                    )) : (
-                      <option value="IN">India (₹)</option>
+                    {countries.length > 0 ? (
+                      // Float the auto-detected / selected country to the top so it's the obvious default.
+                      [...countries]
+                        .sort((a, b) =>
+                          a.code === formData.country ? -1 : b.code === formData.country ? 1 : 0
+                        )
+                        .map((c) => (
+                          <option key={c.code} value={c.code}>
+                            {flagEmoji(c.code)}  {c.name} ({c.currency_symbol})
+                          </option>
+                        ))
+                    ) : (
+                      <option value="IN">{flagEmoji('IN')}  India (₹)</option>
                     )}
                   </select>
                 </div>
 
-                <div>
-                  <label className={labelCls}>
+                <ValidatedInput
+                  label={
                     <span className="flex items-center gap-1.5">
                       <Building2 className="w-4 h-4 text-gray-400" /> Clinic name *
                     </span>
-                  </label>
-                  <input
-                    type="text"
-                    name="clinic_name"
-                    value={formData.clinic_name}
-                    onChange={handleInputChange}
-                    placeholder="MolarPlus Dental Care"
-                    className={inputCls}
-                  />
-                </div>
+                  }
+                  labelClassName={labelCls}
+                  className="text-sm"
+                  name="clinic_name"
+                  value={formData.clinic_name}
+                  onChange={handleInputChange}
+                  placeholder="MolarPlus Dental Care"
+                  isValid={isNonEmpty(formData.clinic_name)}
+                  errorText="Clinic name is required"
+                />
 
-                <div>
-                  <label className={labelCls}>
+                <ValidatedInput
+                  label={
                     <span className="flex items-center gap-1.5">
                       <MessageCircle className="w-4 h-4 text-green-600" /> WhatsApp / Phone number *
                     </span>
-                  </label>
-                  <input
-                    type="tel"
-                    name="clinic_phone"
-                    value={formData.clinic_phone}
-                    onChange={handleInputChange}
-                    placeholder={countries.find(c => c.code === formData.country)?.phone_code + ' ...' || '+91 98765 43210'}
-                    className={inputCls}
-                  />
-                  <p className="mt-1.5 text-xs text-gray-500">
-                    Used for appointment reminders and consent links sent to patients.
-                  </p>
-                </div>
+                  }
+                  labelClassName={labelCls}
+                  className="text-sm"
+                  type="tel"
+                  name="clinic_phone"
+                  value={formData.clinic_phone}
+                  onChange={handleInputChange}
+                  placeholder={countries.find(c => c.code === formData.country)?.phone_code + ' ...' || '+91 98765 43210'}
+                  isValid={isValidPhone(formData.clinic_phone)}
+                  errorText="Enter a valid phone number"
+                  hint="Used for appointment reminders and consent links sent to patients."
+                />
 
-                <div>
-                  <label className={labelCls}>
+                <ValidatedInput
+                  label={
                     <span className="flex items-center gap-1.5">
                       <MapPin className="w-4 h-4 text-gray-400" /> Address *
                     </span>
-                  </label>
-                  <textarea
-                    name="clinic_address"
-                    value={formData.clinic_address}
-                    onChange={handleInputChange}
-                    rows={2}
-                    placeholder="Suite, building, street, city"
-                    className={`${inputCls} resize-none`}
-                  />
-                </div>
+                  }
+                  labelClassName={labelCls}
+                  className="text-sm"
+                  name="clinic_address"
+                  value={formData.clinic_address}
+                  onChange={handleInputChange}
+                  rows={2}
+                  placeholder="Suite, building, street, city"
+                  isValid={isNonEmpty(formData.clinic_address)}
+                  errorText="Address is required"
+                />
               </div>
             )}
 
@@ -431,7 +452,7 @@ const ClinicOnboarding = () => {
                     }`}
                   >
                     Annual
-                    <span className="bg-green-100 text-green-700 text-[10px] font-bold px-1.5 py-0.5 rounded">25% OFF</span>
+                    <span className="bg-green-100 text-green-700 text-[10px] font-bold px-1.5 py-0.5 rounded">{pricing.pctOff}% OFF</span>
                   </button>
                 </div>
 
@@ -453,7 +474,7 @@ const ClinicOnboarding = () => {
                         <CheckCircle className="w-5 h-5 text-[#2a276e]" />
                       )}
                     </div>
-                    <div className="text-2xl font-bold text-gray-900">{getCurrencySymbol()}0</div>
+                    <div className="text-2xl font-bold text-gray-900">{pricing.symbol}0</div>
                     <p className="text-xs text-gray-500 mb-3">Forever — get started</p>
                     <ul className="space-y-1.5 text-xs text-gray-600">
                       {['Up to 50 patients', 'Basic appointments', 'Single user'].map((f) => (
@@ -483,17 +504,17 @@ const ClinicOnboarding = () => {
                     {formData.billing_cycle === 'annual' ? (
                       <>
                         <div className="flex items-baseline gap-1.5">
-                          <span className="text-2xl font-bold text-gray-900">{getCurrencySymbol()}675</span>
+                          <span className="text-2xl font-bold text-gray-900">{pricing.symbol}{pricing.annualMonthly}</span>
                           <span className="text-xs text-gray-500">/month</span>
                         </div>
                         <p className="text-xs text-gray-500 mb-3">
-                          Billed {getCurrencySymbol()}8,100/year — save {getCurrencySymbol()}2,688
+                          Billed {pricing.symbol}{pricing.annualTotal.toLocaleString('en-US')}/year — save {pricing.symbol}{pricing.save.toLocaleString('en-US')}
                         </p>
                       </>
                     ) : (
                       <>
                         <div className="flex items-baseline gap-1.5">
-                          <span className="text-2xl font-bold text-gray-900">{getCurrencySymbol()}899</span>
+                          <span className="text-2xl font-bold text-gray-900">{pricing.symbol}{pricing.monthly}</span>
                           <span className="text-xs text-gray-500">/month</span>
                         </div>
                         <p className="text-xs text-gray-500 mb-3">Billed monthly</p>

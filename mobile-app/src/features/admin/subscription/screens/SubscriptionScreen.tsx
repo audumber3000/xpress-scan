@@ -13,6 +13,7 @@ import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
 import { BaseApiService } from '../../../../services/api/base.api';
 import { useAuth } from '../../../../app/AuthContext';
 import { IS_PURCHASE_UI_ENABLED, MARKETING_SITE_TEXT } from '../../../../shared/constants/platform';
+import { getSubscriptionPricing } from '../../../../shared/utils/pricing';
 
 const PLAN_META: Record<string, { label: string; Icon: any; gradient: [string, string] }> = {
   free:         { label: 'Free',         Icon: Gift,  gradient: ['#374151', '#6B7280'] },
@@ -82,6 +83,7 @@ function fmtProvider(p: string | null | undefined) {
 
 export const SubscriptionScreen: React.FC<SubscriptionScreenProps> = ({ navigation }) => {
   const { backendUser } = useAuth();
+  const pricing = getSubscriptionPricing(backendUser?.clinic);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sub, setSub] = useState<any>(null);
@@ -272,7 +274,7 @@ export const SubscriptionScreen: React.FC<SubscriptionScreenProps> = ({ navigati
                   <Award size={22} color="#fff" />
                   <View>
                     <Text style={s.upgradeTitle}>Go Professional</Text>
-                    <Text style={s.upgradePrice}>₹899 / month</Text>
+                    <Text style={s.upgradePrice}>{pricing.symbol}{pricing.monthly} / month</Text>
                   </View>
                 </View>
                 <ArrowRight size={20} color="#fff" />

@@ -178,6 +178,24 @@
   100% { left: 100%; }
 }
 
+/* Celebration / modal entrance */
+@keyframes celebrate-overlay {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-celebrate-overlay {
+  animation: celebrate-overlay 0.25s ease-out;
+}
+
+@keyframes celebrate-pop {
+  0% { opacity: 0; transform: scale(0.9) translateY(8px); }
+  60% { transform: scale(1.01); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-celebrate-pop {
+  animation: celebrate-pop 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 .animate-shine {
   position: relative;
   overflow: hidden;

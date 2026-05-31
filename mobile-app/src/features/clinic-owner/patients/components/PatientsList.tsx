@@ -12,8 +12,8 @@ interface Patient {
   phone: string;
   status: 'Active' | 'Inactive';
   lastVisit: string;
-  initials: string;
-  avatarColor: string;
+  age: number;
+  gender: string;
 }
 
 interface PatientsListProps {

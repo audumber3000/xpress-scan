@@ -31,6 +31,9 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
 
   const currentInvoiceId = invoice?.id || invoiceId;
   const creationStartedRef = useRef(false);
+  // True once THIS editor session created a fresh draft — so we can clean it up
+  // on close if it was left completely empty (avoids ₹0 orphan drafts).
+  const createdHereRef = useRef(false);
 
   const createDraftInvoice = async ({ patientId, appointmentId = null, notes = "", lineItems = [] }) => {
     const newInvoice = await api.post('/invoices', {
@@ -51,9 +54,26 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
 
     const enriched = await api.get(`/invoices/${newInvoice.id}`);
     setInvoice(enriched);
+    createdHereRef.current = true;
     setIsCreating(false);
     setLoading(false);
     return enriched;
+  };
+
+  // Close handler that discards a draft we created this session if it was left
+  // empty (no line items). Safe for case papers: invoices generated from a case
+  // paper always carry line items, so they're never discarded.
+  const handleClose = async () => {
+    const itemCount = invoice?.line_items?.length ?? 0;
+    if (createdHereRef.current && invoice?.id && invoice?.status === 'draft' && itemCount === 0) {
+      try {
+        await api.delete(`/invoices/${invoice.id}`);
+        if (onSave) onSave(); // refresh the list so the now-deleted draft disappears
+      } catch (error) {
+        console.error('Failed to discard empty draft invoice:', error);
+      }
+    }
+    onClose();
   };
 
   useEffect(() => {
@@ -366,7 +386,7 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
   return (
     <>
       <div className="fixed inset-0 z-50">
-        <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+        <div className="absolute inset-0 bg-black/30" onClick={handleClose} />
 
         <div className="absolute right-0 top-0 h-full w-full max-w-3xl bg-white shadow-2xl z-50 flex flex-col animate-slide-in-right">
           {isLoadingDrawer ? (
@@ -379,7 +399,7 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-900">{isCreating ? "Invoice" : "Invoice Details"}</h2>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="p-2 hover:bg-gray-100 rounded-full transition"
             >
               <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

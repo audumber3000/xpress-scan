@@ -240,7 +240,7 @@ function AppContent() {
         />
         <div className="flex-1 flex flex-col min-w-0 h-full relative transition-all duration-300 ease-in-out overflow-x-hidden">
           {/* Header */}
-          <Header />
+          <Header onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)} />
 
           {/* Mobile browser notice */}
           <MobileAppBanner />
@@ -252,16 +252,7 @@ function AppContent() {
 
           {/* Main content area */}
           <main className="flex-1 w-full overflow-auto">
-            {/* Mobile menu button */}
-            <button
-              onClick={() => setIsMobileSidebarOpen(true)}
-              className="md:hidden fixed top-20 left-4 z-30 p-2 bg-white border border-gray-200 rounded-lg shadow-md hover:shadow-lg transition-shadow"
-            >
-              <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-            
+
             <Routes>
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/lab" element={<ProtectedRoute><LabHub /></ProtectedRoute>} />

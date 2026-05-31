@@ -15,6 +15,13 @@ class PatientRepository(BaseRepository[Patient], PatientRepositoryProtocol):
     def __init__(self, db: Session):
         super().__init__(db, Patient)
 
+    def get_by_clinic_id(self, clinic_id: int, skip: int = 0, limit: int = 100) -> List[Patient]:
+        """Get patients for a clinic, newest first so recently added patients
+        appear at the top of the list."""
+        return self.db.query(Patient).filter(
+            Patient.clinic_id == clinic_id
+        ).order_by(Patient.created_at.desc(), Patient.id.desc()).offset(skip).limit(limit).all()
+
     def get_with_reports(self, patient_id: int) -> Optional[Patient]:
         """Get patient with related reports"""
         return self.db.query(Patient).options(
@@ -41,7 +48,7 @@ class PatientRepository(BaseRepository[Patient], PatientRepositoryProtocol):
                     Patient.phone.ilike(search_term)
                 )
             )
-        ).offset(skip).limit(limit).all()
+        ).order_by(Patient.created_at.desc(), Patient.id.desc()).offset(skip).limit(limit).all()
 
     def search_duplicates(self, clinic_id: int, name: Optional[str] = None, phone: Optional[str] = None, email: Optional[str] = None) -> List[Patient]:
         """Search for potential duplicate patients by name, phone, or email"""

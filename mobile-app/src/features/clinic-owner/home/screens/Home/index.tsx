@@ -145,6 +145,8 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
 
   const dailyRevenue = analytics?.dailyRevenue || 0;
   const totalPatients = analytics?.totalPatients || 0;
+  const totalAppointments = analytics?.appointments || 0;
+  const totalChecking = analytics?.checking || 0;
 
   return (
     <View style={styles.container}>
@@ -176,6 +178,8 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
           onProfilePress={() => navigation.navigate('Profile')}
           dailyRevenue={dailyRevenue}
           totalPatients={totalPatients}
+          totalAppointments={totalAppointments}
+          totalChecking={totalChecking}
           subscriptionPlan={backendUser?.clinic?.subscription_plan}
           isTrial={backendUser?.clinic?.is_trial}
           trialDaysRemaining={backendUser?.clinic?.trial_days_remaining}

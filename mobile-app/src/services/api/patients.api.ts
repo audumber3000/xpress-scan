@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BaseApiService } from './base.api';
 
 export interface MedicalRecord {
@@ -298,6 +299,24 @@ export class PatientsApiService extends BaseApiService {
       console.error('Error uploading file:', error);
       throw error;
     }
+  }
+
+  /**
+   * Build an authenticated download URL for a patient file. The JWT is
+   * appended as a query param so the URL can be used directly as an <Image>
+   * src or opened in a browser (neither can set Authorization headers).
+   */
+  async getFileDownloadUrl(patientId: string, fileName: string): Promise<string> {
+    const token = await AsyncStorage.getItem('access_token');
+    const url = `${this.baseURL}/patients/${patientId}/files/${encodeURIComponent(fileName)}/download`;
+    return token ? `${url}?token=${encodeURIComponent(token)}` : url;
+  }
+
+  /** Build an authenticated download URL for an X-ray image. */
+  async getXrayDownloadUrl(patientId: string, xrayId: string): Promise<string> {
+    const token = await AsyncStorage.getItem('access_token');
+    const url = `${this.baseURL}/patients/${patientId}/xrays/${xrayId}/download`;
+    return token ? `${url}?token=${encodeURIComponent(token)}` : url;
   }
 
   async getXrays(patientId: string): Promise<XrayFile[]> {

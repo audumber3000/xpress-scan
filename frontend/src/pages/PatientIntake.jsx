@@ -157,7 +157,7 @@ const PatientIntake = () => {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6 ph-no-capture">
+        <form onSubmit={handleSubmit} className="space-y-6">
           {/* Patient Information */}
           <div className="bg-gray-50 p-4 rounded-lg">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Patient Information</h2>

@@ -51,6 +51,7 @@ const Patients = () => {
     notes: ""
   });
   const [editLoading, setEditLoading] = useState(false);
+  const [casePaperPrompt, setCasePaperPrompt] = useState(null); // { id, name } of a just-created patient
   const [deleteLoading, setDeleteLoading] = useState(null);
   const [importing, setImporting] = useState(false);
   const fileInputRef = React.useRef(null);
@@ -198,11 +199,15 @@ const Patients = () => {
       if (drawerMode === 'edit') {
         await api.put(`/patients/${editingPatient.id}`, editFormData);
         toast.success("Patient updated successfully");
+        setEditDrawerOpen(false);
       } else {
-        await api.post(`/patients/`, editFormData);
+        const created = await api.post(`/patients/`, editFormData);
         toast.success("Patient created successfully");
+        setEditDrawerOpen(false);
+        // Nudge the user to start the patient's case paper — turns creation
+        // into a flow rather than a dead end.
+        if (created?.id) setCasePaperPrompt({ id: created.id, name: created.name || editFormData.name });
       }
-      setEditDrawerOpen(false);
       fetchPatients();
     } catch (e) {
       console.error("Error saving patient:", e);
@@ -579,7 +584,7 @@ const Patients = () => {
       {editDrawerOpen && (
         <div className="fixed inset-0 z-50 overflow-hidden">
           <div className="absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity" onClick={() => setEditDrawerOpen(false)} />
-          <div className="fixed inset-y-0 right-0 max-w-md w-full bg-white shadow-xl flex flex-col pt-6 animate-in slide-in-from-right duration-300">
+          <div className="fixed inset-y-0 right-0 max-w-md w-full bg-white shadow-xl flex flex-col animate-in slide-in-from-right duration-300">
             <div className="flex justify-between items-center p-6 border-b border-gray-100">
             <div>
               <h2 className="text-xl font-bold text-gray-900">
@@ -598,15 +603,15 @@ const Patients = () => {
           </div>
 
             <div className="flex-1 overflow-y-auto px-6">
-              <form id="edit-patient-form" onSubmit={(e) => e.preventDefault()} className="space-y-4">
+              <form id="edit-patient-form" onSubmit={(e) => { e.preventDefault(); handleSavePatient(); }} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Name <span className="text-red-500">*</span></label>
                   <input 
                     type="text" 
                     required
                     value={editFormData.name}
                     onChange={(e) => setEditFormData({...editFormData, name: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent text-sm"
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] text-sm transition-all"
                   />
                 </div>
                 {drawerMode === 'edit' && (
@@ -616,28 +621,28 @@ const Patients = () => {
                       type="text" 
                       readOnly
                       value={editFormData.display_id}
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-500 text-sm cursor-not-allowed"
+                      className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-500 text-sm cursor-not-allowed"
                     />
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Age</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Age <span className="text-red-500">*</span></label>
                     <input 
                       type="number" 
                       required
                       value={editFormData.age}
                       onChange={(e) => setEditFormData({...editFormData, age: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent text-sm"
+                      className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] text-sm transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Gender <span className="text-red-500">*</span></label>
                     <select 
                       required
                       value={editFormData.gender}
                       onChange={(e) => setEditFormData({...editFormData, gender: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent text-sm"
+                      className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] text-sm transition-all"
                     >
                       <option value="">Select Gender</option>
                       <option value="Male">Male</option>
@@ -647,23 +652,23 @@ const Patients = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone <span className="text-red-500">*</span></label>
                   <input 
                     type="tel" 
                     required
                     value={editFormData.phone}
                     onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent text-sm"
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] text-sm transition-all"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Village/City</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Village/City <span className="text-red-500">*</span></label>
                   <input 
                     type="text" 
                     required
                     value={editFormData.village}
                     onChange={(e) => setEditFormData({...editFormData, village: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent text-sm"
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] text-sm transition-all"
                   />
                 </div>
                 <div>
@@ -672,7 +677,7 @@ const Patients = () => {
                     type="text" 
                     value={editFormData.treatment_type}
                     onChange={(e) => setEditFormData({...editFormData, treatment_type: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent text-sm"
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] text-sm transition-all"
                   />
                 </div>
                 <div>
@@ -681,7 +686,7 @@ const Patients = () => {
                     type="text" 
                     value={editFormData.referred_by}
                     onChange={(e) => setEditFormData({...editFormData, referred_by: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent text-sm"
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] text-sm transition-all"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -690,7 +695,7 @@ const Patients = () => {
                     <select 
                       value={editFormData.blood_group}
                       onChange={(e) => setEditFormData({...editFormData, blood_group: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent text-sm"
+                      className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] text-sm transition-all"
                     >
                       <option value="">Select Blood Group</option>
                       <option value="A+">A+</option>
@@ -710,7 +715,7 @@ const Patients = () => {
                       placeholder="e.g. Diabetics, Hypertension"
                       value={editFormData.patient_history}
                       onChange={(e) => setEditFormData({...editFormData, patient_history: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent text-sm"
+                      className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] text-sm transition-all"
                     />
                   </div>
                 </div>
@@ -720,7 +725,7 @@ const Patients = () => {
                     rows="3"
                     value={editFormData.notes}
                     onChange={(e) => setEditFormData({...editFormData, notes: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:border-transparent text-sm resize-none"
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] text-sm transition-all resize-none"
                   />
                 </div>
               </form>
@@ -728,22 +733,61 @@ const Patients = () => {
 
             <div className="p-6 border-t border-gray-100 mt-auto">
               <div className="flex gap-3">
-                <button 
+                <button
                   type="button"
                   onClick={() => setEditDrawerOpen(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 py-2.5 bg-gray-50 text-gray-600 rounded-lg text-sm font-semibold hover:bg-gray-100 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
-                onClick={handleSavePatient}
-                disabled={editLoading}
-                className="flex-1 bg-[#2a276e] text-white py-3 rounded-xl font-bold hover:bg-[#1a1548] transition-all shadow-lg shadow-blue-900/10 flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                {editLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : null}
-                {drawerMode === 'edit' ? 'Update Patient' : 'Create Patient'}
-              </button>
+                  type="submit"
+                  form="edit-patient-form"
+                  disabled={editLoading}
+                  className="flex-1 px-4 py-2.5 bg-[#2a276e] text-white rounded-lg text-sm font-semibold hover:bg-[#1a1548] transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {editLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : null}
+                  {drawerMode === 'edit' ? 'Update Patient' : 'Create Patient'}
+                </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Post-create nudge: start the patient's case paper */}
+      {casePaperPrompt && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          onClick={() => setCasePaperPrompt(null)}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="w-12 h-12 rounded-full bg-[#2a276e]/10 text-[#2a276e] flex items-center justify-center mx-auto mb-4">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">Patient created 🎉</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              Start a case paper for <span className="font-semibold text-gray-700">{casePaperPrompt.name}</span> now?
+            </p>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setCasePaperPrompt(null)}
+                className="flex-1 px-4 py-2.5 bg-gray-50 text-gray-600 rounded-lg text-sm font-semibold hover:bg-gray-100 transition-colors"
+              >
+                Not now
+              </button>
+              <button
+                onClick={() => {
+                  const id = casePaperPrompt.id;
+                  setCasePaperPrompt(null);
+                  navigate(`/patient-profile/${id}?tab=case-papers`);
+                }}
+                className="flex-1 px-4 py-2.5 bg-[#2a276e] text-white rounded-lg text-sm font-semibold hover:bg-[#1a1548] transition-colors shadow-sm"
+              >
+                Yes, create
+              </button>
             </div>
           </div>
         </div>

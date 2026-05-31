@@ -3,15 +3,11 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-nat
 import { Phone, Mail, MapPin, User, Info, Clock, Calendar } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
 import { Patient, patientsApiService } from '../../../../services/api/patients.api';
+import { PatientAvatar } from '../../../../shared/components/PatientAvatar';
 
 interface PatientInfoViewProps {
     patient: Patient;
 }
-
-const getInitials = (name: string) => {
-    if (!name) return '??';
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-};
 
 const fmtDate = (d: string) => {
     try { return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); }
@@ -36,9 +32,13 @@ export const PatientInfoView: React.FC<PatientInfoViewProps> = ({ patient }) => 
         <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
             {/* Avatar Header */}
             <View style={styles.avatarSection}>
-                <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>{getInitials(patient.name)}</Text>
-                </View>
+                <PatientAvatar
+                    name={patient.name}
+                    age={patient.age}
+                    gender={patient.gender}
+                    size={72}
+                    style={styles.avatar}
+                />
                 <Text style={styles.avatarName}>{patient.name}</Text>
                 <Text style={styles.avatarSub}>{patient.gender}, {patient.age} years</Text>
                 <View style={[
@@ -131,7 +131,7 @@ export const PatientInfoView: React.FC<PatientInfoViewProps> = ({ patient }) => 
                     </View>
                     <View style={styles.divider} />
                     <View style={styles.infoRow}>
-                        <Text style={styles.label}>Patient Since</Text>
+                        <Text style={styles.label}>Last Visit</Text>
                         <Text style={styles.value}>{patient.lastVisit || 'N/A'}</Text>
                     </View>
                 </View>
@@ -258,18 +258,7 @@ const styles = StyleSheet.create({
         paddingTop: 8,
     },
     avatar: {
-        width: 72,
-        height: 72,
-        borderRadius: 20,
-        backgroundColor: colors.primary,
-        justifyContent: 'center',
-        alignItems: 'center',
         marginBottom: 10,
-    },
-    avatarText: {
-        fontSize: 24,
-        fontWeight: '700',
-        color: '#fff',
     },
     avatarName: {
         fontSize: 18,

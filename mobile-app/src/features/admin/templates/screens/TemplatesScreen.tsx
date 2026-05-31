@@ -465,6 +465,11 @@ const styles = StyleSheet.create({
   fieldHint:    { fontSize: 11, color: '#9CA3AF', marginTop: 5, fontStyle: 'italic' },
   colorRow:     { flexDirection: 'row', alignItems: 'center', gap: 12 },
   colorSwatch:  { width: 44, height: 44, borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB' },
+  variantCard:       { width: 100, borderRadius: 12, borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#fff', padding: 6, alignItems: 'center' },
+  variantCardActive: { borderColor: adminColors.primary },
+  variantCheck:      { position: 'absolute', top: 6, right: 6, width: 18, height: 18, borderRadius: 9, backgroundColor: adminColors.primary, justifyContent: 'center', alignItems: 'center', zIndex: 2 },
+  variantThumb:      { width: '100%', height: 88, borderRadius: 8, backgroundColor: '#F3F4F6' },
+  variantName:       { fontSize: 11, fontWeight: '600', color: '#374151', marginTop: 6, textAlign: 'center' },
   iconInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 2 },
 
   // Logo upload

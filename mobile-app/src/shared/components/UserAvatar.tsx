@@ -11,8 +11,12 @@ interface UserAvatarProps {
   photoURL?: string | null;
   /** Deterministic seed for DiceBear fallback — usually the user's email */
   seed?: string | null;
+  /** Explicit SVG url to render (e.g. a patient persona). Overrides seed. */
+  svgUri?: string | null;
   /** Display name used to render initials behind the SVG until it loads */
   name?: string | null;
+  /** Text shown when no name is available (defaults to staff "DR") */
+  fallbackInitials?: string;
   /** Optional override for the initials-fallback background colour */
   fallbackBg?: string;
   /** Optional override for the initials-fallback text colour */
@@ -25,7 +29,9 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
   size,
   photoURL,
   seed,
+  svgUri,
   name,
+  fallbackInitials = 'DR',
   fallbackBg = colors.primarySubtle,
   fallbackColor = colors.primary,
   style,
@@ -33,8 +39,9 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
   const [photoFailed, setPhotoFailed] = useState(false);
   const [svgFailed, setSvgFailed] = useState(false);
 
-  const initials = getInitials(name, 'DR');
+  const initials = getInitials(name, fallbackInitials);
   const initialsFontSize = Math.round(size * 0.4);
+  const resolvedSvgUri = svgUri ?? (seed ? generateAvatarUrl(seed, size) : null);
 
   const wrapperStyle = [
     styles.wrapper,
@@ -62,13 +69,13 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
     );
   }
 
-  if (seed && !svgFailed) {
+  if (resolvedSvgUri && !svgFailed) {
     return (
       <View style={wrapperStyle}>
         {initialsLayer}
         <View style={[StyleSheet.absoluteFill, styles.svgWrap]}>
           <SvgUri
-            uri={generateAvatarUrl(seed, size)}
+            uri={resolvedSvgUri}
             width={size}
             height={size}
             onError={() => setSvgFailed(true)}

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Bell, ChevronDown } from 'lucide-react-native';
+import { Bell, ChevronDown, Wallet, Users, CalendarDays, UserCheck } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '../../../../../../shared/constants/colors';
 import { getCurrencySymbol } from '../../../../../../shared/utils/currency';
@@ -14,6 +14,8 @@ interface WelcomeHeaderProps {
   onNotificationPress: () => void;
   dailyRevenue: number;
   totalPatients: number;
+  totalAppointments: number;
+  totalChecking: number;
   onClinicPress?: () => void;
   onProfilePress?: () => void;
   loading?: boolean;
@@ -47,6 +49,8 @@ export const WelcomeHeaderTopPart: React.FC<WelcomeHeaderProps> = ({
   onNotificationPress,
   dailyRevenue,
   totalPatients,
+  totalAppointments,
+  totalChecking,
   onClinicPress,
   onProfilePress,
   loading = false,
@@ -155,15 +159,43 @@ export const WelcomeHeaderTopPart: React.FC<WelcomeHeaderProps> = ({
           </View>
         </View>
 
-        {/* Stats Cards */}
-        <View style={styles.statsContainer}>
+        {/* Stats Cards — 2x2 grid */}
+        <View style={styles.statsGrid}>
           <View style={styles.statCard}>
-            <Text style={styles.statLabel}>REVENUE</Text>
-            <Text style={styles.statValue}>{getCurrencySymbol()}{dailyRevenue.toLocaleString('en-IN')}</Text>
+            <View style={styles.statTopRow}>
+              <Wallet size={14} color="rgba(255,255,255,0.65)" strokeWidth={2.5} />
+              <Text style={styles.statLabel}>REVENUE</Text>
+            </View>
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+              {getCurrencySymbol()}{dailyRevenue.toLocaleString('en-IN')}
+            </Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statLabel}>PATIENTS</Text>
-            <Text style={styles.statValue}>{totalPatients.toLocaleString()}</Text>
+            <View style={styles.statTopRow}>
+              <Users size={14} color="rgba(255,255,255,0.65)" strokeWidth={2.5} />
+              <Text style={styles.statLabel}>PATIENTS</Text>
+            </View>
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+              {totalPatients.toLocaleString()}
+            </Text>
+          </View>
+          <View style={styles.statCard}>
+            <View style={styles.statTopRow}>
+              <CalendarDays size={14} color="rgba(255,255,255,0.65)" strokeWidth={2.5} />
+              <Text style={styles.statLabel}>APPOINTMENTS</Text>
+            </View>
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+              {totalAppointments.toLocaleString()}
+            </Text>
+          </View>
+          <View style={styles.statCard}>
+            <View style={styles.statTopRow}>
+              <UserCheck size={14} color="rgba(255,255,255,0.65)" strokeWidth={2.5} />
+              <Text style={styles.statLabel}>CHECKING</Text>
+            </View>
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+              {totalChecking.toLocaleString()}
+            </Text>
           </View>
         </View>
       </SafeAreaView>
@@ -313,28 +345,36 @@ const styles = StyleSheet.create({
     borderColor: '#2E2A85',
     zIndex: 10,
   },
-  statsContainer: {
+  statsGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingHorizontal: 20,
-    gap: 12,
+    gap: 10,
   },
   statCard: {
-    flex: 1,
+    width: '48%',
+    flexGrow: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 20,
-    padding: 18,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
-  statLabel: {
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontWeight: '600',
+  statTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginBottom: 6,
+  },
+  statLabel: {
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontWeight: '700',
     letterSpacing: 0.5,
   },
   statValue: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: 'bold',
     color: '#FFFFFF',
   },

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { api } from '../utils/api';
 import { useHeader } from '../contexts/HeaderContext';
+import { useAuth } from '../contexts/AuthContext';
 import posthog from 'posthog-js';
 import {
   CheckCircle2,
@@ -33,7 +34,9 @@ import {
   Bot,
 } from 'lucide-react';
 import GearLoader from '../components/GearLoader';
+import TrialCelebrationModal from '../components/TrialCelebrationModal';
 import { getCurrencySymbol } from '../utils/currency';
+import { getSubscriptionPricing } from '../utils/pricing';
 
 const PRO_FEATURES = [
   { icon: Users,        label: 'Patient Management',       starter: true,    pro: true },
@@ -85,11 +88,14 @@ const TABS = [
 
 const Subscription = () => {
   const { setTitle } = useHeader();
+  const { refreshUser } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('subscription');
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState(null);
   const [billingHistory, setBillingHistory] = useState([]);
+  const [startingTrial, setStartingTrial] = useState(false);
+  const [celebration, setCelebration] = useState(null); // { trialEndsAt, daysRemaining } when shown
 
   useEffect(() => {
     setTitle('Subscription & Billing');
@@ -138,6 +144,24 @@ const Subscription = () => {
   const handleUpgrade = (billing = 'monthly') => {
     posthog.capture('Subscription Button Clicked', { billing_cycle: billing, plan: 'professional' });
     navigate(`/checkout?plan=professional&billing=${billing}`);
+  };
+
+  const handleStartTrial = async () => {
+    if (startingTrial) return;
+    posthog.capture('Free Trial Started', { plan: 'professional', source: 'subscription_page' });
+    try {
+      setStartingTrial(true);
+      const res = await api.post('/subscriptions/start-trial');
+      await Promise.all([fetchSubscription(), refreshUser()]);
+      setCelebration({
+        trialEndsAt: res?.trial_ends_at || null,
+        daysRemaining: res?.trial_days_remaining ?? 7,
+      });
+    } catch (err) {
+      toast.error(err?.detail || err?.message || 'Could not start your trial. Please try again.');
+    } finally {
+      setStartingTrial(false);
+    }
   };
 
   const downloadInvoice = (inv) => {
@@ -265,8 +289,12 @@ const Subscription = () => {
   );
 
   const isExpired = subscription?.is_expired === true;
-  const isTrial = subscription?.plan_name === 'trial' && subscription?.status === 'active' && !isExpired;
-  const isPro = ['professional', 'professional_annual'].includes(subscription?.plan_name) && subscription?.status === 'active' && !isExpired;
+  const isTrial = subscription?.is_trial === true && subscription?.status === 'active' && !isExpired;
+  const isPro = ['professional', 'professional_annual'].includes(subscription?.plan_name) && subscription?.status === 'active' && !isExpired && !isTrial;
+  // Eligible for a one-time free trial (never used one and not currently on Pro/trial).
+  const trialAvailable = subscription?.trial_available === true && !isPro && !isTrial;
+  // Currency-aware pricing (₹ for India, $ internationally).
+  const pricing = getSubscriptionPricing();
 
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-y-auto custom-scrollbar">
@@ -331,13 +359,13 @@ const Subscription = () => {
                     onClick={() => handleUpgrade('monthly')}
                     className="px-3 py-2 border border-[#29828a] text-[#29828a] text-xs font-bold rounded-lg hover:bg-[#29828a]/5 transition-all"
                   >
-                    {getCurrencySymbol()}899/mo
+                    {pricing.symbol}{pricing.monthly}/mo
                   </button>
                   <button
                     onClick={() => handleUpgrade('annual')}
                     className="flex items-center gap-1.5 px-3 py-2 bg-[#29828a] hover:bg-[#1f6b72] text-white text-xs font-bold rounded-lg transition-all"
                   >
-                    Annual — 25% off <ArrowRight size={11} />
+                    Annual — {pricing.pctOff}% off <ArrowRight size={11} />
                   </button>
                 </div>
               </div>
@@ -362,13 +390,13 @@ const Subscription = () => {
                     onClick={() => handleUpgrade('monthly')}
                     className="px-3 py-2 border border-red-300 text-red-600 text-xs font-bold rounded-lg hover:bg-red-100 transition-all"
                   >
-                    {getCurrencySymbol()}899/mo
+                    {pricing.symbol}{pricing.monthly}/mo
                   </button>
                   <button
                     onClick={() => handleUpgrade('annual')}
                     className="flex items-center gap-1.5 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-all"
                   >
-                    {getCurrencySymbol()}675/mo — Annual <ArrowRight size={11} />
+                    {pricing.symbol}{pricing.annualMonthly}/mo — Annual <ArrowRight size={11} />
                   </button>
                 </div>
               </div>
@@ -419,7 +447,7 @@ const Subscription = () => {
                         {isPro ? 'Professional Plan' : isTrial ? '7-Day Free Trial' : 'Starter Plan'}
                       </p>
                       {isPro && (
-                        <span className="text-xs font-semibold text-[#29828a]">{getCurrencySymbol()}899 / month</span>
+                        <span className="text-xs font-semibold text-[#29828a]">{pricing.symbol}{pricing.monthly} / month</span>
                       )}
                       {isTrial && (
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#29828a]/10 text-[#29828a]">Trial</span>
@@ -447,6 +475,34 @@ const Subscription = () => {
                 </div>
               </div>
 
+              {/* One-time free trial — no card required */}
+              {trialAvailable && (
+                <div className="mt-3 relative overflow-hidden rounded-xl border border-[#29828a]/30 bg-gradient-to-br from-[#29828a]/8 via-[#29828a]/4 to-transparent p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-[#29828a]/15 flex items-center justify-center flex-shrink-0">
+                        <Zap size={18} className="text-[#29828a]" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">
+                          Try Professional free for 7 days
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Full access to every Pro feature. No card, no commitment — cancel anytime.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleStartTrial}
+                      disabled={startingTrial}
+                      className="flex items-center gap-1.5 px-4 py-2.5 bg-[#29828a] hover:bg-[#1f6b72] disabled:opacity-60 text-white text-xs font-bold rounded-lg transition-all flex-shrink-0 shadow-sm"
+                    >
+                      {startingTrial ? 'Activating…' : <>Start free trial <ArrowRight size={12} /></>}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {!isPro && (
                 <div className="mt-3 rounded-xl border border-gray-100 bg-white overflow-hidden">
                   <div className="flex items-center justify-between gap-4 p-4">
@@ -455,7 +511,9 @@ const Subscription = () => {
                         <Zap size={18} className="text-[#29828a]" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-gray-900">Professional Plan</p>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {trialAvailable ? 'Or subscribe directly' : 'Professional Plan'}
+                        </p>
                         <p className="text-xs text-gray-400 mt-0.5">Unlimited patients, staff, WhatsApp &amp; more</p>
                       </div>
                     </div>
@@ -463,18 +521,18 @@ const Subscription = () => {
                       onClick={() => handleUpgrade('monthly')}
                       className="flex items-center gap-1.5 px-4 py-2 bg-[#29828a] hover:bg-[#1f6b72] text-white text-xs font-semibold rounded-lg transition-all flex-shrink-0"
                     >
-                      {getCurrencySymbol()}899/mo <ArrowRight size={12} />
+                      {pricing.symbol}{pricing.monthly}/mo <ArrowRight size={12} />
                     </button>
                   </div>
                   <div className="flex items-center justify-between px-4 py-2.5 bg-green-50 border-t border-green-100">
                     <p className="text-xs text-green-700 font-medium">
-                      💰 Save {getCurrencySymbol()}1,488/year — pay <strong>{getCurrencySymbol()}675/month</strong> billed annually
+                      💰 Save {pricing.symbol}{pricing.save.toLocaleString('en-US')}/year — pay <strong>{pricing.symbol}{pricing.annualMonthly}/month</strong> billed annually
                     </p>
                     <button
                       onClick={() => handleUpgrade('annual')}
                       className="text-xs font-bold text-green-700 hover:underline flex items-center gap-1 flex-shrink-0"
                     >
-                      25% off <ArrowRight size={10} />
+                      {pricing.pctOff}% off <ArrowRight size={10} />
                     </button>
                   </div>
                 </div>
@@ -511,7 +569,7 @@ const Subscription = () => {
                 </div>
                 {!isPro && (
                   <div className="flex items-center justify-between gap-3 px-4 py-3.5 bg-[#29828a]/5 border-t border-[#29828a]/10">
-                    <p className="text-xs text-gray-600 font-medium">{getCurrencySymbol()}899/month or <strong className="text-[#29828a]">{getCurrencySymbol()}675/month</strong> billed annually — save 25%</p>
+                    <p className="text-xs text-gray-600 font-medium">{pricing.symbol}{pricing.monthly}/month or <strong className="text-[#29828a]">{pricing.symbol}{pricing.annualMonthly}/month</strong> billed annually — save {pricing.pctOff}%</p>
                     <div className="flex gap-2 flex-shrink-0">
                       <button
                         onClick={() => handleUpgrade('monthly')}
@@ -523,7 +581,7 @@ const Subscription = () => {
                         onClick={() => handleUpgrade('annual')}
                         className="flex items-center gap-1.5 px-3 py-2 bg-[#29828a] hover:bg-[#1f6b72] text-white text-xs font-semibold rounded-lg transition-all"
                       >
-                        Annual — 25% off <ArrowRight size={12} />
+                        Annual — {pricing.pctOff}% off <ArrowRight size={12} />
                       </button>
                     </div>
                   </div>
@@ -584,6 +642,13 @@ const Subscription = () => {
         )}
 
       </div>
+
+      <TrialCelebrationModal
+        open={!!celebration}
+        trialEndsAt={celebration?.trialEndsAt}
+        daysRemaining={celebration?.daysRemaining}
+        onClose={() => setCelebration(null)}
+      />
     </div>
   );
 };

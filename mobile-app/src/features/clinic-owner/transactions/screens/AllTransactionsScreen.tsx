@@ -8,6 +8,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../../app/AppNavigator';
 import { GearLoader } from '../../../../shared/components/GearLoader';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
+import { PatientAvatar } from '../../../../shared/components/PatientAvatar';
 import { colors } from '../../../../shared/constants/colors';
 import { transactionsApiService, Transaction, LedgerItem } from '../../../../services/api/transactions.api';
 import { getCurrencySymbol } from '../../../../shared/utils/currency';
@@ -141,14 +142,11 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () =>
                   const statusBgColor = s === 'completed' ? '#E6F9F1' : s === 'success' ? '#EFF6FF' : '#FFFBEB';
                   const statusTextColor = s === 'completed' ? '#10B981' : s === 'success' ? '#3B82F6' : '#F59E0B';
                   const statusLabel = s === 'completed' ? 'PAID' : s === 'success' ? 'UNVERIFIED' : 'PENDING';
-                  const initials = getInitials(transaction.patientName || '??');
                   return (
                     <View key={transaction.id}>
                       <TouchableOpacity style={styles.rowContent} activeOpacity={0.7} onPress={() => handleItemPress(transaction)}>
                         <View style={styles.avatarContainer}>
-                          <View style={styles.avatar}>
-                            <Text style={styles.avatarText}>{initials}</Text>
-                          </View>
+                          <PatientAvatar name={transaction.patientName} size={48} />
                           <View style={[styles.iconIndicator, { backgroundColor: '#10B981' }]}>
                             <ArrowDownLeft size={10} color="#FFFFFF" strokeWidth={3} />
                           </View>
@@ -185,9 +183,13 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () =>
                     <View key={`${item.type}-${item.id}`}>
                       <TouchableOpacity style={styles.rowContent} activeOpacity={0.7} onPress={() => handleItemPress(item)}>
                         <View style={styles.avatarContainer}>
-                          <View style={styles.avatar}>
-                            <Text style={styles.avatarText}>{initials}</Text>
-                          </View>
+                          {isExpense ? (
+                            <View style={styles.avatar}>
+                              <Text style={styles.avatarText}>{initials}</Text>
+                            </View>
+                          ) : (
+                            <PatientAvatar name={item.entityName} size={48} />
+                          )}
                           <View style={[styles.iconIndicator, { backgroundColor: indicatorColor }]}>
                             {isExpense ? <ArrowUpRight size={10} color="#FFFFFF" strokeWidth={3} /> : <ArrowDownLeft size={10} color="#FFFFFF" strokeWidth={3} />}
                           </View>

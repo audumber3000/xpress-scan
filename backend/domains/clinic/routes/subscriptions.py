@@ -1,8 +1,11 @@
 import os
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
+
+TRIAL_DAYS = 7
 
 from database import SessionLocal, get_db
 from models import Subscription, Clinic, User
@@ -86,6 +89,7 @@ async def get_current_subscription(
             plan_name=clinic_plan,
             status="active",
             provider="none",
+            trial_available=(clinic_plan == "free"),
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
@@ -126,10 +130,79 @@ async def get_current_subscription(
         "is_trial": is_trial,
         "trial_ends_at": trial_ends_at,
         "trial_days_remaining": trial_days_remaining,
+        "trial_available": (
+            not getattr(subscription, "trial_used", False)
+            and not (subscription.status == "active" and subscription.plan_name != "free" and not is_expired)
+        ),
         "created_at": subscription.created_at.isoformat() if subscription.created_at else None,
         "updated_at": subscription.updated_at.isoformat() if subscription.updated_at else None,
     }
     return result
+
+@router.post("/start-trial")
+async def start_free_trial(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Activate a one-time 7-day Professional free trial for the current clinic.
+
+    No payment required. A clinic can only ever start a trial once — eligibility
+    is tracked via Subscription.trial_used.
+    """
+    if not current_user.clinic_id:
+        raise HTTPException(status_code=400, detail="User not in clinic")
+
+    now = datetime.utcnow()
+
+    subscription = db.query(Subscription).filter(
+        or_(
+            Subscription.user_id == current_user.id,
+            Subscription.clinic_id == current_user.clinic_id,
+        )
+    ).order_by(Subscription.id.desc()).first()
+
+    if subscription:
+        if getattr(subscription, "trial_used", False):
+            raise HTTPException(status_code=400, detail="Your free trial has already been used.")
+        is_expired = bool(subscription.current_end and subscription.current_end < now)
+        if subscription.status == "active" and subscription.plan_name != "free" and not is_expired:
+            raise HTTPException(status_code=400, detail="You already have an active plan.")
+
+    trial_end = now + timedelta(days=TRIAL_DAYS)
+
+    if not subscription:
+        subscription = Subscription(
+            clinic_id=current_user.clinic_id,
+            user_id=current_user.id,
+            provider="trial",
+        )
+        db.add(subscription)
+
+    subscription.plan_name = "professional"
+    subscription.status = "active"
+    subscription.provider = "trial"
+    subscription.is_trial = True
+    subscription.trial_used = True
+    subscription.current_start = now
+    subscription.current_end = trial_end
+    subscription.trial_ends_at = trial_end
+
+    clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+    if clinic:
+        clinic.subscription_plan = "professional"
+
+    db.commit()
+    db.refresh(subscription)
+
+    return {
+        "success": True,
+        "message": f"Your {TRIAL_DAYS}-day Professional trial is now active.",
+        "plan_name": subscription.plan_name,
+        "is_trial": True,
+        "trial_ends_at": subscription.current_end.isoformat() if subscription.current_end else None,
+        "trial_days_remaining": TRIAL_DAYS,
+    }
+
 
 @router.get("/history")
 async def get_billing_history(

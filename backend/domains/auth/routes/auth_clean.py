@@ -59,12 +59,19 @@ def _enrich_clinic_dto(db: Session, clinic: Clinic) -> ClinicResponseDTO:
         .first()
     )
     if not sub:
+        # No subscription row yet → brand-new clinic, eligible for a free trial.
+        dto.trial_available = True
         return dto
     now = _dt.utcnow()
     is_expired = bool(
         sub.current_end and sub.current_end < now
     )
     dto.is_trial = bool(getattr(sub, "is_trial", False) and sub.status == "active" and not is_expired)
+
+    # Eligible to start a trial only if one was never used and they aren't
+    # currently on an active paid/trial plan.
+    is_active_paid = bool(sub.status == "active" and sub.plan_name != "free" and not is_expired)
+    dto.trial_available = not getattr(sub, "trial_used", False) and not is_active_paid
 
     # Auto-downgrade: if expired, reflect 'free' so all clients see the right plan
     if is_expired and clinic.subscription_plan != 'free':
@@ -97,7 +104,13 @@ async def register_user(
     Creates a user with the specified role and default permissions.
     """
     try:
-        user = auth_service.create_user(user_data.dict())
+        # Public self-signup always creates a clinic owner. Staff (doctors,
+        # receptionists) are added by the owner via /clinic-users; letting
+        # someone self-register as a non-owner leaves them with no clinic and
+        # unable to onboard.
+        registration_data = user_data.dict()
+        registration_data["role"] = "clinic_owner"
+        user = auth_service.create_user(registration_data)
         token = auth_service.create_jwt_token(user.id)
 
         notify(

@@ -70,3 +70,36 @@ export function detectCountry(): string {
   }
   return 'IN';
 }
+
+/**
+ * Most accurate detection: ask an IP-geolocation service for the country, with
+ * a short timeout, falling back to the locale/timezone guess if the lookup is
+ * blocked, slow, or fails. No API key.
+ */
+export async function detectCountryAsync(): Promise<string> {
+  const fallback = detectCountry();
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2000);
+    const res = await fetch('https://ipwho.is/?fields=country_code', { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = await res.json();
+      const code = String(data?.country_code || '').toUpperCase();
+      if (/^[A-Z]{2}$/.test(code)) return code;
+    }
+  } catch {
+    /* blocked / offline / timeout → use the browser-based fallback */
+  }
+  return fallback;
+}
+
+/**
+ * Turn an ISO 3166-1 alpha-2 code ("IN") into its emoji flag ("🇮🇳").
+ * iOS and Android both render flag emojis correctly.
+ */
+export function flagEmoji(code: string): string {
+  const cc = String(code || '').toUpperCase();
+  if (!/^[A-Z]{2}$/.test(cc)) return '🏳️';
+  return String.fromCodePoint(...[...cc].map((ch) => 127397 + ch.charCodeAt(0)));
+}

@@ -2,12 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
-import { Gem, Crown, Search, X, Clock } from "lucide-react";
+import { Gem, Crown, Search, X, Clock, Menu } from "lucide-react";
 import { FaSync } from "react-icons/fa";
 import { api } from "../utils/api";
 import { generateAvatarUrl } from "../utils/avatar";
 
-const Header = () => {
+const Header = ({ onOpenMobileSidebar }) => {
   const { user, signOut, switchClinic } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -260,7 +260,18 @@ const Header = () => {
       )}
 
       {/* Left side - Page title and refresh button */}
-      <div className="flex items-center gap-4 flex-1">
+      <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
+        {/* Mobile menu button — opens the sidebar drawer */}
+        {onOpenMobileSidebar && (
+          <button
+            onClick={onOpenMobileSidebar}
+            className="md:hidden p-2 -ml-1 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors flex-shrink-0"
+            aria-label="Open menu"
+          >
+            <Menu size={22} />
+          </button>
+        )}
+
         {/* Clinic Switcher */}
         <div className="relative">
           <button
@@ -418,38 +429,43 @@ const Header = () => {
               {user?.clinic?.is_trial ? (
                 <button
                   onClick={() => navigate("/subscription")}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-100 via-blue-50 to-white border border-blue-200/60 shadow-sm hover:shadow transition-all"
+                  className="flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-4 md:py-2 rounded-xl bg-gradient-to-r from-blue-100 via-blue-50 to-white border border-blue-200/60 shadow-sm hover:shadow transition-all"
                   title={
                     typeof user?.clinic?.trial_days_remaining === 'number'
                       ? `Trial · ${user.clinic.trial_days_remaining} day${user.clinic.trial_days_remaining === 1 ? '' : 's'} left`
                       : 'Trial Plan'
                   }
                 >
-                  <Clock size={18} className="text-blue-500" />
-                  <span className="text-[15px] font-semibold text-gray-800 tracking-wide">
-                    Trial
-                    {typeof user?.clinic?.trial_days_remaining === 'number'
-                      ? ` · ${user.clinic.trial_days_remaining}d left`
-                      : ''}
+                  <Clock size={16} className="text-blue-500 flex-shrink-0" />
+                  <span className="text-xs md:text-[15px] font-semibold text-gray-800 tracking-wide whitespace-nowrap">
+                    <span className="hidden sm:inline">Trial</span>
+                    {typeof user?.clinic?.trial_days_remaining === 'number' ? (
+                      <>
+                        <span className="hidden sm:inline"> · </span>
+                        {user.clinic.trial_days_remaining}d left
+                      </>
+                    ) : (
+                      <span className="sm:hidden">Trial</span>
+                    )}
                   </span>
                 </button>
               ) : user?.clinic?.subscription_plan === 'professional' ? (
                 <button
                   onClick={() => navigate("/subscription")}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-100 via-amber-50 to-white border border-amber-200/50 shadow-sm hover:shadow transition-all"
+                  className="flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-4 md:py-2 rounded-xl bg-gradient-to-r from-amber-100 via-amber-50 to-white border border-amber-200/50 shadow-sm hover:shadow transition-all"
                   title="Professional Plan"
                 >
-                  <Crown size={18} className="text-amber-500 fill-amber-400" />
-                  <span className="text-[15px] font-semibold text-gray-800 tracking-wide">Pro</span>
+                  <Crown size={16} className="text-amber-500 fill-amber-400 flex-shrink-0" />
+                  <span className="text-xs md:text-[15px] font-semibold text-gray-800 tracking-wide">Pro</span>
                 </button>
               ) : (
                 <button
                   onClick={() => navigate("/subscription")}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#feedd5] border border-[#fdd2a4]/40 shadow-sm hover:shadow transition-all"
+                  className="flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-4 md:py-2 rounded-xl bg-[#feedd5] border border-[#fdd2a4]/40 shadow-sm hover:shadow transition-all"
                   title="Starter Plan"
                 >
-                  <Gem size={18} className="text-blue-500 fill-[#8b5cf6] opacity-90" />
-                  <span className="text-[15px] font-medium text-[#2d3748]">Starter</span>
+                  <Gem size={16} className="text-blue-500 fill-[#8b5cf6] opacity-90 flex-shrink-0" />
+                  <span className="text-xs md:text-[15px] font-medium text-[#2d3748] whitespace-nowrap">Starter</span>
                 </button>
               )}
             </div>
@@ -473,7 +489,7 @@ const Header = () => {
               <span className="text-xs text-gray-500 leading-tight">{roleInfo.label}</span>
             </div>
             <svg
-              className={`w-4 h-4 text-gray-500 transition-transform ${showProfileDropdown ? 'rotate-180' : ''}`}
+              className={`w-4 h-4 text-gray-500 transition-transform hidden sm:block ${showProfileDropdown ? 'rotate-180' : ''}`}
               fill="none"
               stroke="currentColor"
               strokeWidth="2"

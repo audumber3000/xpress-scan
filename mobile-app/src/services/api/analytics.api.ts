@@ -4,6 +4,10 @@ export interface Analytics {
   patientVisits: number[];
   totalVisits: number;
   totalPatients: number;
+  /** Booked appointments for the period (dashboard/metrics → appointments) */
+  appointments: number;
+  /** Patients currently in "checking" status for the period (dashboard/metrics → checking) */
+  checking: number;
   dailyRevenue: number;
   percentageChange: string;
   period: '1D' | '1W' | '1M' | '3M' | '6M' | 'All';
@@ -112,7 +116,9 @@ export class AnalyticsApiService extends BaseApiService {
       return {
         patientVisits,
         totalVisits: appointments.length,
-        totalPatients: metrics.appointments?.value || 0, // Using appointments as Patients seen
+        totalPatients: metrics.total_patients?.value || 0,
+        appointments: metrics.appointments?.value || 0,
+        checking: metrics.checking?.value || 0,
         dailyRevenue: revenueValue,
         percentageChange: `${metrics.revenue?.change_type === 'up' ? '+' : '-'}${metrics.revenue?.change || 0}%`,
         period: period,

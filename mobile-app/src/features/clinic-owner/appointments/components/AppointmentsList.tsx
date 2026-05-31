@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
+import { View, Text, StyleSheet, FlatList, RefreshControlProps } from 'react-native';
 import { AppointmentCard } from './AppointmentCard';
 import { colors } from '../../../../shared/constants/colors';
 import { EmptyState } from '../../../../shared/components/EmptyState';
@@ -10,7 +10,7 @@ interface AppointmentsListProps {
   selectedDate: Date;
   onAppointmentPress: (appointment: any) => void;
   ListHeaderComponent?: React.ReactElement;
-  refreshControl?: React.ReactElement;
+  refreshControl?: React.ReactElement<RefreshControlProps>;
   loading?: boolean;
 }
 
