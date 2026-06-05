@@ -8,12 +8,17 @@ set -e
 mkdir -p /root/.ssh
 chmod 700 /root/.ssh
 
-# --- SSH key for the DB tunnel (Railway secret SSH_TUNNEL_KEY) ---------------
-if [ -n "$SSH_TUNNEL_KEY" ]; then
+# --- SSH key for the DB tunnel ----------------------------------------------
+# Prefer base64 (SSH_TUNNEL_KEY_B64) — env vars mangle multiline values, and a
+# corrupted key silently breaks the tunnel. Fall back to a raw key if provided.
+if [ -n "$SSH_TUNNEL_KEY_B64" ]; then
+  echo "$SSH_TUNNEL_KEY_B64" | base64 -d > /root/.ssh/id_tunnel
+  chmod 600 /root/.ssh/id_tunnel
+elif [ -n "$SSH_TUNNEL_KEY" ]; then
   printf '%s\n' "$SSH_TUNNEL_KEY" > /root/.ssh/id_tunnel
   chmod 600 /root/.ssh/id_tunnel
 else
-  echo "FATAL: SSH_TUNNEL_KEY is not set — cannot reach the prod DB." >&2
+  echo "FATAL: SSH_TUNNEL_KEY_B64/SSH_TUNNEL_KEY not set — cannot reach the prod DB." >&2
   exit 1
 fi
 
