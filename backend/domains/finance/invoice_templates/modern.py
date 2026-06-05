@@ -46,6 +46,12 @@ def render_invoice(invoice, clinic, config=None) -> str:
     c_gst     = safe_text(getattr(clinic, 'gst_number',  '') if clinic else '')
     c_doctor  = safe_text(getattr(clinic, 'doctor_name', '') if clinic else '')
 
+    # Locale: currency symbol + tax label per clinic country.
+    currency  = getattr(clinic, 'currency_symbol', None) or '₹'
+    tax_label = getattr(clinic, 'tax_label', None) or 'GST No.'
+    is_india  = (getattr(clinic, 'country', None) or 'IN') == 'IN'
+    tax_reg_label = 'GSTIN' if is_india else tax_label
+
     pat      = getattr(invoice, 'patient', None)
     p_name   = safe_text(pat.name  if pat else '')
     p_phone  = safe_text(pat.phone if pat else '')
@@ -91,16 +97,20 @@ def render_invoice(invoice, clinic, config=None) -> str:
             f'<td class="num">{i}</td>'
             f'<td>{safe_text(item.description)}{tooth_chip}</td>'
             f'<td class="qty">{int(item.quantity)}</td>'
-            f'<td class="amt">₹ {float(item.unit_price):,.2f}</td>'
-            f'<td class="amt">₹ {float(item.amount):,.2f}</td>'
+            f'<td class="amt">{currency} {float(item.unit_price):,.2f}</td>'
+            f'<td class="amt">{currency} {float(item.amount):,.2f}</td>'
             f'</tr>'
         )
 
     # ── Summary rows ────────────────────────────────────────────────────────
-    disc_row = f'<tr><td>Discount</td><td>– ₹ {discount:,.2f}</td></tr>' if discount > 0 else ''
-    half = inv_tax / 2 if inv_tax > 0 else 0
-    cgst_row = f'<tr><td>CGST 9%</td><td>₹ {half:,.2f}</td></tr>' if half else ''
-    sgst_row = f'<tr><td>SGST 9%</td><td>₹ {half:,.2f}</td></tr>' if half else ''
+    disc_row = f'<tr><td>Discount</td><td>– {currency} {discount:,.2f}</td></tr>' if discount > 0 else ''
+    if is_india:
+        half = inv_tax / 2 if inv_tax > 0 else 0
+        cgst_row = f'<tr><td>CGST 9%</td><td>{currency} {half:,.2f}</td></tr>' if half else ''
+        sgst_row = f'<tr><td>SGST 9%</td><td>{currency} {half:,.2f}</td></tr>' if half else ''
+    else:
+        cgst_row = f'<tr><td>Tax</td><td>{currency} {inv_tax:,.2f}</td></tr>' if inv_tax > 0 else ''
+        sgst_row = ''
 
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
@@ -271,7 +281,7 @@ body {{
         <div class="name">{c_name}</div>
         <div class="sub">{(doctor_name + ' · ') if doctor_name else ''}{c_address}</div>
         <div class="sub">{('Tel: ' + c_phone) if c_phone else ''}{('  ·  ' + c_email) if c_email else ''}</div>
-        {f'<div class="sub">GSTIN: {c_gst}</div>' if c_gst else ''}
+        {f'<div class="sub">{tax_reg_label}: {c_gst}</div>' if c_gst else ''}
       </div>
     </div>
     <div class="invoice-meta">
@@ -313,19 +323,19 @@ body {{
   <!-- TOTALS -->
   <div class="totals-wrap">
     <table class="totals">
-      <tr><td>Subtotal</td><td>₹ {subtotal:,.2f}</td></tr>
+      <tr><td>Subtotal</td><td>{currency} {subtotal:,.2f}</td></tr>
       {disc_row}
       {cgst_row}
       {sgst_row}
-      <tr class="grand"><td>Total Due</td><td>₹ {total:,.2f}</td></tr>
+      <tr class="grand"><td>Total Due</td><td>{currency} {total:,.2f}</td></tr>
     </table>
   </div>
 
   <!-- FOOTER -->
   <div class="foot">
     <div class="terms">
-      Clinical treatments (consultation, RCT, crowns, implants) are GST-exempt under SAC 9993.
-      Warranties valid only with this original invoice. Computer-generated; no signature required.
+      {'''Clinical treatments (consultation, RCT, crowns, implants) are GST-exempt under SAC 9993.
+      ''' if is_india else ''}Warranties valid only with this original invoice. Computer-generated; no signature required.
     </div>
     <div class="sig">
       {f'<img src="{doctor_signature}" alt="Signature" style="display:block;max-width:140px;max-height:48px;margin-left:auto;margin-bottom:2px;object-fit:contain;">' if doctor_signature else ''}

@@ -1,5 +1,6 @@
 import React from "react";
 import { generatePatientPersona, generateInitialsAvatar } from "../../utils/avatar";
+import { getCurrencySymbol } from "../../utils/currency";
 
 const InvoiceHeader = ({ invoice }) => {
   if (!invoice) return null;
@@ -10,12 +11,10 @@ const InvoiceHeader = ({ invoice }) => {
     return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ", " + date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
-  const formatAmount = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-    }).format(amount);
-  };
+  // Use the clinic's currency symbol (same source as the rest of the app) so
+  // the case-paper invoice matches every other screen instead of falling back to ₹.
+  const formatAmount = (amount) =>
+    `${getCurrencySymbol()}${Number(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const getStatusBadge = (invoice) => {
     const { status, payment_mode, created_at } = invoice;

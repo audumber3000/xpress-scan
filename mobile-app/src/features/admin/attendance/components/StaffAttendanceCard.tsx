@@ -137,7 +137,7 @@ export const StaffAttendanceCard: React.FC<StaffAttendanceCardProps> = ({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 12,
     marginHorizontal: 20,
     marginBottom: 12,
     overflow: 'hidden',
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF4E6',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: 20,
     marginBottom: 16,
   },
   statusBadgeText: {
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: adminColors.primary,
     paddingVertical: 14,
-    borderRadius: 16,
+    borderRadius: 10,
     gap: 8,
   },
   confirmButtonText: {

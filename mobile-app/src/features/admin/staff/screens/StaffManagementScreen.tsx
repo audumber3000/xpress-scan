@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
   filterButton: {
     paddingHorizontal: 20,
     paddingVertical: 10,
-    borderRadius: 20,
+    borderRadius: 10,
     backgroundColor: '#F3F4F6',
   },
   filterButtonActive: {

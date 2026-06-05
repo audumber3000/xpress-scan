@@ -107,7 +107,7 @@ const s = StyleSheet.create({
   },
   card: {
     backgroundColor: '#fff',
-    borderRadius: 24,
+    borderRadius: 12,
     padding: 28,
     alignItems: 'center',
     width: '100%',
@@ -150,7 +150,7 @@ const s = StyleSheet.create({
   },
   btn: {
     width: '100%',
-    borderRadius: 14,
+    borderRadius: 10,
     overflow: 'hidden',
     marginBottom: 10,
   },

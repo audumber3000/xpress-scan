@@ -298,7 +298,7 @@ export const TeamScreen: React.FC<TeamScreenProps> = ({ navigation, route }) => 
         />
       </View>
       {/* Filters */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersScroll} contentContainerStyle={styles.filtersRow}>
         {STAFF_FILTERS.map(f => (
           <TouchableOpacity
             key={f}
@@ -691,7 +691,8 @@ const styles = StyleSheet.create({
   // Search & filters
   searchBar:   { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, margin: 16, marginBottom: 8, gap: 8, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, elevation: 1 },
   searchInput: { flex: 1, fontSize: 14, color: '#111827' },
-  filtersRow:  { paddingHorizontal: 16, gap: 8, marginBottom: 8 },
+  filtersScroll: { flexGrow: 0, marginBottom: 8 },
+  filtersRow:  { paddingHorizontal: 16, gap: 8, alignItems: 'center' },
   filterChip:      { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB' },
   filterChipActive: { backgroundColor: adminColors.primary, borderColor: adminColors.primary },
   filterChipText:   { fontSize: 13, fontWeight: '500', color: '#6B7280' },

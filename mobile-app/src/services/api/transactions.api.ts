@@ -212,6 +212,59 @@ export class TransactionsApiService extends BaseApiService {
     }
     return response.json();
   }
+
+  /** Add a line item to a draft invoice. Returns the updated invoice. */
+  async addLineItem(
+    invoiceId: string | number,
+    item: { description: string; quantity: number; unit_price: number }
+  ): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/invoices/${invoiceId}/line-items`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(item),
+    });
+    if (!response.ok) {
+      let detail = `HTTP ${response.status}`;
+      try { detail = (await response.json())?.detail || detail; } catch {}
+      throw new Error(detail);
+    }
+    return response.json();
+  }
+
+  /** Record a payment on a finalized / partially-paid invoice. Returns the updated invoice. */
+  async markInvoicePaid(
+    invoiceId: string | number,
+    payload: { payment_mode: string; utr?: string | null; is_partial: boolean; amount_paid?: number | null }
+  ): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/invoices/${invoiceId}/mark-as-paid`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      let detail = `HTTP ${response.status}`;
+      try { detail = (await response.json())?.detail || detail; } catch {}
+      throw new Error(detail);
+    }
+    return response.json();
+  }
+
+  /** Finalize a draft invoice (locks it, requires ≥1 line item). Returns the updated invoice. */
+  async finalizeInvoice(invoiceId: string | number): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/invoices/${invoiceId}/finalize`, {
+      method: 'POST',
+      headers,
+    });
+    if (!response.ok) {
+      let detail = `HTTP ${response.status}`;
+      try { detail = (await response.json())?.detail || detail; } catch {}
+      throw new Error(detail);
+    }
+    return response.json();
+  }
 }
 
 export const transactionsApiService = new TransactionsApiService();

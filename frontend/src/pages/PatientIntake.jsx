@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../utils/api";
+import { toast } from "react-toastify";
+import { api, getFriendlyErrorMessage } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
 import { getCurrencySymbol } from "../utils/currency";
 
@@ -33,6 +34,7 @@ const PatientIntake = () => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   const [treatmentTypes, setTreatmentTypes] = useState([]);
   const [selectedPrice, setSelectedPrice] = useState("");
   const [referringDoctors, setReferringDoctors] = useState([]);
@@ -75,11 +77,22 @@ const PatientIntake = () => {
   }, []);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name } = e.target;
+    let { value } = e.target;
+    // Phone: allow digits only (the country code is added automatically when sending).
+    if (name === "phone") value = value.replace(/\D/g, "");
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
+    // Clear this field's error as soon as the user starts fixing it.
+    if (fieldErrors[name]) {
+      setFieldErrors(prev => {
+        const next = { ...prev };
+        delete next[name];
+        return next;
+      });
+    }
     if (name === "treatment_type") {
       const found = treatmentTypes.find(t => t.id.toString() === value);
       setSelectedPrice(found ? found.price : "");
@@ -110,8 +123,55 @@ const PatientIntake = () => {
     setShowVillageDropdown(false);
   };
 
+  // Validates every required field and returns a { fieldName: message } map.
+  // An empty map means the form is valid.
+  const validateForm = () => {
+    const errors = {};
+
+    if (!formData.name.trim()) errors.name = "Full name is required.";
+
+    const age = String(formData.age).trim();
+    if (!age) {
+      errors.age = "Age is required.";
+    } else {
+      const ageNum = Number(age);
+      if (!Number.isFinite(ageNum) || ageNum < 0 || ageNum > 150) {
+        errors.age = "Please enter a valid age between 0 and 150.";
+      }
+    }
+
+    if (!formData.gender) errors.gender = "Gender is required.";
+
+    if (!formData.phone.trim()) {
+      errors.phone = "Phone number is required.";
+    } else if (formData.phone.length < 7) {
+      errors.phone = "Please enter a valid phone number (at least 7 digits).";
+    }
+
+    if (!formData.treatment_type) errors.treatment_type = "Treatment type is required.";
+    if (!formData.referred_by.trim()) errors.referred_by = "Referring doctor is required.";
+
+    return errors;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      // Name every missing/invalid field in one summary message.
+      const summary =
+        Object.keys(errors).length === 1
+          ? Object.values(errors)[0]
+          : `Please fix these fields: ${Object.values(errors).join(" ")}`;
+      setError(summary);
+      toast.error(summary);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    setFieldErrors({});
+
     setLoading(true);
     setError("");
 
@@ -131,15 +191,35 @@ const PatientIntake = () => {
       await api.post("/patients/", patientPayload);
 
       // 3. Show success and redirect
-      alert(`Patient registered successfully!`);
+      toast.success(`${formData.name} has been added 🎉`);
       navigate("/patients");
-      
+
     } catch (error) {
-      setError(error.message);
+      // Turn any backend/validation/network error into a specific, friendly
+      // sentence (handles 422 field errors, raw 500 strings, timeouts, etc.).
+      const message = getFriendlyErrorMessage(
+        error,
+        "We couldn't save this patient. Please check the details and try again."
+      );
+      setError(message);
+      toast.error(message);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setLoading(false);
     }
   };
+
+  // Border turns red when a field has a validation error.
+  const inputClass = (name) =>
+    `w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] ${
+      fieldErrors[name] ? "border-red-400 bg-red-50" : "border-gray-300"
+    }`;
+
+  // Small red message shown under a field, if it has an error.
+  const FieldError = ({ name }) =>
+    fieldErrors[name] ? (
+      <p className="mt-1 text-sm text-red-600">{fieldErrors[name]}</p>
+    ) : null;
 
   return (
     <div className="w-full h-full bg-white p-6">
@@ -157,7 +237,7 @@ const PatientIntake = () => {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} noValidate className="space-y-6">
           {/* Patient Information */}
           <div className="bg-gray-50 p-4 rounded-lg">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Patient Information</h2>
@@ -173,9 +253,10 @@ const PatientIntake = () => {
                   onChange={handleChange}
                   autoComplete="off"
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
+                  className={inputClass("name")}
                   placeholder="Enter patient's full name"
                 />
+                <FieldError name="name" />
               </div>
               
               <div>
@@ -190,8 +271,9 @@ const PatientIntake = () => {
                   required
                   min="0"
                   max="150"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
+                  className={inputClass("age")}
                 />
+                <FieldError name="age" />
               </div>
               
               <div>
@@ -203,13 +285,14 @@ const PatientIntake = () => {
                   value={formData.gender}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
+                  className={inputClass("gender")}
                 >
                   <option value="">Select Gender</option>
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
                   <option value="Other">Other</option>
                 </select>
+                <FieldError name="gender" />
               </div>
               
               <div>
@@ -252,16 +335,18 @@ const PatientIntake = () => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone Number
+                  Phone Number *
                 </label>
                 <input
                   type="tel"
                   name="phone"
                   value={formData.phone}
                   onChange={handleChange}
+                  required
                   autoComplete="off"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
+                  className={inputClass("phone")}
                 />
+                <FieldError name="phone" />
               </div>
             </div>
           </div>
@@ -279,7 +364,7 @@ const PatientIntake = () => {
                   value={showOtherDoctor ? "__other__" : formData.referred_by}
                   onChange={handleChange}
                   required={!showOtherDoctor}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
+                  className={inputClass("referred_by")}
                 >
                   <option value="">Select Referring Doctor</option>
                   {referringDoctors.map(doc => (
@@ -295,9 +380,10 @@ const PatientIntake = () => {
                     onChange={handleChange}
                     required
                     placeholder="Enter referring doctor name"
-                    className="w-full mt-2 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
+                    className={`mt-2 ${inputClass("referred_by")}`}
                   />
                 )}
+                <FieldError name="referred_by" />
               </div>
               
               <div>
@@ -309,13 +395,14 @@ const PatientIntake = () => {
                   value={formData.treatment_type}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
+                  className={inputClass("treatment_type")}
                 >
                     <option value="">Select Treatment Type</option>
                   {treatmentTypes.map(treatment => (
                     <option key={treatment.id} value={treatment.id}>{treatment.name}</option>
                   ))}
                 </select>
+                <FieldError name="treatment_type" />
               </div>
             </div>
             {/* Auto-display price */}

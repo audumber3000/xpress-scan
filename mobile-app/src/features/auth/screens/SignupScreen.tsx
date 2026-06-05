@@ -652,7 +652,7 @@ const styles = StyleSheet.create({
   },
   inputCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    borderRadius: 12,
     padding: 24,
     borderWidth: 1,
     borderColor: '#F3F4F6',
@@ -704,7 +704,7 @@ const styles = StyleSheet.create({
   selectorChip: {
     flex: 1,
     height: 48,
-    borderRadius: 12,
+    borderRadius: 20,
     backgroundColor: '#F9FAFB',
     borderWidth: 1,
     borderColor: '#F3F4F6',

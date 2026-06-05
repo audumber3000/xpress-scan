@@ -160,10 +160,6 @@ body {{
   letter-spacing: 2px;
 }}
 .patient-box {{
-  background: var(--highlight-bg);
-  padding: 10px 12px;
-  border-radius: 5px;
-  border: 1px solid var(--border-light);
   margin-bottom: 15px;
 }}
 .info-table {{ width: 100%; border-collapse: collapse; }}

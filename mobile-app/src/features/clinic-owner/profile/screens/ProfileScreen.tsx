@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginTop: 32,
     paddingVertical: 16,
-    borderRadius: 16,
+    borderRadius: 10,
     gap: 8,
   },
   logoutText: {

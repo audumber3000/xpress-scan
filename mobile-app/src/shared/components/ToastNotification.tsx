@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     paddingVertical: 12,
     paddingLeft: 12,

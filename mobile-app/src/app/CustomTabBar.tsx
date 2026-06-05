@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F59E0B',
     paddingHorizontal: 4,
     paddingVertical: 1,
-    borderRadius: 6,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: '#FFFFFF',
     minWidth: 28,
@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
   },
   proMiniBadge: {
     backgroundColor: 'rgba(46, 42, 133, 0.9)',
-    borderRadius: 6,
+    borderRadius: 20,
     padding: 2,
     borderWidth: 1,
     borderColor: '#FFD700',

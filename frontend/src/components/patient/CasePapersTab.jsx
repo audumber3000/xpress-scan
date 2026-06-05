@@ -14,6 +14,8 @@ import InvoiceEditor from '../payments/InvoiceEditor';
 import { toast } from 'react-toastify';
 import { api } from "../../utils/api";
 import { Clock, ChevronLeft } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { getUserDisplayName } from '../../utils/userName';
 
 const CasePapersTab = ({
   patientData,
@@ -39,6 +41,8 @@ const CasePapersTab = ({
   refreshPayments,
   refreshInvoices
 }) => {
+  const { user } = useAuth();
+  const currentUserName = getUserDisplayName(user); // logged-in dentist, used as fallback
   const [selectedCasePaper, setSelectedCasePaper] = useState(null);
   const [activeChartTab, setActiveChartTab] = useState('dental_chart');
   const [isAddingLabOrder, setIsAddingLabOrder] = useState(false);
@@ -109,8 +113,12 @@ const CasePapersTab = ({
   const selectedDentistName =
     selectedCasePaper?.dentist?.name ||
     selectedCasePaper?.dentist_name ||
-    (typeof selectedCasePaper?.dentist === 'string' ? selectedCasePaper.dentist : '') ||
-    (selectedCasePaper?.dentist_id ? `Doctor #${selectedCasePaper.dentist_id}` : 'Not Assigned');
+    (typeof selectedCasePaper?.dentist === 'string' && selectedCasePaper.dentist !== 'Current Doctor'
+      ? selectedCasePaper.dentist
+      : '') ||
+    (selectedCasePaper?.dentist_id ? `Doctor #${selectedCasePaper.dentist_id}` : '') ||
+    currentUserName ||
+    'Not Assigned';
 
   useEffect(() => {
     if (patientData?.id) {
@@ -264,7 +272,7 @@ const CasePapersTab = ({
           id: 'new-' + Date.now(),
           date: new Date().toISOString(),
           status: 'In Progress',
-          dentist: 'Current Doctor',
+          dentist: currentUserName || 'Current Doctor',
           isNew: true
       };
       setForm({

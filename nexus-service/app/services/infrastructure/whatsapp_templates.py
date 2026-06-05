@@ -350,6 +350,24 @@ def build_whatsapp(event_type: str, **kwargs) -> dict:
             "template_name": "molarplus_trial_ended_mk",
             "components": [_header_text(kw.get("owner_name", ""))],
         },
+        # ── Trial lifecycle (current one-click trial) ──
+        # t1/t2/t3: body {{1}} = owner_name. t4: no parameters.
+        "molarplus_account_update_t1": lambda **kw: {
+            "template_name": "molarplus_account_update_t1",
+            "components": [_body_params(kw.get("owner_name", ""))],
+        },
+        "molarplus_account_update_t2": lambda **kw: {
+            "template_name": "molarplus_account_update_t2",
+            "components": [_body_params(kw.get("owner_name", ""))],
+        },
+        "molarplus_account_update_t3": lambda **kw: {
+            "template_name": "molarplus_account_update_t3",
+            "components": [_body_params(kw.get("owner_name", ""))],
+        },
+        "molarplus_account_update_t4": lambda **kw: {
+            "template_name": "molarplus_account_update_t4",
+            "components": [],
+        },
     }
     fn = builders.get(event_type)
     if not fn:

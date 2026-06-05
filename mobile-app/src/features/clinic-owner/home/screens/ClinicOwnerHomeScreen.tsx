@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#DDD6FE',
     paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: 16,
+    borderRadius: 20,
   },
   badgeText: {
     color: '#5B21B6',
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
   },
   card: {
     aspectRatio: 1,
-    borderRadius: 16,
+    borderRadius: 12,
     padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
   logoutButton: {
     backgroundColor: '#EF4444',
     paddingVertical: 16,
-    borderRadius: 12,
+    borderRadius: 10,
     alignItems: 'center',
   },
   buttonPressed: {

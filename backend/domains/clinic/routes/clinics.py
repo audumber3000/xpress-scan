@@ -96,23 +96,32 @@ async def owner_add_clinic(
         # Inherit locale from parent clinic (or use defaults)
         parent_clinic = db.query(Clinic).filter(Clinic.id == new_parent_id).first() if new_parent_id else None
 
+        # Determine the branch's country: use the one chosen on the form if given,
+        # otherwise fall back to the parent clinic, then to India. Currency, timezone
+        # and tax label are derived from that country so they are always consistent
+        # (instead of defaulting to ₹ regardless of country).
+        from core.countries import get_country_config
+        branch_country = getattr(clinic_data, 'country', None) or (parent_clinic.country if parent_clinic else 'IN')
+        cfg = get_country_config(branch_country)
+
         # Create the new clinic
         new_clinic = Clinic(
             name=clinic_data.name,
             address=getattr(clinic_data, 'address', None),
             phone=getattr(clinic_data, 'phone', None),
             email=getattr(clinic_data, 'email', None),
+            gst_number=getattr(clinic_data, 'gst_number', None),
             specialization=getattr(clinic_data, 'specialization', 'dental'),
             clinic_code=generate_clinic_code(),
             status='active',
             subscription_plan=branch_plan,
             clinic_label=new_label,
             parent_clinic_id=new_parent_id,
-            country=parent_clinic.country if parent_clinic else getattr(clinic_data, 'country', 'IN'),
-            currency_code=parent_clinic.currency_code if parent_clinic else getattr(clinic_data, 'currency_code', 'INR'),
-            currency_symbol=parent_clinic.currency_symbol if parent_clinic else getattr(clinic_data, 'currency_symbol', '₹'),
-            timezone=parent_clinic.timezone if parent_clinic else getattr(clinic_data, 'timezone', 'Asia/Kolkata'),
-            tax_label=parent_clinic.tax_label if parent_clinic else getattr(clinic_data, 'tax_label', 'GST No.'),
+            country=branch_country,
+            currency_code=cfg['currency_code'],
+            currency_symbol=cfg['currency_symbol'],
+            timezone=cfg['timezone'],
+            tax_label=cfg['tax_label'],
             created_at=datetime.datetime.utcnow(),
             updated_at=datetime.datetime.utcnow(),
         )

@@ -194,6 +194,19 @@ async def start_free_trial(
     db.commit()
     db.refresh(subscription)
 
+    # Fire the "trial started" WhatsApp (t1) immediately. Best-effort — never block activation.
+    if clinic:
+        try:
+            from domains.notification.services.platform_notification_service import PlatformNotificationService
+            owner_name = getattr(current_user, "first_name", None) or getattr(current_user, "name", None) or (clinic.name or "there")
+            PlatformNotificationService(db).send_whatsapp_event(
+                clinic,
+                "molarplus_account_update_t1",
+                template_data={"owner_name": owner_name},
+            )
+        except Exception:
+            pass
+
     return {
         "success": True,
         "message": f"Your {TRIAL_DAYS}-day Professional trial is now active.",

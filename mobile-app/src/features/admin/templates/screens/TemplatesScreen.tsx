@@ -1,25 +1,25 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
-  StatusBar, ActivityIndicator, Image,
+  StatusBar, ActivityIndicator, Image, Modal,
 } from 'react-native';
+import Svg, { Rect } from 'react-native-svg';
 import * as DocumentPicker from 'expo-document-picker';
 import { WebView } from 'react-native-webview';
 import { toast } from '../../../../shared/components/toastService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import {
-  ChevronLeft, Save, FileText, Stethoscope, ClipboardCheck, Upload, X, Check,
-} from 'lucide-react-native';
+import { ChevronLeft, Save, Check, Maximize2, X } from 'lucide-react-native';
 import { adminColors } from '../../../../shared/constants/adminColors';
+import { componentRadius } from '../../../../shared/constants/theme';
 import { adminApiService } from '../../../../services/api/admin.api';
 import { FeatureLock } from '../../../../shared/components/FeatureLock';
 
 const TABS = [
-  { id: 'invoice',      label: 'Invoices',       icon: FileText,       defaultColor: '#FF9800' },
-  { id: 'prescription', label: 'Prescriptions',  icon: Stethoscope,    defaultColor: '#2a276e' },
-  { id: 'consent',      label: 'Consent Forms',  icon: ClipboardCheck, defaultColor: '#2a276e' },
-];
+  { id: 'invoice',      label: 'Invoices',      hint: 'How your invoice PDFs look' },
+  { id: 'prescription', label: 'Prescriptions', hint: 'How your prescription PDFs look' },
+  { id: 'consent',      label: 'Consent forms', hint: 'How your consent forms look' },
+] as const;
 
 type TabId = 'invoice' | 'prescription' | 'consent';
 
@@ -30,36 +30,129 @@ interface TabConfig {
   footer_text: string;
   gst_number: string;
 }
-
 type Configs = Record<TabId, TabConfig>;
 
 const DEFAULT_CONFIGS: Configs = {
   invoice:      { template_id: 'modern_orange', logo_url: '', primary_color: '#FF9800', footer_text: '', gst_number: '' },
-  prescription: { template_id: 'standard',      logo_url: '', primary_color: '#2a276e', footer_text: '' , gst_number: '' },
-  consent:      { template_id: 'classic',       logo_url: '', primary_color: '#2a276e', footer_text: '' , gst_number: '' },
+  prescription: { template_id: 'standard',      logo_url: '', primary_color: '#2a276e', footer_text: '', gst_number: '' },
+  consent:      { template_id: 'classic',       logo_url: '', primary_color: '#2a276e', footer_text: '', gst_number: '' },
 };
 
-interface TemplatesScreenProps {
-  navigation: any;
-}
+const PRESETS = [
+  { name: 'Orange',   value: '#FF9800' },
+  { name: 'Teal',     value: '#0D9488' },
+  { name: 'Indigo',   value: '#4338CA' },
+  { name: 'Charcoal', value: '#374151' },
+];
+
+// Sample data so the live preview is actually readable.
+const SAMPLE: Record<TabId, { title: string; rows: [string, string][]; total: [string, string] | null }> = {
+  invoice: {
+    title: 'Invoice #INV-2026-0018',
+    rows: [['Root canal treatment', '₹3,500'], ['X-Ray (digital)', '₹400'], ['Medicines', '₹280']],
+    total: ['Total', '₹4,180'],
+  },
+  prescription: {
+    title: 'Prescription',
+    rows: [['Amoxicillin 500mg', '1-0-1 · 5 days'], ['Ibuprofen 400mg', 'SOS · after food'], ['Chlorhexidine rinse', '0-1-0 · 7 days']],
+    total: null,
+  },
+  consent: {
+    title: 'Consent — Extraction',
+    rows: [['Procedure', 'Tooth extraction (#36)'], ['Risks explained', 'Yes'], ['Patient signature', '—']],
+    total: null,
+  },
+};
+
+const isLight = (hex: string) => {
+  const h = hex.replace('#', '');
+  if (h.length < 6) return false;
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 165;
+};
+
+// SVG mini-document so the doctor can see Classic vs Compact differ at a glance.
+const LayoutThumb: React.FC<{ accent: string; compact: boolean }> = ({ accent, compact }) => (
+  <Svg viewBox="0 0 130 96" width="100%" height={104}>
+    <Rect x={0} y={0} width={130} height={96} rx={6} fill="#FFFFFF" />
+    {compact ? (
+      <>
+        <Rect x={12} y={12} width={56} height={7} rx={3.5} fill={accent} />
+        <Rect x={104} y={10} width={16} height={16} rx={3} fill="#E5E7EB" />
+        <Rect x={12} y={34} width={106} height={4} rx={2} fill="#E5E7EB" />
+        <Rect x={12} y={44} width={88} height={4} rx={2} fill="#E5E7EB" />
+        <Rect x={12} y={58} width={106} height={4} rx={2} fill="#E5E7EB" />
+        <Rect x={12} y={68} width={70} height={4} rx={2} fill="#E5E7EB" />
+      </>
+    ) : (
+      <>
+        <Rect x={12} y={12} width={106} height={9} rx={3} fill={accent} />
+        <Rect x={12} y={30} width={92} height={4} rx={2} fill="#E5E7EB" />
+        <Rect x={12} y={40} width={106} height={4} rx={2} fill="#E5E7EB" />
+        <Rect x={12} y={50} width={78} height={4} rx={2} fill="#E5E7EB" />
+        <Rect x={12} y={60} width={98} height={4} rx={2} fill="#E5E7EB" />
+        <Rect x={74} y={78} width={44} height={6} rx={3} fill={accent} />
+      </>
+    )}
+  </Svg>
+);
+
+// One document-preview component, used both inline and full-size — so every
+// tab (invoice / prescription / consent) renders with the exact same style.
+const DocPreview: React.FC<{
+  accent: string;
+  clinicName: string;
+  address?: string;
+  gst?: string;
+  sample: { title: string; rows: [string, string][]; total: [string, string] | null };
+  footer?: string;
+  large?: boolean;
+}> = ({ accent, clinicName, address, gst, sample, footer, large }) => {
+  const s = large ? docLarge : docSmall;
+  return (
+    <View style={[styles.doc, large && styles.docLargeOuter]}>
+      <View style={[styles.docAccent, large && { height: 9 }, { backgroundColor: accent }]} />
+      <View style={{ padding: large ? 24 : 16 }}>
+        <Text style={s.clinic}>{clinicName}</Text>
+        {(address || gst) ? (
+          <Text style={s.meta} numberOfLines={1}>
+            {address}{gst ? `${address ? ' · ' : ''}GST: ${gst}` : ''}
+          </Text>
+        ) : null}
+        <Text style={s.title}>{sample.title}</Text>
+        {sample.rows.map(([l, r], i) => (
+          <View key={i} style={[styles.docRow, large && { paddingVertical: 11 }]}>
+            <Text style={s.rowLabel} numberOfLines={1}>{l}</Text>
+            <Text style={s.rowVal}>{r}</Text>
+          </View>
+        ))}
+        {sample.total && (
+          <View style={[styles.docRow, styles.docTotalRow, large && { paddingTop: 16 }]}>
+            <Text style={s.totalLabel}>{sample.total[0]}</Text>
+            <Text style={[s.totalVal, { color: accent }]}>{sample.total[1]}</Text>
+          </View>
+        )}
+        {!!footer && <Text style={[styles.docFooter, large && { fontSize: 13, marginTop: 18 }]} numberOfLines={3}>{footer}</Text>}
+      </View>
+    </View>
+  );
+};
+
+interface TemplatesScreenProps { navigation: any; }
 
 export const TemplatesScreen: React.FC<TemplatesScreenProps> = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState<TabId>('invoice');
   const [configs, setConfigs] = useState<Configs>({ ...DEFAULT_CONFIGS });
+  const [clinicMeta, setClinicMeta] = useState<{ name: string; address: string }>({ name: 'Your Clinic', address: '' });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
-  const [previewHtml, setPreviewHtml] = useState<string>('');
+  const [previewHtml, setPreviewHtml] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [fullVisible, setFullVisible] = useState(false);
   const [variants, setVariants] = useState<Record<TabId, Array<{ id: string; name: string; description: string; thumbnail: string }>>>({
-    invoice: [],
-    prescription: [],
-    consent: [],
+    invoice: [], prescription: [], consent: [],
   });
-
-  // Backend mounts /static next to /api/v1; strip the api path to get the host root.
-  const apiBase = (process.env.EXPO_PUBLIC_API_BASE_URL || '').replace(/\/api\/v1\/?$/, '');
-  const thumbUrl = (path: string) => path?.startsWith('http') ? path : `${apiBase}${path}`;
 
   const load = useCallback(async () => {
     try {
@@ -72,6 +165,7 @@ export const TemplatesScreen: React.FC<TemplatesScreenProps> = ({ navigation }) 
         next.invoice.gst_number  = (meData as any).gst_number  || '';
         next.invoice.logo_url    = (meData as any).logo_url    || '';
         next.invoice.template_id = (meData as any).invoice_template || 'modern_orange';
+        setClinicMeta({ name: meData.name || 'Your Clinic', address: meData.address || '' });
       }
       (configData || []).forEach((cfg: any) => {
         const key = cfg.category as TabId;
@@ -95,36 +189,29 @@ export const TemplatesScreen: React.FC<TemplatesScreenProps> = ({ navigation }) 
 
   useEffect(() => { load(); }, [load]);
 
-  // One-time fetch of variant catalogs for both categories.
   useEffect(() => {
     Promise.all([
       adminApiService.getTemplateVariants('invoice'),
       adminApiService.getTemplateVariants('prescription'),
       adminApiService.getTemplateVariants('consent'),
-    ]).then(([inv, rx, cons]) => {
-      setVariants({ invoice: inv, prescription: rx, consent: cons });
-    }).catch(() => {});
+    ]).then(([inv, rx, cons]) => setVariants({ invoice: inv, prescription: rx, consent: cons })).catch(() => {});
   }, []);
 
-  // Debounced preview refresh: rebuild HTML 350 ms after the user stops editing.
-  // Uses a request token so a slow earlier request can't overwrite a newer one.
+  // Build the real-PDF HTML (shown in the Full-size view), debounced.
   useEffect(() => {
     if (loading) return;
-    const cfg = configs[activeTab];
+    const c = configs[activeTab];
     let cancelled = false;
     const handle = setTimeout(async () => {
       setPreviewLoading(true);
       const html = await adminApiService.previewTemplate({
         category: activeTab,
-        template_id: cfg.template_id,
-        primary_color: cfg.primary_color,
-        footer_text: cfg.footer_text,
-        logo_url: cfg.logo_url || null,
+        template_id: c.template_id,
+        primary_color: c.primary_color,
+        footer_text: c.footer_text,
+        logo_url: c.logo_url || null,
       });
-      if (!cancelled) {
-        if (html) setPreviewHtml(html);
-        setPreviewLoading(false);
-      }
+      if (!cancelled) { if (html) setPreviewHtml(html); setPreviewLoading(false); }
     }, 350);
     return () => { cancelled = true; clearTimeout(handle); };
   }, [activeTab, configs, loading]);
@@ -136,31 +223,17 @@ export const TemplatesScreen: React.FC<TemplatesScreenProps> = ({ navigation }) 
   const handlePickLogo = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: ['image/png', 'image/jpeg'],
-        copyToCacheDirectory: true,
-        multiple: false,
+        type: ['image/png', 'image/jpeg'], copyToCacheDirectory: true, multiple: false,
       });
       if (result.canceled || !result.assets?.length) return;
-
       const asset = result.assets[0];
-      if (asset.size && asset.size > 5 * 1024 * 1024) {
-        toast.error('Logo must be under 5 MB');
-        return;
-      }
-
+      if (asset.size && asset.size > 5 * 1024 * 1024) { toast.error('Logo must be under 5 MB'); return; }
       setUploadingLogo(true);
-      const file = {
-        uri: asset.uri,
-        name: asset.name || 'logo',
-        type: asset.mimeType || 'image/png',
-      };
-      const res = await adminApiService.uploadTemplateLogo(activeTab, file);
-      if (res?.logo_url) {
-        updateField('logo_url', res.logo_url);
-        toast.success('Logo uploaded — remember to save changes');
-      } else {
-        toast.error('Upload failed. Try a different image.');
-      }
+      const res = await adminApiService.uploadTemplateLogo(activeTab, {
+        uri: asset.uri, name: asset.name || 'logo', type: asset.mimeType || 'image/png',
+      });
+      if (res?.logo_url) { updateField('logo_url', res.logo_url); toast.success('Logo uploaded — remember to save'); }
+      else toast.error('Upload failed. Try a different image.');
     } catch (e) {
       console.error('[Templates] Logo pick error:', e);
       toast.error('Could not upload logo');
@@ -169,30 +242,24 @@ export const TemplatesScreen: React.FC<TemplatesScreenProps> = ({ navigation }) 
     }
   };
 
-  const handleRemoveLogo = () => {
-    updateField('logo_url', '');
-  };
-
   const handleSave = async () => {
     setSaving(true);
     const cfg = configs[activeTab];
     const ok = await adminApiService.saveTemplateConfig({
-      category:      activeTab,
-      template_id:   cfg.template_id,
-      logo_url:      cfg.logo_url,
-      primary_color: cfg.primary_color,
-      footer_text:   cfg.footer_text,
+      category: activeTab, template_id: cfg.template_id, logo_url: cfg.logo_url,
+      primary_color: cfg.primary_color, footer_text: cfg.footer_text,
       ...(activeTab === 'invoice' ? { gst_number: cfg.gst_number } : {}),
     });
     setSaving(false);
-    if (ok) {
-      toast.success(`${TABS.find(t => t.id === activeTab)?.label} template saved!`);
-    } else {
-      toast.error('Failed to save. Try again.');
-    }
+    if (ok) toast.success(`${TABS.find(t => t.id === activeTab)?.label} template saved!`);
+    else toast.error('Failed to save. Try again.');
   };
 
   const cfg = configs[activeTab];
+  const accent = cfg.primary_color || '#FF9800';
+  const sample = SAMPLE[activeTab];
+  const activeHint = TABS.find(t => t.id === activeTab)?.hint || '';
+  const matchedPreset = PRESETS.find(p => p.value.toLowerCase() === accent.toLowerCase());
 
   return (
     <View style={styles.container}>
@@ -201,311 +268,309 @@ export const TemplatesScreen: React.FC<TemplatesScreenProps> = ({ navigation }) 
         <LinearGradient colors={[adminColors.gradientStart, adminColors.gradientEnd]} style={styles.header}>
           <View style={styles.headerRow}>
             <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-              <ChevronLeft size={24} color="#fff" />
+              <ChevronLeft size={22} color="#fff" />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
               <Text style={styles.headerTitle}>Templates</Text>
-              <Text style={styles.headerSub}>PDF & Document design</Text>
+              <Text style={styles.headerSub}>PDF & document design</Text>
             </View>
-            <TouchableOpacity
-              style={[styles.saveHeaderBtn, saving && { opacity: 0.6 }]}
-              onPress={handleSave}
-              disabled={saving}
-            >
-              {saving
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <Save size={18} color="#fff" />
-              }
+            <TouchableOpacity style={[styles.saveHeaderBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
+              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Save size={16} color="#fff" />}
+              <Text style={styles.saveHeaderText}>Save</Text>
             </TouchableOpacity>
           </View>
 
+          {/* Tabs */}
+          <View style={styles.tabRow}>
+            {TABS.map(t => (
+              <TouchableOpacity key={t.id} style={styles.tabBtn} onPress={() => setActiveTab(t.id)} activeOpacity={0.8}>
+                <Text style={[styles.tabLabel, activeTab === t.id && styles.tabLabelActive]}>{t.label}</Text>
+                {activeTab === t.id && <View style={styles.tabUnderline} />}
+              </TouchableOpacity>
+            ))}
+          </View>
         </LinearGradient>
       </SafeAreaView>
 
-      <FeatureLock
-        featureName="Templates"
-        description="Customising PDF templates for invoices, prescriptions and consent forms is a Professional plan feature."
-      >
-      <View style={{ flex: 1 }}>
-      {/* Tab bar — simple underline style */}
-      <View style={styles.tabBar}>
-        {TABS.map(t => (
-          <TouchableOpacity
-            key={t.id}
-            style={[styles.tabBtn, activeTab === t.id && styles.tabBtnActive]}
-            onPress={() => setActiveTab(t.id as TabId)}
-          >
-            <Text style={[styles.tabLabel, activeTab === t.id && styles.tabLabelActive]}>{t.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <FeatureLock featureName="Templates" description="Customising PDF templates for invoices, prescriptions and consent forms is a Professional plan feature.">
+        {loading ? (
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color={adminColors.primary} />
+            <Text style={styles.loadingText}>Loading template settings...</Text>
+          </View>
+        ) : (
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+            <Text style={styles.tabHint}>{activeHint}</Text>
 
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={adminColors.primary} />
-          <Text style={styles.loadingText}>Loading template settings...</Text>
-        </View>
-      ) : (
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+            {/* ── Layout ── */}
+            {(variants[activeTab]?.length ?? 0) > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>LAYOUT</Text>
+                <View style={styles.card}>
+                  <View style={styles.layoutGrid}>
+                    {variants[activeTab].map((v) => {
+                      const isActive = cfg.template_id === v.id;
+                      const compact = /compact|minimal|simple|slim/i.test(`${v.id} ${v.name} ${v.description}`);
+                      return (
+                        <TouchableOpacity
+                          key={v.id}
+                          style={[styles.layoutCard, isActive && styles.layoutCardActive]}
+                          onPress={() => updateField('template_id', v.id)}
+                          activeOpacity={0.85}
+                        >
+                          <View style={styles.layoutThumbWrap}>
+                            <LayoutThumb accent={accent} compact={compact} />
+                          </View>
+                          <View style={styles.layoutMetaRow}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.layoutName}>{v.name}</Text>
+                              {!!v.description && <Text style={styles.layoutDesc} numberOfLines={2}>{v.description}</Text>}
+                            </View>
+                            {isActive && (
+                              <View style={styles.layoutCheck}><Check size={13} color="#fff" strokeWidth={3} /></View>
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              </>
+            )}
 
-          {/* ── Layout (variant picker) ── */}
-          {(variants[activeTab]?.length ?? 0) > 0 && (
+            {/* ── Accent colour ── */}
+            <Text style={styles.sectionLabel}>ACCENT COLOUR</Text>
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Layout</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 12, paddingRight: 4 }}
-              >
-                {variants[activeTab].map((v) => {
-                  const isActive = cfg.template_id === v.id;
+              <View style={styles.swatchGrid}>
+                {PRESETS.map(p => {
+                  const selected = matchedPreset?.value === p.value;
+                  const light = isLight(p.value);
                   return (
                     <TouchableOpacity
-                      key={v.id}
-                      style={[styles.variantCard, isActive && styles.variantCardActive]}
-                      onPress={() => updateField('template_id', v.id)}
+                      key={p.value}
+                      style={[styles.swatch, { backgroundColor: p.value }, selected && styles.swatchSelected]}
+                      onPress={() => updateField('primary_color', p.value)}
                       activeOpacity={0.85}
                     >
-                      {isActive && (
-                        <View style={styles.variantCheck}>
-                          <Check size={11} color="#fff" />
-                        </View>
-                      )}
-                      <Image
-                        source={{ uri: thumbUrl(v.thumbnail) }}
-                        style={styles.variantThumb}
-                        resizeMode="cover"
-                      />
-                      <Text style={styles.variantName} numberOfLines={1}>{v.name}</Text>
+                      <Text style={[styles.swatchText, { color: light ? '#1F2937' : '#FFFFFF' }]}>{p.name}</Text>
                     </TouchableOpacity>
                   );
                 })}
-              </ScrollView>
-            </View>
-          )}
+              </View>
 
-          {/* ── Branding & Info ── */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Branding & Info</Text>
-
-            {/* Accent Color */}
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Primary Accent Color</Text>
-              <View style={styles.colorRow}>
-                <View style={[styles.colorSwatch, { backgroundColor: cfg.primary_color }]} />
+              <View style={styles.customRow}>
+                <View style={[styles.customSwatch, { backgroundColor: accent }]} />
                 <TextInput
-                  style={[styles.fieldInput, { flex: 1, fontFamily: 'monospace' }]}
+                  style={styles.customInput}
                   placeholder="#FF9800"
                   placeholderTextColor="#9CA3AF"
-                  value={cfg.primary_color}
+                  value={accent}
                   onChangeText={v => updateField('primary_color', v)}
-                  autoCapitalize="none"
-                />
-              </View>
-            </View>
-
-            {/* Logo */}
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Clinic Logo</Text>
-              {cfg.logo_url ? (
-                <View style={styles.logoRow}>
-                  <Image source={{ uri: cfg.logo_url }} style={styles.logoPreview} resizeMode="contain" />
-                  <View style={styles.logoActions}>
-                    <TouchableOpacity
-                      style={[styles.logoActionBtn, uploadingLogo && { opacity: 0.5 }]}
-                      onPress={handlePickLogo}
-                      disabled={uploadingLogo}
-                    >
-                      {uploadingLogo
-                        ? <ActivityIndicator size="small" color={adminColors.primary} />
-                        : <Upload size={14} color={adminColors.primary} />}
-                      <Text style={styles.logoActionText}>Replace</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.logoActionBtnDanger}
-                      onPress={handleRemoveLogo}
-                      disabled={uploadingLogo}
-                    >
-                      <X size={14} color="#DC2626" />
-                      <Text style={styles.logoActionTextDanger}>Remove</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={[styles.logoUploadTile, uploadingLogo && { opacity: 0.6 }]}
-                  onPress={handlePickLogo}
-                  disabled={uploadingLogo}
-                >
-                  {uploadingLogo ? (
-                    <ActivityIndicator size="small" color={adminColors.primary} />
-                  ) : (
-                    <Upload size={20} color={adminColors.primary} />
-                  )}
-                  <Text style={styles.logoUploadTitle}>
-                    {uploadingLogo ? 'Uploading…' : 'Tap to upload logo'}
-                  </Text>
-                  <Text style={styles.logoUploadHint}>PNG or JPEG, up to 5 MB</Text>
-                </TouchableOpacity>
-              )}
-              <Text style={styles.fieldHint}>Used in the {activeTab} PDF header. Leave empty to fall back to the clinic-wide logo.</Text>
-            </View>
-
-            {/* GST — Invoice only */}
-            {activeTab === 'invoice' && (
-              <View style={styles.field}>
-                <Text style={styles.fieldLabel}>Clinic GST Number</Text>
-                <TextInput
-                  style={styles.fieldInput}
-                  placeholder="29GGGGG1314R9Z6"
-                  placeholderTextColor="#9CA3AF"
-                  value={cfg.gst_number}
-                  onChangeText={v => updateField('gst_number', v)}
                   autoCapitalize="characters"
                 />
+                <Text style={[styles.customLabel, !matchedPreset && styles.customLabelActive]}>Custom</Text>
               </View>
-            )}
-
-            {/* Footer text */}
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Footer / Disclaimer</Text>
-              <TextInput
-                style={[styles.fieldInput, styles.multiInput]}
-                placeholder="e.g. This is a computer generated document. No signature required."
-                placeholderTextColor="#9CA3AF"
-                value={cfg.footer_text}
-                onChangeText={v => updateField('footer_text', v)}
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-              />
             </View>
-          </View>
 
-          {/* ── Live Preview ── */}
-          <View style={styles.card}>
-            <View style={styles.previewHeaderBar}>
-              <Text style={[styles.cardTitle, { marginBottom: 0, paddingBottom: 0, borderBottomWidth: 0 }]}>Live Preview</Text>
-              {previewLoading && <ActivityIndicator size="small" color={adminColors.primary} />}
-            </View>
-            <View style={styles.previewWebViewWrap}>
-              {previewHtml ? (
-                <WebView
-                  originWhitelist={['*']}
-                  source={{ html: previewHtml }}
-                  scalesPageToFit
-                  showsVerticalScrollIndicator={false}
-                  style={styles.previewWebView}
-                  injectedJavaScript={'document.body.style.zoom="0.5";true;'}
-                  scrollEnabled
-                />
-              ) : (
-                <View style={styles.previewPlaceholder}>
+            {/* ── Clinic branding ── */}
+            <Text style={styles.sectionLabel}>CLINIC BRANDING</Text>
+            <View style={styles.card}>
+              <Text style={styles.fieldLabel}>Clinic logo</Text>
+              <TouchableOpacity
+                style={[styles.logoTile, cfg.logo_url && styles.logoTileFilled, uploadingLogo && { opacity: 0.6 }]}
+                onPress={handlePickLogo}
+                disabled={uploadingLogo}
+                activeOpacity={0.8}
+              >
+                {uploadingLogo ? (
                   <ActivityIndicator size="small" color={adminColors.primary} />
-                  <Text style={styles.previewPlaceholderText}>Building preview…</Text>
+                ) : cfg.logo_url ? (
+                  <>
+                    <Image source={{ uri: cfg.logo_url }} style={styles.logoImg} resizeMode="contain" />
+                    <Text style={styles.logoTitleOk}>Logo uploaded</Text>
+                    <Text style={styles.logoSubOk}>Tap to replace</Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.logoTitle}>Tap to upload logo</Text>
+                    <Text style={styles.logoSub}>PNG or JPEG, up to 5 MB</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {activeTab === 'invoice' && (
+                <View style={{ marginTop: 16 }}>
+                  <Text style={styles.fieldLabel}>GST number</Text>
+                  <TextInput
+                    style={styles.fieldInput}
+                    placeholder="29GGGGG1314R9Z6"
+                    placeholderTextColor="#9CA3AF"
+                    value={cfg.gst_number}
+                    onChangeText={v => updateField('gst_number', v)}
+                    autoCapitalize="characters"
+                  />
                 </View>
               )}
+
+              <View style={{ marginTop: 16 }}>
+                <Text style={styles.fieldLabel}>Footer / disclaimer</Text>
+                <TextInput
+                  style={[styles.fieldInput, styles.multiInput]}
+                  placeholder="e.g. This is a computer generated document…"
+                  placeholderTextColor="#9CA3AF"
+                  value={cfg.footer_text}
+                  onChangeText={v => updateField('footer_text', v)}
+                  multiline numberOfLines={3} textAlignVertical="top"
+                />
+              </View>
             </View>
-            <Text style={styles.fieldHint}>
-              Rendered with sample data using the same engine as your real PDFs.
-            </Text>
-          </View>
 
-          {/* Save button */}
-          <TouchableOpacity
-            style={[styles.saveBtn, saving && { opacity: 0.6 }]}
-            onPress={handleSave}
-            disabled={saving}
-          >
-            {saving
-              ? <ActivityIndicator size="small" color="#fff" />
-              : <><Save size={18} color="#fff" /><Text style={styles.saveBtnText}>Save Changes</Text></>
-            }
-          </TouchableOpacity>
+            {/* ── Live preview ── */}
+            <Text style={styles.sectionLabel}>LIVE PREVIEW</Text>
+            <View style={styles.card}>
+              <View style={styles.previewHead}>
+                <Text style={styles.previewTitle}>{TABS.find(t => t.id === activeTab)?.label.replace(/s$/, '')} preview</Text>
+                <TouchableOpacity style={styles.fullBtn} onPress={() => setFullVisible(true)} activeOpacity={0.7}>
+                  <Maximize2 size={15} color={adminColors.primary} />
+                  <Text style={styles.fullBtnText}>Full size</Text>
+                </TouchableOpacity>
+              </View>
 
-          <View style={{ height: 60 }} />
-        </ScrollView>
-      )}
-      </View>
+              {/* Native sample-data document */}
+              <DocPreview
+                accent={accent}
+                clinicName={clinicMeta.name}
+                address={clinicMeta.address}
+                gst={activeTab === 'invoice' ? cfg.gst_number : ''}
+                sample={sample}
+                footer={cfg.footer_text}
+              />
+              <Text style={styles.previewHint}>Rendered with sample data · updates as you edit</Text>
+            </View>
+
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        )}
       </FeatureLock>
+
+      {/* ── Full-size modal (real PDF engine) ── */}
+      <Modal visible={fullVisible} animationType="slide" onRequestClose={() => setFullVisible(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top', 'bottom']}>
+          <View style={styles.modalHead}>
+            <Text style={styles.modalTitle}>Full preview</Text>
+            <TouchableOpacity style={styles.modalClose} onPress={() => setFullVisible(false)}>
+              <X size={20} color="#111827" />
+            </TouchableOpacity>
+          </View>
+          {previewHtml ? (
+            <WebView originWhitelist={['*']} source={{ html: previewHtml }} style={{ flex: 1 }} />
+          ) : (
+            <View style={styles.center}>
+              <ActivityIndicator size="small" color={adminColors.primary} />
+              <Text style={styles.loadingText}>Building preview…</Text>
+            </View>
+          )}
+        </SafeAreaView>
+      </Modal>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container:    { flex: 1, backgroundColor: '#F9FAFB' },
-  center:       { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
-  loadingText:  { fontSize: 14, color: '#6B7280' },
-  body:         { padding: 16, gap: 16 },
+  container:   { flex: 1, backgroundColor: '#F3F4F6' },
+  center:      { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  loadingText: { fontSize: 14, color: '#6B7280' },
+  body:        { padding: 16, paddingTop: 6 },
 
   // Header
-  header:       { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 20, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
-  headerRow:    { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
-  backBtn:      { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-  headerTitle:  { fontSize: 18, fontWeight: '700', color: '#fff' },
-  headerSub:    { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 1 },
-  saveHeaderBtn:{ width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+  header:        { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
+  headerRow:     { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  backBtn:       { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+  headerTitle:   { fontSize: 20, fontWeight: '800', color: '#fff' },
+  headerSub:     { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 1 },
+  saveHeaderBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 16, paddingVertical: 9, borderRadius: componentRadius.button },
+  saveHeaderText:{ fontSize: 15, fontWeight: '700', color: '#fff' },
 
-  // Tab bar
-  tabBar:         { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  tabBtn:         { flex: 1, paddingVertical: 13, alignItems: 'center' as const, borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  tabBtnActive:   { borderBottomColor: adminColors.primary },
-  tabLabel:       { fontSize: 13, fontWeight: '500' as const, color: '#6B7280' },
-  tabLabelActive: { color: adminColors.primary, fontWeight: '700' as const },
+  // Tabs
+  tabRow:        { flexDirection: 'row', gap: 22 },
+  tabBtn:        { paddingVertical: 12 },
+  tabLabel:      { fontSize: 15, fontWeight: '600', color: 'rgba(255,255,255,0.6)' },
+  tabLabelActive:{ color: '#fff', fontWeight: '700' },
+  tabUnderline:  { height: 3, borderRadius: 2, backgroundColor: '#fff', marginTop: 8 },
 
-  // Cards
-  card:         { backgroundColor: '#fff', borderRadius: 16, padding: 18, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, elevation: 1 },
-  cardTitle:    { fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  tabHint:       { fontSize: 13, color: '#6B7280', marginTop: 12, marginBottom: 4, marginLeft: 4 },
+  sectionLabel:  { fontSize: 12, fontWeight: '700', color: '#9CA3AF', letterSpacing: 1, marginTop: 20, marginBottom: 10, marginLeft: 4 },
+  card:          { backgroundColor: '#fff', borderRadius: componentRadius.carouselCard, padding: 16, borderWidth: 1, borderColor: '#EEF0F2' },
 
-  // Fields
-  field:        { marginBottom: 16 },
-  fieldLabel:   { fontSize: 11, fontWeight: '700', color: '#6B7280', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.6 },
-  fieldInput:   { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, color: '#111827' },
-  multiInput:   { minHeight: 80, textAlignVertical: 'top' },
-  fieldHint:    { fontSize: 11, color: '#9CA3AF', marginTop: 5, fontStyle: 'italic' },
-  colorRow:     { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  colorSwatch:  { width: 44, height: 44, borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB' },
-  variantCard:       { width: 100, borderRadius: 12, borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#fff', padding: 6, alignItems: 'center' },
-  variantCardActive: { borderColor: adminColors.primary },
-  variantCheck:      { position: 'absolute', top: 6, right: 6, width: 18, height: 18, borderRadius: 9, backgroundColor: adminColors.primary, justifyContent: 'center', alignItems: 'center', zIndex: 2 },
-  variantThumb:      { width: '100%', height: 88, borderRadius: 8, backgroundColor: '#F3F4F6' },
-  variantName:       { fontSize: 11, fontWeight: '600', color: '#374151', marginTop: 6, textAlign: 'center' },
-  iconInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 2 },
+  // Layout
+  layoutGrid:        { flexDirection: 'row', gap: 12 },
+  layoutCard:        { flex: 1, borderRadius: componentRadius.carouselCard, borderWidth: 2, borderColor: '#E5E7EB', backgroundColor: '#fff', overflow: 'hidden' },
+  layoutCardActive:  { borderColor: adminColors.primary },
+  layoutThumbWrap:   { backgroundColor: '#F9FAFB', padding: 10, borderBottomWidth: 1, borderBottomColor: '#F1F3F5' },
+  layoutMetaRow:     { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12 },
+  layoutName:        { fontSize: 15, fontWeight: '700', color: '#111827' },
+  layoutDesc:        { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  layoutCheck:       { width: 26, height: 26, borderRadius: 13, backgroundColor: adminColors.primary, justifyContent: 'center', alignItems: 'center' },
 
-  // Logo upload
-  logoUploadTile:       { flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 22, backgroundColor: '#F9FAFB', borderWidth: 1, borderStyle: 'dashed', borderColor: '#D1D5DB', borderRadius: 12 },
-  logoUploadTitle:      { fontSize: 13, fontWeight: '600' as const, color: '#111827' },
-  logoUploadHint:       { fontSize: 11, color: '#9CA3AF' },
-  logoRow:              { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  logoPreview:          { width: 72, height: 72, borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#fff' },
-  logoActions:          { flex: 1, gap: 8 },
-  logoActionBtn:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 9, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, backgroundColor: '#fff' },
-  logoActionText:       { fontSize: 12, fontWeight: '600' as const, color: adminColors.primary },
-  logoActionBtnDanger:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 9, borderWidth: 1, borderColor: '#FECACA', borderRadius: 8, backgroundColor: '#FEF2F2' },
-  logoActionTextDanger: { fontSize: 12, fontWeight: '600' as const, color: '#DC2626' },
+  // Accent colour
+  swatchGrid:    { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  swatch:        { width: '47%', flexGrow: 1, height: 56, borderRadius: componentRadius.button, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'transparent' },
+  swatchSelected:{ borderColor: '#111827' },
+  swatchText:    { fontSize: 15, fontWeight: '700' },
+  customRow:     { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 14 },
+  customSwatch:  { width: 48, height: 48, borderRadius: componentRadius.button, borderWidth: 1, borderColor: '#E5E7EB' },
+  customInput:   { flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: componentRadius.button, paddingHorizontal: 14, paddingVertical: 13, fontSize: 16, fontWeight: '700', color: '#111827', letterSpacing: 1 },
+  customLabel:   { fontSize: 14, fontWeight: '600', color: '#9CA3AF' },
+  customLabelActive: { color: adminColors.primary, fontWeight: '700' },
 
-  // Real PDF preview (WebView-based)
-  previewHeaderBar:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  previewWebViewWrap:      { height: 380, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#fff' },
-  previewWebView:          { flex: 1, backgroundColor: '#fff' },
-  previewPlaceholder:      { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 10 },
-  previewPlaceholderText:  { fontSize: 12, color: '#6B7280' },
+  // Branding
+  fieldLabel:    { fontSize: 12, fontWeight: '700', color: '#6B7280', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.6 },
+  fieldInput:    { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: componentRadius.button, paddingHorizontal: 14, paddingVertical: 13, fontSize: 15, color: '#111827' },
+  multiInput:    { minHeight: 84, textAlignVertical: 'top' },
+  logoTile:      { alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 26, borderRadius: componentRadius.carouselCard, borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#D1D5DB', backgroundColor: '#F9FAFB' },
+  logoTileFilled:{ borderStyle: 'solid', borderColor: adminColors.primary, backgroundColor: '#E7F6EE' },
+  logoImg:       { width: 64, height: 40, marginBottom: 6 },
+  logoTitle:     { fontSize: 15, fontWeight: '700', color: '#111827' },
+  logoSub:       { fontSize: 12, color: '#9CA3AF' },
+  logoTitleOk:   { fontSize: 15, fontWeight: '700', color: '#15803D' },
+  logoSubOk:     { fontSize: 13, color: '#15803D' },
 
-  // Preview (legacy skeleton — kept for tab/badge styles still referenced)
-  previewDoc:        { borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#E5E7EB' },
-  previewAccent:     { height: 5, width: '100%' },
-  previewBody:       { padding: 16, gap: 12 },
-  previewHeaderRow:  { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  previewLogo:       { width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  previewLine:       { height: 6, borderRadius: 3, backgroundColor: '#E5E7EB', width: '100%' },
-  previewBadge:      { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
-  previewContent:    { paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
-  previewLines:      { gap: 6 },
-  previewFooter:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
-  previewFooterText: { flex: 1, fontSize: 9, color: '#9CA3AF', fontStyle: 'italic', lineHeight: 13 },
-  previewFooterStamp:{ width: 48, height: 28, borderRadius: 4, borderWidth: 1, borderStyle: 'dashed' },
+  // Preview
+  previewHead:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  previewTitle:  { fontSize: 16, fontWeight: '800', color: '#111827' },
+  fullBtn:       { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  fullBtnText:   { fontSize: 14, fontWeight: '700', color: adminColors.primary },
+  doc:           { borderRadius: componentRadius.button, borderWidth: 1, borderColor: '#EEF0F2', overflow: 'hidden', backgroundColor: '#fff' },
+  docLargeOuter: { borderRadius: componentRadius.carouselCard, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
+  docAccent:     { height: 6, width: '100%' },
+  docRow:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 7 },
+  docTotalRow:   { borderTopWidth: 1, borderTopColor: '#F1F3F5', marginTop: 4, paddingTop: 12 },
+  docFooter:     { fontSize: 11, color: '#9CA3AF', fontStyle: 'italic', marginTop: 12, lineHeight: 15 },
+  previewHint:   { fontSize: 12, color: '#9CA3AF', marginTop: 12, textAlign: 'center' },
 
-  // Save
-  saveBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: adminColors.primary, borderRadius: 14, paddingVertical: 15 },
-  saveBtnText:  { fontSize: 15, fontWeight: '700', color: '#fff' },
+  // Full modal
+  modalHead:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F1F3F5' },
+  modalTitle:  { fontSize: 17, fontWeight: '800', color: '#111827' },
+  modalClose:  { width: 38, height: 38, borderRadius: 19, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
+  modalBody:   { padding: 20 },
+});
+
+// Text scales for the document preview — small (inline) vs large (full-size).
+const docSmall = StyleSheet.create({
+  clinic:     { fontSize: 15, fontWeight: '800', color: '#111827' },
+  meta:       { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
+  title:      { fontSize: 15, fontWeight: '800', color: '#111827', marginTop: 12, marginBottom: 6 },
+  rowLabel:   { fontSize: 14, color: '#6B7280', flex: 1, marginRight: 12 },
+  rowVal:     { fontSize: 14, fontWeight: '600', color: '#374151' },
+  totalLabel: { fontSize: 15, fontWeight: '800', color: '#111827' },
+  totalVal:   { fontSize: 16, fontWeight: '800' },
+});
+const docLarge = StyleSheet.create({
+  clinic:     { fontSize: 22, fontWeight: '800', color: '#111827' },
+  meta:       { fontSize: 14, color: '#9CA3AF', marginTop: 3 },
+  title:      { fontSize: 20, fontWeight: '800', color: '#111827', marginTop: 18, marginBottom: 8 },
+  rowLabel:   { fontSize: 16, color: '#6B7280', flex: 1, marginRight: 14 },
+  rowVal:     { fontSize: 16, fontWeight: '600', color: '#374151' },
+  totalLabel: { fontSize: 18, fontWeight: '800', color: '#111827' },
+  totalVal:   { fontSize: 20, fontWeight: '800' },
 });

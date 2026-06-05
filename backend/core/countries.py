@@ -265,6 +265,7 @@ def get_all_countries() -> list:
     """Return list of countries for frontend dropdown, sorted by name."""
     return [
         {"code": code, "name": cfg["name"], "phone_code": cfg["phone_code"],
-         "currency_symbol": cfg["currency_symbol"], "currency_code": cfg["currency_code"]}
+         "currency_symbol": cfg["currency_symbol"], "currency_code": cfg["currency_code"],
+         "tax_label": cfg["tax_label"]}
         for code, cfg in sorted(COUNTRIES.items(), key=lambda x: x[1]["name"])
     ]

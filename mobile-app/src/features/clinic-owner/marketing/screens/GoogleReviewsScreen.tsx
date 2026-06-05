@@ -634,7 +634,7 @@ const s = StyleSheet.create({
   card: {
     backgroundColor: colors.cardBg,
     marginHorizontal: 16,
-    borderRadius: 16,
+    borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     shadowColor: '#000',
@@ -667,7 +667,7 @@ const s = StyleSheet.create({
   reviewList: { paddingHorizontal: 16, gap: 10 },
   reviewCard: {
     backgroundColor: colors.cardBg,
-    borderRadius: 16,
+    borderRadius: 12,
     padding: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -696,7 +696,7 @@ const s = StyleSheet.create({
   scopePill: {
     flex: 1,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: 20,
     backgroundColor: colors.cardBg,
     alignItems: 'center',
     borderWidth: 1.5,
@@ -759,7 +759,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.gray100,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 20,
   },
   competitorRating: { fontSize: 14, fontWeight: '800', color: colors.textPrimary },
   competitorCount: { fontSize: 11, color: colors.textMuted },

@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: 20,
   },
   dot: {
     width: 6,
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
   moduleCard: {
     width: '30.5%',
     aspectRatio: 1,
-    borderRadius: 20,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 10,

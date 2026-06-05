@@ -60,6 +60,7 @@ const TemplatesEditor = () => {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState(null);
   const [variants, setVariants] = useState({ invoice: [], prescription: [], consent: [] });
+  const [taxLabel, setTaxLabel] = useState('GST No.'); // clinic's country-specific tax label
 
   const fileInputRef = useRef(null);
 
@@ -85,6 +86,7 @@ const TemplatesEditor = () => {
         next.invoice.gst_number  = me.gst_number  || '';
         next.invoice.logo_url    = me.logo_url    || '';
         next.invoice.template_id = me.invoice_template || 'classic';
+        if (me.tax_label) setTaxLabel(me.tax_label);
       }
       (configList || []).forEach((c) => {
         const k = c.category;
@@ -432,12 +434,12 @@ const TemplatesEditor = () => {
                 {activeTab === 'invoice' && (
                   <Section title="Tax & Identity">
                     <div>
-                      <FieldLabel>Clinic GST Number</FieldLabel>
+                      <FieldLabel>Clinic {taxLabel}</FieldLabel>
                       <input
                         type="text"
                         value={cfg.gst_number}
                         onChange={(e) => updateField('gst_number', e.target.value.toUpperCase())}
-                        placeholder="29GGGGG1314R9Z6"
+                        placeholder={`Enter ${taxLabel}`}
                         className="w-full px-3 py-2 bg-white border border-gray-200 rounded-md text-sm font-mono uppercase focus:border-[#29828a] focus:ring-1 focus:ring-[#29828a] outline-none"
                       />
                     </div>

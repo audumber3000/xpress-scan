@@ -1,12 +1,14 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Bell, ChevronDown, Wallet, Users, CalendarDays, UserCheck } from 'lucide-react-native';
+import { Bell, ChevronDown, Wallet, Users, CalendarDays, UserCheck, ArrowRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '../../../../../../shared/constants/colors';
 import { getCurrencySymbol } from '../../../../../../shared/utils/currency';
 import { UserAvatar } from '../../../../../../shared/components/UserAvatar';
+import { AppSkeleton } from '../../../../../../shared/components/Skeleton';
 import { IS_PURCHASE_UI_ENABLED } from '../../../../../../shared/constants/platform';
+import { componentRadius } from '../../../../../../shared/constants/theme';
 
 interface WelcomeHeaderProps {
   userName: string;
@@ -28,7 +30,62 @@ interface WelcomeHeaderProps {
   photoURL?: string | null;
   /** Email used as seed for the DiceBear fallback avatar */
   avatarSeed?: string | null;
+  /** Contextual nudge actions — fired when an empty KPI card is tapped */
+  onAddInvoice?: () => void;
+  onAddPatient?: () => void;
+  onAddAppointment?: () => void;
 }
+
+// A single KPI tile. When `nudge` is provided the card becomes tappable and
+// shows a contextual call-to-action instead of leaving a dead zero on screen.
+const StatCard: React.FC<{
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  loading?: boolean;
+  nudge?: { text: string; actionable: boolean; onPress?: () => void };
+}> = ({ icon, label, value, loading = false, nudge }) => {
+  const tappable = !!nudge?.actionable && !!nudge.onPress;
+  const Wrapper: any = tappable ? TouchableOpacity : View;
+  return (
+    <Wrapper
+      style={styles.statCard}
+      {...(tappable ? { onPress: nudge!.onPress, activeOpacity: 0.7 } : {})}
+    >
+      <View style={styles.statTopRow}>
+        {icon}
+        <Text style={styles.statLabel}>{label}</Text>
+      </View>
+      {loading ? (
+        <View style={styles.statSkeletonWrap}>
+          <AppSkeleton width="72%" height={28} radius={7} />
+        </View>
+      ) : (
+        <Text
+          style={styles.statValue}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.78}
+        >
+          {value}
+        </Text>
+      )}
+      {!loading && nudge ? (
+        <View style={styles.statNudgeRow}>
+          <Text
+            style={[styles.statNudge, !nudge.actionable && styles.statNudgeMuted]}
+            numberOfLines={1}
+          >
+            {nudge.text}
+          </Text>
+          {nudge.actionable ? (
+            <ArrowRight size={12} color="#C4B5FD" strokeWidth={2.5} />
+          ) : null}
+        </View>
+      ) : null}
+    </Wrapper>
+  );
+};
 
 // 1. Background backdrop (lowest layer)
 export const WelcomeHeaderBackground: React.FC = () => {
@@ -61,6 +118,9 @@ export const WelcomeHeaderTopPart: React.FC<WelcomeHeaderProps> = ({
   onPlanPress,
   photoURL,
   avatarSeed,
+  onAddInvoice,
+  onAddPatient,
+  onAddAppointment,
 }) => {
   return (
     <LinearGradient
@@ -158,81 +218,91 @@ export const WelcomeHeaderTopPart: React.FC<WelcomeHeaderProps> = ({
             </TouchableOpacity>
           </View>
         </View>
-
-        {/* Stats Cards — 2x2 grid */}
-        <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
-            <View style={styles.statTopRow}>
-              <Wallet size={14} color="rgba(255,255,255,0.65)" strokeWidth={2.5} />
-              <Text style={styles.statLabel}>REVENUE</Text>
-            </View>
-            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
-              {getCurrencySymbol()}{dailyRevenue.toLocaleString('en-IN')}
-            </Text>
-          </View>
-          <View style={styles.statCard}>
-            <View style={styles.statTopRow}>
-              <Users size={14} color="rgba(255,255,255,0.65)" strokeWidth={2.5} />
-              <Text style={styles.statLabel}>PATIENTS</Text>
-            </View>
-            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
-              {totalPatients.toLocaleString()}
-            </Text>
-          </View>
-          <View style={styles.statCard}>
-            <View style={styles.statTopRow}>
-              <CalendarDays size={14} color="rgba(255,255,255,0.65)" strokeWidth={2.5} />
-              <Text style={styles.statLabel}>APPOINTMENTS</Text>
-            </View>
-            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
-              {totalAppointments.toLocaleString()}
-            </Text>
-          </View>
-          <View style={styles.statCard}>
-            <View style={styles.statTopRow}>
-              <UserCheck size={14} color="rgba(255,255,255,0.65)" strokeWidth={2.5} />
-              <Text style={styles.statLabel}>CHECKING</Text>
-            </View>
-            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
-              {totalChecking.toLocaleString()}
-            </Text>
-          </View>
-        </View>
       </SafeAreaView>
     </LinearGradient>
   );
 };
 
-// 3. Part Two: Tiny component joined to uper one with rounded corners at bottom
-export const WelcomeHeaderBottomPocket: React.FC = () => {
+interface WelcomeHeaderStatsProps {
+  dailyRevenue: number;
+  totalPatients: number;
+  totalAppointments: number;
+  totalChecking: number;
+  loading?: boolean;
+  onAddInvoice?: () => void;
+  onAddPatient?: () => void;
+  onAddAppointment?: () => void;
+}
+
+// 2b. Stats cards — live below the sticky greeting and scroll away with content.
+export const WelcomeHeaderStats: React.FC<WelcomeHeaderStatsProps> = ({
+  dailyRevenue,
+  totalPatients,
+  totalAppointments,
+  totalChecking,
+  loading = false,
+  onAddInvoice,
+  onAddPatient,
+  onAddAppointment,
+}) => {
   return (
     <LinearGradient
       colors={['#393399', '#4338CA']}
-      style={styles.bottomPocket}
+      style={styles.statsContainer}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
-    />
+    >
+      <View style={styles.statsGrid}>
+        <StatCard
+          icon={<Wallet size={15} color="rgba(255,255,255,0.65)" strokeWidth={2.5} />}
+          label="REVENUE"
+          value={`${getCurrencySymbol()}${dailyRevenue.toLocaleString('en-IN')}`}
+          loading={loading}
+          nudge={dailyRevenue === 0 ? { text: 'Add first invoice', actionable: true, onPress: onAddInvoice } : undefined}
+        />
+        <StatCard
+          icon={<Users size={15} color="rgba(255,255,255,0.65)" strokeWidth={2.5} />}
+          label="PATIENTS"
+          value={totalPatients.toLocaleString()}
+          loading={loading}
+          nudge={totalPatients === 0 ? { text: 'Register a patient', actionable: true, onPress: onAddPatient } : undefined}
+        />
+        <StatCard
+          icon={<CalendarDays size={15} color="rgba(255,255,255,0.65)" strokeWidth={2.5} />}
+          label="TODAY'S APTS."
+          value={totalAppointments.toLocaleString()}
+          loading={loading}
+          nudge={totalAppointments === 0 ? { text: 'Schedule one', actionable: true, onPress: onAddAppointment } : undefined}
+        />
+        <StatCard
+          icon={<UserCheck size={15} color="rgba(255,255,255,0.65)" strokeWidth={2.5} />}
+          label="CHECK-INS"
+          value={totalChecking.toLocaleString()}
+          loading={loading}
+          nudge={totalChecking === 0 ? { text: 'Waiting room empty', actionable: false } : undefined}
+        />
+      </View>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
   absoluteBackdrop: {
+    // Only tall enough to back the status-bar / over-scroll bounce area.
+    // The header paints its own purple, so this never sits behind the chart.
     ...StyleSheet.absoluteFillObject,
-    height: 450,
+    height: 200,
     zIndex: -1,
   },
   topPartContainer: {
-    paddingBottom: 20,
     zIndex: 1000,
     elevation: 80,
     backgroundColor: '#2E2A85',
   },
-  bottomPocket: {
-    height: 80,
-    borderBottomLeftRadius: 60,
-    borderBottomRightRadius: 60,
-    zIndex: 1,
-    elevation: 1,
+  statsContainer: {
+    paddingTop: 4,
+    paddingBottom: 24,
+    backgroundColor: '#393399',
   },
   headerContent: {
     flexDirection: 'row',
@@ -286,7 +356,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF3C7',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 12,
+    borderRadius: componentRadius.pill, // 20 — badge pill
     borderWidth: 1,
     borderColor: '#F59E0B',
   },
@@ -300,7 +370,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(16, 185, 129, 0.2)',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 12,
+    borderRadius: componentRadius.pill, // 20 — badge pill
     borderWidth: 1,
     borderColor: '#10B981',
   },
@@ -311,15 +381,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   trialBadge: {
-    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    // Amber, not blue — a trial counting down is urgency, and urgency reads amber.
+    backgroundColor: 'rgba(245, 158, 11, 0.22)',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 12,
+    borderRadius: componentRadius.pill, // 20 — badge pill
     borderWidth: 1,
-    borderColor: '#60A5FA',
+    borderColor: '#F59E0B',
   },
   trialBadgeText: {
-    color: '#BFDBFE',
+    color: '#FCD34D',
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 0.5,
@@ -355,8 +426,8 @@ const styles = StyleSheet.create({
     width: '48%',
     flexGrow: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 16,
-    paddingVertical: 12,
+    borderRadius: componentRadius.statCard, // 10
+    paddingVertical: 13,
     paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
@@ -368,14 +439,37 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   statLabel: {
-    fontSize: 10,
+    flexShrink: 1,
+    fontSize: 11,
+    lineHeight: 13,
     color: 'rgba(255, 255, 255, 0.7)',
-    fontWeight: '700',
+    fontWeight: '800',
     letterSpacing: 0.5,
   },
   statValue: {
-    fontSize: 19,
+    fontSize: 23,
+    lineHeight: 28,
     fontWeight: 'bold',
     color: '#FFFFFF',
+  },
+  statSkeletonWrap: {
+    opacity: 0.45,
+  },
+  statNudgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: 6,
+  },
+  statNudge: {
+    flexShrink: 1,
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '600',
+    color: '#C4B5FD',
+  },
+  statNudgeMuted: {
+    color: 'rgba(255,255,255,0.45)',
+    fontWeight: '500',
   },
 });

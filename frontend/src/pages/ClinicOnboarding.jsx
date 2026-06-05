@@ -40,8 +40,9 @@ const SPECIALIZATIONS = [
 
 const ClinicOnboarding = () => {
   const navigate = useNavigate();
-  const { setUser: setAuthUser } = useAuth();
+  const { setUser: setAuthUser, signOut } = useAuth();
   const [user, setUser] = useState(null);
+  const [showExitModal, setShowExitModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [countries, setCountries] = useState([]);
@@ -86,6 +87,35 @@ const ClinicOnboarding = () => {
       );
     }).catch(() => {});
   }, []);
+
+  // Don't let people wander off mid-setup. Warn on tab close/refresh, and
+  // intercept the browser Back button with a friendly "finish your clinic" nudge.
+  useEffect(() => {
+    const onBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+
+    window.history.pushState(null, '', window.location.href);
+    const onPopState = () => {
+      setShowExitModal(true);
+      // Re-trap so a second Back press still shows the nudge instead of leaving.
+      window.history.pushState(null, '', window.location.href);
+    };
+    window.addEventListener('popstate', onPopState);
+
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      window.removeEventListener('popstate', onPopState);
+    };
+  }, []);
+
+  const handleLeaveAnyway = async () => {
+    setShowExitModal(false);
+    try { await signOut?.(); } catch { /* ignore */ }
+    navigate('/login', { replace: true });
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -565,6 +595,36 @@ const ClinicOnboarding = () => {
           A product by Clino Health · Upclick Labs (OPC)
         </div>
       </div>
+
+      {/* Exit-intent nudge */}
+      {showExitModal && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-celebrate-overlay">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-celebrate-pop">
+            <div className="bg-gradient-to-br from-[#2a276e] to-[#403bb1] px-8 pt-8 pb-10 text-center text-white">
+              <div className="text-5xl mb-3">🦷✨</div>
+              <h2 className="text-2xl font-bold tracking-tight">Wait — your clinic is almost ready!</h2>
+              <p className="mt-2 text-sm text-white/80">
+                You're literally one step away from running your practice on MolarPlus.
+                Don't lose your progress now!
+              </p>
+            </div>
+            <div className="px-6 pt-6 pb-7 -mt-6 bg-white rounded-t-3xl flex flex-col gap-2.5">
+              <button
+                onClick={() => setShowExitModal(false)}
+                className="w-full py-3.5 rounded-xl bg-[#2a276e] text-white font-semibold hover:bg-[#1a1548] transition-colors shadow-sm"
+              >
+                Finish setting up my clinic →
+              </button>
+              <button
+                onClick={handleLeaveAnyway}
+                className="w-full py-2.5 text-sm font-medium text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                Leave anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

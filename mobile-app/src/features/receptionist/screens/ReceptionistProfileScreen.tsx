@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   avatarCard: {
     alignItems: 'center', paddingVertical: 28,
     backgroundColor: '#FFFFFF', marginHorizontal: 16, marginTop: 20,
-    borderRadius: 20,
+    borderRadius: 12,
     ...Platform.select({
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 },
       android: { elevation: 3 },

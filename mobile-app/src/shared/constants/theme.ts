@@ -233,6 +233,24 @@ export const radius = {
 } as const;
 
 // ─────────────────────────────────────────────
+// COMPONENT RADIUS — STYLE GUIDE (mobile app)
+// Canonical corner radii per component type. Prefer these over raw numbers
+// so the whole app stays consistent.
+//   • Carousel card        → 12  (feels native, not bubbly)
+//   • Header stat cards     → 10  (tighter, they're smaller)
+//   • Buttons               → 10
+//   • Badges / pills        → 20  (reads as a full pill at badge heights)
+//   • Bottom action buttons → 10
+// ─────────────────────────────────────────────
+export const componentRadius = {
+  carouselCard:       radius.lg,    // 12
+  statCard:           radius.md,    // 10
+  button:             radius.md,    // 10
+  pill:               radius['2xl'], // 20
+  bottomActionButton: radius.md,    // 10
+} as const;
+
+// ─────────────────────────────────────────────
 // SHADOWS
 // ─────────────────────────────────────────────
 export const shadows = {
@@ -643,6 +661,7 @@ export const theme = {
   typography,
   spacing,
   radius,
+  componentRadius,
   shadows,
   layout,
   getStatusColors,

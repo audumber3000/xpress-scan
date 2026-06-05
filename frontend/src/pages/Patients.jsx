@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { api, getPermissionAwareErrorMessage } from "../utils/api";
+import { api, getPermissionAwareErrorMessage, getFriendlyErrorMessage } from "../utils/api";
 import { toast } from 'react-toastify';
 import { FaEye, FaEdit, FaTrash, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import { Search, Plus, User, Folder, X, Edit2, Trash2, UploadCloud, UserPlus } from "lucide-react";
@@ -51,6 +51,7 @@ const Patients = () => {
     notes: ""
   });
   const [editLoading, setEditLoading] = useState(false);
+  const [editErrors, setEditErrors] = useState({}); // { fieldName: message } for inline validation
   const [casePaperPrompt, setCasePaperPrompt] = useState(null); // { id, name } of a just-created patient
   const [deleteLoading, setDeleteLoading] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -171,6 +172,7 @@ const Patients = () => {
       display_id: patient.display_id || "",
       notes: patient.notes || ""
     });
+    setEditErrors({});
     setEditDrawerOpen(true);
   };
 
@@ -190,10 +192,55 @@ const Patients = () => {
       display_id: "",
       notes: ""
     });
+    setEditErrors({});
     setEditDrawerOpen(true);
   };
 
+  // Checks all required fields up-front and returns a { field: message } map.
+  // Empty map = valid. This catches problems before hitting the server.
+  const validatePatientForm = () => {
+    const errors = {};
+    if (!editFormData.name?.trim()) errors.name = "Name is required.";
+
+    const age = String(editFormData.age ?? "").trim();
+    if (!age) {
+      errors.age = "Age is required.";
+    } else {
+      const ageNum = Number(age);
+      if (!Number.isFinite(ageNum) || ageNum < 0 || ageNum > 150) {
+        errors.age = "Enter a valid age between 0 and 150.";
+      }
+    }
+
+    if (!editFormData.gender?.trim()) errors.gender = "Gender is required.";
+
+    if (!editFormData.phone?.trim()) {
+      errors.phone = "Phone number is required.";
+    } else if (editFormData.phone.replace(/\D/g, "").length < 7) {
+      errors.phone = "Enter a valid phone number (at least 7 digits).";
+    }
+
+    if (!editFormData.village?.trim()) errors.village = "Village/City is required.";
+    if (!editFormData.treatment_type?.trim()) errors.treatment_type = "Treatment type is required.";
+    if (!editFormData.referred_by?.trim()) errors.referred_by = "Referred by is required.";
+
+    return errors;
+  };
+
   const handleSavePatient = async () => {
+    // Validate on the frontend first so the user sees exactly which field is missing.
+    const errors = validatePatientForm();
+    if (Object.keys(errors).length > 0) {
+      setEditErrors(errors);
+      const summary =
+        Object.keys(errors).length === 1
+          ? Object.values(errors)[0]
+          : `Please fix these fields: ${Object.values(errors).join(" ")}`;
+      toast.error(summary);
+      return;
+    }
+    setEditErrors({});
+
     try {
       setEditLoading(true);
       if (drawerMode === 'edit') {
@@ -211,7 +258,8 @@ const Patients = () => {
       fetchPatients();
     } catch (e) {
       console.error("Error saving patient:", e);
-      toast.error(e.response?.data?.detail || "Failed to save patient");
+      // Surface the real reason (duplicate phone, etc.) instead of a generic message.
+      toast.error(getFriendlyErrorMessage(e, "We couldn't save this patient. Please check the details and try again."));
     } finally {
       setEditLoading(false);
     }
@@ -330,6 +378,28 @@ const Patients = () => {
     if (g === 'female') return 'bg-pink-50 text-pink-600';
     return 'bg-gray-100 text-gray-600';
   };
+
+  // Update a patient form field and clear its validation error as the user types.
+  const setField = (name, value) => {
+    setEditFormData(prev => ({ ...prev, [name]: value }));
+    if (editErrors[name]) {
+      setEditErrors(prev => {
+        const next = { ...prev };
+        delete next[name];
+        return next;
+      });
+    }
+  };
+
+  // Input border styling — turns red when the field has a validation error.
+  const fieldClass = (name) =>
+    `w-full px-4 py-2 bg-gray-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] text-sm transition-all ${
+      editErrors[name] ? "border-red-400 bg-red-50" : "border-gray-200"
+    }`;
+
+  // Inline red error message shown under a field.
+  const FieldError = ({ name }) =>
+    editErrors[name] ? <p className="mt-1 text-sm text-red-600">{editErrors[name]}</p> : null;
 
   return (
     <div className="flex flex-col h-screen bg-gray-50/30">
@@ -606,13 +676,13 @@ const Patients = () => {
               <form id="edit-patient-form" onSubmit={(e) => { e.preventDefault(); handleSavePatient(); }} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Name <span className="text-red-500">*</span></label>
-                  <input 
-                    type="text" 
-                    required
+                  <input
+                    type="text"
                     value={editFormData.name}
-                    onChange={(e) => setEditFormData({...editFormData, name: e.target.value})}
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] text-sm transition-all"
+                    onChange={(e) => setField("name", e.target.value)}
+                    className={fieldClass("name")}
                   />
+                  <FieldError name="name" />
                 </div>
                 {drawerMode === 'edit' && (
                   <div>
@@ -628,66 +698,68 @@ const Patients = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Age <span className="text-red-500">*</span></label>
-                    <input 
-                      type="number" 
-                      required
+                    <input
+                      type="number"
                       value={editFormData.age}
-                      onChange={(e) => setEditFormData({...editFormData, age: e.target.value})}
-                      className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] text-sm transition-all"
+                      onChange={(e) => setField("age", e.target.value)}
+                      className={fieldClass("age")}
                     />
+                    <FieldError name="age" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Gender <span className="text-red-500">*</span></label>
-                    <select 
-                      required
+                    <select
                       value={editFormData.gender}
-                      onChange={(e) => setEditFormData({...editFormData, gender: e.target.value})}
-                      className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] text-sm transition-all"
+                      onChange={(e) => setField("gender", e.target.value)}
+                      className={fieldClass("gender")}
                     >
                       <option value="">Select Gender</option>
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
                       <option value="Other">Other</option>
                     </select>
+                    <FieldError name="gender" />
                   </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone <span className="text-red-500">*</span></label>
-                  <input 
-                    type="tel" 
-                    required
+                  <input
+                    type="tel"
                     value={editFormData.phone}
-                    onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})}
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] text-sm transition-all"
+                    onChange={(e) => setField("phone", e.target.value)}
+                    className={fieldClass("phone")}
                   />
+                  <FieldError name="phone" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Village/City <span className="text-red-500">*</span></label>
-                  <input 
-                    type="text" 
-                    required
+                  <input
+                    type="text"
                     value={editFormData.village}
-                    onChange={(e) => setEditFormData({...editFormData, village: e.target.value})}
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] text-sm transition-all"
+                    onChange={(e) => setField("village", e.target.value)}
+                    className={fieldClass("village")}
                   />
+                  <FieldError name="village" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Treatment Type</label>
-                  <input 
-                    type="text" 
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Treatment Type <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
                     value={editFormData.treatment_type}
-                    onChange={(e) => setEditFormData({...editFormData, treatment_type: e.target.value})}
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] text-sm transition-all"
+                    onChange={(e) => setField("treatment_type", e.target.value)}
+                    className={fieldClass("treatment_type")}
                   />
+                  <FieldError name="treatment_type" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Referred By</label>
-                  <input 
-                    type="text" 
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Referred By <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
                     value={editFormData.referred_by}
-                    onChange={(e) => setEditFormData({...editFormData, referred_by: e.target.value})}
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] text-sm transition-all"
+                    onChange={(e) => setField("referred_by", e.target.value)}
+                    className={fieldClass("referred_by")}
                   />
+                  <FieldError name="referred_by" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>

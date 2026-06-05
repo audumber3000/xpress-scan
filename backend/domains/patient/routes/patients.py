@@ -7,9 +7,57 @@ from typing import List
 from schemas import PatientResponse
 from core.auth_utils import get_current_user, get_current_clinic, require_patients_view, require_patients_edit, require_patients_delete
 from datetime import datetime
+import re
 
 
 router = APIRouter()
+
+# Plain-English labels for patient columns, used when explaining DB errors.
+_PATIENT_FIELD_LABELS = {
+    "name": "Full name",
+    "age": "Age",
+    "gender": "Gender",
+    "phone": "Phone number",
+    "village": "Village/City",
+    "referred_by": "Referring doctor",
+    "treatment_type": "Treatment type",
+    "payment_type": "Payment type",
+    "email": "Email",
+}
+
+
+def explain_patient_save_error(exc: Exception):
+    """Turn a raw DB/SQLAlchemy exception into (status_code, human reason)."""
+    msg = str(getattr(exc, "orig", exc)) or str(exc)
+    low = msg.lower()
+
+    # Unique violation, e.g. a patient with this phone already exists.
+    if "duplicate key" in low or "unique constraint" in low:
+        m = re.search(r"key \((?P<col>[\w, ]+)\)=\((?P<val>.*?)\)", msg, re.IGNORECASE)
+        if m:
+            col = m.group("col").split(",")[0].strip()
+            label = _PATIENT_FIELD_LABELS.get(col, col.replace("_", " ").capitalize())
+            return 409, f"A patient with this {label.lower()} already exists."
+        return 409, "A patient with this information already exists."
+
+    # NOT NULL violation — a required column was empty.
+    if "not-null" in low or "not null" in low or "null value in column" in low:
+        m = re.search(r'column "(?P<col>[\w]+)"', msg, re.IGNORECASE)
+        if m:
+            label = _PATIENT_FIELD_LABELS.get(m.group("col"), m.group("col").replace("_", " ").capitalize())
+            return 422, f"{label} is required."
+        return 422, "A required field is missing."
+
+    # Value too long for the column.
+    if "value too long" in low:
+        return 422, "One of the fields is too long. Please shorten it and try again."
+
+    # Foreign key issues (e.g. clinic missing).
+    if "foreign key" in low:
+        return 409, "This patient is linked to a record that no longer exists. Please refresh and try again."
+
+    # Unknown failure — keep it honest but non-technical.
+    return 500, "We couldn't save this patient due to an unexpected error. Please try again, or contact support if it keeps happening."
 
 @router.options("/")
 def options_patients():
@@ -73,8 +121,8 @@ def create_patient(
         if db_patient.phone:
             try:
                 from routes.message_templates import get_template_for_scenario, render_template
-                import re
-                
+                from core.phone import normalize_phone
+
                 from models import Clinic
                 clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
                 
@@ -89,9 +137,7 @@ def create_patient(
                 }
                 rendered_message = render_template(welcome_message, template_vars)
                 
-                clean_phone = re.sub(r'\D', '', str(db_patient.phone))
-                if len(clean_phone) == 10:
-                    clean_phone = "91" + clean_phone
+                clean_phone = normalize_phone(db_patient.phone, getattr(clinic, "country", None))
             except Exception as e:
                 print(f"⚠️ Welcome message error: {e}")
         
@@ -99,11 +145,15 @@ def create_patient(
         db_patient.last_visit = db_patient.created_at
         
         return db_patient
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
-        if "duplicate key value violates unique constraint" in str(e):
-            raise HTTPException(status_code=409, detail="A patient with this information already exists.")
-        raise HTTPException(status_code=500, detail=f"Failed to create patient: {str(e)}")
+        # Log the full technical detail for debugging.
+        print(f"❌ Failed to create patient: {e}")
+        # Translate the database error into a specific, plain-English reason.
+        status_code, reason = explain_patient_save_error(e)
+        raise HTTPException(status_code=status_code, detail=reason)
 
 @router.get("/{patient_id}", response_model=PatientOut)
 def get_patient(

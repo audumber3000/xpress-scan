@@ -560,7 +560,7 @@ const s = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 22,
     paddingVertical: 14,
-    borderRadius: 28,
+    borderRadius: 10,
     elevation: 6,
     shadowColor: '#1a1548',
     shadowOffset: { width: 0, height: 4 },

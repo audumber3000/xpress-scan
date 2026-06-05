@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import ToothSurfaceMap from './ToothSurfaceMap';
 import { getCurrencySymbol } from '../../utils/currency';
+import { getUserDisplayName } from '../../utils/userName';
+import { useAuth } from '../../contexts/AuthContext';
 
 /**
  * PatientTimeline - Flush Kanban Board, edge-to-edge buttons, Tooth Diagram integration
@@ -15,6 +17,9 @@ const PatientTimeline = ({
 }) => {
     const [editingId, setEditingId] = useState(null);
     const [editData, setEditData] = useState({});
+    const { user } = useAuth();
+    // Fallback for a treatment item with no recorded doctor: the current user.
+    const currentUserName = getUserDisplayName(user);
 
     const columns = useMemo(() => {
         const planItems = treatmentPlan.filter(item => !item.status || item.status === 'planned');
@@ -106,7 +111,7 @@ const PatientTimeline = ({
         const qty = item.qty || 1;
         const itemPrice = item.cost || 600;
         const total = qty * itemPrice;
-        const doctorName = item.doctor || "Audumber Ramdas Chaudhari";
+        const doctorName = item.doctor || currentUserName || "Treating Doctor";
 
         if (isEditing) {
             return (

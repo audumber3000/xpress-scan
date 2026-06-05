@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2E2A85',
     borderStyle: 'dashed',
-    borderRadius: 16,
+    borderRadius: 10,
     marginTop: 8,
     backgroundColor: 'rgba(46, 42, 133, 0.05)',
   },
@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
     paddingVertical: 16,
-    borderRadius: 12,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },

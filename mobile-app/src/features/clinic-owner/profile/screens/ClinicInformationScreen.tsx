@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginTop: 16,
     padding: 24,
-    borderRadius: 16,
+    borderRadius: 12,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#F3F4F6',
@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.white,
-    borderRadius: 16,
+    borderRadius: 12,
     padding: 16,
     borderWidth: 1,
     borderColor: '#F3F4F6',

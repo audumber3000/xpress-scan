@@ -1,6 +1,7 @@
 import React, { memo, useState } from "react";
 import { generatePatientPersona, generateInitialsAvatar } from "../../utils/avatar";
 import { api } from "../../utils/api";
+import { getCurrencySymbol } from "../../utils/currency";
 import { toast } from "react-toastify";
 
 const InvoiceItem = memo(({ invoice, onSelect }) => {
@@ -18,12 +19,8 @@ const InvoiceItem = memo(({ invoice, onSelect }) => {
         setIsSendingWA(false);
     }
   };
-  const formatAmount = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-    }).format(amount);
-  };
+  const formatAmount = (amount) =>
+    `${getCurrencySymbol()}${Number(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const formatDate = (dateString) => {
     if (!dateString) return "";

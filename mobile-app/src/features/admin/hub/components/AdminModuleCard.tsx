@@ -37,7 +37,7 @@ const styles = StyleSheet.create({
   card: {
     width: '31%',
     aspectRatio: 1,
-    borderRadius: 24,
+    borderRadius: 12,
     padding: 16,
     justifyContent: 'center',
     alignItems: 'center',

@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
   statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
+    borderRadius: 20,
   },
   statusText: {
     fontSize: 9,

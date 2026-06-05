@@ -136,12 +136,9 @@ const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdat
     setDiscountEditing(false);
   };
 
-  const formatAmount = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-    }).format(amount || 0);
-  };
+  // Currency symbol comes from the clinic (same source as the rest of the app).
+  const formatAmount = (amount) =>
+    `${getCurrencySymbol()}${Number(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
     <div className="space-y-4">

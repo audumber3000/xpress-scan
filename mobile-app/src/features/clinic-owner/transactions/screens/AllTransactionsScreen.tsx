@@ -10,6 +10,7 @@ import { GearLoader } from '../../../../shared/components/GearLoader';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
 import { PatientAvatar } from '../../../../shared/components/PatientAvatar';
 import { colors } from '../../../../shared/constants/colors';
+import { componentRadius } from '../../../../shared/constants/theme';
 import { transactionsApiService, Transaction, LedgerItem } from '../../../../services/api/transactions.api';
 import { getCurrencySymbol } from '../../../../shared/utils/currency';
 
@@ -139,9 +140,11 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () =>
               ) : (
                 transactions.map((transaction, index) => {
                   const s = transaction.status.toLowerCase();
-                  const statusBgColor = s === 'completed' ? '#E6F9F1' : s === 'success' ? '#EFF6FF' : '#FFFBEB';
-                  const statusTextColor = s === 'completed' ? '#10B981' : s === 'success' ? '#3B82F6' : '#F59E0B';
-                  const statusLabel = s === 'completed' ? 'PAID' : s === 'success' ? 'UNVERIFIED' : 'PENDING';
+                  // Paid is paid — no user-facing "verification" distinction.
+                  const isPaid = s === 'completed' || s === 'success';
+                  const statusBgColor = isPaid ? '#E6F9F1' : '#FFFBEB';
+                  const statusTextColor = isPaid ? '#10B981' : '#F59E0B';
+                  const statusLabel = isPaid ? 'PAID' : 'PENDING';
                   return (
                     <View key={transaction.id}>
                       <TouchableOpacity style={styles.rowContent} activeOpacity={0.7} onPress={() => handleItemPress(transaction)}>
@@ -196,16 +199,13 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () =>
                         </View>
                         <View style={styles.transactionInfo}>
                           <Text style={styles.itemTitle} numberOfLines={1}>{item.entityName || 'General'}</Text>
-                          <View style={styles.row}>
-                            <View style={[styles.typeBadge, { backgroundColor: isExpense ? '#FEE2E2' : '#E0F2FE' }]}>
-                              <Text style={[styles.typeBadgeText, { color: isExpense ? '#B91C1C' : '#0369A1' }]}>{item.type.toUpperCase()}</Text>
-                            </View>
-                            <Text style={styles.itemSubtitle}>{item.date} • {item.category}</Text>
-                          </View>
+                          <Text style={styles.itemSubtitle} numberOfLines={1}>{item.date} • {item.category}</Text>
                         </View>
                         <View style={styles.transactionRight}>
                           <Text style={[styles.itemAmount, { color: isExpense ? '#B91C1C' : '#10B981' }]}>{isExpense ? '-' : '+'}{getCurrencySymbol()}{item.amount.toLocaleString()}</Text>
-                          <Text style={styles.paymentMethodText}>{item.payment_method || 'Cash'}</Text>
+                          <View style={[styles.statusBadge, { backgroundColor: isExpense ? '#FEE2E2' : '#E0F2FE' }]}>
+                            <Text style={[styles.statusText, { color: isExpense ? '#B91C1C' : '#0369A1' }]}>{item.type.toUpperCase()}</Text>
+                          </View>
                         </View>
                       </TouchableOpacity>
                       {index < ledgerItems.length - 1 && <View style={styles.separator} />}
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
   activeTabIndicator: { position: 'absolute', bottom: 0, left: '20%', right: '20%', height: 3, backgroundColor: colors.primary, borderRadius: 2 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   content: { flex: 1 },
-  listContent: { padding: 15, flexGrow: 1 },
+  listContent: { flexGrow: 1, paddingBottom: 24 },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 80, paddingHorizontal: 32 },
   emptyIcon: { fontSize: 48, marginBottom: 16 },
   emptyTitle: { fontSize: 17, fontWeight: '700', color: '#111827', marginBottom: 8, textAlign: 'center' },
@@ -256,11 +256,7 @@ const styles = StyleSheet.create({
   itemSubtitle: { fontSize: 13, color: '#6B7280', marginTop: 2 },
   transactionRight: { alignItems: 'flex-end' },
   itemAmount: { fontSize: 16, fontWeight: '700', color: '#111827' },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginTop: 4 },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: componentRadius.pill, marginTop: 4 },
   statusText: { fontSize: 10, fontWeight: '700' },
   separator: { height: 1, backgroundColor: '#F3F4F6', marginLeft: 82 },
-  row: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-  typeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 6 },
-  typeBadgeText: { fontSize: 9, fontWeight: '700' },
-  paymentMethodText: { fontSize: 12, color: '#9CA3AF', marginTop: 4 },
 });

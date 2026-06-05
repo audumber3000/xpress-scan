@@ -7,23 +7,15 @@ Wallet balance is checked before the first send and deducted per channel.
 Raises InsufficientWalletBalance (from wallet_service) when funds are low —
 callers should catch this and return HTTP 402 to the frontend.
 """
-import re
 import logging
 import datetime
 from sqlalchemy.orm import Session
 from core.nexus_notify import notify
+from core.phone import normalize_phone
 from core import wallet_service
 from core.wallet_service import InsufficientWalletBalance  # re-export for callers
 
 logger = logging.getLogger(__name__)
-
-
-def _clean_phone(phone: str) -> str:
-    """Strip non-digits and ensure 91 country prefix for Indian numbers."""
-    digits = re.sub(r"\D", "", phone or "")
-    if len(digits) == 10:
-        digits = "91" + digits
-    return digits
 
 
 def notify_event(
@@ -42,7 +34,7 @@ def notify_event(
     Raises InsufficientWalletBalance if the clinic cannot afford even one channel.
     All other errors are caught and logged so they never break the calling request.
     """
-    from models import NotificationPreference, NotificationLog
+    from models import NotificationPreference, NotificationLog, Clinic
 
     pref = (
         db.query(NotificationPreference)
@@ -59,7 +51,9 @@ def notify_event(
 
     channels = pref.channels or []
     data = template_data or {}
-    phone = _clean_phone(to_phone) if to_phone else ""
+    # Country-code the recipient using the clinic's country (defaults to IN).
+    clinic_country = db.query(Clinic.country).filter(Clinic.id == clinic_id).scalar()
+    phone = normalize_phone(to_phone, clinic_country) if to_phone else ""
 
     # ── Pre-flight wallet check ───────────────────────────────────────────────
     # Calculate total cost for all channels about to fire and verify balance

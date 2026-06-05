@@ -1,6 +1,5 @@
 import datetime as dt
 import logging
-import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -8,24 +7,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
 from core.nexus_notify import notify
-from models import Clinic, LabOrder, NotificationLog, User
+from core.phone import normalize_phone
+from models import Clinic, LabOrder, NotificationLog, Subscription, User
 
 logger = logging.getLogger(__name__)
-
-
-TRIAL_EVENT_DAY_MAP = {
-    0: "molarplus_trial_started_mk",
-    4: "molarplus_trial_mid_mk",
-    7: "molarplus_trial_ending_mk",
-    8: "molarplus_trial_ended_mk",
-}
-
-
-def _normalize_phone(phone: str | None) -> str:
-    digits = re.sub(r"\D", "", phone or "")
-    if len(digits) == 10:
-        digits = f"91{digits}"
-    return digits
 
 
 def _owner_name(owner: Optional[User], clinic: Clinic) -> str:
@@ -105,7 +90,7 @@ class PlatformNotificationService:
         template_data: Optional[dict] = None,
         not_before: Optional[dt.datetime] = None,
     ) -> SendResult:
-        recipient = _normalize_phone(clinic.phone)
+        recipient = normalize_phone(clinic.phone, getattr(clinic, "country", None))
         if not recipient:
             return SendResult(False, "missing clinic phone")
 
@@ -223,29 +208,49 @@ class PlatformNotificationService:
             "lab_due_tomorrow": 0,
         }
 
-        active_clinics = (
-            self.db.query(Clinic)
-            .filter(or_(Clinic.status.is_(None), ~Clinic.status.in_(["suspended", "cancelled"])))
+        # ── Trial nudges (t2/t3/t4) off the subscription's real trial window ──
+        # t1 is sent immediately at activation by the start-trial endpoint.
+        # provider == "trial" keeps converted/paid clinics out of these nudges.
+        trial_subs = (
+            self.db.query(Subscription, Clinic)
+            .join(Clinic, Clinic.id == Subscription.clinic_id)
+            .filter(
+                Subscription.provider == "trial",
+                Subscription.trial_used == True,
+                Subscription.current_start.isnot(None),
+                Subscription.current_end.isnot(None),
+                or_(Clinic.status.is_(None), ~Clinic.status.in_(["suspended", "cancelled"])),
+            )
             .all()
         )
 
-        for clinic in active_clinics:
-            owner = _get_owner_for_clinic(self.db, clinic.id)
+        for sub, clinic in trial_subs:
+            start = sub.current_start.date()
+            end = sub.current_end.date()
+            day = (today - start).days
+            total = max((end - start).days, 1)
+            mid_day = max(1, total // 2)
 
-            if clinic.created_at and clinic.subscription_plan == "trial":
-                trial_day = (today - clinic.created_at.date()).days
-                trial_event = TRIAL_EVENT_DAY_MAP.get(trial_day)
-                if trial_event:
-                    sent_trial = self.send_whatsapp_event(
-                        clinic,
-                        trial_event,
-                        template_data={
-                            "owner_name": _owner_name(owner, clinic),
-                            "price": "999",  # starting plan price for trial_ending_mk body_1
-                        },
-                        not_before=dt.datetime.combine(today, dt.time.min),
-                    )
-                    summary["trial_messages"] += int(sent_trial.sent)
+            if (today - end).days == 1:           # day after it ended → t4
+                event = "molarplus_account_update_t4"
+            elif (end - today).days == 1:          # one day before it ends → t3
+                event = "molarplus_account_update_t3"
+            elif day == mid_day and today < end:   # mid-trial → t2
+                event = "molarplus_account_update_t2"
+            else:
+                continue
+
+            owner = _get_owner_for_clinic(self.db, clinic.id)
+            data = {} if event == "molarplus_account_update_t4" else {
+                "owner_name": _owner_name(owner, clinic)
+            }
+            sent_trial = self.send_whatsapp_event(
+                clinic,
+                event,
+                template_data=data,
+                not_before=dt.datetime.combine(today, dt.time.min),
+            )
+            summary["trial_messages"] += int(sent_trial.sent)
 
         tomorrow = today + dt.timedelta(days=1)
         tomorrow_start = dt.datetime.combine(tomorrow, dt.time.min)

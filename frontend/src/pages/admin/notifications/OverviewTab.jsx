@@ -1,6 +1,6 @@
 import React from 'react';
 import { AlertCircle, CreditCard, Wallet, Loader2, CheckCircle2, XCircle } from 'lucide-react';
-import { CHANNEL_META } from './constants';
+import { CHANNEL_META, getChannelPriceLabel } from './constants';
 import { getCurrencySymbol } from '../../../utils/currency';
 
 const StatCard = ({ channel, stats, channelStatus }) => {
@@ -17,7 +17,7 @@ const StatCard = ({ channel, stats, channelStatus }) => {
           </div>
           <div>
             <span className="font-semibold text-gray-800 text-sm">{meta.label}</span>
-            <p className="text-[11px] text-gray-400">{meta.priceLabel}</p>
+            <p className="text-[11px] text-gray-400">{getChannelPriceLabel(channel)}</p>
           </div>
         </div>
         <span className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${status.configured ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>

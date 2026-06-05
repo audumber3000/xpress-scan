@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.white,
-    borderRadius: 16,
+    borderRadius: 12,
     width: '100%',
     maxWidth: 340,
     padding: 24,

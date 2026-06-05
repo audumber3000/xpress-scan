@@ -99,6 +99,71 @@ export const authenticatedFetch = async (url, options = {}) => {
   }
 };
 
+// Plain-English labels for fields that can fail server-side validation.
+const FRIENDLY_FIELD_LABELS = {
+  name: "Full name",
+  age: "Age",
+  gender: "Gender",
+  phone: "Phone number",
+  village: "Village/City",
+  referred_by: "Referring doctor",
+  treatment_type: "Treatment type",
+  scan_type: "Treatment type",
+  payment_type: "Payment type",
+};
+
+// Patterns that mean the message is a leaked stack trace / DB / framework string
+// and should never be shown to a user.
+const TECHNICAL_ERROR_RE =
+  /traceback|psycopg|sqlalchemy|integrity\s?error|unique constraint|duplicate key|Internal Server|HTTP \d|Failed to create|NoneType|KeyError/i;
+
+// Turn any thrown API error into a specific, human-friendly sentence.
+// `fallback` is used whenever the underlying error is technical or unknown.
+export const getFriendlyErrorMessage = (error, fallback = "Something went wrong. Please try again.") => {
+  if (!error) return fallback;
+
+  const status = error.status;
+  const detail = error.detail;
+  const rawMessage = error.message || "";
+
+  // Network / timeout errors have no HTTP status.
+  if (!status) {
+    if (/timeout/i.test(rawMessage)) {
+      return "The server took too long to respond. Please check your connection and try again.";
+    }
+    if (/failed to fetch|network|load failed/i.test(rawMessage)) {
+      return "We couldn't reach the server. Please check your internet connection and try again.";
+    }
+  }
+
+  // FastAPI validation errors (422): detail is an array of { loc, msg }.
+  if (Array.isArray(detail) && detail.length) {
+    const first = detail[0] || {};
+    const loc = Array.isArray(first.loc) ? first.loc : [];
+    const field = loc[loc.length - 1];
+    const label =
+      FRIENDLY_FIELD_LABELS[field] ||
+      (typeof field === "string" ? field.replace(/_/g, " ") : "A required field");
+    const msg = (first.msg || "").toLowerCase();
+    if (msg.includes("required") || msg.includes("missing") || msg.includes("none is not")) {
+      return `${label} is required.`;
+    }
+    if (msg.includes("valid") || msg.includes("type")) {
+      return `Please enter a valid ${label.toLowerCase()}.`;
+    }
+    return `Please check the "${label}" field and try again.`;
+  }
+
+  if (status === 403) return "You don't have permission to perform this action.";
+
+  // A string detail straight from the backend — show it only if it's safe.
+  if (typeof detail === "string" && detail.trim()) {
+    return TECHNICAL_ERROR_RE.test(detail) ? fallback : detail;
+  }
+
+  return fallback;
+};
+
 export const getPermissionAwareErrorMessage = (error, fallbackMessage, permissionMessage) => {
   const message = error?.message || '';
   const isPermissionError =

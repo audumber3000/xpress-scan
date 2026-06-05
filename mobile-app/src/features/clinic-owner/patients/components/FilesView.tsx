@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: 10,
     gap: 6,
   },
   addButtonText: {
@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 12,
     padding: 12,
     marginBottom: 12,
     borderWidth: 1,

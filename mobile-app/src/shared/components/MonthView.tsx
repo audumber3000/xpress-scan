@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 20,
   },
   statusDot: {
     width: 6,

@@ -10,7 +10,18 @@ export interface Analytics {
   checking: number;
   dailyRevenue: number;
   percentageChange: string;
+  /** Signed period-over-period % change per metric, e.g. "+5%" / "-3%". */
+  patientsChange: string;
+  appointmentsChange: string;
+  checkingChange: string;
+  revenueChange: string;
   period: '1D' | '1W' | '1M' | '3M' | '6M' | 'All';
+}
+
+/** Format a backend metric `{ change }` (already signed) into "+5%" / "-3%". */
+function formatChange(metric: any): string {
+  const change = Number(metric?.change ?? 0);
+  return `${change >= 0 ? '+' : ''}${change}%`;
 }
 
 export class AnalyticsApiService extends BaseApiService {
@@ -120,7 +131,11 @@ export class AnalyticsApiService extends BaseApiService {
         appointments: metrics.appointments?.value || 0,
         checking: metrics.checking?.value || 0,
         dailyRevenue: revenueValue,
-        percentageChange: `${metrics.revenue?.change_type === 'up' ? '+' : '-'}${metrics.revenue?.change || 0}%`,
+        percentageChange: formatChange(metrics.revenue),
+        patientsChange: formatChange(metrics.total_patients),
+        appointmentsChange: formatChange(metrics.appointments),
+        checkingChange: formatChange(metrics.checking),
+        revenueChange: formatChange(metrics.revenue),
         period: period,
       };
     } catch (error) {

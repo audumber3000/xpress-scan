@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF', 
     marginHorizontal: 16, 
     marginTop: 14, 
-    borderRadius: 16, 
+    borderRadius: 12, 
     ...Platform.select({ 
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 6 }, 
       android: { elevation: 2 } 

@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: 10,
   },
   toggleButtonActive: {
     backgroundColor: '#FFFFFF',

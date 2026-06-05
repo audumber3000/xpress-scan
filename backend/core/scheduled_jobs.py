@@ -15,6 +15,7 @@ from core.notification_dispatch import (
     InsufficientWalletBalance,
 )
 from core.nexus_notify import notify
+from core.phone import normalize_phone
 
 logger = logging.getLogger(__name__)
 
@@ -114,14 +115,6 @@ async def appointment_reminder_scan_job() -> None:
         db.close()
 
 
-def _clean_phone(phone: str) -> str:
-    import re
-    digits = re.sub(r"\D", "", phone or "")
-    if len(digits) == 10:
-        digits = "91" + digits
-    return digits
-
-
 def _send_system_whatsapp(db, clinic_id: int, to_phone: str, event_type: str, template_data: dict) -> bool:
     """Send a platform-driven WhatsApp notification, bypassing prefs and wallet.
 
@@ -129,8 +122,9 @@ def _send_system_whatsapp(db, clinic_id: int, to_phone: str, event_type: str, te
     the platform service and are not billed against the clinic's wallet.
     Writes a NotificationLog row so the support tool / UI can surface them.
     """
-    from models import NotificationLog
-    phone = _clean_phone(to_phone)
+    from models import NotificationLog, Clinic
+    clinic_country = db.query(Clinic.country).filter(Clinic.id == clinic_id).scalar()
+    phone = normalize_phone(to_phone, clinic_country)
     if not phone:
         return False
     log_entry = NotificationLog(

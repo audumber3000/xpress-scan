@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
   appointmentCard: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 12,
     marginBottom: 12,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
   statusBadge: {
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 12,
+    borderRadius: 20,
     marginBottom: 8,
   },
   statusText: {

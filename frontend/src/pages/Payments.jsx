@@ -3,6 +3,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
 import GearLoader from "../components/GearLoader";
 import { api } from "../utils/api";
+import { getCurrencyCode } from "../utils/currency";
 import InvoiceEditor from "../components/payments/InvoiceEditor";
 import InvoiceItem from "../components/payments/InvoiceItem";
 import ExpenseModal from "../components/payments/ExpenseModal";
@@ -246,7 +247,7 @@ const Payments = () => {
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
-      currency: 'INR',
+      currency: getCurrencyCode(),
       maximumFractionDigits: 0
     }).format(amount);
   };

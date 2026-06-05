@@ -20,10 +20,19 @@ const AdminHub = () => {
     return '';
   };
   const [openSection, setOpenSection] = useState(getInitialOpenSection);
+  // Mobile only: false = show the config menu, true = show the selected section.
+  // Ignored on desktop (md+), where both panes always render side by side.
+  const [mobileShowContent, setMobileShowContent] = useState(false);
   const userBranches = (user?.clinics?.length > 0 ? user.clinics : [user?.clinic]).filter(Boolean);
 
   const toggleSection = (id) => {
     setOpenSection(openSection === id ? '' : id);
+  };
+
+  // Navigate to a section and, on mobile, switch from the menu to the content view.
+  const goTo = (path) => {
+    navigate(path);
+    setMobileShowContent(true);
   };
 
   // Helper for Sidebar items
@@ -40,7 +49,7 @@ const AdminHub = () => {
         <button
           onClick={() => {
               if (path && !hasChildren) {
-                navigate(path);
+                goTo(path);
               }
               if (hasChildren) toggleSection(id);
           }}
@@ -60,8 +69,8 @@ const AdminHub = () => {
 
   return (
     <div className="flex h-screen w-full bg-[#f8fafc] overflow-hidden">
-      {/* Secondary Sidebar Navigation */}
-      <div className="w-72 bg-white border-r border-gray-200 flex flex-col h-full shrink-0 shadow-sm z-10">
+      {/* Secondary Sidebar Navigation — full-width on mobile, fixed pane on desktop */}
+      <div className={`${mobileShowContent ? 'hidden md:flex' : 'flex'} w-full md:w-72 bg-white border-r border-gray-200 flex-col h-full shrink-0 shadow-sm z-10`}>
         <div className="p-6 border-b border-gray-100/80 mt-1">
           <h2 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
             <SettingsIcon size={22} className="text-[#29828a]" />
@@ -76,11 +85,11 @@ const AdminHub = () => {
           {openSection === 'branches' && (
             <div className="ml-9 border-l-2 border-gray-100 pl-3 space-y-1.5 mb-3 mt-1">
                {userBranches.map((branch) => (
-                 <button key={branch.id} onClick={() => navigate('/admin/clinic')} className={`w-full text-left px-3 py-2 text-[13px] rounded-lg transition-colors ${location.pathname.includes('/clinic') && user?.clinic?.id === branch.id ? 'text-[#29828a] font-semibold bg-[#29828a]/5' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}>
+                 <button key={branch.id} onClick={() => goTo('/admin/clinic')} className={`w-full text-left px-3 py-2 text-[13px] rounded-lg transition-colors ${location.pathname.includes('/clinic') && user?.clinic?.id === branch.id ? 'text-[#29828a] font-semibold bg-[#29828a]/5' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}>
                    {branch.name}
                  </button>
                ))}
-               <button onClick={() => navigate('/add-clinic')} className="w-full text-left px-3 py-2 text-[13px] rounded-lg text-[#29828a] font-medium flex items-center gap-2 hover:bg-gray-50">
+               <button onClick={() => goTo('/add-clinic')} className="w-full text-left px-3 py-2 text-[13px] rounded-lg text-[#29828a] font-medium flex items-center gap-2 hover:bg-gray-50">
                  <PlusCircle size={14} /> Add New Branch
                </button>
             </div>
@@ -97,7 +106,7 @@ const AdminHub = () => {
                   return (
                     <button 
                       key={tab} 
-                      onClick={() => navigate(`/admin/practice-settings/${slug}`)}
+                      onClick={() => goTo(`/admin/practice-settings/${slug}`)}
                       className={`w-full text-left px-3 py-2 text-[13px] rounded-lg transition-colors ${isActive ? 'text-[#29828a] font-semibold bg-[#29828a]/5' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
                     >
                       {tab}
@@ -113,8 +122,16 @@ const AdminHub = () => {
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+      {/* Main Content Area — full-screen on mobile (with a Back bar), flex pane on desktop */}
+      <div className={`${mobileShowContent ? 'flex' : 'hidden md:flex'} flex-1 flex-col h-full overflow-hidden relative`}>
+        {/* Mobile-only: back to the config menu */}
+        <button
+          onClick={() => setMobileShowContent(false)}
+          className="md:hidden flex items-center gap-1.5 px-4 py-3 text-sm font-semibold text-[#29828a] bg-white border-b border-gray-200 shrink-0"
+        >
+          <ChevronDown size={18} className="rotate-90" />
+          Admin Hub menu
+        </button>
         <div className="flex-1 overflow-y-auto w-full h-full relative z-10 bg-[#f8fafc]">
             {/* The routed dynamic sub-component renders here */}
             <div className="w-full min-h-full">

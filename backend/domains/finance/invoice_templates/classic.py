@@ -108,6 +108,12 @@ def render_invoice(invoice, clinic, config=None) -> str:
     discount = float(getattr(invoice, 'discount_amount',0) or 0)
     taxable  = subtotal - discount
 
+    # Locale: currency symbol + tax label come from the clinic so invoices show
+    # the right currency/tax wording per country (₹/GST for India, $/VAT, etc.).
+    currency  = getattr(clinic, 'currency_symbol', None) or '₹'
+    tax_label = getattr(clinic, 'tax_label', None) or 'GST No.'
+    is_india  = (getattr(clinic, 'country', None) or 'IN') == 'IN'
+
     return _render_indian_tax(
         invoice=invoice,
         primary_color=primary_color,
@@ -123,6 +129,7 @@ def render_invoice(invoice, clinic, config=None) -> str:
         invoice_date=invoice_date,
         subtotal=subtotal, total=total,
         inv_tax=inv_tax, discount=discount, taxable=taxable,
+        currency=currency, tax_label=tax_label, is_india=is_india,
     )
 
 
@@ -134,7 +141,7 @@ def _render_indian_tax(
     c_reg, c_gst, doctor_name, status_label,
     p_name, p_phone, p_age, p_gender, p_uhid,
     invoice_date, subtotal, total, inv_tax, discount, taxable,
-    doctor_signature='',
+    doctor_signature='', currency='₹', tax_label='GST No.', is_india=True,
 ):
     # Line items
     rows = ''
@@ -155,17 +162,25 @@ def _render_indian_tax(
 
     # Summary rows
     disc_row = (
-        f'<tr><td>Discount</td><td>– ₹ {discount:,.2f}</td></tr>'
+        f'<tr><td>Discount</td><td>– {currency} {discount:,.2f}</td></tr>'
         if discount > 0 else ''
     )
-    half = inv_tax / 2 if inv_tax > 0 else 0
-    cgst_row = f'<tr><td>CGST @ 9%</td><td>₹ {half:,.2f}</td></tr>' if half else ''
-    sgst_row = f'<tr><td>SGST @ 9%</td><td>₹ {half:,.2f}</td></tr>' if half else ''
+    # India splits tax into CGST + SGST; everywhere else shows a single tax line
+    # labelled with the country's tax term (VAT, Tax, etc.).
+    if is_india:
+        half = inv_tax / 2 if inv_tax > 0 else 0
+        cgst_row = f'<tr><td>CGST @ 9%</td><td>{currency} {half:,.2f}</td></tr>' if half else ''
+        sgst_row = f'<tr><td>SGST @ 9%</td><td>{currency} {half:,.2f}</td></tr>' if half else ''
+    else:
+        cgst_row = f'<tr><td>Tax</td><td>{currency} {inv_tax:,.2f}</td></tr>' if inv_tax > 0 else ''
+        sgst_row = ''
 
-    # Reg / GST line
+    # Reg / tax-registration line. India keeps the familiar "GSTIN" wording;
+    # other countries use their own tax label (VAT No., Tax ID, etc.).
+    tax_reg_label = 'GSTIN' if is_india else tax_label
     reg_gst_parts = []
     if c_reg:  reg_gst_parts.append(f'Reg No: {c_reg}')
-    if c_gst:  reg_gst_parts.append(f'<strong>GSTIN: {c_gst}</strong>')
+    if c_gst:  reg_gst_parts.append(f'<strong>{tax_reg_label}: {c_gst}</strong>')
     reg_gst_line = f'<p>{" | ".join(reg_gst_parts)}</p>' if reg_gst_parts else ''
 
     # Payment
@@ -174,7 +189,8 @@ def _render_indian_tax(
 
     age_gender = ' / '.join(filter(None, [p_age, p_gender]))
     notes      = getattr(invoice, 'notes', '') or ''
-    aow        = _amount_in_words(total)
+    # Amount-in-words uses Indian numbering/"Rupees" wording, so only show it for India.
+    aow        = _amount_in_words(total) if is_india else ''
 
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
@@ -352,8 +368,8 @@ body {{
           <th style="width:65px;">SAC / HSN</th>
           <th style="width:60px;">Tooth No.</th>
           <th style="width:32px;">Qty</th>
-          <th class="text-right" style="width:85px;">Unit Price (₹)</th>
-          <th class="text-right" style="width:85px;">Total (₹)</th>
+          <th class="text-right" style="width:85px;">Unit Price ({currency})</th>
+          <th class="text-right" style="width:85px;">Total ({currency})</th>
         </tr>
       </thead>
       <tbody>{rows}</tbody>
@@ -362,26 +378,26 @@ body {{
     <!-- BILLING SUMMARY -->
     <div class="summary-wrapper">
       <table class="summary-table">
-        <tr><td>Subtotal</td><td>₹ {subtotal:,.2f}</td></tr>
+        <tr><td>Subtotal</td><td>{currency} {subtotal:,.2f}</td></tr>
         {disc_row}
-        <tr><td>Net Taxable Amount</td><td>₹ {taxable:,.2f}</td></tr>
+        <tr><td>Net Taxable Amount</td><td>{currency} {taxable:,.2f}</td></tr>
         {cgst_row}
         {sgst_row}
-        <tr class="grand-total"><td>Grand Total</td><td>₹ {total:,.2f}</td></tr>
+        <tr class="grand-total"><td>Grand Total</td><td>{currency} {total:,.2f}</td></tr>
       </table>
     </div>
 
     <!-- AMOUNT IN WORDS -->
-    <div class="amount-words">
+    {f'''<div class="amount-words">
       <strong>Amount in Words:</strong> {aow}
-    </div>
+    </div>''' if aow else ''}
 
     <!-- FOOTER -->
     <div class="footer">
       <div class="terms">
         <h4>Terms &amp; Conditions</h4>
         <ul>
-          <li>Clinical treatments (Consultation, RCT, Crowns, Implants) are exempt from GST as per Indian Govt. regulations (SAC 9993). GST applies only to cosmetic procedures &amp; pharmacy products.</li>
+          {'<li>Clinical treatments (Consultation, RCT, Crowns, Implants) are exempt from GST as per Indian Govt. regulations (SAC 9993). GST applies only to cosmetic procedures &amp; pharmacy products.</li>' if is_india else ''}
           <li>Warranties for crowns/bridges are valid only with this original invoice.</li>
           <li>This is a computer-generated invoice and does not require a physical signature.</li>
         </ul>

@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.error,
     paddingHorizontal: 20,
     paddingVertical: 8,
-    borderRadius: 6,
+    borderRadius: 10,
     alignSelf: 'center',
   },
   retryText: {

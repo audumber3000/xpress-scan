@@ -141,7 +141,11 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
 
   // Use external state if provided, otherwise use internal state
   const [internalCollapsed, setInternalCollapsed] = useState(false);
-  const collapsed = isCollapsed !== undefined ? isCollapsed : internalCollapsed;
+  // Collapse (icon-only rail) is a desktop affordance. On mobile the menu is a
+  // full overlay drawer, so always show the full labels regardless of the saved
+  // desktop collapse preference.
+  const desktopCollapsed = isCollapsed !== undefined ? isCollapsed : internalCollapsed;
+  const collapsed = isMobile ? false : desktopCollapsed;
   const setCollapsed = onCollapseChange || setInternalCollapsed;
 
   // Check if we're on mobile — initialise immediately to avoid layout flash
@@ -362,9 +366,20 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
               <div key={item.name}>
                 {/* Main nav item */}
                 {item.hasSubmenu ? (
+                  <div className={collapsed ? 'relative group' : ''}>
                   <button
-                    onClick={() => toggleSubmenu(item.name)}
-                    className={`w-full ${linkClass(item.path)} ${collapsed ? 'group' : ''} ${isSubmenuActive ? 'bg-white text-gray-900 shadow-lg' : ''}`}
+                    onClick={() => {
+                      if (collapsed) {
+                        // Collapsed rail can't show the inline submenu, so jump
+                        // straight to the first sub-route (e.g. /marketing/reviews).
+                        const target = item.submenu?.[0]?.path || item.path;
+                        navigate(target);
+                        isMobile && onMobileClose?.();
+                      } else {
+                        toggleSubmenu(item.name);
+                      }
+                    }}
+                    className={`w-full ${linkClass(item.path)} ${isSubmenuActive ? 'bg-white text-gray-900 shadow-lg' : ''}`}
                     title={collapsed ? item.name : ''}
                   >
                     <div className={`${collapsed ? 'w-6 h-6' : 'w-6 h-6'} flex items-center justify-center transition-all ${isSubmenuActive ? 'text-gray-900' : 'text-white/80'}`}>
@@ -380,13 +395,29 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
                         )}
                       </>
                     )}
-                    {/* Tooltip for collapsed state */}
-                    {collapsed && (
-                      <span className="absolute left-full ml-2 px-3 py-1.5 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 shadow-xl">
-                        {item.name}
-                      </span>
-                    )}
                   </button>
+                    {/* Collapsed flyout: shows the submenu items on hover */}
+                    {collapsed && (
+                      <div className="absolute left-full top-0 ml-2 hidden group-hover:block z-50">
+                        <div className="bg-gray-900/95 rounded-lg shadow-xl border border-gray-700 py-1.5 min-w-[180px]">
+                          <div className="px-3 py-1.5 text-xs font-semibold text-white/50 uppercase tracking-wider">
+                            {item.name}
+                          </div>
+                          {item.submenu.map((subItem) => (
+                            <Link
+                              key={subItem.name}
+                              to={subItem.path}
+                              onClick={() => isMobile && onMobileClose?.()}
+                              className="flex items-center gap-2 px-3 py-2 text-sm text-white/90 hover:bg-white/10 transition-colors whitespace-nowrap"
+                            >
+                              <span className="w-5 h-5 flex items-center justify-center">{subItem.icon}</span>
+                              {subItem.name}
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <Link
                     to={item.path}

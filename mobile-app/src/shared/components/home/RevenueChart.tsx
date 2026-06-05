@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
   changeBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 20,
   },
   changeBadgeText: {
     fontSize: 14,

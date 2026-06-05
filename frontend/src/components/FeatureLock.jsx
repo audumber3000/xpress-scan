@@ -13,12 +13,16 @@ import TrialCelebrationModal from './TrialCelebrationModal';
  * one-click "Start 7-day free trial"; the direct subscribe option stays too.
  */
 const FeatureLock = ({ children, featureName = "This feature" }) => {
-  const { user, refreshUser } = useAuth();
+  const { user, loading, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [starting, setStarting] = useState(false);
   const [celebration, setCelebration] = useState(null); // { trialEndsAt, daysRemaining }
 
-  const isLocked = user?.clinic?.subscription_plan === 'free';
+  // Until we positively know the plan, treat the feature as locked so premium
+  // content never flashes on screen before the lock kicks in.
+  const plan = user?.clinic?.subscription_plan;
+  const planKnown = plan != null;
+  const isLocked = planKnown ? plan === 'free' : true;
   const trialAvailable = user?.clinic?.trial_available === true;
 
   const handleStartTrial = async () => {
@@ -48,6 +52,21 @@ const FeatureLock = ({ children, featureName = "This feature" }) => {
       onClose={() => setCelebration(null)}
     />
   );
+
+  // While the session is still validating, show a neutral loader instead of the
+  // lock overlay. The overlay's CTA (Upgrade vs. Start-trial) depends on
+  // trial_available, which lands a moment after the plan — rendering early makes
+  // "Upgrade to Pro" flash before flipping to "Start 7-day free trial".
+  if (loading && (!planKnown || isLocked)) {
+    return (
+      <>
+        <div className="min-h-[400px] w-full flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-[#2a276e]/30 border-t-[#2a276e] rounded-full animate-spin" />
+        </div>
+        {celebrationModal}
+      </>
+    );
+  }
 
   if (!isLocked) {
     return (

@@ -18,6 +18,23 @@ export function getCurrencySymbol() {
 }
 
 /**
+ * The clinic's ISO 4217 currency code (e.g. "INR", "USD", "CAD"), for use with
+ * Intl.NumberFormat({ style: 'currency' }). Falls back to INR for existing
+ * Indian clinics that don't carry the field.
+ */
+export function getCurrencyCode() {
+  try {
+    const raw = localStorage.getItem('user');
+    if (raw) {
+      const user = JSON.parse(raw);
+      const clinic = user.clinic || user.clinics?.[0];
+      if (clinic?.currency_code) return clinic.currency_code;
+    }
+  } catch { /* ignore */ }
+  return 'INR';
+}
+
+/**
  * Format a numeric amount with the clinic's currency symbol.
  * @param {number|string} amount
  * @param {string} [symbol] — override symbol (otherwise auto-detected)

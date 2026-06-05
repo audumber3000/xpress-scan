@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
 import { toast } from "react-toastify";
 import FeatureLock from "../components/FeatureLock";
+import { detectCountry, flagEmoji } from "../utils/detectCountry";
 
 const SPECIALIZATIONS = [
   { value: "dental", label: "Dental" },
@@ -37,14 +38,26 @@ const AddClinic = () => {
   const navigate = useNavigate();
   const { refreshUser } = useAuth();
   const [saving, setSaving] = useState(false);
+  const [countries, setCountries] = useState([]);
   const [form, setForm] = useState({
     name: "",
     address: "",
     phone: "",
     email: "",
     specialization: "dental",
+    country: detectCountry(),
     gst_number: "",
   });
+
+  // Load the supported-countries list (drives currency + tax-label per country).
+  useEffect(() => {
+    api.get("/clinics/countries").then(setCountries).catch(() => setCountries([]));
+  }, []);
+
+  // Config for the currently selected country (currency symbol, tax label, etc.).
+  const selectedCountry = countries.find((c) => c.code === form.country);
+  const taxLabel = selectedCountry?.tax_label || "Tax ID";
+  const currencySymbol = selectedCountry?.currency_symbol || "";
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -58,7 +71,14 @@ const AddClinic = () => {
     }
     setSaving(true);
     try {
-      await api.post("/clinics/owner/add", form);
+      // Send the chosen country plus its currency/tax info so the new branch
+      // is created with the correct currency (not a hardcoded ₹).
+      await api.post("/clinics/owner/add", {
+        ...form,
+        currency_code: selectedCountry?.currency_code,
+        currency_symbol: selectedCountry?.currency_symbol,
+        tax_label: taxLabel,
+      });
       toast.success(`"${form.name}" branch created successfully!`);
       // Refresh auth context so the user sees the new clinic in the switcher
       if (refreshUser) await refreshUser();
@@ -115,18 +135,43 @@ const AddClinic = () => {
               />
             </Field>
 
-            <Field label="Specialization">
-              <select
-                name="specialization"
-                value={form.specialization}
-                onChange={handleChange}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2a276e]/30 focus:border-[#2a276e] transition-all bg-white"
-              >
-                {SPECIALIZATIONS.map((s) => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
-                ))}
-              </select>
-            </Field>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <Field label="Specialization">
+                <select
+                  name="specialization"
+                  value={form.specialization}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2a276e]/30 focus:border-[#2a276e] transition-all bg-white"
+                >
+                  {SPECIALIZATIONS.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Country" required>
+                <select
+                  name="country"
+                  value={form.country}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2a276e]/30 focus:border-[#2a276e] transition-all bg-white"
+                >
+                  {countries.length === 0 && (
+                    <option value={form.country}>{form.country}</option>
+                  )}
+                  {countries.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {flagEmoji(c.code)} {c.name} ({c.currency_symbol})
+                    </option>
+                  ))}
+                </select>
+                {currencySymbol && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Branch currency: <span className="font-semibold">{currencySymbol}</span>
+                  </p>
+                )}
+              </Field>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <Field label="Phone">
@@ -160,12 +205,12 @@ const AddClinic = () => {
               />
             </Field>
 
-            <Field label="GST Number">
+            <Field label={taxLabel}>
               <Input
                 name="gst_number"
                 value={form.gst_number}
                 onChange={handleChange}
-                placeholder="22AAAAA0000A1Z5"
+                placeholder={`Enter ${taxLabel}`}
               />
             </Field>
 

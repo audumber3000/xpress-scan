@@ -571,7 +571,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFD700', // Gold Badge
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 20,
     gap: 4,
   },
   proBadgeText: {
@@ -614,7 +614,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16, // Reduced from 20
-    borderRadius: 20,
+    borderRadius: 12,
     backgroundColor: '#F8FAFC',
     borderWidth: 2,
     borderColor: 'transparent',
@@ -679,7 +679,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981', // Green for savings
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 8,
+    borderRadius: 20,
   },
   saveBadgeText: {
     color: '#FFFFFF',
@@ -696,7 +696,7 @@ const styles = StyleSheet.create({
   },
   gradientButton: {
     paddingVertical: 18,
-    borderRadius: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden', // Required for shine effect
@@ -765,7 +765,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#2E2A85',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 10,
   },
   applyButtonDisabled: {
     backgroundColor: '#10B981',

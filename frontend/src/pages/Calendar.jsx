@@ -52,6 +52,9 @@ const Calendar = () => {
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
   const [duplicatePatients, setDuplicatePatients] = useState([]);
   const [viewMode, setViewMode] = useState('week'); // 'week' or 'today'
+  // Mobile only: show the mini-calendar + team filters rail (hidden by default so
+  // the schedule grid gets the full width). Ignored on desktop (md+).
+  const [showFilters, setShowFilters] = useState(false);
   const [patientFormData, setPatientFormData] = useState({
     name: '',
     age: '',
@@ -1480,8 +1483,20 @@ const Calendar = () => {
           })()}
         />
 
+        {/* Mobile-only toggle: filters/mini-calendar vs the schedule grid */}
+        <button
+          onClick={() => setShowFilters(v => !v)}
+          className="md:hidden w-full flex items-center justify-between mb-3 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 shadow-sm"
+        >
+          {showFilters ? '← Back to calendar' : 'Mini-calendar & team filters'}
+          <svg className={`w-4 h-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+
         {/* Two-column layout: team members rail + calendar content */}
         <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
+          <div className={`${showFilters ? '' : 'hidden'} md:block w-full md:w-auto md:shrink-0`}>
           <TeamMembersPanel
             doctors={doctors}
             countsByDoctorId={countsByDoctorId}
@@ -1504,8 +1519,9 @@ const Calendar = () => {
               />
             }
           />
+          </div>
 
-          <div className="flex-1 min-w-0 overflow-y-auto">
+          <div className={`${showFilters ? 'hidden' : ''} md:block flex-1 min-w-0 overflow-y-auto`}>
         {/* Calendar Content */}
         {loading ? (
           <div className="text-center py-12">

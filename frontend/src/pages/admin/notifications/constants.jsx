@@ -1,4 +1,5 @@
 import { MessageCircle } from 'lucide-react';
+import { getCurrencyCode } from '../../../utils/currency';
 
 export const WhatsAppIcon = ({ size = 20 }) => (
   <svg viewBox="0 0 48 48" width={size} height={size}>
@@ -77,7 +78,28 @@ export const getChannelCost = (channel, eventType = '') => {
 };
 
 export const CHANNEL_META = {
-  whatsapp: { label: 'WhatsApp', color: 'text-green-600',  bg: 'bg-white',      badge: 'bg-green-100 text-green-700',   icon: WhatsAppIcon,  priceLabel: '₹0.115 utility / ₹0.8631 marketing' },
-  email:    { label: 'Email',    color: 'text-blue-600',   bg: 'bg-white',      badge: 'bg-blue-100 text-blue-700',     icon: GmailIcon,     priceLabel: '~₹0.02 / Mail' },
-  sms:      { label: 'SMS',      color: 'text-purple-600', bg: 'bg-purple-50',  badge: 'bg-purple-100 text-purple-700', icon: MessageCircle, priceLabel: '~₹0.15 / SMS' },
+  whatsapp: { label: 'WhatsApp', color: 'text-green-600',  bg: 'bg-white',      badge: 'bg-green-100 text-green-700',   icon: WhatsAppIcon },
+  email:    { label: 'Email',    color: 'text-blue-600',   bg: 'bg-white',      badge: 'bg-blue-100 text-blue-700',     icon: GmailIcon },
+  sms:      { label: 'SMS',      color: 'text-purple-600', bg: 'bg-purple-50',  badge: 'bg-purple-100 text-purple-700', icon: MessageCircle },
+};
+
+// Per-message cost labels. India bills in ₹; everywhere else shows the USD
+// equivalent (≈ ₹83 / $1). These are display labels — the actual wallet cost
+// (getChannelCost) is unchanged.
+const CHANNEL_PRICE_LABELS = {
+  INR: {
+    whatsapp: '₹0.115 utility / ₹0.8631 marketing',
+    email: '~₹0.02 / Mail',
+    sms: '~₹0.15 / SMS',
+  },
+  USD: {
+    whatsapp: '$0.0014 utility / $0.0104 marketing',
+    email: '~$0.0002 / Mail',
+    sms: '~$0.0018 / SMS',
+  },
+};
+
+export const getChannelPriceLabel = (channel) => {
+  const tier = getCurrencyCode() === 'INR' ? 'INR' : 'USD';
+  return CHANNEL_PRICE_LABELS[tier]?.[channel] || '';
 };

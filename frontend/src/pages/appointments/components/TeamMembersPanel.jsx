@@ -39,7 +39,7 @@ const TeamMembersPanel = ({
     doctors.every((d) => selectedDoctorIds.has(d.id));
 
   return (
-    <aside className="w-64 shrink-0 border-r border-gray-200 bg-white h-full flex flex-col">
+    <aside className="w-full md:w-64 md:shrink-0 border-r border-gray-200 bg-white h-full flex flex-col rounded-xl md:rounded-none">
       {header}
       <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
         <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Team members</h3>

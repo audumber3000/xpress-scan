@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 12,
     backgroundColor: colors.primary,
-    borderRadius: 12,
+    borderRadius: 10,
   },
   backButtonText: {
     color: '#FFFFFF',
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
   },
   amountCard: {
     backgroundColor: '#2E2A85', // Navy theme matching MolarPlus
-    borderRadius: 24,
+    borderRadius: 12,
     padding: 24,
     alignItems: 'center',
     marginBottom: 24,
@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.15)',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 10,
+    borderRadius: 20,
     marginTop: 16,
   },
   categoryText: {
@@ -324,7 +324,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 12,
     padding: 16,
     borderWidth: 1,
     borderColor: '#F3F4F6',
@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 10,
     padding: 16,
     borderWidth: 1,
     borderColor: colors.primary + '20',
