@@ -10,11 +10,15 @@ from routes import auth, metrics, clinics, owners, tickets, financials, subscrip
 
 app = FastAPI(title="MolarPlus Support Dashboard API", version="1.0.0")
 
+# FRONTEND_URL may be a single origin or a comma-separated list (prod domain +
+# Railway subdomain during cutover). All entries are allowed for CORS.
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5174")
+_allowed_origins = [o.strip() for o in FRONTEND_URL.split(",") if o.strip()]
+_allowed_origins += ["http://localhost:5174", "http://localhost:5173"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL, "http://localhost:5174", "http://localhost:5173"],
+    allow_origins=list(dict.fromkeys(_allowed_origins)),  # de-duped, order preserved
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
