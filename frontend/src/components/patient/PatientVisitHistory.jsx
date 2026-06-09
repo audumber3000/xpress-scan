@@ -17,9 +17,27 @@ const formatTime = (value) => {
     : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
 };
 
-const PatientVisitHistory = ({ appointments = [], prescriptions = [], invoices = [] }) => {
+const PatientVisitHistory = ({ appointments = [], prescriptions = [], invoices = [], casePapers = [], registrationDate = null }) => {
   const visits = useMemo(() => {
     const grouped = {};
+    const ensureDay = (dateKey) => {
+      if (!grouped[dateKey]) grouped[dateKey] = { date: dateKey, events: [] };
+      return grouped[dateKey];
+    };
+
+    // Each case paper is a real clinical encounter — the most reliable "visit".
+    casePapers.forEach((cp) => {
+      const raw = cp.date || cp.created_at;
+      const dateKey = raw ? raw.split('T')[0] : 'unknown';
+      const complaints = Array.isArray(cp.chief_complaint) ? cp.chief_complaint.filter(Boolean) : [];
+      ensureDay(dateKey).events.push({
+        type: 'casepaper',
+        id: cp.id,
+        time: formatTime(raw),
+        title: 'Case Paper',
+        notes: complaints.length ? complaints.join(', ') : (cp.diagnosis || null),
+      });
+    });
 
     appointments.forEach((apt) => {
       const dateKey = apt.appointment_date || apt.date || 'unknown';
@@ -65,8 +83,19 @@ const PatientVisitHistory = ({ appointments = [], prescriptions = [], invoices =
       });
     });
 
+    // Registration counts as the patient's first visit — useful when a doctor
+    // just registers a walk-in without ever creating an appointment.
+    if (registrationDate) {
+      const dateKey = registrationDate.split('T')[0];
+      ensureDay(dateKey).events.push({
+        type: 'registration',
+        time: formatTime(registrationDate),
+        title: 'Patient registered',
+      });
+    }
+
     return Object.values(grouped).sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [appointments, prescriptions, invoices]);
+  }, [appointments, prescriptions, invoices, casePapers, registrationDate]);
 
   const formatDateParts = (dateStr) => {
     if (!dateStr || dateStr === 'unknown') return { day: '??', month: '---' };
@@ -131,6 +160,18 @@ const PatientVisitHistory = ({ appointments = [], prescriptions = [], invoices =
 
                       {/* Right-side action / status */}
                       <div className="flex-shrink-0">
+                        {event.type === 'registration' && (
+                          <span className="text-[10px] font-semibold px-2 py-1 rounded-md bg-[#1aa49a]/10 text-[#1aa49a]">
+                            Registered
+                          </span>
+                        )}
+
+                        {event.type === 'casepaper' && (
+                          <span className="text-[10px] font-semibold px-2 py-1 rounded-md bg-[#9B8CFF]/15 text-[#2a276e]">
+                            Consultation
+                          </span>
+                        )}
+
                         {event.type === 'appointment' && event.status && (
                           <span className={`text-[10px] font-semibold px-2 py-1 rounded-md ${
                             event.status === 'Completed' ? 'bg-green-50 text-green-700'

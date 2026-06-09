@@ -10,11 +10,12 @@ import { generatePatientPersona, generateInitialsAvatar } from '../../utils/avat
  * @param {array} prescriptions - List of prescriptions
  * @param {array} invoices - List of invoices
  */
-const PatientInfo = ({ 
-  patientData, 
-  appointments = [], 
-  prescriptions = [], 
-  invoices = [] 
+const PatientInfo = ({
+  patientData,
+  appointments = [],
+  prescriptions = [],
+  invoices = [],
+  casePapers = []
 }) => {
     if (!patientData) return null;
 
@@ -95,10 +96,12 @@ const PatientInfo = ({
                 </div>
 
                 <div className="flex-1 overflow-y-auto max-h-[600px] pr-2 scrollbar-thin scrollbar-thumb-gray-200">
-                    <PatientVisitHistory 
+                    <PatientVisitHistory
                         appointments={appointments}
                         prescriptions={prescriptions}
                         invoices={invoices}
+                        casePapers={casePapers}
+                        registrationDate={patientData.created_at}
                     />
                 </div>
             </div>

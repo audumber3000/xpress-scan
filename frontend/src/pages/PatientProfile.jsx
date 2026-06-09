@@ -39,6 +39,7 @@ const PatientProfile = () => {
   const [treatmentPlan, setTreatmentPlan] = useState([]);
   const [prescriptions, setPrescriptions] = useState([]);
   const [normalizedPrescriptions, setNormalizedPrescriptions] = useState([]);
+  const [casePapers, setCasePapers] = useState([]);
 
   const tabs = [
     { id: "case-papers", name: "Case Papers" },
@@ -147,6 +148,15 @@ const PatientProfile = () => {
         } catch (error) {
           console.error('Error fetching normalized prescriptions:', error);
           setNormalizedPrescriptions([]);
+        }
+
+        // Fetch case papers so each clinical encounter shows in the visit timeline
+        try {
+          const res = await api.get(`/clinical/case-papers/patient/${patientId}`);
+          setCasePapers(Array.isArray(res) ? res : []);
+        } catch (error) {
+          console.error('Error fetching case papers:', error);
+          setCasePapers([]);
         }
 
       } catch (error) {
@@ -530,11 +540,12 @@ const PatientProfile = () => {
             )}
 
             {activeTab === "profile" && (
-              <PatientInfo 
-                patientData={patientData} 
+              <PatientInfo
+                patientData={patientData}
                 appointments={appointments}
                 prescriptions={normalizedPrescriptions}
                 invoices={payments}
+                casePapers={casePapers}
               />
             )}
           </div>

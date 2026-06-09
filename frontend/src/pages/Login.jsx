@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { toast } from 'react-toastify';
 import { api } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
-import { saveLastLogin } from '../utils/lastLogin';
+import { saveLastLogin, clearLastLoginToken } from '../utils/lastLogin';
 import LoadingButton from '../components/LoadingButton';
 import LastLoginCard from '../components/login/LastLoginCard';
 import ValidatedInput from '../components/forms/ValidatedInput';
@@ -18,6 +18,15 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { setUser, setToken } = useAuth();
+
+  // Prefill email when arriving from the "Already signed up?" card on /signup.
+  useEffect(() => {
+    const prefill = new URLSearchParams(window.location.search).get('email');
+    if (prefill) {
+      setEmail(prefill);
+      requestAnimationFrame(() => document.getElementById('login-password')?.focus());
+    }
+  }, []);
 
   useEffect(() => {
     completeGoogleRedirectAuth({
@@ -96,7 +105,7 @@ const Login = () => {
       setToken(data.token);
       setUser(userWithClinic);
 
-      saveLastLogin({ provider: 'email', email, name: data.user?.name });
+      saveLastLogin({ provider: 'email', email, name: data.user?.name, token: data.token });
       toast.success('Login successful!');
 
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -235,7 +244,7 @@ const Login = () => {
         setUser(userWithClinic);
         console.log('🔵 [LOGIN] AuthContext updated');
 
-        saveLastLogin({ provider: 'google', email: result.user.email, name: result.user.displayName });
+        saveLastLogin({ provider: 'google', email: result.user.email, name: result.user.displayName, token: data.token });
         toast.success('Login successful!');
 
         // Small delay to ensure context is updated before navigation
@@ -299,9 +308,45 @@ const Login = () => {
           {/* Last Login Card */}
           <LastLoginCard
             variant="login"
-            onContinue={(provider) => {
-              if (provider === 'google') handleGoogleLogin();
-              // email provider: user must type credentials again
+            onContinue={async (entry) => {
+              // 1) One-click: a stored session token means we can validate it and
+              //    drop the user straight onto their dashboard — no password needed.
+              if (entry.token) {
+                setError("");
+                setLoading(true);
+                localStorage.setItem('auth_token', entry.token);
+                try {
+                  const me = await api.get('/auth/me'); // flat user + clinic; throws 401 if expired
+                  localStorage.setItem('user', JSON.stringify(me));
+                  setToken(entry.token);
+                  setUser(me);
+                  toast.success('Welcome back!');
+                  const redirectPath = !me.clinic_id
+                    ? '/onboarding'
+                    : (me.role === 'clinic_owner' && me.clinics?.length > 1)
+                      ? '/select-clinic'
+                      : '/dashboard';
+                  navigate(redirectPath, { replace: true });
+                  return;
+                } catch {
+                  // Token expired / invalidated — clean up and fall back to manual sign-in.
+                  localStorage.removeItem('auth_token');
+                  localStorage.removeItem('user');
+                  clearLastLoginToken();
+                  setLoading(false);
+                }
+              }
+
+              // 2) No usable token: Google re-runs OAuth; email prefills + focuses password.
+              if (entry.provider === 'google') {
+                handleGoogleLogin();
+                return;
+              }
+              setEmail(entry.email);
+              setError("");
+              requestAnimationFrame(() => {
+                document.getElementById('login-password')?.focus();
+              });
             }}
             loading={loading}
           />
@@ -335,6 +380,7 @@ const Login = () => {
           <form onSubmit={handleLogin} className="space-y-4">
             <ValidatedInput
               label="Email or Username"
+              id="login-email"
               type="text"
               autoCapitalize="none"
               autoCorrect="off"
@@ -347,6 +393,7 @@ const Login = () => {
             />
             <ValidatedInput
               label="Password"
+              id="login-password"
               type="password"
               placeholder="Enter your password"
               value={password}

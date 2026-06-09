@@ -181,6 +181,34 @@ def delete_file_from_r2(storage_path: str) -> bool:
         print(f"Error deleting from R2: {e}")
         return False
 
+def put_bytes_to_key(storage_path: str, data: bytes, content_type: str = "application/octet-stream") -> bool:
+    """Write raw bytes to an explicit R2 key (used for caching derived files like
+    generated thumbnails next to their source)."""
+    try:
+        client = _get_r2_client()
+        if not client:
+            return False
+        client.put_object(Bucket=os.getenv("R2_BUCKET_NAME"), Key=storage_path, Body=data, ContentType=content_type)
+        return True
+    except Exception as e:
+        print(f"Error writing to R2: {e}")
+        return False
+
+def download_bytes_from_r2(storage_path: str) -> Optional[bytes]:
+    """Fetch an object's raw bytes from R2 server-side.
+
+    Used to proxy files to the browser when a direct presigned-URL fetch would be
+    blocked by CORS (e.g. an XHR-based DICOM viewer)."""
+    try:
+        client = _get_r2_client()
+        if not client:
+            return None
+        resp = client.get_object(Bucket=os.getenv("R2_BUCKET_NAME"), Key=storage_path)
+        return resp["Body"].read()
+    except Exception as e:
+        print(f"Error downloading from R2: {e}")
+        return None
+
 def list_files_in_prefix(prefix: str) -> list:
     """List files in R2 by prefix"""
     try:

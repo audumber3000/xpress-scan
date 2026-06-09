@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wallet, FlaskConical, UserX, CalendarClock, ChevronRight, CheckCircle2 } from 'lucide-react';
-import GearLoader from '../../components/GearLoader';
+import { SkeletonBox } from '../../components/Skeleton';
 import { getCurrencySymbol } from '../../utils/currency';
 
 const STATUS_STYLES = {
@@ -123,10 +123,29 @@ const NeedsAttention = ({ attention }) => {
   );
 };
 
+const TodayPanelSkeleton = () => (
+  <div className="flex flex-col md:flex-row gap-6">
+    {[0, 1].map((col) => (
+      <div key={col} className="flex-1 space-y-3">
+        <SkeletonBox className="h-4 w-32 mb-4" />
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3">
+            <SkeletonBox className="w-9 h-9 rounded-full" />
+            <div className="flex-1 space-y-1.5">
+              <SkeletonBox className="h-3.5 w-2/3" />
+              <SkeletonBox className="h-2.5 w-1/3" />
+            </div>
+          </div>
+        ))}
+      </div>
+    ))}
+  </div>
+);
+
 const TodayPanel = ({ data, loading }) => (
   <div className="bg-white border border-gray-200 rounded-2xl p-4 md:p-6 shadow-sm mb-6">
     {loading ? (
-      <div className="flex items-center justify-center min-h-[160px]"><GearLoader size="w-10 h-10" /></div>
+      <TodayPanelSkeleton />
     ) : (
       <div className="flex flex-col md:flex-row gap-6">
         <Schedule summary={data?.summary} appointments={data?.appointments || []} />

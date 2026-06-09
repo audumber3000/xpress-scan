@@ -178,6 +178,12 @@
   100% { left: 100%; }
 }
 
+/* Indeterminate progress (server still processing after upload completes) */
+@keyframes indeterminate {
+  0% { left: -40%; }
+  100% { left: 100%; }
+}
+
 /* Celebration / modal entrance */
 @keyframes celebrate-overlay {
   from { opacity: 0; }

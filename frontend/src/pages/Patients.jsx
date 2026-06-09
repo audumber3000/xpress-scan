@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import { FaEye, FaEdit, FaTrash, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import { Search, Plus, User, Folder, X, Edit2, Trash2, UploadCloud, UserPlus } from "lucide-react";
 import GearLoader from "../components/GearLoader";
+import { SkeletonTableRows } from "../components/Skeleton";
 import Pagination from "../components/Pagination";
 import FilterDropdown from "../components/FilterDropdown";
 import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
@@ -492,9 +493,17 @@ const Patients = () => {
         <div className="h-full bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
           
           {loading ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-12">
-              <GearLoader size="w-10 h-10" />
-              <p className="mt-4 text-gray-500 font-medium">Loading patients...</p>
+            <div className="flex-1 overflow-auto">
+              <table className="w-full divide-y divide-gray-200">
+                <thead className="bg-[#f8fafc] sticky top-0 z-10">
+                  <tr>
+                    {['Patient ID', 'Patient Details', 'Contact', 'Gender / Age', 'Treatment', 'Last Visit', 'Actions'].map((h, i) => (
+                      <th key={h} className={`px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider ${i === 6 ? 'text-right' : 'text-left'}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <SkeletonTableRows rows={10} />
+              </table>
             </div>
           ) : activeTab === 'list' ? (
             <div className="flex-1 overflow-auto">

@@ -184,8 +184,13 @@ const Signup = () => {
           {/* Last Login Card */}
           <LastLoginCard
             variant="register"
-            onContinue={(provider) => {
-              if (provider === 'google') handleGoogleSignup();
+            onContinue={(entry) => {
+              if (entry.provider === 'google') {
+                handleGoogleSignup();
+                return;
+              }
+              // Already has an email/password account — send them to sign in.
+              navigate(`/login?email=${encodeURIComponent(entry.email)}`);
             }}
             loading={loading}
           />

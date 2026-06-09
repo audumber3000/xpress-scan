@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import GearLoader from "../components/GearLoader";
+import { SkeletonBox } from "../components/Skeleton";
 import { api } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
 import { toast } from "react-toastify";
@@ -1524,9 +1524,13 @@ const Calendar = () => {
           <div className={`${showFilters ? 'hidden' : ''} md:block flex-1 min-w-0 overflow-y-auto`}>
         {/* Calendar Content */}
         {loading ? (
-          <div className="text-center py-12">
-            <GearLoader size="w-12 h-12" className="mx-auto" />
-            <p className="mt-4 text-gray-600">Loading appointments...</p>
+          <div className="p-4 space-y-3">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="flex items-start gap-4">
+                <SkeletonBox className="h-3 w-12 mt-2" />
+                <SkeletonBox className="h-16 flex-1 rounded-xl" />
+              </div>
+            ))}
           </div>
         ) : viewMode === 'month' ? (
           /* Month View — full month grid with doctor-colored chips */

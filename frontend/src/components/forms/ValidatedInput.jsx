@@ -13,6 +13,7 @@ import { CheckCircle2, AlertCircle } from 'lucide-react';
 const ValidatedInput = ({
   label,
   name,
+  id,
   type = 'text',
   value,
   onChange,
@@ -66,6 +67,7 @@ const ValidatedInput = ({
           <input
             type={type}
             name={name}
+            id={id}
             value={value}
             onChange={onChange}
             onBlur={() => setTouched(true)}

@@ -36,7 +36,7 @@ const ProviderIcon = ({ provider }) => {
  * if the user previously signed in on this browser.
  *
  * @param {'login'|'register'} variant - controls heading text
- * @param {(provider: string) => void} onContinue - called with the stored provider
+ * @param {(entry: {provider: string, email: string, name?: string}) => void} onContinue - called with the stored login entry
  * @param {boolean} loading - shows spinner in place of chevron
  */
 const LastLoginCard = ({ variant = 'login', onContinue, loading = false }) => {
@@ -57,7 +57,7 @@ const LastLoginCard = ({ variant = 'login', onContinue, loading = false }) => {
       <p className="text-xs font-semibold text-gray-500 ml-1">{heading}</p>
       <button
         type="button"
-        onClick={() => onContinue(last.provider)}
+        onClick={() => onContinue(last)}
         disabled={loading}
         className="w-full flex items-center gap-3 px-4 py-3 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md hover:border-gray-300 transition-all disabled:opacity-60"
       >

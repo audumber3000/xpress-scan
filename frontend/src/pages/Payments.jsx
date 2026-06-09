@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
-import GearLoader from "../components/GearLoader";
+import { SkeletonBox, SkeletonTableRows } from "../components/Skeleton";
 import { api } from "../utils/api";
 import { getCurrencyCode } from "../utils/currency";
 import InvoiceEditor from "../components/payments/InvoiceEditor";
@@ -529,12 +529,16 @@ const Payments = () => {
       <div className="flex-1 overflow-hidden px-6 pb-4">
         <div className="h-full overflow-auto bg-white border border-gray-200 rounded-xl shadow-sm">
           {loading && invoices.length === 0 ? (
-            <div className="w-full h-full flex items-center justify-center">
-              <div className="text-center">
-                <GearLoader size="w-8 h-8" className="mx-auto" />
-                <p className="mt-2 text-sm text-gray-600">Loading ledger data...</p>
-              </div>
-            </div>
+            <table className="w-full">
+              <thead className="bg-[#f8fafc] border-b border-gray-100 sticky top-0 z-10">
+                <tr>
+                  {Array.from({ length: 7 }).map((_, i) => (
+                    <th key={i} className="px-6 py-4"><SkeletonBox className="h-3 w-20" /></th>
+                  ))}
+                </tr>
+              </thead>
+              <SkeletonTableRows rows={10} />
+            </table>
           ) : error ? (
             <div className="p-6">
               <div className="bg-red-50 border border-red-200 rounded-lg p-4">

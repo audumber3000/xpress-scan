@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
@@ -7,7 +7,8 @@ from database import get_db
 from models import PatientDocument, Patient, User, Report
 from core.dtos import PatientDocumentResponseDTO, ExternalDocumentRequestDTO, UnifiedFileResponseDTO
 from core.auth_utils import get_current_user
-from domains.infrastructure.services.r2_storage import upload_bytes_to_r2, StorageCategory, get_presigned_url
+from domains.infrastructure.services.r2_storage import upload_bytes_to_r2, StorageCategory, get_presigned_url, download_bytes_from_r2, put_bytes_to_key
+import io
 
 router = APIRouter()
 
@@ -257,6 +258,112 @@ async def list_documents(
     # Sort by created_at descending (newest first)
     result.sort(key=lambda x: x.created_at, reverse=True)
     return result
+
+@router.get("/{document_id}/raw")
+async def get_document_raw(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Stream a document's bytes from R2 through our own (CORS-enabled) origin.
+
+    Needed for clients that fetch via XHR — e.g. the in-app DICOM viewer — which
+    a direct R2 presigned URL blocks with CORS."""
+    document = db.query(PatientDocument).filter(PatientDocument.id == document_id).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    data = download_bytes_from_r2(document.file_path)
+    if data is None:
+        raise HTTPException(status_code=404, detail="File not found in storage")
+
+    ext = (document.file_type or "").lower()
+    media_type = "application/dicom" if ext in ("dcm", "dicom") else "application/octet-stream"
+    return Response(
+        content=data,
+        media_type=media_type,
+        headers={"Content-Disposition": f'inline; filename="{document.file_name}"'},
+    )
+
+def _dicom_to_png(raw: bytes) -> Optional[bytes]:
+    """Render a DICOM's first frame to a downscaled greyscale PNG."""
+    try:
+        import pydicom
+        import numpy as np
+        from PIL import Image
+
+        ds = pydicom.dcmread(io.BytesIO(raw))
+        arr = ds.pixel_array
+        # Multi-frame -> first frame; leave RGB(A) frames as-is.
+        if arr.ndim == 3 and arr.shape[-1] not in (3, 4):
+            arr = arr[0]
+        arr = arr.astype(np.float32)
+        lo, hi = float(arr.min()), float(arr.max())
+        if hi > lo:
+            arr = (arr - lo) / (hi - lo)
+        arr = (arr * 255).astype(np.uint8)
+        img = Image.fromarray(arr)
+        if img.mode not in ("L", "RGB"):
+            img = img.convert("L")
+        img.thumbnail((480, 480))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+    except Exception as e:
+        print(f"DICOM thumbnail failed: {e}")
+        return None
+
+
+def _pdf_to_png(raw: bytes) -> Optional[bytes]:
+    """Render a PDF's first page to a PNG (pypdfium2, same as template thumbnails)."""
+    try:
+        import pypdfium2 as pdfium
+
+        pdf = pdfium.PdfDocument(raw)
+        if len(pdf) == 0:
+            return None
+        pil_image = pdf[0].render(scale=1.4).to_pil()
+        buf = io.BytesIO()
+        pil_image.save(buf, format="PNG")
+        return buf.getvalue()
+    except Exception as e:
+        print(f"PDF thumbnail failed: {e}")
+        return None
+
+
+@router.get("/{document_id}/thumbnail")
+async def get_document_thumbnail(document_id: int, db: Session = Depends(get_db)):
+    """Return a small PNG preview for a DICOM or PDF document.
+
+    Generated on first request and cached in R2 next to the source so repeat
+    loads are cheap. Auth-free to match the document list endpoint and so it can
+    be used directly as an <img> src (which can't send an auth header)."""
+    document = db.query(PatientDocument).filter(PatientDocument.id == document_id).first()
+    if not document or not document.file_path:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    ext = (document.file_type or "").lower()
+    if ext not in ("dcm", "dicom", "pdf"):
+        raise HTTPException(status_code=415, detail="No thumbnail for this file type")
+
+    png_headers = {"Cache-Control": "public, max-age=86400"}
+    thumb_key = f"{document.file_path}.thumb.png"
+
+    cached = download_bytes_from_r2(thumb_key)
+    if cached:
+        return Response(content=cached, media_type="image/png", headers=png_headers)
+
+    raw = download_bytes_from_r2(document.file_path)
+    if raw is None:
+        raise HTTPException(status_code=404, detail="File not found in storage")
+
+    png = _dicom_to_png(raw) if ext in ("dcm", "dicom") else _pdf_to_png(raw)
+    if png is None:
+        raise HTTPException(status_code=422, detail="Could not generate thumbnail")
+
+    put_bytes_to_key(thumb_key, png, "image/png")  # cache for next time
+    return Response(content=png, media_type="image/png", headers=png_headers)
+
 
 @router.delete("/{document_id}")
 async def delete_document(document_id: int, db: Session = Depends(get_db)):

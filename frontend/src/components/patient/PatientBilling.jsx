@@ -19,6 +19,15 @@ const PatientBilling = ({
     const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
     const [sendingWhatsApp, setSendingWhatsApp] = useState(null);
 
+    // Closing or saving the editor should both re-sync the list. The editor only
+    // fired onSave on a couple of paths (mark-paid, empty-draft discard), so a
+    // freshly finalized invoice stayed invisible until a full page reload.
+    const handleEditorDone = () => {
+        setSelectedInvoiceId(null);
+        if (refreshInvoices) refreshInvoices();
+        if (refreshPayments) refreshPayments();
+    };
+
     const handleSendWhatsApp = async (invoiceId) => {
         setSendingWhatsApp(invoiceId);
         try {
@@ -168,12 +177,8 @@ const PatientBilling = ({
             {selectedInvoiceId && (
                 <InvoiceEditor
                     invoiceId={selectedInvoiceId}
-                    onClose={() => setSelectedInvoiceId(null)}
-                    onSave={() => {
-                        setSelectedInvoiceId(null);
-                        if (refreshInvoices) refreshInvoices();
-                        if (refreshPayments) refreshPayments();
-                    }}
+                    onClose={handleEditorDone}
+                    onSave={handleEditorDone}
                     prefill={selectedInvoiceId === 'new' ? { patientId } : null}
                 />
             )}
