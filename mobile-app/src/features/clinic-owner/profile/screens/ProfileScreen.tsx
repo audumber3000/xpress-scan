@@ -102,6 +102,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
         variant="primary"
         title="Settings"
         titleIcon={<User size={22} />}
+        onBackPress={() => navigation.goBack()}
         rightComponent={
           <TouchableOpacity style={styles.menuButtonPrimary}>
             <MoreVertical size={24} color={colors.white} />
