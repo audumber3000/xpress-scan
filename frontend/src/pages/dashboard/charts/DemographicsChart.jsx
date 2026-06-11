@@ -2,6 +2,7 @@ import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, LabelList } from 'recharts';
 import ChartCard from '../ChartCard';
 import { tooltipStyle } from '../format';
+import { COLORS, RAMP, CHART_HEIGHT, BAR_SIZE, BAR_RADIUS, GRID_PROPS, AXIS_PROPS, CHART_MARGIN } from '../chartTheme';
 
 const Icon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -21,15 +22,16 @@ const DemographicsChart = ({ data, loading }) => {
       emptyTitle="No age data"
       emptyHint="Add patient ages to see the age breakdown."
     >
-      <ResponsiveContainer width="100%" height={230}>
-        <BarChart data={data} margin={{ left: -20, top: 16 }} accessibilityLayer>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 600, fill: '#6b7280' }} />
-          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 500, fill: '#9ca3af' }} allowDecimals={false} />
-          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: '#f3f4f6', radius: 8 }} formatter={(value) => [value, 'Patients']} />
-          <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={40}>
+      <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
+        <BarChart data={data} margin={{ ...CHART_MARGIN, top: 16 }} accessibilityLayer>
+          <CartesianGrid {...GRID_PROPS} />
+          <XAxis dataKey="name" {...AXIS_PROPS} />
+          <YAxis {...AXIS_PROPS} allowDecimals={false} />
+          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: COLORS.grid, radius: 8 }} formatter={(value) => [value, 'Patients']} />
+          {/* Single-hue ramp (darkest = youngest) keeps it on-brand instead of a rainbow. */}
+          <Bar dataKey="value" radius={BAR_RADIUS} barSize={BAR_SIZE + 8}>
             {data.map((entry, idx) => (
-              <Cell key={`cell-${idx}`} fill={entry.color} />
+              <Cell key={`cell-${idx}`} fill={RAMP[idx % RAMP.length]} />
             ))}
             <LabelList dataKey="value" position="top" formatter={(v) => (v > 0 ? v : '')} style={{ fontSize: 11, fontWeight: 700, fill: '#374151' }} />
           </Bar>

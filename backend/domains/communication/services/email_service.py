@@ -681,6 +681,48 @@ class EmailService:
         
         html_content = self._get_email_template(clinic_name, content)
         subject = f"Test Email - {clinic_name} Notification Service"
-        
+
+        return self._send_email(to_email, subject, html_content)
+
+    def send_password_reset_email(
+        self,
+        to_email: str,
+        reset_url: str,
+        user_name: Optional[str] = None
+    ) -> dict:
+        """
+        Send a password reset link email.
+
+        Args:
+            to_email: Recipient email address
+            reset_url: Full URL (with token) to the reset-password page
+            user_name: Recipient's name (optional)
+
+        Returns:
+            API response as dictionary
+        """
+        greeting = f"Dear {user_name}," if user_name else "Hello,"
+        content = f"""
+            <h2>Reset your MolarPlus password</h2>
+            <p>{greeting}</p>
+            <p>We received a request to reset the password for your MolarPlus account.
+               Click the button below to choose a new password. This link expires in 1 hour.</p>
+            <div style="text-align:center; margin:28px 0;">
+                <a href="{reset_url}"
+                   style="display:inline-block; background:#2a276e; color:#ffffff; text-decoration:none;
+                          padding:12px 28px; border-radius:8px; font-weight:600;">
+                    Reset your password
+                </a>
+            </div>
+            <p style="font-size:13px; color:#666;">If the button doesn't work, copy and paste this link into your browser:</p>
+            <p style="font-size:13px; word-break:break-all;"><a href="{reset_url}">{reset_url}</a></p>
+            <div class="highlight">
+                <p>If you didn't request a password reset, you can safely ignore this email — your password won't change.</p>
+            </div>
+        """
+
+        html_content = self._get_email_template("MolarPlus", content)
+        subject = "Reset your MolarPlus password"
+
         return self._send_email(to_email, subject, html_content)
 

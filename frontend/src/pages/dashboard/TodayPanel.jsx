@@ -25,7 +25,7 @@ const Schedule = ({ summary, appointments }) => (
     <div className="flex items-center justify-between mb-4">
       <div className="flex items-center gap-2">
         <div className="p-2 bg-[#f0f0fd] rounded-lg text-[#2a276e]"><CalendarClock size={18} /></div>
-        <h3 className="font-bold text-gray-900 text-lg">Today's Schedule</h3>
+        <h3 className="font-bold text-gray-800 text-lg">Today's Schedule</h3>
       </div>
       {summary && (
         <span className="text-xs font-semibold text-gray-500">
@@ -82,7 +82,7 @@ const NeedsAttention = ({ attention }) => {
 
   return (
     <div className="md:w-72 flex-shrink-0 border-t border-gray-100 pt-5 md:border-t-0 md:pt-0 md:border-l md:pl-6">
-      <h3 className="font-bold text-gray-900 text-lg mb-4">Needs attention</h3>
+      <h3 className="font-bold text-gray-800 text-lg mb-4">Needs attention</h3>
       {allClear ? (
         <div className="flex flex-col items-center justify-center py-8 text-center">
           <CheckCircle2 size={28} className="text-green-400 mb-2" />

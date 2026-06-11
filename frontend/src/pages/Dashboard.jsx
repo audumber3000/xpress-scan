@@ -12,7 +12,6 @@ import DemographicsChart from './dashboard/charts/DemographicsChart';
 import RevenueChart from './dashboard/charts/RevenueChart';
 import AppointmentTrendsChart from './dashboard/charts/AppointmentTrendsChart';
 import MetricDetailDrawer from './dashboard/MetricDetailDrawer';
-import CustomizeDrawer from './dashboard/CustomizeDrawer';
 import AssistantPanel from './dashboard/AssistantPanel';
 import SupportMenu from './dashboard/SupportMenu';
 
@@ -24,12 +23,11 @@ const Dashboard = () => {
     globalPeriod, setGlobalPeriod,
     metrics,
     patientStatsData, demographicsData, revenueData, appointmentData,
-    loading, visibleWidgets, toggleWidget,
+    loading, visibleWidgets,
     selectedMetric, drawerData, drawerLoading, openMetric, closeMetric,
     today, todayLoading,
   } = useDashboardData();
 
-  const [showCustomize, setShowCustomize] = useState(false);
   const [showAssistant, setShowAssistant] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
 
@@ -53,7 +51,6 @@ const Dashboard = () => {
         ownerName={ownerName}
         period={globalPeriod}
         onPeriodChange={setGlobalPeriod}
-        onCustomize={() => setShowCustomize(true)}
       />
 
       <QuickActions />
@@ -99,14 +96,8 @@ const Dashboard = () => {
         metric={selectedMetric}
         data={drawerData}
         loading={drawerLoading}
+        period={globalPeriod}
         onClose={closeMetric}
-      />
-
-      <CustomizeDrawer
-        open={showCustomize}
-        widgets={visibleWidgets}
-        onToggle={toggleWidget}
-        onClose={() => setShowCustomize(false)}
       />
 
       <WelcomeChecklistModal open={showWelcome} onClose={() => setShowWelcome(false)} />

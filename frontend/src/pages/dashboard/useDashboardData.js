@@ -9,10 +9,12 @@ const DEFAULT_METRICS = [
 ];
 
 // Which detail endpoint backs each metric card's drawer.
+// `usesPeriod` endpoints get ?period=<globalPeriod> appended at fetch time.
 const METRIC_DETAIL_ENDPOINTS = {
-  'Total Patients': '/dashboard/patients/details?period=month',
-  Appointments: '/dashboard/appointments/today',
-  Checking: '/dashboard/chairs/status',
+  'Total Patients': { path: '/dashboard/patients/details', usesPeriod: true },
+  Revenue:          { path: '/dashboard/revenue/details',  usesPeriod: true },
+  Appointments:     { path: '/dashboard/appointments/today', usesPeriod: true },
+  Checking:         { path: '/dashboard/chairs/status',    usesPeriod: false },
 };
 
 const DEFAULT_WIDGETS = { patientStats: true, demographics: true, revenue: true, appointments: true };
@@ -113,18 +115,21 @@ export function useDashboardData() {
 
   const openMetric = useCallback(async (metric) => {
     setSelectedMetric(metric);
-    const endpoint = METRIC_DETAIL_ENDPOINTS[metric.title];
-    if (!endpoint) { setDrawerData([]); return; }
+    const cfg = METRIC_DETAIL_ENDPOINTS[metric.title];
+    if (!cfg) { setDrawerData([]); return; }
+    const url = cfg.usesPeriod ? `${cfg.path}?period=${globalPeriod}` : cfg.path;
     setDrawerLoading(true);
     try {
-      const data = await api.get(endpoint);
-      setDrawerData(Array.isArray(data) ? data : []);
+      const data = await api.get(url);
+      // Most endpoints return an array; chairs/status returns an object — pass
+      // the raw payload through and let the drawer render the right view.
+      setDrawerData(data ?? []);
     } catch {
       setDrawerData([]);
     } finally {
       setDrawerLoading(false);
     }
-  }, []);
+  }, [globalPeriod]);
 
   const closeMetric = useCallback(() => {
     setSelectedMetric(null);

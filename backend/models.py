@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, JSON, Float, Table
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, JSON, Float, Table, UniqueConstraint
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 import uuid
@@ -802,8 +802,31 @@ class NotificationLog(Base):
     template_name = Column(String, nullable=True)
     status = Column(String, default='queued')           # queued, sent, delivered, read, failed
     cost = Column(Float, default=0.0)
+    provider = Column(String, default='msg91')          # 'msg91' (paid) | 'wareach' (own number, free)
     error_message = Column(Text, nullable=True)
     provider_message_id = Column(String, nullable=True, index=True)  # MSG91 request_id for webhook correlation
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    clinic = relationship("Clinic")
+
+
+class WhatsAppIntegration(Base):
+    """Per-clinic 'own number' WhatsApp link via WA Reach (whatsapp-web.js).
+
+    Additive & separate from the MSG91 path: a clinic only routes through its
+    own number once it has a row here with status='connected'. Clinics with no
+    row fall through to the existing MSG91 flow, unchanged.
+    """
+    __tablename__ = 'whatsapp_integrations'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, unique=True, index=True)
+    provider = Column(String, default='wareach')
+    session_id = Column(String, nullable=True)          # WA Reach session id
+    api_key_enc = Column(Text, nullable=True)           # WA Reach API key, Fernet-encrypted
+    phone_number = Column(String, nullable=True)        # linked number (set once connected)
+    status = Column(String, default='disconnected')     # disconnected | connecting | connected | failed
+    last_status_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
@@ -939,6 +962,35 @@ class SupportMessage(Base):
 
     ticket = relationship("SupportTicket", back_populates="messages")
     sender = relationship("User")
+
+
+class FeatureRequest(Base):
+    __tablename__ = 'feature_requests'
+    id = Column(Integer, primary_key=True, index=True)
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=True, index=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    status = Column(String, default='open')   # open / planned / in_progress / shipped / declined
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    creator = relationship("User")
+    clinic = relationship("Clinic")
+    votes = relationship("FeatureRequestVote", back_populates="request", cascade="all, delete-orphan")
+
+
+class FeatureRequestVote(Base):
+    __tablename__ = 'feature_request_votes'
+    id = Column(Integer, primary_key=True, index=True)
+    feature_request_id = Column(Integer, ForeignKey('feature_requests.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint('feature_request_id', 'user_id', name='uq_feature_vote'),)
+
+    request = relationship("FeatureRequest", back_populates="votes")
+    user = relationship("User")
 
 
 class PushToken(Base):

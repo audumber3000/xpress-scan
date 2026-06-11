@@ -160,6 +160,46 @@ class AuthService(AuthServiceProtocol):
         self.db.commit()
         return True
 
+    def hash_password(self, password: str) -> str:
+        """Public wrapper for password hashing (used by the reset flow)."""
+        return self._hash_password(password)
+
+    def _password_binding(self, password_hash: Optional[str]) -> str:
+        """Short digest of the current password hash. Embedding this in a reset
+        token makes the token single-use: once the password changes the digest
+        no longer matches, so the same link can't be replayed."""
+        return hashlib.sha256((password_hash or "").encode()).hexdigest()[:16]
+
+    def create_password_reset_token(self, user: User) -> str:
+        """Mint a short-lived, single-use JWT for resetting a password."""
+        payload = {
+            "user_id": user.id,
+            "purpose": "password_reset",
+            "pwb": self._password_binding(user.password_hash),
+            "exp": datetime.utcnow() + timedelta(hours=1),
+        }
+        return jwt.encode(payload, self.jwt_secret, algorithm=self.jwt_algorithm)
+
+    def verify_password_reset_token(self, token: str) -> Optional[int]:
+        """Validate a reset token's signature/expiry/purpose and return the
+        user_id, re-checking the password binding so the token is single-use.
+        Returns None if the token is invalid, expired, or already used."""
+        try:
+            payload = jwt.decode(token, self.jwt_secret, algorithms=[self.jwt_algorithm])
+        except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+            return None
+        if payload.get("purpose") != "password_reset":
+            return None
+        user_id = payload.get("user_id")
+        if not user_id:
+            return None
+        user = self.auth_repo.validate_session(user_id)
+        if not user:
+            return None
+        if payload.get("pwb") != self._password_binding(user.password_hash):
+            return None
+        return user_id
+
     def _hash_password(self, password: str) -> str:
         """Hash password using SHA256"""
         return hashlib.sha256(password.encode()).hexdigest()

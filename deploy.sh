@@ -95,6 +95,14 @@ run_migration "tax_id"           "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS t
 run_migration "email_report_unsubscribed" "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_report_unsubscribed BOOLEAN DEFAULT FALSE"
 run_migration "trial_used"        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_used BOOLEAN DEFAULT FALSE"
 
+# Help Center — feature-request board
+run_migration "feature_requests" "CREATE TABLE IF NOT EXISTS feature_requests (id SERIAL PRIMARY KEY, created_by INTEGER REFERENCES users(id), clinic_id INTEGER REFERENCES clinics(id), title VARCHAR NOT NULL, description TEXT, status VARCHAR DEFAULT 'open', created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())"
+run_migration "feature_request_votes" "CREATE TABLE IF NOT EXISTS feature_request_votes (id SERIAL PRIMARY KEY, feature_request_id INTEGER NOT NULL REFERENCES feature_requests(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id), created_at TIMESTAMP DEFAULT NOW(), CONSTRAINT uq_feature_vote UNIQUE (feature_request_id, user_id))"
+
+# WA Reach — own-number WhatsApp (Pro). Additive; MSG91 path untouched.
+run_migration "notif_provider"   "ALTER TABLE notification_logs ADD COLUMN IF NOT EXISTS provider VARCHAR DEFAULT 'msg91'"
+run_migration "whatsapp_integrations" "CREATE TABLE IF NOT EXISTS whatsapp_integrations (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL UNIQUE REFERENCES clinics(id), provider VARCHAR DEFAULT 'wareach', session_id VARCHAR, api_key_enc TEXT, phone_number VARCHAR, status VARCHAR DEFAULT 'disconnected', last_status_at TIMESTAMP, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())"
+
 # 6. Schema migration check — catch missing ALTER TABLE migrations before deploy
 echo ""
 echo "▶ Running schema migration check against prod DB..."
@@ -160,6 +168,11 @@ else
   echo "     docker logs molarplus-backend-1 --tail 30"
   exit 1
 fi
+
+# ── Seed the feature-request board (run-once; skips if it already has rows) ────
+echo ""
+echo "▶ Seeding feature-request board (idempotent)..."
+docker exec molarplus-backend-1 python scripts/seed_feature_requests.py || echo "  ⚠️  seed step skipped/failed (non-fatal)"
 
 echo ""
 echo "✅ Deployment complete!"

@@ -6,9 +6,10 @@ import { Gem, Crown, Search, X, Clock, Menu } from "lucide-react";
 import { FaSync } from "react-icons/fa";
 import { api } from "../utils/api";
 import { generateAvatarUrl } from "../utils/avatar";
+import { SkeletonBox } from "./Skeleton";
 
 const Header = ({ onOpenMobileSidebar }) => {
-  const { user, signOut, switchClinic } = useAuth();
+  const { user, signOut, switchClinic, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { title, titlePath, refreshFunction, refreshPath, loading, handleRefresh } = useHeader();
@@ -28,6 +29,11 @@ const Header = ({ onOpenMobileSidebar }) => {
   const searchInputRef = useRef(null);
 
   const isDashboardPage = location.pathname === '/dashboard';
+
+  // On first login the clinic object may not be hydrated yet (login response
+  // didn't include it; /auth/me fills it in a moment later). Show a shimmer
+  // instead of flashing the literal "Select Clinic" fallback during that gap.
+  const clinicHydrating = !user?.clinic?.name && (authLoading || !!user?.clinic_id);
 
   const getRouteTitle = (pathname) => {
     const staticTitles = {
@@ -58,7 +64,7 @@ const Header = ({ onOpenMobileSidebar }) => {
       '/doctor-profile': 'Profile Settings',
       '/subscription': 'Subscription & Billing',
       '/support': 'Support',
-      '/support-tickets': 'Support',
+      '/support-tickets': 'Help Center',
       '/add-clinic': 'Add Branch',
       '/checkout': 'Checkout',
       '/mail': 'Mail',
@@ -292,12 +298,21 @@ const Header = ({ onOpenMobileSidebar }) => {
 
             {/* Name + subtitle */}
             <div className="hidden md:flex flex-col items-start leading-tight min-w-0">
-              <span className="text-sm font-bold text-[#2a276e] truncate max-w-[140px]">
-                {user?.clinic?.name || "Select Clinic"}
-              </span>
-              <span className="text-xs text-gray-500 truncate max-w-[140px]">
-                {user?.clinic?.address?.split(",")[0] || user?.clinic?.email || "Clinic"}
-              </span>
+              {clinicHydrating ? (
+                <>
+                  <SkeletonBox className="h-4 w-28 mb-1" />
+                  <SkeletonBox className="h-3 w-20" />
+                </>
+              ) : (
+                <>
+                  <span className="text-sm font-bold text-[#2a276e] truncate max-w-[140px]">
+                    {user?.clinic?.name || "Select Clinic"}
+                  </span>
+                  <span className="text-xs text-gray-500 truncate max-w-[140px]">
+                    {user?.clinic?.address?.split(",")[0] || user?.clinic?.email || "Clinic"}
+                  </span>
+                </>
+              )}
             </div>
 
             {/* Chevron */}

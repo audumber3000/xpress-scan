@@ -13,7 +13,7 @@ import {
   TOOTH_NAMES,
   ToothRightDrawer
 } from "../components/patient";
-import GearLoader from "../components/GearLoader";
+import { SkeletonBox, SkeletonCards } from "../components/Skeleton";
 import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import { toast } from 'react-toastify';
@@ -25,6 +25,7 @@ const PatientProfile = () => {
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || "case-papers");
   const [loading, setLoading] = useState(true);
+  const [secondaryLoading, setSecondaryLoading] = useState(true);
   const [patientData, setPatientData] = useState(null);
   const [isCasePaperOpen, setIsCasePaperOpen] = useState(false);
   const [appointments, setAppointments] = useState([]);
@@ -47,6 +48,15 @@ const PatientProfile = () => {
     { id: "profile", name: "Patient Info" },
     { id: "files", name: "Files" }
   ];
+
+  // Lightweight placeholder for tabs whose data is still streaming in.
+  const TabSkeleton = () => (
+    <div className="space-y-4">
+      <SkeletonCards count={3} />
+      <SkeletonBox className="h-32 w-full rounded-xl" />
+      <SkeletonBox className="h-32 w-full rounded-xl" />
+    </div>
+  );
 
 
   const fetchPayments = async () => {
@@ -89,7 +99,9 @@ const PatientProfile = () => {
       try {
         setLoading(true);
 
-        // Fetch patient details (required - show error if this fails)
+        // Fetch patient details (required - show error if this fails).
+        // Once this resolves we render the page shell immediately; the
+        // secondary data below streams in behind per-tab skeletons.
         try {
           const patient = await patientService.getPatient(patientId);
           setPatientData(patient);
@@ -99,6 +111,7 @@ const PatientProfile = () => {
           setToothNotes(patient.tooth_notes || {});
           setTreatmentPlan(patient.treatment_plan || []);
           setPrescriptions(patient.prescriptions || []);
+          setLoading(false);
         } catch (error) {
           console.error('Error fetching patient data:', error);
           toast.error(getPermissionAwareErrorMessage(
@@ -110,62 +123,68 @@ const PatientProfile = () => {
           return;
         }
 
-        // Fetch all appointments and filter by patient_id (optional - don't show error)
-        try {
-          const allAppointments = await appointmentService.getAppointments();
-          const patientAppointments = allAppointments.filter(apt => apt.patient_id === parseInt(patientId));
+        // Secondary data (appointments, payments, invoices, prescriptions,
+        // case papers) — fetched in parallel so the page fills in quickly.
+        // Each settles independently; a failure just leaves that slice empty.
+        const fetchAppointments = async () => {
+          try {
+            const allAppointments = await appointmentService.getAppointments();
+            const patientAppointments = allAppointments.filter(apt => apt.patient_id === parseInt(patientId));
+            const transformedAppointments = patientAppointments.map(apt => ({
+              id: apt.id,
+              date: apt.appointment_date,
+              time: apt.start_time,
+              procedure: apt.treatment,
+              status: apt.status,
+              notes: apt.notes || '',
+              doctor: apt.doctor_name || 'Unassigned',
+              visit_number: apt.visit_number || null,
+              clinic_name: apt.clinic_name || 'Zendral Dental Central'
+            }));
+            setAppointments(transformedAppointments);
+          } catch (error) {
+            console.error('Error fetching appointments:', error);
+            setAppointments([]);
+          }
+        };
 
-          // Transform appointments for display
-          const transformedAppointments = patientAppointments.map(apt => ({
-            id: apt.id,
-            date: apt.appointment_date,
-            time: apt.start_time,
-            procedure: apt.treatment,
-            status: apt.status,
-            notes: apt.notes || '',
-            doctor: apt.doctor_name || 'Unassigned',
-            visit_number: apt.visit_number || null,
-            clinic_name: apt.clinic_name || 'Zendral Dental Central'
-          }));
+        const fetchNormalizedPrescriptions = async () => {
+          try {
+            const res = await api.get(`/clinical/prescriptions/patient/${patientId}`);
+            setNormalizedPrescriptions(Array.isArray(res) ? res : []);
+          } catch (error) {
+            console.error('Error fetching normalized prescriptions:', error);
+            setNormalizedPrescriptions([]);
+          }
+        };
 
-          setAppointments(transformedAppointments);
-        } catch (error) {
-          console.error('Error fetching appointments:', error);
-          // Don't show alert, just log the error
-          setAppointments([]);
-        }
+        const fetchCasePapers = async () => {
+          try {
+            const res = await api.get(`/clinical/case-papers/patient/${patientId}`);
+            setCasePapers(Array.isArray(res) ? res : []);
+          } catch (error) {
+            console.error('Error fetching case papers:', error);
+            setCasePapers([]);
+          }
+        };
 
-        // Fetch all payments and filter by patient_id (optional - don't show error)
-        await fetchPayments();
-        
-        // Fetch all invoices
-        await fetchInvoices();
-
-        // Fetch normalized prescriptions (new table)
-        try {
-          const res = await api.get(`/clinical/prescriptions/patient/${patientId}`);
-          setNormalizedPrescriptions(Array.isArray(res) ? res : []);
-        } catch (error) {
-          console.error('Error fetching normalized prescriptions:', error);
-          setNormalizedPrescriptions([]);
-        }
-
-        // Fetch case papers so each clinical encounter shows in the visit timeline
-        try {
-          const res = await api.get(`/clinical/case-papers/patient/${patientId}`);
-          setCasePapers(Array.isArray(res) ? res : []);
-        } catch (error) {
-          console.error('Error fetching case papers:', error);
-          setCasePapers([]);
-        }
+        await Promise.allSettled([
+          fetchAppointments(),
+          fetchPayments(),
+          fetchInvoices(),
+          fetchNormalizedPrescriptions(),
+          fetchCasePapers(),
+        ]);
 
       } catch (error) {
         console.error('Unexpected error:', error);
       } finally {
         setLoading(false);
+        setSecondaryLoading(false);
       }
     };
 
+    setSecondaryLoading(true);
     fetchPatientData();
   }, [patientId]);
 
@@ -371,10 +390,35 @@ const PatientProfile = () => {
 
   if (loading) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <GearLoader size="w-12 h-12" className="mx-auto mb-4" />
-          <p className="text-gray-600">Loading patient data...</p>
+      <div className="w-full h-full flex flex-col bg-gray-50 overflow-hidden">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6">
+          <div className="max-w-7xl mx-auto">
+            {/* Header skeleton */}
+            <div className="flex items-center gap-3 py-4">
+              <SkeletonBox className="w-9 h-9 rounded-full" />
+              <SkeletonBox className="w-12 h-12 rounded-full" />
+              <div>
+                <SkeletonBox className="h-7 w-48 mb-2" />
+                <div className="flex gap-1.5">
+                  <SkeletonBox className="h-5 w-16 rounded-full" />
+                  <SkeletonBox className="h-5 w-20 rounded-full" />
+                  <SkeletonBox className="h-5 w-24 rounded-full" />
+                </div>
+              </div>
+            </div>
+            {/* Tab strip skeleton */}
+            <div className="border-b border-gray-200 mb-4">
+              <div className="flex gap-8 pb-2">
+                {[...Array(4)].map((_, i) => <SkeletonBox key={i} className="h-5 w-24" />)}
+              </div>
+            </div>
+            {/* Content skeleton */}
+            <SkeletonCards count={4} />
+            <div className="mt-6 space-y-3">
+              <SkeletonBox className="h-24 w-full rounded-xl" />
+              <SkeletonBox className="h-24 w-full rounded-xl" />
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -524,15 +568,19 @@ const PatientProfile = () => {
             )}
 
             {activeTab === "billing" && (
-              <PatientBilling 
-                invoices={invoices}
-                payments={payments} 
-                patientId={patientId} 
-                appointments={appointments}
-                refreshInvoices={fetchInvoices}
-                refreshPayments={fetchPayments}
-                patientPhone={patientData?.phone}
-              />
+              secondaryLoading ? (
+                <TabSkeleton />
+              ) : (
+                <PatientBilling
+                  invoices={invoices}
+                  payments={payments}
+                  patientId={patientId}
+                  appointments={appointments}
+                  refreshInvoices={fetchInvoices}
+                  refreshPayments={fetchPayments}
+                  patientPhone={patientData?.phone}
+                />
+              )
             )}
 
             {activeTab === "files" && (
@@ -540,13 +588,17 @@ const PatientProfile = () => {
             )}
 
             {activeTab === "profile" && (
-              <PatientInfo
-                patientData={patientData}
-                appointments={appointments}
-                prescriptions={normalizedPrescriptions}
-                invoices={payments}
-                casePapers={casePapers}
-              />
+              secondaryLoading ? (
+                <TabSkeleton />
+              ) : (
+                <PatientInfo
+                  patientData={patientData}
+                  appointments={appointments}
+                  prescriptions={normalizedPrescriptions}
+                  invoices={payments}
+                  casePapers={casePapers}
+                />
+              )
             )}
           </div>
         </div>

@@ -2,6 +2,7 @@ import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
 import ChartCard from '../ChartCard';
 import { calculateYAxisDomain, tooltipStyle } from '../format';
+import { COLORS, CHART_HEIGHT, BAR_SIZE, BAR_RADIUS, GRID_PROPS, AXIS_PROPS, LEGEND_PROPS, CHART_MARGIN } from '../chartTheme';
 
 const Icon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -21,16 +22,16 @@ const AppointmentTrendsChart = ({ data, loading, delta }) => (
     emptyTitle="No appointments in this period"
     emptyHint="Booked, completed and missed visits will appear here."
   >
-    <ResponsiveContainer width="100%" height={230}>
-      <BarChart data={data} margin={{ left: -20 }} accessibilityLayer>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-        <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }} interval="preserveStartEnd" />
-        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }} domain={calculateYAxisDomain(data, ['bookings'], 0.1)} allowDecimals={false} />
-        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: '#f3f4f6', radius: 8 }} formatter={(value, name) => [value, LABELS[name] || name]} />
-        <Legend iconType="circle" wrapperStyle={{ fontSize: 11, fontWeight: 600, paddingTop: 8 }} formatter={(v) => LABELS[v] || v} />
-        <Bar dataKey="completed" stackId="a" fill="#22c55e" barSize={26} />
-        <Bar dataKey="scheduled" stackId="a" fill="#9B8CFF" barSize={26} />
-        <Bar dataKey="missed" stackId="a" fill="#ef4444" radius={[5, 5, 0, 0]} barSize={26} />
+    <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
+      <BarChart data={data} margin={CHART_MARGIN} accessibilityLayer>
+        <CartesianGrid {...GRID_PROPS} />
+        <XAxis dataKey="time" {...AXIS_PROPS} interval="preserveStartEnd" />
+        <YAxis {...AXIS_PROPS} domain={calculateYAxisDomain(data, ['bookings'], 0.1)} allowDecimals={false} />
+        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: COLORS.grid, radius: 8 }} formatter={(value, name) => [value, LABELS[name] || name]} />
+        <Legend {...LEGEND_PROPS} formatter={(v) => LABELS[v] || v} />
+        <Bar dataKey="completed" stackId="a" fill={COLORS.positive} barSize={BAR_SIZE} />
+        <Bar dataKey="scheduled" stackId="a" fill={COLORS.primarySoft} barSize={BAR_SIZE} />
+        <Bar dataKey="missed" stackId="a" fill={COLORS.danger} radius={BAR_RADIUS} barSize={BAR_SIZE} />
       </BarChart>
     </ResponsiveContainer>
   </ChartCard>

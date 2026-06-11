@@ -20,6 +20,10 @@ class SendEventRequest(BaseModel):
     template_data: Dict[str, Any] = {}  # fields passed to the template builder
     log_id: Optional[int] = None        # NotificationLog PK — for status callback
     callback_url: Optional[str] = None  # main backend PATCH URL
+    # WA Reach (own-number WhatsApp) — present only when routing via WA Reach.
+    provider: Optional[str] = None
+    wareach_session_id: Optional[str] = None
+    wareach_api_key: Optional[str] = None
 
 
 @router.post("/send-event")
@@ -36,6 +40,10 @@ async def send_event(request: SendEventRequest):
         to_name=request.to_name or "",
         to_phone=request.to_phone or "",
         attachments=request.attachments,
+        provider=request.provider,
+        wareach_session_id=request.wareach_session_id,
+        wareach_api_key=request.wareach_api_key,
+        log_id=request.log_id,
         **request.template_data,
     )
 

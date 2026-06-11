@@ -26,7 +26,7 @@ const ChartCard = ({ title, icon, children, loading, isEmpty, delta, emptyTitle,
         {icon}
       </div>
       <div className="min-w-0">
-        <h3 className="font-bold text-gray-900 tracking-tight text-base md:text-lg leading-tight">{title}</h3>
+        <h3 className="font-bold text-gray-800 tracking-tight text-base md:text-lg leading-tight">{title}</h3>
         {!loading && !isEmpty && <DeltaCaption delta={delta} />}
       </div>
     </div>

@@ -9,21 +9,17 @@ from core.auth_utils import get_current_user
 
 router = APIRouter()
 
-@router.get("/metrics")
-def get_dashboard_metrics(
-    period: str = "month",  # today, yesterday, 7days, month
-    clinic_id: Optional[int] = None,
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
-):
-    """Get main dashboard metrics with period filtering - Dental clinic specific"""
-    # Use provided clinic_id if owner, else default to user's clinic
-    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
-    
-    # Calculate date ranges
-    now = datetime.utcnow()
+
+def period_range(period: str, now: datetime = None):
+    """Single source of truth for period → (start, end, prev_start, prev_end).
+
+    Shared by the KPI metrics endpoint AND the drawer detail endpoints so the
+    card numbers and the drawer lists always cover the exact same window.
+    Vocabulary matches the dashboard header: today | yesterday | 7days | all | month.
+    """
+    now = now or datetime.utcnow()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    
+
     if period == "today":
         start_date = today_start
         end_date = today_start + timedelta(days=1)
@@ -44,13 +40,31 @@ def get_dashboard_metrics(
         start_date = datetime(2000, 1, 1)
         end_date = today_start + timedelta(days=1)
         prev_start, prev_end = start_date, end_date
-    else:  # month
+    else:  # month (calendar month-to-date)
         start_date = today_start.replace(day=1)
         end_date = today_start + timedelta(days=1)
-        # Previous month
         last_day_prev_month = start_date - timedelta(days=1)
         prev_start = last_day_prev_month.replace(day=1)
         prev_end = start_date
+
+    return start_date, end_date, prev_start, prev_end
+
+
+@router.get("/metrics")
+def get_dashboard_metrics(
+    period: str = "month",  # today, yesterday, 7days, month
+    clinic_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Get main dashboard metrics with period filtering - Dental clinic specific"""
+    # Use provided clinic_id if owner, else default to user's clinic
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
+
+    # Calculate date ranges
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_date, end_date, prev_start, prev_end = period_range(period, now)
 
     # 1. Total Patients (registered in this period)
     patients_count = db.query(func.count(Patient.id)).filter(
@@ -416,20 +430,14 @@ def get_patients_details(
 ):
     """Get detailed patient list for drawer view"""
     final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
-    now = datetime.utcnow()
-    
+
     query = db.query(Patient).filter(Patient.clinic_id == final_clinic_id)
-    
-    if period == "today":
-        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        query = query.filter(Patient.created_at >= today_start)
-    elif period == "week":
-        week_ago = now - timedelta(days=7)
-        query = query.filter(Patient.created_at >= week_ago)
-    elif period == "month":
-        month_ago = now - timedelta(days=30)
-        query = query.filter(Patient.created_at >= month_ago)
-    
+
+    # Same window as the KPI card, so counts match.
+    if period:
+        start_date, end_date, _, _ = period_range(period)
+        query = query.filter(Patient.created_at >= start_date, Patient.created_at < end_date)
+
     patients = query.order_by(Patient.created_at.desc()).limit(100).all()
     
     return [{
@@ -442,6 +450,35 @@ def get_patients_details(
         "treatment_type": p.treatment_type,
         "created_at": p.created_at.isoformat() if p.created_at else None
     } for p in patients]
+
+@router.get("/revenue/details")
+def get_revenue_details(
+    period: Optional[str] = None,  # today, week, month
+    clinic_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Recent payments for the Revenue card drawer."""
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
+
+    query = db.query(Payment).filter(Payment.clinic_id == final_clinic_id)
+
+    # Same window as the KPI card, so the total matches.
+    if period:
+        start_date, end_date, _, _ = period_range(period)
+        query = query.filter(Payment.created_at >= start_date, Payment.created_at < end_date)
+
+    payments = query.order_by(Payment.created_at.desc()).limit(100).all()
+
+    return [{
+        "id": p.id,
+        "patient_name": p.patient.name if p.patient else f"Patient #{p.patient_id}",
+        "amount": float(p.amount or 0),
+        "payment_method": p.payment_method,
+        "status": p.status,
+        "treatment_type": p.treatment_type.name if p.treatment_type else None,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+    } for p in payments]
 
 @router.get("/reports/details")
 def get_reports_details(
@@ -472,24 +509,28 @@ def get_reports_details(
 
 @router.get("/appointments/today")
 def get_appointments_today(
+    period: Optional[str] = None,  # today, yesterday, 7days, month, all
     clinic_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """Get today's appointments for drawer view"""
+    """Appointments for the drawer view. Defaults to today; honors the same
+    period as the KPI card so the list matches the Appointments count."""
     final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
     now = datetime.utcnow()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_end = today_start + timedelta(days=1)
+    if period:
+        win_start, win_end, _, _ = period_range(period, now)
+    else:
+        win_start, win_end = today_start, today_start + timedelta(days=1)
 
-    # Get appointments scheduled for today
     appointments = db.query(Appointment).filter(
         and_(
             Appointment.clinic_id == final_clinic_id,
-            Appointment.appointment_date >= today_start,
-            Appointment.appointment_date < today_end
+            Appointment.appointment_date >= win_start,
+            Appointment.appointment_date < win_end
         )
-    ).order_by(Appointment.start_time.asc()).all()
+    ).order_by(Appointment.appointment_date.desc(), Appointment.start_time.asc()).all()
 
     result = []
     for apt in appointments:

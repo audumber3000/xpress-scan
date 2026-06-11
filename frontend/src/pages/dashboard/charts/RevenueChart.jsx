@@ -1,8 +1,9 @@
 import React from 'react';
-import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
 import ChartCard from '../ChartCard';
 import { formatToK, calculateYAxisDomain, tooltipStyle } from '../format';
 import { getCurrencySymbol } from '../../../utils/currency';
+import { COLORS, CHART_HEIGHT, GRID_PROPS, AXIS_PROPS, LEGEND_PROPS, CHART_MARGIN, ChartDefs } from '../chartTheme';
 
 const Icon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -22,14 +23,13 @@ const RevenueChart = ({ data, loading, delta }) => {
       emptyTitle="No revenue in this period"
       emptyHint="Invoiced and collected amounts will appear here."
     >
-      <ResponsiveContainer width="100%" height={240}>
-        <ComposedChart data={data} margin={{ left: -20, right: 4, top: 8, bottom: 0 }} accessibilityLayer>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-          <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }} interval="preserveStartEnd" />
+      <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
+        <ComposedChart data={data} margin={CHART_MARGIN} accessibilityLayer>
+          <ChartDefs />
+          <CartesianGrid {...GRID_PROPS} />
+          <XAxis dataKey="label" {...AXIS_PROPS} interval="preserveStartEnd" />
           <YAxis
-            axisLine={false}
-            tickLine={false}
-            tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }}
+            {...AXIS_PROPS}
             tickFormatter={(val) => `${cur}${formatToK(val)}`}
             domain={calculateYAxisDomain(data, ['billed', 'collected'], 0.15)}
           />
@@ -37,13 +37,16 @@ const RevenueChart = ({ data, loading, delta }) => {
             contentStyle={tooltipStyle}
             formatter={(value, name) => [`${cur}${formatToK(value)}`, name === 'collected' ? 'Collected' : 'Billed']}
           />
-          <Legend
-            iconType="circle"
-            wrapperStyle={{ fontSize: 11, fontWeight: 600, paddingTop: 8 }}
-            formatter={(v) => (v === 'collected' ? 'Collected' : 'Billed')}
+          <Legend {...LEGEND_PROPS} formatter={(v) => (v === 'collected' ? 'Collected' : 'Billed')} />
+          <Area
+            type="monotone" dataKey="collected"
+            stroke={COLORS.primary} strokeWidth={2.5} fill="url(#areaPrimary)"
+            activeDot={{ r: 4, strokeWidth: 0 }}
           />
-          <Bar dataKey="collected" fill="#2a276e" radius={[5, 5, 0, 0]} barSize={26} />
-          <Line type="monotone" dataKey="billed" stroke="#F59E0B" strokeWidth={2.5} strokeDasharray="4 3" dot={false} />
+          <Line
+            type="monotone" dataKey="billed"
+            stroke={COLORS.warning} strokeWidth={2.5} strokeDasharray="5 4" dot={false}
+          />
         </ComposedChart>
       </ResponsiveContainer>
     </ChartCard>

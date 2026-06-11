@@ -8,6 +8,8 @@ import 'react-toastify/dist/ReactToastify.css';
 // Pages
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import Patients from "./pages/Patients";
 import PatientIntake from "./pages/PatientIntake";
@@ -192,7 +194,7 @@ function AppContent() {
   }, [location.pathname, loading, user, navigate]);
 
   // Check if current route is auth page, booking page, or public page
-  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/onboarding' || location.pathname === '/auth/callback' || location.pathname === '/desktop-auth/start';
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/forgot-password' || location.pathname === '/reset-password' || location.pathname === '/onboarding' || location.pathname === '/auth/callback' || location.pathname === '/desktop-auth/start';
   const isBookingPage = location.pathname === '/booking';
   const isPublicPage = location.pathname === '/dental-demo' || location.pathname.startsWith('/consent/sign/') || location.pathname === '/checkout';
 
@@ -217,6 +219,8 @@ function AppContent() {
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/onboarding" element={<ClinicOnboarding />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/desktop-auth/start" element={<DesktopAuthStart />} />

@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 from dotenv import load_dotenv
 from .email_templates import build_email, PLATFORM_EVENTS
-from .whatsapp_templates import build_whatsapp
+from .whatsapp_templates import build_whatsapp, build_whatsapp_text
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '../../../../.env'))
 
@@ -429,6 +429,44 @@ class NotificationService:
 </body>
 </html>"""
 
+    async def send_via_wareach(
+        self,
+        api_key: str,
+        session_id: str,
+        to_phone: str,
+        text: str,
+        media_url: Optional[str] = None,
+        log_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Send a free-text (optionally with media) WhatsApp from the clinic's
+        own number via WA Reach (whatsapp-web.js). Separate from MSG91.
+
+        Passing log_id lets WA Reach echo it back on delivery-receipt webhooks
+        so the originating NotificationLog can be updated (sent/delivered/read)."""
+        base = os.getenv("WAREACH_URL", "http://116.203.142.56:3000").rstrip("/")
+        if not session_id or not api_key:
+            return {"success": False, "error": "WA Reach session not configured"}
+        payload = {"to": to_phone, "text": text}
+        if media_url:
+            payload["media_url"] = media_url
+        if log_id is not None:
+            payload["log_id"] = log_id
+        headers = {"Authorization": f"Bearer {api_key}"}
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                resp = await client.post(
+                    f"{base}/api/sessions/{session_id}/send", json=payload, headers=headers
+                )
+                if resp.status_code in (200, 201):
+                    try:
+                        return {"success": True, "data": resp.json()}
+                    except Exception:
+                        return {"success": True, "data": {}}
+                return {"success": False, "error": f"WA Reach {resp.status_code}: {resp.text[:200]}"}
+        except Exception as e:
+            logger.error(f"WA Reach send error: {e}")
+            return {"success": False, "error": str(e)}
+
     async def dispatch_event(
         self,
         event_type: str,
@@ -437,6 +475,10 @@ class NotificationService:
         to_name: str = "",
         to_phone: str = "",
         attachments: Optional[List[Dict[str, str]]] = None,
+        provider: Optional[str] = None,
+        wareach_session_id: Optional[str] = None,
+        wareach_api_key: Optional[str] = None,
+        log_id: Optional[int] = None,
         **template_kwargs,
     ) -> Dict[str, Any]:
         """
@@ -467,6 +509,24 @@ class NotificationService:
                     )
 
             elif channel == "whatsapp":
+                # WA Reach (own number) — plain text + optional media, free.
+                if provider == "wareach":
+                    text = build_whatsapp_text(event_type, **template_kwargs)
+                    media_url = (
+                        template_kwargs.get("media_url")
+                        or template_kwargs.get("media_id")
+                        or template_kwargs.get("document_url")
+                        or None
+                    )
+                    return await self.send_via_wareach(
+                        api_key=wareach_api_key,
+                        session_id=wareach_session_id,
+                        to_phone=to_phone,
+                        text=text,
+                        media_url=media_url,
+                        log_id=log_id,
+                    )
+                # Default: MSG91 Meta template path (unchanged).
                 wa = build_whatsapp(event_type, **template_kwargs)
                 return await self.send_whatsapp(
                     mobile_number=to_phone,

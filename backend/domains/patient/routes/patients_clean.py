@@ -3,7 +3,9 @@ Patient routes using clean architecture
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.encoders import jsonable_encoder
+from pydantic import BaseModel
 from typing import List, Optional, Any
+import re
 from sqlalchemy.orm import Session
 from database import get_db
 from core.dtos import (
@@ -139,6 +141,71 @@ async def create_patient(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create patient: {str(e)}"
         )
+
+
+class BulkImportRequest(BaseModel):
+    patients: List[dict]
+
+
+@router.post(
+    "/import",
+    summary="Bulk import patients from CSV",
+    description="Create multiple patients from rows already parsed and validated on the client."
+)
+async def import_patients(
+    payload: BulkImportRequest,
+    current_user = Depends(require_patients_edit),
+    patient_service = Depends(get_patient_service),
+):
+    """Bulk-create patients. Each row reuses the normal create path (display_id,
+    treatment-type auto-create, etc.). Name + phone are re-validated server-side;
+    invalid or failing rows are skipped and reported rather than failing the batch."""
+    imported_count = 0
+    errors = []
+
+    for idx, row in enumerate(payload.patients):
+        row_num = idx + 1
+        try:
+            name = (row.get("name") or "").strip()
+            phone = (row.get("phone") or "").strip()
+            if not name:
+                errors.append(f"Row {row_num}: Name is required")
+                continue
+            if len(re.sub(r"\D", "", phone)) < 7:
+                errors.append(f"Row {row_num}: A valid phone number is required")
+                continue
+
+            age_raw = row.get("age")
+            age = int(age_raw) if age_raw not in (None, "") and str(age_raw).strip().isdigit() else None
+
+            clean = {
+                "name": name,
+                "age": age,
+                "gender": (row.get("gender") or "").strip() or None,
+                "phone": phone,
+                "village": (row.get("village") or "").strip() or None,
+                "treatment_type": (row.get("treatment_type") or "").strip() or None,
+                "referred_by": (row.get("referred_by") or "").strip() or None,
+                "blood_group": (row.get("blood_group") or "").strip() or None,
+                "patient_history": (row.get("patient_history") or "").strip() or None,
+                "notes": (row.get("notes") or "").strip() or None,
+            }
+            # Drop empties so the model/DTO defaults (e.g. treatment_type) apply.
+            clean = {k: v for k, v in clean.items() if v is not None}
+
+            patient_service.create_patient(clean, current_user.clinic_id)
+            imported_count += 1
+        except ValueError as e:
+            errors.append(f"Row {row_num}: {str(e)}")
+        except Exception as e:
+            errors.append(f"Row {row_num}: {str(e)}")
+
+    return {
+        "status": "success",
+        "message": f"Successfully imported {imported_count} patient{'s' if imported_count != 1 else ''}",
+        "imported_count": imported_count,
+        "errors": errors,
+    }
 
 
 @router.get(

@@ -55,13 +55,23 @@ def notify_event(
     clinic_country = db.query(Clinic.country).filter(Clinic.id == clinic_id).scalar()
     phone = normalize_phone(to_phone, clinic_country) if to_phone else ""
 
+    # ── WA Reach (own-number WhatsApp) ────────────────────────────────────────
+    # Default-off guard: None unless this clinic is Pro AND has connected its own
+    # number. When set, WhatsApp goes via their number for free (no wallet) — all
+    # other channels and clinics are untouched.
+    from domains.notification.services import wareach_service
+    wareach = wareach_service.get_active_integration(db, clinic_id)
+
     # ── Pre-flight wallet check ───────────────────────────────────────────────
     # Calculate total cost for all channels about to fire and verify balance
-    # once up front so we either send everything or nothing.
+    # once up front so we either send everything or nothing. WhatsApp is excluded
+    # when WA Reach is active (those sends are free).
     total_cost = sum(
         wallet_service.get_cost(ch, event_type)
         for ch in channels
-        if (ch in ("whatsapp", "sms") and phone) or (ch == "email" and to_email)
+        if (ch == "whatsapp" and phone and not wareach)
+        or (ch == "sms" and phone)
+        or (ch == "email" and to_email)
     )
 
     if total_cost > 0:
@@ -77,6 +87,9 @@ def notify_event(
                 logger.debug(f"notify_event [{event_type}] {channel}: no recipient, skip")
                 continue
 
+            # Route WhatsApp via the clinic's own number when WA Reach is active.
+            use_wareach = channel == "whatsapp" and wareach is not None
+
             # Log queued entry before firing
             log_entry = NotificationLog(
                 clinic_id=clinic_id,
@@ -86,6 +99,7 @@ def notify_event(
                 template_name=event_type,
                 status="queued",
                 cost=0.0,
+                provider="wareach" if use_wareach else "msg91",
                 created_at=datetime.datetime.utcnow(),
                 updated_at=datetime.datetime.utcnow(),
             )
@@ -93,18 +107,28 @@ def notify_event(
             db.commit()
             db.refresh(log_entry)
 
-            # Deduct from wallet before firing
-            cost = wallet_service.check_and_deduct(
-                db=db,
-                clinic_id=clinic_id,
-                channel=channel,
-                event_type=event_type,
-                description=f"{event_type} via {channel}",
-            )
+            # WA Reach sends are free — skip the wallet deduction entirely.
+            if use_wareach:
+                cost = 0.0
+            else:
+                cost = wallet_service.check_and_deduct(
+                    db=db,
+                    clinic_id=clinic_id,
+                    channel=channel,
+                    event_type=event_type,
+                    description=f"{event_type} via {channel}",
+                )
 
             # Fire notification
             if channel == "whatsapp":
-                notify(event_type, channel="whatsapp", to_phone=phone, template_data=data, log_id=log_entry.id)
+                if use_wareach:
+                    notify(
+                        event_type, channel="whatsapp", to_phone=phone, template_data=data, log_id=log_entry.id,
+                        provider="wareach", wareach_session_id=wareach.session_id,
+                        wareach_api_key=wareach_service.decrypt_key(wareach.api_key_enc),
+                    )
+                else:
+                    notify(event_type, channel="whatsapp", to_phone=phone, template_data=data, log_id=log_entry.id)
             elif channel == "email":
                 notify(event_type, channel="email", to_email=to_email, to_name=to_name, template_data=data, log_id=log_entry.id)
             elif channel == "sms":

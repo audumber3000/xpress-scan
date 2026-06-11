@@ -32,6 +32,7 @@
     "dicom-parser": "^1.8.21",
     "firebase": "^10.13.0",
     "lucide-react": "^0.525.0",
+    "papaparse": "^5.5.3",
     "posthog-js": "^1.373.5",
     "prop-types": "^15.8.1",
     "react": "^19.1.0",

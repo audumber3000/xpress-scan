@@ -10,6 +10,7 @@ import ValidatedInput from '../components/forms/ValidatedInput';
 import { isValidEmail, isValidPassword, isNonEmpty } from '../utils/validators';
 import loginImage from '../assets/login-page-left-side.png';
 import { completeGoogleRedirectAuth, markGoogleRedirectPending } from '../utils/googleRedirectAuth';
+import PublicSupportButton from '../components/PublicSupportButton';
 
 const Signup = () => {
   const [email, setEmail] = useState("");
@@ -158,6 +159,7 @@ const Signup = () => {
 
   return (
     <div className="h-screen flex overflow-hidden">
+      <PublicSupportButton />
       {/* Left Side - Image */}
       <div className="hidden lg:flex lg:w-1/2 relative">
         <img 

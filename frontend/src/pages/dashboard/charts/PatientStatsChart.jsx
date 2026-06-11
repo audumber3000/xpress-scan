@@ -1,7 +1,8 @@
 import React from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
 import ChartCard from '../ChartCard';
 import { formatToK, calculateYAxisDomain, tooltipStyle } from '../format';
+import { COLORS, CHART_HEIGHT, GRID_PROPS, AXIS_PROPS, LEGEND_PROPS, CHART_MARGIN, ChartDefs } from '../chartTheme';
 
 const Icon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -19,33 +20,30 @@ const PatientStatsChart = ({ data, loading, delta }) => (
     emptyTitle="No patient activity in this period"
     emptyHint="New registrations and returning visits will appear here."
   >
-    <ResponsiveContainer width="100%" height={230}>
-      <BarChart data={data} margin={{ left: -20 }} accessibilityLayer>
-        <defs>
-          <linearGradient id="newGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#2a276e" stopOpacity={0.95} />
-            <stop offset="100%" stopColor="#2a276e" stopOpacity={0.8} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-        <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 500, fill: '#9ca3af' }} interval="preserveStartEnd" />
+    <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
+      <AreaChart data={data} margin={CHART_MARGIN} accessibilityLayer>
+        <ChartDefs />
+        <CartesianGrid {...GRID_PROPS} />
+        <XAxis dataKey="label" {...AXIS_PROPS} interval="preserveStartEnd" />
         <YAxis
-          axisLine={false}
-          tickLine={false}
-          tick={{ fontSize: 11, fontWeight: 500, fill: '#9ca3af' }}
+          {...AXIS_PROPS}
           domain={calculateYAxisDomain(data, ['new', 'returning'])}
           tickFormatter={formatToK}
           allowDecimals={false}
         />
-        <Tooltip
-          contentStyle={tooltipStyle}
-          cursor={{ fill: '#f3f4f6', radius: 8 }}
-          formatter={(value, name) => [value, name === 'new' ? 'New' : 'Returning']}
+        <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [value, name === 'new' ? 'New' : 'Returning']} />
+        <Legend {...LEGEND_PROPS} formatter={(v) => (v === 'new' ? 'New' : 'Returning')} />
+        <Area
+          type="monotone" dataKey="new" stackId="p"
+          stroke={COLORS.primary} strokeWidth={2} fill="url(#areaPrimary)"
+          activeDot={{ r: 4, strokeWidth: 0 }}
         />
-        <Legend iconType="circle" wrapperStyle={{ fontSize: 11, fontWeight: 600, paddingTop: 8 }} formatter={(v) => (v === 'new' ? 'New' : 'Returning')} />
-        <Bar dataKey="new" stackId="p" fill="url(#newGradient)" radius={[0, 0, 0, 0]} barSize={30} />
-        <Bar dataKey="returning" stackId="p" fill="#9B8CFF" radius={[5, 5, 0, 0]} barSize={30} />
-      </BarChart>
+        <Area
+          type="monotone" dataKey="returning" stackId="p"
+          stroke={COLORS.primarySoft} strokeWidth={2} fill="url(#areaSoft)"
+          activeDot={{ r: 4, strokeWidth: 0 }}
+        />
+      </AreaChart>
     </ResponsiveContainer>
   </ChartCard>
 );

@@ -3,6 +3,8 @@ import {
   ArrowRight,
   Clock3,
   ExternalLink,
+  LifeBuoy,
+  Lightbulb,
   Mail,
   MessageCircle,
   PlayCircle,
@@ -11,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { api } from '../utils/api';
+import FeatureRequestsBoard from '../components/support/FeatureRequestsBoard';
 
 const STATUS_COLORS = {
   open: 'bg-amber-100 text-amber-700 border border-amber-200',
@@ -34,55 +37,48 @@ const WHATSAPP_TEXT = encodeURIComponent(
 );
 
 const heroVideo = {
-  title: 'Welcome to MolarPlus Learning',
+  title: 'MolarPlus Demo — Modern Dental Clinic Management Software',
   description:
-    'Start here for a quick walkthrough of the platform, daily workflows, and where to find key features.',
-  youtubeId: '',
-  duration: '3-5 min',
+    'Start here for a full walkthrough of MolarPlus — daily workflows and where to find key features.',
+  youtubeId: 'geAX_4K-O9c',
+  duration: '',
 };
 
 const videoSections = [
   {
-    title: 'Getting Started',
-    description: 'Clinic setup, onboarding, and first-day essentials for your team.',
-    youtubeId: '',
-    duration: '4 min',
+    title: 'Download & Install MolarPlus',
+    description: 'Get the MolarPlus dental clinic management software set up on your computer.',
+    youtubeId: 't1AWTbaKJ_E',
+    duration: '',
     tag: 'Setup',
   },
   {
-    title: 'Appointments & Calendar',
-    description: 'Learn how to book, manage, and track appointments smoothly.',
-    youtubeId: '',
-    duration: '5 min',
-    tag: 'Workflow',
+    title: 'Clinic Setup Guide — First Steps After Signup',
+    description: 'Configure your clinic in the MolarPlus admin panel right after signing up.',
+    youtubeId: 'dRchVyjrVGQ',
+    duration: '',
+    tag: 'Getting Started',
   },
   {
-    title: 'Patients & Clinical Records',
-    description: 'Organize patient profiles, treatment notes, and files with confidence.',
-    youtubeId: '',
-    duration: '6 min',
-    tag: 'Patients',
+    title: 'Book Patient Appointments',
+    description: 'Learn how to book and manage patient appointments in MolarPlus.',
+    youtubeId: '-pW5txU376A',
+    duration: '',
+    tag: 'Appointments',
   },
   {
-    title: 'Billing & Payments',
-    description: 'Handle invoices, transactions, and payment tracking in one place.',
-    youtubeId: '',
-    duration: '4 min',
-    tag: 'Finance',
+    title: 'Create Patient Invoices',
+    description: 'Generate and manage patient invoices and billing in MolarPlus.',
+    youtubeId: 'mnXGbX9B7ME',
+    duration: '',
+    tag: 'Billing',
   },
   {
-    title: 'Reports & Insights',
-    description: 'Use reports to stay on top of practice performance and decisions.',
-    youtubeId: '',
-    duration: '5 min',
-    tag: 'Analytics',
-  },
-  {
-    title: 'Admin & Team Settings',
-    description: 'Manage users, permissions, templates, and practice-level configuration.',
-    youtubeId: '',
-    duration: '4 min',
-    tag: 'Admin',
+    title: 'Manage Lab Orders',
+    description: 'Create and track dental lab orders end-to-end in MolarPlus.',
+    youtubeId: 'RoU7z34DxPk',
+    duration: '',
+    tag: 'Lab',
   },
 ];
 
@@ -196,7 +192,6 @@ const VideoTableRow = ({ section, index }) => {
           {section.tag}
         </span>
       </td>
-      <td className="px-4 py-4 text-sm text-gray-500">{section.duration}</td>
       <td className="px-4 py-4 text-right">
         {hasVideo ? (
           <a
@@ -219,6 +214,7 @@ const VideoTableRow = ({ section, index }) => {
 };
 
 export default function SupportTickets() {
+  const [activeTab, setActiveTab] = useState('support');
   const [tickets, setTickets] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -297,6 +293,30 @@ export default function SupportTickets() {
   return (
     <div className="min-h-full bg-[#f7f8fc]">
       <div className="mx-auto max-w-7xl px-4 py-5 md:px-6 md:py-6">
+        {/* Tabs */}
+        <div className="mb-6 inline-flex rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
+          <button
+            onClick={() => setActiveTab('support')}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+              activeTab === 'support' ? 'bg-[#2a276e] text-white' : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            <LifeBuoy size={16} /> Support
+          </button>
+          <button
+            onClick={() => setActiveTab('features')}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+              activeTab === 'features' ? 'bg-[#2a276e] text-white' : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            <Lightbulb size={16} /> Feature Requests
+          </button>
+        </div>
+
+        {activeTab === 'features' && <FeatureRequestsBoard />}
+
+        {activeTab === 'support' && (
+        <>
         <section className="rounded-3xl border border-[#2a276e]/10 bg-white shadow-sm overflow-hidden">
           <div className="grid gap-0 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="p-5 md:p-6 lg:p-7">
@@ -387,9 +407,6 @@ export default function SupportTickets() {
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                         Section
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                        Duration
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                         Link
@@ -735,6 +752,8 @@ export default function SupportTickets() {
               </>
             )}
           </section>
+        )}
+        </>
         )}
       </div>
     </div>

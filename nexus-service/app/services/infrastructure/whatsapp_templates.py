@@ -373,3 +373,46 @@ def build_whatsapp(event_type: str, **kwargs) -> dict:
     if not fn:
         raise ValueError(f"No WhatsApp template for event_type: {event_type}")
     return fn(**kwargs)
+
+
+def build_whatsapp_text(event_type: str, **kw) -> str:
+    """Plain-text version of a patient message, for sending via WA Reach
+    (whatsapp-web.js sends free text, not Meta templates).
+
+    Additive and used only on the WA Reach path; the MSG91 template path above
+    is unchanged. Only patient-facing events route here (the platform→owner
+    `molarplus_*` messages never go through a clinic's own number).
+    """
+    cn = kw.get("clinic_name", "our clinic")
+    pn = kw.get("patient_name", "")
+    dn = kw.get("doctor_name", "")
+    date = kw.get("appointment_date", "")
+    time = kw.get("appointment_time", "")
+    phone = kw.get("clinic_phone", "")
+
+    def sign() -> str:
+        return f"\n\n— {cn}" + (f"\n{phone}" if phone else "")
+
+    if event_type == "appointment_booked":
+        body = f"Hi {pn}, your appointment at {cn} is booked for {date} at {time}. We look forward to seeing you!"
+    elif event_type == "appointment_confirmation":
+        body = f"Hi {pn}, your appointment at {cn} on {date} at {time} is confirmed. See you then!"
+    elif event_type == "checked_in":
+        body = f"Hi {pn}, you're checked in at {cn}" + (f" with {dn}" if dn else "") + ". We'll call you shortly."
+    elif event_type == "appointment_reminder":
+        body = f"Reminder: {pn}, you have an appointment at {cn} on {date} at {time}. Reply here if you need to reschedule."
+    elif event_type == "invoice_notification":
+        body = f"Hi {pn}, please find your invoice from {cn} attached. Thank you for visiting us."
+    elif event_type == "prescription_notification":
+        body = f"Hi {pn}, your prescription from {cn}" + (f" (Dr. {dn})" if dn else "") + " is attached. Get well soon!"
+    elif event_type == "consent_form":
+        link = kw.get("consent_link", "")
+        body = f"Hi {pn}, please review and sign your consent form for {cn}: {link}"
+    elif event_type == "google_review":
+        link = kw.get("review_link", "")
+        body = f"Hi {pn}, thank you for visiting {cn}! We'd love your feedback — please leave us a review: {link}"
+    else:
+        # Generic fallback — prefer an explicit message if the caller passed one.
+        body = kw.get("message") or kw.get("body") or f"Hi {pn}, you have an update from {cn}."
+
+    return body + sign()

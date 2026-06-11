@@ -3,12 +3,14 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { api, getPermissionAwareErrorMessage, getFriendlyErrorMessage } from "../utils/api";
 import { toast } from 'react-toastify';
 import { FaEye, FaEdit, FaTrash, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
-import { Search, Plus, User, Folder, X, Edit2, Trash2, UploadCloud, UserPlus } from "lucide-react";
+import { Search, Plus, User, Folder, X, Edit2, Trash2, UploadCloud, UserPlus, CheckCircle2 } from "lucide-react";
+import { isValidPhone } from "../utils/validators";
 import GearLoader from "../components/GearLoader";
 import { SkeletonTableRows } from "../components/Skeleton";
 import Pagination from "../components/Pagination";
 import FilterDropdown from "../components/FilterDropdown";
 import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
+import ImportPatientsModal from "../components/patient/ImportPatientsModal";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
 
@@ -55,8 +57,7 @@ const Patients = () => {
   const [editErrors, setEditErrors] = useState({}); // { fieldName: message } for inline validation
   const [casePaperPrompt, setCasePaperPrompt] = useState(null); // { id, name } of a just-created patient
   const [deleteLoading, setDeleteLoading] = useState(null);
-  const [importing, setImporting] = useState(false);
-  const fileInputRef = React.useRef(null);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // Parse URL params for tab state
   useEffect(() => {
@@ -266,33 +267,6 @@ const Patients = () => {
     }
   };
 
-  const handleImportCSV = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-      setImporting(true);
-      const res = await api.post("/patients/import", formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
-      toast.success(res.message || `Successfully imported ${res.imported_count} patients`);
-      if (res.errors && res.errors.length > 0) {
-        console.warn("Import errors:", res.errors);
-        toast.warning(`Imported with ${res.errors.length} errors. Check console.`);
-      }
-      fetchPatients();
-    } catch (err) {
-      console.error("Import error:", err);
-      toast.error(err.response?.data?.detail || "Import failed");
-    } finally {
-      setImporting(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
   const handleDeletePatient = async (patient) => {
     if (!window.confirm(`Are you sure you want to delete ${patient.name}?`)) return;
     setDeleteLoading(patient.id);
@@ -465,19 +439,11 @@ const Patients = () => {
         </div>
         
         <div className="flex items-center gap-3">
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleImportCSV} 
-            accept=".csv" 
-            className="hidden" 
-          />
           <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={importing}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-50 transition-all shadow-sm whitespace-nowrap disabled:opacity-50"
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-50 transition-all shadow-sm whitespace-nowrap"
           >
-            <UploadCloud size={18} className="text-blue-500" /> {importing ? "Importing..." : "Import Patient"}
+            <UploadCloud size={18} className="text-blue-500" /> Import Patients
           </button>
           <button
             onClick={handleCreatePatient}
@@ -732,12 +698,20 @@ const Patients = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone <span className="text-red-500">*</span></label>
-                  <input
-                    type="tel"
-                    value={editFormData.phone}
-                    onChange={(e) => setField("phone", e.target.value)}
-                    className={fieldClass("phone")}
-                  />
+                  <div className="relative">
+                    <input
+                      type="tel"
+                      value={editFormData.phone}
+                      onChange={(e) => setField("phone", e.target.value)}
+                      className={`${fieldClass("phone")} pr-11`}
+                    />
+                    {isValidPhone(editFormData.phone) && (
+                      <CheckCircle2
+                        size={20}
+                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-green-500 animate-in fade-in zoom-in duration-200"
+                      />
+                    )}
+                  </div>
                   <FieldError name="phone" />
                 </div>
                 <div>
@@ -873,6 +847,12 @@ const Patients = () => {
           </div>
         </div>
       )}
+
+      <ImportPatientsModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImported={fetchPatients}
+      />
     </div>
   );
 };

@@ -26,6 +26,8 @@ from domains.notification.services.platform_notification_service import Platform
 from models import Clinic, User, Subscription, user_clinics
 from sqlalchemy import or_
 from datetime import datetime as _dt
+from pydantic import BaseModel
+from domains.communication.services.email_service import EmailService
 
 router = APIRouter()
 
@@ -962,3 +964,75 @@ async def switch_clinic(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Clinic switch failed: {str(e)}"
         )
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/forgot-password", summary="Request a password reset link")
+def forgot_password(
+    payload: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+    auth_service=Depends(get_auth_service),
+):
+    """Email a time-limited reset link for email/password accounts.
+
+    Always returns a generic success message regardless of whether the email
+    exists or how the account signed up — this avoids leaking which emails are
+    registered (account enumeration)."""
+    generic = {"message": "If an account with that email exists, we've sent a password reset link."}
+
+    email = (payload.email or "").strip().lower()
+    if not email:
+        return generic
+
+    user = db.query(User).filter(User.email == email).first()
+
+    # Only email/password accounts can reset a password. Google-only accounts
+    # have no password_hash — silently skip (same generic response).
+    if user and user.password_hash:
+        try:
+            token = auth_service.create_password_reset_token(user)
+            frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+            reset_url = f"{frontend_url}/reset-password?token={token}"
+            EmailService().send_password_reset_email(
+                to_email=user.email,
+                reset_url=reset_url,
+                user_name=user.name,
+            )
+        except Exception as e:
+            # Never surface internal failures to the caller; just log.
+            print(f"[forgot-password] failed to send reset email to {email}: {e}")
+
+    return generic
+
+
+@router.post("/reset-password", summary="Set a new password using a reset token")
+def reset_password(
+    payload: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+    auth_service=Depends(get_auth_service),
+):
+    """Validate the reset token and set the new password."""
+    if not payload.new_password or len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
+
+    user_id = auth_service.verify_password_reset_token(payload.token)
+    if not user_id:
+        raise HTTPException(status_code=400, detail="This reset link is invalid or has expired. Please request a new one.")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="This reset link is invalid or has expired. Please request a new one.")
+
+    user.password_hash = auth_service.hash_password(payload.new_password)
+    user.updated_at = _dt.utcnow()
+    db.commit()
+
+    return {"message": "Your password has been reset. You can now sign in with your new password."}

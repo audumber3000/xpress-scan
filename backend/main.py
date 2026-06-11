@@ -50,8 +50,10 @@ from domains.consent.routes import consents, consents_internal
 from domains.document.routes import documents
 from domains.clinical.routes import settings_router, case_papers_router, prescriptions_router, lab_orders_router
 from domains.notification.routes import notification_admin, push_notifications
+from domains.notification.routes import wareach as wareach_routes
 from domains.activity.routes import activity_log
 from domains.support.routes import support_tickets
+from domains.support.routes import feature_requests
 
 # Get the base path for PyInstaller bundled app
 def get_base_path():
@@ -132,6 +134,24 @@ async def lifespan(app: FastAPI):
                     cost FLOAT DEFAULT 0.0,
                     error_message TEXT,
                     created_at TIMESTAMP DEFAULT NOW()
+                )
+            """))
+            # WA Reach (own-number WhatsApp) — additive; tags which provider sent each message.
+            conn.execute(text(
+                "ALTER TABLE notification_logs ADD COLUMN IF NOT EXISTS provider VARCHAR DEFAULT 'msg91'"
+            ))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS whatsapp_integrations (
+                    id SERIAL PRIMARY KEY,
+                    clinic_id INTEGER NOT NULL UNIQUE REFERENCES clinics(id),
+                    provider VARCHAR DEFAULT 'wareach',
+                    session_id VARCHAR,
+                    api_key_enc TEXT,
+                    phone_number VARCHAR,
+                    status VARCHAR DEFAULT 'disconnected',
+                    last_status_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
                 )
             """))
             conn.execute(text("""
@@ -241,6 +261,27 @@ async def lifespan(app: FastAPI):
                     body TEXT NOT NULL,
                     is_staff BOOLEAN DEFAULT FALSE,
                     created_at TIMESTAMP DEFAULT NOW()
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS feature_requests (
+                    id SERIAL PRIMARY KEY,
+                    created_by INTEGER REFERENCES users(id),
+                    clinic_id INTEGER REFERENCES clinics(id),
+                    title VARCHAR NOT NULL,
+                    description TEXT,
+                    status VARCHAR DEFAULT 'open',
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS feature_request_votes (
+                    id SERIAL PRIMARY KEY,
+                    feature_request_id INTEGER NOT NULL REFERENCES feature_requests(id) ON DELETE CASCADE,
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    CONSTRAINT uq_feature_vote UNIQUE (feature_request_id, user_id)
                 )
             """))
             conn.commit()
@@ -387,6 +428,7 @@ app.include_router(documents.router, prefix="/api/v1/documents", tags=["document
 
 # Notification Admin Domain
 app.include_router(notification_admin.router, prefix="/api/v1/notification-admin", tags=["notification-admin"])
+app.include_router(wareach_routes.router, prefix="/api/v1/integrations/wareach", tags=["wareach"])
 app.include_router(push_notifications.router, prefix="/api/v1/push", tags=["push-notifications"])
 
 # Activity Log Domain
@@ -394,6 +436,7 @@ app.include_router(activity_log.router, prefix="/api/v1/activity-log", tags=["ac
 
 # Support Domain (clinic-side ticket endpoints)
 app.include_router(support_tickets.router, prefix="/api/v1/support-tickets", tags=["support-tickets"])
+app.include_router(feature_requests.router, prefix="/api/v1/feature-requests", tags=["feature-requests"])
 
 # Clinical Domain
 app.include_router(settings_router, prefix="/api/v1/clinical", tags=["clinical-settings"])

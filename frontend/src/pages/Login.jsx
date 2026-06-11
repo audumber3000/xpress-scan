@@ -10,6 +10,7 @@ import ValidatedInput from '../components/forms/ValidatedInput';
 import { isNonEmpty } from '../utils/validators';
 import loginImage from '../assets/login-page-left-side.png';
 import { completeGoogleRedirectAuth, markGoogleRedirectPending } from '../utils/googleRedirectAuth';
+import PublicSupportButton from '../components/PublicSupportButton';
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -282,6 +283,7 @@ const Login = () => {
 
   return (
     <div className="h-screen flex overflow-hidden">
+      <PublicSupportButton />
       {/* Left Side - Image */}
       <div className="hidden lg:flex lg:w-1/2 relative">
         <img 
@@ -402,8 +404,13 @@ const Login = () => {
               autoComplete="current-password"
               required
             />
+            <div className="flex justify-end -mt-1">
+              <Link to="/forgot-password" className="text-sm text-[#2a276e] hover:text-[#1a1548] font-semibold">
+                Forgot password?
+              </Link>
+            </div>
             <button
-              type="submit" 
+              type="submit"
               disabled={loading}
               className="w-full bg-[#2a276e] text-white py-3 px-4 rounded-lg hover:bg-[#1a1548] focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:ring-offset-2 disabled:opacity-50 font-medium transition-colors"
             >
@@ -431,7 +438,7 @@ const Login = () => {
                 aria-label="Download on the App Store"
                 className="hover:opacity-80 transition-opacity"
               >
-                <img src="/badges/app-store.svg" alt="Download on the App Store" className="h-10 w-auto" />
+                <img src="/badges/app-store.svg" alt="Download on the App Store" className="h-12 w-auto" />
               </a>
               <a
                 href="https://play.google.com/store/apps/details?id=com.molarplus.app&pcampaignid=web_share"
@@ -440,7 +447,7 @@ const Login = () => {
                 aria-label="Get it on Google Play"
                 className="hover:opacity-80 transition-opacity"
               >
-                <img src="/badges/google-play.svg" alt="Get it on Google Play" className="h-[3.4rem] w-auto" />
+                <img src="/badges/google-play.svg" alt="Get it on Google Play" className="h-12 w-auto" />
               </a>
             </div>
           </div>
