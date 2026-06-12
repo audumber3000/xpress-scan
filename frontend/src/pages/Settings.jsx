@@ -4,7 +4,7 @@ import GearLoader from "../components/GearLoader";
 import { api } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
-import posthog from "posthog-js";
+import { track, EVENTS } from "../analytics/track";
 import StaffTable from "../components/settings/StaffTable";
 import StaffTableHeader from "../components/settings/StaffTableHeader";
 import UserDetailsPanel from "../components/settings/UserDetailsPanel";
@@ -342,7 +342,7 @@ const Settings = () => {
 
       console.log('✅ Clinic data saved successfully!');
       toast.success('Clinic information updated successfully!');
-      posthog.capture('Settings Updated', { type: 'clinic_profile' });
+      track(EVENTS.SETTINGS_UPDATED, { type: 'clinic_profile' });
 
       // Wait a moment then refresh clinic data
       console.log('🔄 Refreshing clinic data...');

@@ -7,6 +7,7 @@ import { detectCountry, detectCountryAsync, flagEmoji } from '../utils/detectCou
 import ValidatedInput from '../components/forms/ValidatedInput';
 import { isNonEmpty, isValidPhone } from '../utils/validators';
 import { getSubscriptionPricing } from '../utils/pricing';
+import { track, EVENTS } from '../analytics/track';
 import {
   Building2,
   MapPin,
@@ -166,6 +167,7 @@ const ClinicOnboarding = () => {
       try {
         localStorage.setItem('mp_device_upsell_v1', JSON.stringify({ dismissedAt: Date.now() }));
       } catch (_) { /* ignore */ }
+      track(EVENTS.ONBOARDING_COMPLETED, { clinic_id: result.user?.clinic_id });
       navigate("/dashboard");
     } catch (error) {
       toast.error(error.response?.data?.detail || error.message || "Onboarding failed.");

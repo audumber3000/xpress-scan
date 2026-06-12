@@ -10,14 +10,6 @@ load_dotenv(os.path.join(BASE_DIR, ".env"))
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-import sentry_sdk
-
-sentry_sdk.init(
-    dsn="https://73dc9b005c9ed724147ad1f0e119ba48@o4511180469043200.ingest.de.sentry.io/4511180473630800",
-    # Add data like request headers and IP for users,
-    # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
-    send_default_pii=True,
-)
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 from contextlib import asynccontextmanager
@@ -373,6 +365,21 @@ class TrailingSlashMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(TrailingSlashMiddleware)
 
+
+# Report unhandled exceptions to PostHog error tracking (replaces Sentry).
+# Only genuine 500s reach here — FastAPI handles HTTPException/4xx inside the app.
+@app.middleware("http")
+async def posthog_error_capture(request: StarletteRequest, call_next):
+    try:
+        return await call_next(request)
+    except Exception as e:
+        try:
+            from core.posthog_client import capture_exception
+            capture_exception(e, properties={"path": request.url.path, "method": request.method})
+        except Exception:
+            pass
+        raise
+
 # Mount static files for template assets (handle PyInstaller bundling)
 templates_assets_path = os.path.join(BASE_PATH, "templates", "assets")
 if os.path.exists(templates_assets_path):
@@ -452,10 +459,6 @@ def root():
 def health_check():
     """Health check endpoint for desktop app server status"""
     return {"status": "healthy", "message": "Backend is running"}
-
-@app.get("/sentry-debug")
-async def trigger_error():
-    division_by_zero = 1 / 0
 
 @app.get("/api/v1/clinical-assets")
 def get_clinical_assets(category: str = "anatomy", db: Session = Depends(get_db)):

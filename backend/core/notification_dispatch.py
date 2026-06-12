@@ -14,6 +14,7 @@ from core.nexus_notify import notify
 from core.phone import normalize_phone
 from core import wallet_service
 from core.wallet_service import InsufficientWalletBalance  # re-export for callers
+from core.posthog_client import track_event, EVENTS
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +139,15 @@ def notify_event(
             log_entry.cost = cost
             log_entry.status = "sent"
             db.commit()
+
+            if channel == "whatsapp":
+                track_event(
+                    f"clinic_{clinic_id}",
+                    EVENTS.WHATSAPP_MESSAGE_SENT,
+                    {"provider": "wareach" if use_wareach else "msg91",
+                     "event_type": event_type, "paid": not use_wareach},
+                    clinic_id=clinic_id,
+                )
 
         except InsufficientWalletBalance:
             raise  # let the caller handle this

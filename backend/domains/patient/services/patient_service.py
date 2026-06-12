@@ -7,7 +7,7 @@ from core.interfaces import PatientServiceProtocol, PatientRepositoryProtocol, C
 from core.dtos import PatientCreateDTO, PatientUpdateDTO, PatientResponseDTO, PatientSummaryDTO
 from models import Patient, Clinic, TreatmentType, Invoice, InvoiceLineItem, Appointment
 from sqlalchemy import func, cast, Integer
-from core.posthog_client import track_event
+from core.posthog_client import track_event, EVENTS
 
 
 class PatientService(PatientServiceProtocol):
@@ -72,12 +72,10 @@ class PatientService(PatientServiceProtocol):
         created_patient = self.patient_repo.create(patient)
 
         track_event(
-            f"clinic_{clinic_id}", 
-            "Patient Created", 
-            {
-                "treatment_type": patient_dict.get('treatment_type'),
-                "$groups": {"clinic": clinic_id}
-            }
+            f"clinic_{clinic_id}",
+            EVENTS.PATIENT_CREATED,
+            {"treatment_type": patient_dict.get('treatment_type')},
+            clinic_id=clinic_id,
         )
 
         return created_patient

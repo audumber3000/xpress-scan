@@ -29,7 +29,6 @@ email-validator
 google-auth
 google-auth-oauthlib
 google-api-python-client
-sentry-sdk[fastapi]>=2.0.0
 jinja2
 APScheduler>=3.10.4,<4.0
-posthog>=3.5.0
+posthog>=3.7.0

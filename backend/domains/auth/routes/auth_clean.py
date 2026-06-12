@@ -28,6 +28,7 @@ from sqlalchemy import or_
 from datetime import datetime as _dt
 from pydantic import BaseModel
 from domains.communication.services.email_service import EmailService
+from core.posthog_client import track_event, group_identify, EVENTS
 
 router = APIRouter()
 
@@ -77,15 +78,32 @@ def _enrich_clinic_dto(db: Session, clinic: Clinic) -> ClinicResponseDTO:
 
     # Auto-downgrade: if expired, reflect 'free' so all clients see the right plan
     if is_expired and clinic.subscription_plan != 'free':
+        was_trial = bool(getattr(sub, "is_trial", False))
         clinic.subscription_plan = 'free'
         sub.status = 'expired'
         db.commit()
         dto.subscription_plan = 'free'
+        # Fire a survey-trigger event once, when the downgrade actually happens.
+        actor = str(owner.id) if owner else f"clinic_{clinic.id}"
+        track_event(
+            actor,
+            EVENTS.TRIAL_ENDED if was_trial else EVENTS.SUBSCRIPTION_DOWNGRADED,
+            {"from_trial": was_trial, "previous_plan": sub.plan_name},
+            clinic_id=clinic.id,
+        )
 
     dto.plan_name = sub.plan_name
     if sub.current_end:
         dto.plan_ends_at = sub.current_end.isoformat()
         dto.trial_days_remaining = max(0, (sub.current_end.date() - now.date()).days)
+
+    # Keep the PostHog 'clinic' group properties fresh (B2B group analytics).
+    group_identify("clinic", str(clinic.id), {
+        "name": clinic.name,
+        "plan": clinic.subscription_plan,
+        "is_trial": bool(getattr(dto, "is_trial", False)),
+        "country": getattr(clinic, "country", None),
+    })
     return dto
 
 

@@ -149,8 +149,16 @@ export const AuthProvider = ({ children }) => {
         role: user.role
       });
       if (user.clinic_id) {
+        const c = user.clinic || {};
+        // Enrich the clinic group so every PostHog insight can be sliced by
+        // plan / trial / size (B2B group analytics).
         posthog.group('clinic', user.clinic_id, {
-          name: user.clinic?.name || `Clinic ${user.clinic_id}`
+          name: c.name || `Clinic ${user.clinic_id}`,
+          plan: c.subscription_plan || 'free',
+          is_trial: !!c.is_trial,
+          trial_days_remaining: c.trial_days_remaining ?? null,
+          country: c.country || null,
+          created_at: c.created_at || null,
         });
       }
     } else if (!loading) {

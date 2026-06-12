@@ -5,7 +5,7 @@ from models import Appointment, Patient, User, Clinic
 from sqlalchemy import and_, or_, cast, Date
 from datetime import datetime, timedelta
 from typing import List, Optional
-from core.posthog_client import track_event
+from core.posthog_client import track_event, EVENTS
 from core.auth_utils import get_current_user
 from core.notification_dispatch import notify_event, fmt_appt_time
 from pydantic import BaseModel
@@ -140,12 +140,9 @@ async def create_appointment(
 
         track_event(
             str(current_user.id),
-            "Appointment Scheduled",
-            {
-                "status": appointment.status,
-                "treatment": appointment.treatment,
-                "$groups": {"clinic": current_user.clinic_id}
-            }
+            EVENTS.APPOINTMENT_BOOKED,
+            {"status": appointment.status, "treatment": appointment.treatment},
+            clinic_id=current_user.clinic_id,
         )
         
         # Get doctor name if assigned

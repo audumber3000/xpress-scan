@@ -10,6 +10,7 @@ import re
 
 from database import SessionLocal
 from core.notification_dispatch import notify_event
+from core.posthog_client import track_event, EVENTS
 
 def get_db():
     db = SessionLocal()
@@ -490,6 +491,13 @@ async def finalize_invoice(
 
         db.commit()
         db.refresh(invoice)
+
+        track_event(
+            str(current_user.id),
+            EVENTS.INVOICE_FINALIZED,
+            {"amount": float(invoice.total or 0)},
+            clinic_id=current_user.clinic_id,
+        )
 
         # ── Push notification to clinic — payment due ──────────────────
         from core.push_notify import push_to_clinic

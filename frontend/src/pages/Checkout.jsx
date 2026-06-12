@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { api } from '../utils/api';
-import posthog from 'posthog-js';
+import { track, EVENTS } from '../analytics/track';
 import { 
   ChevronLeft, 
   CreditCard, 
@@ -59,8 +59,8 @@ const Checkout = () => {
 
   const handlePayNow = async () => {
     setLoading(true);
-    posthog.capture('Payment Button Clicked', { 
-        plan: checkoutPlanName, 
+    track(EVENTS.PAYMENT_BUTTON_CLICKED, {
+        plan: checkoutPlanName,
         amount: discountInfo ? discountInfo.final_amount : basePrice,
         has_discount: !!discountInfo
     });

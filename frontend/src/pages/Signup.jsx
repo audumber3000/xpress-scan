@@ -11,6 +11,7 @@ import { isValidEmail, isValidPassword, isNonEmpty } from '../utils/validators';
 import loginImage from '../assets/login-page-left-side.png';
 import { completeGoogleRedirectAuth, markGoogleRedirectPending } from '../utils/googleRedirectAuth';
 import PublicSupportButton from '../components/PublicSupportButton';
+import { track, EVENTS } from '../analytics/track';
 
 const Signup = () => {
   const [email, setEmail] = useState("");
@@ -65,6 +66,7 @@ const Signup = () => {
       setUser(data.user);
       sessionStorage.removeItem('referred_by_code');
       saveLastLogin({ provider: 'email', email, name: `${firstName} ${lastName}`.trim() });
+      track(EVENTS.SIGNUP_COMPLETED, { method: 'email', referred: !!referredBy });
 
       if (!data.user.clinic_id) {
         navigate("/onboarding");

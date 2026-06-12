@@ -4,7 +4,7 @@ import { toast } from 'react-toastify';
 import { api } from '../utils/api';
 import { useHeader } from '../contexts/HeaderContext';
 import { useAuth } from '../contexts/AuthContext';
-import posthog from 'posthog-js';
+import { track, EVENTS } from '../analytics/track';
 import {
   CheckCircle2,
   XCircle,
@@ -142,13 +142,13 @@ const Subscription = () => {
   };
 
   const handleUpgrade = (billing = 'monthly') => {
-    posthog.capture('Subscription Button Clicked', { billing_cycle: billing, plan: 'professional' });
+    track(EVENTS.SUBSCRIPTION_CTA_CLICKED, { billing_cycle: billing, plan: 'professional' });
     navigate(`/checkout?plan=professional&billing=${billing}`);
   };
 
   const handleStartTrial = async () => {
     if (startingTrial) return;
-    posthog.capture('Free Trial Started', { plan: 'professional', source: 'subscription_page' });
+    track(EVENTS.FREE_TRIAL_STARTED, { plan: 'professional', source: 'subscription_page' });
     try {
       setStartingTrial(true);
       const res = await api.post('/subscriptions/start-trial');

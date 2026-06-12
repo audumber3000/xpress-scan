@@ -12,7 +12,6 @@
   "dependencies": {
     "@cashfreepayments/cashfree-js": "^1.0.6",
     "@posthog/react": "^1.9.0",
-    "@sentry/react": "^10.47.0",
     "@tailwindcss/vite": "^4.1.11",
     "@tiptap/extension-bullet-list": "^3.0.7",
     "@tiptap/extension-font-family": "^3.0.7",
