@@ -115,9 +115,9 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   rightContainer: {
-    width: 40,
+    minWidth: 40,
     height: 40,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'flex-end',
   },
 });

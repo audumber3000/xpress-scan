@@ -117,9 +117,21 @@ export const TreatmentsPricingScreen: React.FC<{ navigation: any }> = ({ navigat
           <ChevronLeft size={24} color={adminColors.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Price Catalog</Text>
-        <TouchableOpacity style={styles.menuBtn} onPress={loadData}>
-          <MoreVertical size={20} color={adminColors.primary} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.menuBtn}
+            onPress={() => {
+              setEditingTreatment(null);
+              setFormData({ name: '', price: '', category: 'General' });
+              setIsModalVisible(true);
+            }}
+          >
+            <Plus size={22} color={adminColors.primary} strokeWidth={2.5} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.menuBtn} onPress={loadData}>
+            <MoreVertical size={20} color={adminColors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -191,18 +203,6 @@ export const TreatmentsPricingScreen: React.FC<{ navigation: any }> = ({ navigat
         )}
         <View style={{ height: 100 }} />
       </ScrollView>
-
-      {/* FAB */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => {
-          setEditingTreatment(null);
-          setFormData({ name: '', price: '', category: 'General' });
-          setIsModalVisible(true);
-        }}
-      >
-        <Plus size={28} color="#FFFFFF" strokeWidth={3} />
-      </TouchableOpacity>
 
       {/* Bottom Tray Modal */}
       <Modal
@@ -287,7 +287,8 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', padding: 20, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
   headerTitle: { flex: 1, fontSize: 18, fontWeight: 'bold', color: '#111827', textAlign: 'center' },
-  menuBtn: { width: 40, height: 40, alignItems: 'flex-end', justifyContent: 'center' },
+  menuBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerActions: { flexDirection: 'row', alignItems: 'center' },
   content: { flex: 1 },
   searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', margin: 20, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16, borderWidth: 1, borderColor: '#F3F4F6' },
   searchInput: { flex: 1, marginLeft: 12, fontSize: 15, color: '#111827' },

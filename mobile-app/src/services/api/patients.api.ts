@@ -209,6 +209,40 @@ export class PatientsApiService extends BaseApiService {
     }
   }
 
+  /** Patients with a birthday in the next `days` days (requires date_of_birth). */
+  async getUpcomingBirthdays(days = 30): Promise<Array<{
+    id: number; display_id?: string; name: string; phone?: string; gender?: string;
+    village?: string; date_of_birth: string; next_birthday: string; days_until: number; turning_age: number;
+  }>> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await this.fetchWithTimeout(`${this.baseURL}/patients/birthdays/upcoming?days=${days}`, {
+        method: 'GET',
+        headers,
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Error getting upcoming birthdays:', error);
+      return [];
+    }
+  }
+
+  /** Bulk-import patients from already-parsed CSV rows (mirrors the web importer). */
+  async importPatients(patients: Record<string, any>[]): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/patients/import`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patients }),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
+    }
+    return await response.json();
+  }
+
   async updatePatient(patientId: string, updateData: Partial<any>): Promise<any> {
     try {
       console.log('👥 [API] Updating patient:', patientId);

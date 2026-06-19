@@ -11,6 +11,7 @@ import Pagination from "../components/Pagination";
 import FilterDropdown from "../components/FilterDropdown";
 import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
 import ImportPatientsModal from "../components/patient/ImportPatientsModal";
+import AgeOrDobField, { computeAgeFromDob } from "../components/patient/AgeOrDobField";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
 
@@ -43,6 +44,7 @@ const Patients = () => {
   const [editFormData, setEditFormData] = useState({
     name: "",
     age: "",
+    date_of_birth: "",
     gender: "Male",
     phone: "",
     village: "",
@@ -53,19 +55,43 @@ const Patients = () => {
     display_id: "",
     notes: ""
   });
+  // Whether the Age/DOB field is collecting an age or a date of birth.
+  const [ageMode, setAgeMode] = useState("age");
   const [editLoading, setEditLoading] = useState(false);
   const [editErrors, setEditErrors] = useState({}); // { fieldName: message } for inline validation
   const [casePaperPrompt, setCasePaperPrompt] = useState(null); // { id, name } of a just-created patient
   const [deleteLoading, setDeleteLoading] = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
 
+  // Upcoming birthdays tab
+  const [birthdays, setBirthdays] = useState([]);
+  const [birthdaysLoading, setBirthdaysLoading] = useState(false);
+
   // Parse URL params for tab state
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tab = params.get('tab');
     if (tab === 'files') setActiveTab('files');
+    else if (tab === 'birthdays') setActiveTab('birthdays');
     else setActiveTab('list');
   }, [location.search]);
+
+  const fetchBirthdays = async () => {
+    try {
+      setBirthdaysLoading(true);
+      const data = await api.get("/patients/birthdays/upcoming?days=30");
+      setBirthdays(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error("Error fetching birthdays:", e);
+      setBirthdays([]);
+    } finally {
+      setBirthdaysLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'birthdays') fetchBirthdays();
+  }, [activeTab]);
 
   // Handle tab change with URL sync
   const handleTabChange = (tab) => {
@@ -113,7 +139,7 @@ const Patients = () => {
   };
 
   useEffect(() => {
-    setTitle(activeTab === 'list' ? 'Patients' : 'Patient Files');
+    setTitle(activeTab === 'list' ? 'Patients' : activeTab === 'birthdays' ? 'Upcoming Birthdays' : 'Patient Files');
     setRefreshFunction(() => fetchPatients);
   }, [setTitle, setRefreshFunction, activeTab]);
 
@@ -164,6 +190,7 @@ const Patients = () => {
     setEditFormData({
       name: patient.name || "",
       age: patient.age || "",
+      date_of_birth: patient.date_of_birth || "",
       gender: patient.gender || "Male",
       phone: patient.phone || "",
       village: patient.village || "",
@@ -174,7 +201,9 @@ const Patients = () => {
       display_id: patient.display_id || "",
       notes: patient.notes || ""
     });
+    setAgeMode(patient.date_of_birth ? "dob" : "age");
     setEditErrors({});
+    setDrawerMode('edit');
     setEditDrawerOpen(true);
   };
 
@@ -184,6 +213,7 @@ const Patients = () => {
     setEditFormData({
       name: "",
       age: "",
+      date_of_birth: "",
       gender: "Male",
       phone: "",
       village: "",
@@ -194,6 +224,7 @@ const Patients = () => {
       display_id: "",
       notes: ""
     });
+    setAgeMode("age");
     setEditErrors({});
     setEditDrawerOpen(true);
   };
@@ -204,13 +235,21 @@ const Patients = () => {
     const errors = {};
     if (!editFormData.name?.trim()) errors.name = "Name is required.";
 
-    const age = String(editFormData.age ?? "").trim();
-    if (!age) {
-      errors.age = "Age is required.";
+    if (ageMode === "dob") {
+      if (!editFormData.date_of_birth) {
+        errors.age = "Date of birth is required.";
+      } else if (new Date(editFormData.date_of_birth) > new Date()) {
+        errors.age = "Date of birth can't be in the future.";
+      }
     } else {
-      const ageNum = Number(age);
-      if (!Number.isFinite(ageNum) || ageNum < 0 || ageNum > 150) {
-        errors.age = "Enter a valid age between 0 and 150.";
+      const age = String(editFormData.age ?? "").trim();
+      if (!age) {
+        errors.age = "Age is required.";
+      } else {
+        const ageNum = Number(age);
+        if (!Number.isFinite(ageNum) || ageNum < 0 || ageNum > 150) {
+          errors.age = "Enter a valid age between 0 and 150.";
+        }
       }
     }
 
@@ -243,14 +282,28 @@ const Patients = () => {
     }
     setEditErrors({});
 
+    // Build the payload, sending either age or date_of_birth based on the toggle.
+    const buildPayload = () => {
+      const payload = { ...editFormData };
+      if (ageMode === "dob") {
+        payload.date_of_birth = editFormData.date_of_birth || null;
+        payload.age = computeAgeFromDob(editFormData.date_of_birth) || null;
+      } else {
+        payload.age = editFormData.age === "" ? null : Number(editFormData.age);
+        payload.date_of_birth = null;
+      }
+      return payload;
+    };
+
     try {
       setEditLoading(true);
       if (drawerMode === 'edit') {
-        await api.put(`/patients/${editingPatient.id}`, editFormData);
+        await api.put(`/patients/${editingPatient.id}`, buildPayload());
         toast.success("Patient updated successfully");
         setEditDrawerOpen(false);
       } else {
-        const created = await api.post(`/patients/`, editFormData);
+        const payload = buildPayload();
+        const created = await api.post(`/patients/`, payload);
         toast.success("Patient created successfully");
         setEditDrawerOpen(false);
         // Nudge the user to start the patient's case paper — turns creation
@@ -401,6 +454,16 @@ const Patients = () => {
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
           >
             Patient Files
+          </button>
+          <button
+            onClick={() => handleTabChange('birthdays')}
+            className={`${
+              activeTab === 'birthdays'
+                ? 'border-[#2a276e] text-[#2a276e]'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+          >
+            Birthdays
           </button>
         </nav>
       </div>
@@ -586,6 +649,56 @@ const Patients = () => {
                 </tbody>
               </table>
             </div>
+          ) : activeTab === 'birthdays' ? (
+            <div className="flex-1 overflow-auto p-6">
+              {birthdaysLoading ? (
+                <div className="flex items-center justify-center py-16"><GearLoader /></div>
+              ) : birthdays.length === 0 ? (
+                <div className="py-16 text-center text-gray-500">
+                  <p className="text-sm font-medium text-gray-900">No upcoming birthdays</p>
+                  <p className="text-xs text-gray-400 mt-1">Birthdays appear here once patients have a date of birth on file.</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-w-3xl mx-auto">
+                  {birthdays.map((b) => {
+                    const label = b.days_until === 0 ? "Today 🎂" : b.days_until === 1 ? "Tomorrow" : `in ${b.days_until} days`;
+                    const phoneDigits = (b.phone || "").replace(/\D/g, "");
+                    return (
+                      <div key={b.id} className="flex items-center justify-between gap-3 p-3 bg-white border border-gray-100 rounded-xl hover:bg-indigo-50/30 transition-colors">
+                        <div
+                          className="flex items-center gap-3 cursor-pointer flex-1 min-w-0"
+                          onClick={() => navigate(`/patient-profile/${b.id}`)}
+                        >
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${b.days_until === 0 ? 'bg-pink-100 text-pink-600' : 'bg-indigo-50 text-[#2a276e]'}`}>
+                            <span className="text-lg">🎂</span>
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold text-gray-900 truncate">{b.name} <span className="text-xs font-normal text-gray-400">#{b.display_id || '—'}</span></div>
+                            <div className="text-xs text-gray-500">
+                              {new Date(b.next_birthday).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} • turning {b.turning_age}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${b.days_until === 0 ? 'bg-pink-100 text-pink-700' : 'bg-gray-100 text-gray-600'}`}>{label}</span>
+                          {phoneDigits && (
+                            <a
+                              href={`https://wa.me/${phoneDigits}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
+                            >
+                              Wish
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           ) : (
             <div className="flex-1 overflow-auto p-8">
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-10">
@@ -616,12 +729,14 @@ const Patients = () => {
             </div>
           )}
 
-          <Pagination
-            page={page}
-            pageSize={PATIENTS_PER_PAGE}
-            totalItems={fullyFilteredData.length}
-            onPageChange={setPage}
-          />
+          {activeTab !== 'birthdays' && (
+            <Pagination
+              page={page}
+              pageSize={PATIENTS_PER_PAGE}
+              totalItems={fullyFilteredData.length}
+              onPageChange={setPage}
+            />
+          )}
         </div>
       </div>
 
@@ -671,16 +786,16 @@ const Patients = () => {
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Age <span className="text-red-500">*</span></label>
-                    <input
-                      type="number"
-                      value={editFormData.age}
-                      onChange={(e) => setField("age", e.target.value)}
-                      className={fieldClass("age")}
-                    />
-                    <FieldError name="age" />
-                  </div>
+                  <AgeOrDobField
+                    mode={ageMode}
+                    onModeChange={setAgeMode}
+                    age={editFormData.age}
+                    onAgeChange={(v) => setField("age", v)}
+                    dob={editFormData.date_of_birth}
+                    onDobChange={(v) => setField("date_of_birth", v)}
+                    error={editErrors.age}
+                    inputClass={fieldClass("age")}
+                  />
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Gender <span className="text-red-500">*</span></label>
                     <select
@@ -776,7 +891,7 @@ const Patients = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                  <textarea 
+                  <textarea
                     rows="3"
                     value={editFormData.notes}
                     onChange={(e) => setEditFormData({...editFormData, notes: e.target.value})}

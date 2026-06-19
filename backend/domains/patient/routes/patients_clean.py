@@ -143,6 +143,19 @@ async def create_patient(
         )
 
 
+def _rollback_import_session(patient_service) -> None:
+    """Roll back the shared DB session after a failed import row.
+
+    create_patient commits per row; a failed commit (e.g. a NOT NULL violation)
+    leaves the session needing a rollback, otherwise every subsequent row in the
+    batch fails too. Best-effort — never raise from here.
+    """
+    try:
+        patient_service.patient_repo.db.rollback()
+    except Exception:
+        pass
+
+
 class BulkImportRequest(BaseModel):
     patients: List[dict]
 
@@ -178,9 +191,30 @@ async def import_patients(
             age_raw = row.get("age")
             age = int(age_raw) if age_raw not in (None, "") and str(age_raw).strip().isdigit() else None
 
+            # Parse an optional date of birth and registration date.
+            # (accepts YYYY-MM-DD / DD-MM-YYYY / DD/MM/YYYY / MM/DD/YYYY)
+            from datetime import datetime as _dt
+
+            def _parse_date(raw):
+                raw = (raw or "").strip()
+                if not raw:
+                    return None
+                for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%m/%d/%Y"):
+                    try:
+                        return _dt.strptime(raw, fmt)
+                    except ValueError:
+                        continue
+                return None
+
+            dob_dt = _parse_date(row.get("date_of_birth"))
+            dob = dob_dt.date() if dob_dt else None
+            registered_at = _parse_date(row.get("registered_at"))
+
             clean = {
                 "name": name,
                 "age": age,
+                "date_of_birth": dob,
+                "registered_at": registered_at,
                 "gender": (row.get("gender") or "").strip() or None,
                 "phone": phone,
                 "village": (row.get("village") or "").strip() or None,
@@ -190,14 +224,20 @@ async def import_patients(
                 "patient_history": (row.get("patient_history") or "").strip() or None,
                 "notes": (row.get("notes") or "").strip() or None,
             }
-            # Drop empties so the model/DTO defaults (e.g. treatment_type) apply.
+            # Drop empties so model/service defaults apply.
             clean = {k: v for k, v in clean.items() if v is not None}
+            # treatment_type is NOT NULL on the model and has no default — mirror the
+            # single-add behaviour and fall back to a sensible default when omitted.
+            if not clean.get("treatment_type"):
+                clean["treatment_type"] = "General Consultation"
 
             patient_service.create_patient(clean, current_user.clinic_id)
             imported_count += 1
         except ValueError as e:
+            _rollback_import_session(patient_service)
             errors.append(f"Row {row_num}: {str(e)}")
         except Exception as e:
+            _rollback_import_session(patient_service)
             errors.append(f"Row {row_num}: {str(e)}")
 
     return {
@@ -206,6 +246,72 @@ async def import_patients(
         "imported_count": imported_count,
         "errors": errors,
     }
+
+
+@router.get(
+    "/birthdays/upcoming",
+    summary="Upcoming patient birthdays",
+    description="List patients whose birthday falls within the next N days (requires date_of_birth)."
+)
+async def get_upcoming_birthdays(
+    days: int = Query(30, ge=1, le=366, description="How many days ahead to look"),
+    current_user = Depends(require_patients_view),
+    db: Session = Depends(get_db)
+):
+    """Return patients with a birthday in the next `days` days, soonest first.
+
+    Computed in Python so it works the same on SQLite (local) and Postgres (prod).
+    Each entry includes `days_until` and `turning_age` for convenient display.
+    """
+    from datetime import date as _date
+    from models import Patient as _Patient
+
+    try:
+        patients = db.query(_Patient).filter(
+            _Patient.clinic_id == current_user.clinic_id,
+            _Patient.date_of_birth.isnot(None),
+        ).all()
+
+        today = _date.today()
+        results = []
+        for p in patients:
+            dob = p.date_of_birth
+            if not dob:
+                continue
+            # Next occurrence of this month/day (handle Feb 29 -> Feb 28 fallback).
+            try:
+                next_bday = dob.replace(year=today.year)
+            except ValueError:
+                next_bday = dob.replace(year=today.year, day=28)
+            if next_bday < today:
+                try:
+                    next_bday = dob.replace(year=today.year + 1)
+                except ValueError:
+                    next_bday = dob.replace(year=today.year + 1, day=28)
+
+            days_until = (next_bday - today).days
+            if days_until <= days:
+                results.append({
+                    "id": p.id,
+                    "display_id": p.display_id,
+                    "name": p.name,
+                    "phone": p.phone,
+                    "gender": p.gender,
+                    "village": p.village,
+                    "date_of_birth": dob.isoformat(),
+                    "next_birthday": next_bday.isoformat(),
+                    "days_until": days_until,
+                    "turning_age": next_bday.year - dob.year,
+                })
+
+        results.sort(key=lambda r: r["days_until"])
+        return results
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve upcoming birthdays: {str(e)}"
+        )
 
 
 @router.get(

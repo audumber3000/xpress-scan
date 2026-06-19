@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
+import type { UtilityTabHandle } from '../utilityTab';
 import {
   View, Text, ScrollView, TouchableOpacity, RefreshControl,
   ActivityIndicator, Modal, TextInput,
@@ -27,12 +28,13 @@ const EmptyState = () => (
   </View>
 );
 
-export const LabTab: React.FC = () => {
+export const LabTab = forwardRef<UtilityTabHandle>((_props, ref) => {
   const [orders, setOrders] = useState<LabOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  useImperativeHandle(ref, () => ({ openCreate: () => setShowCreate(true) }));
   const [actionOrder, setActionOrder] = useState<LabOrder | null>(null);
   const [editOrder, setEditOrder] = useState<LabOrder | null>(null);
   const [form, setForm] = useState<Partial<LabOrderCreate>>({ work_type: '', status: 'Draft', cost: 0, due_date: '' });
@@ -258,9 +260,6 @@ export const LabTab: React.FC = () => {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} onPress={() => setShowCreate(true)} activeOpacity={0.85}>
-        <Plus size={24} color="#FFFFFF" strokeWidth={2.5} />
-      </TouchableOpacity>
 
       {/* ── Action tray: status picker ── */}
       <Modal visible={!!actionOrder} animationType="slide" transparent onRequestClose={() => setActionOrder(null)}>
@@ -494,4 +493,5 @@ export const LabTab: React.FC = () => {
       </Modal>
     </>
   );
-};
+});
+LabTab.displayName = 'LabTab';

@@ -1,4 +1,5 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import type { UtilityTabHandle } from '../utilityTab';
 import {
   View, Text, ScrollView, TouchableOpacity, RefreshControl,
   ActivityIndicator, Modal, TextInput,
@@ -29,13 +30,14 @@ const EmptyState = () => (
   </View>
 );
 
-export const ConsentFormsTab: React.FC = () => {
+export const ConsentFormsTab = forwardRef<UtilityTabHandle>((_props, ref) => {
   const { backendUser } = useAuth();
   const [templates, setTemplates] = useState<ConsentTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  useImperativeHandle(ref, () => ({ openCreate: () => setShowCreate(true) }));
   const [actionTemplate, setActionTemplate] = useState<ConsentTemplate | null>(null);
   const [editTemplate, setEditTemplate] = useState<ConsentTemplate | null>(null);
   const [form, setForm] = useState<ConsentTemplateCreate>({ name: '', content: '' });
@@ -215,9 +217,6 @@ export const ConsentFormsTab: React.FC = () => {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} onPress={() => setShowCreate(true)} activeOpacity={0.85}>
-        <Plus size={24} color="#FFFFFF" strokeWidth={2.5} />
-      </TouchableOpacity>
 
       {/* ── Action tray: content viewer + toggle ── */}
       <Modal visible={!!actionTemplate} animationType="slide" transparent onRequestClose={() => setActionTemplate(null)}>
@@ -401,7 +400,8 @@ export const ConsentFormsTab: React.FC = () => {
       </Modal>
     </>
   );
-};
+});
+ConsentFormsTab.displayName = 'ConsentFormsTab';
 
 const localStyles = StyleSheet.create({
   sendModalSheet: {

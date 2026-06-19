@@ -1,4 +1,5 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import type { UtilityTabHandle } from '../utilityTab';
 import {
   View, Text, ScrollView, TouchableOpacity, RefreshControl,
   ActivityIndicator, Modal, TextInput,
@@ -25,12 +26,13 @@ const EmptyState = () => (
   </View>
 );
 
-export const InventoryTab: React.FC = () => {
+export const InventoryTab = forwardRef<UtilityTabHandle>((_props, ref) => {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  useImperativeHandle(ref, () => ({ openCreate: () => setShowCreate(true) }));
   const [actionItem, setActionItem] = useState<InventoryItem | null>(null);
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
   const [restockQty, setRestockQty] = useState('');
@@ -200,9 +202,6 @@ export const InventoryTab: React.FC = () => {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} onPress={() => setShowCreate(true)} activeOpacity={0.85}>
-        <Plus size={24} color="#FFFFFF" strokeWidth={2.5} />
-      </TouchableOpacity>
 
       {/* ── Action tray: stock details + restock ── */}
       <Modal visible={!!actionItem} animationType="slide" transparent onRequestClose={() => setActionItem(null)}>
@@ -331,4 +330,5 @@ export const InventoryTab: React.FC = () => {
       </Modal>
     </>
   );
-};
+});
+InventoryTab.displayName = 'InventoryTab';

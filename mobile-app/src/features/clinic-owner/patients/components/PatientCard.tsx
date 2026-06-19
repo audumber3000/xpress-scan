@@ -21,7 +21,6 @@ interface PatientCardProps {
 }
 
 export const PatientCard: React.FC<PatientCardProps> = ({ patient, onPress, onPhonePress, onDelete }) => {
-  const isActive = patient.status === 'Active';
   const translateX = useRef(new Animated.Value(0)).current;
   const lastOffset = useRef(0);
 
@@ -123,10 +122,9 @@ export const PatientCard: React.FC<PatientCardProps> = ({ patient, onPress, onPh
           <View style={styles.patientInfo}>
             <View style={styles.nameRow}>
               <Text style={styles.patientName}>{patient.name}</Text>
-              <View style={[styles.statusDot, { backgroundColor: isActive ? '#10B981' : '#9CA3AF' }]} />
             </View>
             <Text style={styles.statusText}>
-              {patient.status} • {patient.phone}
+              {patient.phone}
             </Text>
             <Text style={styles.lastVisit}>Last visit: {patient.lastVisit}</Text>
           </View>
@@ -207,11 +205,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#111827',
     marginRight: 8,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
   },
   statusText: {
     fontSize: 14,

@@ -51,6 +51,7 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
   const [formData, setFormData] = useState({
     name: '',
     age: '',
+    dateOfBirth: '',
     gender: '',
     village: '',
     phone: '',
@@ -60,6 +61,8 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
     paymentType: 'Cash',
   });
 
+  // Whether the Age/DOB field collects an age or a date of birth.
+  const [ageMode, setAgeMode] = useState<'age' | 'dob'>('age');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [treatmentTypes, setTreatmentTypes] = useState<Array<{ id: number; name: string; price: number }>>([]);
   const [referringDoctors, setReferringDoctors] = useState<Array<{ id: number; name: string }>>([]);
@@ -110,6 +113,30 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
     }
   };
 
+  // Masks free typing into a YYYY-MM-DD string as digits are entered.
+  const maskDate = (value: string) => {
+    const d = value.replace(/\D/g, '').slice(0, 8);
+    if (d.length <= 4) return d;
+    if (d.length <= 6) return `${d.slice(0, 4)}-${d.slice(4)}`;
+    return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`;
+  };
+
+  const isValidDate = (s: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+    const d = new Date(s);
+    return !isNaN(d.getTime()) && d <= new Date();
+  };
+
+  const computeAge = (dob: string) => {
+    if (!isValidDate(dob)) return null;
+    const d = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - d.getFullYear();
+    const m = today.getMonth() - d.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age--;
+    return age;
+  };
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
@@ -117,7 +144,11 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
       newErrors.name = 'Patient name is required';
     }
 
-    if (!formData.age.trim() || isNaN(Number(formData.age)) || Number(formData.age) < 0 || Number(formData.age) > 150) {
+    if (ageMode === 'dob') {
+      if (!isValidDate(formData.dateOfBirth)) {
+        newErrors.age = 'Enter a valid date of birth (YYYY-MM-DD)';
+      }
+    } else if (!formData.age.trim() || isNaN(Number(formData.age)) || Number(formData.age) < 0 || Number(formData.age) > 150) {
       newErrors.age = 'Valid age is required (0-150)';
     }
 
@@ -153,20 +184,26 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
     try {
       console.log('🔄 [PATIENT] Creating new patient...');
 
-      const ageNumber = Number(formData.age);
-      console.log('🔢 [PATIENT] Age conversion:', formData.age, '->', ageNumber, 'type:', typeof ageNumber);
-
-      const patientData = {
+      const patientData: any = {
         name: formData.name.trim(),
-        age: ageNumber,
         gender: formData.gender,
         village: formData.village.trim(),
         phone: formData.phone.trim(),
         referred_by: formData.referredBy.trim() || 'None',
         treatment_type: formData.treatmentType.trim() || 'General Consultation',
-        notes: formData.notes.trim() || null,
+        notes: formData.notes.trim() || undefined,
         payment_type: formData.paymentType,
       };
+
+      // Send either age or date of birth based on the toggle.
+      if (ageMode === 'dob') {
+        patientData.date_of_birth = formData.dateOfBirth;
+        const derived = computeAge(formData.dateOfBirth);
+        if (derived !== null) patientData.age = derived;
+      } else {
+        patientData.age = Number(formData.age);
+      }
+
 
       console.log('📋 [PATIENT] Patient data being sent:', JSON.stringify(patientData, null, 2));
       const data = await patientsApiService.createPatient(patientData);
@@ -213,6 +250,7 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
       setFormData({
         name: '',
         age: '',
+        dateOfBirth: '',
         gender: '',
         village: '',
         phone: '',
@@ -221,6 +259,7 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
         notes: '',
         paymentType: 'Cash',
       });
+      setAgeMode('age');
       setErrors({});
     });
   };
@@ -228,6 +267,8 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
   const updateFormData = (field: string, value: string) => {
     if (field === 'age') {
       value = value.replace(/[^0-9]/g, '');
+    } else if (field === 'dateOfBirth') {
+      value = maskDate(value);
     }
     setFormData(prev => ({ ...prev, [field]: value }));
     // Clear error when user starts typing
@@ -282,18 +323,51 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
                 {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
               </View>
 
-              {/* Age */}
+              {/* Age or Date of Birth */}
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Age *</Text>
-                <TextInput
-                  style={[styles.input, errors.age && styles.inputError]}
-                  value={formData.age}
-                  onChangeText={(value) => updateFormData('age', value)}
-                  placeholder="Enter age"
-                  placeholderTextColor={colors.gray400}
-                  keyboardType="numeric"
-                  maxLength={3}
-                />
+                <View style={styles.labelRow}>
+                  <Text style={styles.label}>{ageMode === 'dob' ? 'Date of Birth *' : 'Age *'}</Text>
+                  <View style={styles.segmented}>
+                    <TouchableOpacity
+                      style={[styles.segmentBtn, ageMode === 'age' && styles.segmentBtnActive]}
+                      onPress={() => setAgeMode('age')}
+                    >
+                      <Text style={[styles.segmentText, ageMode === 'age' && styles.segmentTextActive]}>Age</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.segmentBtn, ageMode === 'dob' && styles.segmentBtnActive]}
+                      onPress={() => setAgeMode('dob')}
+                    >
+                      <Text style={[styles.segmentText, ageMode === 'dob' && styles.segmentTextActive]}>DOB</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                {ageMode === 'dob' ? (
+                  <>
+                    <TextInput
+                      style={[styles.input, errors.age && styles.inputError]}
+                      value={formData.dateOfBirth}
+                      onChangeText={(value) => updateFormData('dateOfBirth', value)}
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor={colors.gray400}
+                      keyboardType="numeric"
+                      maxLength={10}
+                    />
+                    {computeAge(formData.dateOfBirth) !== null && (
+                      <Text style={styles.helperText}>Age: {computeAge(formData.dateOfBirth)} years</Text>
+                    )}
+                  </>
+                ) : (
+                  <TextInput
+                    style={[styles.input, errors.age && styles.inputError]}
+                    value={formData.age}
+                    onChangeText={(value) => updateFormData('age', value)}
+                    placeholder="Enter age"
+                    placeholderTextColor={colors.gray400}
+                    keyboardType="numeric"
+                    maxLength={3}
+                  />
+                )}
                 {errors.age && <Text style={styles.errorText}>{errors.age}</Text>}
               </View>
 
@@ -598,6 +672,40 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.gray900,
     marginBottom: 8,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  segmented: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  segmentBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    backgroundColor: colors.white,
+  },
+  segmentBtnActive: {
+    backgroundColor: colors.primary,
+  },
+  segmentText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.gray500,
+  },
+  segmentTextActive: {
+    color: colors.white,
+  },
+  helperText: {
+    fontSize: 12,
+    color: colors.gray400,
+    marginTop: 6,
   },
   input: {
     borderWidth: 1,

@@ -101,6 +101,7 @@ run_migration "feature_request_votes" "CREATE TABLE IF NOT EXISTS feature_reques
 
 # WA Reach — own-number WhatsApp (Pro). Additive; MSG91 path untouched.
 run_migration "notif_provider"   "ALTER TABLE notification_logs ADD COLUMN IF NOT EXISTS provider VARCHAR DEFAULT 'msg91'"
+run_migration "patient_dob"       "ALTER TABLE patients ADD COLUMN IF NOT EXISTS date_of_birth DATE"
 run_migration "whatsapp_integrations" "CREATE TABLE IF NOT EXISTS whatsapp_integrations (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL UNIQUE REFERENCES clinics(id), provider VARCHAR DEFAULT 'wareach', session_id VARCHAR, api_key_enc TEXT, phone_number VARCHAR, status VARCHAR DEFAULT 'disconnected', last_status_at TIMESTAMP, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())"
 
 # 6. Schema migration check — catch missing ALTER TABLE migrations before deploy
@@ -111,7 +112,7 @@ declare -A REQUIRED_COLS=(
   ["clinics"]="id clinic_code name address phone email gst_number specialization subscription_plan status razorpay_customer_id cashfree_customer_id logo_url invoice_template primary_color number_of_chairs timings created_at updated_at synced_at sync_status referred_by_code clinic_label parent_clinic_id country currency_code currency_symbol timezone tax_label tax_id"
   ["users"]="id email name first_name last_name role is_active permissions created_at updated_at email_report_unsubscribed"
   ["user_clinics"]="user_id clinic_id role is_active created_at"
-  ["patients"]="id clinic_id name phone created_at updated_at"
+  ["patients"]="id clinic_id name phone date_of_birth created_at updated_at"
   ["appointments"]="id clinic_id patient_name appointment_date start_time end_time status created_at updated_at"
   ["subscriptions"]="id plan_name status current_start current_end is_trial trial_ends_at"
 )

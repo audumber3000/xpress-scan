@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, JSON, Float, Table, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Date, ForeignKey, Text, JSON, Float, Table, UniqueConstraint
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 import uuid
@@ -125,6 +125,7 @@ class Patient(Base):
     clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
     name = Column(String, nullable=False)
     age = Column(Integer, nullable=True)
+    date_of_birth = Column(Date, nullable=True)  # Optional; age can be derived from this
     gender = Column(String, nullable=True)
     village = Column(String, nullable=True)
     phone = Column(String, nullable=False)

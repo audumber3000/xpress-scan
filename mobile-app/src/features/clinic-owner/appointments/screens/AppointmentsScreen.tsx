@@ -186,6 +186,12 @@ export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigati
             >
               <Search size={22} color={colors.white} />
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.iconButtonPrimary}
+              onPress={() => navigation.navigate('AddAppointment')}
+            >
+              <Plus size={22} color={colors.white} />
+            </TouchableOpacity>
           </View>
         }
       />
@@ -263,14 +269,6 @@ export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigati
         }
       />
       
-      {/* Floating Action Button */}
-      <TouchableOpacity
-        style={[styles.fab, { bottom: Math.max(insets.bottom + 20, 20) }]}
-        onPress={() => navigation.navigate('AddAppointment')}
-      >
-        <Plus color="#FFFFFF" size={24} />
-      </TouchableOpacity>
-
       <ClinicSwitcherSheet
         isVisible={showClinicSwitcher}
         onClose={() => setShowClinicSwitcher(false)}

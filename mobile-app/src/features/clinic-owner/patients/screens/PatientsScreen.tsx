@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, Linking, StatusBar } from 'react-native';
 import { showAlert } from '../../../../shared/components/alertService';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Plus, Users } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Plus, Users, UploadCloud, Gift } from 'lucide-react-native';
 import { patientsApiService, Patient } from '../../../../services/api/patients.api';
 import { useAuth } from '../../../../app/AuthContext';
 import { SearchBar } from '../components/SearchBar';
 import { FilterTabs } from '../components/FilterTabs';
 import { PatientsList } from '../components/PatientsList';
 import { AddPatientScreen } from './AddPatientScreen';
+import { ImportPatientsModal } from '../components/ImportPatientsModal';
+import { BirthdaysView } from '../components/BirthdaysView';
 import { colors } from '../../../../shared/constants/colors';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
 import { AppSkeleton } from '../../../../shared/components/Skeleton';
@@ -26,8 +28,8 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showAddPatient, setShowAddPatient] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [contactPatient, setContactPatient] = useState<Patient | null>(null);
-  const insets = useSafeAreaInsets();
 
   const { backendUser } = useAuth();
 
@@ -118,8 +120,12 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
   // Prepare tabs with counts
   const tabs = [
     { key: 'all', label: 'All Patients', value: 'all', count: patients.length },
-    { key: 'active', label: 'Active', value: 'active', count: patients.filter(p => p.status === 'Active').length },
-    { key: 'inactive', label: 'Inactive', value: 'inactive', count: patients.filter(p => p.status === 'Inactive').length },
+    {
+      key: 'birthdays',
+      label: 'Birthdays',
+      value: 'birthdays',
+      icon: <Gift size={15} color={selectedTab === 'birthdays' ? colors.primary : '#6B7280'} />,
+    },
   ];
 
   return (
@@ -130,6 +136,16 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
         title="Patients"
         titleIcon={<Users size={22} />}
         onBackPress={navigation.canGoBack() ? () => navigation.goBack() : undefined}
+        rightComponent={
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={() => setShowImport(true)} style={styles.headerAddBtn}>
+              <UploadCloud color={colors.white} size={20} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowAddPatient(true)} style={styles.headerAddBtn}>
+              <Plus color={colors.white} size={22} />
+            </TouchableOpacity>
+          </View>
+        }
       />
 
       <SearchBar
@@ -145,7 +161,9 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
         onTabChange={setSelectedTab}
       />
 
-      {loading && !refreshing ? (
+      {selectedTab === 'birthdays' ? (
+        <BirthdaysView onPatientPress={(id) => navigation.navigate('PatientDetails', { patientId: String(id) })} />
+      ) : loading && !refreshing ? (
         <View style={{ padding: 20 }}>
           <AppSkeleton show={true} width="100%" height={80} radius={12} />
           <View style={{ height: 12 }} />
@@ -164,13 +182,14 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
         />
       )}
 
-      {/* Floating Action Button */}
-      <TouchableOpacity
-        style={[styles.fab, { bottom: Math.max(insets.bottom + 20, 20) }]}
-        onPress={() => setShowAddPatient(true)}
-      >
-        <Plus color="#FFFFFF" size={24} />
-      </TouchableOpacity>
+      <ImportPatientsModal
+        visible={showImport}
+        onClose={() => setShowImport(false)}
+        onImported={() => {
+          setShowImport(false);
+          loadPatients();
+        }}
+      />
 
       <AddPatientScreen
         visible={showAddPatient}
@@ -198,20 +217,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
-    backgroundColor: colors.primary,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerAddBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.18)',
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
   },
 });

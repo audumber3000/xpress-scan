@@ -57,6 +57,21 @@ class PatientService(PatientServiceProtocol):
         patient_dict = patient_data.copy()
         patient_dict['clinic_id'] = clinic_id
 
+        # Back-date support: `registered_at` (if provided) sets the patient's
+        # created_at so historical patients keep their real registration date.
+        registered_at = patient_dict.pop('registered_at', None)
+        if registered_at:
+            patient_dict['created_at'] = registered_at
+
+        # Age / DOB are interchangeable on intake. If a date of birth was given
+        # but no age, derive the age from it so list/summary views stay populated.
+        dob = patient_dict.get('date_of_birth')
+        if dob and not patient_dict.get('age'):
+            today = datetime.utcnow().date()
+            patient_dict['age'] = today.year - dob.year - (
+                (today.month, today.day) < (dob.month, dob.day)
+            )
+
         # Generate a 6-digit display_id per clinic (MAX(numeric display_id) + 1, starting at 100001).
         # Using MAX rather than COUNT defends against collisions when patients are deleted.
         if not patient_dict.get('display_id'):
@@ -129,6 +144,14 @@ class PatientService(PatientServiceProtocol):
         existing_patient = self.get_patient(patient_id, clinic_id)
         if not existing_patient:
             return None
+
+        # Keep age in sync when a date of birth is set/changed without an explicit age.
+        dob = updates.get('date_of_birth')
+        if dob and not updates.get('age'):
+            today = datetime.utcnow().date()
+            updates['age'] = today.year - dob.year - (
+                (today.month, today.day) < (dob.month, dob.day)
+            )
 
         # Validate phone number uniqueness if being updated
         if 'phone' in updates and updates['phone'] != existing_patient.phone:

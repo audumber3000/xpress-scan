@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { api, getFriendlyErrorMessage } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
 import { getCurrencySymbol } from "../utils/currency";
+import AgeOrDobField, { computeAgeFromDob } from "../components/patient/AgeOrDobField";
 
 const PatientIntake = () => {
   const { user } = useAuth();
@@ -24,6 +25,7 @@ const PatientIntake = () => {
   const [formData, setFormData] = useState({
     name: "",
     age: "",
+    date_of_birth: "",
     gender: "",
     village: "",
     phone: "",
@@ -32,6 +34,8 @@ const PatientIntake = () => {
     notes: "",
     payment_type: "Cash"
   });
+  // Whether the Age/DOB field collects an age or a date of birth.
+  const [ageMode, setAgeMode] = useState("age");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
@@ -130,13 +134,21 @@ const PatientIntake = () => {
 
     if (!formData.name.trim()) errors.name = "Full name is required.";
 
-    const age = String(formData.age).trim();
-    if (!age) {
-      errors.age = "Age is required.";
+    if (ageMode === "dob") {
+      if (!formData.date_of_birth) {
+        errors.age = "Date of birth is required.";
+      } else if (new Date(formData.date_of_birth) > new Date()) {
+        errors.age = "Date of birth can't be in the future.";
+      }
     } else {
-      const ageNum = Number(age);
-      if (!Number.isFinite(ageNum) || ageNum < 0 || ageNum > 150) {
-        errors.age = "Please enter a valid age between 0 and 150.";
+      const age = String(formData.age).trim();
+      if (!age) {
+        errors.age = "Age is required.";
+      } else {
+        const ageNum = Number(age);
+        if (!Number.isFinite(ageNum) || ageNum < 0 || ageNum > 150) {
+          errors.age = "Please enter a valid age between 0 and 150.";
+        }
       }
     }
 
@@ -180,12 +192,18 @@ const PatientIntake = () => {
       const treatmentTypeObj = treatmentTypes.find(t => t.id.toString() === formData.treatment_type);
       const treatmentTypeName = treatmentTypeObj ? treatmentTypeObj.name : "";
       
-      // Convert age to integer and prepare payload
-      const patientPayload = { 
-        ...formData, 
+      // Prepare payload — send either age or date_of_birth based on the toggle.
+      const patientPayload = {
+        ...formData,
         scan_type: treatmentTypeName, // Backend still expects scan_type field
-        age: parseInt(formData.age, 10) // Convert age to integer
       };
+      if (ageMode === "dob") {
+        patientPayload.date_of_birth = formData.date_of_birth || null;
+        patientPayload.age = computeAgeFromDob(formData.date_of_birth) || null;
+      } else {
+        patientPayload.age = formData.age === "" ? null : parseInt(formData.age, 10);
+        patientPayload.date_of_birth = null;
+      }
       
       // 1. Save patient to database
       await api.post("/patients/", patientPayload);
@@ -259,23 +277,17 @@ const PatientIntake = () => {
                 <FieldError name="name" />
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Age *
-                </label>
-                <input
-                  type="number"
-                  name="age"
-                  value={formData.age}
-                  onChange={handleChange}
-                  required
-                  min="0"
-                  max="150"
-                  className={inputClass("age")}
-                />
-                <FieldError name="age" />
-              </div>
-              
+              <AgeOrDobField
+                mode={ageMode}
+                onModeChange={setAgeMode}
+                age={formData.age}
+                onAgeChange={(v) => handleChange({ target: { name: "age", value: v } })}
+                dob={formData.date_of_birth}
+                onDobChange={(v) => handleChange({ target: { name: "date_of_birth", value: v } })}
+                error={fieldErrors.age}
+                inputClass={inputClass("age")}
+              />
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Gender *
@@ -441,6 +453,7 @@ const PatientIntake = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e] resize-vertical"
               />
             </div>
+
           </div>
 
           {/* Submit Buttons */}

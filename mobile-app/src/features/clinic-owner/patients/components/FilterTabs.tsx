@@ -4,8 +4,9 @@ import { colors } from '../../../../shared/constants/colors';
 
 interface FilterTab {
   label: string;
-  count: number;
+  count?: number;
   value: string;
+  icon?: React.ReactNode;
 }
 
 interface FilterTabsProps {
@@ -24,12 +25,15 @@ export const FilterTabs: React.FC<FilterTabsProps> = ({ tabs, selectedTab, onTab
           onPress={() => onTabChange(tab.value)}
           activeOpacity={0.7}
         >
-          <Text style={[
-            styles.tabText,
-            selectedTab === tab.value && styles.tabTextActive
-          ]}>
-            {tab.label} ({tab.count})
-          </Text>
+          <View style={styles.tabLabelRow}>
+            {tab.icon}
+            <Text style={[
+              styles.tabText,
+              selectedTab === tab.value && styles.tabTextActive
+            ]}>
+              {tab.label}{tab.count !== undefined ? ` (${tab.count})` : ''}
+            </Text>
+          </View>
           {selectedTab === tab.value && <View style={styles.tabIndicator} />}
         </TouchableOpacity>
       ))}
@@ -49,6 +53,11 @@ const styles = StyleSheet.create({
     marginRight: 24,
     paddingBottom: 12,
     position: 'relative',
+  },
+  tabLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
   tabText: {
     fontSize: 15,

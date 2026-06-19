@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FlaskConical, Package, FileText } from 'lucide-react-native';
+import { FlaskConical, Package, FileText, Plus } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
 import { tabStyles } from '../../../../shared/constants/theme';
@@ -9,6 +9,7 @@ import { LabTab } from '../tabs/LabTab';
 import { InventoryTab } from '../tabs/InventoryTab';
 import { ConsentFormsTab } from '../tabs/ConsentFormsTab';
 import { FeatureLock } from '../../../../shared/components/FeatureLock';
+import type { UtilityTabHandle } from '../utilityTab';
 
 type TabKey = 'lab' | 'inventory' | 'consent';
 
@@ -22,12 +23,26 @@ export const UtilitiesScreen: React.FC<{ navigation: any; route: any }> = ({ nav
   const initialSearchTab = route?.params?.initialTab as TabKey;
   const [activeTab, setActiveTab] = useState<TabKey>(initialSearchTab || 'lab');
 
+  const labRef = useRef<UtilityTabHandle>(null);
+  const inventoryRef = useRef<UtilityTabHandle>(null);
+  const consentRef = useRef<UtilityTabHandle>(null);
+
+  const handleAdd = () => {
+    const ref = activeTab === 'lab' ? labRef : activeTab === 'inventory' ? inventoryRef : consentRef;
+    ref.current?.openCreate();
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader
         variant="primary"
         title="Utilities"
         onBackPress={navigation.canGoBack() ? () => navigation.goBack() : undefined}
+        rightComponent={
+          <TouchableOpacity onPress={handleAdd} style={styles.headerAddBtn}>
+            <Plus color={colors.white} size={22} />
+          </TouchableOpacity>
+        }
       />
       <View style={tabStyles.container}>
         {TABS.map(tab => {
@@ -54,9 +69,9 @@ export const UtilitiesScreen: React.FC<{ navigation: any; route: any }> = ({ nav
           featureName="Utilities"
           description="Lab orders, inventory management, and consent forms are Professional plan features. Upgrade to access them."
         >
-          {activeTab === 'lab'       && <LabTab />}
-          {activeTab === 'inventory' && <InventoryTab />}
-          {activeTab === 'consent'   && <ConsentFormsTab />}
+          {activeTab === 'lab'       && <LabTab ref={labRef} />}
+          {activeTab === 'inventory' && <InventoryTab ref={inventoryRef} />}
+          {activeTab === 'consent'   && <ConsentFormsTab ref={consentRef} />}
         </FeatureLock>
       </View>
     </SafeAreaView>
@@ -66,4 +81,12 @@ export const UtilitiesScreen: React.FC<{ navigation: any; route: any }> = ({ nav
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FAFB' },
   tabContent: { flex: 1 },
+  headerAddBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });

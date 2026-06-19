@@ -59,8 +59,11 @@ export const StaffManagementScreen: React.FC<StaffManagementScreenProps> = ({ na
           <ChevronLeft size={24} color={adminColors.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Staff Management</Text>
-        <TouchableOpacity style={styles.menuButton}>
-          <UserCheck size={24} color={adminColors.primary} />
+        <TouchableOpacity
+          style={styles.menuButton}
+          onPress={() => showAlert('Coming Soon', 'Staff onboarding via mobile is coming in the next update.')}
+        >
+          <Plus size={24} color={adminColors.primary} strokeWidth={2.5} />
         </TouchableOpacity>
       </View>
 
@@ -143,13 +146,6 @@ export const StaffManagementScreen: React.FC<StaffManagementScreenProps> = ({ na
             />
           )}
 
-          {/* FAB */}
-          <TouchableOpacity
-            style={[styles.fab, { bottom: Math.max(insets.bottom + 20, 20) }]}
-            onPress={() => showAlert('Coming Soon', 'Staff onboarding via mobile is coming in the next update.')}
-          >
-            <Plus size={28} color="#FFFFFF" strokeWidth={3} />
-          </TouchableOpacity>
         </View>
       </FeatureLock>
     </SafeAreaView>

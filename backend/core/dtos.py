@@ -3,13 +3,14 @@ Data Transfer Objects for API requests and responses
 """
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, date
 
 
 # Patient DTOs
 class PatientBaseDTO(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     age: Optional[int] = Field(None, ge=0, le=150)
+    date_of_birth: Optional[date] = None
     gender: Optional[str] = Field(None, pattern="^(male|female|other|Male|Female|Other)$")
     village: Optional[str] = Field(None, min_length=1, max_length=100)
     phone: str = Field(..., min_length=10, max_length=15)
@@ -29,12 +30,15 @@ class PatientBaseDTO(BaseModel):
 
 
 class PatientCreateDTO(PatientBaseDTO):
-    pass
+    # Optional back-date for historical patients — sets the patient's created_at
+    # (registration date). Defaults to "now" when omitted.
+    registered_at: Optional[datetime] = None
 
 
 class PatientUpdateDTO(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     age: Optional[int] = Field(None, ge=0, le=150)
+    date_of_birth: Optional[date] = None
     gender: Optional[str] = Field(None, pattern="^(male|female|other)$")
     village: Optional[str] = Field(None, min_length=1, max_length=100)
     phone: Optional[str] = Field(None, min_length=10, max_length=15)
