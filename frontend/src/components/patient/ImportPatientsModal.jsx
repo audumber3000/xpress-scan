@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import Papa from "papaparse";
-import { X, UploadCloud, Download, CheckCircle2, AlertCircle, FileSpreadsheet, Table2, Plus, Trash2, ImagePlus, Sparkles, Loader2, Circle, ScanLine } from "lucide-react";
+import { X, UploadCloud, Download, CheckCircle2, AlertCircle, FileSpreadsheet, Table2, Plus, Trash2, ImagePlus, Sparkles, Loader2, Circle, ScanLine, Sun, Images, ListChecks, Languages } from "lucide-react";
 import { toast } from "react-toastify";
 import { api, getFriendlyErrorMessage } from "../../utils/api";
 import { isValidPhone } from "../../utils/validators";
@@ -15,6 +15,19 @@ const SCAN_STEPS = [
   { label: () => "Extracting patient details", sub: "Names, phones, age, village & more" },
   { label: () => "Building your editable table", sub: "Almost ready to review" },
 ];
+
+// A single "what you need" tip on the scan intro screen.
+const Tip = ({ icon: Icon, title, desc }) => (
+  <div className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50/60">
+    <div className="w-8 h-8 rounded-lg bg-white border border-gray-100 flex items-center justify-center flex-shrink-0">
+      <Icon size={16} className="text-[#2a276e]" />
+    </div>
+    <div className="min-w-0">
+      <p className="text-sm font-semibold text-gray-900">{title}</p>
+      <p className="text-xs text-gray-500 leading-snug">{desc}</p>
+    </div>
+  </div>
+);
 
 // One blank row for the manual-entry table.
 const emptyManualRow = () => ({
@@ -273,6 +286,15 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
+          {/* Hidden image picker — rendered once so the scan intro can trigger it */}
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => handleScanRegister(e.target.files)}
+          />
           {scanning ? (
             /* AI extraction in progress — animated activity checklist */
             <div className="py-4">
@@ -328,19 +350,16 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
             /* Choose how to add patients */
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <button
-                onClick={() => imageInputRef.current?.click()}
-                disabled={scanning}
-                className="sm:col-span-2 flex flex-col items-start gap-2 p-5 border-[1.5px] border-[#2a276e] rounded-xl text-left bg-[#fafaff] hover:bg-[#2a276e]/5 transition-all disabled:opacity-70"
+                onClick={() => setMode("scan")}
+                className="sm:col-span-2 flex flex-col items-start gap-2 p-5 border-[1.5px] border-[#2a276e] rounded-xl text-left bg-[#fafaff] hover:bg-[#2a276e]/5 transition-all"
               >
                 <div className="flex items-center justify-between w-full">
                   <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
-                    {scanning ? <Loader2 size={20} className="text-emerald-600 animate-spin" /> : <ImagePlus size={20} className="text-emerald-600" />}
+                    <ImagePlus size={20} className="text-emerald-600" />
                   </div>
                   <span className="px-2 py-0.5 rounded-full bg-[#2a276e] text-white text-[10px] font-extrabold tracking-wide">NEW</span>
                 </div>
-                <span className="text-sm font-bold text-gray-900">
-                  {scanning ? "Reading your photos…" : "Scan a register from photos"}
-                </span>
+                <span className="text-sm font-bold text-gray-900">Scan a register from photos</span>
                 <span className="flex items-center gap-1 text-xs font-bold text-[#2a276e]">
                   <Sparkles size={12} /> Powered by AI
                 </span>
@@ -348,14 +367,6 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
                   Upload photos of your paper register — we read them into an editable table for you to review before importing.
                 </span>
               </button>
-              <input
-                ref={imageInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={(e) => handleScanRegister(e.target.files)}
-              />
 
               <button
                 onClick={() => setMode("csv")}
@@ -378,6 +389,48 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
                 <span className="text-xs text-gray-500">Type several patients row by row — with age or date of birth — then import them all together.</span>
               </button>
             </div>
+          ) : mode === "scan" ? (
+            /* Scan intro — what you need before uploading photos */
+            <>
+              <button onClick={() => setMode(null)} className="text-sm text-[#2a276e] hover:underline font-medium mb-4">
+                ← Back
+              </button>
+
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                  <ScanLine size={22} className="text-emerald-600" />
+                </div>
+                <div>
+                  <h4 className="flex items-center gap-1.5 text-base font-bold text-gray-900">
+                    Scan a handwritten register
+                    <span className="px-1.5 py-0.5 rounded-full bg-[#2a276e] text-white text-[9px] font-extrabold tracking-wide">NEW</span>
+                  </h4>
+                  <p className="flex items-center gap-1 text-xs font-semibold text-[#2a276e]">
+                    <Sparkles size={11} /> Powered by AI
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-3 mb-5">
+                <Tip icon={Sun} title="Clear, well-lit photos" desc="Lay the page flat; avoid shadows and glare." />
+                <Tip icon={Images} title="Up to 12 pages at once" desc="One photo per register page." />
+                <Tip icon={ListChecks} title="Show the columns" desc="Name & phone matter most; age, village, treatment if there." />
+                <Tip icon={Languages} title="English handwriting & numbers" desc="Neater writing reads best — you can fix anything after." />
+              </div>
+
+              <div className="flex items-center gap-2 p-3 mb-5 rounded-lg bg-blue-50/60 text-xs text-gray-600">
+                <CheckCircle2 size={15} className="text-green-500 flex-shrink-0" />
+                Nothing is saved yet — you'll review and edit everything in a table before importing.
+              </div>
+
+              <button
+                onClick={() => imageInputRef.current?.click()}
+                className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-[#2a276e] text-white text-sm font-bold rounded-xl hover:bg-[#1a1548] transition-all"
+              >
+                <ImagePlus size={18} /> Upload register photos
+              </button>
+              <p className="text-[11px] text-gray-400 text-center mt-2">JPG, PNG or HEIC · up to 12 photos</p>
+            </>
           ) : mode === "manual" ? (
             /* Manual entry table */
             <>
