@@ -156,8 +156,9 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
     try {
       const formData = new FormData();
       files.forEach((f) => formData.append("files", f));
+      // Do NOT set Content-Type — the fetch wrapper omits it for FormData so the
+      // browser can add the multipart boundary itself.
       const res = await api.post("/patients/extract-register", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
         timeout: 120000,
       });
       const extractedRows = res.rows || [];

@@ -38,7 +38,7 @@ export const authenticatedFetch = async (url, options = {}) => {
       fullUrl += `?${queryString}`;
     }
   }
-  const timeout = 30000;
+  const timeout = options.timeout || 30000;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
