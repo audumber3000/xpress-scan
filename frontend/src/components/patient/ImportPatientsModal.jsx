@@ -1,10 +1,20 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Papa from "papaparse";
-import { X, UploadCloud, Download, CheckCircle2, AlertCircle, FileSpreadsheet, Table2, Plus, Trash2, ImagePlus, Sparkles, Loader2 } from "lucide-react";
+import { X, UploadCloud, Download, CheckCircle2, AlertCircle, FileSpreadsheet, Table2, Plus, Trash2, ImagePlus, Sparkles, Loader2, Circle, ScanLine } from "lucide-react";
 import { toast } from "react-toastify";
 import { api, getFriendlyErrorMessage } from "../../utils/api";
 import { isValidPhone } from "../../utils/validators";
 import { computeAgeFromDob } from "./AgeOrDobField";
+
+// Activity steps shown while the AI reads the register photos. The activities are
+// real (upload -> vision OCR -> field extraction -> table); the step timing is an
+// estimate keyed to the photo count, since the backend returns all rows at once.
+const SCAN_STEPS = [
+  { label: (n) => `Uploading ${n} ${n === 1 ? "photo" : "photos"}`, sub: "Sending your register to our AI" },
+  { label: () => "Reading the handwriting", sub: "Recognising text on each page" },
+  { label: () => "Extracting patient details", sub: "Names, phones, age, village & more" },
+  { label: () => "Building your editable table", sub: "Almost ready to review" },
+];
 
 // One blank row for the manual-entry table.
 const emptyManualRow = () => ({
@@ -47,8 +57,24 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
   const [mode, setMode] = useState(null);        // null = choose, 'csv' = CSV, 'manual' = table
   const [manualRows, setManualRows] = useState([emptyManualRow(), emptyManualRow(), emptyManualRow()]);
   const [scanning, setScanning] = useState(false);
+  const [scanStep, setScanStep] = useState(0);
+  const [scanPageCount, setScanPageCount] = useState(0);
   const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
+
+  // Walk the activity checklist forward while a scan is running. Caps on the last
+  // step (it keeps spinning until the real response arrives and unmounts this view).
+  useEffect(() => {
+    if (!scanning) return;
+    setScanStep(0);
+    const perPage = Math.max(2400, scanPageCount * 1700);
+    const timers = [
+      setTimeout(() => setScanStep(1), 1300),
+      setTimeout(() => setScanStep(2), 1300 + perPage),
+      setTimeout(() => setScanStep(3), 1300 + perPage + 2200),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, [scanning, scanPageCount]);
 
   if (!isOpen) return null;
 
@@ -60,6 +86,8 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
     setMode(null);
     setManualRows([emptyManualRow(), emptyManualRow(), emptyManualRow()]);
     setScanning(false);
+    setScanStep(0);
+    setScanPageCount(0);
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (imageInputRef.current) imageInputRef.current.value = "";
   };
@@ -94,7 +122,7 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
     });
 
   const handleClose = () => {
-    if (importing) return;
+    if (importing || scanning) return;
     reset();
     onClose();
   };
@@ -152,6 +180,8 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
     const files = Array.from(fileList || []).filter(Boolean).slice(0, 12);
     if (imageInputRef.current) imageInputRef.current.value = "";
     if (!files.length) return;
+    setScanPageCount(files.length);
+    setScanStep(0);
     setScanning(true);
     try {
       const formData = new FormData();
@@ -236,14 +266,65 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
               <p className="text-xs text-gray-500">Import from a spreadsheet or add manually</p>
             </div>
           </div>
-          <button onClick={handleClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" disabled={importing}>
+          <button onClick={handleClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-40" disabled={importing || scanning}>
             <X size={20} className="text-gray-500" />
           </button>
         </div>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          {mode === null ? (
+          {scanning ? (
+            /* AI extraction in progress — animated activity checklist */
+            <div className="py-4">
+              <div className="flex flex-col items-center text-center mb-6">
+                <div className="relative w-16 h-16 rounded-2xl bg-[#2a276e]/10 flex items-center justify-center mb-3">
+                  <ScanLine size={28} className="text-[#2a276e]" />
+                  <span className="absolute inset-0 rounded-2xl border-2 border-[#2a276e]/30 animate-ping" />
+                </div>
+                <h4 className="text-base font-bold text-gray-900">Reading your register…</h4>
+                <p className="text-xs text-gray-500 mt-1">
+                  {scanPageCount} {scanPageCount === 1 ? "photo" : "photos"} · this usually takes a few seconds per page
+                </p>
+              </div>
+
+              <div className="max-w-md mx-auto space-y-1.5">
+                {SCAN_STEPS.map((step, i) => {
+                  const done = i < scanStep;
+                  const active = i === scanStep;
+                  return (
+                    <div
+                      key={i}
+                      className={`flex items-start gap-3 px-3 py-2.5 rounded-xl transition-colors ${active ? "bg-[#2a276e]/5" : ""}`}
+                    >
+                      <span className="flex-shrink-0 mt-0.5">
+                        {done ? (
+                          <CheckCircle2 size={18} className="text-green-500" />
+                        ) : active ? (
+                          <Loader2 size={18} className="text-[#2a276e] animate-spin" />
+                        ) : (
+                          <Circle size={18} className="text-gray-300" />
+                        )}
+                      </span>
+                      <span className="min-w-0">
+                        <span className={`block text-sm font-semibold ${done ? "text-gray-400" : active ? "text-gray-900" : "text-gray-400"}`}>
+                          {step.label(scanPageCount)}
+                        </span>
+                        <span className={`block text-xs ${active ? "text-gray-500" : "text-gray-400"}`}>{step.sub}</span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-6 max-w-md mx-auto h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[#2a276e] rounded-full transition-all duration-700 ease-out"
+                  style={{ width: `${Math.min(95, ((scanStep + 1) / SCAN_STEPS.length) * 100)}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-gray-400 text-center mt-4">Please keep this window open — your data is almost ready.</p>
+            </div>
+          ) : mode === null ? (
             /* Choose how to add patients */
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <button
