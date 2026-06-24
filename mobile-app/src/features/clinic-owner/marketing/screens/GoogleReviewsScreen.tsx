@@ -10,9 +10,10 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, RefreshCw, Search, MapPin, CheckCircle2 } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, RefreshCw, Search, MapPin, CheckCircle2, Unlink } from 'lucide-react-native';
 import Svg, { Path, Rect, Line, G } from 'react-native-svg';
 import { colors } from '../../../../shared/constants/colors';
 import { GearLoader } from '../../../../shared/components/GearLoader';
@@ -342,6 +343,30 @@ export const GoogleReviewsScreen: React.FC<{ navigation: any }> = ({ navigation 
     setSyncing(false);
   };
 
+  const handleUnlink = () => {
+    Alert.alert(
+      'Unlink Google profile',
+      'This disconnects your Google Business profile. Reviews will stop syncing here. You can reconnect anytime.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Unlink',
+          style: 'destructive',
+          onPress: async () => {
+            setLoading(true);
+            const ok = await googleReviewsApiService.unlinkPlace();
+            if (ok) {
+              await initialLoad(); // status flips to not-linked → shows the connect panel
+            } else {
+              setLoading(false);
+              Alert.alert('Could not unlink', 'Something went wrong. Please try again.');
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleTabChange = async (tab: 'reviews' | 'competitors') => {
     setActiveTab(tab);
     if (!status?.linked) return;
@@ -373,7 +398,7 @@ export const GoogleReviewsScreen: React.FC<{ navigation: any }> = ({ navigation 
 
   return (
     <SafeAreaView style={s.screen} edges={['top']}>
-      <Header navigation={navigation} onSync={handleSync} syncing={syncing} />
+      <Header navigation={navigation} onSync={handleSync} syncing={syncing} onUnlink={handleUnlink} />
 
       {/* Clinic status banner */}
       <View style={s.statusBanner}>
@@ -440,19 +465,36 @@ export const GoogleReviewsScreen: React.FC<{ navigation: any }> = ({ navigation 
 };
 
 // ─── Header sub-component ──────────────────────────────────────────────────────
-function Header({ navigation, onSync, syncing }: { navigation: any; onSync: () => void; syncing: boolean }) {
+function Header({
+  navigation,
+  onSync,
+  syncing,
+  onUnlink,
+}: {
+  navigation: any;
+  onSync: () => void;
+  syncing: boolean;
+  onUnlink?: () => void;
+}) {
   return (
     <View style={s.header}>
       <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
         <ChevronLeft size={24} color="#FFFFFF" />
       </TouchableOpacity>
       <Text style={s.headerTitle}>Google Reviews</Text>
-      <TouchableOpacity style={s.syncBtn} onPress={onSync} disabled={syncing}>
-        {syncing
-          ? <ActivityIndicator size="small" color="#FFFFFF" />
-          : <RefreshCw size={18} color="#FFFFFF" />
-        }
-      </TouchableOpacity>
+      <View style={s.headerActions}>
+        <TouchableOpacity style={s.syncBtn} onPress={onSync} disabled={syncing}>
+          {syncing
+            ? <ActivityIndicator size="small" color="#FFFFFF" />
+            : <RefreshCw size={18} color="#FFFFFF" />
+          }
+        </TouchableOpacity>
+        {onUnlink && (
+          <TouchableOpacity style={s.syncBtn} onPress={onUnlink}>
+            <Unlink size={18} color="#FFFFFF" />
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 }
@@ -584,7 +626,8 @@ const s = StyleSheet.create({
   },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
   headerTitle: { flex: 1, fontSize: 18, fontWeight: '700', color: '#FFFFFF', textAlign: 'center' },
-  syncBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-end' },
+  syncBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  headerActions: { flexDirection: 'row', alignItems: 'center' },
 
   // Status banner
   statusBanner: {

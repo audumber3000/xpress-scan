@@ -172,10 +172,11 @@ export const AppointmentsScreen: React.FC<AppointmentsScreenProps> = ({ navigati
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={[]}>
       <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
       <ScreenHeader
         variant="primary"
+        topInset
         title="Appointments"
         onBackPress={navigation.canGoBack() ? () => navigation.goBack() : undefined}
         rightComponent={

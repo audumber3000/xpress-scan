@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import Papa from "papaparse";
-import { X, UploadCloud, Download, CheckCircle2, AlertCircle, FileSpreadsheet, Table2, Plus, Trash2 } from "lucide-react";
+import { X, UploadCloud, Download, CheckCircle2, AlertCircle, FileSpreadsheet, Table2, Plus, Trash2, ImagePlus, Sparkles, Loader2 } from "lucide-react";
 import { toast } from "react-toastify";
 import { api, getFriendlyErrorMessage } from "../../utils/api";
 import { isValidPhone } from "../../utils/validators";
@@ -46,7 +46,9 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
   const [importing, setImporting] = useState(false);
   const [mode, setMode] = useState(null);        // null = choose, 'csv' = CSV, 'manual' = table
   const [manualRows, setManualRows] = useState([emptyManualRow(), emptyManualRow(), emptyManualRow()]);
+  const [scanning, setScanning] = useState(false);
   const fileInputRef = useRef(null);
+  const imageInputRef = useRef(null);
 
   if (!isOpen) return null;
 
@@ -57,7 +59,9 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
     setImporting(false);
     setMode(null);
     setManualRows([emptyManualRow(), emptyManualRow(), emptyManualRow()]);
+    setScanning(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
+    if (imageInputRef.current) imageInputRef.current.value = "";
   };
 
   // ── Manual-entry table helpers ──────────────────────────────
@@ -136,6 +140,63 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
     });
   };
 
+  const normGender = (g) => {
+    const v = String(g || "").trim().toLowerCase();
+    if (v.startsWith("m")) return "Male";
+    if (v.startsWith("f")) return "Female";
+    return v ? "Other" : "";
+  };
+
+  // Scan handwritten register photos → extract rows → drop into the editable table.
+  const handleScanRegister = async (fileList) => {
+    const files = Array.from(fileList || []).filter(Boolean).slice(0, 12);
+    if (imageInputRef.current) imageInputRef.current.value = "";
+    if (!files.length) return;
+    setScanning(true);
+    try {
+      const formData = new FormData();
+      files.forEach((f) => formData.append("files", f));
+      const res = await api.post("/patients/extract-register", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 120000,
+      });
+      const extractedRows = res.rows || [];
+      const mapped = extractedRows.map((r) => {
+        const row = {
+          name: String(r.name || "").trim(),
+          phone: String(r.phone || "").replace(/[^\d+]/g, ""),
+          age: String(r.age || "").replace(/\D/g, ""),
+          date_of_birth: String(r.date_of_birth || "").trim(),
+          gender: normGender(r.gender),
+          village: String(r.village || "").trim(),
+          treatment_type: String(r.treatment_type || "").trim(),
+          referred_by: String(r.referred_by || "").trim(),
+          registered_at: String(r.registered_at || "").trim(),
+        };
+        return row;
+      });
+      if (!mapped.length) {
+        toast.error(
+          res.errors?.length
+            ? "We couldn't read those photos. Make sure they're clear, well-lit, and show the register text."
+            : "No patient rows found. Try clearer, well-lit photos of the register."
+        );
+        return;
+      }
+      setManualRows(mapped);
+      setMode("manual");
+      const flagged = extractedRows.filter((r) => r.confidence === "low" || r.issues).length;
+      toast.success(
+        `Found ${mapped.length} patient${mapped.length === 1 ? "" : "s"}` +
+          (flagged ? ` — ${flagged} need a quick check.` : ". Review before importing.")
+      );
+    } catch (err) {
+      toast.error(getFriendlyErrorMessage(err, "Could not read the register photos."));
+    } finally {
+      setScanning(false);
+    }
+  };
+
   const validRows = rows.filter((r) => r.problems.length === 0);
   const invalidCount = rows.length - validRows.length;
 
@@ -184,6 +245,36 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
           {mode === null ? (
             /* Choose how to add patients */
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <button
+                onClick={() => imageInputRef.current?.click()}
+                disabled={scanning}
+                className="sm:col-span-2 flex flex-col items-start gap-2 p-5 border-[1.5px] border-[#2a276e] rounded-xl text-left bg-[#fafaff] hover:bg-[#2a276e]/5 transition-all disabled:opacity-70"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
+                    {scanning ? <Loader2 size={20} className="text-emerald-600 animate-spin" /> : <ImagePlus size={20} className="text-emerald-600" />}
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full bg-[#2a276e] text-white text-[10px] font-extrabold tracking-wide">NEW</span>
+                </div>
+                <span className="text-sm font-bold text-gray-900">
+                  {scanning ? "Reading your photos…" : "Scan a register from photos"}
+                </span>
+                <span className="flex items-center gap-1 text-xs font-bold text-[#2a276e]">
+                  <Sparkles size={12} /> Powered by AI
+                </span>
+                <span className="text-xs text-gray-500">
+                  Upload photos of your paper register — we read them into an editable table for you to review before importing.
+                </span>
+              </button>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => handleScanRegister(e.target.files)}
+              />
+
               <button
                 onClick={() => setMode("csv")}
                 className="flex flex-col items-start gap-2 p-5 border border-gray-200 rounded-xl text-left hover:border-[#2a276e] hover:bg-gray-50 transition-all"

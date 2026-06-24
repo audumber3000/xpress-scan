@@ -1,7 +1,7 @@
 """
 Patient routes using clean architecture
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 from typing import List, Optional, Any
@@ -246,6 +246,140 @@ async def import_patients(
         "imported_count": imported_count,
         "errors": errors,
     }
+
+
+# ── Handwritten register OCR (vision LLM) ────────────────────────────────────
+_REGISTER_ROW_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "rows": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Patient full name as written"},
+                    "age": {"type": "string", "description": "Age in years, digits only; empty if not written"},
+                    "date_of_birth": {"type": "string", "description": "YYYY-MM-DD if a full DOB is written, else empty"},
+                    "gender": {"type": "string", "description": "Male, Female, Other, or empty"},
+                    "phone": {"type": "string", "description": "Phone digits as written; empty if none"},
+                    "village": {"type": "string", "description": "Village/town/place; empty if none"},
+                    "treatment_type": {"type": "string", "description": "Treatment/complaint; empty if none"},
+                    "referred_by": {"type": "string", "description": "Referred by; empty if none"},
+                    "registered_at": {"type": "string", "description": "YYYY-MM-DD registration date if written, else empty"},
+                    "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+                    "issues": {"type": "string", "description": "Short note on any uncertain reads; empty if confident"},
+                },
+                "required": [
+                    "name", "age", "date_of_birth", "gender", "phone", "village",
+                    "treatment_type", "referred_by", "registered_at", "confidence", "issues",
+                ],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["rows"],
+    "additionalProperties": False,
+}
+
+_REGISTER_SYSTEM = (
+    "You are a meticulous medical-records data-entry assistant. You read photos of "
+    "handwritten dental/clinic patient registers (often Indian clinics; names may be in "
+    "English, Hindi, or Marathi) and transcribe each patient row into structured fields. "
+    "Transcribe exactly what is written — never invent or guess data that isn't there. "
+    "Leave a field empty if it is blank or unreadable. When you are unsure of a value, give "
+    "your best reading but lower that row's confidence and name the uncertain field in 'issues'."
+)
+
+_REGISTER_INSTRUCTION = (
+    "Extract every patient row from this register page, top to bottom. Map the columns to: "
+    "name, age (digits only), date_of_birth (YYYY-MM-DD only if a full birth date is written, else empty), "
+    "gender (Male/Female/Other), phone (digits only), village, treatment_type, referred_by, "
+    "registered_at (YYYY-MM-DD only if a registration date is written). Normalize gender and dates. "
+    "Set confidence (high/medium/low) per row and put uncertain reads in 'issues'. "
+    "Return one object per patient row. If the photo contains no patient rows, return an empty list."
+)
+
+
+@router.post(
+    "/extract-register",
+    summary="Extract patient rows from photos of a handwritten register (vision LLM)",
+)
+async def extract_register(
+    files: List[UploadFile] = File(...),
+    current_user = Depends(require_patients_edit),
+):
+    """Read photos of a handwritten patient register and return structured rows
+    for the editable import table. NOTHING is saved here; images are not persisted.
+    The user reviews/edits the rows, then imports via /patients/import.
+    """
+    import os
+    import base64
+    import json
+    import asyncio
+
+    if not files:
+        raise HTTPException(status_code=400, detail="No images uploaded")
+    if len(files) > 12:
+        raise HTTPException(status_code=400, detail="Please upload at most 12 photos at a time.")
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Handwriting extraction isn't configured on the server yet (missing ANTHROPIC_API_KEY).",
+        )
+    try:
+        from anthropic import AsyncAnthropic
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Handwriting extraction dependency is not installed.")
+
+    model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+    client = AsyncAnthropic(api_key=api_key)
+
+    # Claude vision only accepts these; anything else (e.g. iOS HEIC) is sent as jpeg.
+    _allowed = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+    images = []
+    for f in files:
+        raw = await f.read()
+        if not raw:
+            continue
+        ct = (f.content_type or "").lower()
+        media_type = ct if ct in _allowed else "image/jpeg"
+        images.append((media_type, base64.standard_b64encode(raw).decode("ascii")))
+
+    async def extract_page(media_type: str, b64: str):
+        resp = await client.messages.create(
+            model=model,
+            max_tokens=16000,
+            system=_REGISTER_SYSTEM,
+            output_config={"format": {"type": "json_schema", "schema": _REGISTER_ROW_SCHEMA}},
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
+                    {"type": "text", "text": _REGISTER_INSTRUCTION},
+                ],
+            }],
+        )
+        text = "".join(getattr(b, "text", "") for b in resp.content if getattr(b, "type", None) == "text")
+        return json.loads(text).get("rows", []) if text.strip() else []
+
+    results = await asyncio.gather(
+        *(extract_page(mt, b64) for mt, b64 in images),
+        return_exceptions=True,
+    )
+
+    all_rows = []
+    page_errors = []
+    for idx, res in enumerate(results):
+        if isinstance(res, Exception):
+            page_errors.append(f"Page {idx + 1}: {str(res)[:200]}")
+            continue
+        for r in res:
+            r["_page"] = idx + 1
+            all_rows.append(r)
+
+    return {"rows": all_rows, "pages": len(images), "errors": page_errors}
 
 
 @router.get(

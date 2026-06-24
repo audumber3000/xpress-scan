@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlaskConical, Package, FileText, Plus } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
@@ -33,9 +33,11 @@ export const UtilitiesScreen: React.FC<{ navigation: any; route: any }> = ({ nav
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={[]}>
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
       <ScreenHeader
         variant="primary"
+        topInset
         title="Utilities"
         onBackPress={navigation.canGoBack() ? () => navigation.goBack() : undefined}
         rightComponent={

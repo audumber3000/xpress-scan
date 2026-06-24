@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
 import { colors } from '../constants/colors';
 import { adminColors } from '../constants/adminColors';
@@ -14,6 +15,13 @@ interface ScreenHeaderProps {
   variant?: 'default' | 'admin' | 'primary';
   subtitle?: string;
   titleIcon?: React.ReactNode;
+  /**
+   * When true, the header extends its background up behind the status bar (adds
+   * the top safe-area inset as padding) so the status-bar strip matches the
+   * header colour. Use on top-level screens; pair with SafeAreaView edges that
+   * exclude 'top' so the inset isn't applied twice.
+   */
+  topInset?: boolean;
 }
 
 export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
@@ -26,7 +34,9 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   variant = 'default',
   subtitle,
   titleIcon,
+  topInset = false,
 }) => {
+  const insets = useSafeAreaInsets();
   const bgColor = backgroundColor || (
     variant === 'primary' ? colors.primary :
     variant === 'admin' ? '#FFFFFF' : '#FFFFFF'
@@ -41,7 +51,7 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   );
 
   return (
-    <View style={[styles.header, { backgroundColor: bgColor }]}>
+    <View style={[styles.header, { backgroundColor: bgColor }, topInset && { paddingTop: insets.top + HEADER_VERTICAL_PADDING }]}>
       {onBackPress && (
         <TouchableOpacity
           style={styles.backButton}
@@ -77,12 +87,14 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   );
 };
 
+const HEADER_VERTICAL_PADDING = 16;
+
 const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: HEADER_VERTICAL_PADDING,
     backgroundColor: '#FFFFFF',
   },
   backButton: {

@@ -59,3 +59,12 @@ mobile/android/
 
 # Claude Code local session state
 .claude/
+
+# Terraform (state may hold secrets; tfvars holds the DB password)
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl
+crash.log

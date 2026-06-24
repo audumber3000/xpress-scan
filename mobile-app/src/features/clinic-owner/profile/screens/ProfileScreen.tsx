@@ -96,10 +96,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
   const userName = user?.displayName || 'Dr. Aris Thorne';
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={[]}>
       <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
       <ScreenHeader
         variant="primary"
+        topInset
         title="Settings"
         titleIcon={<User size={22} />}
         onBackPress={() => navigation.goBack()}

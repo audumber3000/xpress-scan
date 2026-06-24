@@ -1054,3 +1054,34 @@ def reset_password(
     db.commit()
 
     return {"message": "Your password has been reset. You can now sign in with your new password."}
+
+
+@router.post("/account-preview", summary="Look up an account by email for the forgot-password confirmation step")
+def account_preview(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """Return minimal account info so the forgot-password flow can confirm the
+    right account (name + clinic) before sending a reset link.
+
+    NOTE: unlike /forgot-password, this intentionally reveals whether an email
+    is registered (account enumeration) so the user gets a clear confirmation —
+    a deliberate product decision for the in-app reset UX.
+    """
+    email = (payload.email or "").strip().lower()
+    if not email:
+        return {"found": False}
+
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        return {"found": False}
+
+    clinic_name = None
+    if user.clinic_id:
+        clinic = db.query(Clinic).filter(Clinic.id == user.clinic_id).first()
+        clinic_name = clinic.name if clinic else None
+
+    return {
+        "found": True,
+        "name": user.name,
+        "clinic_name": clinic_name,
+        # Google-only accounts have no password and can't use email reset.
+        "has_password": bool(user.password_hash),
+    }

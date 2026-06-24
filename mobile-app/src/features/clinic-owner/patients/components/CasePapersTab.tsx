@@ -7,6 +7,8 @@ import {
   Plus, ChevronLeft, ChevronRight, Clock, FileText, FlaskConical,
   Pill, Upload, Save, X, Check, Trash2, Receipt, Eye, Edit3,
 } from 'lucide-react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import { UploadProgressBar, type UploadPhase } from '../../../../shared/components/UploadProgressBar';
 import { patientsApiService, Patient } from '../../../../services/api/patients.api';
 import { getCurrencySymbol } from '../../../../shared/utils/currency';
 import { colors } from '../../../../shared/constants/colors';
@@ -213,6 +215,10 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
   const [prescriptions, setPrescriptions] = useState<any[]>([]);
   const [labOrders, setLabOrders] = useState<any[]>([]);
   const [documents, setDocuments] = useState<any[]>([]);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [docProgress, setDocProgress] = useState(0);
+  const [docPhase, setDocPhase] = useState<UploadPhase>('uploading');
+  const [docName, setDocName] = useState<string | undefined>(undefined);
   const [invoice, setInvoice] = useState<any | null>(null);
   const [sendingRxId, setSendingRxId] = useState<number | string | null>(null);
 
@@ -329,6 +335,44 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
       setInvoice(null);
     }
   }, [patientId]);
+
+  const handleUploadDocument = async () => {
+    if (!selectedPaper || selectedPaper.isNew || `${selectedPaper.id}`.startsWith('new-')) {
+      Alert.alert('Save first', 'Please save this case paper before uploading documents.');
+      return;
+    }
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/*', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      setUploadingDoc(true);
+      setDocProgress(0);
+      setDocPhase('uploading');
+      setDocName(asset.name);
+      const fileToUpload = {
+        uri: asset.uri,
+        name: asset.name,
+        type: asset.mimeType || 'application/octet-stream',
+      };
+      await patientsApiService.uploadDocument(patientId, fileToUpload, selectedPaper.id, (fraction) => {
+        setDocProgress(fraction);
+        setDocPhase(fraction >= 1 ? 'processing' : 'uploading');
+      });
+      await fetchSubData(selectedPaper.id.toString());
+      Alert.alert('Uploaded', 'Document uploaded successfully.');
+    } catch (error) {
+      console.error('Error uploading case paper document:', error);
+      Alert.alert('Upload failed', 'Could not upload the document. Please try again.');
+    } finally {
+      setUploadingDoc(false);
+      setDocProgress(0);
+      setDocPhase('uploading');
+      setDocName(undefined);
+    }
+  };
 
   useEffect(() => { fetchCasePapers(); }, [fetchCasePapers]);
 
@@ -869,11 +913,18 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
           <View style={s.section}>
             <View style={s.sectionHeaderRow}>
               <Text style={s.sectionTitle}>Documents</Text>
-              <TouchableOpacity style={s.sectionAddBtn} onPress={() => Alert.alert('Coming Soon', 'Document upload from mobile is coming soon.')}>
-                <Upload size={14} color={colors.primary} />
-                <Text style={s.sectionAddText}>Upload</Text>
+              <TouchableOpacity style={s.sectionAddBtn} onPress={handleUploadDocument} disabled={uploadingDoc}>
+                {uploadingDoc ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Upload size={14} color={colors.primary} />
+                )}
+                <Text style={s.sectionAddText}>{uploadingDoc ? 'Uploading…' : 'Upload'}</Text>
               </TouchableOpacity>
             </View>
+            {uploadingDoc && (
+              <UploadProgressBar progress={docProgress} phase={docPhase} label={docName} />
+            )}
             {documents.length === 0 ? (
               <Text style={s.emptyRow}>No documents attached.</Text>
             ) : documents.map((doc: any, i: number) => (

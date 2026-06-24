@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors } from '../../../../shared/constants/colors';
 
 interface WeekDay {
@@ -17,12 +17,7 @@ interface WeekDaysViewProps {
 
 export const WeekDaysView: React.FC<WeekDaysViewProps> = ({ weekDays, onDateSelect }) => {
   return (
-    <ScrollView 
-      horizontal 
-      showsHorizontalScrollIndicator={false} 
-      style={styles.weekScroll}
-      contentContainerStyle={styles.weekScrollContent}
-    >
+    <View style={styles.weekRow}>
       {weekDays.map((dayInfo, index) => (
         <TouchableOpacity
           key={index}
@@ -44,31 +39,36 @@ export const WeekDaysView: React.FC<WeekDaysViewProps> = ({ weekDays, onDateSele
           ]}>
             {dayInfo.dayNumber}
           </Text>
-          {dayInfo.hasAppointments && dayInfo.isSelected && (
-            <View style={styles.selectedDot} />
-          )}
+          {/* Busy indicator: shown on ANY day that has appointments (white on the
+              selected navy pill, primary elsewhere). Always rendered — hidden via
+              opacity when empty — so the day number never shifts. */}
+          <View
+            style={[
+              styles.dot,
+              dayInfo.isSelected ? styles.dotOnSelected : styles.dotDefault,
+              !dayInfo.hasAppointments && styles.dotHidden,
+            ]}
+          />
         </TouchableOpacity>
       ))}
-    </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  weekScroll: {
-    paddingHorizontal: 20,
+  weekRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
     marginBottom: 24,
-  },
-  weekScrollContent: {
-    paddingRight: 20,
+    gap: 6,
   },
   weekDay: {
+    flex: 1,
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 2,
     paddingVertical: 12,
-    marginRight: 12,
     borderRadius: 16,
     backgroundColor: '#F9FAFB',
-    minWidth: 70,
   },
   weekDaySelected: {
     backgroundColor: colors.primary,
@@ -90,11 +90,19 @@ const styles = StyleSheet.create({
   weekDayNumberSelected: {
     color: '#FFFFFF',
   },
-  selectedDot: {
+  dot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#FFFFFF',
     marginTop: 6,
+  },
+  dotDefault: {
+    backgroundColor: colors.primary,
+  },
+  dotOnSelected: {
+    backgroundColor: '#FFFFFF',
+  },
+  dotHidden: {
+    opacity: 0,
   },
 });

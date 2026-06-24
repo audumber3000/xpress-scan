@@ -1,14 +1,17 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { CalendarClock, FileWarning, Star, UserRoundCheck } from 'lucide-react-native';
+import { CalendarClock, FileWarning, UserRoundCheck } from 'lucide-react-native';
 import { colors } from '../../../../../../shared/constants/colors';
 import { AppSkeleton } from '../../../../../../shared/components/Skeleton';
+import { GoogleGLogo, StarRow } from '../../../../../../shared/components/home/GoogleBits';
 
 interface RightNowStripProps {
   waitingCount: number;
   nextAppointmentTime?: string | null;
   unpaidInvoicesCount: number;
   reviewCount?: number | null;
+  reviewsLinked?: boolean;
+  reviewRating?: number | null;
   loading?: boolean;
   refreshing?: boolean;
   lastUpdatedAt?: Date | null;
@@ -16,6 +19,7 @@ interface RightNowStripProps {
   onAppointmentsPress?: () => void;
   onInvoicesPress?: () => void;
   onReviewsPress?: () => void;
+  onConnectReviewsPress?: () => void;
 }
 
 const formatLastUpdated = (date?: Date | null) => {
@@ -65,11 +69,71 @@ const LiveItem: React.FC<{
   );
 };
 
+// Connection-aware Google reviews slot: rating + stars when linked, a dashed
+// "Connect" CTA when the clinic hasn't linked its Google Business profile yet.
+const ReviewsItem: React.FC<{
+  linked: boolean;
+  rating?: number | null;
+  reviewCount: number;
+  loading?: boolean;
+  onPress?: () => void;
+  onConnect?: () => void;
+}> = ({ linked, rating, reviewCount, loading = false, onPress, onConnect }) => {
+  if (loading) {
+    return (
+      <View style={styles.item}>
+        <View style={styles.iconWrap}>
+          <AppSkeleton width={20} height={20} radius={10} />
+        </View>
+        <View style={styles.itemText}>
+          <AppSkeleton width={54} height={17} radius={4} />
+          <View style={{ height: 5 }} />
+          <AppSkeleton width={82} height={12} radius={4} />
+        </View>
+      </View>
+    );
+  }
+
+  if (!linked) {
+    return (
+      <Pressable
+        onPress={onConnect}
+        disabled={!onConnect}
+        style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
+      >
+        <View style={styles.connectBox}>
+          <GoogleGLogo size={18} />
+          <Text style={styles.connectText} numberOfLines={1}>Connect</Text>
+          <Text style={styles.connectSubText} numberOfLines={1}>Google Reviews</Text>
+        </View>
+      </Pressable>
+    );
+  }
+
+  const r = typeof rating === 'number' ? rating : 0;
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
+    >
+      <View style={styles.iconWrap}><GoogleGLogo size={18} /></View>
+      <View style={styles.itemText}>
+        <Text style={styles.itemValue} numberOfLines={1}>{r.toFixed(1)}</Text>
+        <View style={styles.reviewStars}><StarRow rating={r} size={9} gap={1} /></View>
+        <Text style={styles.itemLabel} numberOfLines={1}>{reviewCount} Google reviews</Text>
+      </View>
+    </Pressable>
+  );
+};
+
 export const RightNowStrip: React.FC<RightNowStripProps> = ({
   waitingCount,
   nextAppointmentTime,
   unpaidInvoicesCount,
   reviewCount,
+  reviewsLinked = false,
+  reviewRating,
   loading = false,
   refreshing = false,
   lastUpdatedAt,
@@ -77,6 +141,7 @@ export const RightNowStrip: React.FC<RightNowStripProps> = ({
   onAppointmentsPress,
   onInvoicesPress,
   onReviewsPress,
+  onConnectReviewsPress,
 }) => {
   const reviews = typeof reviewCount === 'number' ? reviewCount : 0;
 
@@ -102,7 +167,7 @@ export const RightNowStrip: React.FC<RightNowStripProps> = ({
         />
         <View style={styles.separator} />
         <LiveItem
-          icon={<CalendarClock size={18} color="#E5484D" strokeWidth={2.4} />}
+          icon={<CalendarClock size={18} color={colors.primary} strokeWidth={2.4} />}
           value={nextAppointmentTime || 'None'}
           label="next appointment"
           loading={loading}
@@ -117,12 +182,13 @@ export const RightNowStrip: React.FC<RightNowStripProps> = ({
           onPress={onInvoicesPress}
         />
         <View style={styles.separator} />
-        <LiveItem
-          icon={<Star size={18} color="#2E9E5B" strokeWidth={2.4} />}
-          value={`${reviews}`}
-          label={`${plural(reviews, 'review')} total`}
+        <ReviewsItem
+          linked={reviewsLinked}
+          rating={reviewRating}
+          reviewCount={reviews}
           loading={loading}
           onPress={onReviewsPress}
+          onConnect={onConnectReviewsPress}
         />
       </View>
     </View>
@@ -212,6 +278,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  reviewStars: {
+    marginTop: 1,
+    alignItems: 'center',
+  },
+  connectBox: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.gray300,
+  },
+  connectText: {
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  connectSubText: {
+    fontSize: 9,
+    lineHeight: 11,
+    fontWeight: '600',
+    color: colors.textMuted,
   },
   separator: {
     width: StyleSheet.hairlineWidth,

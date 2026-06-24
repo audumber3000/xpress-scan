@@ -129,10 +129,11 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
   ];
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={[]}>
       <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
       <ScreenHeader
         variant="primary"
+        topInset
         title="Patients"
         titleIcon={<Users size={22} />}
         onBackPress={navigation.canGoBack() ? () => navigation.goBack() : undefined}

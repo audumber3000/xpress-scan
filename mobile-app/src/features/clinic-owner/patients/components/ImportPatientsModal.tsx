@@ -12,8 +12,9 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { X, FileSpreadsheet, Table2, CheckCircle2, AlertCircle, UploadCloud, Plus, Trash2 } from 'lucide-react-native';
+import { X, FileSpreadsheet, Table2, CheckCircle2, AlertCircle, UploadCloud, Plus, Trash2, Camera, Sparkles } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { colors } from '../../../../shared/constants/colors';
 import { toast } from '../../../../shared/components/toastService';
@@ -114,6 +115,7 @@ export const ImportPatientsModal: React.FC<ImportPatientsModalProps> = ({
   const [fileName, setFileName] = useState('');
   const [parsing, setParsing] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [scanning, setScanning] = useState(false);
   // Manual table rows
   const [manualRows, setManualRows] = useState<ManualRow[]>([emptyRow(), emptyRow(), emptyRow()]);
 
@@ -166,6 +168,73 @@ export const ImportPatientsModal: React.FC<ImportPatientsModalProps> = ({
       console.error('CSV pick/parse error:', err);
       toast.error('Could not read that file.');
       setParsing(false);
+    }
+  };
+
+  const normGender = (g?: string): string => {
+    const v = (g || '').trim().toLowerCase();
+    if (v.startsWith('m')) return 'Male';
+    if (v.startsWith('f')) return 'Female';
+    return v ? 'Other' : '';
+  };
+
+  // Scan handwritten register photos → extract rows → drop into the editable table.
+  const handleScanRegister = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        toast.error('Photo access is needed to scan a register.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: true,
+        selectionLimit: 12,
+        quality: 0.6,
+      });
+      if (result.canceled || !result.assets?.length) return;
+
+      setScanning(true);
+      const images = result.assets.slice(0, 12).map((a, i) => ({
+        uri: a.uri,
+        name: a.fileName || `register-${i + 1}.jpg`,
+        type: a.mimeType || 'image/jpeg',
+      }));
+
+      const res = await patientsApiService.extractRegister(images);
+      const extracted: ManualRow[] = (res.rows || []).map((r: any) => ({
+        name: (r.name || '').trim(),
+        phone: (r.phone || '').toString().replace(/[^0-9+]/g, ''),
+        ageMode: r.date_of_birth ? 'dob' : 'age',
+        age: (r.age || '').toString().replace(/[^0-9]/g, ''),
+        dateOfBirth: (r.date_of_birth || '').trim(),
+        gender: normGender(r.gender),
+        village: (r.village || '').trim(),
+        treatmentType: (r.treatment_type || '').trim(),
+        referredBy: (r.referred_by || '').trim(),
+        registeredAt: (r.registered_at || '').trim(),
+      }));
+
+      if (!extracted.length) {
+        toast.error(
+          res.errors?.length
+            ? "We couldn't read those photos. Make sure they're clear, well-lit, and show the register text."
+            : 'No patient rows found. Try clearer, well-lit photos of the register.',
+        );
+        return;
+      }
+      setManualRows(extracted);
+      setMode('manual');
+      const flagged = (res.rows || []).filter((r: any) => r.confidence === 'low' || r.issues).length;
+      toast.success(
+        `Found ${extracted.length} patient${extracted.length === 1 ? '' : 's'}` +
+          (flagged ? ` — ${flagged} need a quick check.` : '. Review before importing.'),
+      );
+    } catch (err: any) {
+      console.error('Scan register error:', err);
+      toast.error(err?.message || 'Could not read the register photos.');
+    } finally {
+      setScanning(false);
     }
   };
 
@@ -249,6 +318,27 @@ export const ImportPatientsModal: React.FC<ImportPatientsModalProps> = ({
           <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
             {mode === null ? (
               <>
+                <TouchableOpacity style={[styles.choiceCard, styles.choiceCardNew]} onPress={handleScanRegister} disabled={scanning}>
+                  <View style={styles.choiceTopRow}>
+                    <View style={[styles.choiceIcon, { backgroundColor: '#ECFDF5' }]}>
+                      {scanning ? <ActivityIndicator color="#059669" /> : <Camera size={22} color="#059669" />}
+                    </View>
+                    <View style={styles.newBadge}>
+                      <Text style={styles.newBadgeText}>NEW</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.choiceTitle}>
+                    {scanning ? 'Reading your photos…' : 'Scan a handwritten register'}
+                  </Text>
+                  <View style={styles.aiRow}>
+                    <Sparkles size={13} color={colors.primary} />
+                    <Text style={styles.aiText}>Powered by AI</Text>
+                  </View>
+                  <Text style={styles.choiceSub}>
+                    Upload photos of your paper register. We read them into an editable table for you to review before importing.
+                  </Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity style={styles.choiceCard} onPress={() => setMode('csv')}>
                   <View style={[styles.choiceIcon, { backgroundColor: '#EFF6FF' }]}>
                     <FileSpreadsheet size={22} color="#3B82F6" />
@@ -498,6 +588,12 @@ const styles = StyleSheet.create({
   closeBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.gray100, justifyContent: 'center', alignItems: 'center' },
   body: { padding: 20, gap: 16 },
   choiceCard: { borderWidth: 1, borderColor: colors.gray200, borderRadius: 14, padding: 18, gap: 8 },
+  choiceCardNew: { borderColor: colors.primary, borderWidth: 1.5, backgroundColor: '#FAFAFF' },
+  choiceTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  newBadge: { backgroundColor: colors.primary, borderRadius: 20, paddingHorizontal: 9, paddingVertical: 3 },
+  newBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
+  aiRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: -2 },
+  aiText: { fontSize: 12, fontWeight: '700', color: colors.primary },
   choiceIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   choiceTitle: { fontSize: 15, fontWeight: '700', color: colors.gray900 },
   choiceSub: { fontSize: 13, color: colors.gray500, lineHeight: 18 },

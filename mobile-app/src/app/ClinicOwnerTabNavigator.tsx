@@ -1,6 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Home, Calendar, Users, Wrench } from 'lucide-react-native';
+import { Home, Calendar, Users, LayoutGrid, Hospital } from 'lucide-react-native';
 import { ClinicOwnerHomeScreen } from '../features/clinic-owner/home/screens/Home';
 import { AppointmentsScreen } from '../features/clinic-owner/appointments/screens/AppointmentsScreen';
 import { PatientsScreen } from '../features/clinic-owner/patients/screens/PatientsScreen';
@@ -11,10 +11,10 @@ import { useAuth } from './AuthContext';
 
 export type ClinicOwnerTabParamList = {
   Home: undefined;
-  Appointments: undefined;
-  Admin?: undefined;
   Patients: undefined;
+  Appointments: undefined;
   Utilities: undefined;
+  Admin?: undefined;
 };
 
 const Tab = createBottomTabNavigator<ClinicOwnerTabParamList>();
@@ -47,15 +47,6 @@ export const ClinicOwnerTabNavigator = () => {
           tabBarIcon: ({ color, size }) => <Users size={size} color={color} />,
         }}
       />
-      {isAdmin && (
-        <Tab.Screen
-          name="Admin"
-          component={AdminHubScreen}
-          options={{
-            tabBarIcon: () => null,
-          }}
-        />
-      )}
       <Tab.Screen
         name="Appointments"
         component={AppointmentsScreen}
@@ -67,9 +58,18 @@ export const ClinicOwnerTabNavigator = () => {
         name="Utilities"
         component={UtilitiesScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <Wrench size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <LayoutGrid size={size} color={color} />,
         }}
       />
+      {isAdmin && (
+        <Tab.Screen
+          name="Admin"
+          component={AdminHubScreen}
+          options={{
+            tabBarIcon: ({ color, size }) => <Hospital size={size} color={color} />,
+          }}
+        />
+      )}
     </Tab.Navigator>
   );
 };

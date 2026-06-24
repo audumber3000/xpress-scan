@@ -39,6 +39,30 @@ export class AuthApiService extends BaseApiService {
     }
   }
 
+  /**
+   * Look up an account by email for the forgot-password confirmation step.
+   * Returns the owner's name + clinic so the user can confirm before sending
+   * a reset link. Returns { found: false } on any miss/error.
+   */
+  async accountPreview(email: string): Promise<{
+    found: boolean;
+    name?: string;
+    clinic_name?: string | null;
+    has_password?: boolean;
+  }> {
+    try {
+      const res = await this.fetchWithTimeout(`${this.baseURL}/auth/account-preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+      if (!res.ok) return { found: false };
+      return await res.json();
+    } catch {
+      return { found: false };
+    }
+  }
+
   private transformUser(data: any): BackendUser {
     // Backend returns data in different formats depending on endpoint
     // AuthResponseDTO: { user: {...}, clinic: {...}, clinics: [...] }

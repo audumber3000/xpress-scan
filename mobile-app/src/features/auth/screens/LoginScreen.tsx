@@ -27,7 +27,9 @@ import {
 } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../app/AppNavigator';
-import { signInWithGoogle, signInWithApple } from '../../../services/auth/authService';
+import { signInWithGoogle, signInWithApple, resetPassword } from '../../../services/auth/authService';
+import { authApiService } from '../../../services/api/auth.api';
+import { AuthInput } from '../components/AuthInput';
 import { useAuth } from '../../../app/AuthContext';
 import { colors } from '../../../shared/constants/colors';
 import { spacing } from '../../../shared/constants/theme';
@@ -42,11 +44,21 @@ const { width } = Dimensions.get('window');
 type LoginScreenProps = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
-  const [viewMode, setViewMode] = useState<'gateway' | 'email'>('gateway');
+  const [viewMode, setViewMode] = useState<'gateway' | 'email' | 'forgot'>('gateway');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isPasswordHidden, setIsPasswordHidden] = useState(true);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetSent, setResetSent] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [resetPreview, setResetPreview] = useState<{
+    found: boolean;
+    name?: string;
+    clinic_name?: string | null;
+    has_password?: boolean;
+  } | null>(null);
+  const isValidEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
   const passwordInputRef = useRef<TextInput>(null);
   const { signInEmail, setAppleFullName } = useAuth();
 
@@ -157,6 +169,47 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     setViewMode('email');
   };
 
+  const openForgot = () => {
+    setResetEmail(email.includes('@') ? email : '');
+    setResetSent(false);
+    setResetPreview(null);
+    setViewMode('forgot');
+  };
+
+  // Step 1: confirm the account exists and show whose it is before sending.
+  const handleLookup = async () => {
+    if (!isValidEmail(resetEmail)) {
+      setResetPreview({ found: false });
+      return;
+    }
+    setPreviewLoading(true);
+    try {
+      const preview = await authApiService.accountPreview(resetEmail.trim());
+      setResetPreview(preview);
+    } catch {
+      setResetPreview({ found: false });
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  // Step 2: actually send the reset link for the confirmed account.
+  const handleSendReset = async () => {
+    setIsLoading(true);
+    try {
+      const { error } = await resetPassword(resetEmail.trim());
+      if (error) {
+        toast.error(error);
+      } else {
+        setResetSent(true);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Could not send reset email.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const renderGateway = () => (
     <ScrollView 
       style={{ flex: 1 }}
@@ -252,62 +305,151 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
         <ArrowLeft size={24} color={colors.gray900} />
       </TouchableOpacity>
 
-      <Text style={[styles.title, { fontSize: 36, marginBottom: 40 }]}>Login with Email or Username</Text>
+      <Text style={[styles.title, { fontSize: 32, marginBottom: 8 }]}>Welcome back</Text>
+      <Text style={styles.formSubtitle}>Log in with your email or username.</Text>
 
-      <View style={styles.formCard}>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Email or Username</Text>
-          <View style={styles.inputWrapper}>
-            <Mail size={20} color={colors.primary} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="doctor@molarplus.com or reception1"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType={email.includes('@') ? 'email-address' : 'default'}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoFocus={true}
-              onSubmitEditing={() => passwordInputRef.current?.focus()}
-            />
-          </View>
-        </View>
+      <AuthInput
+        label="Email or Username"
+        placeholder="doctor@molarplus.com or reception1"
+        value={email}
+        onChangeText={setEmail}
+        keyboardType={email.includes('@') ? 'email-address' : 'default'}
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoFocus
+      />
 
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Password</Text>
-          <View style={styles.inputWrapper}>
-            <Lock size={20} color={colors.primary} style={styles.inputIcon} />
-            <TextInput
-              ref={passwordInputRef}
-              style={[styles.input, { letterSpacing: 2 }]}
-              placeholder="........"
-              secureTextEntry={isPasswordHidden}
-              value={password}
-              onChangeText={setPassword}
-            />
-            <TouchableOpacity 
-              onPress={() => setIsPasswordHidden(!isPasswordHidden)}
-              hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
-            >
-              {isPasswordHidden ? <EyeOff size={18} color={colors.gray400} /> : <Eye size={18} color={colors.gray400} />}
-            </TouchableOpacity>
-          </View>
-        </View>
+      <AuthInput
+        label="Password"
+        placeholder="Enter your password"
+        isPassword
+        value={password}
+        onChangeText={setPassword}
+      />
 
-        <TouchableOpacity 
-          style={styles.loginBtn}
-          onPress={handleEmailLogin}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.loginBtnText}>Login</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity onPress={openForgot} style={styles.forgotRow} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <Text style={styles.forgotText}>Forgot password?</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.loginBtn}
+        onPress={handleEmailLogin}
+        disabled={isLoading}
+      >
+        {isLoading ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <Text style={styles.loginBtnText}>Login</Text>
+        )}
+      </TouchableOpacity>
     </ScrollView>
   );
+
+  const renderForgotForm = () => {
+    const account = resetPreview?.found ? resetPreview : null;
+    const notFound = resetPreview != null && !resetPreview.found;
+
+    // Phase 3 — link sent.
+    if (resetSent) {
+      return (
+        <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 40 }}>
+          <TouchableOpacity
+            style={[styles.iconCircle, { width: 56, height: 56, marginBottom: 32 }]}
+            onPress={() => setViewMode('email')}
+          >
+            <ArrowLeft size={24} color={colors.gray900} />
+          </TouchableOpacity>
+          <Text style={[styles.title, { fontSize: 32, marginBottom: 8 }]}>Check your inbox</Text>
+          <Text style={styles.formSubtitle}>
+            We've sent a password reset link to {resetEmail.trim()}. Open it to set a new password.
+          </Text>
+          <TouchableOpacity style={styles.loginBtn} onPress={() => setViewMode('email')}>
+            <Text style={styles.loginBtnText}>Back to login</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      );
+    }
+
+    return (
+      <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 40 }}>
+        <TouchableOpacity
+          style={[styles.iconCircle, { width: 56, height: 56, marginBottom: 32 }]}
+          onPress={() => (account ? setResetPreview(null) : setViewMode('email'))}
+        >
+          <ArrowLeft size={24} color={colors.gray900} />
+        </TouchableOpacity>
+
+        <Text style={[styles.title, { fontSize: 32, marginBottom: 8 }]}>Reset password</Text>
+        <Text style={styles.formSubtitle}>
+          {account
+            ? 'We found your account. Confirm it below to get a reset link.'
+            : "Enter your account email and we'll find your account."}
+        </Text>
+
+        {/* Step 2 — confirm the matched account */}
+        {account ? (
+          <>
+            <View style={styles.accountCard}>
+              <View style={styles.accountAvatar}>
+                <Text style={styles.accountAvatarText}>
+                  {(account.name || '?').trim().charAt(0).toUpperCase()}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.accountName} numberOfLines={1}>{account.name || 'Your account'}</Text>
+                {!!account.clinic_name && (
+                  <Text style={styles.accountClinic} numberOfLines={1}>{account.clinic_name}</Text>
+                )}
+                <Text style={styles.accountEmail} numberOfLines={1}>{resetEmail.trim()}</Text>
+              </View>
+            </View>
+
+            <TouchableOpacity style={styles.loginBtn} onPress={handleSendReset} disabled={isLoading}>
+              {isLoading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.loginBtnText}>Send reset link</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.useDifferentRow} onPress={() => setResetPreview(null)}>
+              <Text style={styles.useDifferentText}>Use a different email</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          /* Step 1 — enter email */
+          <>
+            <AuthInput
+              label="Email address"
+              placeholder="doctor@molarplus.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+              value={resetEmail}
+              onChangeText={(t) => { setResetEmail(t); if (resetPreview) setResetPreview(null); }}
+              isValid={isValidEmail(resetEmail)}
+              errorText="Enter a valid email address"
+            />
+
+            {notFound && (
+              <Text style={styles.noticeText}>
+                We couldn't find an account with that email. Double-check it, or register a new clinic.
+              </Text>
+            )}
+
+            <TouchableOpacity style={styles.loginBtn} onPress={handleLookup} disabled={previewLoading}>
+              {previewLoading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.loginBtnText}>Find my account</Text>
+              )}
+            </TouchableOpacity>
+          </>
+        )}
+      </ScrollView>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -316,7 +458,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
       >
-        {viewMode === 'gateway' ? renderGateway() : renderEmailForm()}
+        {viewMode === 'gateway'
+          ? renderGateway()
+          : viewMode === 'forgot'
+          ? renderForgotForm()
+          : renderEmailForm()}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -461,20 +607,84 @@ const styles = StyleSheet.create({
   },
   loginBtn: {
     backgroundColor: colors.primary,
-    height: 56,
-    borderRadius: 28,
+    height: 54,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 12,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    marginTop: 8,
   },
   loginBtnText: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
+  },
+  formSubtitle: {
+    fontSize: 14,
+    color: colors.gray500,
+    marginBottom: 28,
+  },
+  forgotRow: {
+    alignSelf: 'flex-end',
+    marginBottom: 20,
+    marginTop: -4,
+  },
+  forgotText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  accountCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    marginBottom: 20,
+  },
+  accountAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  accountAvatarText: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  accountName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  accountClinic: {
+    fontSize: 13,
+    color: '#4B5563',
+    marginTop: 1,
+  },
+  accountEmail: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  noticeText: {
+    fontSize: 13,
+    color: colors.gray500,
+    marginBottom: 16,
+    lineHeight: 19,
+  },
+  useDifferentRow: {
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  useDifferentText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
   },
 });

@@ -44,6 +44,7 @@ import { signUpWithEmail } from '../../../services/auth/authService';
 import { authApiService } from '../../../services/api/auth.api';
 import { detectCountryAsync, flagEmoji } from '../../../shared/utils/detectCountry';
 import { colors } from '../../../shared/constants/colors';
+import { AuthInput } from '../components/AuthInput';
 import { useAuth } from '../../../app/AuthContext';
 import { getApiBaseUrl } from '../../../config/api.config';
 
@@ -106,6 +107,14 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({ navigation }) => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isPasswordHidden, setIsPasswordHidden] = useState(true);
+  // Reveals inline field errors once the user tries to advance / submit.
+  const [triedNext, setTriedNext] = useState(false);
+
+  // Per-field validity (mirrors the web's ValidatedInput checks).
+  const isNonEmpty = (s: string) => s.trim().length > 0;
+  const isValidEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
+  const pwLongEnough = password.length >= 8;
+  const pwMatches = confirmPassword.length > 0 && password === confirmPassword;
 
   // Refs for navigation
   const emailRef = useRef<TextInput>(null);
@@ -116,36 +125,47 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({ navigation }) => {
   const handleNextStep = () => {
     // Validation for each step
     if (step === 1) {
-      if (!fullName || !personalPhone || !specialty) {
-        setError('Please fill your details first, Dr.');
+      if (!isNonEmpty(fullName) || !isNonEmpty(personalPhone) || !isNonEmpty(specialty)) {
+        setTriedNext(true);
+        setError('Please fill in the required fields to continue.');
         return;
       }
     } else if (step === 2) {
-      if (!clinicName || !clinicAddress) {
-        setError('We need your clinic location to set up your practice.');
+      if (!isNonEmpty(clinicName) || !isNonEmpty(clinicAddress)) {
+        setTriedNext(true);
+        setError('Please fill in the required fields to continue.');
         return;
       }
     } else if (step === 3) {
       if (!numberOfChairs) {
+        setTriedNext(true);
         setError('Please specify your clinic capacity.');
         return;
       }
     }
-    
+
     setError('');
+    setTriedNext(false);
     setStep(step + 1);
   };
 
   const handleBackStep = () => {
-    if (step > 1) setStep(step - 1);
+    if (step > 1) {
+      setError('');
+      setTriedNext(false);
+      setStep(step - 1);
+    }
   };
 
   const isSocialAuth = authProvider === 'google' || authProvider === 'apple';
 
   const handleFinalSubmit = async () => {
     if (!isSocialAuth) {
-      if (!email || !password || password !== confirmPassword) {
-        setError(password !== confirmPassword ? 'Passwords do not match' : 'Please complete all security fields');
+      if (!isValidEmail(email) || !pwLongEnough || password !== confirmPassword) {
+        setTriedNext(true);
+        if (!isValidEmail(email)) setError('Please enter a valid email address.');
+        else if (!pwLongEnough) setError('Password must be at least 8 characters.');
+        else setError('Passwords do not match.');
         return;
       }
     }
@@ -221,259 +241,210 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({ navigation }) => {
 
   const renderStep1 = () => (
     <View style={styles.stepContent}>
-      <View style={styles.illustrationPlace}>
-        <Stethoscope size={64} color={colors.primary} />
-        <Text style={styles.dentistLine}>"A healthy smile starts with a great doctor. Let's get to know you!"</Text>
-      </View>
+      <Text style={styles.stepTitle}>Your details</Text>
+      <Text style={styles.stepSubtitle}>Tell us a bit about yourself.</Text>
 
-      <View style={styles.inputCard}>
-        <Text style={styles.cardTitle}>Professional Profile</Text>
-        
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Full Name</Text>
-          <View style={styles.inputWrapper}>
-            <User size={20} color={colors.primary} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Dr. Rajesh Kumar"
-              value={fullName}
-              onChangeText={setFullName}
-            />
-          </View>
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Personal Mobile</Text>
-          <View style={styles.inputWrapper}>
-            <Phone size={20} color={colors.primary} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="+91 98765 43210"
-              keyboardType="phone-pad"
-              value={personalPhone}
-              onChangeText={setPersonalPhone}
-            />
-          </View>
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Degree / Specialty</Text>
-          <View style={styles.inputWrapper}>
-            <Briefcase size={20} color={colors.primary} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="BDS, MDS (Orthodontics)"
-              value={specialty}
-              onChangeText={setSpecialty}
-            />
-          </View>
-        </View>
-      </View>
+      <AuthInput
+        label="Full Name"
+        placeholder="Dr. Rajesh Kumar"
+        value={fullName}
+        onChangeText={setFullName}
+        isValid={isNonEmpty(fullName)}
+        errorText="Full name is required"
+        forceShowError={triedNext}
+      />
+      <AuthInput
+        label="Personal Mobile"
+        placeholder="+91 98765 43210"
+        keyboardType="phone-pad"
+        value={personalPhone}
+        onChangeText={setPersonalPhone}
+        isValid={isNonEmpty(personalPhone)}
+        errorText="Mobile number is required"
+        forceShowError={triedNext}
+      />
+      <AuthInput
+        label="Degree / Specialty"
+        placeholder="BDS, MDS (Orthodontics)"
+        value={specialty}
+        onChangeText={setSpecialty}
+        isValid={isNonEmpty(specialty)}
+        errorText="Degree / specialty is required"
+        forceShowError={triedNext}
+      />
     </View>
   );
 
   const renderStep2 = () => (
     <View style={styles.stepContent}>
-      <View style={styles.illustrationPlace}>
-        <Building2 size={64} color={colors.primary} />
-        <Text style={styles.dentistLine}>"Every clinic has a story. Tell us where the magic happens!"</Text>
+      <Text style={styles.stepTitle}>Your clinic</Text>
+      <Text style={styles.stepSubtitle}>Where your practice is based.</Text>
+
+      <AuthInput
+        label="Clinic Brand Name"
+        placeholder="MolarPlus Dental Care"
+        value={clinicName}
+        onChangeText={setClinicName}
+        isValid={isNonEmpty(clinicName)}
+        errorText="Clinic name is required"
+        forceShowError={triedNext}
+      />
+
+      <View style={styles.fieldGroup}>
+        <Text style={styles.fieldLabel}>Country</Text>
+        <TouchableOpacity
+          style={styles.selectField}
+          onPress={() => setCountryModalVisible(true)}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.selectText, { color: country ? '#111827' : '#9CA3AF' }]}>
+            {country
+              ? `${flagEmoji(country)}  ${countries.find((c) => c.code === country)?.name || country}`
+              : 'Select country'}
+          </Text>
+          <ChevronDown size={18} color="#9CA3AF" />
+        </TouchableOpacity>
       </View>
 
-      <View style={styles.inputCard}>
-        <Text style={styles.cardTitle}>Clinic Details</Text>
-        
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Clinic Brand Name</Text>
-          <View style={styles.inputWrapper}>
-            <Building2 size={20} color={colors.primary} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="MolarPlus Dental Care"
-              value={clinicName}
-              onChangeText={setClinicName}
-            />
-          </View>
+      <View style={styles.fieldGroup}>
+        <Text style={styles.fieldLabel}>Full Address</Text>
+        <View style={[styles.selectField, styles.textArea, triedNext && !isNonEmpty(clinicAddress) && styles.fieldError]}>
+          <TextInput
+            style={[styles.selectText, { flex: 1, textAlignVertical: 'top' }]}
+            placeholder="Suite 405, MG Road, Pune..."
+            placeholderTextColor="#9CA3AF"
+            multiline
+            value={clinicAddress}
+            onChangeText={setClinicAddress}
+          />
         </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Country</Text>
-          <TouchableOpacity
-            style={styles.inputWrapper}
-            onPress={() => setCountryModalVisible(true)}
-            activeOpacity={0.7}
-          >
-            <Globe size={20} color={colors.primary} style={styles.inputIcon} />
-            <Text style={[styles.input, { color: country ? '#111827' : '#9CA3AF' }]}>
-              {country
-                ? `${flagEmoji(country)}  ${countries.find((c) => c.code === country)?.name || country}`
-                : 'Select country'}
-            </Text>
-            <ChevronDown size={18} color="#9CA3AF" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Full Address</Text>
-          <View style={[styles.inputWrapper, { height: 80, alignItems: 'flex-start', paddingTop: 12 }]}>
-            <MapPin size={20} color={colors.primary} style={styles.inputIcon} />
-            <TextInput
-              style={[styles.input, { textAlignVertical: 'top' }]}
-              placeholder="Suite 405, MG Road, Pune..."
-              multiline
-              value={clinicAddress}
-              onChangeText={setClinicAddress}
-            />
-          </View>
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Clinic Phone (Optional)</Text>
-          <View style={styles.inputWrapper}>
-            <Phone size={20} color={colors.primary} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Leave blank to use personal"
-              keyboardType="phone-pad"
-              value={clinicPhone}
-              onChangeText={setClinicPhone}
-            />
-          </View>
-        </View>
+        {triedNext && !isNonEmpty(clinicAddress) && (
+          <Text style={styles.fieldErrorText}>Clinic address is required</Text>
+        )}
       </View>
+
+      <AuthInput
+        label="Clinic Phone (Optional)"
+        placeholder="Leave blank to use personal"
+        keyboardType="phone-pad"
+        value={clinicPhone}
+        onChangeText={setClinicPhone}
+      />
     </View>
   );
 
   const renderStep3 = () => (
     <View style={styles.stepContent}>
-      <View style={styles.illustrationPlace}>
-        <Users size={64} color={colors.primary} />
-        <Text style={styles.dentistLine}>"Growth matters! We'll help you manage your patient volume seamlessly."</Text>
+      <Text style={styles.stepTitle}>Your practice</Text>
+      <Text style={styles.stepSubtitle}>A few details to tailor your setup.</Text>
+
+      <View style={styles.fieldGroup}>
+        <Text style={styles.fieldLabel}>Number of Dental Chairs</Text>
+        <View style={styles.chipRow}>
+          {['1', '2', '3', '4+'].map(val => (
+            <TouchableOpacity
+              key={val}
+              style={[styles.selectorChip, numberOfChairs === val && styles.selectorChipActive]}
+              onPress={() => setNumberOfChairs(val)}
+            >
+              <Text style={[styles.selectorText, numberOfChairs === val && styles.selectorTextActive]}>
+                {val}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
-      <View style={styles.inputCard}>
-        <Text style={styles.cardTitle}>Practice Insights</Text>
-        
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Number of Dental Chairs</Text>
-          <View style={styles.row}>
-            {['1', '2', '3', '4+'].map(val => (
-              <TouchableOpacity
-                key={val}
-                style={[
-                  styles.selectorChip,
-                  numberOfChairs === val && styles.selectorChipActive
-                ]}
-                onPress={() => setNumberOfChairs(val)}
-              >
-                <Text style={[
-                  styles.selectorText,
-                  numberOfChairs === val && styles.selectorTextActive
-                ]}>{val}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Clinic Focus Area</Text>
-          <TouchableOpacity 
-            style={styles.inputWrapper}
-            onPress={() => {
-              const areas = ['General Dentistry', 'Pediatric', 'Orthodontics', 'Cosmetic', 'Implants'];
-              const idx = areas.indexOf(clinicCategory);
-              setClinicCategory(areas[(idx + 1) % areas.length]);
-            }}
-          >
-            <Check size={20} color={colors.primary} style={styles.inputIcon} />
-            <Text style={styles.input}>{clinicCategory}</Text>
-            <ChevronDown size={20} color={colors.gray400} />
-          </TouchableOpacity>
-        </View>
+      <View style={styles.fieldGroup}>
+        <Text style={styles.fieldLabel}>Clinic Focus Area</Text>
+        <TouchableOpacity
+          style={styles.selectField}
+          onPress={() => {
+            const areas = ['General Dentistry', 'Pediatric', 'Orthodontics', 'Cosmetic', 'Implants'];
+            const idx = areas.indexOf(clinicCategory);
+            setClinicCategory(areas[(idx + 1) % areas.length]);
+          }}
+        >
+          <Text style={styles.selectText}>{clinicCategory}</Text>
+          <ChevronDown size={18} color="#9CA3AF" />
+        </TouchableOpacity>
       </View>
     </View>
   );
 
   const renderStep4 = () => (
     <View style={styles.stepContent}>
-      <View style={styles.illustrationPlace}>
-        <Lock size={64} color={colors.primary} />
-        <Text style={styles.dentistLine}>
-          {authProvider === 'google'
-            ? "Your account is linked to Google. Your data is safe and secured by Google's world-class protection."
-            : authProvider === 'apple'
-            ? "Your account is linked with Sign in with Apple. Authentication is handled securely by Apple."
-            : "Stay secure. Your clinical data is encrypted and protected with us."
-          }
-        </Text>
-      </View>
+      <Text style={styles.stepTitle}>{isSocialAuth ? 'Confirm & finish' : 'Account security'}</Text>
+      <Text style={styles.stepSubtitle}>
+        {isSocialAuth ? 'Review and create your clinic.' : 'Set the password for your account.'}
+      </Text>
 
-      <View style={styles.inputCard}>
-        <Text style={styles.cardTitle}>Account Security</Text>
-
-        {isSocialAuth ? (
-          <View style={styles.socialAuthInfo}>
-            <View style={styles.socialAuthBadge}>
-              <Check size={20} color={colors.success} />
-              <Text style={styles.socialAuthText}>
-                {authProvider === 'apple' ? 'Linked with Apple' : 'Linked with Google'}
-              </Text>
-            </View>
-            <Text style={styles.socialAuthSubtext}>
-              {authProvider === 'apple'
-                ? `No password needed. Your account is secured by Sign in with Apple${firebaseUser?.email ? ` (${firebaseUser.email})` : ''}.`
-                : `No separate password is required. You can continue to use your Google account (${firebaseUser?.email}) to access MolarPlus.`}
+      {isSocialAuth ? (
+        <View style={styles.socialAuthInfo}>
+          <View style={styles.socialAuthBadge}>
+            <Check size={20} color={colors.success} />
+            <Text style={styles.socialAuthText}>
+              {authProvider === 'apple' ? 'Linked with Apple' : 'Linked with Google'}
             </Text>
           </View>
-        ) : (
-          <>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Official Email</Text>
-              <View style={styles.inputWrapper}>
-                <Mail size={20} color={colors.primary} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="doctor@example.com"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  value={email}
-                  onChangeText={setEmail}
-                />
-              </View>
-            </View>
+          <Text style={styles.socialAuthSubtext}>
+            {authProvider === 'apple'
+              ? `No password needed. Your account is secured by Sign in with Apple${firebaseUser?.email ? ` (${firebaseUser.email})` : ''}.`
+              : `No separate password is required. You can continue to use your Google account (${firebaseUser?.email}) to access MolarPlus.`}
+          </Text>
+        </View>
+      ) : (
+        <>
+          <AuthInput
+            label="Official Email"
+            placeholder="doctor@example.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
+            isValid={isValidEmail(email)}
+            errorText="Enter a valid email address"
+            forceShowError={triedNext}
+          />
+          <AuthInput
+            label="Secure Password"
+            placeholder="Min. 8 characters"
+            isPassword
+            value={password}
+            onChangeText={setPassword}
+            isValid={pwLongEnough}
+            errorText="Use at least 8 characters"
+            forceShowError={triedNext}
+          />
+          <AuthInput
+            label="Confirm Password"
+            placeholder="Repeat password"
+            isPassword
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            isValid={pwMatches}
+            errorText="Passwords do not match"
+            forceShowError={triedNext}
+          />
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Secure Password</Text>
-              <View style={styles.inputWrapper}>
-                <Lock size={20} color={colors.primary} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Min. 8 characters"
-                  secureTextEntry={isPasswordHidden}
-                  value={password}
-                  onChangeText={setPassword}
-                />
-                <TouchableOpacity onPress={() => setIsPasswordHidden(!isPasswordHidden)}>
-                  {isPasswordHidden ? <EyeOff size={18} color={colors.gray400} /> : <Eye size={18} color={colors.gray400} />}
-                </TouchableOpacity>
+          {(password.length > 0 || confirmPassword.length > 0) && (
+            <View style={styles.pwReqs}>
+              <View style={styles.pwReqRow}>
+                <Check size={14} color={pwLongEnough ? '#10B981' : '#D1D5DB'} />
+                <Text style={[styles.pwReqText, pwLongEnough && styles.pwReqTextMet]}>
+                  At least 8 characters
+                </Text>
+              </View>
+              <View style={styles.pwReqRow}>
+                <Check size={14} color={pwMatches ? '#10B981' : '#D1D5DB'} />
+                <Text style={[styles.pwReqText, pwMatches && styles.pwReqTextMet]}>
+                  Passwords match
+                </Text>
               </View>
             </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Confirm Password</Text>
-              <View style={styles.inputWrapper}>
-                <Check size={20} color={colors.primary} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Repeat password"
-                  secureTextEntry={isPasswordHidden}
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                />
-              </View>
-            </View>
-          </>
-        )}
-      </View>
+          )}
+        </>
+      )}
     </View>
   );
 
@@ -511,12 +482,9 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({ navigation }) => {
               {isLoading ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <>
-                  <Text style={styles.actionButtonText}>
-                    {step === totalSteps ? 'Create My Clinic' : 'Continue'}
-                  </Text>
-                  <ChevronRight size={20} color="#FFFFFF" />
-                </>
+                <Text style={styles.actionButtonText}>
+                  {step === totalSteps ? 'Create account' : 'Continue'}
+                </Text>
               )}
             </Pressable>
 
@@ -739,12 +707,89 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '600',
   },
+  pwReqs: {
+    marginTop: 2,
+    marginBottom: 4,
+    gap: 6,
+  },
+  pwReqRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pwReqText: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+  pwReqTextMet: {
+    color: '#059669',
+  },
+  stepTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  stepSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 24,
+  },
+  fieldGroup: {
+    marginBottom: 16,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 6,
+  },
+  selectField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    backgroundColor: '#FFFFFF',
+  },
+  selectText: {
+    fontSize: 15,
+    color: '#111827',
+  },
+  textArea: {
+    minHeight: 80,
+    alignItems: 'flex-start',
+    paddingTop: 12,
+  },
+  fieldError: {
+    borderColor: '#FCA5A5',
+  },
+  fieldErrorText: {
+    marginTop: 5,
+    fontSize: 12,
+    color: '#EF4444',
+  },
+  chipRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
   footer: {
     paddingHorizontal: 24,
     marginTop: 8,
   },
   actionButton: {
     backgroundColor: colors.primary,
+    height: 54,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  _legacyActionButton: {
     height: 60,
     borderRadius: 30,
     flexDirection: 'row',
@@ -759,8 +804,8 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '900',
+    fontSize: 16,
+    fontWeight: '700',
   },
   alreadyHaveRow: {
     flexDirection: 'row',

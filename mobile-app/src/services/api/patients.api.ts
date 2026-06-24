@@ -228,6 +228,37 @@ export class PatientsApiService extends BaseApiService {
     }
   }
 
+  /**
+   * Extract patient rows from photos of a handwritten register via the backend
+   * vision model. Returns rows for the editable review table — nothing is saved.
+   * Uses a long timeout (not fetchWithTimeout's 8s) since vision extraction is slow.
+   */
+  async extractRegister(
+    images: { uri: string; name: string; type: string }[],
+  ): Promise<{ rows: any[]; pages: number; errors: string[] }> {
+    const headers = await this.getUploadHeaders();
+    const formData = new FormData();
+    images.forEach((img) => formData.append('files', img as any));
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 120000); // 2 min
+    try {
+      const response = await fetch(`${this.baseURL}/patients/extract-register`, {
+        method: 'POST',
+        headers,
+        body: formData,
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || 'Could not read the register photos.');
+      }
+      return await response.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /** Bulk-import patients from already-parsed CSV rows (mirrors the web importer). */
   async importPatients(patients: Record<string, any>[]): Promise<any> {
     const headers = await this.getAuthHeaders();
@@ -310,17 +341,14 @@ export class PatientsApiService extends BaseApiService {
 
   async uploadFile(patientId: string, file: any, notes?: string): Promise<any> {
     try {
-      const headers = await this.getAuthHeaders();
+      const headers = await this.getUploadHeaders();
       const formData = new FormData();
       formData.append('file', file);
       if (notes) formData.append('notes', notes);
 
       const response = await fetch(`${this.baseURL}/patients/${patientId}/files/upload`, {
         method: 'POST',
-        headers: {
-          ...headers,
-          'Accept': 'application/json',
-        },
+        headers,
         body: formData,
       });
 
@@ -333,6 +361,23 @@ export class PatientsApiService extends BaseApiService {
       console.error('Error uploading file:', error);
       throw error;
     }
+  }
+
+  /** Upload a patient file with real progress reporting (onProgress 0..1). */
+  async uploadFileWithProgress(
+    patientId: string,
+    file: any,
+    onProgress?: (fraction: number) => void,
+    notes?: string,
+  ): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (notes) formData.append('notes', notes);
+    return this.uploadWithProgress(
+      `${this.baseURL}/patients/${patientId}/files/upload`,
+      formData,
+      onProgress,
+    );
   }
 
   /**
@@ -490,6 +535,25 @@ export class PatientsApiService extends BaseApiService {
       console.error('❌ [API] getPatientDocuments error:', error);
       return [];
     }
+  }
+
+  /**
+   * Upload a document for a patient, optionally attached to a case paper.
+   * Uses multipart headers (no JSON Content-Type) so the boundary is set by RN.
+   */
+  async uploadDocument(
+    patientId: string,
+    file: any,
+    casePaperId?: string | number,
+    onProgress?: (fraction: number) => void,
+  ): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    let url = `${this.baseURL}/documents/upload/${patientId}`;
+    if (casePaperId !== undefined && casePaperId !== null && `${casePaperId}` !== '') {
+      url += `?case_paper_id=${casePaperId}`;
+    }
+    return this.uploadWithProgress(url, formData, onProgress);
   }
 
   // ─── Invoices ──────────────────────────────────────────────

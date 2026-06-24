@@ -431,14 +431,14 @@ export class AdminApiService extends BaseApiService {
         file: { uri: string; name: string; type: string },
     ): Promise<{ logo_url: string; storage_key: string } | null> {
         try {
-            const headers = await this.getAuthHeaders();
+            const headers = await this.getUploadHeaders();
             const formData = new FormData();
             formData.append('category', category);
             formData.append('file', file as any);
 
             const r = await this.fetchWithTimeout(`${this.baseURL}/template-configs/logo`, {
                 method: 'POST',
-                headers: { ...headers, Accept: 'application/json' },
+                headers,
                 body: formData as any,
             });
             if (!r.ok) {

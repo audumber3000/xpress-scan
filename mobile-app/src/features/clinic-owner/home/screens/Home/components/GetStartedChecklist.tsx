@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Rocket, Check, ChevronRight } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Rocket, Check, ChevronRight, X } from 'lucide-react-native';
 import { colors } from '../../../../../../shared/constants/colors';
 import { componentRadius } from '../../../../../../shared/constants/theme';
 
@@ -13,18 +14,38 @@ export interface ChecklistStep {
 
 interface GetStartedChecklistProps {
   steps: ChecklistStep[];
+  /** Clinic id — dismissal is remembered per clinic. */
+  dismissKey?: string | number | null;
 }
 
+const dismissStorageKey = (k?: string | number | null) => `getstarted_dismissed_${k ?? 'default'}`;
+
 /**
- * Onboarding "Get started checklist" card. Replaces the dead-zero dashboard with
- * a clear path forward. Hides itself once every step is complete.
+ * Onboarding "Get started checklist" card. Hides itself once every step is
+ * complete, or once the user dismisses it (remembered per clinic).
  */
-export const GetStartedChecklist: React.FC<GetStartedChecklistProps> = ({ steps }) => {
+export const GetStartedChecklist: React.FC<GetStartedChecklistProps> = ({ steps, dismissKey }) => {
+  const [dismissed, setDismissed] = React.useState(false);
+  const [hydrated, setHydrated] = React.useState(false);
+
+  React.useEffect(() => {
+    let active = true;
+    AsyncStorage.getItem(dismissStorageKey(dismissKey))
+      .then((v) => { if (active) { setDismissed(v === '1'); setHydrated(true); } })
+      .catch(() => { if (active) setHydrated(true); });
+    return () => { active = false; };
+  }, [dismissKey]);
+
+  const handleDismiss = () => {
+    setDismissed(true);
+    AsyncStorage.setItem(dismissStorageKey(dismissKey), '1').catch(() => {});
+  };
+
   const completed = steps.filter((s) => s.done).length;
   const total = steps.length;
 
-  // Nothing left to nudge — get out of the way.
-  if (completed === total) return null;
+  // Don't flash before we know the dismissed state; hide when complete or dismissed.
+  if (!hydrated || dismissed || completed === total) return null;
 
   return (
     <View style={styles.card}>
@@ -34,11 +55,18 @@ export const GetStartedChecklist: React.FC<GetStartedChecklistProps> = ({ steps 
         </View>
         <View style={styles.headerText}>
           <Text style={styles.title}>Get started checklist</Text>
-          <Text style={styles.subtitle}>{total} steps to unlock full use</Text>
+          <Text style={styles.subtitle}>{completed} of {total} done</Text>
         </View>
         <Text style={styles.progress}>
           {completed} / {total}
         </Text>
+        <TouchableOpacity
+          onPress={handleDismiss}
+          style={styles.dismissBtn}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <X size={18} color={colors.gray400} strokeWidth={2.4} />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.steps}>
@@ -112,6 +140,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     color: colors.primary,
+  },
+  dismissBtn: {
+    marginLeft: 8,
+    padding: 2,
   },
   steps: {
     marginTop: 14,

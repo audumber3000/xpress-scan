@@ -2,7 +2,7 @@
   "expo": {
     "name": "MolarPlus",
     "slug": "molarplus",
-    "version": "3.15.0",
+    "version": "3.16.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -48,6 +48,13 @@
         }
       ],
       "expo-localization",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "MolarPlus needs access to your photos to scan handwritten patient registers.",
+          "cameraPermission": "MolarPlus needs camera access to photograph handwritten patient registers."
+        }
+      ],
       "./plugins/withFirebaseModularHeaders"
     ],
     "web": {

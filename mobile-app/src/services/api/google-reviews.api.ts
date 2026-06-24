@@ -147,6 +147,20 @@ export class GoogleReviewsApiService extends BaseApiService {
       return false;
     }
   }
+
+  async unlinkPlace(): Promise<boolean> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const res = await this.fetchWithTimeout(`${this.baseURL}/google-places/unlink`, {
+        method: 'DELETE',
+        headers,
+      });
+      return res.ok;
+    } catch (err) {
+      console.error('❌ [GOOGLE] unlink error:', err);
+      return false;
+    }
+  }
 }
 
 export const googleReviewsApiService = new GoogleReviewsApiService();

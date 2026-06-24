@@ -29,11 +29,17 @@ if [ -n "$FIREBASE_JSON_B64" ] && [ -n "$FIREBASE_JSON_PATH" ]; then
 fi
 
 # --- SSH tunnel to the private prod Postgres --------------------------------
-# DB_TUNNEL_HOST e.g. "root@178.104.132.255"; DB_TUNNEL_SSH_PORT defaults to 22.
-: "${DB_TUNNEL_HOST:?DB_TUNNEL_HOST required (e.g. root@178.104.132.255)}"
+# DB_TUNNEL_HOST e.g. "root@178.104.132.255" (Hetzner) or "ubuntu@13.207.97.83" (AWS EC2).
+# DB_TUNNEL_SSH_PORT defaults to 22.
+# DB_REMOTE_TARGET is the host:port to forward to *on the far side of the tunnel*.
+# Defaults to "localhost:5432" (Postgres on the tunnel host, e.g. Hetzner). For AWS,
+# point this at the private RDS endpoint, which only the EC2 box can reach, e.g.
+# "molarplus-db.ch8c2s2qg0dt.ap-south-1.rds.amazonaws.com:5432".
+: "${DB_TUNNEL_HOST:?DB_TUNNEL_HOST required (e.g. root@178.104.132.255 or ubuntu@13.207.97.83)}"
 : "${DB_TUNNEL_SSH_PORT:=22}"
+: "${DB_REMOTE_TARGET:=localhost:5432}"
 
-echo "Opening DB tunnel via $DB_TUNNEL_HOST ..."
+echo "Opening DB tunnel via $DB_TUNNEL_HOST -> $DB_REMOTE_TARGET ..."
 autossh -M 0 -f -N \
   -o StrictHostKeyChecking=no \
   -o UserKnownHostsFile=/dev/null \
@@ -42,7 +48,7 @@ autossh -M 0 -f -N \
   -o ExitOnForwardFailure=yes \
   -i /root/.ssh/id_tunnel \
   -p "$DB_TUNNEL_SSH_PORT" \
-  -L 5432:localhost:5432 \
+  -L "5432:${DB_REMOTE_TARGET}" \
   "$DB_TUNNEL_HOST"
 
 # --- Wait for the tunnel to accept connections before starting the app ------

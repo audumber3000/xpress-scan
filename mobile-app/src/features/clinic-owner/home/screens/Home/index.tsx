@@ -15,7 +15,6 @@ import { MetricChartCard } from '../../../../../shared/components/home/MetricCha
 import { getCurrencySymbol } from '../../../../../shared/utils/currency';
 import { ErrorBanner } from './components/ErrorBanner';
 import { GetStartedChecklist } from './components/GetStartedChecklist';
-import { GoogleReviewsRow } from '../../../../../shared/components/home/GoogleReviewsRow';
 import { googleReviewsApiService, GooglePlaceStatus } from '../../../../../services/api/google-reviews.api';
 import { colors } from '../../../../../shared/constants/colors';
 import { RightNowStrip } from './components/RightNowStrip';
@@ -310,7 +309,8 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
   const checklistSteps = [
     { key: 'patient', label: 'Register your first patient', done: totalPatients > 0, onPress: goToPatient },
     { key: 'appointment', label: 'Schedule an appointment', done: totalAppointments > 0, onPress: goToAppointment },
-    { key: 'invoice', label: 'Create your first invoice', done: dailyRevenue > 0, onPress: goToInvoice },
+    // "Has ever invoiced" — not today's revenue, so established clinics aren't nagged.
+    { key: 'invoice', label: 'Create your first invoice', done: transactions.length > 0 || dailyRevenue > 0, onPress: goToInvoice },
   ];
 
   // Chart series for the carousel.
@@ -380,6 +380,8 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
           nextAppointmentTime={nextAppointmentTime}
           unpaidInvoicesCount={unpaidInvoicesCount}
           reviewCount={reviewCount}
+          reviewsLinked={!!googleStatus?.linked}
+          reviewRating={googleStatus?.current_rating ?? null}
           loading={showInitialSkeletons}
           refreshing={refreshing || analyticsLoading}
           lastUpdatedAt={lastUpdatedAt}
@@ -387,6 +389,7 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
           onAppointmentsPress={() => navigation.navigate('Appointments')}
           onInvoicesPress={() => navigation.navigate('AllTransactions')}
           onReviewsPress={() => navigation.navigate('GoogleReviews')}
+          onConnectReviewsPress={() => navigation.navigate('GoogleReviews')}
         />
 
         {/* Swipeable chart cards on the plain screen background (no purple behind) */}
@@ -496,14 +499,11 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
 
         <ErrorBanner error={error} onRetry={loadData} />
 
-        {!loading && <GetStartedChecklist steps={checklistSteps} />}
-
-        <GoogleReviewsRow
-          status={googleStatus}
-          loading={googleLoading}
-          cityRank={cityRank}
-          onPress={() => navigation.navigate('GoogleReviews')}
-        />
+        {/* Onboarding only: a clinic that has any financial activity (or revenue
+            today) is operational, so the checklist gets out of the way. */}
+        {!loading && transactions.length === 0 && dailyRevenue === 0 && (
+          <GetStartedChecklist steps={checklistSteps} dismissKey={backendUser?.clinic?.id} />
+        )}
 
         <RecentTransactions
           transactions={transactions}

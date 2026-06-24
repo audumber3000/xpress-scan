@@ -1,10 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, type LayoutChangeEvent } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, type LayoutChangeEvent } from 'react-native';
 import { BottomTabBarHeightCallbackContext, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { Shield } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from './AuthContext';
 import { colors } from '../shared/constants/colors';
-import { adminColors } from '../shared/constants/adminColors';
 import { useNavigationState } from '@react-navigation/native';
 
 const TAB_LABELS: Record<string, string> = {
@@ -17,6 +16,7 @@ const TAB_LABELS: Record<string, string> = {
 
 export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const onHeightChange = React.useContext(BottomTabBarHeightCallbackContext);
+  const insets = useSafeAreaInsets();
   const { backendUser } = useAuth() || {};
   
   // Check if we're in admin section
@@ -39,7 +39,7 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
 
   return (
     <View style={styles.outer} onLayout={handleLayout}>
-      <View style={styles.bar}>
+      <View style={[styles.bar, { paddingBottom: 8 + insets.bottom }]}>
         <View style={styles.row}>
           {state.routes.map((route, index) => {
             const { options } = descriptors[route.key];
@@ -64,45 +64,17 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
               });
             };
 
-            const iconColor = isFocused ? colors.primary : colors.gray400;
+            // Admin stays highlighted while any admin sub-screen is active.
+            const active = isFocused || (isAdminTab && isInAdminSection);
+            const iconColor = active ? colors.primary : colors.gray400;
             const label = TAB_LABELS[route.name] ?? route.name;
-
-            if (isAdminTab) {
-              const adminButtonColor = isInAdminSection ? adminColors.primary : colors.primary;
-              const adminShadowColor = isInAdminSection ? adminColors.primary : colors.primary;
-              
-              return (
-                <TouchableOpacity
-                  key={route.key}
-                  accessibilityRole="button"
-                  accessibilityState={isFocused ? { selected: true } : {}}
-                  accessibilityLabel={label}
-                  onPress={onPress}
-                  onLongPress={onLongPress}
-                  style={styles.adminTabWrapper}
-                  activeOpacity={0.8}
-                >
-                  <View style={[
-                    styles.adminButton, 
-                    { backgroundColor: adminButtonColor },
-                    Platform.select({
-                      ios: {
-                        shadowColor: adminShadowColor,
-                      },
-                    }),
-                  ]}>
-                    <Shield size={26} color="#FFFFFF" strokeWidth={2.5} />
-                  </View>
-                </TouchableOpacity>
-              );
-            }
 
             const Icon = options.tabBarIcon;
             return (
               <TouchableOpacity
                 key={route.key}
                 accessibilityRole="button"
-                accessibilityState={isFocused ? { selected: true } : {}}
+                accessibilityState={active ? { selected: true } : {}}
                 accessibilityLabel={label}
                 onPress={onPress}
                 onLongPress={onLongPress}
@@ -111,7 +83,7 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
               >
                 {Icon ? (
                   <View style={styles.iconWrap}>
-                    {Icon({ focused: isFocused, color: iconColor, size: 24 })}
+                    {Icon({ focused: active, color: iconColor, size: 24 })}
                   </View>
                 ) : null}
                 <Text style={[styles.label, { color: iconColor }]} numberOfLines={1}>
@@ -154,66 +126,5 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 11,
     fontWeight: '600',
-  },
-  adminTabWrapper: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 12,
-    overflow: 'visible',
-  },
-  adminButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.primary,
-    borderWidth: 3,
-    borderColor: colors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: -24,
-    transform: [{ translateY: -14 }],
-    ...Platform.select({
-      ios: {
-        shadowColor: colors.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.45,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 10,
-      },
-    }),
-  },
-  badgeContainer: {
-    position: 'absolute',
-    top: -2,
-    right: -6,
-    zIndex: 10,
-  },
-  freeBadgePill: {
-    backgroundColor: '#F59E0B',
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#FFFFFF',
-    minWidth: 28,
-    alignItems: 'center',
-  },
-  freeBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 7,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-  proMiniBadge: {
-    backgroundColor: 'rgba(46, 42, 133, 0.9)',
-    borderRadius: 20,
-    padding: 2,
-    borderWidth: 1,
-    borderColor: '#FFD700',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

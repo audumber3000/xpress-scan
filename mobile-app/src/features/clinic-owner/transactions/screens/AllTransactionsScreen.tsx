@@ -96,10 +96,11 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () =>
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={[]}>
       <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
       <ScreenHeader
         variant="primary"
+        topInset
         title="All Transactions"
         titleIcon={<Receipt size={22} />}
         onBackPress={navigation.canGoBack() ? () => navigation.goBack() : undefined}
