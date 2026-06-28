@@ -1,0 +1,54 @@
+name: Deploy Backend to AWS
+
+# Auto-deploys the FastAPI backend to the EC2 prod box whenever backend code is
+# pushed to main. (The web frontend is auto-deployed separately by Vercel; the
+# mobile app ships via EAS — neither is handled here.)
+#
+# ── One-time setup ────────────────────────────────────────────────────────────
+# Repo → Settings → Secrets and variables → Actions → "New repository secret":
+#   EC2_SSH_KEY  – the FULL contents of the molarplus-ec2.pem private key
+#                  (the whole file, incl. the BEGIN/END lines)
+#   EC2_HOST     – the EC2 host/IP, e.g. 13.207.97.83
+#
+# Then test it once via the "Run workflow" button below (workflow_dispatch)
+# before relying on the automatic push trigger.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'          # only redeploy when backend code actually changes
+  workflow_dispatch:           # manual "Run workflow" button
+
+# Never run two deploys at once (they both rebuild the same containers).
+concurrency:
+  group: deploy-backend-aws
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2.pem
+          chmod 600 ~/.ssh/ec2.pem
+
+      - name: Rsync backend to EC2
+        run: |
+          rsync -avz \
+            --exclude '.venv/' --exclude 'venv/' --exclude '__pycache__/' \
+            --exclude '*.pyc' --exclude '.env' --exclude '.env.*' \
+            --exclude '.pytest_cache/' --exclude 'uploads/' --exclude '.git/' \
+            -e "ssh -i ~/.ssh/ec2.pem -o StrictHostKeyChecking=no" \
+            backend/ "ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/molarplus/backend/"
+
+      - name: Run deploy script (RDS migrations + rebuild + health check)
+        run: |
+          ssh -i ~/.ssh/ec2.pem -o StrictHostKeyChecking=no \
+            "ubuntu@${{ secrets.EC2_HOST }}" \
+            'cd /home/ubuntu/molarplus && bash deploy-aws.sh'
