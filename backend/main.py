@@ -7,6 +7,25 @@ from dotenv import load_dotenv
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
+# ── Sentry backend error tracking ────────────────────────────────────────────
+# Initialise as early as possible so the FastAPI integration can auto-capture
+# unhandled exceptions (full stack traces + alerting). No-op when SENTRY_DSN is
+# unset, so local/dev runs are unaffected. PostHog stays for product analytics.
+SENTRY_DSN = os.environ.get("SENTRY_DSN")
+if SENTRY_DSN:
+    try:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            environment=os.environ.get("SENTRY_ENVIRONMENT", "production"),
+            release=os.environ.get("SENTRY_RELEASE"),
+            traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.0")),
+            send_default_pii=False,
+        )
+        print("✅ Sentry error tracking initialised")
+    except Exception as _sentry_exc:
+        print(f"⚠️  Sentry init skipped: {_sentry_exc}")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -88,6 +107,13 @@ async def lifespan(app: FastAPI):
     # Inline migrations — add any missing columns safely
     try:
         with engine.connect() as conn:
+            # Patient DOB (added 2026-06; powers DOB-or-age intake + birthdays).
+            # create_all never adds columns to existing tables, so self-heal here —
+            # a DB migrated/restored without this column otherwise 500s the whole
+            # patients list with "column patients.date_of_birth does not exist".
+            conn.execute(text(
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS date_of_birth DATE"
+            ))
             conn.execute(text(
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS dashboard_preferences JSONB"
             ))
@@ -131,6 +157,12 @@ async def lifespan(app: FastAPI):
             # WA Reach (own-number WhatsApp) — additive; tags which provider sent each message.
             conn.execute(text(
                 "ALTER TABLE notification_logs ADD COLUMN IF NOT EXISTS provider VARCHAR DEFAULT 'msg91'"
+            ))
+            # Link prescriptions to their case paper (visit). Case papers are a
+            # separate table from appointments, so the prior appointment_id link
+            # was silently nulled and prescriptions never showed on the case paper.
+            conn.execute(text(
+                "ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS case_paper_id INTEGER REFERENCES case_papers(id)"
             ))
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS whatsapp_integrations (
@@ -279,6 +311,15 @@ async def lifespan(app: FastAPI):
             conn.commit()
     except Exception as e:
         print(f"⚠️  Column migration skipped: {e}")
+
+    # Seed system-wide medication catalogue (powers the prescription typeahead).
+    try:
+        from seed_medications import seed_system_medications
+        seeded = seed_system_medications()
+        if seeded:
+            print(f"✅ Seeded {seeded} system medications")
+    except Exception as e:
+        print(f"⚠️  Medication seeding skipped: {e}")
 
     # Start daily Places review sync background task
     places_sync_task = asyncio.create_task(_daily_places_sync())

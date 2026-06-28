@@ -54,6 +54,19 @@ class PatientUpdateDTO(BaseModel):
 
 
 class PatientResponseDTO(PatientBaseDTO):
+    # Output must tolerate legacy / imported rows that predate current input rules.
+    # PatientBaseDTO enforces strict constraints (phone min_length=10, gender/email
+    # patterns, etc.) which are correct for *creating* a patient but must NOT reject
+    # an already-stored row when *reading* the list — one bad phone would otherwise
+    # 500 the entire "load patients" call. Relax the constrained fields for the response.
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    gender: Optional[str] = None
+    email: Optional[str] = None
+    village: Optional[str] = None
+    referred_by: Optional[str] = None
+    treatment_type: Optional[str] = None
+    payment_type: Optional[str] = None
     id: int
     clinic_id: int
     display_id: Optional[str] = None

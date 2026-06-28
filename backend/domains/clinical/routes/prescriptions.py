@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, status, Response
 from sqlalchemy.orm import Session
 from database import get_db
-from models import Prescription, User, Patient, Appointment
+from models import Prescription, User, Patient, Appointment, CasePaper
 from schemas import PrescriptionCreate, PrescriptionOut
 from core.auth_utils import get_current_user, require_doctor_or_owner
 from typing import List, Optional
@@ -56,6 +56,16 @@ def create_prescription(
         if not exists:
             payload["appointment_id"] = None
 
+    # Same guard for the case-paper link (this is what the case-paper UI sends and
+    # then filters on, so it must round-trip).
+    if payload.get("case_paper_id") is not None:
+        cp_exists = db.query(CasePaper.id).filter(
+            CasePaper.id == payload["case_paper_id"],
+            CasePaper.clinic_id == current_user.clinic_id
+        ).first()
+        if not cp_exists:
+            payload["case_paper_id"] = None
+
     db_prescription = Prescription(
         **payload,
         items=items_data,
@@ -75,6 +85,32 @@ def create_prescription(
     except Exception:
         pass
     return db_prescription
+
+@router.put("/{prescription_id}", response_model=PrescriptionOut)
+def update_prescription(
+    prescription_id: int,
+    prescription: PrescriptionCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor_or_owner())
+):
+    """Update an existing prescription's medications / notes.
+
+    Mirrors the case-paper UI's PUT /clinical/prescriptions/{id} call so editing
+    a saved prescription updates it in place instead of 404-ing (which previously
+    forced the UI to create duplicates)."""
+    rx = db.query(Prescription).filter(
+        Prescription.id == prescription_id,
+        Prescription.clinic_id == current_user.clinic_id
+    ).first()
+    if not rx:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+
+    rx.items = [item.model_dump() for item in prescription.items]
+    rx.notes = prescription.notes
+    db.commit()
+    db.refresh(rx)
+    return rx
+
 
 @router.delete("/{prescription_id}")
 def delete_prescription(

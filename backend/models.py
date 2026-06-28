@@ -156,7 +156,8 @@ class Prescription(Base):
     id = Column(Integer, primary_key=True, index=True)
     clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
     patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False)
-    appointment_id = Column(Integer, ForeignKey('appointments.id'), nullable=True)  # Linked visit
+    appointment_id = Column(Integer, ForeignKey('appointments.id'), nullable=True)  # Linked appointment (if any)
+    case_paper_id = Column(Integer, ForeignKey('case_papers.id'), nullable=True)    # Linked case paper / visit
     visit_number = Column(Integer, nullable=True)   # Denormalised for quick display
     items = Column(JSON, nullable=False, default=list)  # List of medication dicts
     notes = Column(Text, nullable=True)
@@ -168,6 +169,7 @@ class Prescription(Base):
     clinic = relationship("Clinic")
     patient = relationship("Patient")
     appointment = relationship("Appointment")
+    case_paper = relationship("CasePaper")
 
 class ClinicalSetting(Base):
     __tablename__ = 'clinical_settings'

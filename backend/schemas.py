@@ -771,11 +771,14 @@ class PrescriptionItem(BaseModel):
     dosage: Optional[str] = None
     frequency: Optional[str] = None
     duration: Optional[str] = None
+    quantity: Optional[str] = None
     instructions: Optional[str] = None
+    notes: Optional[str] = None
 
 class PrescriptionBase(BaseModel):
     patient_id: int
     appointment_id: Optional[int] = None
+    case_paper_id: Optional[int] = None
     visit_number: Optional[int] = None
     items: List[PrescriptionItem] = []
     notes: Optional[str] = None
