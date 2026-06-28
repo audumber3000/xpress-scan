@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useNavigationGuard } from "../contexts/NavigationGuardContext";
 import { useAuth } from "../contexts/AuthContext";
 import { api } from "../utils/api";
 import { ChevronDown, ChevronRight, HelpCircle } from "lucide-react";
@@ -127,6 +128,9 @@ const adminNavItems = [
 const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { attemptNavigate } = useNavigationGuard();
+  // Guarded navigate — prompts to save if a case paper has unsaved edits.
+  const gnav = (to) => attemptNavigate(() => navigate(to));
   const { user } = useAuth();
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const [clinicData, setClinicData] = useState(null);
@@ -373,7 +377,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
                         // Collapsed rail can't show the inline submenu, so jump
                         // straight to the first sub-route (e.g. /marketing/reviews).
                         const target = item.submenu?.[0]?.path || item.path;
-                        navigate(target);
+                        gnav(target);
                         isMobile && onMobileClose?.();
                       } else {
                         toggleSubmenu(item.name);
@@ -504,7 +508,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
         <div className={`mt-3 pt-3 border-t border-white/10 ${collapsed ? 'flex justify-center' : ''}`}>
           <button
             onClick={() => {
-              navigate('/support-tickets');
+              gnav('/support-tickets');
               onMobileClose?.();
             }}
             className={`${

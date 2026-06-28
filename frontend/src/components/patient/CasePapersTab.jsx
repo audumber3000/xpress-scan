@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import PatientTimeline from './PatientTimeline';
 import ToothRightDrawer from './ToothRightDrawer';
 import PrescriptionDrawer from './PrescriptionDrawer';
@@ -15,6 +15,7 @@ import { toast } from 'react-toastify';
 import { api } from "../../utils/api";
 import { Clock, ChevronLeft } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNavigationGuard } from '../../contexts/NavigationGuardContext';
 import { getUserDisplayName } from '../../utils/userName';
 
 const CasePapersTab = ({
@@ -42,6 +43,7 @@ const CasePapersTab = ({
   refreshInvoices
 }) => {
   const { user } = useAuth();
+  const { registerBlocker, attemptNavigate } = useNavigationGuard();
   const currentUserName = getUserDisplayName(user); // logged-in dentist, used as fallback
   const [selectedCasePaper, setSelectedCasePaper] = useState(null);
   const [activeChartTab, setActiveChartTab] = useState('dental_chart');
@@ -67,7 +69,9 @@ const CasePapersTab = ({
 
   // Unsaved-changes guard: flips true on any edit, resets after save/load.
   const [dirty, setDirty] = useState(false);
-  const [exitPrompt, setExitPrompt] = useState(false);
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
+  const saveRef = useRef(null);
   
   // Form state for Lab Order
   const [labOrderForm, setLabOrderForm] = useState({
@@ -341,8 +345,25 @@ const CasePapersTab = ({
       } catch (err) {
           console.error("Failed to save case paper:", err);
           toast.error("Error saving clinical records");
+          throw err; // let the navigation guard keep the work if the save failed
       }
   };
+
+  // Keep the guard's save handler pointing at the latest closure.
+  saveRef.current = handleSaveCasePaper;
+
+  // Register the unsaved-changes blocker: while this case paper has pending edits,
+  // ANY exit (sidebar/header link, the Back button, browser Back, refresh) prompts.
+  useEffect(() => registerBlocker({
+    isDirty: () => dirtyRef.current,
+    onSave: async () => { await saveRef.current?.(); },
+  }), [registerBlocker]);
+
+  // Add a history entry while dirty so the browser Back button is catchable.
+  useEffect(() => {
+    if (!dirty) return;
+    try { window.history.pushState(null, '', window.location.href); } catch { /* noop */ }
+  }, [dirty]);
 
   const onUpdatePlan = (updatedPlan) => {
     // Update local session plan
@@ -451,16 +472,13 @@ const CasePapersTab = ({
   // Exit the case paper back to the history list.
   const doExit = () => {
     setDirty(false);
-    setExitPrompt(false);
     setSelectedCasePaper(null);
     onCasePaperStateChange?.(false);
   };
 
-  // Guarded exit: if there are unsaved edits, ask first.
-  const requestExit = () => {
-    if (dirty) setExitPrompt(true);
-    else doExit();
-  };
+  // Guarded exit (Back button): routes through the global guard, which shows the
+  // shared "Save & continue / Don't save / Cancel" prompt when there are edits.
+  const requestExit = () => attemptNavigate(doExit);
 
   const formatStatus = (status) => {
     switch (status) {
@@ -647,8 +665,8 @@ const CasePapersTab = ({
             const casePrescriptions = selectedCasePaper?.isNew
               ? []
               : visitPrescriptions.filter(rx =>
-                  rx.appointment_id === selectedCasePaper?.id ||
-                  rx.appointment_id?.toString() === selectedCasePaper?.id?.toString()
+                  rx.case_paper_id === selectedCasePaper?.id ||
+                  rx.case_paper_id?.toString() === selectedCasePaper?.id?.toString()
                 );
             return casePrescriptions.length > 0 ? casePrescriptions[casePrescriptions.length - 1] : null;
           })()}
@@ -661,8 +679,8 @@ const CasePapersTab = ({
                   const casePrescriptions = selectedCasePaper?.isNew
                     ? []
                     : visitPrescriptions.filter(rx =>
-                        rx.appointment_id === selectedCasePaper?.id ||
-                        rx.appointment_id?.toString() === selectedCasePaper?.id?.toString()
+                        rx.case_paper_id === selectedCasePaper?.id ||
+                        rx.case_paper_id?.toString() === selectedCasePaper?.id?.toString()
                       );
                   const existingRx = casePrescriptions.length > 0 ? casePrescriptions[casePrescriptions.length - 1] : null;
                   if (existingRx?.id) {
@@ -675,7 +693,7 @@ const CasePapersTab = ({
                       await api.post('/clinical/prescriptions', {
                           ...data,
                           patient_id: patientData.id,
-                          appointment_id: selectedCasePaper?.id?.toString().startsWith('new-') ? null : selectedCasePaper?.id
+                          case_paper_id: selectedCasePaper?.id?.toString().startsWith('new-') ? null : selectedCasePaper?.id
                       });
                       toast.success("Prescription saved");
                   }
@@ -738,40 +756,6 @@ const CasePapersTab = ({
           editingTreatment={editingTreatment}
       />
 
-      {/* Unsaved-changes guard when leaving the case paper */}
-      {exitPrompt && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setExitPrompt(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-bold text-gray-900">Unsaved changes</h3>
-            <p className="text-sm text-gray-500 mt-1">You have unsaved changes in this case paper. What would you like to do?</p>
-            <div className="flex flex-col gap-2.5 mt-6">
-              <button
-                onClick={() => { setExitPrompt(false); handleSaveCasePaper(); }}
-                className="w-full px-4 py-2.5 bg-[#2a276e] text-white rounded-lg text-sm font-semibold hover:bg-[#1a1548] transition-colors shadow-sm"
-              >
-                Save &amp; exit
-              </button>
-              <button
-                onClick={doExit}
-                className="w-full px-4 py-2.5 bg-red-50 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-100 transition-colors"
-              >
-                Don't save
-              </button>
-              <button
-                onClick={() => setExitPrompt(false)}
-                className="w-full px-4 py-2.5 bg-gray-50 text-gray-600 rounded-lg text-sm font-semibold hover:bg-gray-100 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

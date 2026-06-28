@@ -7,10 +7,15 @@ import { FaSync } from "react-icons/fa";
 import { api } from "../utils/api";
 import { generateAvatarUrl } from "../utils/avatar";
 import { SkeletonBox } from "./Skeleton";
+import GlobalSearchModal from "./GlobalSearchModal";
+import { useNavigationGuard } from "../contexts/NavigationGuardContext";
 
 const Header = ({ onOpenMobileSidebar }) => {
   const { user, signOut, switchClinic, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const { attemptNavigate } = useNavigationGuard();
+  // Guarded navigate — prompts to save if a case paper has unsaved edits.
+  const gnav = (to) => attemptNavigate(() => navigate(to));
   const location = useLocation();
   const { title, titlePath, refreshFunction, refreshPath, loading, handleRefresh } = useHeader();
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
@@ -22,11 +27,6 @@ const Header = ({ onOpenMobileSidebar }) => {
 
   // Search state
   const [showSearch, setShowSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const searchRef = useRef(null);
-  const searchInputRef = useRef(null);
 
   const isDashboardPage = location.pathname === '/dashboard';
 
@@ -136,18 +136,22 @@ const Header = ({ onOpenMobileSidebar }) => {
     navigate("/login");
   };
 
-  const handleClinicSwitch = async (clinicId) => {
-    setIsSwitching(true);
-    try {
-      await switchClinic(clinicId);
-      setShowClinicDropdown(false);
-      // Refresh current page to load new clinic data
-      window.location.reload();
-    } catch (error) {
-      console.error("Failed to switch clinic:", error);
-    } finally {
-      setIsSwitching(false);
-    }
+  const handleClinicSwitch = (clinicId) => {
+    // Switching clinic reloads the page and replaces all data — guard it so an
+    // open case paper with unsaved edits prompts first.
+    attemptNavigate(async () => {
+      setIsSwitching(true);
+      try {
+        await switchClinic(clinicId);
+        setShowClinicDropdown(false);
+        // Refresh current page to load new clinic data
+        window.location.reload();
+      } catch (error) {
+        console.error("Failed to switch clinic:", error);
+      } finally {
+        setIsSwitching(false);
+      }
+    });
   };
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -164,32 +168,18 @@ const Header = ({ onOpenMobileSidebar }) => {
 
   useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 
-  // Search patients
+  // Open global search with ⌘K / Ctrl+K
   useEffect(() => {
-    if (!searchQuery.trim()) { setSearchResults([]); return; }
-    const t = setTimeout(async () => {
-      setSearchLoading(true);
-      try {
-        const data = await api.get(`/patients?search=${encodeURIComponent(searchQuery)}&limit=8`);
-        setSearchResults(Array.isArray(data) ? data : (data?.patients || []));
-      } catch { setSearchResults([]); } finally { setSearchLoading(false); }
-    }, 300);
-    return () => clearTimeout(t);
-  }, [searchQuery]);
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setShowSearch(true);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
-  // Close search on outside click
-  useEffect(() => {
-    if (!showSearch) return;
-    const handler = (e) => { if (searchRef.current && !searchRef.current.contains(e.target)) { setShowSearch(false); setSearchQuery(''); setSearchResults([]); } };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [showSearch]);
-
-  // Focus search input when opened
-  useEffect(() => {
-    if (showSearch) setTimeout(() => searchInputRef.current?.focus(), 50);
-  }, [showSearch]);
-  
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -212,58 +202,8 @@ const Header = ({ onOpenMobileSidebar }) => {
 
   return (
     <header className="bg-white border-b border-gray-200 h-14 flex items-center justify-between px-4 md:px-6 sticky top-0 z-30 shadow-sm">
-      {/* Inline search bar — expands over the left side of the header */}
-      {showSearch && (
-        <div className="absolute inset-0 bg-white z-40 flex items-center px-4 gap-3" ref={searchRef}>
-          <Search size={18} className="text-[#29828a] flex-shrink-0" />
-          <div className="flex-1 relative">
-            <input
-              ref={searchInputRef}
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search patient by name or phone…"
-              className="w-full text-sm outline-none text-gray-900 placeholder-gray-400 bg-transparent"
-            />
-            {/* Results dropdown */}
-            {(searchResults.length > 0 || searchLoading || searchQuery) && (
-              <div className="absolute top-full left-0 mt-2 w-full max-w-lg bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
-                {searchLoading && (
-                  <div className="px-4 py-3 text-sm text-gray-400 text-center">Searching…</div>
-                )}
-                {!searchLoading && searchQuery && searchResults.length === 0 && (
-                  <div className="px-4 py-3 text-sm text-gray-400 text-center">No patients found</div>
-                )}
-                {!searchLoading && searchResults.length > 0 && (
-                  <ul className="max-h-72 overflow-y-auto py-1">
-                    {searchResults.map(p => (
-                      <li key={p.id}>
-                        <button
-                          onClick={() => { navigate(`/patient-profile/${p.id}`); setShowSearch(false); setSearchQuery(''); setSearchResults([]); }}
-                          className="w-full text-left px-4 py-2.5 hover:bg-[#29828a]/5 flex items-center gap-3 transition-colors"
-                        >
-                          <div className="w-8 h-8 rounded-full bg-[#29828a]/10 flex items-center justify-center flex-shrink-0">
-                            <span className="text-xs font-bold text-[#29828a]">{(p.name || p.full_name || '?')[0]?.toUpperCase()}</span>
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 truncate">{p.name || p.full_name}</p>
-                            <p className="text-xs text-gray-400">{p.phone || p.mobile || 'No phone'}</p>
-                          </div>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-          </div>
-          <button
-            onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchResults([]); }}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors flex-shrink-0"
-          >
-            <X size={18} />
-          </button>
-        </div>
-      )}
+      {/* Centered command-palette search (opens from the search icon or ⌘K) */}
+      <GlobalSearchModal open={showSearch} onClose={() => setShowSearch(false)} />
 
       {/* Left side - Page title and refresh button */}
       <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
@@ -365,7 +305,7 @@ const Header = ({ onOpenMobileSidebar }) => {
                 {/* Add new branch */}
                 <div className="border-t border-gray-100 mt-1 px-4 py-2">
                   <button
-                    onClick={() => { setShowClinicDropdown(false); navigate("/add-clinic"); }}
+                    onClick={() => { setShowClinicDropdown(false); gnav("/add-clinic"); }}
                     className="w-full flex items-center justify-between py-1.5 text-sm font-semibold text-[#2a276e] hover:text-[#1a1548] transition-colors"
                   >
                     <div className="flex items-center gap-2">
@@ -443,7 +383,7 @@ const Header = ({ onOpenMobileSidebar }) => {
             <div className="flex items-center">
               {user?.clinic?.is_trial ? (
                 <button
-                  onClick={() => navigate("/subscription")}
+                  onClick={() => gnav("/subscription")}
                   className="flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-4 md:py-2 rounded-xl bg-gradient-to-r from-blue-100 via-blue-50 to-white border border-blue-200/60 shadow-sm hover:shadow transition-all"
                   title={
                     typeof user?.clinic?.trial_days_remaining === 'number'
@@ -466,7 +406,7 @@ const Header = ({ onOpenMobileSidebar }) => {
                 </button>
               ) : user?.clinic?.subscription_plan === 'professional' ? (
                 <button
-                  onClick={() => navigate("/subscription")}
+                  onClick={() => gnav("/subscription")}
                   className="flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-4 md:py-2 rounded-xl bg-gradient-to-r from-amber-100 via-amber-50 to-white border border-amber-200/50 shadow-sm hover:shadow transition-all"
                   title="Professional Plan"
                 >
@@ -475,7 +415,7 @@ const Header = ({ onOpenMobileSidebar }) => {
                 </button>
               ) : (
                 <button
-                  onClick={() => navigate("/subscription")}
+                  onClick={() => gnav("/subscription")}
                   className="flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-4 md:py-2 rounded-xl bg-[#feedd5] border border-[#fdd2a4]/40 shadow-sm hover:shadow transition-all"
                   title="Starter Plan"
                 >
@@ -531,7 +471,7 @@ const Header = ({ onOpenMobileSidebar }) => {
                 </div>
                 <button
                   onClick={() => {
-                    navigate("/doctor-profile");
+                    gnav("/doctor-profile");
                     setShowProfileDropdown(false);
                   }}
                   className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
@@ -545,7 +485,7 @@ const Header = ({ onOpenMobileSidebar }) => {
                 </button>
                 <button
                   onClick={() => {
-                    navigate("/subscription");
+                    gnav("/subscription");
                     setShowProfileDropdown(false);
                   }}
                   className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
@@ -632,7 +572,7 @@ const Header = ({ onOpenMobileSidebar }) => {
                       <li
                         key={n.id}
                         className={`px-5 py-3.5 hover:bg-gray-50 transition-colors ${n.link ? 'cursor-pointer' : ''}`}
-                        onClick={() => n.link && navigate(n.link)}
+                        onClick={() => n.link && gnav(n.link)}
                       >
                         <div className="flex items-start gap-3">
                           <span className="text-xl flex-shrink-0 mt-0.5">{icon}</span>

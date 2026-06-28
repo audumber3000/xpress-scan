@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { HeaderProvider } from "./contexts/HeaderContext";
+import { NavigationGuardProvider } from "./contexts/NavigationGuardContext";
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -327,7 +328,9 @@ function App() {
       <Router>
         <AuthProvider>
           <HeaderProvider>
-            <AppContent />
+            <NavigationGuardProvider>
+              <AppContent />
+            </NavigationGuardProvider>
           </HeaderProvider>
         </AuthProvider>
       </Router>
