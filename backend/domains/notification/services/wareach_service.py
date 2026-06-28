@@ -56,7 +56,10 @@ def decrypt_key(enc: str) -> str:
 
 
 def is_pro(clinic) -> bool:
-    return bool(clinic and getattr(clinic, "subscription_plan", "free") in PRO_PLANS)
+    # WA Reach is now free for every clinic — multi-branch is the only premium
+    # capability. Kept as a function (rather than removing call sites) so the
+    # WhatsApp routing/serialisation code is untouched. `clinic` must still exist.
+    return bool(clinic)
 
 
 def get_active_integration(db, clinic_id: int):

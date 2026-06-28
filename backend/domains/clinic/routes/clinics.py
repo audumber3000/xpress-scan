@@ -62,11 +62,20 @@ async def owner_add_clinic(
                 detail="You have reached the maximum of 5 clinics. Contact support to increase this limit."
             )
 
-        # Inherit the owner's current subscription plan for the new branch
+        # Multi-branch is the ONLY premium capability: a single clinic is fully
+        # free, but adding a 2nd+ branch requires an active paid plan. (The first
+        # clinic is created during onboarding, never through this endpoint, so any
+        # owner who already has >= 1 clinic here is trying to go multi-branch.)
         owner_sub = db.query(Subscription).filter(Subscription.user_id == current_user.id).first()
-        branch_plan = "free"
-        if owner_sub and owner_sub.status == 'active':
-            branch_plan = owner_sub.plan_name
+        PAID_PLANS = ('professional', 'professional_annual', 'enterprise')
+        is_paid = bool(owner_sub and owner_sub.status == 'active' and owner_sub.plan_name in PAID_PLANS)
+        if clinic_count >= 1 and not is_paid:
+            raise HTTPException(
+                status_code=403,
+                detail="Adding another clinic branch is a premium feature. Your single clinic stays free — upgrade to add more branches."
+            )
+        # New branch inherits the owner's paid plan.
+        branch_plan = owner_sub.plan_name if is_paid else "free"
 
         # Determine branch label and parent based on existing clinics
         existing_clinics = db.execute(

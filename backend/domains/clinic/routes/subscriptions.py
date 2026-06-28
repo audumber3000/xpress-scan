@@ -25,34 +25,37 @@ router = APIRouter()
 @router.get("/plans")
 async def get_available_plans():
     """Get available subscription plans"""
+    # New model: a single clinic is 100% free (every feature). The paid plan's
+    # only added capability is running multiple branches from one account.
     plans = [
         {
             "name": "free",
-            "display_name": "Free Plan",
+            "display_name": "Free — Single Clinic",
             "price": 0,
             "currency": "INR",
             "interval": "month",
             "features": [
-                "Basic dental charting",
-                "Patient management",
-                "Simple reporting",
-                "Google Reviews"
+                "Everything included for one clinic",
+                "Unlimited patients & staff",
+                "Appointments, billing & invoicing",
+                "Reports, consent, inventory & lab orders",
+                "WhatsApp reminders & own-number WA Reach",
             ]
         },
         {
             "name": "professional",
-            "display_name": "Professional Plan",
+            "display_name": "Multi-Branch",
             "price": 899,
             "annual_price": 8100,
             "annual_monthly_equivalent": 675,
             "currency": "INR",
             "interval": "month",
             "features": [
-                "Unlimited patients",
-                "Advanced dental analytics",
-                "WhatsApp notifications",
-                "Multi-clinic support",
-                "Priority support"
+                "Everything in Free — for every branch",
+                "Add multiple clinic branches",
+                "Switch between branches in one login",
+                "Cross-branch reporting",
+                "Priority support",
             ]
         }
     ]
