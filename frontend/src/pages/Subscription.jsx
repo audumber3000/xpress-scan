@@ -38,29 +38,33 @@ import TrialCelebrationModal from '../components/TrialCelebrationModal';
 import { getCurrencySymbol } from '../utils/currency';
 import { getSubscriptionPricing } from '../utils/pricing';
 
+// Everything is free for a single clinic. The ONLY difference on the paid plan
+// is running multiple branches from one account — so every feature is `single: true`,
+// and the multi-branch capabilities are the paid-only rows.
 const PRO_FEATURES = [
-  { icon: Users,        label: 'Patient Management',       starter: true,    pro: true },
-  { icon: FileText,     label: 'Treatment Records',        starter: true,    pro: true },
-  { icon: FileText,     label: 'Digital Case Sheets',      starter: true,    pro: true },
-  { icon: Image,        label: 'Media Uploads (X-rays)',   starter: true,    pro: true },
-  { icon: CalendarDays, label: 'Appointment Scheduling',   starter: true,    pro: true },
-  { icon: CalendarDays, label: 'Calendar View',            starter: true,    pro: true },
-  { icon: Receipt,      label: 'Billing & Invoicing',      starter: true,    pro: true },
-  { icon: CreditCard,   label: 'Payment Tracking',         starter: true,    pro: true },
-  { icon: BarChart3,    label: 'Dashboard Analytics',      starter: true,    pro: true },
-  { icon: Star,         label: 'Google Review Management', starter: true,    pro: true },
-  { icon: Cloud,        label: 'Cloud Storage',            starter: true,    pro: true },
-  { icon: Smartphone,   label: 'Cross-platform Access',    starter: true,    pro: true },
-  { icon: Bot,          label: 'AI Report Generation',     starter: false,   pro: true },
-  { icon: Bell,         label: 'Notifications & Alerts',   starter: false,   pro: true },
-  { icon: ShieldCheck,  label: 'Consent Forms',            starter: false,   pro: true },
-  { icon: Users,        label: 'Multi-user Access',        starter: false,   pro: true },
-  { icon: Package,      label: 'Inventory Management',     starter: false,   pro: true },
-  { icon: FlaskConical, label: 'Lab Order Management',     starter: false,   pro: true },
-  { icon: TrendingUp,   label: 'Competitor Tracking',      starter: false,   pro: true },
-  { icon: MessageCircle,label: 'Patient Communication',    starter: false,   pro: true },
-  { icon: Database,     label: 'Data Backup & Security',   starter: false,   pro: true },
-  { icon: Headphones,   label: 'Priority Support',         starter: false,   pro: true },
+  { icon: Users,        label: 'Patient Management',         single: true,  pro: true },
+  { icon: FileText,     label: 'Treatment Records',          single: true,  pro: true },
+  { icon: FileText,     label: 'Digital Case Sheets',        single: true,  pro: true },
+  { icon: Image,        label: 'Media Uploads (X-rays)',     single: true,  pro: true },
+  { icon: CalendarDays, label: 'Appointment Scheduling',     single: true,  pro: true },
+  { icon: Receipt,      label: 'Billing & Invoicing',        single: true,  pro: true },
+  { icon: CreditCard,   label: 'Payment Tracking',           single: true,  pro: true },
+  { icon: BarChart3,    label: 'Reports & Analytics',        single: true,  pro: true },
+  { icon: Users,        label: 'Staff & Roles (multi-user)', single: true,  pro: true },
+  { icon: Clock,        label: 'Staff Attendance',           single: true,  pro: true },
+  { icon: ShieldCheck,  label: 'Digital Consent Forms',      single: true,  pro: true },
+  { icon: Package,      label: 'Inventory & Vendors',        single: true,  pro: true },
+  { icon: FlaskConical, label: 'Lab Order Management',       single: true,  pro: true },
+  { icon: Bell,         label: 'Notifications & WhatsApp',   single: true,  pro: true },
+  { icon: MessageCircle,label: 'Own-number WhatsApp (WA Reach)', single: true, pro: true },
+  { icon: Bot,          label: 'AI Report Generation',       single: true,  pro: true },
+  { icon: Star,         label: 'Google Review Management',   single: true,  pro: true },
+  { icon: Cloud,        label: 'Cloud Storage & Backup',     single: true,  pro: true },
+  // ── Paid-only: multi-branch ──
+  { icon: Building2,    label: 'Multiple Clinic Branches',   single: false, pro: true },
+  { icon: Building2,    label: 'Switch Between Branches',    single: false, pro: true },
+  { icon: TrendingUp,   label: 'Cross-branch Reporting',     single: false, pro: true },
+  { icon: Headphones,   label: 'Priority Support',           single: false, pro: true },
 ];
 
 const FeatVal = ({ val }) => {
@@ -379,9 +383,9 @@ const Subscription = () => {
                     <Clock size={16} className="text-red-500" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-red-700">Your Professional Plan has expired</p>
+                    <p className="text-sm font-bold text-red-700">Your Multi-Branch plan has expired</p>
                     <p className="text-xs text-red-500 mt-0.5">
-                      Expired on {formatDate(subscription?.current_end)}. Your premium features are now locked. Renew to restore full access.
+                      Expired on {formatDate(subscription?.current_end)}. Your extra branches are now locked — your main clinic stays free. Renew to restore branch access.
                     </p>
                   </div>
                 </div>
@@ -444,7 +448,7 @@ const Subscription = () => {
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-gray-900">
-                        {isPro ? 'Professional Plan' : isTrial ? '7-Day Free Trial' : 'Starter Plan'}
+                        {isPro ? 'Multi-Branch Plan' : isTrial ? '7-Day Free Trial' : 'Free Plan'}
                       </p>
                       {isPro && (
                         <span className="text-xs font-semibold text-[#29828a]">{pricing.symbol}{pricing.monthly} / month</span>
@@ -462,8 +466,8 @@ const Subscription = () => {
                         : isTrial
                         ? `Trial ends ${formatDate(subscription?.current_end)} — upgrade to keep full access`
                         : isExpired
-                        ? `Expired on ${formatDate(subscription?.current_end)} — renew to restore access`
-                        : 'Free forever — unlimited upgrade available'}
+                        ? `Expired on ${formatDate(subscription?.current_end)} — renew to restore your extra branches`
+                        : 'Free forever for a single clinic — upgrade only to add branches'}
                     </p>
                   </div>
                 </div>
@@ -475,34 +479,6 @@ const Subscription = () => {
                 </div>
               </div>
 
-              {/* One-time free trial — no card required */}
-              {trialAvailable && (
-                <div className="mt-3 relative overflow-hidden rounded-xl border border-[#29828a]/30 bg-gradient-to-br from-[#29828a]/8 via-[#29828a]/4 to-transparent p-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-[#29828a]/15 flex items-center justify-center flex-shrink-0">
-                        <Zap size={18} className="text-[#29828a]" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold text-gray-900">
-                          Try Professional free for 7 days
-                        </p>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          Full access to every Pro feature. No card, no commitment — cancel anytime.
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={handleStartTrial}
-                      disabled={startingTrial}
-                      className="flex items-center gap-1.5 px-4 py-2.5 bg-[#29828a] hover:bg-[#1f6b72] disabled:opacity-60 text-white text-xs font-bold rounded-lg transition-all flex-shrink-0 shadow-sm"
-                    >
-                      {startingTrial ? 'Activating…' : <>Start free trial <ArrowRight size={12} /></>}
-                    </button>
-                  </div>
-                </div>
-              )}
-
               {!isPro && (
                 <div className="mt-3 rounded-xl border border-gray-100 bg-white overflow-hidden">
                   <div className="flex items-center justify-between gap-4 p-4">
@@ -512,9 +488,9 @@ const Subscription = () => {
                       </div>
                       <div>
                         <p className="text-sm font-semibold text-gray-900">
-                          {trialAvailable ? 'Or subscribe directly' : 'Professional Plan'}
+                          Multi-Branch Plan
                         </p>
-                        <p className="text-xs text-gray-400 mt-0.5">Unlimited patients, staff, WhatsApp &amp; more</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Your single clinic is free — upgrade to add &amp; manage more branches</p>
                       </div>
                     </div>
                     <button
@@ -542,15 +518,15 @@ const Subscription = () => {
             {/* What's Included */}
             <Section
               title="What's Included"
-              description="Features available in your current plan compared to Professional."
+              description="Every feature is free for a single clinic. The paid plan only adds running multiple branches from one account."
               noBorder
             >
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
                 {/* Header */}
                 <div className="grid grid-cols-3 px-4 py-2.5 bg-gray-50 border-b border-gray-100">
                   <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Feature</div>
-                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center">Starter</div>
-                  <div className="text-[10px] font-bold text-[#29828a] uppercase tracking-wider text-center">Professional</div>
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center">Single Clinic<br/><span className="text-green-600">Free</span></div>
+                  <div className="text-[10px] font-bold text-[#29828a] uppercase tracking-wider text-center">Multi-Branch<br/><span className="normal-case">Pro</span></div>
                 </div>
                 <div className="divide-y divide-gray-50">
                   {PRO_FEATURES.map((row, i) => {
@@ -561,7 +537,7 @@ const Subscription = () => {
                           <Icon size={12} className="text-gray-300 flex-shrink-0" />
                           <span className="text-xs text-gray-700">{row.label}</span>
                         </div>
-                        <div className="flex justify-center"><FeatVal val={row.starter} /></div>
+                        <div className="flex justify-center"><FeatVal val={row.single} /></div>
                         <div className="flex justify-center"><FeatVal val={row.pro} /></div>
                       </div>
                     );

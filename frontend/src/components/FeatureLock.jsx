@@ -1,81 +1,35 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
-import { api } from '../utils/api';
-import { Lock, Zap, Sparkles } from 'lucide-react';
-import TrialCelebrationModal from './TrialCelebrationModal';
+import { Building2, Zap } from 'lucide-react';
 
 /**
- * FeatureLock Wrapper
- * Blurs children and shows a lock overlay if the user is on the 'free' plan.
- * If the clinic has never used its free trial, the primary CTA becomes a
- * one-click "Start 7-day free trial"; the direct subscribe option stays too.
+ * FeatureLock — multi-branch upgrade gate.
+ *
+ * A single clinic is fully free (staff, attendance, reports, consent, etc.).
+ * The ONLY premium capability is running more than one branch, so this wrapper
+ * is used solely around the "Add Branch" flow. Free plans see the upgrade
+ * overlay; paid plans pass straight through.
  */
-const FeatureLock = ({ children, featureName = "This feature" }) => {
-  const { user, loading, refreshUser } = useAuth();
+const FeatureLock = ({ children, featureName = "Multiple branches" }) => {
+  const { user, loading } = useAuth();
   const navigate = useNavigate();
-  const [starting, setStarting] = useState(false);
-  const [celebration, setCelebration] = useState(null); // { trialEndsAt, daysRemaining }
 
-  // Until we positively know the plan, treat the feature as locked so premium
-  // content never flashes on screen before the lock kicks in.
+  // Until we positively know the plan, treat as locked so premium content never
+  // flashes before the gate kicks in.
   const plan = user?.clinic?.subscription_plan;
   const planKnown = plan != null;
   const isLocked = planKnown ? plan === 'free' : true;
-  const trialAvailable = user?.clinic?.trial_available === true;
 
-  const handleStartTrial = async () => {
-    if (starting) return;
-    try {
-      setStarting(true);
-      const res = await api.post('/subscriptions/start-trial');
-      await refreshUser();
-      setCelebration({
-        trialEndsAt: res?.trial_ends_at || null,
-        daysRemaining: res?.trial_days_remaining ?? 7,
-      });
-    } catch (err) {
-      toast.error(err?.detail || err?.message || 'Could not start your trial. Please try again.');
-    } finally {
-      setStarting(false);
-    }
-  };
-
-  // The celebration must persist across the lock→unlock transition, so it's
-  // rendered alongside whichever state (locked overlay or unlocked children).
-  const celebrationModal = (
-    <TrialCelebrationModal
-      open={!!celebration}
-      trialEndsAt={celebration?.trialEndsAt}
-      daysRemaining={celebration?.daysRemaining}
-      onClose={() => setCelebration(null)}
-    />
-  );
-
-  // While the session is still validating, show a neutral loader instead of the
-  // lock overlay. The overlay's CTA (Upgrade vs. Start-trial) depends on
-  // trial_available, which lands a moment after the plan — rendering early makes
-  // "Upgrade to Pro" flash before flipping to "Start 7-day free trial".
   if (loading && (!planKnown || isLocked)) {
     return (
-      <>
-        <div className="min-h-[400px] w-full flex items-center justify-center">
-          <div className="w-8 h-8 border-2 border-[#2a276e]/30 border-t-[#2a276e] rounded-full animate-spin" />
-        </div>
-        {celebrationModal}
-      </>
+      <div className="min-h-[400px] w-full flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#2a276e]/30 border-t-[#2a276e] rounded-full animate-spin" />
+      </div>
     );
   }
 
-  if (!isLocked) {
-    return (
-      <>
-        {children}
-        {celebrationModal}
-      </>
-    );
-  }
+  if (!isLocked) return <>{children}</>;
 
   return (
     <div className="relative min-h-[400px] w-full overflow-hidden rounded-xl">
@@ -84,65 +38,36 @@ const FeatureLock = ({ children, featureName = "This feature" }) => {
         {children}
       </div>
 
-      {/* Glassmorphism Lock Overlay */}
+      {/* Upgrade Overlay */}
       <div className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-white/10 backdrop-blur-[2px] animate-in fade-in duration-700">
         <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 p-8 max-w-sm w-full text-center transform transition-all hover:scale-[1.02] duration-300">
-          {/* Animated Lock Icon */}
-          <div className="w-20 h-20 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-orange-200/50">
-            <Lock className="w-10 h-10 text-white" />
+          <div className="w-20 h-20 bg-gradient-to-br from-[#2a276e] to-[#403bb1] rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-200/50">
+            <Building2 className="w-10 h-10 text-white" />
           </div>
 
           <h3 className="text-2xl font-bold text-gray-900 mb-3 tracking-tight">
-            Unlock {featureName}
+            Add more branches
           </h3>
 
-          {trialAvailable ? (
-            <>
-              <p className="text-gray-500 text-sm leading-relaxed mb-8">
-                Get <span className="font-bold text-[#2a276e]">full Professional access free for 7 days</span>.
-                No card, no commitment — see everything {featureName.toLowerCase()} can do.
-              </p>
+          <p className="text-gray-500 text-sm leading-relaxed mb-8">
+            Your single clinic is <span className="font-bold text-[#2a276e]">free forever</span> — every
+            feature included. Running <span className="font-bold text-[#2a276e]">multiple branches</span> from
+            one account is our only premium upgrade.
+          </p>
 
-              <button
-                onClick={handleStartTrial}
-                disabled={starting}
-                className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-gradient-to-r from-[#2a276e] to-[#403bb1] text-white font-bold text-lg shadow-xl hover:shadow-2xl hover:scale-[1.05] active:scale-95 disabled:opacity-60 disabled:hover:scale-100 transition-all animate-shine"
-              >
-                <Sparkles className="w-5 h-5 fill-current" />
-                {starting ? 'Activating…' : 'Start 7-day free trial'}
-              </button>
-
-              <button
-                onClick={() => navigate("/subscription")}
-                className="mt-3 text-sm font-semibold text-gray-500 hover:text-[#2a276e] transition-colors"
-              >
-                Or subscribe directly →
-              </button>
-            </>
-          ) : (
-            <>
-              <p className="text-gray-500 text-sm leading-relaxed mb-8">
-                This premium feature is part of our <span className="font-bold text-amber-600">Professional Plan</span>.
-                Upgrade now to streamline your clinic workflow.
-              </p>
-
-              <button
-                onClick={() => navigate("/subscription")}
-                className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-gradient-to-r from-[#2a276e] to-[#403bb1] text-white font-bold text-lg shadow-xl hover:shadow-2xl hover:scale-[1.05] active:scale-95 transition-all animate-shine"
-              >
-                <Zap className="w-5 h-5 fill-current" />
-                Upgrade to Pro
-              </button>
-            </>
-          )}
+          <button
+            onClick={() => navigate("/subscription")}
+            className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-gradient-to-r from-[#2a276e] to-[#403bb1] text-white font-bold text-lg shadow-xl hover:shadow-2xl hover:scale-[1.05] active:scale-95 transition-all animate-shine"
+          >
+            <Zap className="w-5 h-5 fill-current" />
+            Upgrade to add branches
+          </button>
 
           <p className="mt-4 text-xs text-gray-400 font-medium">
-            Join 500+ clinics using MolarPlus Pro
+            Manage all your clinics from one login
           </p>
         </div>
       </div>
-
-      {celebrationModal}
     </div>
   );
 };

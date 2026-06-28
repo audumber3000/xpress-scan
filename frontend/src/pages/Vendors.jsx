@@ -7,7 +7,6 @@ import InventoryAlerts from "../components/vendors/InventoryAlerts";
 import InventoryTable from "../components/vendors/InventoryTable";
 import VendorDrawer from "../components/vendors/VendorDrawer";
 
-import FeatureLock from "../components/FeatureLock";
 import Pagination from "../components/Pagination";
 import FilterDropdown from "../components/FilterDropdown";
 
@@ -278,7 +277,7 @@ const Vendors = () => {
 
     return (
         <div className="p-8 max-w-[1600px] mx-auto min-h-screen bg-[#fafafa]">
-            <FeatureLock featureName="Inventory & Vendor Management">
+            <>
                 {/* Tabs row with action buttons on the right — page title is in the global header */}
                 <div className="flex justify-between items-end border-b border-gray-200 mb-6">
                     <div className="flex gap-10">
@@ -479,7 +478,7 @@ const Vendors = () => {
                         )}
                     </div>
                 )}
-            </FeatureLock>
+            </>
 
             {/* Vendor Modal */}
             {showVendorModal && (

@@ -6,7 +6,6 @@ import { api } from '../utils/api';
 import { toast } from 'react-toastify';
 import { ChevronLeft } from 'lucide-react';
 import GearLoader from '../components/GearLoader';
-import FeatureLock from "../components/FeatureLock";
 import Pagination from '../components/Pagination';
 
 const DOCTORS_PER_PAGE = 10;
@@ -116,7 +115,7 @@ const ReferringDoctors = () => {
 
   return (
     <div className="flex flex-col h-screen p-6 bg-gray-50 overflow-hidden">
-      <FeatureLock featureName="Referring Doctor Management">
+      <>
         <div className="max-w-6xl mx-auto flex flex-col flex-1 min-h-0">
         {/* Header with teal theme */}
         <div className="bg-gradient-to-r from-[#2D9596] to-[#1F6B72] rounded-lg p-6 mb-6 text-white">
@@ -302,7 +301,7 @@ const ReferringDoctors = () => {
           </div>
         )}
         </div>
-      </FeatureLock>
+      </>
     </div>
   );
 };

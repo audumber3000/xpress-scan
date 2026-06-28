@@ -27,7 +27,6 @@ const STEPS = [
   { id: 1, title: 'Profile' },
   { id: 2, title: 'Clinic' },
   { id: 3, title: 'Setup' },
-  { id: 4, title: 'Plan' },
 ];
 
 const SPECIALIZATIONS = [
@@ -179,7 +178,7 @@ const ClinicOnboarding = () => {
   const handleNext = (e) => {
     e?.preventDefault();
     if (!isValidStep()) return;
-    if (currentStep < 4) setCurrentStep(currentStep + 1);
+    if (currentStep < 3) setCurrentStep(currentStep + 1);
     else submitOnboarding();
   };
 
@@ -456,113 +455,6 @@ const ClinicOnboarding = () => {
               </div>
             )}
 
-            {currentStep === 4 && (
-              <div className="space-y-5">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">Pick a plan</h2>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Start free, upgrade anytime. No card required.
-                  </p>
-                </div>
-
-                {/* Billing toggle */}
-                <div className="inline-flex items-center bg-gray-100 rounded-lg p-1">
-                  <button
-                    type="button"
-                    onClick={() => setFormData((prev) => ({ ...prev, billing_cycle: 'monthly' }))}
-                    className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${
-                      formData.billing_cycle === 'monthly' ? 'bg-white text-[#2a276e] shadow-sm' : 'text-gray-500'
-                    }`}
-                  >
-                    Monthly
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData((prev) => ({ ...prev, billing_cycle: 'annual' }))}
-                    className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors flex items-center gap-2 ${
-                      formData.billing_cycle === 'annual' ? 'bg-white text-[#2a276e] shadow-sm' : 'text-gray-500'
-                    }`}
-                  >
-                    Annual
-                    <span className="bg-green-100 text-green-700 text-[10px] font-bold px-1.5 py-0.5 rounded">{pricing.pctOff}% OFF</span>
-                  </button>
-                </div>
-
-                {/* Plan cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {/* Free */}
-                  <button
-                    type="button"
-                    onClick={() => setFormData((prev) => ({ ...prev, subscription_plan: 'free' }))}
-                    className={`text-left rounded-xl border-2 p-5 transition-colors ${
-                      formData.subscription_plan === 'free'
-                        ? 'border-[#2a276e] bg-[#9B8CFF]/5'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-base font-bold text-gray-900">Free</h3>
-                      {formData.subscription_plan === 'free' && (
-                        <CheckCircle className="w-5 h-5 text-[#2a276e]" />
-                      )}
-                    </div>
-                    <div className="text-2xl font-bold text-gray-900">{pricing.symbol}0</div>
-                    <p className="text-xs text-gray-500 mb-3">Forever — get started</p>
-                    <ul className="space-y-1.5 text-xs text-gray-600">
-                      {['Up to 50 patients', 'Basic appointments', 'Single user'].map((f) => (
-                        <li key={f} className="flex items-center gap-1.5">
-                          <Check className="w-3.5 h-3.5 text-gray-400" /> {f}
-                        </li>
-                      ))}
-                    </ul>
-                  </button>
-
-                  {/* Professional */}
-                  <button
-                    type="button"
-                    onClick={() => setFormData((prev) => ({ ...prev, subscription_plan: 'professional' }))}
-                    className={`text-left rounded-xl border-2 p-5 transition-colors ${
-                      formData.subscription_plan === 'professional'
-                        ? 'border-[#2a276e] bg-[#9B8CFF]/5'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-base font-bold text-gray-900">Professional</h3>
-                      {formData.subscription_plan === 'professional' && (
-                        <CheckCircle className="w-5 h-5 text-[#2a276e]" />
-                      )}
-                    </div>
-                    {formData.billing_cycle === 'annual' ? (
-                      <>
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-2xl font-bold text-gray-900">{pricing.symbol}{pricing.annualMonthly}</span>
-                          <span className="text-xs text-gray-500">/month</span>
-                        </div>
-                        <p className="text-xs text-gray-500 mb-3">
-                          Billed {pricing.symbol}{pricing.annualTotal.toLocaleString('en-US')}/year — save {pricing.symbol}{pricing.save.toLocaleString('en-US')}
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-2xl font-bold text-gray-900">{pricing.symbol}{pricing.monthly}</span>
-                          <span className="text-xs text-gray-500">/month</span>
-                        </div>
-                        <p className="text-xs text-gray-500 mb-3">Billed monthly</p>
-                      </>
-                    )}
-                    <ul className="space-y-1.5 text-xs text-gray-600">
-                      {['Unlimited patients & staff', 'WhatsApp reminders', 'Treatment planning', 'Reports & analytics'].map((f) => (
-                        <li key={f} className="flex items-center gap-1.5">
-                          <Check className="w-3.5 h-3.5 text-gray-400" /> {f}
-                        </li>
-                      ))}
-                    </ul>
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Nav buttons */}
@@ -585,7 +477,7 @@ const ClinicOnboarding = () => {
             >
               {loading
                 ? 'Setting up…'
-                : currentStep === 4
+                : currentStep === 3
                 ? 'Finish setup'
                 : 'Continue'}
               {!loading && <ChevronRight className="w-4 h-4" />}

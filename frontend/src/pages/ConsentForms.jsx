@@ -7,7 +7,6 @@ import Card from "../components/Card";
 import axios from "axios";
 import { Layout, Share2, CheckCircle, Clock, XCircle, Printer, ExternalLink, Search } from 'lucide-react';
 import ConsentRecentLinks from "../components/consents/ConsentRecentLinks";
-import FeatureLock from "../components/FeatureLock";
 import Pagination from "../components/Pagination";
 import FilterDropdown from "../components/FilterDropdown";
 import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
@@ -230,7 +229,7 @@ const ConsentForms = () => {
 
     return (
         <div className="flex flex-col h-screen p-8 max-w-[1600px] mx-auto bg-gray-50/50 overflow-hidden">
-            <FeatureLock featureName="Digital Consent Forms">
+            <>
                 {/* Tabs row with action buttons on the right — page title is in the global header */}
                 <div className="flex justify-between items-end border-b border-gray-200 mb-6">
                     <div className="flex gap-10">
@@ -525,7 +524,7 @@ const ConsentForms = () => {
                         </div>
                     </div>
                 ) : null}
-            </FeatureLock>
+            </>
 
             {showSendModal && (
                 <div className="fixed inset-0 z-50 flex justify-end">

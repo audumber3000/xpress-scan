@@ -10,7 +10,6 @@ import { generateAvatarUrl } from "../utils/avatar";
 import { startOfWeek, endOfWeek, addWeeks, subWeeks, format, eachDayOfInterval } from "date-fns";
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Search } from 'lucide-react';
-import FeatureLock from "../components/FeatureLock";
 import { toast } from 'react-toastify';
 
 const Attendance = () => {
@@ -196,7 +195,7 @@ const Attendance = () => {
         </div>
       </div>
 
-      <FeatureLock featureName="Staff Attendance Tracking">
+      <>
         <div className="flex-1 flex flex-col overflow-hidden bg-white rounded-xl shadow-sm border border-gray-100 p-2">
         {/* Attendance Header (Date Selector & Legend) */}
         <AttendanceHeader
@@ -264,7 +263,7 @@ const Attendance = () => {
           />
         )}
         </div>
-      </FeatureLock>
+      </>
     </div>
   );
 };

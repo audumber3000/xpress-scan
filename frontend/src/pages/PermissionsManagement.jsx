@@ -5,7 +5,6 @@ import { useHeader } from "../contexts/HeaderContext";
 import { useAuth } from "../contexts/AuthContext";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import GearLoader from "../components/GearLoader";
-import FeatureLock from "../components/FeatureLock";
 import Pagination from "../components/Pagination";
 import { ChevronLeft, X, Shield, ChevronRight, Search } from 'lucide-react';
 import { generateAvatarUrl } from "../utils/avatar";
@@ -213,7 +212,7 @@ const PermissionsManagement = () => {
         </div>
       </div>
 
-      <FeatureLock featureName="Advanced Permissions & RBAC">
+      <>
         <div className="flex-1 flex flex-col overflow-hidden bg-white rounded-xl shadow-sm border border-gray-100 p-2">
           {/* Table toolbar */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
@@ -401,7 +400,7 @@ const PermissionsManagement = () => {
             </div>
           </div>
         )}
-      </FeatureLock>
+      </>
     </div>
   );
 };

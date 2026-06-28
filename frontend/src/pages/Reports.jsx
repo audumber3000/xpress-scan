@@ -4,7 +4,6 @@ import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import GearLoader from "../components/GearLoader";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
-import FeatureLock from "../components/FeatureLock";
 import Pagination from "../components/Pagination";
 
 const REPORTS_PER_PAGE = 10;
@@ -642,7 +641,7 @@ const Reports = () => {
 
   return (
     <div className="flex-1 bg-gray-50/50 min-h-screen">
-      <FeatureLock featureName="Advanced Analytics & Reports">
+      <>
         <div className="px-8 pt-6 border-b border-gray-200 bg-white sticky top-0 z-10">
           <nav className="-mb-px flex space-x-8">
             {[
@@ -693,7 +692,7 @@ const Reports = () => {
             <GeneratedReportsTab refreshKey={refreshKey} />
           )}
         </div>
-      </FeatureLock>
+      </>
 
       {drawerReport && (
         <ReportDrawer
