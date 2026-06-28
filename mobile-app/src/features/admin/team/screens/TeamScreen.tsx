@@ -12,7 +12,6 @@ import {
 import { adminColors } from '../../../../shared/constants/adminColors';
 import { adminApiService, StaffMember } from '../../../../services/api/admin.api';
 import { GearLoader } from '../../../../shared/components/GearLoader';
-import { FeatureLock } from '../../../../shared/components/FeatureLock';
 import { format, startOfWeek, addWeeks, subWeeks, eachDayOfInterval, endOfWeek } from 'date-fns';
 
 type Tab = 'staff' | 'attendance' | 'permissions';
@@ -479,10 +478,7 @@ export const TeamScreen: React.FC<TeamScreenProps> = ({ navigation, route }) => 
         </LinearGradient>
       </SafeAreaView>
 
-      <FeatureLock
-        featureName="Team Management"
-        description="Managing staff, attendance, and permissions is a Professional plan feature. Upgrade to unlock full team control."
-      >
+      <>
         <View style={{ flex: 1 }}>
           {/* Tab bar — simple underline style */}
           <View style={styles.tabBar}>
@@ -509,7 +505,7 @@ export const TeamScreen: React.FC<TeamScreenProps> = ({ navigation, route }) => 
             </>
           )}
         </View>
-      </FeatureLock>
+      </>
 
       {/* ── Permission Editor Modal ── */}
       <Modal visible={!!permModalUser} animationType="slide" transparent onRequestClose={() => setPermModalUser(null)}>

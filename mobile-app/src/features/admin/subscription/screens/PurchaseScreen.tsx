@@ -206,10 +206,10 @@ export const PurchaseScreen: React.FC<PurchaseScreenProps> = ({ navigation }) =>
   };
 
   const features = [
-    { id: 1, text: 'Digital Consent & WhatsApp Reminders', icon: Users },
-    { id: 2, text: 'Multi-Branch & Staff Management', icon: Layout },
-    { id: 3, text: 'Inventory & Vendor System', icon: Shield },
-    { id: 4, text: '24/7 Support & Advanced Analytics', icon: BarChart3 },
+    { id: 1, text: 'Add multiple clinic branches', icon: Layout },
+    { id: 2, text: 'Switch between branches in one login', icon: Users },
+    { id: 3, text: 'Cross-branch reporting & analytics', icon: BarChart3 },
+    { id: 4, text: 'Priority support', icon: Shield },
   ];
 
   const handlePayment = async () => {
@@ -284,7 +284,7 @@ export const PurchaseScreen: React.FC<PurchaseScreenProps> = ({ navigation }) =>
               <Text style={styles.proBadgeText}>Pro</Text>
             </View>
           </View>
-          <Text style={styles.tagline}>Unlock the full potential of your clinic.</Text>
+          <Text style={styles.tagline}>Your single clinic is free — upgrade to run multiple branches.</Text>
         </View>
 
         {/* 3. Feature List */}

@@ -8,7 +8,6 @@ import { tabStyles } from '../../../../shared/constants/theme';
 import { LabTab } from '../tabs/LabTab';
 import { InventoryTab } from '../tabs/InventoryTab';
 import { ConsentFormsTab } from '../tabs/ConsentFormsTab';
-import { FeatureLock } from '../../../../shared/components/FeatureLock';
 import type { UtilityTabHandle } from '../utilityTab';
 
 type TabKey = 'lab' | 'inventory' | 'consent';
@@ -67,14 +66,11 @@ export const UtilitiesScreen: React.FC<{ navigation: any; route: any }> = ({ nav
         })}
       </View>
       <View style={styles.tabContent}>
-        <FeatureLock
-          featureName="Utilities"
-          description="Lab orders, inventory management, and consent forms are Professional plan features. Upgrade to access them."
-        >
+        <>
           {activeTab === 'lab'       && <LabTab ref={labRef} />}
           {activeTab === 'inventory' && <InventoryTab ref={inventoryRef} />}
           {activeTab === 'consent'   && <ConsentFormsTab ref={consentRef} />}
-        </FeatureLock>
+        </>
       </View>
     </SafeAreaView>
   );

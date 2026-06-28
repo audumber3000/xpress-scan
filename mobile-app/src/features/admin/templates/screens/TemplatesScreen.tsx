@@ -13,7 +13,6 @@ import { ChevronLeft, Save, Check, Maximize2, X } from 'lucide-react-native';
 import { adminColors } from '../../../../shared/constants/adminColors';
 import { componentRadius } from '../../../../shared/constants/theme';
 import { adminApiService } from '../../../../services/api/admin.api';
-import { FeatureLock } from '../../../../shared/components/FeatureLock';
 
 const TABS = [
   { id: 'invoice',      label: 'Invoices',      hint: 'How your invoice PDFs look' },
@@ -292,7 +291,7 @@ export const TemplatesScreen: React.FC<TemplatesScreenProps> = ({ navigation }) 
         </LinearGradient>
       </SafeAreaView>
 
-      <FeatureLock featureName="Templates" description="Customising PDF templates for invoices, prescriptions and consent forms is a Professional plan feature.">
+      <>
         {loading ? (
           <View style={styles.center}>
             <ActivityIndicator size="large" color={adminColors.primary} />
@@ -451,7 +450,7 @@ export const TemplatesScreen: React.FC<TemplatesScreenProps> = ({ navigation }) 
             <View style={{ height: 40 }} />
           </ScrollView>
         )}
-      </FeatureLock>
+      </>
 
       {/* ── Full-size modal (real PDF engine) ── */}
       <Modal visible={fullVisible} animationType="slide" onRequestClose={() => setFullVisible(false)}>

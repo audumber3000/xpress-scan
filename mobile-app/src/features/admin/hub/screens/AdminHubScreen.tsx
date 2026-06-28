@@ -88,6 +88,15 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
   const onRefresh = () => { setRefreshing(true); loadData(); };
 
   const openAddBranch = () => {
+    // Free plans get the upgrade path instead of the create-branch form.
+    if (!isPro) {
+      if (IS_PURCHASE_UI_ENABLED) {
+        navigation.navigate('Purchase');
+      } else {
+        toast.info('Running multiple branches is a premium upgrade. Manage your plan from your clinic account on the website.');
+      }
+      return;
+    }
     setBranchName(''); setBranchAddr(''); setBranchPhone(''); setBranchEmail('');
     setAddBranchVisible(true);
   };
@@ -103,6 +112,9 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
         email: branchEmail.trim() || undefined,
       });
       if (result) { setAddBranchVisible(false); loadData(); }
+    } catch (e: any) {
+      // Backend enforces the multi-branch gate too (403 for free plans).
+      toast.error(e?.response?.data?.detail || 'Could not add branch. Adding more branches requires an upgrade.');
     } finally {
       setAddingBranch(false);
     }
@@ -140,6 +152,8 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
   const isTrial = activeClinic?.is_trial;
   const daysLeft = activeClinic?.trial_days_remaining;
   const plan = activeClinic?.subscription_plan;
+  // Multi-branch is the only premium capability — a single clinic is fully free.
+  const isPro = plan === 'professional' || plan === 'professional_annual';
   const subText = isTrial
     ? `Trial — ${typeof daysLeft === 'number' ? `${daysLeft} day${daysLeft === 1 ? '' : 's'} left` : 'active'}`
     : plan === 'professional' ? 'Professional plan' : 'Free plan';
@@ -231,6 +245,11 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
           <TouchableOpacity style={styles.addBranchRow} onPress={openAddBranch} activeOpacity={0.7}>
             <Plus size={18} color={adminColors.primary} />
             <Text style={styles.addBranchText}>Add new branch</Text>
+            {!isPro && (
+              <View style={styles.proPill}>
+                <Text style={styles.proPillText}>PRO</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -378,6 +397,8 @@ const styles = StyleSheet.create({
   activeBadgeText: { fontSize: 12, fontWeight: '700', color: '#fff' },
   addBranchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, paddingVertical: 14, borderTopWidth: 1, borderTopColor: '#F1F3F5' },
   addBranchText: { fontSize: 15, fontWeight: '700', color: adminColors.primary },
+  proPill: { marginLeft: 'auto', backgroundColor: adminColors.primary, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
+  proPillText: { fontSize: 10, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
 
   // ── Config ──
   configRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, paddingVertical: 15 },

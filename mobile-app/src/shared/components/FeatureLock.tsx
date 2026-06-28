@@ -1,32 +1,34 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Lock, Zap } from 'lucide-react-native';
+import { Building2, Zap } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../app/AuthContext';
 import { IS_PURCHASE_UI_ENABLED, MARKETING_SITE_TEXT } from '../constants/platform';
-import { getSubscriptionPricing } from '../utils/pricing';
 
 interface FeatureLockProps {
   children: React.ReactNode;
-  featureName: string;
+  featureName?: string;
   description?: string;
 }
 
+/**
+ * FeatureLock — multi-branch upgrade gate.
+ *
+ * A single clinic is fully free (every feature). The ONLY premium capability is
+ * running more than one branch, so this wraps the "Add branch" flow only.
+ */
 export const FeatureLock: React.FC<FeatureLockProps> = ({
   children,
-  featureName,
+  featureName = 'Multiple branches',
   description,
 }) => {
   const { backendUser } = useAuth();
   const navigation = useNavigation<any>();
-  const pricing = getSubscriptionPricing(backendUser?.clinic);
 
   const plan = backendUser?.clinic?.subscription_plan as string | undefined;
   const isPro = plan === 'professional' || plan === 'professional_annual';
-  // Trial users get full access to premium features for the duration of the trial.
-  const isTrial = !!backendUser?.clinic?.is_trial;
-  const isLocked = !isPro && !isTrial;
+  const isLocked = !isPro;
 
   if (!isLocked) return <>{children}</>;
 
@@ -37,25 +39,24 @@ export const FeatureLock: React.FC<FeatureLockProps> = ({
         {children}
       </View>
 
-      {/* Lock overlay */}
+      {/* Upgrade overlay */}
       <View style={s.overlay}>
         <View style={s.card}>
-          {/* Lock icon */}
           <LinearGradient
-            colors={['#F59E0B', '#EA580C']}
+            colors={['#2E2A85', '#4338CA']}
             style={s.iconCircle}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
           >
-            <Lock size={28} color="#fff" strokeWidth={2.5} />
+            <Building2 size={28} color="#fff" strokeWidth={2.5} />
           </LinearGradient>
 
-          <Text style={s.title}>{featureName}</Text>
+          <Text style={s.title}>Add more branches</Text>
           {IS_PURCHASE_UI_ENABLED ? (
             <>
               <Text style={s.body}>
                 {description ||
-                  `${featureName} is a premium feature. Upgrade to Professional to streamline your clinic workflow.`}
+                  'Your single clinic is free forever — every feature included. Running multiple branches from one account is our only premium upgrade.'}
               </Text>
 
               <TouchableOpacity
@@ -70,18 +71,17 @@ export const FeatureLock: React.FC<FeatureLockProps> = ({
                   end={{ x: 1, y: 0 }}
                 >
                   <Zap size={16} color="#fff" fill="#fff" />
-                  <Text style={s.btnText}>Upgrade to Pro</Text>
+                  <Text style={s.btnText}>Upgrade to add branches</Text>
                 </LinearGradient>
               </TouchableOpacity>
 
-              <Text style={s.hint}>Starting at {pricing.symbol}{pricing.monthly} / month</Text>
+              <Text style={s.hint}>Manage all your clinics from one login</Text>
             </>
           ) : (
             // iOS: no in-app upgrade CTA. Plain text mentioning the website.
             <Text style={s.body}>
-              {description
-                ? `${description} Manage your plan from your clinic account on ${MARKETING_SITE_TEXT}.`
-                : `${featureName} is included with the MolarPlus Professional plan. Manage your plan from your clinic account on ${MARKETING_SITE_TEXT}.`}
+              Your single clinic is free forever. To run multiple branches from one
+              account, upgrade from your clinic account on {MARKETING_SITE_TEXT}.
             </Text>
           )}
         </View>

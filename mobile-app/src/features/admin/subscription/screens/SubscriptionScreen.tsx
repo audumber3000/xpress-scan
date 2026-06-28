@@ -21,11 +21,12 @@ const PLAN_META: Record<string, { label: string; Icon: any; gradient: [string, s
   enterprise:   { label: 'Enterprise',   Icon: Zap,   gradient: ['#5B21B6', '#7C3AED'] },
 };
 
-// Fallback features if API call fails
+// Fallback features if API call fails. New model: a single clinic is fully free;
+// the paid plan only adds multi-branch.
 const FALLBACK_FEATURES: Record<string, string[]> = {
-  free:         ['Basic dental charting', 'Patient management', 'Simple reporting', 'Up to 250 patients'],
-  professional: ['Unlimited patients', 'Advanced analytics', 'WhatsApp notifications', 'Multi-clinic support', 'Priority support', 'Billing & invoicing'],
-  enterprise:   ['Everything in Professional', 'Dedicated account manager', 'Custom integrations', 'SLA guarantee', 'Advanced security'],
+  free:         ['Everything included for one clinic', 'Unlimited patients & staff', 'Appointments, billing & invoicing', 'Reports, consent, inventory & lab orders', 'WhatsApp reminders & WA Reach'],
+  professional: ['Everything in Free — for every branch', 'Add multiple clinic branches', 'Switch between branches in one login', 'Cross-branch reporting', 'Priority support'],
+  enterprise:   ['Everything in Multi-Branch', 'Dedicated account manager', 'Custom integrations', 'SLA guarantee', 'Advanced security'],
 };
 
 class SubApiService extends BaseApiService {
@@ -172,7 +173,7 @@ export const SubscriptionScreen: React.FC<SubscriptionScreenProps> = ({ navigati
               <Text style={s.planLabel}>{meta.label} Plan</Text>
               <Text style={s.planSub}>
                 {isFree
-                  ? 'Free forever · No payment needed'
+                  ? 'Free forever · Single clinic'
                   : `via ${fmtProvider(sub?.provider)}`}
               </Text>
             </View>
@@ -273,7 +274,7 @@ export const SubscriptionScreen: React.FC<SubscriptionScreenProps> = ({ navigati
                 <View style={s.upgradeLeft}>
                   <Award size={22} color="#fff" />
                   <View>
-                    <Text style={s.upgradeTitle}>Go Professional</Text>
+                    <Text style={s.upgradeTitle}>Add more branches</Text>
                     <Text style={s.upgradePrice}>{pricing.symbol}{pricing.monthly} / month</Text>
                   </View>
                 </View>
@@ -288,9 +289,9 @@ export const SubscriptionScreen: React.FC<SubscriptionScreenProps> = ({ navigati
             <View style={s.card}>
               <View style={{ paddingHorizontal: 16, paddingVertical: 14 }}>
                 <Text style={{ fontSize: 13, color: '#374151', lineHeight: 20, fontWeight: '500' }}>
-                  Your plan is managed from your clinic account on the web.
-                  Visit {MARKETING_SITE_TEXT} from a browser to upgrade or
-                  change billing for this clinic.
+                  Your single clinic is free forever. To run multiple branches from
+                  one account, visit {MARKETING_SITE_TEXT} from a browser to upgrade
+                  this clinic.
                 </Text>
               </View>
             </View>

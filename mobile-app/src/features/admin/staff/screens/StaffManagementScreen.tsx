@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, FlatList } from 'react-native';
-import { FeatureLock } from '../../../../shared/components/FeatureLock';
 import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Search, Menu, Plus, UserCircle2, Mail, Shield, UserCheck, Users } from 'lucide-react-native';
@@ -67,10 +66,7 @@ export const StaffManagementScreen: React.FC<StaffManagementScreenProps> = ({ na
         </TouchableOpacity>
       </View>
 
-      <FeatureLock
-        featureName="Staff Management"
-        description="Managing staff members is a Professional plan feature. Upgrade to add doctors, receptionists, and track their roles."
-      >
+      <>
         <View style={{ flex: 1 }}>
           {loading ? (
             <View style={styles.center}>
@@ -147,7 +143,7 @@ export const StaffManagementScreen: React.FC<StaffManagementScreenProps> = ({ na
           )}
 
         </View>
-      </FeatureLock>
+      </>
     </SafeAreaView>
   );
 };
