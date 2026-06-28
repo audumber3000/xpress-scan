@@ -11,10 +11,10 @@ const DiagnosticsGrid = ({
   onNewPrescription
 }) => {
   const filteredPrescriptions = isNewCasePaper
-    ? visitPrescriptions.filter(rx => !rx.appointment_id)
+    ? visitPrescriptions.filter(rx => !rx.case_paper_id)
     : visitPrescriptions.filter(rx =>
-        rx.appointment_id === selectedCasePaper?.id ||
-        rx.appointment_id?.toString() === selectedCasePaper?.id?.toString()
+        rx.case_paper_id === selectedCasePaper?.id ||
+        rx.case_paper_id?.toString() === selectedCasePaper?.id?.toString()
       );
   return (
     <section className="grid grid-cols-1 lg:grid-cols-2 gap-12 pt-8 border-t border-gray-100">

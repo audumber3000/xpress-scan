@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import teethMapping from '../../assets/teeth_mapping.json';
 
-import { CONDITION_LABELS } from './dentalConstants';
+import { CONDITION_LABELS, STATUS_COLORS } from './dentalConstants';
 
 /**
  * RealisticDentalChart - Uses anatomical SVG data to render a professional chart
@@ -22,13 +22,11 @@ const RealisticDentalChart = ({
         }
     };
 
+    // Single source of truth — colours come from STATUS_COLORS in dentalConstants.
     const getToothStatusColor = (toothNum) => {
         const data = teethData[toothNum];
-        if (!data) return null;
-        if (data.status === 'missing') return '#ef4444'; // Red
-        if (data.status === 'implant') return '#3b82f6'; // Blue
-        if (data.status === 'rootCanal') return '#f59e0b'; // Amber
-        return null;
+        if (!data || !data.status) return null;
+        return STATUS_COLORS[data.status] || null;
     };
 
     // Helper to calculate center of a tooth for label placement
@@ -60,9 +58,9 @@ const RealisticDentalChart = ({
                         <pattern id="hatchPattern" patternUnits="userSpaceOnUse" width="4" height="4" patternTransform="rotate(45)">
                             <line x1="0" y1="0" x2="0" y2="4" stroke="#94a3b8" strokeWidth="1" />
                         </pattern>
-                        <filter id="toothGlow" x="-20%" y="-20%" width="140%" height="140%">
-                            <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="blur" />
-                            <feFlood floodColor="#3b82f6" floodOpacity="0.5" result="color" />
+                        <filter id="toothGlow" x="-40%" y="-40%" width="180%" height="180%">
+                            <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="blur" />
+                            <feFlood floodColor="#2a276e" floodOpacity="0.65" result="color" />
                             <feComposite in="color" in2="blur" operator="in" result="glow" />
                             <feMerge>
                                 <feMergeNode in="glow" />
@@ -104,7 +102,7 @@ const RealisticDentalChart = ({
                                         <path
                                             key={idx}
                                             d={path.d}
-                                            fill={status === 'crown_gold' ? '#D4AF37' : (status === 'crown_porcelain' ? '#f8fafc' : (isSelected ? '#2a276e' : (statusColor || path.fill)))}
+                                            fill={status === 'crown_gold' ? '#D4AF37' : (status === 'crown_porcelain' ? '#f8fafc' : (statusColor || path.fill))}
                                             transform={`translate(${path.x},${path.y + yOffset})`}
                                             className="transition-all duration-200"
                                             style={{
@@ -152,9 +150,9 @@ const RealisticDentalChart = ({
                                     </g>
                                 )}
 
-                                {/* PLANNED: Red Circle */}
+                                {/* PLANNED: Amber dashed ring (matches the amber fill) */}
                                 {status === 'planned' && (
-                                    <circle cx={adjustedCenter.x} cy={adjustedCenter.y} r="35" fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="4 2" />
+                                    <circle cx={adjustedCenter.x} cy={adjustedCenter.y} r="35" fill="none" stroke="#f59e0b" strokeWidth="2" strokeDasharray="4 2" />
                                 )}
 
                                 {/* FRACTURE: Zig zag crack */}
@@ -200,23 +198,27 @@ const RealisticDentalChart = ({
             </div>
 
 
-            {/* Professional Status Legend */}
-            <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-4 border-t border-gray-50 pt-8">
-                <div className="flex items-center gap-3 bg-gray-50/50 p-2.5 rounded-xl border border-gray-100/50">
-                    <div className="w-4 h-4 rounded-lg bg-[#2a276e] shadow-sm"></div>
+            {/* Status Legend — matches exactly what the chart can draw */}
+            <div className="mt-10 grid grid-cols-2 sm:grid-cols-5 gap-3 border-t border-gray-50 pt-8">
+                <div className="flex items-center gap-2.5 bg-gray-50/50 p-2.5 rounded-xl border border-gray-100/50">
+                    <div className="w-4 h-4 rounded-lg bg-white ring-2 ring-[#2a276e] shadow-[0_0_6px_#2a276e] flex-shrink-0"></div>
                     <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest leading-none">Selected</span>
                 </div>
-                <div className="flex items-center gap-3 bg-red-50/50 p-2.5 rounded-xl border border-red-100/50">
-                    <div className="w-4 h-4 rounded-lg bg-[#ef4444] shadow-sm flex-shrink-0"></div>
-                    <span className="text-[10px] font-bold text-red-700 uppercase tracking-widest leading-none">Teeth Removed</span>
-                </div>
-                <div className="flex items-center gap-3 bg-blue-50/50 p-2.5 rounded-xl border border-blue-100/50">
-                    <div className="w-4 h-4 rounded-lg bg-[#3b82f6] shadow-sm flex-shrink-0"></div>
-                    <span className="text-[10px] font-bold text-blue-700 uppercase tracking-widest leading-none">Treatment Taken Before</span>
-                </div>
-                <div className="flex items-center gap-3 bg-amber-50/50 p-2.5 rounded-xl border border-amber-100/50">
+                <div className="flex items-center gap-2.5 bg-amber-50/50 p-2.5 rounded-xl border border-amber-100/50">
                     <div className="w-4 h-4 rounded-lg bg-[#f59e0b] shadow-sm flex-shrink-0"></div>
-                    <span className="text-[10px] font-bold text-amber-700 uppercase tracking-widest leading-none">Recommended To Take Treatment</span>
+                    <span className="text-[10px] font-bold text-amber-700 uppercase tracking-widest leading-none">Planned</span>
+                </div>
+                <div className="flex items-center gap-2.5 bg-blue-50/50 p-2.5 rounded-xl border border-blue-100/50">
+                    <div className="w-4 h-4 rounded-lg bg-[#3b82f6] shadow-sm flex-shrink-0"></div>
+                    <span className="text-[10px] font-bold text-blue-700 uppercase tracking-widest leading-none">Existing Work</span>
+                </div>
+                <div className="flex items-center gap-2.5 bg-red-50/50 p-2.5 rounded-xl border border-red-100/50">
+                    <div className="w-4 h-4 rounded-lg bg-[#ef4444] shadow-sm flex-shrink-0"></div>
+                    <span className="text-[10px] font-bold text-red-700 uppercase tracking-widest leading-none">Extracted</span>
+                </div>
+                <div className="flex items-center gap-2.5 bg-gray-50/50 p-2.5 rounded-xl border border-gray-100/50">
+                    <div className="w-4 h-4 rounded-lg shadow-sm flex-shrink-0" style={{ backgroundColor: '#3f2b1d' }}></div>
+                    <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest leading-none">Caries</span>
                 </div>
             </div>
         </div>

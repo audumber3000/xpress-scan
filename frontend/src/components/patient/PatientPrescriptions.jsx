@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { FileText } from 'lucide-react';
 import { api } from "../../utils/api";
 import { toast } from 'react-toastify';
 

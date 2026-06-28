@@ -39,14 +39,17 @@ export const CONDITION_LABELS = {
     fracture: 'Fracture',
 };
 
-// Professional clinical statuses
+// Professional clinical statuses — SINGLE SOURCE OF TRUTH for the dental chart.
+// Convention: amber = planned/needed work, blue = existing/completed work,
+// red = extracted. `present`/`impacted` carry no fill (handled by anatomy/hatch).
+// RealisticDentalChart imports this map directly, so editing here recolours the chart.
 export const STATUS_COLORS = {
-    present: '#10b981',
-    missing: '#ef4444',
-    implant: '#64748b',
-    rootCanal: '#ef4444',
-    impacted: '#94a3b8',
-    planned: '#ef4444',
+    present: null,       // healthy — keep natural anatomy
+    planned: '#f59e0b',  // amber — planned procedure
+    implant: '#3b82f6',  // blue — existing work / implant
+    rootCanal: '#3b82f6',// blue — existing endodontic work
+    missing: '#ef4444',  // red — extracted
+    impacted: null,      // slate hatch overlay handles this
 };
 
 // Status labels
