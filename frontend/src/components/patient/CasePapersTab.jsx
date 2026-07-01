@@ -374,13 +374,18 @@ const CasePapersTab = ({
     updatedPlan.forEach(item => {
       const oldItem = sessionTreatmentPlan.find(p => p.id === item.id);
       if (item.status === 'completed' && (!oldItem || oldItem.status !== 'completed')) {
+        const unitPrice = Number(item.cost) || 0;
         const charge = {
           description: `${item.procedure} (Tooth #${item.tooth || 'General'})`,
           quantity: item.qty || 1,
-          unit_price: item.cost || 600
+          unit_price: unitPrice
         };
         setDraftCharges(prev => [...prev, charge]);
-        toast.info(`Treatment "${item.procedure}" added to billing draft`);
+        toast.info(
+          unitPrice > 0
+            ? `Treatment "${item.procedure}" added to billing draft`
+            : `"${item.procedure}" added — set its fee in the invoice`
+        );
       }
     });
 

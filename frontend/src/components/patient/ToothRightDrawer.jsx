@@ -7,6 +7,8 @@ import { getCurrencySymbol } from '../../utils/currency';
 import { TOOTH_NAMES } from './dentalConstants';
 import AnatomyIcon from './AnatomyIcons';
 import ClinicalAutocomplete from './ClinicalAutocomplete';
+import { api } from '../../utils/api';
+import { toast } from 'react-toastify';
 
 // Honest status options — the label, the stored value, and the chart symbol all agree.
 const TOOTH_STATUSES = [
@@ -40,6 +42,8 @@ const ToothRightDrawer = ({
     const [diagnosis, setDiagnosis] = useState('');
     const [treatment, setTreatment] = useState('');
     const [price, setPrice] = useState(0);
+    const [priceFromCatalog, setPriceFromCatalog] = useState(false); // picked from the price list
+    const [savePrice, setSavePrice] = useState(false);               // "also save to my price list"
     const [note, setNote] = useState('');
     const [status, setStatus] = useState('present');
 
@@ -48,12 +52,16 @@ const ToothRightDrawer = ({
             setDiagnosis(editingTreatment.diagnosis || '');
             setTreatment(editingTreatment.procedure || '');
             setPrice(editingTreatment.cost || 0);
+            setPriceFromCatalog(!!editingTreatment.cost);
+            setSavePrice(false);
             setNote(editingTreatment.notes || toothNotes[selectedTooth] || '');
             setStatus(teethData[selectedTooth]?.status || 'present');
         } else if (selectedTooth) {
             setDiagnosis('');
             setTreatment('');
             setPrice(0);
+            setPriceFromCatalog(false);
+            setSavePrice(false);
             setNote(toothNotes[selectedTooth] || '');
             setStatus(teethData[selectedTooth]?.status || 'present');
         }
@@ -79,8 +87,18 @@ const ToothRightDrawer = ({
 
     // One save: status + note already persist live; this commits the procedure card
     // (if any) and reflects a planned procedure on the chart. Nothing is half-saved.
-    const handleSave = () => {
+    const handleSave = async () => {
         if (treatment) {
+            const fee = Number(price) || 0;
+            // Optionally remember a new procedure + its fee, so it's recognised next time.
+            if (savePrice && !priceFromCatalog && treatment.trim() && fee > 0) {
+                try {
+                    await api.post('/treatment-types', { name: treatment.trim(), price: fee });
+                    toast.success(`Saved "${treatment.trim()}" to your price list`);
+                } catch {
+                    // non-fatal — still add the procedure to this case
+                }
+            }
             // Colour the tooth on the chart as "planned" unless it already carries an
             // explicit status (extracted / existing work / etc.).
             if ((teethData[selectedTooth]?.status || 'present') === 'present') {
@@ -91,7 +109,7 @@ const ToothRightDrawer = ({
                 diagnosis,
                 procedure: treatment,
                 notes: note,
-                cost: price,
+                cost: fee,
                 status: editingTreatment?.status || 'planned'
             });
         }
@@ -186,37 +204,61 @@ const ToothRightDrawer = ({
                         placeholder="Type diagnosis or select suggestion..."
                     />
 
-                    {/* Procedure (drives price) */}
+                    {/* Procedure — a list pick fills the fee; a typed-in one is flagged
+                        as new and asks for a fee (no silent default). */}
                     <ClinicalAutocomplete
                         category="procedure"
                         label="Procedure"
                         value={treatment}
-                        onChange={(val) => setTreatment(val)}
+                        onChange={(val) => { setTreatment(val); setPriceFromCatalog(false); setSavePrice(false); }}
                         onSelectFull={(suggestion) => {
-                            if (suggestion.price != null && suggestion.price > 0) {
-                                setPrice(suggestion.price);
-                            }
+                            setPrice(suggestion.price != null ? suggestion.price : 0);
+                            setPriceFromCatalog(true);
+                            setSavePrice(false);
                         }}
                         placeholder="Type procedure or select suggestion..."
                     />
 
-                    {/* Price (read-only, from settings) */}
-                    {price > 0 && (
-                        <div className="flex items-center gap-3 px-4 py-2.5 bg-green-50 border border-green-100 rounded-xl -mt-2">
-                            <span className="text-xs font-bold text-green-600 uppercase tracking-widest">Procedure Fee</span>
-                            <span className="ml-auto text-lg font-black text-green-700">{getCurrencySymbol()}{Number(price).toLocaleString('en-US')}</span>
-                        </div>
-                    )}
+                    {/* Editable fee — green when it's from the price list, amber when it's
+                        a new procedure that needs a fee set for this case. */}
+                    {treatment.trim() && (
+                        <div className="-mt-1 space-y-2">
+                            <div className={`rounded-xl border px-4 py-3 ${priceFromCatalog ? 'bg-green-50 border-green-100' : 'bg-amber-50 border-amber-100'}`}>
+                                <div className="flex items-center gap-3">
+                                    <span className={`text-xs font-bold uppercase tracking-widest ${priceFromCatalog ? 'text-green-600' : 'text-amber-700'}`}>Procedure fee</span>
+                                    <div className="ml-auto flex items-center gap-0.5">
+                                        <span className={`text-base font-black ${priceFromCatalog ? 'text-green-700' : 'text-amber-700'}`}>{getCurrencySymbol()}</span>
+                                        <input
+                                            type="number" min="0" inputMode="numeric"
+                                            value={price || ''}
+                                            onChange={(e) => setPrice(e.target.value === '' ? 0 : Number(e.target.value))}
+                                            placeholder="0"
+                                            className={`w-24 text-right text-lg font-black bg-transparent outline-none placeholder:text-current/40 ${priceFromCatalog ? 'text-green-700' : 'text-amber-700'}`}
+                                        />
+                                    </div>
+                                </div>
+                                <p className={`text-[11px] mt-1 ${priceFromCatalog ? 'text-green-600/70' : 'text-amber-700'}`}>
+                                    {priceFromCatalog
+                                        ? 'From your price list — edit if this case is different.'
+                                        : `"${treatment.trim()}" isn't in your price list yet — set a fee for this case.`}
+                                </p>
+                            </div>
 
-                    {/* Jump to pricing settings to edit / compare procedure prices. */}
-                    {isTooth && (
-                        <Link
-                            to="/admin/treatments"
-                            className="-mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[#2a276e] hover:underline"
-                        >
-                            {price > 0 ? 'Change price' : 'Check procedure prices'} or compare others
-                            <ArrowUpRight size={13} />
-                        </Link>
+                            {/* Remember a new procedure's fee for next time */}
+                            {!priceFromCatalog && Number(price) > 0 && (
+                                <label className="flex items-center gap-2 px-1 cursor-pointer">
+                                    <input type="checkbox" checked={savePrice} onChange={(e) => setSavePrice(e.target.checked)}
+                                        className="rounded border-gray-300 text-[#2a276e] focus:ring-[#2a276e]/20" />
+                                    <span className="text-xs text-gray-600">Save <span className="font-semibold">{treatment.trim()}</span> at {getCurrencySymbol()}{Number(price).toLocaleString('en-US')} to my price list</span>
+                                </label>
+                            )}
+
+                            {isTooth && (
+                                <Link to="/admin/treatments" className="inline-flex items-center gap-1 text-xs font-semibold text-[#2a276e] hover:underline px-1">
+                                    Manage price list <ArrowUpRight size={13} />
+                                </Link>
+                            )}
+                        </div>
                     )}
 
                     {/* Note (optional — merges the old "On Examination") */}
