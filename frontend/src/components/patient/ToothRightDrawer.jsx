@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight } from 'lucide-react';
 import CleanToothSVG from './CleanToothSVG';
@@ -44,6 +44,8 @@ const ToothRightDrawer = ({
     const [price, setPrice] = useState(0);
     const [priceFromCatalog, setPriceFromCatalog] = useState(false); // picked from the price list
     const [savePrice, setSavePrice] = useState(false);               // "also save to my price list"
+    const [feePrompt, setFeePrompt] = useState(false);               // "free or paid?" confirm
+    const priceInputRef = useRef(null);
     const [note, setNote] = useState('');
     const [status, setStatus] = useState('present');
 
@@ -85,35 +87,39 @@ const ToothRightDrawer = ({
         onToothStatusChange(selectedTooth, value);
     };
 
-    // One save: status + note already persist live; this commits the procedure card
-    // (if any) and reflects a planned procedure on the chart. Nothing is half-saved.
-    const handleSave = async () => {
-        if (treatment) {
-            const fee = Number(price) || 0;
-            // Optionally remember a new procedure + its fee, so it's recognised next time.
-            if (savePrice && !priceFromCatalog && treatment.trim() && fee > 0) {
-                try {
-                    await api.post('/treatment-types', { name: treatment.trim(), price: fee });
-                    toast.success(`Saved "${treatment.trim()}" to your price list`);
-                } catch {
-                    // non-fatal — still add the procedure to this case
-                }
+    // Commit the procedure card with a confirmed fee (status + note already persist live).
+    const commitTreatment = async (fee) => {
+        // Optionally remember a new procedure + its fee, so it's recognised next time.
+        if (savePrice && !priceFromCatalog && treatment.trim() && fee > 0) {
+            try {
+                await api.post('/treatment-types', { name: treatment.trim(), price: fee });
+                toast.success(`Saved "${treatment.trim()}" to your price list`);
+            } catch {
+                // non-fatal — still add the procedure to this case
             }
-            // Colour the tooth on the chart as "planned" unless it already carries an
-            // explicit status (extracted / existing work / etc.).
-            if ((teethData[selectedTooth]?.status || 'present') === 'present') {
-                onToothStatusChange(selectedTooth, 'planned');
-            }
-            onAddTreatment({
-                tooth: selectedTooth,
-                diagnosis,
-                procedure: treatment,
-                notes: note,
-                cost: fee,
-                status: editingTreatment?.status || 'planned'
-            });
         }
+        // Colour the tooth on the chart as "planned" unless it already carries an
+        // explicit status (extracted / existing work / etc.).
+        if ((teethData[selectedTooth]?.status || 'present') === 'present') {
+            onToothStatusChange(selectedTooth, 'planned');
+        }
+        onAddTreatment({
+            tooth: selectedTooth,
+            diagnosis,
+            procedure: treatment,
+            notes: note,
+            cost: fee,
+            status: editingTreatment?.status || 'planned'
+        });
         onClose();
+    };
+
+    const handleSave = () => {
+        if (!treatment.trim()) { onClose(); return; }
+        const fee = Number(price) || 0;
+        // No fee entered — confirm it's genuinely free before adding a ₹0 procedure.
+        if (fee <= 0) { setFeePrompt(true); return; }
+        commitTreatment(fee);
     };
 
     return (
@@ -229,6 +235,7 @@ const ToothRightDrawer = ({
                                     <div className="ml-auto flex items-center gap-0.5">
                                         <span className={`text-base font-black ${priceFromCatalog ? 'text-green-700' : 'text-amber-700'}`}>{getCurrencySymbol()}</span>
                                         <input
+                                            ref={priceInputRef}
                                             type="number" min="0" inputMode="numeric"
                                             value={price || ''}
                                             onChange={(e) => setPrice(e.target.value === '' ? 0 : Number(e.target.value))}
@@ -291,6 +298,35 @@ const ToothRightDrawer = ({
                 </div>
 
             </div>
+
+            {/* Confirm free-or-paid when a procedure is added with no fee. */}
+            {feePrompt && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm" onClick={() => setFeePrompt(false)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs p-6 text-center" onClick={(e) => e.stopPropagation()}>
+                        <div className="w-11 h-11 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-4">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V6m0 12v-2" /></svg>
+                        </div>
+                        <h3 className="text-base font-bold text-gray-900">No fee set</h3>
+                        <p className="text-sm text-gray-500 mt-1 leading-relaxed">
+                            Is <span className="font-semibold text-gray-700">"{treatment.trim()}"</span> free, or would you like to add a price?
+                        </p>
+                        <div className="flex flex-col gap-2.5 mt-5">
+                            <button
+                                onClick={() => { setFeePrompt(false); setTimeout(() => priceInputRef.current?.focus(), 50); }}
+                                className="w-full px-4 py-2.5 bg-[#2a276e] text-white rounded-lg text-sm font-semibold hover:bg-[#1a1548] transition-colors shadow-sm"
+                            >
+                                Add a price
+                            </button>
+                            <button
+                                onClick={() => { setFeePrompt(false); commitTreatment(0); }}
+                                className="w-full px-4 py-2.5 bg-gray-50 text-gray-600 rounded-lg text-sm font-semibold hover:bg-gray-100 transition-colors"
+                            >
+                                It's free — add at {getCurrencySymbol()}0
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 };
