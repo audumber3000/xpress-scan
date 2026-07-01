@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import GearLoader from '../components/GearLoader';
 import { auth } from '../firebaseClient';
 import { api } from '../utils/api';
 import { getDeviceInfo } from '../utils/googleRedirectAuth';
@@ -60,20 +59,49 @@ const DesktopAuthStart = () => {
     runDesktopBrowserAuth();
   }, []);
 
+  // Restart the whole flow (clears the pending flag so it re-triggers the redirect).
+  const handleRetry = () => {
+    sessionStorage.removeItem(PENDING_KEY);
+    window.location.reload();
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="text-center space-y-6 px-6">
-        <GearLoader />
-        <div>
-          <h1 className="text-xl font-semibold text-[#2a276e]">Signing in with Google</h1>
-          <p className="mt-2 text-sm text-gray-600">
-            Complete Google sign-in here, then return to MolarPlus.
-          </p>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-indigo-50 to-indigo-100 px-4">
+      <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl border border-gray-100 p-8 text-center">
+        {/* Brand */}
+        <div className="mb-7 flex items-center justify-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-[#2a276e] flex items-center justify-center text-white text-sm font-black">M</div>
+          <span className="text-lg font-black tracking-tight text-[#2a276e]">MolarPlus</span>
         </div>
-        {error && (
-          <div className="max-w-md rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
+
+        {!error ? (
+          <>
+            {/* Spinner */}
+            <div className="mx-auto mb-6 w-12 h-12 rounded-full border-[3px] border-[#2a276e]/15 border-t-[#2a276e] animate-spin" />
+            <h1 className="text-lg font-bold text-gray-900">Signing you in with Google</h1>
+            <p className="mt-2 text-sm text-gray-500 leading-relaxed">
+              Finish the Google sign-in in this window — you'll be returned to the MolarPlus app automatically.
+            </p>
+            <p className="mt-5 text-xs text-gray-400">This usually takes just a few seconds.</p>
+          </>
+        ) : (
+          <>
+            {/* Error */}
+            <div className="mx-auto mb-6 w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
+              <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+            </div>
+            <h1 className="text-lg font-bold text-gray-900">Sign-in didn't complete</h1>
+            <p className="mt-2 text-sm text-gray-500 leading-relaxed">{error}</p>
+            <button
+              onClick={handleRetry}
+              className="mt-6 w-full py-2.5 rounded-xl bg-[#2a276e] text-white font-semibold text-sm hover:bg-[#1a1548] transition-colors shadow-sm"
+            >
+              Try again
+            </button>
+            <p className="mt-3 text-xs text-gray-400">If it keeps happening, close this window and reopen the MolarPlus app.</p>
+          </>
         )}
       </div>
     </div>
