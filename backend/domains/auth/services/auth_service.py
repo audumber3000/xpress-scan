@@ -139,7 +139,7 @@ class AuthService(AuthServiceProtocol):
         """Create JWT token for user"""
         payload = {
             "user_id": user_id,
-            "exp": datetime.utcnow() + timedelta(days=7)  # 7 days expiration
+            "exp": datetime.utcnow() + timedelta(days=30)  # 30 days — powers one-click "last used" re-login
         }
         return jwt.encode(payload, self.jwt_secret, algorithm=self.jwt_algorithm)
 
