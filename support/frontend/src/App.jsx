@@ -18,6 +18,7 @@ import Growth from './pages/Growth';
 import MarketingPromos from './pages/MarketingPromos';
 import MarketingReferrals from './pages/MarketingReferrals';
 import MarketingCampaigns from './pages/MarketingCampaigns';
+import BlogStudio from './pages/BlogStudio';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -53,6 +54,7 @@ function AppRoutes() {
         <Route path="marketing/promos" element={<MarketingPromos />} />
         <Route path="marketing/referrals" element={<MarketingReferrals />} />
         <Route path="marketing/campaigns" element={<MarketingCampaigns />} />
+        <Route path="marketing/blog" element={<BlogStudio />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
