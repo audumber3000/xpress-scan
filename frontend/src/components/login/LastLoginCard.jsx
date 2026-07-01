@@ -50,7 +50,7 @@ const LastLoginCard = ({ variant = 'login', onContinue, loading = false }) => {
 
   if (!last || dismissed) return null;
 
-  const heading = variant === 'register' ? 'Already signed up?' : 'Welcome back';
+  const heading = variant === 'register' ? 'Already signed up?' : 'Last used to sign in';
 
   return (
     <div className="mb-4 space-y-2">
@@ -67,7 +67,7 @@ const LastLoginCard = ({ variant = 'login', onContinue, loading = false }) => {
             Continue as <span className="font-bold">{maskEmail(last.email)}</span>
           </p>
           <p className="text-xs text-gray-500">
-            Last signed in with {PROVIDER_LABEL[last.provider] || last.provider}
+            {PROVIDER_LABEL[last.provider] || last.provider} account · tap to continue
           </p>
         </div>
         {loading ? (

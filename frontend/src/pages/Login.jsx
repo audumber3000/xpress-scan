@@ -134,7 +134,7 @@ const Login = () => {
     }
   };
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleLogin = async (hintEmail = '') => {
     setError("");
     setLoading(true);
     try {
@@ -149,6 +149,9 @@ const Login = () => {
       const provider = new GoogleAuthProvider();
       provider.addScope('email');
       provider.addScope('profile');
+      // Re-auth from the "last used" card: hint Google so it skips the account
+      // picker and signs the returning user straight back in.
+      if (hintEmail) provider.setCustomParameters({ login_hint: hintEmail });
 
       // Popups don't work inside the MolarPlus desktop wrapper (Tauri webview).
       // Use the system browser so Google can return through the molarplus:// deep link.
@@ -341,7 +344,7 @@ const Login = () => {
 
               // 2) No usable token: Google re-runs OAuth; email prefills + focuses password.
               if (entry.provider === 'google') {
-                handleGoogleLogin();
+                handleGoogleLogin(entry.email);
                 return;
               }
               setEmail(entry.email);
@@ -354,8 +357,8 @@ const Login = () => {
           />
 
           {/* Google OAuth Button */}
-          <LoadingButton 
-            onClick={handleGoogleLogin}
+          <LoadingButton
+            onClick={() => handleGoogleLogin()}
             loading={loading}
             disabled={loading}
             className="w-full bg-white border-2 border-gray-200 rounded-lg px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors font-medium flex items-center justify-center gap-3"
