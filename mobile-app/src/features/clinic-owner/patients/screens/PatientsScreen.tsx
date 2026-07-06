@@ -76,7 +76,9 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(p =>
-        p.name.toLowerCase().includes(query) ||
+        // Guard name too: legacy/imported patients can have a null name, and an
+        // unguarded .toLowerCase() throws mid-render → app error screen on search.
+        (p.name?.toLowerCase().includes(query)) ||
         (p.phone && p.phone.includes(query)) ||
         (p.id && p.id.toString().includes(query))
       );

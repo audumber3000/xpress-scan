@@ -17,7 +17,7 @@ import { SkeletonBox, SkeletonCards } from "../components/Skeleton";
 import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import { toast } from 'react-toastify';
-import { patientService, appointmentService, paymentService, treatmentPlanService } from '../services/patientService';
+import { patientService, appointmentService, paymentService } from '../services/patientService';
 
 const PatientProfile = () => {
   const { patientId } = useParams();
@@ -215,28 +215,12 @@ const PatientProfile = () => {
         setTreatmentPlan(currentTreatmentPlan);
       }
 
-      // Save treatment plans via API to create appointments (if needed)
-      if (currentTreatmentPlan && currentTreatmentPlan.length > 0) {
-        console.log('📋 Checking treatment plans for appointment creation...');
-        for (const plan of currentTreatmentPlan) {
-          if (plan.date && plan.time && !plan.appointment_id) {
-            try {
-              const createdPlan = await treatmentPlanService.createTreatmentPlan(patientId, {
-                ...plan,
-                create_appointment: true
-              });
-              plan.appointment_id = createdPlan.appointment_id;
-            } catch (err) {
-              console.error('Failed to create treatment plan:', err);
-            }
-          }
-        }
-        // Update patient one last time with appointment_ids
-        await patientService.updatePatient(patientId, {
-          treatment_plan: currentTreatmentPlan
-        });
-      }
-      
+      // NOTE: Treatment-plan items are a *plan* only — they are persisted with the
+      // patient above and must never silently create calendar appointments. An
+      // appointment is created only when a doctor explicitly books one from the
+      // scheduling UI. (Previously this loop auto-created "accepted" appointments
+      // for every planned procedure, flooding the calendar on patient/case-paper save.)
+
       console.log('✅ All data saved successfully');
       toast.success("Clinical records updated successfully.");
     } catch (error) {

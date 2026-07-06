@@ -23,7 +23,10 @@ class TreatmentPlanCreate(BaseModel):
     notes: str = Field(default="")
     doctor_id: int = Field(None, description="Assigned doctor ID")
     duration: int = Field(default=60, ge=15, le=480, description="Duration in minutes")
-    create_appointment: bool = Field(default=True, description="Create appointment for this plan")
+    # Default False: a treatment plan is a plan, not a booking. Appointments are
+    # created only when the caller explicitly opts in (e.g. an explicit "schedule"
+    # action), never as a side effect of saving a patient or case paper.
+    create_appointment: bool = Field(default=False, description="Create appointment for this plan")
 
 
 class TreatmentPlanUpdate(BaseModel):

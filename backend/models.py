@@ -107,6 +107,8 @@ class User(Base):
     supabase_user_id = Column(String, nullable=True)  # Link to Supabase auth user
     password_hash = Column(String, nullable=True)  # Password hash for OAuth users who want desktop access
     signature_url = Column(Text, nullable=True)  # Base64 signature image for prescriptions/documents
+    phone = Column(String, nullable=True)  # Optional personal contact number (profile)
+    avatar_url = Column(Text, nullable=True)  # Optional base64 profile photo (profile)
     created_by = Column(Integer, ForeignKey('users.id'), nullable=True)  # Who created this user
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)

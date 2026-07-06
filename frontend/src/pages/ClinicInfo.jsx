@@ -133,6 +133,47 @@ const ClinicInfo = () => {
     );
   }
 
+  // Permanently delete the clinic and ALL associated data. Owner-only,
+  // triple-confirmed. Moved here from the personal profile page, where it was
+  // wrongly exposed to every role.
+  const handleDeleteClinic = async () => {
+    const firstConfirm = window.confirm(
+      "⚠️ WARNING: You are about to permanently delete the entire clinic and all associated data.\n\n" +
+      "This will delete:\n" +
+      "• All patients and their records\n" +
+      "• All reports and medical documents\n" +
+      "• All users (doctors, receptionists, clinic owners)\n" +
+      "• All scan types and pricing\n" +
+      "• All referring doctors\n" +
+      "• The clinic account itself\n\n" +
+      "This action CANNOT be undone. Are you absolutely sure?"
+    );
+    if (!firstConfirm) return;
+
+    const secondConfirm = window.confirm(
+      "FINAL WARNING: This is your last chance to cancel.\n\n" +
+      "You are about to permanently delete everything associated with this clinic.\n" +
+      "This action cannot be undone."
+    );
+    if (!secondConfirm) return;
+
+    const userInput = window.prompt("To confirm deletion, please type 'DELETE' (case sensitive):");
+    if (userInput !== "DELETE") {
+      toast.error("Deletion cancelled. Clinic was not deleted.");
+      return;
+    }
+
+    try {
+      toast.info("Deleting clinic and all associated data...");
+      await api.delete(`/clinics/${user.clinic_id}/delete-all`);
+      toast.success("Clinic and all associated data have been permanently deleted.");
+      setTimeout(() => { window.location.href = "/login"; }, 2000);
+    } catch (error) {
+      console.error("Error deleting clinic:", error);
+      toast.error(error.message || "Failed to delete clinic. Please try again.");
+    }
+  };
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="max-w-4xl mx-auto">
@@ -317,6 +358,31 @@ const ClinicInfo = () => {
             </div>
           </div>
         </div>
+
+        {/* Danger Zone — owner-only. Deletes the entire clinic and all data. */}
+        {user?.role === 'clinic_owner' && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6 mt-6">
+            <h3 className="text-lg font-semibold text-red-800 mb-2">Danger Zone — Delete Clinic</h3>
+            <p className="text-red-700 mb-3">
+              This permanently deletes the entire clinic and everything in it:
+            </p>
+            <ul className="text-red-700 text-sm mb-4 list-disc list-inside space-y-1">
+              <li>All patients and their records</li>
+              <li>All reports and medical documents</li>
+              <li>All users (doctors, receptionists, clinic owners)</li>
+              <li>All scan types and pricing</li>
+              <li>All referring doctors</li>
+              <li>The clinic account itself</li>
+            </ul>
+            <p className="text-red-700 font-medium mb-4">⚠️ This action cannot be undone.</p>
+            <button
+              onClick={handleDeleteClinic}
+              className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors font-medium"
+            >
+              Delete Clinic
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

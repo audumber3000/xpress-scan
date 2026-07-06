@@ -193,10 +193,22 @@ class UserResponseDTO(UserBaseDTO):
     synced_at: Optional[datetime] = None
     sync_status: str = "local"
     signature_url: Optional[str] = None
+    # Optional profile fields — additive, default None so login/onboarding/signup
+    # responses are unchanged for accounts that never set them.
+    phone: Optional[str] = None
+    avatar_url: Optional[str] = None
     clinics: List[ClinicResponseDTO] = []
 
     class Config:
         from_attributes = True
+
+
+class UpdateProfileDTO(BaseModel):
+    """Self-service profile edits from the profile page. All fields optional;
+    only provided fields are updated. Does not touch role/email/clinic."""
+    first_name: Optional[str] = Field(None, min_length=1, max_length=50)
+    last_name: Optional[str] = Field(None, min_length=1, max_length=50)
+    phone: Optional[str] = Field(None, max_length=20)
 
 
 # Payment DTOs

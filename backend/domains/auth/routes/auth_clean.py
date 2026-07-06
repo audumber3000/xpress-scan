@@ -15,7 +15,8 @@ from core.dtos import (
     UserResponseDTO,
     ClinicResponseDTO,
     DeviceInfoDTO,
-    SuccessResponseDTO
+    SuccessResponseDTO,
+    UpdateProfileDTO,
 )
 from core.dependencies import get_auth_service, get_user_service
 from core.auth_utils import require_role
@@ -640,6 +641,119 @@ async def update_signature(
     db.query(User).filter(User.id == user.id).update({"signature_url": clean_uri})
     db.commit()
     return {"status": "ok", "signature_url": clean_uri}
+
+
+@router.patch("/me", summary="Update the current user's profile (name, phone)")
+async def update_profile(
+    payload: UpdateProfileDTO,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Self-service profile edit. Only updates the fields provided; never touches
+    role, email, clinic, or password. `name` is kept in sync with first/last."""
+    from core.auth_utils import get_current_user as _get_user
+    user = _get_user(request, db)
+
+    updates = {}
+    data = payload.model_dump(exclude_unset=True)
+    if "first_name" in data and data["first_name"] is not None:
+        updates["first_name"] = data["first_name"].strip()
+    if "last_name" in data and data["last_name"] is not None:
+        updates["last_name"] = data["last_name"].strip()
+    if "phone" in data:
+        phone = (data["phone"] or "").strip()
+        updates["phone"] = phone or None
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No profile fields to update")
+
+    # Keep the denormalised full name in sync when either part changes.
+    if "first_name" in updates or "last_name" in updates:
+        new_first = updates.get("first_name", user.first_name)
+        new_last = updates.get("last_name", user.last_name)
+        updates["name"] = f"{new_first} {new_last}".strip()
+
+    db.query(User).filter(User.id == user.id).update(updates)
+    db.commit()
+    refreshed = db.query(User).filter(User.id == user.id).first()
+    return {
+        "status": "ok",
+        "first_name": refreshed.first_name,
+        "last_name": refreshed.last_name,
+        "name": refreshed.name,
+        "phone": refreshed.phone,
+    }
+
+
+@router.patch("/me/avatar", summary="Update the current user's profile photo")
+async def update_avatar(
+    payload: dict,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Save (or clear) the current user's avatar. Accepts a
+    `data:image/(png|jpeg);base64,...` URI, validated + re-encoded through Pillow
+    (same hardening as the signature endpoint) and normalised to a square-ish PNG."""
+    from core.auth_utils import get_current_user as _get_user
+    user = _get_user(request, db)
+
+    raw = payload.get("avatar_url")
+    if raw is None or raw == "":
+        db.query(User).filter(User.id == user.id).update({"avatar_url": None})
+        db.commit()
+        return {"status": "ok", "avatar_url": None}
+
+    if not isinstance(raw, str) or not raw.startswith("data:"):
+        raise HTTPException(status_code=400, detail="avatar_url must be a data: URI")
+    if raw.startswith("data:image/svg") or "svg+xml" in raw[:60].lower():
+        raise HTTPException(status_code=400, detail="SVG avatars are not supported")
+    if len(raw) > 4_000_000:
+        raise HTTPException(status_code=413, detail="avatar too large (max ~3 MB)")
+
+    try:
+        header, b64 = raw.split(",", 1)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="malformed data URI")
+    if "base64" not in header:
+        raise HTTPException(status_code=400, detail="avatar_url must be base64-encoded")
+
+    import base64 as _b64
+    import io as _io
+    try:
+        decoded = _b64.b64decode(b64, validate=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid base64")
+    if len(decoded) > 3_000_000:
+        raise HTTPException(status_code=413, detail="avatar too large (max 3 MB after decode)")
+
+    try:
+        from PIL import Image, UnidentifiedImageError
+    except ImportError:
+        raise HTTPException(status_code=500, detail="image processing unavailable on server")
+
+    try:
+        img = Image.open(_io.BytesIO(decoded))
+        img.verify()
+        img = Image.open(_io.BytesIO(decoded))  # re-open: verify() invalidates
+    except (UnidentifiedImageError, Exception):
+        raise HTTPException(status_code=400, detail="not a valid image")
+
+    if img.format not in {"PNG", "JPEG"}:
+        raise HTTPException(status_code=400, detail=f"unsupported format {img.format} — use PNG or JPEG")
+
+    # Downscale to an avatar-appropriate size; store as a compact PNG.
+    if max(img.width, img.height) > 256:
+        img.thumbnail((256, 256), Image.LANCZOS)
+    if img.mode not in ("RGBA", "LA", "RGB"):
+        img = img.convert("RGB")
+    out = _io.BytesIO()
+    img.save(out, format="PNG", optimize=True)
+    clean_b64 = _b64.b64encode(out.getvalue()).decode("ascii")
+    clean_uri = f"data:image/png;base64,{clean_b64}"
+
+    db.query(User).filter(User.id == user.id).update({"avatar_url": clean_uri})
+    db.commit()
+    return {"status": "ok", "avatar_url": clean_uri}
 
 
 @router.post(

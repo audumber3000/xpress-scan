@@ -61,6 +61,7 @@ const Patients = () => {
   const [editErrors, setEditErrors] = useState({}); // { fieldName: message } for inline validation
   const [casePaperPrompt, setCasePaperPrompt] = useState(null); // { id, name } of a just-created patient
   const [deleteLoading, setDeleteLoading] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null); // patient pending delete-confirm
   const [showImportModal, setShowImportModal] = useState(false);
 
   // Upcoming birthdays tab
@@ -153,9 +154,13 @@ const Patients = () => {
       if (!debouncedSearch) return true;
       const s = debouncedSearch.toLowerCase();
       return (
-        p.name.toLowerCase().includes(s) ||
-        p.phone.toLowerCase().includes(s) ||
-        p.village.toLowerCase().includes(s) ||
+        // Guard every field: legacy/imported patients can have null name/phone/
+        // village (the API's PatientResponseDTO allows these), and an unguarded
+        // `.toLowerCase()` on a null throws mid-render → the "something went wrong"
+        // error-boundary card the moment the user types in the search bar.
+        p.name?.toLowerCase().includes(s) ||
+        p.phone?.toLowerCase().includes(s) ||
+        p.village?.toLowerCase().includes(s) ||
         p.treatment_type?.toLowerCase().includes(s) ||
         p.referred_by?.toLowerCase().includes(s) ||
         String(p.id).includes(s)
@@ -320,16 +325,23 @@ const Patients = () => {
     }
   };
 
-  const handleDeletePatient = async (patient) => {
-    if (!window.confirm(`Are you sure you want to delete ${patient.name}?`)) return;
+  // Open the confirm modal (single, on-brand — replaces the native window.confirm).
+  const handleDeletePatient = (patient) => setDeleteTarget(patient);
+
+  const confirmDeletePatient = async () => {
+    if (!deleteTarget) return;
+    const patient = deleteTarget;
     setDeleteLoading(patient.id);
     try {
       await api.delete(`/patients/${patient.id}`);
       toast.success("Patient deleted successfully");
+      setDeleteTarget(null);
       fetchPatients();
     } catch (error) {
       console.error("Error deleting patient:", error);
-      toast.error("Error deleting patient");
+      // Surface the backend's reason when it has one (e.g. "Cannot delete patient
+      // with existing payments") instead of a generic message.
+      toast.error(error?.response?.data?.detail || error?.message || "Error deleting patient");
     } finally {
       setDeleteLoading(null);
     }
@@ -968,6 +980,45 @@ const Patients = () => {
         onClose={() => setShowImportModal(false)}
         onImported={fetchPatients}
       />
+
+      {/* Delete patient — single on-brand confirm (matches the app's modal style). */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <Trash2 size={18} className="text-red-600" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-lg font-semibold text-gray-900">Delete patient?</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Are you sure you want to delete <span className="font-semibold">{deleteTarget.name}</span>?
+                  This will remove their records and <span className="font-semibold">cannot be undone</span>.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleteLoading === deleteTarget.id}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeletePatient}
+                disabled={deleteLoading === deleteTarget.id}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {deleteLoading === deleteTarget.id && <GearLoader size="w-4 h-4" />}
+                {deleteLoading === deleteTarget.id ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

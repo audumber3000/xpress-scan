@@ -250,13 +250,19 @@ async def get_public_appointments(
         # Get all appointments for this clinic
         query = db.query(Appointment).filter(Appointment.clinic_id == clinic_id)
 
-        # Apply date range filter
+        # Apply date range filter — reject malformed dates as 400, not 500.
         if date_from:
-            from_date = datetime.strptime(date_from, "%Y-%m-%d")
+            try:
+                from_date = datetime.strptime(date_from, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid date_from '{date_from}'. Expected YYYY-MM-DD.")
             query = query.filter(Appointment.appointment_date >= from_date)
 
         if date_to:
-            to_date = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+            try:
+                to_date = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid date_to '{date_to}'. Expected YYYY-MM-DD.")
             query = query.filter(Appointment.appointment_date < to_date)
 
         appointments = query.order_by(Appointment.appointment_date.asc()).all()
@@ -520,19 +526,34 @@ async def get_appointments(
     current_user: User = Depends(get_current_user)
 ):
     """Get all appointments for the clinic with optional filters"""
+    # Parse date filters defensively: a malformed/truncated value (e.g. a
+    # half-typed "2026-07-0" from the client) is a bad request, not a server
+    # error. Do this BEFORE the try/except below so it surfaces as a clean 400
+    # instead of being swallowed into a 500 (which also pollutes error tracking).
+    from_date = None
+    to_date = None
+    if date_from:
+        try:
+            from_date = datetime.strptime(date_from, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid date_from '{date_from}'. Expected YYYY-MM-DD.")
+    if date_to:
+        try:
+            to_date = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid date_to '{date_to}'. Expected YYYY-MM-DD.")
+
     try:
         final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
         query = db.query(Appointment).filter(Appointment.clinic_id == final_clinic_id)
-        
+
         # Apply date range filter
-        if date_from:
-            from_date = datetime.strptime(date_from, "%Y-%m-%d")
+        if from_date:
             query = query.filter(Appointment.appointment_date >= from_date)
-        
-        if date_to:
-            to_date = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+
+        if to_date:
             query = query.filter(Appointment.appointment_date < to_date)
-        
+
         # Apply status filter
         if status:
             query = query.filter(Appointment.status == status)
@@ -580,6 +601,8 @@ async def get_appointments(
             ))
         
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching appointments: {str(e)}")
 

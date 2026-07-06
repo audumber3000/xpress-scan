@@ -120,6 +120,14 @@ async def lifespan(app: FastAPI):
             conn.execute(text(
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS signature_url TEXT"
             ))
+            # Optional profile fields (added 2026-07). Nullable + additive — never
+            # touched by register/login/onboarding, only by the profile page.
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR"
+            ))
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT"
+            ))
             conn.execute(text(
                 "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS is_trial BOOLEAN DEFAULT FALSE"
             ))

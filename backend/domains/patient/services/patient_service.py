@@ -197,15 +197,40 @@ class PatientService(PatientServiceProtocol):
         if hasattr(patient, 'reports') and patient.reports:
             raise ValueError("Cannot delete patient with existing reports.")
 
-        # Delete related records to prevent foreign key constraint violations
+        # Delete related records to prevent foreign key constraint violations.
+        #
+        # Order matters — children must go before their parents:
+        #   invoice_line_items / invoice_audit_logs → invoices → appointments
+        #   lab_orders / prescriptions / patient_documents → case_papers
+        #   x-ray_images / case_papers / invoices / prescriptions → appointments
+        # so appointments (referenced by almost everything) are deleted LAST.
+        # (Previously invoices/x-rays/lab-orders were neither guarded nor deleted,
+        # so deleting a patient who had an invoice raised
+        # ForeignKeyViolation "invoices_patient_id_fkey"; and appointments were
+        # deleted before x-rays/case-papers that reference them.)
+        #
+        # Payments and reports remain guarded above (deletion is blocked when they
+        # exist) — we never silently drop real financial/clinical history.
         try:
-            from models import Appointment, Prescription, CasePaper, PatientDocument, PatientConsent
+            from models import (
+                Appointment, Prescription, CasePaper, PatientDocument, PatientConsent,
+                Invoice, InvoiceLineItem, InvoiceAuditLog, XrayImage, LabOrder,
+            )
             db = self.patient_repo.db
-            db.query(Appointment).filter(Appointment.patient_id == patient_id).delete(synchronize_session=False)
+
+            invoice_ids = [row[0] for row in db.query(Invoice.id).filter(Invoice.patient_id == patient_id).all()]
+            if invoice_ids:
+                db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id.in_(invoice_ids)).delete(synchronize_session=False)
+                db.query(InvoiceAuditLog).filter(InvoiceAuditLog.invoice_id.in_(invoice_ids)).delete(synchronize_session=False)
+            db.query(Invoice).filter(Invoice.patient_id == patient_id).delete(synchronize_session=False)
+
+            db.query(LabOrder).filter(LabOrder.patient_id == patient_id).delete(synchronize_session=False)
             db.query(Prescription).filter(Prescription.patient_id == patient_id).delete(synchronize_session=False)
-            db.query(CasePaper).filter(CasePaper.patient_id == patient_id).delete(synchronize_session=False)
             db.query(PatientDocument).filter(PatientDocument.patient_id == patient_id).delete(synchronize_session=False)
+            db.query(XrayImage).filter(XrayImage.patient_id == patient_id).delete(synchronize_session=False)
             db.query(PatientConsent).filter(PatientConsent.patient_id == patient_id).delete(synchronize_session=False)
+            db.query(CasePaper).filter(CasePaper.patient_id == patient_id).delete(synchronize_session=False)
+            db.query(Appointment).filter(Appointment.patient_id == patient_id).delete(synchronize_session=False)
             db.flush()
         except Exception as e:
             db.rollback()

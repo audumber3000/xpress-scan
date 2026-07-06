@@ -30,7 +30,7 @@ class TreatmentPlanService:
         patient_id: int,
         clinic_id: int,
         plan_data: Dict[str, Any],
-        create_appointment: bool = True
+        create_appointment: bool = False
     ) -> Dict[str, Any]:
         """
         Create a new treatment plan item and optionally create an appointment

@@ -54,7 +54,6 @@ import Checkout from "./pages/Checkout";
 // Components
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
-import PWAInstall from "./components/PWAInstall";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ConnectivityBanner from "./components/ConnectivityBanner";
 import DeviceUpsellModal from "./components/DeviceUpsellModal";
@@ -298,7 +297,6 @@ function AppContent() {
             </Routes>
           </main>
         </div>
-        <PWAInstall />
       </div>
     );
   };

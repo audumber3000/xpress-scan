@@ -29,7 +29,31 @@ else:
             "Please set it to your Render PostgreSQL connection string."
         )
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+# Connection-pool hardening.
+#
+# The default pool (size 5 + overflow 10 = 15) is too small: every request holds
+# its connection for the whole request (auth's `get_current_user` uses
+# `Depends(get_db)`), so bursts — MSG91 delivery webhooks, the vision-LLM register
+# OCR, bulk import — saturate the pool and unrelated calls (e.g. patient search)
+# queue `pool_timeout`s then 500 with "QueuePool limit ... reached".
+#
+# RDS allows 191 connections and each container is a single uvicorn process, so a
+# 30-connection pool per process leaves ample headroom. All values are
+# env-overridable for tuning without a redeploy of code.
+#   pool_pre_ping : drop dead connections (RDS closes idle ones) before use,
+#                   instead of surfacing them as 500s on the next query.
+#   pool_recycle  : proactively recycle connections older than this many seconds.
+_engine_kwargs = {}
+if not SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
+    _engine_kwargs = dict(
+        pool_size=int(os.environ.get("DB_POOL_SIZE", "10")),
+        max_overflow=int(os.environ.get("DB_MAX_OVERFLOW", "20")),
+        pool_timeout=int(os.environ.get("DB_POOL_TIMEOUT", "30")),
+        pool_recycle=int(os.environ.get("DB_POOL_RECYCLE", "1800")),
+        pool_pre_ping=True,
+    )
+
+engine = create_engine(SQLALCHEMY_DATABASE_URL, **_engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def get_db():
