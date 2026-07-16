@@ -5,6 +5,7 @@ import GearLoader from "../components/GearLoader";
 import { api } from "../utils/api";
 import { toast } from 'react-toastify';
 import { BadgeCheck } from "lucide-react";
+import { generateAvatarUrl } from "../utils/avatar";
 
 const ROLE_INFO = {
   clinic_owner: { label: "Clinic Owner", color: "text-purple-700", bg: "bg-purple-50" },
@@ -13,13 +14,6 @@ const ROLE_INFO = {
 };
 const getRoleInfo = (role) => ROLE_INFO[role] || { label: "Staff", color: "text-gray-700", bg: "bg-gray-100" };
 
-const initialsOf = (name) => {
-  if (!name) return "U";
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const first = parts[0]?.[0] || "";
-  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
-  return (first + last).toUpperCase() || "U";
-};
 
 const DoctorProfile = () => {
   const { user, refreshUser } = useAuth();
@@ -267,11 +261,13 @@ const DoctorProfile = () => {
               <div className="flex flex-col sm:flex-row sm:items-end gap-4">
                 <div className="relative -mt-10">
                   <div className="w-24 h-24 rounded-full ring-4 ring-white bg-[#2a276e] overflow-hidden flex items-center justify-center shadow">
-                    {avatarPreview ? (
-                      <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-white text-2xl font-bold">{initialsOf(displayName)}</span>
-                    )}
+                    {/* No uploaded photo falls back to the same DiceBear cartoon
+                        the header shows, so the two surfaces match. */}
+                    <img
+                      src={avatarPreview || generateAvatarUrl(email || displayName, 160)}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                   <button
                     onClick={() => avatarInputRef.current?.click()}

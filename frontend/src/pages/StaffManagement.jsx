@@ -129,10 +129,17 @@ const StaffManagement = () => {
     }
   };
 
+  // Clicking a staff member goes to their permissions rather than squeezing the
+  // table into a side panel — permissions is what this list is mostly used for.
   const handleUserClick = (clickedUser) => {
+    navigate(`/admin/permissions?user=${clickedUser.id}`);
+  };
+
+  // Editing name/role still needs a home, so it moved to a per-row icon.
+  const handleEditUser = (clickedUser) => {
     setSelectedUser(clickedUser);
     setShowUserPanel(true);
-    setUserPanelTab("accounts");
+    setUserPanelTab("edit");
   };
 
   // Filter users based on selected filter
@@ -263,7 +270,7 @@ const StaffManagement = () => {
 
       <>
         <div className="flex-1 flex overflow-hidden bg-white rounded-xl shadow-sm border border-gray-100 p-2">
-        <div className={`flex-1 overflow-y-auto transition-all duration-300 ${showUserPanel ? 'mr-96' : ''}`}>
+        <div className="flex-1 overflow-y-auto">
           <div className="p-4">
             <StaffTableHeader
               userCount={filteredUsers.length}
@@ -293,6 +300,7 @@ const StaffManagement = () => {
             <StaffTable
               users={filteredUsers}
               onUserClick={handleUserClick}
+              onEditUser={handleEditUser}
               searchQuery={searchQuery}
               onToggleActive={handleToggleActive}
               currentUserId={user?.id}

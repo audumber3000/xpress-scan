@@ -2,17 +2,19 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useHeader } from '../contexts/HeaderContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Building2, Users, Settings as SettingsIcon, FileText, Bell, CreditCard, PlusCircle, Activity, ChevronDown, Stethoscope, Shield, Calendar, MessageSquare, UserCheck } from 'lucide-react';
+import { Building2, Users, Settings as SettingsIcon, FileText, Bell, CreditCard, PlusCircle, Activity, ChevronDown, Stethoscope, Shield, Calendar } from 'lucide-react';
 
 /**
- * Admin navigation, grouped by category.
+ * Control Center navigation, grouped by category.
  *
- * Single source of truth for the menu. Every child route under /admin appears
- * here — Attendance, Treatments, Permissions and Referring Doctors used to be
- * routed but unreachable from this menu, which also meant /admin's default
- * redirect (attendance) landed on a page with no matching item.
+ * Single source of truth for the menu. A null title renders the group ungrouped
+ * at the top.
  *
- * A null title renders the group ungrouped at the top.
+ * Two /admin child routes are deliberately NOT listed and are reachable only by
+ * direct URL: `templates` (Message Templates) and `doctors` (Referring Doctors),
+ * both retired from the menu as unused. Referring Doctors in particular was a
+ * dead CRUD screen — nothing read the table, and patients record "referred by"
+ * as free text. Their routes are left in place so existing links don't 404.
  */
 const NAV_GROUPS = [
   {
@@ -29,13 +31,11 @@ const NAV_GROUPS = [
     items: [
       { id: 'practice_settings', icon: Activity, label: 'Practice Settings', hasChildren: true, activePath: '/admin/practice-settings' },
       { id: 'treatments', icon: Stethoscope, label: 'Treatments & Pricing', path: '/admin/treatments' },
-      { id: 'doctors', icon: UserCheck, label: 'Referring Doctors', path: '/admin/doctors' },
     ],
   },
   {
     title: 'Communication',
     items: [
-      { id: 'templates', icon: MessageSquare, label: 'Message Templates', path: '/admin/templates' },
       { id: 'templates_editor', icon: FileText, label: 'Templates Editor', path: '/admin/templates-editor' },
       { id: 'notifications', icon: Bell, label: 'Notifications', path: '/admin/notifications' },
     ],

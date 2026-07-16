@@ -1,4 +1,5 @@
 import React from 'react';
+import { Pencil, Trash2 } from 'lucide-react';
 
 const parsePills = (val) => {
     if (Array.isArray(val)) return val;
@@ -9,7 +10,17 @@ const parsePills = (val) => {
     return [];
 };
 
-const CasePaperList = ({ caseHistory, loading, onNewCasePaper, onSelectCasePaper }) => {
+/**
+ * The card title. chief_complaint arrives as a JSON *string* (e.g. '["Pain"]'),
+ * so rendering it directly printed the brackets and quotes verbatim —
+ * Array.isArray is false for a string. parsePills already handles both shapes.
+ */
+const complaintTitle = (val) => {
+    const pills = parsePills(val);
+    return pills.length ? pills.join(', ') : 'General Checkup';
+};
+
+const CasePaperList = ({ caseHistory, loading, onNewCasePaper, onSelectCasePaper, onDeleteCasePaper }) => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center mb-6">
@@ -28,33 +39,56 @@ const CasePaperList = ({ caseHistory, loading, onNewCasePaper, onSelectCasePaper
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {caseHistory.map((paper, index) => (
-            <div 
-              key={paper.id} 
-              onClick={() => {
-                onSelectCasePaper(paper, {
-                  chief_complaint: parsePills(paper.chief_complaint),
-                  medical_history: parsePills(paper.medical_history),
-                  dental_history: parsePills(paper.dental_history),
-                  allergies: parsePills(paper.allergies),
-                  clinical_examination: paper.clinical_examination || '',
-                  diagnosis: paper.diagnosis || '',
-                  next_visit_recommendation: paper.next_visit_recommendation || 'Not specified',
-                  notes: paper.notes || ''
-                });
-              }}
+          {caseHistory.map((paper, index) => {
+            const openPaper = () => {
+              onSelectCasePaper(paper, {
+                chief_complaint: parsePills(paper.chief_complaint),
+                medical_history: parsePills(paper.medical_history),
+                dental_history: parsePills(paper.dental_history),
+                allergies: parsePills(paper.allergies),
+                clinical_examination: paper.clinical_examination || '',
+                diagnosis: paper.diagnosis || '',
+                next_visit_recommendation: paper.next_visit_recommendation || 'Not specified',
+                notes: paper.notes || ''
+              });
+            };
+            return (
+            <div
+              key={paper.id}
+              onClick={openPaper}
               className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm cursor-pointer hover:shadow-md hover:border-[#9B8CFF]/50 transition-all group"
             >
               <div className="flex justify-between items-start mb-4">
                 <div className="px-3 py-1 bg-blue-50 text-blue-700 text-[10px] font-bold uppercase tracking-wider rounded-lg border border-blue-100">
                   Visit #{caseHistory.length - index}
                 </div>
-                <div className={`px-2 py-1 text-[10px] font-bold uppercase rounded-lg ${paper.status === 'Completed' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
-                  {paper.status}
+                <div className="flex items-center gap-1.5">
+                  <div className={`px-2 py-1 text-[10px] font-bold uppercase rounded-lg ${paper.status === 'Completed' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                    {paper.status}
+                  </div>
+                  {/* stopPropagation: the whole card is a click target for opening */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); openPaper(); }}
+                    className="p-1.5 rounded-lg text-gray-400 hover:text-[#2a276e] hover:bg-gray-100 transition-colors"
+                    title="Edit case paper"
+                    aria-label="Edit case paper"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  {onDeleteCasePaper && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDeleteCasePaper(paper); }}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      title="Delete case paper"
+                      aria-label="Delete case paper"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               </div>
               <h3 className="font-bold text-gray-900 mb-1 group-hover:text-[#2a276e] transition-colors line-clamp-1">
-                {Array.isArray(paper.chief_complaint) ? paper.chief_complaint.join(', ') : paper.chief_complaint || 'General Checkup'}
+                {complaintTitle(paper.chief_complaint)}
               </h3>
               <p className="text-sm text-gray-500 mb-4">
                 {new Date(paper.date).toLocaleDateString()} • {paper.dentist?.name || paper.dentist_name || (typeof paper.dentist === 'string' ? paper.dentist : 'Not Assigned')}
@@ -67,7 +101,8 @@ const CasePaperList = ({ caseHistory, loading, onNewCasePaper, onSelectCasePaper
                 </svg>
               </div>
             </div>
-          ))}
+            );
+          })}
 
           {caseHistory.length === 0 && (
             <div className="col-span-full py-20 text-center bg-gray-50/50 rounded-3xl border-2 border-dashed border-gray-200">

@@ -1,11 +1,13 @@
 import React from 'react';
+import { Pencil } from 'lucide-react';
 import { generateAvatarUrl } from '../../utils/avatar';
 
-const StaffTable = ({ 
-  users, 
-  userDevices = {}, 
+const StaffTable = ({
+  users,
+  userDevices = {},
   loadingUserDevices = false,
   onUserClick,
+  onEditUser,
   onToggleActive,
   currentUserId,
   getUserInitials = (name) => name?.split(' ').map(n => n[0]).join('').toUpperCase() || '??',
@@ -126,29 +128,43 @@ const StaffTable = ({
                     {formatDate(u.created_at)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    {onToggleActive && (
-                      <div className="flex items-center justify-end gap-2" title={isOwner ? 'Cannot deactivate clinic owner' : ''}>
-                        <span className={`text-xs font-semibold ${isInactive ? 'text-gray-400' : 'text-emerald-600'}`}>
-                          {isInactive ? 'Inactive' : 'Active'}
-                        </span>
+                    <div className="flex items-center justify-end gap-2">
+                      {onToggleActive && (
+                        <div className="flex items-center gap-2" title={isOwner ? 'Cannot deactivate clinic owner' : ''}>
+                          <span className={`text-xs font-semibold ${isInactive ? 'text-gray-400' : 'text-emerald-600'}`}>
+                            {isInactive ? 'Inactive' : 'Active'}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!isOwner) onToggleActive(u);
+                            }}
+                            disabled={isOwner}
+                            className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ${
+                              isOwner
+                                ? 'cursor-not-allowed opacity-40 bg-gray-200'
+                                : isInactive
+                                  ? 'bg-gray-200 cursor-pointer'
+                                  : 'bg-[#2D9596] cursor-pointer'
+                            }`}
+                          >
+                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ${isInactive ? 'translate-x-0' : 'translate-x-4'}`} />
+                          </button>
+                        </div>
+                      )}
+                      {/* The row itself opens permissions, so editing name/role
+                          needs its own affordance. */}
+                      {onEditUser && (
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!isOwner) onToggleActive(u);
-                          }}
-                          disabled={isOwner}
-                          className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ${
-                            isOwner
-                              ? 'cursor-not-allowed opacity-40 bg-gray-200'
-                              : isInactive
-                                ? 'bg-gray-200 cursor-pointer'
-                                : 'bg-[#2D9596] cursor-pointer'
-                          }`}
+                          onClick={(e) => { e.stopPropagation(); onEditUser(u); }}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-[#2D9596] hover:bg-gray-100 transition-colors"
+                          title="Edit staff details"
+                          aria-label={`Edit ${u.name}`}
                         >
-                          <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ${isInactive ? 'translate-x-0' : 'translate-x-4'}`} />
+                          <Pencil size={15} />
                         </button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </td>
                 </tr>
               );

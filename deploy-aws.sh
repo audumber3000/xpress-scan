@@ -132,6 +132,11 @@ run_migration "patient_dob"       "ALTER TABLE patients ADD COLUMN IF NOT EXISTS
 run_migration "license_number"    "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS license_number VARCHAR(80)"
 run_migration "license_authority" "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS license_authority VARCHAR(120)"
 run_migration "license_expiry"    "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS license_expiry DATE"
+# Support Center → My Account Manager. Set by the support team, not the clinic.
+run_migration "am_name"           "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS account_manager_name VARCHAR(120)"
+run_migration "am_role"           "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS account_manager_role VARCHAR(120)"
+run_migration "am_email"          "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS account_manager_email VARCHAR(120)"
+run_migration "am_phone"          "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS account_manager_phone VARCHAR(20)"
 run_migration "whatsapp_integrations" "CREATE TABLE IF NOT EXISTS whatsapp_integrations (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL UNIQUE REFERENCES clinics(id), provider VARCHAR DEFAULT 'wareach', session_id VARCHAR, api_key_enc TEXT, phone_number VARCHAR, status VARCHAR DEFAULT 'disconnected', last_status_at TIMESTAMP, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())"
 
 # ── Schema migration check (run against RDS) ──────────────────────────────────
@@ -139,7 +144,7 @@ echo ""
 echo "▶ Running schema migration check against RDS..."
 
 declare -A REQUIRED_COLS=(
-  ["clinics"]="id clinic_code name address phone email gst_number specialization subscription_plan status razorpay_customer_id cashfree_customer_id logo_url invoice_template primary_color number_of_chairs timings created_at updated_at synced_at sync_status referred_by_code clinic_label parent_clinic_id country currency_code currency_symbol timezone tax_label tax_id license_number license_authority license_expiry"
+  ["clinics"]="id clinic_code name address phone email gst_number specialization subscription_plan status razorpay_customer_id cashfree_customer_id logo_url invoice_template primary_color number_of_chairs timings created_at updated_at synced_at sync_status referred_by_code clinic_label parent_clinic_id country currency_code currency_symbol timezone tax_label tax_id license_number license_authority license_expiry account_manager_name account_manager_role account_manager_email account_manager_phone"
   ["users"]="id email name first_name last_name role is_active permissions created_at updated_at email_report_unsubscribed"
   ["user_clinics"]="user_id clinic_id role is_active created_at"
   ["patients"]="id clinic_id name phone date_of_birth created_at updated_at"

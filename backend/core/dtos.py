@@ -67,6 +67,10 @@ class PatientResponseDTO(PatientBaseDTO):
     referred_by: Optional[str] = None
     treatment_type: Optional[str] = None
     payment_type: Optional[str] = None
+    # No ge/le here: a stored row of age=2020 (a birth year typed into the age
+    # field on import) once 500'd the entire patient list. Read must report what
+    # is stored; range rules belong on the create/update/import DTOs.
+    age: Optional[int] = None
     id: int
     clinic_id: int
     display_id: Optional[str] = None
@@ -116,6 +120,11 @@ class ClinicBaseDTO(BaseModel):
     license_number: Optional[str] = None
     license_authority: Optional[str] = None
     license_expiry: Optional[date] = None
+    # Assigned account manager (set by the support team; blank when unassigned).
+    account_manager_name: Optional[str] = None
+    account_manager_role: Optional[str] = None
+    account_manager_email: Optional[str] = None
+    account_manager_phone: Optional[str] = None
 
 
 class ClinicCreateDTO(ClinicBaseDTO):

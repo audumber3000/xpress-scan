@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { toast } from 'react-toastify';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useHeader } from "../contexts/HeaderContext";
 import { useAuth } from "../contexts/AuthContext";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
@@ -91,6 +91,7 @@ const PermissionsManagement = () => {
   const { setTitle } = useHeader();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [drawerUser, setDrawerUser] = useState(null);
@@ -139,6 +140,22 @@ const PermissionsManagement = () => {
     });
     setPermissions(merged);
   };
+
+  // Deep link from Staff: /admin/permissions?user=<id> opens that person's
+  // permissions drawer straight away. Waits for the user list, since the drawer
+  // needs the whole record. The param is stripped once applied so a refresh
+  // doesn't force the drawer back open.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const id = params.get('user');
+    if (!id) return;
+    const target = users.find(u => String(u.id) === id);
+    if (!target) return; // still loading — retry when users arrive
+    openDrawer(target);
+    params.delete('user');
+    navigate({ search: params.toString() }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search, users]);
 
   const applyPreset = (role) => {
     const preset = ROLE_PRESETS[role] || {};

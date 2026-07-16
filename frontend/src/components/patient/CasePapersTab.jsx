@@ -271,6 +271,34 @@ const CasePapersTab = ({
       }
   };
 
+  // Deleting a case paper destroys clinical history, so confirm with the
+  // complaint name rather than a bare "are you sure".
+  const handleDeleteCasePaper = async (paper) => {
+    const title = (() => {
+      const raw = paper.chief_complaint;
+      if (Array.isArray(raw)) return raw.join(', ');
+      if (typeof raw === 'string' && raw.trim().startsWith('[')) {
+        try { return JSON.parse(raw).join(', '); } catch { return raw; }
+      }
+      return raw || 'General Checkup';
+    })();
+
+    const ok = window.confirm(
+      `Delete this case paper?\n\n"${title}" — ${new Date(paper.date).toLocaleDateString()}\n\n` +
+      'This permanently removes the clinical record and cannot be undone.'
+    );
+    if (!ok) return;
+
+    try {
+      await api.delete(`/clinical/case-papers/${paper.id}`);
+      toast.success('Case paper deleted');
+      fetchCasePapers();
+    } catch (err) {
+      console.error('Failed to delete case paper:', err);
+      toast.error(err?.message || 'Failed to delete case paper');
+    }
+  };
+
   const startNewCasePaper = () => {
       const newPaper = {
           id: 'new-' + Date.now(),
@@ -500,6 +528,7 @@ const CasePapersTab = ({
         caseHistory={caseHistory}
         loading={loading}
         onNewCasePaper={startNewCasePaper}
+        onDeleteCasePaper={handleDeleteCasePaper}
         onSelectCasePaper={(paper, formData) => {
           setSelectedCasePaper(paper);
           setForm(formData);

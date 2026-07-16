@@ -493,7 +493,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
 
         </div>{/* end scrollable nav area */}
 
-        {/* Need Help button */}
+        {/* Support Center button */}
         <div className={`mt-3 pt-3 border-t border-white/10 ${collapsed ? 'flex justify-center' : ''}`}>
           <button
             onClick={() => {
@@ -505,13 +505,13 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
                 ? 'flex items-center justify-center w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors group relative'
                 : 'flex items-center gap-3 w-full py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors text-sm font-semibold'
             }`}
-            title={collapsed ? 'Need Help?' : ''}
+            title={collapsed ? 'Support Center' : ''}
           >
             <HelpCircle size={18} className="flex-shrink-0" />
-            {!collapsed && 'Need Help?'}
+            {!collapsed && 'Support Center'}
             {collapsed && (
               <span className="absolute left-full ml-3 px-3 py-1.5 bg-gray-900/95 text-white text-sm font-semibold rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 shadow-xl border border-gray-700">
-                Need Help?
+                Support Center
               </span>
             )}
           </button>

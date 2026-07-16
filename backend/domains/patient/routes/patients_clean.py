@@ -20,6 +20,9 @@ from core.dtos import (
 from core.dependencies import get_patient_service
 from core.auth_utils import get_current_user, require_patients_view, require_patients_edit, require_patients_delete
 from domains.activity.routes.activity_log import push_activity
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -87,7 +90,19 @@ async def get_patients(
         else:
             patients = patient_service.get_patients(current_user.clinic_id, skip, limit)
 
-        return [PatientResponseDTO.from_orm(patient) for patient in patients]
+        # Serialize per-row: a single unserializable patient must not 500 the
+        # whole list (a bulk-imported age=2020 did exactly that). Skip the bad
+        # row and log it rather than hiding the entire clinic's patients.
+        result = []
+        for patient in patients:
+            try:
+                result.append(PatientResponseDTO.from_orm(patient))
+            except Exception as row_err:
+                logger.error(
+                    "Skipping unserializable patient id=%s clinic_id=%s: %s",
+                    getattr(patient, "id", "?"), current_user.clinic_id, row_err,
+                )
+        return result
 
     except Exception as e:
         raise HTTPException(
@@ -188,8 +203,20 @@ async def import_patients(
                 errors.append(f"Row {row_num}: A valid phone number is required")
                 continue
 
+            from datetime import datetime as _dt
+
             age_raw = row.get("age")
             age = int(age_raw) if age_raw not in (None, "") and str(age_raw).strip().isdigit() else None
+            # An out-of-range age must never reach the DB — a stored age=2020
+            # (a birth year typed into the age column) once broke the whole
+            # patient list. If it looks like a birth year, convert it to an age;
+            # otherwise drop it to NULL. Either way the row still imports.
+            if age is not None and not (0 <= age <= 150):
+                current_year = _dt.now().year
+                if 1900 <= age <= current_year:
+                    age = current_year - age
+                else:
+                    age = None
 
             # Parse an optional date of birth and registration date.
             # (accepts YYYY-MM-DD / DD-MM-YYYY / DD/MM/YYYY / MM/DD/YYYY)

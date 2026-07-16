@@ -1,18 +1,23 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   ArrowRight,
+  ChevronDown,
+  ChevronRight,
   Clock3,
   ExternalLink,
   LifeBuoy,
   Lightbulb,
   Mail,
   MessageCircle,
+  Phone,
   PlayCircle,
   Send,
   Ticket,
+  UserRoundCheck,
   X,
 } from 'lucide-react';
 import { api } from '../utils/api';
+import { useAuth } from '../contexts/AuthContext';
 import FeatureRequestsBoard from '../components/support/FeatureRequestsBoard';
 
 const STATUS_COLORS = {
@@ -81,6 +86,111 @@ const videoSections = [
     tag: 'Lab',
   },
 ];
+
+/**
+ * Support Center navigation — a flat list, no category headings.
+ * Mirrors the Control Center's two-pane shell.
+ */
+const SUPPORT_NAV = [
+  { id: 'account', icon: UserRoundCheck, label: 'My Account Manager' },
+  { id: 'videos', icon: PlayCircle, label: 'Video Resources' },
+  { id: 'tickets', icon: LifeBuoy, label: 'Support Tickets' },
+  { id: 'features', icon: Lightbulb, label: 'Feature Requests' },
+];
+
+/**
+ * AccountManagerCard — the manager assigned to this clinic.
+ *
+ * Renders strictly from clinic.account_manager_* (set by the support team, not
+ * the clinic). When nobody is assigned it shows an empty state and the general
+ * support channels — never a placeholder person.
+ */
+const AccountManagerCard = ({ clinic }) => {
+  const name = clinic?.account_manager_name;
+  const role = clinic?.account_manager_role;
+  const email = clinic?.account_manager_email;
+  const phone = clinic?.account_manager_phone;
+
+  if (!name) {
+    return (
+      <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm text-center">
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#2a276e]/5">
+          <UserRoundCheck size={22} className="text-[#2a276e]/40" />
+        </div>
+        <p className="text-sm font-medium text-gray-500">No account manager assigned yet</p>
+        <p className="mx-auto mt-1 max-w-md text-xs text-gray-400">
+          Your clinic doesn't have a dedicated manager right now. The support team below can help
+          with anything you need.
+        </p>
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+          <a
+            href={`https://wa.me/${SUPPORT_PHONE_RAW}?text=${WHATSAPP_TEXT}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+          >
+            <MessageCircle size={16} className="text-[#25D366]" /> WhatsApp support
+          </a>
+          <a
+            href={`mailto:${SUPPORT_EMAIL}`}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+          >
+            <Mail size={16} className="text-[#2a276e]" /> {SUPPORT_EMAIL}
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  const phoneRaw = (phone || '').replace(/[^\d]/g, '');
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm max-w-xl">
+      <div className="flex items-center gap-4">
+        <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#2a276e] to-[#5b57c4] text-lg font-bold text-white">
+          {name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase()}
+        </div>
+        <div className="min-w-0">
+          <p className="text-lg font-bold text-gray-900 truncate">{name}</p>
+          {role && <p className="text-sm text-gray-500 truncate">{role}</p>}
+        </div>
+      </div>
+
+      <div className="mt-5 space-y-2">
+        {email && (
+          <a href={`mailto:${email}`} className="flex items-center gap-2 text-sm text-gray-700 hover:text-[#2a276e]">
+            <Mail size={16} className="text-[#2a276e] flex-shrink-0" />
+            <span className="truncate">{email}</span>
+          </a>
+        )}
+        {phone && (
+          <a href={`tel:${phone}`} className="flex items-center gap-2 text-sm text-gray-700 hover:text-[#2a276e]">
+            <Phone size={16} className="text-[#2a276e] flex-shrink-0" />
+            <span>{phone}</span>
+          </a>
+        )}
+      </div>
+
+      {phone && (
+        <div className="mt-5 flex flex-wrap gap-3">
+          <a
+            href={`tel:${phone}`}
+            className="inline-flex items-center gap-2 rounded-lg bg-[#2a276e] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1a1548]"
+          >
+            <Phone size={16} /> Call now
+          </a>
+          <a
+            href={`https://wa.me/${phoneRaw}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+          >
+            <MessageCircle size={16} className="text-[#25D366]" /> WhatsApp
+          </a>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const Chip = ({ label, colorMap }) => (
   <span
@@ -214,7 +324,11 @@ const VideoTableRow = ({ section, index }) => {
 };
 
 export default function SupportTickets() {
-  const [activeTab, setActiveTab] = useState('support');
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState('account');
+  // Mobile only: false = show the nav, true = show the chosen section.
+  // Ignored on md+, where both panes render side by side.
+  const [mobileShowContent, setMobileShowContent] = useState(false);
   const [tickets, setTickets] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -290,32 +404,70 @@ export default function SupportTickets() {
     }
   };
 
+  const go = (id) => { setActiveTab(id); setMobileShowContent(true); };
+
   return (
-    <div className="min-h-full bg-[#f7f8fc]">
-      <div className="mx-auto max-w-7xl px-4 py-5 md:px-6 md:py-6">
-        {/* Tabs */}
-        <div className="mb-6 inline-flex rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
-          <button
-            onClick={() => setActiveTab('support')}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-              activeTab === 'support' ? 'bg-[#2a276e] text-white' : 'text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            <LifeBuoy size={16} /> Support
-          </button>
-          <button
-            onClick={() => setActiveTab('features')}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-              activeTab === 'features' ? 'bg-[#2a276e] text-white' : 'text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            <Lightbulb size={16} /> Feature Requests
-          </button>
+    // h-full, not min-h-full: this renders inside <main>, already below the header.
+    <div className="flex h-full w-full bg-[#f8fafc] overflow-hidden">
+      {/* Left nav — flat list, no category headings */}
+      <div className={`${mobileShowContent ? 'hidden md:flex' : 'flex'} w-full md:w-72 bg-white border-r border-gray-200 flex-col h-full shrink-0 shadow-sm z-10`}>
+        <div className="p-6 border-b border-gray-100/80">
+          <h2 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
+            <LifeBuoy size={22} className="text-[#2a276e]" />
+            Support Center
+          </h2>
+          <p className="text-sm text-gray-500 mt-1 ml-8">Select an option below</p>
         </div>
+
+        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+          {SUPPORT_NAV.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => go(item.id)}
+                className={`w-full flex items-center justify-between px-4 py-3 mb-0.5 rounded-xl transition-all duration-200 ${
+                  isActive
+                    ? 'bg-gradient-to-r from-[#2a276e]/10 to-transparent border-l-4 border-[#2a276e] text-[#2a276e] font-semibold'
+                    : 'text-gray-600 hover:bg-gray-50 border-l-4 border-transparent hover:border-gray-200'
+                }`}
+              >
+                <span className="flex items-center gap-3">
+                  <Icon size={20} className={isActive ? 'text-[#2a276e]' : 'text-gray-500'} />
+                  <span className="font-medium tracking-wide text-[14px]">{item.label}</span>
+                </span>
+                {isActive && <ChevronRight size={16} className="text-[#2a276e]" />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Content pane */}
+      <div className={`${mobileShowContent ? 'flex' : 'hidden md:flex'} flex-1 flex-col h-full overflow-hidden`}>
+        <button
+          onClick={() => setMobileShowContent(false)}
+          className="md:hidden flex items-center gap-1.5 px-4 py-3 text-sm font-semibold text-[#2a276e] bg-white border-b border-gray-200 shrink-0"
+        >
+          <ChevronDown size={18} className="rotate-90" />
+          Support Center menu
+        </button>
+
+        <div className="flex-1 overflow-y-auto p-5 md:p-6 lg:p-8">
+        {activeTab === 'account' && (
+          <>
+            <div className="mb-5">
+              <h3 className="text-lg font-bold text-gray-900">My Account Manager</h3>
+              <p className="text-sm text-gray-500 mt-0.5">Feel free to reach out for any queries</p>
+            </div>
+            <AccountManagerCard clinic={user?.clinic} />
+          </>
+        )}
 
         {activeTab === 'features' && <FeatureRequestsBoard />}
 
-        {activeTab === 'support' && (
+        {activeTab === 'videos' && (
         <>
         <section className="rounded-3xl border border-[#2a276e]/10 bg-white shadow-sm overflow-hidden">
           <div className="grid gap-0 lg:grid-cols-[1.2fr_0.8fr]">
@@ -385,7 +537,7 @@ export default function SupportTickets() {
           </div>
         </section>
 
-        <section className="mt-6 grid gap-6 xl:grid-cols-[1.22fr_0.78fr]">
+        <section className="mt-6">
           <div>
             <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
               <div className="border-b border-gray-200 px-5 py-4">
@@ -466,7 +618,13 @@ export default function SupportTickets() {
               </div>
             </div>
           </div>
+        </section>
+        </>
+        )}
 
+        {activeTab === 'tickets' && (
+        <>
+        <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
           <div className="space-y-6">
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
               <div className="flex items-start justify-between gap-3">
@@ -755,6 +913,7 @@ export default function SupportTickets() {
         )}
         </>
         )}
+        </div>
       </div>
     </div>
   );

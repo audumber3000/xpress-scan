@@ -86,6 +86,13 @@ class Clinic(Base):
     license_number = Column(String(80), nullable=True)  # council / clinical establishment reg. no.
     license_authority = Column(String(120), nullable=True)  # issuing body
     license_expiry = Column(Date, nullable=True)
+    # Assigned MolarPlus account manager, shown on Support Center. All nullable:
+    # a clinic with no manager assigned shows an empty state, never a placeholder
+    # person. Set by the support team, not by the clinic.
+    account_manager_name = Column(String(120), nullable=True)
+    account_manager_role = Column(String(120), nullable=True)  # e.g. "Customer Success Manager"
+    account_manager_email = Column(String(120), nullable=True)
+    account_manager_phone = Column(String(20), nullable=True)
 
     # Relationships
     users = relationship("User", secondary=user_clinics, back_populates="clinics")

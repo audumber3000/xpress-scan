@@ -14,7 +14,7 @@ import {
 } from "../utils/shortcuts";
 import { FaSync } from "react-icons/fa";
 import { api } from "../utils/api";
-import { generateAvatarUrl, getInitials } from "../utils/avatar";
+import { generateAvatarUrl } from "../utils/avatar";
 import { SkeletonBox } from "./Skeleton";
 import GlobalSearchModal from "./GlobalSearchModal";
 import { useNavigationGuard } from "../contexts/NavigationGuardContext";
@@ -55,7 +55,7 @@ const MenuLabel = ({ children }) => (
  * activity). Fixed 40px so the three read as one set inside the 56px header.
  */
 const ICON_BUTTON =
-  'w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-900 flex items-center justify-center flex-shrink-0 transition-colors';
+  'w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-900 flex items-center justify-center flex-shrink-0 transition-colors';
 
 /**
  * Activity event -> icon and tint. Replaces the emoji this list used to render,
@@ -81,49 +81,31 @@ const timeAgo = (createdAt) => {
   return `${Math.floor(h / 24)}d ago`;
 };
 
-/** "main_branch" -> "Main". Anything unrecognised is left off the tile. */
+/** "main_branch" -> "Main". Anything unrecognised is left off. */
 const branchLabel = (clinicLabel) => {
   if (clinicLabel === 'main_branch') return 'Main';
   if (clinicLabel === 'branch') return 'Branch';
   return '';
 };
 
-/**
- * ClinicTile — the clinic's logo, or a branded initials tile when it has none.
- *
- * Replaces a stock photo that was previously shown for every logo-less clinic,
- * which made unrelated branches look identical. Initials + branch label
- * actually distinguish them.
- */
+/** Shown for clinics that haven't uploaded a logo. */
+const DEFAULT_CLINIC_IMAGE =
+  'https://images.unsplash.com/photo-1629909615184-74f495363b67?w=80&h=80&fit=crop&auto=format';
+
+/** ClinicTile — the clinic's logo, falling back to the default clinic image. */
 const ClinicTile = ({ clinic, size = 'md' }) => {
-  const label = branchLabel(clinic?.clinic_label);
   const box = size === 'md' ? 'w-11 h-11' : 'w-9 h-9';
-
-  if (clinic?.logo_url) {
-    return (
-      <div className={`${box} rounded-lg overflow-hidden flex-shrink-0 bg-white`}>
-        <img
-          src={clinic.logo_url}
-          alt=""
-          className="w-full h-full object-cover"
-          // A dead logo URL shouldn't leave a broken-image icon in the header.
-          onError={(e) => { e.currentTarget.style.display = 'none'; }}
-        />
-      </div>
-    );
-  }
-
   return (
-    <div
-      className={`${box} rounded-lg flex-shrink-0 bg-gradient-to-br from-[#2a276e] to-[#5b57c4] flex flex-col items-center justify-center text-white leading-none`}
-      aria-hidden="true"
-    >
-      <span className={size === 'md' ? 'text-sm font-bold' : 'text-xs font-bold'}>
-        {getInitials(clinic?.name)}
-      </span>
-      {label && size === 'md' && (
-        <span className="text-xs font-medium text-white/70 mt-0.5">{label}</span>
-      )}
+    <div className={`${box} rounded-lg overflow-hidden flex-shrink-0 bg-white shadow-sm`}>
+      <img
+        src={clinic?.logo_url || DEFAULT_CLINIC_IMAGE}
+        alt=""
+        className="w-full h-full object-cover"
+        // A dead logo URL falls back to the default rather than a broken image.
+        onError={(e) => {
+          if (e.currentTarget.src !== DEFAULT_CLINIC_IMAGE) e.currentTarget.src = DEFAULT_CLINIC_IMAGE;
+        }}
+      />
     </div>
   );
 };
@@ -182,7 +164,7 @@ const Header = ({ onOpenMobileSidebar }) => {
       '/doctor-profile': 'Profile Settings',
       '/subscription': 'Subscription & Billing',
       '/support': 'Support',
-      '/support-tickets': 'Help Center',
+      '/support-tickets': 'Support Center',
       '/add-clinic': 'Add Branch',
       '/checkout': 'Checkout',
       '/mail': 'Mail',
@@ -253,28 +235,22 @@ const Header = ({ onOpenMobileSidebar }) => {
 
   /**
    * The header's plan button: a title, a supporting line and a chevron on the
-   * brand gradient.
-   *
-   * The "Activate Free Trial" wording only appears when a trial is genuinely
-   * available (`trial_available`, backed by POST /subscriptions/start-trial) —
-   * the button never offers a trial the app can't actually start.
+   * brand gradient. Every state links to /subscription.
    */
   const getPlanInfo = () => {
     const clinic = user?.clinic;
     const isPro = clinic?.subscription_plan === 'professional';
     const isTrial = !!clinic?.is_trial;
-    const trialAvailable = clinic?.trial_available === true && !isPro && !isTrial;
 
-    if (trialAvailable) return { title: 'Activate Free Trial', subtitle: "You're now eligible!" };
     if (isTrial) {
       const days = clinic.trial_days_remaining;
       return {
-        title: 'Trial',
+        title: 'Trial Plan',
         subtitle: typeof days === 'number' ? `${days} day${days === 1 ? '' : 's'} left` : 'Active',
       };
     }
-    if (isPro) return { title: 'Professional', subtitle: 'Active' };
-    return { title: 'Starter', subtitle: 'View plans' };
+    if (isPro) return { title: 'Professional Plan', subtitle: 'Manage your plan' };
+    return { title: 'Starter Plan', subtitle: 'Upgrade your plan' };
   };
   const planInfo = getPlanInfo();
 
@@ -526,7 +502,7 @@ const Header = ({ onOpenMobileSidebar }) => {
               {customTitleIsNode && (
                 <div className="hidden sm:flex items-center shrink-0">{customTitle}</div>
               )}
-              <h1 className="text-xl font-bold text-gray-900 truncate">{pageTitle}</h1>
+              <h1 className="text-base sm:text-xl font-bold text-gray-900 truncate">{pageTitle}</h1>
               <button
                 onClick={handleHeaderRefresh}
                 disabled={loading}
@@ -542,25 +518,22 @@ const Header = ({ onOpenMobileSidebar }) => {
 
       {/* Right side — quick actions stay in the header; the avatar collapses to
           just the cartoon and opens the account menu. */}
-      <div className="flex items-center gap-1 md:gap-2">
-        {/* Current plan — sits apart from the icon cluster. */}
+      <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+        {/* Current plan — hidden on mobile, where it can't fit alongside the
+            icons; the profile menu's "Subscription & billing" covers it there. */}
         <button
           onClick={() => gnav("/subscription")}
-          className="flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-lg bg-gradient-to-r from-[#2a276e] to-[#5b57c4] hover:brightness-110 shadow-sm transition-all"
+          className="hidden lg:flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-lg bg-gradient-to-r from-[#2a276e] to-[#5b57c4] hover:brightness-110 shadow-sm transition-all"
           title={`${planInfo.title} — ${planInfo.subtitle}`}
         >
           <span className="flex flex-col items-start leading-tight min-w-0">
             <span className="text-sm font-bold text-white whitespace-nowrap">{planInfo.title}</span>
-            {/* Supporting line drops on mobile; the title stays so the button is
-                still readable in a cramped header. */}
-            <span className="hidden sm:block text-xs text-white/75 whitespace-nowrap">
-              {planInfo.subtitle}
-            </span>
+            <span className="text-xs text-white/75 whitespace-nowrap">{planInfo.subtitle}</span>
           </span>
           <ChevronRight size={16} className="text-white/80 flex-shrink-0" />
         </button>
 
-        <div className="w-px h-6 bg-gray-200 mx-1"></div>
+        <div className="hidden lg:block w-px h-6 bg-gray-200 mx-1"></div>
 
         {/* Search */}
         <button
@@ -569,13 +542,14 @@ const Header = ({ onOpenMobileSidebar }) => {
           title={`Search patients (${searchHint})`}
           aria-label="Search patients"
         >
-          <Search size={22} />
+          <Search size={20} className="sm:w-[22px] sm:h-[22px]" />
         </button>
 
-        {/* Keyboard shortcuts */}
+        {/* Keyboard shortcuts — pointless without a physical keyboard, so it
+            doesn't earn space on mobile. */}
         <button
           onClick={() => setShowShortcuts(true)}
-          className={ICON_BUTTON}
+          className={`${ICON_BUTTON} hidden sm:flex`}
           title="Keyboard shortcuts (F9)"
           aria-label="Keyboard shortcuts"
         >
@@ -589,7 +563,7 @@ const Header = ({ onOpenMobileSidebar }) => {
           title="Activity Feed"
           aria-label={notifications.length > 0 ? `Activity feed, ${notifications.length} unread` : 'Activity feed'}
         >
-          <Bell size={22} />
+          <Bell size={20} className="sm:w-[22px] sm:h-[22px]" />
           {notifications.length > 0 && (
             <span className="absolute top-0 right-0 min-w-[16px] h-4 px-1 bg-red-500 text-white text-xs font-semibold rounded-full flex items-center justify-center border border-white">
               {notifications.length > 99 ? '99+' : notifications.length}
@@ -675,7 +649,7 @@ const Header = ({ onOpenMobileSidebar }) => {
                 />
                 <MenuRow
                   icon={LifeBuoy}
-                  label="Help center"
+                  label="Support Center"
                   onClick={() => { setShowProfileDropdown(false); gnav("/support-tickets"); }}
                 />
 
