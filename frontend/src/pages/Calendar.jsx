@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { SkeletonBox } from "../components/Skeleton";
 import { api } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
@@ -33,6 +33,7 @@ import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar"
 const Calendar = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [appointments, setAppointments] = useState([]);
@@ -177,6 +178,17 @@ const Calendar = () => {
     }
   };
 
+  // Deep link: /calendar?new=1 opens the booking form — the entry point the
+  // "Add appointment" shortcut uses. The param is stripped straight away so a
+  // refresh or back-navigation doesn't reopen the form.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('new') !== '1') return;
+    setShowAddForm(true);
+    params.delete('new');
+    navigate({ search: params.toString() }, { replace: true });
+  }, [location.search, navigate]);
+
   // Keep the selected-doctors set in sync when new doctors appear (add them selected by default).
   useEffect(() => {
     setSelectedDoctorIds(prev => {
@@ -306,6 +318,19 @@ const Calendar = () => {
       setSelectedAppointment(apt);
     }
   };
+
+  // Deep link from global search: /calendar?appointment=<id> opens that
+  // appointment's drawer. openAppointmentDetails fetches by id, so the record
+  // opens even when it falls outside the date currently on screen.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const id = params.get('appointment');
+    if (!id) return;
+    openAppointmentDetails({ id: Number(id) });
+    params.delete('appointment');
+    navigate({ search: params.toString() }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   const toggleShowAll = () => {
     const allOn = showUnassigned && doctors.every(d => selectedDoctorIds.has(d.id));

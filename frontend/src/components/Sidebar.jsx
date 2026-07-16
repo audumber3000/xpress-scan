@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useNavigationGuard } from "../contexts/NavigationGuardContext";
 import { useAuth } from "../contexts/AuthContext";
 import { api } from "../utils/api";
+import { canAccess } from "../utils/permissions";
 import { ChevronDown, ChevronRight, HelpCircle } from "lucide-react";
 
 const mainNavItems = [
@@ -114,12 +115,13 @@ const mainNavItems = [
 
 const adminNavItems = [
   {
-    name: "Admin",
+    name: "Control Center",
     path: "/admin",
     permissionKey: "staff",
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
       </svg>
     ),
   },
@@ -216,22 +218,9 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
     return location.pathname.startsWith('/admin');
   }, [location.pathname]);
 
-  // RBAC: deny-by-default. clinic_owner always passes.
-  // All other roles must have read === true for that module key.
-  const canAccess = (item) => {
-    if (!item.permissionKey && !item.permissionKeys) return true;
-    if (!user) return false;
-    if (user.role === 'clinic_owner') return true;
-
-    if (Array.isArray(item.permissionKeys) && item.permissionKeys.length > 0) {
-      return item.permissionKeys.some((key) => user.permissions?.[key]?.read === true);
-    }
-
-    return user.permissions?.[item.permissionKey]?.read === true;
-  };
-
-  const visibleMainNav = mainNavItems.filter(canAccess);
-  const visibleAdminNav = adminNavItems.filter(canAccess);
+  // RBAC: deny-by-default. Shared with the shortcuts panel so the two can't drift.
+  const visibleMainNav = mainNavItems.filter((item) => canAccess(user, item));
+  const visibleAdminNav = adminNavItems.filter((item) => canAccess(user, item));
 
   // Desktop sidebar classes - Gradient background (teal for admin, purple for main)
   const desktopClasses = !isMobile 

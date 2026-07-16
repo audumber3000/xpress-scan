@@ -31,7 +31,7 @@ const MessageTemplates = () => {
           className="flex items-center gap-1 text-gray-600 hover:text-gray-900 transition"
         >
           <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">Admin Hub</span>
+          <span className="text-sm font-medium">Control Center</span>
         </button>
       </div>
     );

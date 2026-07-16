@@ -448,7 +448,9 @@ const Subscription = () => {
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-gray-900">
-                        {isPro ? 'Multi-Branch Plan' : isTrial ? '7-Day Free Trial' : 'Free Plan'}
+                        {/* "(Starter)" ties this back to the plan name shown in the
+                            header, which otherwise appears nowhere on this page. */}
+                        {isPro ? 'Multi-Branch Plan' : isTrial ? '7-Day Free Trial' : 'Free Plan (Starter)'}
                       </p>
                       {isPro && (
                         <span className="text-xs font-semibold text-[#29828a]">{pricing.symbol}{pricing.monthly} / month</span>

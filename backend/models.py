@@ -82,6 +82,10 @@ class Clinic(Base):
     timezone = Column(String(50), default='Asia/Kolkata')  # IANA timezone
     tax_label = Column(String(20), default='GST No.')  # GST, VAT, TIN, ABN...
     tax_id = Column(String(50), nullable=True)  # replaces gst_number for intl
+    # Practice licence / registration — shown on the Clinic Profile "License" tab.
+    license_number = Column(String(80), nullable=True)  # council / clinical establishment reg. no.
+    license_authority = Column(String(120), nullable=True)  # issuing body
+    license_expiry = Column(Date, nullable=True)
 
     # Relationships
     users = relationship("User", secondary=user_clinics, back_populates="clinics")

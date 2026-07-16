@@ -13,18 +13,27 @@ export const generateAvatarUrl = (seed, size = 80) => {
 };
 
 /**
+ * First letters of the first two words, e.g. "Audi Pharma" -> "AU".
+ * @param {string} name
+ * @returns {string} 1-2 uppercase letters, or "?" when there's nothing to use.
+ */
+export const getInitials = (name) =>
+  (name || '')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map(word => word[0])
+    .filter(Boolean)
+    .join('')
+    .toUpperCase() || '?';
+
+/**
  * Generate a simple initials-based avatar URL (fallback when offline).
  * @param {string} name - User's full name
  * @returns {string} UI Avatars URL
  */
 export const generateInitialsAvatar = (name) => {
-  const initials = (name || '?')
-    .split(' ')
-    .map(n => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=2a276e&color=fff&size=80&rounded=true&bold=true`;
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(getInitials(name))}&background=2a276e&color=fff&size=80&rounded=true&bold=true`;
 };
 
 /**

@@ -4,6 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 import GearLoader from "../components/GearLoader";
 import { api } from "../utils/api";
 import { toast } from 'react-toastify';
+import { BadgeCheck } from "lucide-react";
 
 const ROLE_INFO = {
   clinic_owner: { label: "Clinic Owner", color: "text-purple-700", bg: "bg-purple-50" },
@@ -223,7 +224,7 @@ const DoctorProfile = () => {
 
   const quickLinks = [
     canAdmin && {
-      label: "Admin Hub", desc: "Staff, clinic, pricing & settings", to: "/admin",
+      label: "Control Center", desc: "Staff, clinic, pricing & settings", to: "/admin",
       icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z",
     },
     canAdmin && {
@@ -237,7 +238,10 @@ const DoctorProfile = () => {
   ].filter(Boolean);
 
   return (
-    <div className="p-6 md:p-8 max-w-4xl mx-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 2rem)' }}>
+    // h-full, not a 100vh-based maxHeight: this renders inside <main>, which
+    // already sits below the 56px header. Pinning to the viewport made the pane
+    // taller than its container, so it scrolled twice and clipped at the bottom.
+    <div className="p-6 md:p-8 max-w-4xl mx-auto overflow-y-auto h-full">
       <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-6">Profile Settings</h1>
 
       {loadingUserData ? (
@@ -257,8 +261,11 @@ const DoctorProfile = () => {
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-8">
             <div className="h-20 bg-gradient-to-r from-[#2a276e] to-[#4a4699]" />
             <div className="px-6 pb-6">
-              <div className="flex flex-col sm:flex-row sm:items-end gap-4 -mt-10">
-                <div className="relative">
+              {/* The pull-up belongs on the avatar alone. On the row it dragged
+                  the name and role badge up into the banner too, so they rendered
+                  on top of the purple. */}
+              <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+                <div className="relative -mt-10">
                   <div className="w-24 h-24 rounded-full ring-4 ring-white bg-[#2a276e] overflow-hidden flex items-center justify-center shadow">
                     {avatarPreview ? (
                       <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
@@ -279,6 +286,9 @@ const DoctorProfile = () => {
                 <div className="flex-1 min-w-0 pb-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-xl font-bold text-gray-900 truncate">{displayName}</h2>
+                    {/* Decorative only — there is no verification data behind this.
+                        Don't treat it as a signal that anything was verified. */}
+                    <BadgeCheck size={18} className="text-white fill-[#00ba7c] flex-shrink-0" />
                     <span className={`text-xs font-medium px-2 py-0.5 rounded ${roleInfo.color} ${roleInfo.bg}`}>{roleInfo.label}</span>
                   </div>
                   <p className="text-sm text-gray-500 truncate" title={email}>{email || 'No email on file'}</p>
@@ -430,7 +440,7 @@ const DoctorProfile = () => {
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 flex items-center justify-between gap-4 flex-wrap">
                 <div>
                   <p className="text-sm font-semibold text-gray-900">Manage clinic settings</p>
-                  <p className="text-xs text-gray-500">Clinic details, staff, pricing and account actions are in the Admin Hub.</p>
+                  <p className="text-xs text-gray-500">Clinic details, staff, pricing and account actions are in the Control Center.</p>
                 </div>
                 <button onClick={() => navigate('/admin/clinic')} className="px-4 py-2 border border-[#2a276e] text-[#2a276e] hover:bg-purple-50 text-sm font-semibold rounded-lg transition-colors">
                   Open Clinic Settings

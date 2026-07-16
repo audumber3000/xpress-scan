@@ -2,7 +2,57 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useHeader } from '../contexts/HeaderContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Building2, Users, Settings as SettingsIcon, FileText, Bell, CreditCard, PlusCircle, Activity, ChevronDown, CheckCircle2, DollarSign, Stethoscope, Shield, Calendar } from 'lucide-react';
+import { Building2, Users, Settings as SettingsIcon, FileText, Bell, CreditCard, PlusCircle, Activity, ChevronDown, Stethoscope, Shield, Calendar, MessageSquare, UserCheck } from 'lucide-react';
+
+/**
+ * Admin navigation, grouped by category.
+ *
+ * Single source of truth for the menu. Every child route under /admin appears
+ * here — Attendance, Treatments, Permissions and Referring Doctors used to be
+ * routed but unreachable from this menu, which also meant /admin's default
+ * redirect (attendance) landed on a page with no matching item.
+ *
+ * A null title renders the group ungrouped at the top.
+ */
+const NAV_GROUPS = [
+  {
+    title: null,
+    items: [
+      { id: 'branches', icon: Building2, label: 'Branches', hasChildren: true, activePath: '/admin/clinic' },
+      { id: 'staff', icon: Users, label: 'Staff', path: '/admin/staff' },
+      { id: 'attendance', icon: Calendar, label: 'Attendance', path: '/admin/attendance' },
+      { id: 'permissions', icon: Shield, label: 'Permissions', path: '/admin/permissions' },
+    ],
+  },
+  {
+    title: 'Clinical',
+    items: [
+      { id: 'practice_settings', icon: Activity, label: 'Practice Settings', hasChildren: true, activePath: '/admin/practice-settings' },
+      { id: 'treatments', icon: Stethoscope, label: 'Treatments & Pricing', path: '/admin/treatments' },
+      { id: 'doctors', icon: UserCheck, label: 'Referring Doctors', path: '/admin/doctors' },
+    ],
+  },
+  {
+    title: 'Communication',
+    items: [
+      { id: 'templates', icon: MessageSquare, label: 'Message Templates', path: '/admin/templates' },
+      { id: 'templates_editor', icon: FileText, label: 'Templates Editor', path: '/admin/templates-editor' },
+      { id: 'notifications', icon: Bell, label: 'Notifications', path: '/admin/notifications' },
+    ],
+  },
+  {
+    title: 'Plans & Billing',
+    items: [
+      { id: 'subscription', icon: CreditCard, label: 'Subscription', path: '/admin/subscription' },
+    ],
+  },
+];
+
+const PRACTICE_SETTING_TABS = [
+  'Procedures', 'Chief Complaints', 'Medical History', 'Clinical Advice',
+  'On Examination', 'Dental History', 'Diagnosis', 'Allergies',
+  'Ongoing Medication', 'Additional Fees',
+];
 
 const AdminHub = () => {
   const navigate = useNavigate();
@@ -11,7 +61,7 @@ const AdminHub = () => {
   const { user } = useAuth();
   
   React.useEffect(() => {
-    setTitle && setTitle('Admin Hub');
+    setTitle && setTitle('Control Center');
   }, [setTitle]);
 
   const getInitialOpenSection = () => {
@@ -38,8 +88,10 @@ const AdminHub = () => {
   // Helper for Sidebar items
   const SidebarItem = ({ id, icon: Icon, label, hasChildren, path, activePath }) => {
     const isExpanded = openSection === id;
+    // Match on a path boundary, not a bare prefix — otherwise /admin/templates
+    // would also light up while you're on /admin/templates-editor.
     const isActive = path
-      ? location.pathname.startsWith(path)
+      ? location.pathname === path || location.pathname.startsWith(`${path}/`)
       : activePath
         ? location.pathname.includes(activePath)
         : false;
@@ -67,58 +119,84 @@ const AdminHub = () => {
     );
   };
 
+  // h-full, not h-screen: this renders inside <main>, which already sits below
+  // the 56px header. h-screen made the hub taller than its container, pushing
+  // the menu's own scroller below the fold.
   return (
-    <div className="flex h-screen w-full bg-[#f8fafc] overflow-hidden">
+    <div className="flex h-full w-full bg-[#f8fafc] overflow-hidden">
       {/* Secondary Sidebar Navigation — full-width on mobile, fixed pane on desktop */}
       <div className={`${mobileShowContent ? 'hidden md:flex' : 'flex'} w-full md:w-72 bg-white border-r border-gray-200 flex-col h-full shrink-0 shadow-sm z-10`}>
         <div className="p-6 border-b border-gray-100/80 mt-1">
           <h2 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
             <SettingsIcon size={22} className="text-[#29828a]" />
-            Admin Hub
+            Control Center
           </h2>
           <p className="text-xs text-gray-500 mt-1 uppercase tracking-wider font-semibold ml-8">Configuration</p>
         </div>
         
-        <div className="flex-1 overflow-y-auto p-4 space-y-1 custom-scrollbar">
-          
-          <SidebarItem id="branches" icon={Building2} label="Branches" hasChildren activePath="/admin/clinic" />
-          {openSection === 'branches' && (
-            <div className="ml-9 border-l-2 border-gray-100 pl-3 space-y-1.5 mb-3 mt-1">
-               {userBranches.map((branch) => (
-                 <button key={branch.id} onClick={() => goTo('/admin/clinic')} className={`w-full text-left px-3 py-2 text-[13px] rounded-lg transition-colors ${location.pathname.includes('/clinic') && user?.clinic?.id === branch.id ? 'text-[#29828a] font-semibold bg-[#29828a]/5' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}>
-                   {branch.name}
-                 </button>
-               ))}
-               <button onClick={() => goTo('/add-clinic')} className="w-full text-left px-3 py-2 text-[13px] rounded-lg text-[#29828a] font-medium flex items-center gap-2 hover:bg-gray-50">
-                 <PlusCircle size={14} /> Add New Branch
-               </button>
+        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.title || 'main'} className="mb-4 last:mb-0">
+              {group.title && (
+                <p className="px-4 pt-2 pb-1.5 text-xs text-gray-900 uppercase tracking-wider font-bold">
+                  {group.title}
+                </p>
+              )}
+
+              {group.items.map((item) => (
+                <React.Fragment key={item.id}>
+                  <SidebarItem
+                    id={item.id}
+                    icon={item.icon}
+                    label={item.label}
+                    hasChildren={item.hasChildren}
+                    path={item.path}
+                    activePath={item.activePath}
+                  />
+
+                  {/* Branches expands to the clinics this user can switch between. */}
+                  {item.id === 'branches' && openSection === 'branches' && (
+                    <div className="ml-9 border-l-2 border-gray-100 pl-3 space-y-1.5 mb-3 mt-1">
+                      {/* Each branch links to its own profile — previously every
+                          one navigated to /admin/clinic, which always showed the
+                          active clinic no matter which branch you clicked. */}
+                      {userBranches.map((branch) => {
+                        const isOpen = location.pathname.includes('/clinic')
+                          && Number(new URLSearchParams(location.search).get('clinic') || user?.clinic?.id) === branch.id;
+                        return (
+                          <button key={branch.id} onClick={() => goTo(`/admin/clinic?clinic=${branch.id}`)} className={`w-full text-left px-3 py-2 text-[13px] rounded-lg transition-colors ${isOpen ? 'text-[#29828a] font-semibold bg-[#29828a]/5' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}>
+                            {branch.name}
+                          </button>
+                        );
+                      })}
+                      <button onClick={() => goTo('/add-clinic')} className="w-full text-left px-3 py-2 text-[13px] rounded-lg text-[#29828a] font-medium flex items-center gap-2 hover:bg-gray-50">
+                        <PlusCircle size={14} /> Add New Branch
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Practice Settings expands to its per-category editors. */}
+                  {item.id === 'practice_settings' && openSection === 'practice_settings' && (
+                    <div className="ml-9 border-l-2 border-gray-100 pl-3 space-y-1.5 mb-3 mt-1 max-h-[35vh] overflow-y-auto custom-scrollbar">
+                      {PRACTICE_SETTING_TABS.map((tab) => {
+                        const slug = tab.toLowerCase().replace(/\s+/g, '-');
+                        const isActive = location.pathname.includes(`/practice-settings/${slug}`);
+                        return (
+                          <button
+                            key={tab}
+                            onClick={() => goTo(`/admin/practice-settings/${slug}`)}
+                            className={`w-full text-left px-3 py-2 text-[13px] rounded-lg transition-colors ${isActive ? 'text-[#29828a] font-semibold bg-[#29828a]/5' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
+                          >
+                            {tab}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </React.Fragment>
+              ))}
             </div>
-          )}
-
-          <SidebarItem id="team" icon={Users} label="Staff" path="/admin/staff" />
-
-          <SidebarItem id="practice_settings" icon={Activity} label="Practice Settings" hasChildren activePath="/admin/practice-settings" />
-          {openSection === 'practice_settings' && (
-            <div className="ml-9 border-l-2 border-gray-100 pl-3 space-y-1.5 mb-3 mt-1 max-h-[35vh] overflow-y-auto custom-scrollbar">
-               {['Procedures', 'Chief Complaints', 'Medical History', 'Clinical Advice', 'On Examination', 'Dental History', 'Diagnosis', 'Allergies', 'Ongoing Medication', 'Additional Fees'].map((tab) => {
-                  const slug = tab.toLowerCase().replace(/\s+/g, '-');
-                  const isActive = location.pathname.includes(`/practice-settings/${slug}`);
-                  return (
-                    <button 
-                      key={tab} 
-                      onClick={() => goTo(`/admin/practice-settings/${slug}`)}
-                      className={`w-full text-left px-3 py-2 text-[13px] rounded-lg transition-colors ${isActive ? 'text-[#29828a] font-semibold bg-[#29828a]/5' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
-                    >
-                      {tab}
-                    </button>
-                  );
-               })}
-            </div>
-          )}
-
-          <SidebarItem id="templates" icon={FileText} label="Templates" path="/admin/templates-editor" />
-          <SidebarItem id="notifications" icon={Bell} label="Notifications" path="/admin/notifications" />
-          <SidebarItem id="subscription" icon={CreditCard} label="Subscription" path="/admin/subscription" />
+          ))}
         </div>
       </div>
 
@@ -130,7 +208,7 @@ const AdminHub = () => {
           className="md:hidden flex items-center gap-1.5 px-4 py-3 text-sm font-semibold text-[#29828a] bg-white border-b border-gray-200 shrink-0"
         >
           <ChevronDown size={18} className="rotate-90" />
-          Admin Hub menu
+          Control Center menu
         </button>
         <div className="flex-1 overflow-y-auto w-full h-full relative z-10 bg-[#f8fafc]">
             {/* The routed dynamic sub-component renders here */}

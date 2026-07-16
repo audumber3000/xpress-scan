@@ -112,6 +112,10 @@ class ClinicBaseDTO(BaseModel):
     timezone: str = "Asia/Kolkata"
     tax_label: str = "GST No."
     tax_id: Optional[str] = None
+    # Practice licence — all optional so existing clinics respond unchanged.
+    license_number: Optional[str] = None
+    license_authority: Optional[str] = None
+    license_expiry: Optional[date] = None
 
 
 class ClinicCreateDTO(ClinicBaseDTO):
@@ -137,11 +141,17 @@ class ClinicUpdateDTO(BaseModel):
     timezone: Optional[str] = None
     tax_label: Optional[str] = None
     tax_id: Optional[str] = None
+    license_number: Optional[str] = None
+    license_authority: Optional[str] = None
+    license_expiry: Optional[date] = None
 
 
 class ClinicResponseDTO(ClinicBaseDTO):
     id: int
     status: str = "active"
+    # "main_branch" / "branch" — shown on the header's clinic tile. Optional so
+    # clinics created before branches existed keep responding unchanged.
+    clinic_label: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     synced_at: Optional[datetime] = None

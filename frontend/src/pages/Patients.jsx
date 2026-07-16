@@ -234,6 +234,18 @@ const Patients = () => {
     setEditDrawerOpen(true);
   };
 
+  // Deep link: /patients?new=1 opens the create drawer — the entry point the
+  // "Add patient" shortcut uses. The param is stripped straight away so a
+  // refresh or back-navigation doesn't reopen the drawer.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('new') !== '1') return;
+    handleCreatePatient();
+    params.delete('new');
+    navigate({ search: params.toString() }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
+
   // Checks all required fields up-front and returns a { field: message } map.
   // Empty map = valid. This catches problems before hitting the server.
   const validatePatientForm = () => {

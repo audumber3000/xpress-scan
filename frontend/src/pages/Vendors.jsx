@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import { useHeader } from "../contexts/HeaderContext";
 import { toast } from "react-toastify";
@@ -14,6 +15,8 @@ const VENDORS_PAGE_SIZE = 10;
 
 const Vendors = () => {
     const { setTitle } = useHeader();
+    const navigate = useNavigate();
+    const location = useLocation();
     const [vendors, setVendors] = useState([]);
     const [inventory, setInventory] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -222,6 +225,21 @@ const Vendors = () => {
         });
         setShowEditInventoryModal(true);
     };
+
+    // Deep link from global search: /vendors?item=<id> opens that item's editor.
+    // Waits for the inventory list, since the editor needs the whole row.
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const id = params.get('item');
+        if (!id) return;
+        const item = inventory.find(i => String(i.id) === id);
+        if (!item) return; // still loading — retry once inventory arrives
+        setActiveTab('inventory');
+        handleEditInventoryItem(item);
+        params.delete('item');
+        navigate({ search: params.toString() }, { replace: true });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [location.search, inventory]);
 
     const handleUpdateInventorySubmit = async (e) => {
         e.preventDefault();

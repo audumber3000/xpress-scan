@@ -16,11 +16,38 @@ from core.dependencies import get_clinic_service
 from core.auth_utils import get_current_user, require_role
 from core.nexus_notify import notify
 from database import get_db
-from models import Clinic, user_clinics, generate_clinic_code, Subscription
+from models import Clinic, User, user_clinics, generate_clinic_code, Subscription
 from sqlalchemy import select, func
 import datetime
 
 router = APIRouter()
+
+
+def _ensure_clinic_access(current_user: User, clinic_id: int) -> None:
+    """
+    Deny-by-default access to a clinic addressed by id.
+
+    Access is decided by *membership* (the user_clinics association), never by
+    role alone. The previous checks treated "is a clinic_owner" as sufficient
+    for any clinic_id, which let an owner of one business read, update and
+    deactivate another business's clinic.
+
+    Note the deliberate exception to this rule is `/{clinic_id}/branding`, which
+    is public by design but returns only a narrow, safe slice.
+    """
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+    if current_user.clinic_id == clinic_id:
+        return
+    if any(c.id == clinic_id for c in (current_user.clinics or [])):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="You don't have access to this clinic",
+    )
 
 
 @router.get("/countries")
@@ -324,14 +351,19 @@ async def get_my_clinic(
 )
 async def get_clinic(
     clinic_id: int,
-    clinic_service = Depends(get_clinic_service)
+    clinic_service = Depends(get_clinic_service),
+    current_user = Depends(get_current_user)
 ):
     """
     Get a specific clinic by ID.
 
     Returns clinic information including settings and subscription details.
+    Callers must be a member of the clinic — this endpoint returns the full
+    record; `/{clinic_id}/branding` is the public, safe-subset alternative.
     """
     try:
+        _ensure_clinic_access(current_user, clinic_id)
+
         clinic = clinic_service.get_clinic(clinic_id)
         if not clinic:
             raise HTTPException(
@@ -422,12 +454,9 @@ async def update_clinic(
     Only clinic owners or users belonging to the clinic can update it.
     """
     try:
-        # Check if user has permission to update this clinic
-        if current_user.role != "clinic_owner" and current_user.clinic_id != clinic_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to update this clinic"
-            )
+        # Membership decides access, not role: any clinic_owner used to pass
+        # this check for any clinic_id.
+        _ensure_clinic_access(current_user, clinic_id)
 
         # Filter out None values
         update_data = {k: v for k, v in clinic_data.dict().items() if v is not None}
@@ -476,9 +505,12 @@ async def deactivate_clinic(
     """
     Deactivate a clinic.
 
-    This will mark the clinic as inactive. Requires admin privileges.
+    This will mark the clinic as inactive. Requires clinic_owner role *and*
+    membership of this clinic — the role alone used to be enough for any id.
     """
     try:
+        _ensure_clinic_access(current_user, clinic_id)
+
         success = clinic_service.deactivate_clinic(clinic_id)
 
         if not success:

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
 import { SkeletonBox, SkeletonTableRows } from "../components/Skeleton";
@@ -14,6 +15,8 @@ const LEDGER_PER_PAGE = 10;
 
 const Payments = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const { setTitle, setRefreshFunction } = useHeader();
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -189,6 +192,23 @@ const Payments = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, ledgerPage, debouncedSearch, activeTab]);
+
+  // Deep links from global search: ?invoice=<id> opens that invoice,
+  // ?tab=ledger lands on the ledger. Params are stripped once applied so a
+  // refresh doesn't force the editor back open.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const invoiceId = params.get('invoice');
+    const tabParam = params.get('tab');
+    if (!invoiceId && !tabParam) return;
+
+    if (tabParam === 'ledger' || tabParam === 'payments') setActiveTab(tabParam);
+    if (invoiceId) setSelectedInvoiceId(Number(invoiceId));
+
+    params.delete('invoice');
+    params.delete('tab');
+    navigate({ search: params.toString() }, { replace: true });
+  }, [location.search, navigate]);
 
   // Stable identity so memoized InvoiceItem rows don't re-render on selection change.
   const handleInvoiceSelect = useCallback((invoiceId) => {

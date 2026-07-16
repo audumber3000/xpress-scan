@@ -103,7 +103,7 @@ const PermissionsManagement = () => {
       <div className="flex items-center gap-2">
         <button onClick={() => navigate('/admin')} className="flex items-center gap-1 text-gray-600 hover:text-gray-900 transition">
           <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">Admin Hub</span>
+          <span className="text-sm font-medium">Control Center</span>
         </button>
       </div>
     );
@@ -200,7 +200,7 @@ const PermissionsManagement = () => {
     <div className="flex flex-col h-full bg-transparent overflow-y-auto custom-scrollbar p-6 lg:p-8 pb-10">
       {/* Breadcrumb */}
       <div className="mb-6 flex items-center gap-2 text-sm font-medium text-gray-500">
-        <span>Admin</span><span>/</span><span className="text-gray-900">Permissions</span>
+        <span>Control Center</span><span>/</span><span className="text-gray-900">Permissions</span>
       </div>
 
       {/* Tabs */}

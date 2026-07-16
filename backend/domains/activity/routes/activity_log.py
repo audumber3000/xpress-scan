@@ -80,3 +80,33 @@ def add_activity_log(
     )
     db.commit()
     return {"status": "ok"}
+
+
+@router.delete("", summary="Clear this clinic's activity feed")
+def clear_activity_logs(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Delete every activity entry for the caller's clinic.
+
+    The feed is clinic-wide with no per-user state, so this clears it for
+    everyone in the clinic — hence owner-only. It's a convenience feed, not an
+    audit trail: nothing else in the app reads ActivityLog.
+    """
+    clinic_id = current_user.clinic_id
+    if not clinic_id:
+        raise HTTPException(status_code=400, detail="No clinic associated")
+    if current_user.role != "clinic_owner":
+        raise HTTPException(
+            status_code=403,
+            detail="Only the clinic owner can clear the activity feed",
+        )
+
+    deleted = (
+        db.query(ActivityLog)
+        .filter(ActivityLog.clinic_id == clinic_id)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return {"status": "ok", "deleted": deleted}

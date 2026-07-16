@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useHeader } from '../../contexts/HeaderContext';
 import { api, getPermissionAwareErrorMessage } from '../../utils/api';
 import { toast } from 'react-toastify';
@@ -28,7 +29,11 @@ import {
 
 const LabHub = () => {
     const { setTitle } = useHeader();
+    const navigate = useNavigate();
+    const location = useLocation();
     const [activeTab, setActiveTab] = useState('orders');
+    // Set by the ?order=<id> deep link so the matching row stands out.
+    const [highlightOrderId, setHighlightOrderId] = useState(null);
     const [orders, setOrders] = useState([]);
     const [vendors, setVendors] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -132,6 +137,30 @@ const LabHub = () => {
             return true;
         });
     }, [orders, searchTerm, filterStatus]);
+
+    // Deep link from global search: /lab?order=<id> lands on the orders tab and
+    // highlights the row, paging to it if needed. Lab orders have no detail view
+    // of their own, so surfacing the row in place is the most we can do.
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const id = params.get('order');
+        if (!id) return;
+        const idx = filteredOrders.findIndex(o => String(o.id) === id);
+        if (idx === -1) return; // orders still loading — retry once they arrive
+        setActiveTab('orders');
+        setOrdersPage(Math.floor(idx / LAB_PAGE_SIZE) + 1);
+        setHighlightOrderId(Number(id));
+        params.delete('order');
+        navigate({ search: params.toString() }, { replace: true });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [location.search, filteredOrders]);
+
+    // Let the highlight fade so it reads as "here it is", not a stuck selection.
+    useEffect(() => {
+        if (!highlightOrderId) return;
+        const t = setTimeout(() => setHighlightOrderId(null), 3000);
+        return () => clearTimeout(t);
+    }, [highlightOrderId]);
 
     const filteredLabVendors = useMemo(() => {
         return vendors.filter(v => {
@@ -247,7 +276,14 @@ const LabHub = () => {
                                                     : daysUntil === 1 ? 'Due tomorrow'
                                                     : `In ${daysUntil} days`;
                                                 return (
-                                                <tr key={order.id} className="hover:bg-indigo-50/30 transition-colors duration-150 group">
+                                                <tr
+                                                    key={order.id}
+                                                    className={`transition-colors duration-150 group ${
+                                                        highlightOrderId === order.id
+                                                            ? 'bg-[#2a276e]/[0.08]'
+                                                            : 'hover:bg-indigo-50/30'
+                                                    }`}
+                                                >
                                                     <td className="px-6 py-5 whitespace-nowrap">
                                                         <div className="flex items-center gap-3">
                                                             <div className="w-9 h-9 bg-[#2a276e]/10 rounded-full flex items-center justify-center text-[#2a276e] flex-shrink-0">

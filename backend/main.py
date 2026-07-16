@@ -43,6 +43,7 @@ from fastapi import Depends
 # Domain imports (using clean architecture routes)
 from domains.patient.routes import patients_clean as patients
 from domains.patient.routes import treatment_types, referring_doctors, treatment_plans, patient_files
+from domains.search.routes import global_search
 from domains.auth.routes import auth_clean as auth
 from domains.auth.routes import clinic_users, permissions
 from domains.clinic.routes import clinics, subscriptions
@@ -499,6 +500,9 @@ app.include_router(settings_router, prefix="/api/v1/clinical", tags=["clinical-s
 app.include_router(case_papers_router, prefix="/api/v1/clinical", tags=["case-papers"])
 app.include_router(prescriptions_router, prefix="/api/v1/clinical", tags=["prescriptions"])
 app.include_router(lab_orders_router, prefix="/api/v1/clinical", tags=["lab-orders"])
+
+# Search Domain — unified command-palette search across the domains above
+app.include_router(global_search.router, prefix="/api/v1/search", tags=["search"])
 
 @app.get("/")
 def root():
