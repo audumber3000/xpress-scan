@@ -13,7 +13,8 @@ import CasePaperActionBar from './CasePaperActionBar';
 import InvoiceEditor from '../payments/InvoiceEditor';
 import { toast } from 'react-toastify';
 import { api } from "../../utils/api";
-import { Clock, ChevronLeft } from 'lucide-react';
+import { universalToFDI } from "../../utils/toothNumbering";
+import { Clock, ChevronLeft, Activity } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigationGuard } from '../../contexts/NavigationGuardContext';
 import { getUserDisplayName } from '../../utils/userName';
@@ -103,6 +104,10 @@ const CasePapersTab = ({
   const [selectedLabOrder, setSelectedLabOrder] = useState(null);
   const [patientDocuments, setPatientDocuments] = useState([]);
 
+  // Inventory used during this visit + the clinic's stock list for the picker.
+  const [inventoryConsumptions, setInventoryConsumptions] = useState([]);
+  const [inventoryItems, setInventoryItems] = useState([]);
+
   const [visitPrescriptions, setVisitPrescriptions] = useState([]);
 
   const selectedCasePaperIndex = caseHistory.findIndex(
@@ -128,6 +133,7 @@ const CasePapersTab = ({
     if (patientData?.id) {
         fetchCasePapers();
         fetchVisitPrescriptions();
+        fetchInventoryItems();
     }
   }, [patientData?.id]);
 
@@ -174,9 +180,11 @@ const CasePapersTab = ({
   useEffect(() => {
     if (selectedCasePaper?.id) {
       fetchLabOrders();
+      fetchInventoryConsumption(selectedCasePaper.id);
       if (!selectedCasePaper?.isNew) fetchExistingCasePaperInvoice();
     } else {
       setExistingCasePaperInvoiceId(null);
+      setInventoryConsumptions([]);
     }
   }, [selectedCasePaper?.id]);
 
@@ -198,34 +206,88 @@ const CasePapersTab = ({
     }
   };
 
-  const handleAutoSaveForDrawer = async (openCallback) => {
-    if (!selectedCasePaper?.isNew) {
-      openCallback();
-      return;
+  // Persist a brand-new case paper if needed and return its id — so actions that
+  // must attach to a real case_paper_id (lab orders, inventory) work even on a
+  // freshly opened, unsaved paper.
+  const ensureCasePaperSaved = async () => {
+    if (!selectedCasePaper?.isNew) return selectedCasePaper?.id;
+    const payload = {
+      ...form,
+      patient_id: patientData.id,
+      clinic_id: patientData.clinic_id,
+      date: new Date().toISOString(),
+      status: 'In Progress',
+      dental_chart_snapshot: sessionTeethData,
+      treatment_plan_snapshot: sessionTreatmentPlan,
+      tooth_notes_snapshot: sessionToothNotes
+    };
+    const saved = await api.post('/clinical/case-papers', payload);
+    setSelectedCasePaper(saved);
+    setDirty(false);
+    fetchCasePapers();
+    if (typeof onSaveClinicalRecords === 'function') {
+      onSaveClinicalRecords({ dental_chart: sessionTeethData, treatment_plan: sessionTreatmentPlan, tooth_notes: sessionToothNotes }).catch(() => {});
     }
+    toast.success('Case paper saved automatically');
+    return saved.id;
+  };
+
+  const handleAutoSaveForDrawer = async (openCallback) => {
     try {
-      const payload = {
-        ...form,
-        patient_id: patientData.id,
-        clinic_id: patientData.clinic_id,
-        date: new Date().toISOString(),
-        status: 'In Progress',
-        dental_chart_snapshot: sessionTeethData,
-        treatment_plan_snapshot: sessionTreatmentPlan,
-        tooth_notes_snapshot: sessionToothNotes
-      };
-      const saved = await api.post('/clinical/case-papers', payload);
-      setSelectedCasePaper(saved);
-      setDirty(false);
-      fetchCasePapers();
-      if (typeof onSaveClinicalRecords === 'function') {
-        onSaveClinicalRecords({ dental_chart: sessionTeethData, treatment_plan: sessionTreatmentPlan, tooth_notes: sessionToothNotes }).catch(() => {});
-      }
-      toast.success('Case paper saved automatically');
+      await ensureCasePaperSaved();
       openCallback();
     } catch (err) {
       console.error('Failed to auto-save case paper:', err);
       toast.error('Error saving case paper. Please save manually first.');
+    }
+  };
+
+  const fetchInventoryItems = async () => {
+    try {
+      const data = await api.get('/inventory');
+      setInventoryItems(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to fetch inventory:', err);
+    }
+  };
+
+  const fetchInventoryConsumption = async (casePaperId) => {
+    const id = casePaperId ?? selectedCasePaper?.id;
+    if (!id || selectedCasePaper?.isNew) { setInventoryConsumptions([]); return; }
+    try {
+      const data = await api.get(`/clinical/inventory-consumption?case_paper_id=${id}`);
+      setInventoryConsumptions(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to fetch inventory consumption:', err);
+    }
+  };
+
+  const handleAddConsumption = async (inventoryItemId, quantity) => {
+    try {
+      const casePaperId = await ensureCasePaperSaved();
+      await api.post('/clinical/inventory-consumption', {
+        patient_id: patientData.id,
+        case_paper_id: casePaperId,
+        inventory_item_id: inventoryItemId,
+        quantity,
+      });
+      // Refresh both: the record list AND stock counts (which just changed).
+      await Promise.all([fetchInventoryConsumption(casePaperId), fetchInventoryItems()]);
+      toast.success('Inventory recorded');
+    } catch (err) {
+      console.error('Failed to record inventory:', err);
+      toast.error(err?.message || 'Failed to record inventory');
+    }
+  };
+
+  const handleDeleteConsumption = async (consumptionId) => {
+    try {
+      await api.delete(`/clinical/inventory-consumption/${consumptionId}`);
+      await Promise.all([fetchInventoryConsumption(), fetchInventoryItems()]);
+      toast.success('Removed — stock restored');
+    } catch (err) {
+      console.error('Failed to remove inventory record:', err);
+      toast.error('Failed to remove');
     }
   };
 
@@ -404,7 +466,7 @@ const CasePapersTab = ({
       if (item.status === 'completed' && (!oldItem || oldItem.status !== 'completed')) {
         const unitPrice = Number(item.cost) || 0;
         const charge = {
-          description: `${item.procedure} (Tooth #${item.tooth || 'General'})`,
+          description: `${item.procedure} (Tooth #${item.tooth ? universalToFDI(item.tooth) : 'General'})`,
           quantity: item.qty || 1,
           unit_price: unitPrice
         };
@@ -641,15 +703,31 @@ const CasePapersTab = ({
           }}
         />
 
-        {/* 6. Grid Row 2: Documents & Clinical Notes */}
+        {/* 6. Grid Row 2: Documents & Inventory Used */}
         <DocumentsNotesGrid
           patientDocuments={patientDocuments}
-          form={form}
-          onFormChange={handleFormChange}
           onUploadClick={() => {
             handleAutoSaveForDrawer(() => setScanOpen(true));
           }}
+          consumptions={inventoryConsumptions}
+          inventoryItems={inventoryItems}
+          onAddConsumption={handleAddConsumption}
+          onDeleteConsumption={handleDeleteConsumption}
         />
+
+        {/* 7. Clinical Notes — full width, below the grid */}
+        <section className="pt-8 border-t border-gray-100">
+          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <Activity size={20} className="text-[#2a276e]" />
+            Clinical Notes
+          </h3>
+          <textarea
+            value={form.notes}
+            onChange={(e) => handleFormChange({ ...form, notes: e.target.value })}
+            placeholder="Refined observations for this session..."
+            className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#2a276e] focus:ring-2 focus:ring-[#2a276e]/20 outline-none text-sm font-medium min-h-[120px] resize-none transition-all"
+          />
+        </section>
       </div>
 
       {/* 7. Sticky Bottom Action Bar */}

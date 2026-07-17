@@ -10,7 +10,7 @@ const CasePaperActionBar = ({
   hasExistingInvoice = false
 }) => {
   return (
-    <div className="fixed bottom-8 right-12 z-[50] flex gap-4 p-5 bg-white/90 backdrop-blur-md rounded-[2.5rem] border border-white shadow-2xl shadow-indigo-900/10 animate-in slide-in-from-bottom duration-500 group">
+    <div className="fixed bottom-8 right-12 z-[50] flex gap-4 p-5 bg-white/90 backdrop-blur-md rounded-2xl border border-white shadow-2xl shadow-indigo-900/10 animate-in slide-in-from-bottom duration-500 group">
       <div className="flex items-center gap-3 px-2 border-r border-gray-100 mr-2 pr-5">
         <div className="text-right">
           <p className="text-xs font-medium text-gray-500 leading-none mb-1">Next Visit</p>

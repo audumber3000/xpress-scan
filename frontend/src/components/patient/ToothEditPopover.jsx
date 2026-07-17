@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { universalToFDI } from '../../utils/toothNumbering';
 import {
     TOOTH_NAMES,
     SURFACE_COLORS,
@@ -120,7 +121,7 @@ const ToothEditPopover = ({
             <div className="p-3 border-b border-gray-50 flex items-center justify-between bg-gray-50/50 rounded-t-2xl">
                 <div className="flex items-center gap-3">
                     <div className="w-8 h-8 bg-[#2a276e] text-white rounded-xl flex items-center justify-center font-bold text-sm shadow-md">
-                        {toothNum}
+                        {universalToFDI(toothNum)}
                     </div>
                     <div className="flex flex-col text-left">
                         <h3 className="text-[11px] font-bold text-[#2a276e] uppercase tracking-wide">

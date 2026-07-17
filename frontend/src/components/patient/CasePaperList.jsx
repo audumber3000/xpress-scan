@@ -105,7 +105,7 @@ const CasePaperList = ({ caseHistory, loading, onNewCasePaper, onSelectCasePaper
           })}
 
           {caseHistory.length === 0 && (
-            <div className="col-span-full py-20 text-center bg-gray-50/50 rounded-3xl border-2 border-dashed border-gray-200">
+            <div className="col-span-full py-20 text-center bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-200">
               <p className="text-gray-400 font-bold">No case papers found for this patient.</p>
               <p className="text-sm text-gray-400 mt-1">Start a new clinical session to begin charting.</p>
             </div>

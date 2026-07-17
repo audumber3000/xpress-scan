@@ -3,9 +3,10 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import { useHeader } from "../contexts/HeaderContext";
 import { toast } from "react-toastify";
-import { Package, Building2, Edit2, Trash2, Search } from "lucide-react";
+import { Package, Building2, Activity, Edit2, Trash2, Search } from "lucide-react";
 import InventoryAlerts from "../components/vendors/InventoryAlerts";
 import InventoryTable from "../components/vendors/InventoryTable";
+import InventoryLedger from "../components/vendors/InventoryLedger";
 import VendorDrawer from "../components/vendors/VendorDrawer";
 
 import Pagination from "../components/Pagination";
@@ -301,6 +302,7 @@ const Vendors = () => {
                     <div className="flex gap-10">
                         {[
                             { id: 'inventory', label: 'Inventory', icon: Package },
+                            { id: 'ledger', label: 'Usage', icon: Activity },
                             { id: 'vendors', label: 'Vendors', icon: Building2 }
                         ].map(tab => (
                             <button
@@ -324,7 +326,7 @@ const Vendors = () => {
                             </svg>
                             Export
                         </button>
-                        {activeTab === 'inventory' ? (
+                        {activeTab === 'inventory' && (
                             <button
                                 onClick={() => setShowAddInventoryModal(true)}
                                 className="bg-[#2a276e] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#1a1548] transition-colors shadow-sm flex items-center gap-2"
@@ -334,7 +336,8 @@ const Vendors = () => {
                                 </svg>
                                 Add Inventory Item
                             </button>
-                        ) : (
+                        )}
+                        {activeTab === 'vendors' && (
                             <button
                                 onClick={() => {
                                     setEditingVendor(null);
@@ -352,8 +355,8 @@ const Vendors = () => {
                     </div>
                 </div>
 
-                {/* Search & Filters toolbar */}
-                <div className="flex flex-col md:flex-row items-center justify-between gap-4 pb-4">
+                {/* Search & Filters toolbar — the ledger tab has its own toolbar */}
+                <div className={`flex flex-col md:flex-row items-center justify-between gap-4 pb-4 ${activeTab === 'ledger' ? 'hidden' : ''}`}>
                     <div className="flex items-center gap-3 w-full md:w-auto flex-1">
                         <div className="w-full md:max-w-sm relative">
                             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -394,12 +397,17 @@ const Vendors = () => {
                         {/* Left - Main Content (switches by tab) */}
                         <div className="flex-1 min-w-0 flex flex-col h-full">
                             {activeTab === 'inventory' ? (
-                                <InventoryTable 
-                                    inventory={filteredInventory} 
+                                <InventoryTable
+                                    inventory={filteredInventory}
                                     onUpdateItem={handleUpdateInventoryItem}
                                     onOpenAdd={() => setShowAddInventoryModal(true)}
                                     onEditItem={handleEditInventoryItem}
                                     onDeleteItem={handleDeleteInventoryItem}
+                                />
+                            ) : activeTab === 'ledger' ? (
+                                <InventoryLedger
+                                    inventoryItems={inventory}
+                                    onStockChanged={fetchData}
                                 />
                             ) : (
                                 /* Vendors Table */

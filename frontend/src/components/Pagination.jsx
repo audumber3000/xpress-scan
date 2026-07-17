@@ -16,10 +16,15 @@ const Pagination = ({
   onPageChange,
   className = '',
   showRange = true,
+  // When true, still render the "Showing X of Y" line on a single page (the page
+  // buttons stay hidden). Lets a small table show its count instead of nothing.
+  alwaysShow = false,
 }) => {
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  if (totalPages <= 1) return null;
+  if (totalItems <= 0) return null;
+  if (totalPages <= 1 && !alwaysShow) return null;
 
+  const multiPage = totalPages > 1;
   const safePage = Math.min(Math.max(1, page), totalPages);
   const rangeStart = (safePage - 1) * pageSize + 1;
   const rangeEnd = Math.min(safePage * pageSize, totalItems);
@@ -38,23 +43,29 @@ const Pagination = ({
 
   return (
     <div className={`bg-white px-6 py-3 flex items-center justify-between border-t border-gray-200 ${className}`}>
-      {/* Mobile: simple Prev/Next */}
-      <div className="flex-1 flex justify-between sm:hidden">
-        <button
-          onClick={() => goTo(safePage - 1)}
-          disabled={safePage === 1}
-          className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Previous
-        </button>
-        <button
-          onClick={() => goTo(safePage + 1)}
-          disabled={safePage === totalPages}
-          className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Next
-        </button>
-      </div>
+      {/* Mobile: simple Prev/Next (only when there's more than one page) */}
+      {multiPage ? (
+        <div className="flex-1 flex justify-between sm:hidden">
+          <button
+            onClick={() => goTo(safePage - 1)}
+            disabled={safePage === 1}
+            className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => goTo(safePage + 1)}
+            disabled={safePage === totalPages}
+            className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
+      ) : (
+        <p className="flex-1 text-sm text-gray-700 sm:hidden">
+          {totalItems} {totalItems === 1 ? 'result' : 'results'}
+        </p>
+      )}
 
       {/* Desktop: full pager + range label */}
       <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
@@ -65,6 +76,7 @@ const Pagination = ({
             <span className="font-medium">{totalItems}</span> results
           </p>
         ) : <span />}
+        {multiPage && (
         <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
           <button
             onClick={() => goTo(safePage - 1)}
@@ -102,6 +114,7 @@ const Pagination = ({
             </svg>
           </button>
         </nav>
+        )}
       </div>
     </div>
   );

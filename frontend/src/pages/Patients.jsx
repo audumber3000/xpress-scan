@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { api, getPermissionAwareErrorMessage, getFriendlyErrorMessage } from "../utils/api";
 import { toast } from 'react-toastify';
 import { FaEye, FaEdit, FaTrash, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
-import { Search, Plus, User, Folder, X, Edit2, Trash2, UploadCloud, UserPlus, CheckCircle2 } from "lucide-react";
+import { Search, Plus, User, Users, Folder, X, Edit2, Trash2, UploadCloud, UserPlus, CheckCircle2 } from "lucide-react";
 import { isValidPhone } from "../utils/validators";
 import GearLoader from "../components/GearLoader";
 import { SkeletonTableRows } from "../components/Skeleton";
@@ -15,7 +15,16 @@ import AgeOrDobField, { computeAgeFromDob } from "../components/patient/AgeOrDob
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
 
-const PATIENTS_PER_PAGE = 10;
+const PATIENTS_PER_PAGE = 20;
+
+// How long a freshly added patient stays highlighted with a "New" badge.
+const NEW_WINDOW_MS = 15 * 1000;
+
+/** Clip long cell text to a fixed length so columns keep a stable width. */
+const truncate = (text, max = 15) => {
+  const s = String(text ?? '');
+  return s.length > max ? `${s.slice(0, max).trimEnd()}…` : s;
+};
 
 const Patients = () => {
   const { user } = useAuth();
@@ -26,8 +35,10 @@ const Patients = () => {
   // Tabs state
   const [activeTab, setActiveTab] = useState('list'); // 'list' or 'files'
   
-  // Data states
+  // Data states. `patients` now holds ONE server page, not the whole clinic.
   const [patients, setPatients] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);     // matches current search/filters
+  const [totalPatients, setTotalPatients] = useState(0); // whole clinic, for the header count
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -120,12 +131,30 @@ const Patients = () => {
     return user.permissions[section]?.[action] === true;
   };
 
-  const fetchPatients = async () => {
+  // Server-side pagination: fetch one page + the matching total. Search and
+  // filters run against the whole clinic, not a preloaded slice — so a clinic
+  // with thousands of patients loads fast and search finds everyone.
+  const fetchPatients = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await api.get("/patients/");
-      console.log("Fetched patients sample:", data[0]); // Debugging display_id
-      setPatients(Array.isArray(data) ? data : []);
+      const filters = {};
+      // Backend requires 2+ chars for search; below that, list everything.
+      if (debouncedSearch.trim().length >= 2) filters.search = debouncedSearch.trim();
+      if (filterGender) filters.gender = filterGender;
+      if (filterTreatment) filters.treatment_type = filterTreatment;
+
+      const [list, countRes] = await Promise.all([
+        api.get("/patients/", { params: { skip: (page - 1) * PATIENTS_PER_PAGE, limit: PATIENTS_PER_PAGE, ...filters } }),
+        api.get("/patients/count", { params: filters }),
+      ]);
+      setPatients(Array.isArray(list) ? list : []);
+      const count = Number(countRes?.total) || 0;
+      setTotalCount(count);
+      // On the unfiltered view this count IS the clinic total — capture it for
+      // the header stat so it stays steady while searching (no extra request).
+      if (!filters.search && !filters.gender && !filters.treatment_type) {
+        setTotalPatients(count);
+      }
     } catch (e) {
       console.error("Error fetching patients:", e);
       toast.error(getPermissionAwareErrorMessage(
@@ -134,61 +163,68 @@ const Patients = () => {
         "You don't have permission to view patients."
       ));
       setPatients([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, debouncedSearch, filterGender, filterTreatment]);
 
   useEffect(() => {
     setTitle(activeTab === 'list' ? 'Patients' : activeTab === 'birthdays' ? 'Upcoming Birthdays' : 'Patient Files');
     setRefreshFunction(() => fetchPatients);
-  }, [setTitle, setRefreshFunction, activeTab]);
+  }, [setTitle, setRefreshFunction, activeTab, fetchPatients]);
 
+  // Refetch whenever the page, search or filters change.
   useEffect(() => {
-    fetchPatients();
-  }, []);
+    if (activeTab !== 'birthdays') fetchPatients();
+  }, [fetchPatients, activeTab]);
 
-  // Filtered and paginated logic
-  const filteredData = useMemo(() => {
-    return patients.filter((p) => {
-      if (!debouncedSearch) return true;
-      const s = debouncedSearch.toLowerCase();
-      return (
-        // Guard every field: legacy/imported patients can have null name/phone/
-        // village (the API's PatientResponseDTO allows these), and an unguarded
-        // `.toLowerCase()` on a null throws mid-render → the "something went wrong"
-        // error-boundary card the moment the user types in the search bar.
-        p.name?.toLowerCase().includes(s) ||
-        p.phone?.toLowerCase().includes(s) ||
-        p.village?.toLowerCase().includes(s) ||
-        p.treatment_type?.toLowerCase().includes(s) ||
-        p.referred_by?.toLowerCase().includes(s) ||
-        String(p.id).includes(s)
-      );
-    });
-  }, [patients, debouncedSearch]);
+  // A new search or filter always returns to page 1.
+  useEffect(() => {
+    setPage(1);
+  }, [filterTreatment, filterGender]);
 
-  // Unique treatment types for the filter dropdown
+  // Treatment options for the filter dropdown, from the current page. (Selecting
+  // one still filters server-side across all patients.)
   const uniqueTreatmentTypes = useMemo(() => {
     const types = new Set();
     patients.forEach(p => { if (p.treatment_type) types.add(p.treatment_type); });
     return [...types].sort();
   }, [patients]);
 
-  // Apply filters on top of search
-  const fullyFilteredData = useMemo(() => {
-    return filteredData.filter(p => {
-      if (filterTreatment && p.treatment_type !== filterTreatment) return false;
-      if (filterGender && p.gender?.toLowerCase() !== filterGender.toLowerCase()) return false;
-      return true;
-    });
-  }, [filteredData, filterTreatment, filterGender]);
+  // The server already returned exactly this page, filtered and searched.
+  const paginatedData = patients;
+  const isFiltered = debouncedSearch.trim().length >= 2 || !!filterGender || !!filterTreatment;
 
-  const totalPages = Math.ceil(fullyFilteredData.length / PATIENTS_PER_PAGE) || 1;
-  const paginatedData = fullyFilteredData.slice(
-    (page - 1) * PATIENTS_PER_PAGE,
-    page * PATIENTS_PER_PAGE
-  );
+  // "Just added" highlight: patients created in the last few seconds get a New
+  // badge + tinted row, then fade on their own — brief, so it reads as "just now".
+  const [nowTick, setNowTick] = useState(() => Date.now());
+
+  // Age in ms of a created_at, parsed as UTC (the API sends naive UTC, no 'Z',
+  // which the browser would otherwise misread as local time).
+  const ageMs = (createdAt) => {
+    if (!createdAt) return Infinity;
+    const iso = /[zZ]|[+-]\d{2}:?\d{2}$/.test(createdAt)
+      ? createdAt
+      : createdAt.replace(' ', 'T') + 'Z';
+    return nowTick - new Date(iso).getTime();
+  };
+  const isRecentlyAdded = (p) => ageMs(p.created_at) < NEW_WINDOW_MS;
+
+  // Tick once a second only while a row on this page is still "new", then stop —
+  // no perpetual re-render when nothing is highlighted.
+  useEffect(() => {
+    const anyRecent = () =>
+      patients.some((p) => Date.now() - new Date(
+        /[zZ]|[+-]\d{2}:?\d{2}$/.test(p.created_at || '') ? p.created_at : (p.created_at || '').replace(' ', 'T') + 'Z'
+      ).getTime() < NEW_WINDOW_MS);
+    if (!anyRecent()) return;
+    const t = setInterval(() => {
+      setNowTick(Date.now());
+      if (!anyRecent()) clearInterval(t);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [patients]);
 
   const handleEditPatient = (patient) => {
     setEditingPatient(patient);
@@ -457,7 +493,7 @@ const Patients = () => {
     <div className="flex flex-col h-screen bg-gray-50/30">
       
       {/* Tabs Design */}
-      <div className="px-6 pt-4 border-b border-gray-200 bg-white">
+      <div className="px-6 pt-4 border-b border-gray-200 bg-white flex items-end justify-between">
         <nav className="-mb-px flex space-x-8">
           <button
             onClick={() => handleTabChange('list')}
@@ -490,6 +526,21 @@ const Patients = () => {
             Birthdays
           </button>
         </nav>
+
+        {/* Patient-base stat — steady clinic total, or "X of Y" while filtering. */}
+        {activeTab !== 'birthdays' && totalPatients > 0 && (
+          <div className="mb-2 hidden sm:inline-flex items-center gap-2 rounded-full bg-[#2a276e]/[0.06] border border-[#2a276e]/10 px-3.5 py-1.5">
+            <Users size={15} className="text-[#2a276e]" />
+            <span className="text-sm font-semibold text-[#2a276e]">
+              {isFiltered
+                ? `${totalCount.toLocaleString()} of ${totalPatients.toLocaleString()}`
+                : totalPatients.toLocaleString()}
+            </span>
+            <span className="text-sm text-[#2a276e]/60">
+              {isFiltered ? 'matching' : (totalPatients === 1 ? 'patient' : 'patients')}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Search, Filters & Actions Area */}
@@ -589,10 +640,13 @@ const Patients = () => {
                     paginatedData.map((patient) => {
                       const treatmentStyle = getTreatmentBadge(patient.treatment_type);
                       const lastVisit = getRelativeTime(patient.last_visit);
+                      const justAdded = isRecentlyAdded(patient);
                       return (
                         <tr
                           key={patient.id}
-                          className="hover:bg-indigo-50/30 cursor-pointer transition-colors duration-150 group"
+                          className={`cursor-pointer transition-colors duration-150 group ${
+                            justAdded ? 'bg-[#00ba7c]/[0.07] hover:bg-[#00ba7c]/[0.12]' : 'hover:bg-indigo-50/30'
+                          }`}
                           onClick={() => navigate(`/patient-profile/${patient.id}`)}
                         >
                           {/* Patient ID */}
@@ -610,7 +664,14 @@ const Patients = () => {
                                 className="w-9 h-9 rounded-full flex-shrink-0 object-cover border border-gray-100"
                               />
                               <div>
-                                <div className="text-sm font-semibold text-gray-900">{patient.name}</div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-semibold text-gray-900">{patient.name}</span>
+                                  {justAdded && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-[#00ba7c] text-white">
+                                      New
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="text-xs text-gray-400">{patient.village || 'No location'}</div>
                               </div>
                             </div>
@@ -631,10 +692,15 @@ const Patients = () => {
                             </div>
                           </td>
 
-                          {/* Treatment Type — Pill Badge */}
+                          {/* Treatment Type — Pill Badge. Truncated to a fixed
+                              length so a long treatment name can't widen the
+                              column; full text shows on hover. */}
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${treatmentStyle.bg}`}>
-                              {patient.treatment_type || 'General'}
+                            <span
+                              className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${treatmentStyle.bg}`}
+                              title={patient.treatment_type || 'General'}
+                            >
+                              {truncate(patient.treatment_type || 'General', 15)}
                             </span>
                           </td>
 
@@ -757,8 +823,9 @@ const Patients = () => {
             <Pagination
               page={page}
               pageSize={PATIENTS_PER_PAGE}
-              totalItems={fullyFilteredData.length}
+              totalItems={totalCount}
               onPageChange={setPage}
+              alwaysShow
             />
           )}
         </div>

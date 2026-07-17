@@ -827,10 +827,46 @@ class LabOrderOut(LabOrderBase):
     clinic_id: int
     created_at: datetime
     updated_at: datetime
-    
+
     # Nested info
     patient_name: Optional[str] = None
     vendor_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+# --- Inventory ledger (stock movements) ---
+
+# Usage recorded from a case paper (always an 'out' movement).
+class InventoryConsumptionCreate(BaseModel):
+    patient_id: int
+    case_paper_id: Optional[int] = None
+    inventory_item_id: int
+    quantity: float
+
+# Manual ledger entry from Inventory & Vendors (in or out).
+class InventoryTransactionCreate(BaseModel):
+    inventory_item_id: int
+    direction: str  # 'in' | 'out'
+    quantity: float
+    patient_id: Optional[int] = None
+    note: Optional[str] = None
+
+class InventoryTransactionOut(BaseModel):
+    id: int
+    clinic_id: int
+    patient_id: Optional[int] = None
+    case_paper_id: Optional[int] = None
+    inventory_item_id: Optional[int] = None
+    direction: str
+    item_name: str
+    quantity: float
+    unit: Optional[str] = None
+    note: Optional[str] = None
+    created_at: datetime
+    # Enriched for display.
+    patient_name: Optional[str] = None
 
     class Config:
         from_attributes = True

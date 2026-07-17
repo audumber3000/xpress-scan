@@ -1,22 +1,80 @@
-import React, { useState } from 'react';
+import React from 'react';
 import teethMapping from '../../assets/teeth_mapping.json';
+import { universalToFDI } from '../../utils/toothNumbering';
 
 import { CONDITION_LABELS, STATUS_COLORS } from './dentalConstants';
 
+// Primary (deciduous) teeth reuse the anatomical shape + arch position of a
+// suitable permanent tooth — the app has no separate primary-tooth artwork.
+// Map: primary FDI number -> permanent Universal tooth whose shape to borrow.
+const PRIMARY_SOURCE = {
+    55: 4, 54: 5, 53: 6, 52: 7, 51: 8,        // upper right (51–55)
+    61: 9, 62: 10, 63: 11, 64: 12, 65: 13,    // upper left  (61–65)
+    75: 20, 74: 21, 73: 22, 72: 23, 71: 24,   // lower left  (71–75)
+    81: 25, 82: 26, 83: 27, 84: 28, 85: 29,   // lower right (81–85)
+};
+const PRIMARY_UPPER = new Set([51, 52, 53, 54, 55, 61, 62, 63, 64, 65]);
+
+// Primary teeth in the Universal system are letters A–T. Keyed by primary FDI.
+const PRIMARY_UNIVERSAL = {
+    55: 'A', 54: 'B', 53: 'C', 52: 'D', 51: 'E',
+    61: 'F', 62: 'G', 63: 'H', 64: 'I', 65: 'J',
+    75: 'K', 74: 'L', 73: 'M', 72: 'N', 71: 'O',
+    81: 'P', 82: 'Q', 83: 'R', 84: 'S', 85: 'T',
+};
+
+// Quadrant range labels shown above/below the arches, per dentition + system.
+// Order: [upper-right, upper-left, lower-right, lower-left].
+const QUADRANT_RANGES = {
+    adult: {
+        fdi: ['11-18', '21-28', '41-48', '31-38'],
+        universal: ['1-8', '9-16', '32-25', '24-17'],
+    },
+    primary: {
+        fdi: ['51-55', '61-65', '81-85', '71-75'],
+        universal: ['A-E', 'F-J', 'P-T', 'K-O'],
+    },
+};
+
 /**
- * RealisticDentalChart - Uses anatomical SVG data to render a professional chart
+ * RealisticDentalChart - anatomical SVG chart.
+ * `dentition` = 'adult' (32 permanent) or 'primary' (20 baby teeth).
+ * `numberingSystem` = 'fdi' (default) or 'universal'.
+ * Storage never changes — adult teeth store Universal (1–32), primary store FDI
+ * (51–85); the label is just formatted to the chosen system for display.
  */
 const RealisticDentalChart = ({
     teethData = {},
-    toothNotes = {},
     selectedTooth,
     onToothSelect,
-    onSurfaceConditionChange,
-    onToothStatusChange,
-    onNotesChange,
-    editable = true
+    editable = true,
+    dentition = 'adult',
+    numberingSystem = 'fdi'
 }) => {
-    const handleToothClick = (toothNum, event) => {
+    const isPrimary = dentition === 'primary';
+    const isUniversal = numberingSystem === 'universal';
+    const quadrantRanges = QUADRANT_RANGES[isPrimary ? 'primary' : 'adult'][isUniversal ? 'universal' : 'fdi'];
+
+    // One flat list the SVG maps over, so the render body doesn't branch per mode.
+    const renderList = isPrimary
+        ? Object.entries(PRIMARY_SOURCE)
+            .map(([fdi, src]) => ({
+                storageKey: Number(fdi),
+                label: isUniversal ? PRIMARY_UNIVERSAL[fdi] : fdi,
+                paths: teethMapping[src],
+                isUpper: PRIMARY_UPPER.has(Number(fdi)),
+            }))
+            .filter((t) => t.paths)
+        : Object.entries(teethMapping).map(([toothNum, paths]) => {
+            const universal = parseInt(toothNum);
+            return {
+                storageKey: universal,
+                label: String(isUniversal ? universal : universalToFDI(universal)),
+                paths,
+                isUpper: universal <= 16,
+            };
+        });
+    const handleToothClick = (toothNum) => {
         if (editable) {
             onToothSelect(toothNum);
         }
@@ -44,11 +102,11 @@ const RealisticDentalChart = ({
     };
 
     return (
-        <div className="w-full dental-chart-container relative bg-white rounded-3xl p-8 shadow-sm border border-gray-100">
+        <div className="w-full dental-chart-container relative bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
             {/* Top Quadrant Labels */}
             <div className="flex justify-between mb-4 text-[10px] font-black uppercase tracking-[0.2em] text-gray-300">
-                <span>Upper Right (1-8)</span>
-                <span>Upper Left (9-16)</span>
+                <span>Upper Right ({quadrantRanges[0]})</span>
+                <span>Upper Left ({quadrantRanges[1]})</span>
             </div>
 
             <div className="relative group/chart">
@@ -68,15 +126,12 @@ const RealisticDentalChart = ({
                             </feMerge>
                         </filter>
                     </defs>
-                    {Object.entries(teethMapping).map(([toothNum, paths]) => {
-                        const toothInt = parseInt(toothNum);
-                        const data = teethData[toothInt] || {};
+                    {renderList.map(({ storageKey, label, paths, isUpper }) => {
+                        const data = teethData[storageKey] || {};
                         const status = data.status || 'present';
-                        const surfaces = data.surfaces || {};
 
-                        const statusColor = getToothStatusColor(toothInt);
-                        const isSelected = selectedTooth === toothInt;
-                        const isUpper = toothInt <= 16;
+                        const statusColor = getToothStatusColor(storageKey);
+                        const isSelected = selectedTooth === storageKey;
 
                         // Substantially increase space between arches
                         const archGap = 40;
@@ -91,8 +146,8 @@ const RealisticDentalChart = ({
 
                         return (
                             <g
-                                key={toothNum}
-                                onClick={(e) => handleToothClick(toothInt, e)}
+                                key={storageKey}
+                                onClick={() => handleToothClick(storageKey)}
                                 className="cursor-pointer group/tooth"
                                 filter={isSelected ? "url(#toothGlow)" : "none"}
                             >
@@ -116,14 +171,14 @@ const RealisticDentalChart = ({
 
                                 {/* IMPACTED: Hatching overlay */}
                                 {status === 'impacted' && (
-                                    <mask id={`mask-${toothNum}`}>
+                                    <mask id={`mask-${storageKey}`}>
                                         {paths.map((path, i) => (
                                             <path key={i} d={path.d} transform={`translate(${path.x},${path.y + yOffset})`} fill="white" />
                                         ))}
                                     </mask>
                                 )}
                                 {status === 'impacted' && (
-                                    <rect width="1169" height="680" fill="url(#hatchPattern)" mask={`url(#mask-${toothNum})`} pointerEvents="none" />
+                                    <rect width="1169" height="680" fill="url(#hatchPattern)" mask={`url(#mask-${storageKey})`} pointerEvents="none" />
                                 )}
 
                                 {/* IMPLANT: Screw Symbol */}
@@ -180,7 +235,7 @@ const RealisticDentalChart = ({
                                     className={`text-[13px] font-black tracking-tighter transition-colors duration-300 ${isSelected || statusColor ? 'fill-white' : 'fill-gray-400'
                                         }`}
                                 >
-                                    {toothNum}
+                                    {label}
                                 </text>
                             </g>
                         );
@@ -191,11 +246,16 @@ const RealisticDentalChart = ({
                 </svg>
             </div>
 
-            {/* Bottom Quadrant Labels */}
+            {/* Bottom Quadrant Labels — FDI quadrant ranges */}
             <div className="flex justify-between mt-4 text-[10px] font-black uppercase tracking-[0.2em] text-gray-300">
-                <span>Lower Right (32-25)</span>
-                <span>Lower Left (24-17)</span>
+                <span>Lower Right ({quadrantRanges[2]})</span>
+                <span>Lower Left ({quadrantRanges[3]})</span>
             </div>
+
+            {/* Standard note so the numbering is unambiguous to any clinician. */}
+            <p className="mt-2 text-center text-[10px] font-medium text-gray-400">
+                {isPrimary ? 'Primary teeth' : 'Permanent teeth'} · {isUniversal ? 'Universal Numbering System' : 'FDI World Dental Federation standard'}
+            </p>
 
 
             {/* Status Legend — matches exactly what the chart can draw */}

@@ -138,6 +138,7 @@ run_migration "am_role"           "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS 
 run_migration "am_email"          "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS account_manager_email VARCHAR(120)"
 run_migration "am_phone"          "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS account_manager_phone VARCHAR(20)"
 run_migration "whatsapp_integrations" "CREATE TABLE IF NOT EXISTS whatsapp_integrations (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL UNIQUE REFERENCES clinics(id), provider VARCHAR DEFAULT 'wareach', session_id VARCHAR, api_key_enc TEXT, phone_number VARCHAR, status VARCHAR DEFAULT 'disconnected', last_status_at TIMESTAMP, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())"
+run_migration "inventory_transactions" "CREATE TABLE IF NOT EXISTS inventory_transactions (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL REFERENCES clinics(id), patient_id INTEGER REFERENCES patients(id), case_paper_id INTEGER REFERENCES case_papers(id), inventory_item_id INTEGER REFERENCES inventory_items(id), direction VARCHAR NOT NULL DEFAULT 'out', item_name VARCHAR NOT NULL, quantity DOUBLE PRECISION NOT NULL DEFAULT 0, unit VARCHAR, note VARCHAR, created_at TIMESTAMP DEFAULT NOW())"
 
 # ── Schema migration check (run against RDS) ──────────────────────────────────
 echo ""

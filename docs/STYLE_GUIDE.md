@@ -189,10 +189,15 @@ This document defines the consistent styling patterns used throughout the applic
 
 ## Border Radius
 
-- **Small**: `rounded-lg` (8px) - Buttons, inputs
-- **Medium**: `rounded-xl` (12px) - Cards, tables
-- **Large**: `rounded-2xl` (16px) - Large containers
-- **Full**: `rounded-full` - Pills, avatars
+This scale is the **standard** and mirrors the mobile app (whose dominant radii
+are 8 / 10 / 12 / 16). Do not exceed `rounded-2xl` (16px) for rectangular
+surfaces — `rounded-3xl`, `rounded-[2rem]`, `rounded-[2.5rem]` are off-scale and
+should be normalised to the values below.
+
+- **Small**: `rounded-lg` (8px) — Buttons, inputs, small chips
+- **Medium**: `rounded-xl` (12px) — Cards, tables, list rows, thumbnails
+- **Large**: `rounded-2xl` (16px) — Large containers, modals, drawers, floating bars
+- **Full**: `rounded-full` — Pills, badges, avatars, icon buttons
 
 ## Shadows
 

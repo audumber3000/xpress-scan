@@ -794,6 +794,36 @@ class LabOrder(Base):
     vendor = relationship("Vendor")
 
 
+class InventoryTransaction(Base):
+    """A single stock movement — the inventory ledger.
+
+    `direction='out'` (usage/wastage) decrements the item's stock; `'in'`
+    (restock/received) increments it. Deleting a row reverses its effect.
+    Usage recorded from a case paper carries patient_id/case_paper_id; manual
+    entries may set patient_id optionally or leave it null (general/wastage).
+    item_name/unit are snapshotted so a row stays readable even if the item is
+    later renamed or removed."""
+    __tablename__ = 'inventory_transactions'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
+    patient_id = Column(Integer, ForeignKey('patients.id'), nullable=True)
+    case_paper_id = Column(Integer, ForeignKey('case_papers.id'), nullable=True)
+    inventory_item_id = Column(Integer, ForeignKey('inventory_items.id'), nullable=True)
+
+    direction = Column(String, nullable=False, default='out')  # 'out' | 'in'
+    item_name = Column(String, nullable=False)   # snapshot at time of the movement
+    quantity = Column(Float, nullable=False, default=0.0)  # always positive
+    unit = Column(String, nullable=True)          # snapshot (pcs, ml, ...)
+    note = Column(String, nullable=True)          # reason for manual entries
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    clinic = relationship("Clinic")
+    patient = relationship("Patient")
+    case_paper = relationship("CasePaper")
+    inventory_item = relationship("InventoryItem")
+
+
 class NotificationPreference(Base):
     __tablename__ = 'notification_preferences'
     id = Column(Integer, primary_key=True, index=True)

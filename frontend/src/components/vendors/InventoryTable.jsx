@@ -49,7 +49,11 @@ const InventoryTable = ({ inventory, onUpdateItem, onEditItem, onDeleteItem }) =
           </thead>
           <tbody className="bg-white divide-y divide-gray-100">
             {paginatedItems.map(item => (
-              <tr key={item.id} className="hover:bg-indigo-50/30 transition-colors duration-150 group">
+              <tr
+                key={item.id}
+                onClick={() => onEditItem?.(item)}
+                className="hover:bg-indigo-50/30 transition-colors duration-150 group cursor-pointer"
+              >
                 <td className="px-6 py-5 whitespace-nowrap">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 bg-[#2a276e]/10 rounded-full flex items-center justify-center text-[#2a276e] flex-shrink-0">
@@ -73,7 +77,7 @@ const InventoryTable = ({ inventory, onUpdateItem, onEditItem, onDeleteItem }) =
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                   {editingItem?.id === item.id ? (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="number"
                         className="w-20 px-2 py-1 border border-[#2a276e] rounded-md text-sm outline-none focus:ring-2 focus:ring-[#2a276e]/20"
@@ -88,7 +92,7 @@ const InventoryTable = ({ inventory, onUpdateItem, onEditItem, onDeleteItem }) =
                     <div className="flex items-center gap-2">
                       <span className="tabular-nums">{item.min_stock_level}</span>
                       <button
-                        onClick={() => { setEditingItem(item); setMinStockInput((item.min_stock_level ?? 0).toString()); }}
+                        onClick={(e) => { e.stopPropagation(); setEditingItem(item); setMinStockInput((item.min_stock_level ?? 0).toString()); }}
                         className="px-2 py-0.5 text-xs font-semibold text-[#2a276e] bg-[#2a276e]/5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         Set
@@ -100,23 +104,25 @@ const InventoryTable = ({ inventory, onUpdateItem, onEditItem, onDeleteItem }) =
                   {getStockStatus(item.quantity, item.min_stock_level)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                  <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center justify-end gap-1">
                     {onEditItem && (
                       <button
-                        onClick={() => onEditItem(item)}
-                        className="px-3 py-1.5 text-xs font-semibold text-[#2a276e] bg-[#2a276e]/5 rounded-lg hover:bg-[#2a276e]/10 transition-colors flex items-center gap-1.5"
+                        onClick={(e) => { e.stopPropagation(); onEditItem(item); }}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-[#2a276e] hover:bg-[#2a276e]/5 transition-colors"
+                        title="Edit item"
+                        aria-label="Edit item"
                       >
-                        <Edit2 size={12} />
-                        Edit
+                        <Edit2 size={16} />
                       </button>
                     )}
                     {onDeleteItem && (
                       <button
-                        onClick={() => onDeleteItem(item.id)}
-                        className="px-3 py-1.5 text-xs font-semibold text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors flex items-center gap-1.5"
+                        onClick={(e) => { e.stopPropagation(); onDeleteItem(item.id); }}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        title="Delete item"
+                        aria-label="Delete item"
                       >
-                        <Trash2 size={12} />
-                        Delete
+                        <Trash2 size={16} />
                       </button>
                     )}
                   </div>

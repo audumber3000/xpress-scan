@@ -113,6 +113,20 @@ class PatientService(PatientServiceProtocol):
         self._attach_last_visit(patients)
         return patients
 
+    def list_patients(self, clinic_id: int, skip: int = 0, limit: int = 100,
+                      search=None, gender=None, treatment_type=None) -> List[Patient]:
+        """One page of patients matching search/gender/treatment filters, enriched
+        with last_visit. Backs the paginated list."""
+        patients = self.patient_repo.list_filtered(
+            clinic_id, skip, limit, search, gender, treatment_type
+        )
+        self._attach_last_visit(patients)
+        return patients
+
+    def count_patients(self, clinic_id: int, search=None, gender=None, treatment_type=None) -> int:
+        """Total patients matching the same filters — for page-count math."""
+        return self.patient_repo.count_filtered(clinic_id, search, gender, treatment_type)
+
     def _attach_last_visit(self, patients: List[Patient]) -> None:
         """Set the transient `last_visit` attribute on each patient via two bulk queries."""
         if not patients:

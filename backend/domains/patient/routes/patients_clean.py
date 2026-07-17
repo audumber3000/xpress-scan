@@ -74,21 +74,22 @@ async def get_patients(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     search: Optional[str] = Query(None, min_length=2, description="Search query for patient name or phone"),
+    gender: Optional[str] = Query(None, description="Filter by gender"),
+    treatment_type: Optional[str] = Query(None, description="Filter by treatment type"),
     current_user = Depends(require_patients_view),
     patient_service = Depends(get_patient_service)
 ):
     """
-    Get patients for the current clinic with optional search.
+    Get one page of patients for the current clinic, with optional search/filters.
 
-    - **skip**: Number of records to skip for pagination
-    - **limit**: Maximum number of records to return
-    - **search**: Optional search query for patient name or phone (minimum 2 characters)
+    Server-side pagination: the caller pages via skip/limit, and search + filters
+    run against the whole clinic (not just a preloaded page). Pair with
+    `GET /patients/count` for the total to drive page numbers.
     """
     try:
-        if search:
-            patients = patient_service.search_patients(current_user.clinic_id, search, skip, limit)
-        else:
-            patients = patient_service.get_patients(current_user.clinic_id, skip, limit)
+        patients = patient_service.list_patients(
+            current_user.clinic_id, skip, limit, search, gender, treatment_type
+        )
 
         # Serialize per-row: a single unserializable patient must not 500 the
         # whole list (a bulk-imported age=2020 did exactly that). Skip the bad
@@ -108,6 +109,30 @@ async def get_patients(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve patients: {str(e)}"
+        )
+
+
+@router.get(
+    "/count",
+    summary="Count patients for current clinic",
+    description="Total patients matching the same search/filters — drives page numbers.",
+)
+async def count_patients(
+    search: Optional[str] = Query(None, min_length=2),
+    gender: Optional[str] = Query(None),
+    treatment_type: Optional[str] = Query(None),
+    current_user = Depends(require_patients_view),
+    patient_service = Depends(get_patient_service),
+):
+    try:
+        total = patient_service.count_patients(
+            current_user.clinic_id, search, gender, treatment_type
+        )
+        return {"total": total}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to count patients: {str(e)}",
         )
 
 

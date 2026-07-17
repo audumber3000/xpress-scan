@@ -35,7 +35,8 @@ const emptyManualRow = () => ({
   village: "", treatment_type: "", referred_by: "", registered_at: "",
 });
 
-// Columns the importer understands. `key` matches the backend Patient fields.
+// Columns the importer understands. `key`/`label` match the backend Patient
+// fields. Dates use DD-MM-YYYY (Indian convention).
 const COLUMNS = [
   { key: "name", label: "name", required: true },
   { key: "age", label: "age" },
@@ -48,11 +49,35 @@ const COLUMNS = [
   { key: "blood_group", label: "blood_group" },
   { key: "patient_history", label: "patient_history" },
   { key: "notes", label: "notes" },
+  // registered_at = the date you want the patient registered ON (their original
+  // join date). Leave blank to register them as of today.
   { key: "registered_at", label: "registered_at" },
 ];
 
 const TEMPLATE_HEADERS = COLUMNS.map((c) => c.label);
-const EXAMPLE_ROW = ["Ravi Kumar", "32", "1992-05-14", "Male", "9876543210", "Pune", "Cleaning", "Dr. Sharma", "B+", "Diabetic", "First visit", "2023-01-20"];
+
+// Readable titles for the preview table header only — the CSV column names
+// stay as `label` (snake_case) so existing templates keep working.
+const COLUMN_TITLES = {
+  name: "Name",
+  age: "Age",
+  date_of_birth: "Date of Birth",
+  gender: "Gender",
+  phone: "Phone",
+  village: "Village / City",
+  treatment_type: "Treatment",
+  referred_by: "Referred By",
+  blood_group: "Blood Group",
+  patient_history: "Medical History",
+  notes: "Notes",
+  registered_at: "Registered On",
+};
+// Two example rows: one fully filled, one minimal — so it's obvious which
+// columns are optional and what a real registration backdate looks like.
+const EXAMPLE_ROWS = [
+  ["Ravi Kumar", "32", "14-05-1992", "Male", "9876543210", "Pune", "Cleaning", "Dr. Sharma", "B+", "Diabetic", "First visit", "20-01-2023"],
+  ["Sunita Devi", "", "", "Female", "9812345678", "Nagpur", "Root Canal", "", "", "", "", "05-08-2024"],
+];
 
 // Validate one parsed row → list of human-readable problems.
 const validateRow = (row) => {
@@ -141,7 +166,7 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
   };
 
   const downloadTemplate = () => {
-    const csv = Papa.unparse({ fields: TEMPLATE_HEADERS, data: [EXAMPLE_ROW] });
+    const csv = Papa.unparse({ fields: TEMPLATE_HEADERS, data: EXAMPLE_ROWS });
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -267,7 +292,7 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={handleClose} />
-      <div className={`relative bg-white rounded-2xl shadow-2xl w-full ${mode === "manual" ? "max-w-6xl" : "max-w-3xl"} max-h-[90vh] flex flex-col overflow-hidden`}>
+      <div className={`relative bg-white rounded-2xl shadow-2xl w-full ${mode === "manual" || (mode === "csv" && rows.length > 0) ? "max-w-6xl" : "max-w-3xl"} max-h-[90vh] flex flex-col overflow-hidden`}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2.5">
@@ -556,6 +581,21 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
                 </li>
               </ol>
 
+              {/* Field notes — the two columns that trip people up. */}
+              <div className="mb-5 rounded-lg border border-[#2a276e]/10 bg-[#2a276e]/[0.03] p-4 text-sm text-gray-700">
+                <p className="font-semibold text-gray-900 mb-1.5">Two things worth knowing</p>
+                <ul className="space-y-1.5">
+                  <li>
+                    <strong>registered_at</strong> — the date you want the patient registered on
+                    (their original join date). Leave it blank to register them as of today.
+                  </li>
+                  <li>
+                    <strong>Dates</strong> use <strong>DD-MM-YYYY</strong> — e.g. <code className="px-1 rounded bg-gray-100">20-01-2023</code> for 20 January 2023.
+                    Applies to both <strong>date_of_birth</strong> and <strong>registered_at</strong>.
+                  </li>
+                </ul>
+              </div>
+
               <button
                 onClick={downloadTemplate}
                 className="flex items-center gap-2 px-4 py-2 mb-5 bg-white border border-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-50 transition-all"
@@ -608,14 +648,16 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
 
               <div className="border border-gray-200 rounded-lg overflow-hidden">
                 <div className="max-h-[42vh] overflow-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50 sticky top-0">
+                  <table className="text-sm whitespace-nowrap">
+                    <thead className="bg-gray-50 sticky top-0 z-10">
                       <tr>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-500 w-10"></th>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-500">Name</th>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-500">Age</th>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-500">Phone</th>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-500">Treatment</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-500 w-10 sticky left-0 bg-gray-50"></th>
+                        {COLUMNS.map((c) => (
+                          <th key={c.key} className="px-3 py-2 text-left font-semibold text-gray-500">
+                            {COLUMN_TITLES[c.key]}
+                            {c.required && <span className="text-red-400"> *</span>}
+                          </th>
+                        ))}
                         <th className="px-3 py-2 text-left font-semibold text-gray-500">Issue</th>
                       </tr>
                     </thead>
@@ -624,15 +666,21 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
                         const ok = r.problems.length === 0;
                         return (
                           <tr key={i} className={ok ? "" : "bg-red-50/50"}>
-                            <td className="px-3 py-2">
+                            <td className={`px-3 py-2 sticky left-0 ${ok ? "bg-white" : "bg-red-50"}`}>
                               {ok
                                 ? <CheckCircle2 size={16} className="text-green-500" />
                                 : <AlertCircle size={16} className="text-red-400" />}
                             </td>
-                            <td className="px-3 py-2 text-gray-900">{r.data.name || <span className="text-gray-300">—</span>}</td>
-                            <td className="px-3 py-2 text-gray-600">{r.data.age || "—"}</td>
-                            <td className="px-3 py-2 text-gray-600">{r.data.phone || <span className="text-gray-300">—</span>}</td>
-                            <td className="px-3 py-2 text-gray-600">{r.data.treatment_type || "—"}</td>
+                            {COLUMNS.map((c) => {
+                              const val = r.data[c.key];
+                              return (
+                                <td key={c.key} className="px-3 py-2 text-gray-600" title={val || ""}>
+                                  {val
+                                    ? (val.length > 20 ? `${val.slice(0, 20)}…` : val)
+                                    : <span className="text-gray-300">—</span>}
+                                </td>
+                              );
+                            })}
                             <td className="px-3 py-2 text-xs text-red-500">{r.problems.join(", ")}</td>
                           </tr>
                         );

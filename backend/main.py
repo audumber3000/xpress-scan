@@ -58,9 +58,10 @@ from domains.gmail.routes import gmail_routes
 from domains.google_business.routes import google_business_routes, google_places_routes
 from domains.vendor.routes import vendors
 from domains.inventory.routes import inventory
+from domains.inventory.routes import transactions as inventory_transactions
 from domains.consent.routes import consents, consents_internal
 from domains.document.routes import documents
-from domains.clinical.routes import settings_router, case_papers_router, prescriptions_router, lab_orders_router
+from domains.clinical.routes import settings_router, case_papers_router, prescriptions_router, lab_orders_router, inventory_consumption_router
 from domains.notification.routes import notification_admin, push_notifications
 from domains.notification.routes import wareach as wareach_routes
 from domains.activity.routes import activity_log
@@ -476,6 +477,8 @@ app.include_router(gmail_routes.router, prefix="/api/v1/gmail", tags=["gmail"])
 app.include_router(google_business_routes.router, prefix="/api/v1/google-business", tags=["google_business"])
 app.include_router(google_places_routes.router, prefix="/api/v1/google-places", tags=["google_places"])
 app.include_router(vendors.router, prefix="/api/v1/vendors", tags=["vendors"])
+# Ledger BEFORE the item router so /inventory/transactions isn't parsed as /inventory/{item_id}
+app.include_router(inventory_transactions.router, prefix="/api/v1", tags=["inventory-transactions"])
 app.include_router(inventory.router, prefix="/api/v1/inventory", tags=["inventory"])
 app.include_router(consents.router, prefix="/api/v1/consents", tags=["consents"])
 # Internal service-to-service routes (Nexus calls these). Auth via shared
@@ -500,6 +503,7 @@ app.include_router(settings_router, prefix="/api/v1/clinical", tags=["clinical-s
 app.include_router(case_papers_router, prefix="/api/v1/clinical", tags=["case-papers"])
 app.include_router(prescriptions_router, prefix="/api/v1/clinical", tags=["prescriptions"])
 app.include_router(lab_orders_router, prefix="/api/v1/clinical", tags=["lab-orders"])
+app.include_router(inventory_consumption_router, prefix="/api/v1/clinical", tags=["inventory-consumption"])
 
 # Search Domain — unified command-palette search across the domains above
 app.include_router(global_search.router, prefix="/api/v1/search", tags=["search"])

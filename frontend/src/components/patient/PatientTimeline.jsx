@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import ToothSurfaceMap from './ToothSurfaceMap';
 import { getCurrencySymbol } from '../../utils/currency';
+import { universalToFDI } from '../../utils/toothNumbering';
 import { getUserDisplayName } from '../../utils/userName';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -229,7 +230,7 @@ const PatientTimeline = ({
                                             onSurfaceSelect={() => {}} // Disabled interaction on card preview
                                         />
                                     </div>
-                                    <p className="font-black text-gray-900 text-lg mt-0.5" style={{ textShadow: '0 1px 1px rgba(0,0,0,0.05)' }}>#{item.tooth}</p>
+                                    <p className="font-black text-gray-900 text-lg mt-0.5" style={{ textShadow: '0 1px 1px rgba(0,0,0,0.05)' }}>#{universalToFDI(item.tooth)}</p>
                                 </>
                             ) : (
                                 <div className="h-16 flex items-center justify-center">

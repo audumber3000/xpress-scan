@@ -82,7 +82,7 @@ const ScanUploadDrawer = ({ isOpen, onClose, onUpload, patientId, casePaperId })
                         
                         <div 
                             onClick={() => fileInputRef.current?.click()}
-                            className="w-full aspect-[2/1] border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 hover:border-[#2a276e]/30 transition-all group"
+                            className="w-full aspect-[2/1] border-2 border-dashed border-gray-200 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 hover:border-[#2a276e]/30 transition-all group"
                         >
                             <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 group-hover:bg-[#2a276e]/5 transition-all text-gray-400 group-hover:text-[#2a276e]">
                                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
@@ -129,7 +129,7 @@ const ScanUploadDrawer = ({ isOpen, onClose, onUpload, patientId, casePaperId })
                     <button 
                         onClick={handleUpload}
                         disabled={isUploading || selectedFiles.length === 0}
-                        className={`w-full py-4 rounded-3xl font-bold transition-all shadow-md ${
+                        className={`w-full py-4 rounded-lg font-bold transition-all shadow-md ${
                             !isUploading && selectedFiles.length > 0
                             ? 'bg-[#2a276e] hover:bg-[#1a1548] text-white hover:shadow-lg' 
                             : 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'

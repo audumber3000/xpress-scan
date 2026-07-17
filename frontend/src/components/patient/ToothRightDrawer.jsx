@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight } from 'lucide-react';
+import { universalToFDI } from '../../utils/toothNumbering';
 import CleanToothSVG from './CleanToothSVG';
 import ToothSurfaceMap from './ToothSurfaceMap';
 import { getCurrencySymbol } from '../../utils/currency';
@@ -137,7 +138,7 @@ const ToothRightDrawer = ({
                 <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
                     <div>
                         <h2 className="text-lg font-bold text-gray-900 leading-tight">
-                            {isTooth ? `Tooth ${selectedTooth}` : 'Examination'}
+                            {isTooth ? `Tooth ${universalToFDI(selectedTooth)}` : 'Examination'}
                         </h2>
                         <p className="text-xs text-gray-400 mt-0.5">
                             {isTooth ? (TOOTH_NAMES[selectedTooth] || 'Procedure & status') : selectedTooth}
@@ -173,7 +174,7 @@ const ToothRightDrawer = ({
                             <div className="w-24 h-24 drop-shadow-sm">
                                 <AnatomyIcon type={selectedTooth} />
                             </div>
-                            <span className="text-xl font-black text-[#2a276e] tracking-tight w-28 break-words">{selectedTooth}</span>
+                            <span className="text-xl font-black text-[#2a276e] tracking-tight w-28 break-words">{universalToFDI(selectedTooth)}</span>
                         </div>
                     )}
 

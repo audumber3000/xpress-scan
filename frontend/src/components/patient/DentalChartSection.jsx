@@ -1,18 +1,36 @@
-import React from 'react';
+import React, { useState } from 'react';
 import RealisticDentalChart from './RealisticDentalChart';
 import AnatomyIcon from './AnatomyIcons';
+
+/** Small pill segmented control used for the chart's dentition / numbering toggles. */
+const SegmentedToggle = ({ value, onChange, options }) => (
+  <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 shadow-sm">
+    {options.map((opt) => (
+      <button
+        key={opt.id}
+        onClick={() => onChange(opt.id)}
+        className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+          value === opt.id ? 'bg-[#2a276e] text-white' : 'text-gray-500 hover:text-gray-700'
+        }`}
+      >
+        {opt.label}
+      </button>
+    ))}
+  </div>
+);
 
 const DentalChartSection = ({
   activeChartTab,
   onTabChange,
   sessionTeethData,
-  sessionToothNotes,
   selectedTooth,
   onToothSelect,
-  onSurfaceConditionChange,
-  onToothStatusChange,
-  onNotesChange
 }) => {
+  // Adult (permanent) vs Child (primary) chart, and FDI vs Universal numbering —
+  // both manual, the doctor decides.
+  const [dentition, setDentition] = useState('adult');
+  const [numberingSystem, setNumberingSystem] = useState('fdi');
+
   return (
     <section className="px-1 lg:px-0">
       {/* Navigation Tabs */}
@@ -34,16 +52,37 @@ const DentalChartSection = ({
 
       <div className="animate-fade-in relative px-1 lg:px-0">
         {activeChartTab === 'dental_chart' && (
-          <RealisticDentalChart
-            teethData={sessionTeethData}
-            toothNotes={sessionToothNotes}
-            selectedTooth={selectedTooth}
-            onToothSelect={onToothSelect}
-            onSurfaceConditionChange={onSurfaceConditionChange}
-            onToothStatusChange={onToothStatusChange}
-            onNotesChange={onNotesChange}
-            editable={true}
-          />
+          <>
+            {/* Chart controls — right-aligned toolbar: dentition | numbering. */}
+            <div className="flex justify-end items-center gap-3 mb-4">
+              <SegmentedToggle
+                value={dentition}
+                onChange={setDentition}
+                options={[
+                  { id: 'adult', label: 'Adult' },
+                  { id: 'primary', label: 'Child' },
+                ]}
+              />
+              <div className="w-px h-6 bg-gray-200" />
+              <SegmentedToggle
+                value={numberingSystem}
+                onChange={setNumberingSystem}
+                options={[
+                  { id: 'fdi', label: 'FDI' },
+                  { id: 'universal', label: 'Universal' },
+                ]}
+              />
+            </div>
+
+            <RealisticDentalChart
+              teethData={sessionTeethData}
+              selectedTooth={selectedTooth}
+              onToothSelect={onToothSelect}
+              editable={true}
+              dentition={dentition}
+              numberingSystem={numberingSystem}
+            />
+          </>
         )}
 
         {activeChartTab === 'soft_tissue' && (
@@ -61,7 +100,7 @@ const DentalChartSection = ({
               <div 
                 key={item.id}
                 onClick={() => onToothSelect(item.id)}
-                className="bg-white rounded-[2rem] border border-gray-200 shadow-sm flex flex-col items-center justify-between overflow-hidden cursor-pointer hover:border-[#2a276e] hover:shadow-xl transition-all group aspect-square"
+                className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center justify-between overflow-hidden cursor-pointer hover:border-[#2a276e] hover:shadow-xl transition-all group aspect-square"
               >
                 <div className="flex-1 w-full flex items-center justify-center p-0 overflow-hidden bg-gray-50/20 group-hover:bg-white transition-colors duration-500">
                   <div className="w-full h-full flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
@@ -84,7 +123,7 @@ const DentalChartSection = ({
               <div 
                 key={item}
                 onClick={() => onToothSelect(item)}
-                className="bg-white rounded-[2.5rem] border border-gray-200 shadow-sm flex flex-col items-center justify-between overflow-hidden cursor-pointer hover:border-[#2a276e] hover:shadow-xl transition-all group aspect-square"
+                className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center justify-between overflow-hidden cursor-pointer hover:border-[#2a276e] hover:shadow-xl transition-all group aspect-square"
               >
                 <div className="flex-1 w-full flex items-center justify-center p-0 overflow-hidden bg-gray-50/20 group-hover:bg-white transition-colors duration-500">
                   <div className="w-full h-full flex items-center justify-center group-hover:scale-105 transition-transform duration-500">

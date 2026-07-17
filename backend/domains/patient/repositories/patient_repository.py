@@ -22,6 +22,36 @@ class PatientRepository(BaseRepository[Patient], PatientRepositoryProtocol):
             Patient.clinic_id == clinic_id
         ).order_by(Patient.created_at.desc(), Patient.id.desc()).offset(skip).limit(limit).all()
 
+    def _filtered_query(self, clinic_id: int, search: Optional[str] = None,
+                        gender: Optional[str] = None, treatment_type: Optional[str] = None):
+        """Base query for the paginated list + its count, so both apply the same
+        filters. Escapes LIKE wildcards in the search term."""
+        q = self.db.query(Patient).filter(Patient.clinic_id == clinic_id)
+        if search and search.strip():
+            term = search.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            like = f"%{term}%"
+            q = q.filter(or_(Patient.name.ilike(like), Patient.phone.ilike(like)))
+        if gender:
+            q = q.filter(Patient.gender == gender)
+        if treatment_type:
+            q = q.filter(Patient.treatment_type == treatment_type)
+        return q
+
+    def list_filtered(self, clinic_id: int, skip: int = 0, limit: int = 100,
+                      search: Optional[str] = None, gender: Optional[str] = None,
+                      treatment_type: Optional[str] = None) -> List[Patient]:
+        """One page of patients matching the filters, newest first."""
+        return (
+            self._filtered_query(clinic_id, search, gender, treatment_type)
+            .order_by(Patient.created_at.desc(), Patient.id.desc())
+            .offset(skip).limit(limit).all()
+        )
+
+    def count_filtered(self, clinic_id: int, search: Optional[str] = None,
+                       gender: Optional[str] = None, treatment_type: Optional[str] = None) -> int:
+        """Total patients matching the filters — drives the page count."""
+        return self._filtered_query(clinic_id, search, gender, treatment_type).count()
+
     def get_with_reports(self, patient_id: int) -> Optional[Patient]:
         """Get patient with related reports"""
         return self.db.query(Patient).options(

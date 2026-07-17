@@ -52,6 +52,15 @@ async def create_inventory_item(
     item = InventoryItem(**item_data.dict())
     item.clinic_id = clinic_id
     db.add(item)
+    db.flush()  # get item.id before writing the ledger row
+
+    # Record the opening stock as an 'in' movement (stock already set on the item).
+    from domains.inventory.services.ledger import record_movement
+    record_movement(
+        db, clinic_id=clinic_id, item=item, direction="in",
+        quantity=item.quantity, note="Opening stock", adjust_stock=False,
+    )
+
     db.commit()
     db.refresh(item)
     return item
@@ -75,10 +84,24 @@ async def update_inventory_item(
     item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
-    
-    for key, value in item_data.dict(exclude_unset=True).items():
+
+    updates = item_data.dict(exclude_unset=True)
+    old_qty = item.quantity or 0.0
+    for key, value in updates.items():
         setattr(item, key, value)
-    
+
+    # If the quantity was edited directly, log the delta to the ledger so the
+    # change is visible there (stock is already set, so don't re-adjust).
+    if "quantity" in updates and updates["quantity"] is not None:
+        delta = (updates["quantity"] or 0.0) - old_qty
+        if delta != 0:
+            from domains.inventory.services.ledger import record_movement
+            record_movement(
+                db, clinic_id=item.clinic_id, item=item,
+                direction="in" if delta > 0 else "out", quantity=abs(delta),
+                note="Stock adjustment", adjust_stock=False,
+            )
+
     db.commit()
     db.refresh(item)
 
