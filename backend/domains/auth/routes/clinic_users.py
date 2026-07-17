@@ -124,6 +124,11 @@ def add_clinic_user(user_in: ClinicUserIn, db: Session = Depends(get_db), curren
             raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
         password_hash = hash_password(user_in.password)
 
+    # Seed sensible role defaults when none are supplied, so a new staff member
+    # is immediately usable rather than locked out with an empty permission set.
+    from domains.auth.role_presets import default_permissions_for
+    permissions = user_in.permissions or default_permissions_for(user_in.role)
+
     user = User(
         email=email,
         username=username,
@@ -133,7 +138,7 @@ def add_clinic_user(user_in: ClinicUserIn, db: Session = Depends(get_db), curren
         role=user_in.role,
         clinic_id=current_user.clinic_id,
         created_by=current_user.id,
-        permissions=user_in.permissions or {},
+        permissions=permissions,
         password_hash=password_hash
     )
     db.add(user)

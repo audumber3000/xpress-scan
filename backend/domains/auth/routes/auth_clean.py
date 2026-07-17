@@ -545,6 +545,11 @@ async def get_current_user(
         
         result = user_dto.model_dump()
         result["clinic"] = clinic_info
+        # Google/OAuth accounts carry a Firebase-backed supabase_user_id;
+        # password/username accounts don't (or use a "local_" placeholder).
+        result["is_google_account"] = bool(
+            user.supabase_user_id and not user.supabase_user_id.startswith("local_")
+        )
         return result
 
     except HTTPException:

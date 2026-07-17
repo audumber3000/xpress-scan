@@ -201,6 +201,15 @@ export const api = {
     });
     return result.data;
   },
+  patch: async (url, data, options = {}) => {
+    const isFormData = data instanceof FormData;
+    const result = await authenticatedFetch(url, {
+      method: 'PATCH',
+      body: isFormData ? data : JSON.stringify(data),
+      ...options
+    });
+    return result.data;
+  },
   delete: async (url) => {
     const result = await authenticatedFetch(url, {
       method: 'DELETE'

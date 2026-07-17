@@ -123,7 +123,14 @@ async def delete_inventory_item(item_id: int, db: Session = Depends(get_db), cur
     item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
-    
+
+    # Detach ledger rows before deleting: they keep their item_name/unit
+    # snapshot, so the history survives while the FK no longer blocks the delete.
+    from models import InventoryTransaction
+    db.query(InventoryTransaction).filter(
+        InventoryTransaction.inventory_item_id == item_id
+    ).update({"inventory_item_id": None}, synchronize_session=False)
+
     db.delete(item)
     db.commit()
     return {"message": "Inventory item deleted successfully"}

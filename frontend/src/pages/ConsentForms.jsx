@@ -5,7 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { toast } from "react-toastify";
 import Card from "../components/Card";
 import axios from "axios";
-import { Layout, Share2, CheckCircle, Clock, XCircle, Printer, ExternalLink, Search } from 'lucide-react';
+import { Layout, Share2, CheckCircle, Clock, XCircle, Printer, ExternalLink, Search, Eye, Download } from 'lucide-react';
 import ConsentRecentLinks from "../components/consents/ConsentRecentLinks";
 import Pagination from "../components/Pagination";
 import FilterDropdown from "../components/FilterDropdown";
@@ -478,8 +478,24 @@ const ConsentForms = () => {
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        <button 
+                                                    <div className="flex items-center justify-end gap-1.5">
+                                                        <button
+                                                            onClick={() => window.open(`/consent/preview/${template.id}`, '_blank')}
+                                                            className="p-1.5 rounded-lg text-gray-400 hover:text-[#2a276e] hover:bg-[#2a276e]/5 transition-colors"
+                                                            title="Preview on a printable page"
+                                                            aria-label="Preview"
+                                                        >
+                                                            <Eye size={16} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => window.open(`/consent/preview/${template.id}?print=1`, '_blank')}
+                                                            className="p-1.5 rounded-lg text-gray-400 hover:text-[#2a276e] hover:bg-[#2a276e]/5 transition-colors"
+                                                            title="Download / print (blank form)"
+                                                            aria-label="Download or print"
+                                                        >
+                                                            <Download size={16} />
+                                                        </button>
+                                                        <button
                                                             onClick={() => {
                                                                 setSelectedTemplate(template);
                                                                 setShowSendModal(true);

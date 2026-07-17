@@ -18,7 +18,7 @@ router = APIRouter()
 # Template Routes
 @router.get("/templates", response_model=List[ConsentTemplateResponseDTO])
 async def list_templates(
-    db: Session = Depends(get_db), 
+    db: Session = Depends(get_db),
     current_user = Depends(get_current_user),
     clinic_id: Optional[int] = None
 ):
@@ -26,6 +26,39 @@ async def list_templates(
     target_clinic_id = clinic_id or current_user.clinic_id
     query = query.filter(ConsentTemplate.clinic_id == target_clinic_id)
     return query.all()
+
+
+@router.get("/templates/{template_id}/preview")
+async def preview_template(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    """Render a blank, printable consent form using the SAME engine that produces
+    signed consents (consent_templates.classic) — so the preview matches the
+    Template Settings letterhead exactly. Patient/signature fields render blank
+    for the doctor to hand-fill. Returns { html }."""
+    from models import Clinic, TemplateConfiguration
+    from domains.consent.consent_templates import resolve_variant
+
+    template = db.query(ConsentTemplate).filter(
+        ConsentTemplate.id == template_id,
+        ConsentTemplate.clinic_id == current_user.clinic_id,
+    ).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+    config = db.query(TemplateConfiguration).filter(
+        TemplateConfiguration.clinic_id == current_user.clinic_id,
+        TemplateConfiguration.category == "consent",
+    ).first()
+
+    variant = resolve_variant("classic")
+    html = variant["render"](
+        clinic, "", "", template.name, template.content, "", config
+    )
+    return {"html": html}
 
 @router.post("/templates", response_model=ConsentTemplateResponseDTO)
 async def create_template(
