@@ -22,7 +22,7 @@ from models import Invoice, InvoiceLineItem, InvoiceAuditLog, Patient, User, Cli
 from core.auth_utils import get_current_user
 from schemas import (
     InvoiceOut, InvoiceLineItemCreate, InvoiceLineItemOut,
-    MarkAsPaidRequest, InvoiceCreate
+    MarkAsPaidRequest, InvoiceCreate, InvoicePaymentCreate
 )
 from domains.infrastructure.services.pdf_service import html_template_to_pdf
 from domains.infrastructure.services.r2_storage import upload_pdf_to_r2
@@ -89,6 +89,20 @@ def enrich_invoice(db: Session, invoice: Invoice):
                 'sync_status': getattr(item, 'sync_status', 'local')
             }
             for item in invoice.line_items
+        ],
+        # Itemised partial-payment history (newest first). paid_amount above is
+        # the authoritative running total; this list is the breakdown.
+        'payments': [
+            {
+                'id': p.id,
+                'invoice_id': p.invoice_id,
+                'amount': float(p.amount or 0),
+                'paid_on': p.paid_on.isoformat() if p.paid_on else None,
+                'method': p.method,
+                'note': p.note,
+                'created_at': p.created_at.isoformat() if p.created_at else None,
+            }
+            for p in sorted(invoice.payments, key=lambda x: (x.paid_on or x.created_at), reverse=True)
         ]
     }
     return invoice_dict
@@ -128,6 +142,30 @@ def recalculate_invoice_totals(db: Session, invoice: Invoice):
     else:
         invoice.paid_amount = 0.0
         invoice.due_amount = max(total, 0.0)
+
+def sync_invoice_from_payments(invoice: Invoice):
+    """Recompute paid/due/status from the sum of the invoice's payment rows —
+    the single source of truth once itemised payments exist."""
+    paid = sum(float(p.amount or 0) for p in invoice.payments)
+    total = float(invoice.total or 0)
+    invoice.paid_amount = paid
+    invoice.due_amount = max(total - paid, 0.0)
+
+    if invoice.status in ('draft', 'cancelled'):
+        return  # don't change lifecycle state for unfinalised/cancelled invoices
+    if paid <= 0:
+        invoice.status = 'finalized'
+        invoice.paid_at = None
+    elif paid < total:
+        invoice.status = 'partially_paid'
+        invoice.paid_at = None
+    else:
+        # Fully paid — preserve a verified status if already set.
+        if invoice.status != 'paid_verified':
+            invoice.status = 'paid_unverified'
+        if not invoice.paid_at:
+            invoice.paid_at = datetime.utcnow()
+
 
 def create_audit_log(
     db: Session,
@@ -266,7 +304,85 @@ async def get_invoice(
     
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    
+
+    return enrich_invoice(db, invoice)
+
+
+@router.post("/{invoice_id}/payments", response_model=InvoiceOut)
+async def add_invoice_payment(
+    invoice_id: int,
+    payload: InvoicePaymentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Record an installment against an invoice. paid/due/status are recomputed
+    from the sum of all payments."""
+    from models import InvoicePayment
+    _ensure_invoice_columns(db)
+    invoice = db.query(Invoice).filter(
+        Invoice.id == invoice_id, Invoice.clinic_id == current_user.clinic_id
+    ).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if invoice.status in ('draft', 'cancelled'):
+        raise HTTPException(status_code=400, detail="Finalize the invoice before recording payments")
+    if not payload.amount or payload.amount <= 0:
+        raise HTTPException(status_code=400, detail="Enter a valid payment amount")
+
+    paid_on = None
+    if payload.paid_on:
+        try:
+            paid_on = datetime.strptime(payload.paid_on, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="paid_on must be YYYY-MM-DD")
+    else:
+        paid_on = datetime.utcnow().date()
+
+    payment = InvoicePayment(
+        invoice_id=invoice.id, clinic_id=current_user.clinic_id,
+        amount=float(payload.amount), paid_on=paid_on,
+        method=payload.method, note=payload.note,
+    )
+    db.add(payment)
+    db.flush()
+    if payload.method:
+        invoice.payment_mode = payload.method
+    sync_invoice_from_payments(invoice)
+    create_audit_log(db, invoice_id, current_user.id, 'payment_added', None,
+                     {'amount': float(payload.amount), 'paid_on': str(paid_on)})
+    db.commit()
+    db.refresh(invoice)
+    return enrich_invoice(db, invoice)
+
+
+@router.delete("/{invoice_id}/payments/{payment_id}", response_model=InvoiceOut)
+async def delete_invoice_payment(
+    invoice_id: int,
+    payment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Remove an installment; paid/due/status recompute from the remaining rows."""
+    from models import InvoicePayment
+    _ensure_invoice_columns(db)
+    invoice = db.query(Invoice).filter(
+        Invoice.id == invoice_id, Invoice.clinic_id == current_user.clinic_id
+    ).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    payment = db.query(InvoicePayment).filter(
+        InvoicePayment.id == payment_id, InvoicePayment.invoice_id == invoice_id
+    ).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+    db.delete(payment)
+    db.flush()
+    sync_invoice_from_payments(invoice)
+    create_audit_log(db, invoice_id, current_user.id, 'payment_deleted',
+                     {'amount': float(payment.amount or 0)}, None)
+    db.commit()
+    db.refresh(invoice)
     return enrich_invoice(db, invoice)
 
 @router.post("/{invoice_id}/line-items", response_model=InvoiceOut)
@@ -576,18 +692,19 @@ async def mark_invoice_as_paid(
         else:
             payment_amount = remaining_due
 
-        invoice.paid_amount = min(float(invoice.total or 0), old_paid + payment_amount)
-        invoice.due_amount = max(float(invoice.total or 0) - invoice.paid_amount, 0.0)
-
-        if invoice.due_amount > 0:
-            invoice.status = 'partially_paid'
-            invoice.paid_at = None
-        else:
-            invoice.status = 'paid_unverified'
-            invoice.paid_at = datetime.utcnow()
-
+        # Record this payment as an itemised row, then derive paid/due/status
+        # from the sum of all rows — keeping the mark-paid flow and the new
+        # payments list as one consistent source of truth.
+        from models import InvoicePayment
+        db.add(InvoicePayment(
+            invoice_id=invoice.id, clinic_id=current_user.clinic_id,
+            amount=float(payment_amount), paid_on=datetime.utcnow().date(),
+            method=payment_data.payment_mode, note=None,
+        ))
+        db.flush()
         invoice.payment_mode = payment_data.payment_mode
         invoice.utr = payment_data.utr
+        sync_invoice_from_payments(invoice)
         
         # Audit log
         create_audit_log(db, invoice_id, current_user.id, 'marked_paid', {

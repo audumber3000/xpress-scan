@@ -278,7 +278,23 @@ class InvoiceOut(InvoiceBase):
     
     # Line items
     line_items: List[InvoiceLineItemOut] = []
-    
+
+    # Itemised partial-payment history
+    payments: List["InvoicePaymentOut"] = []
+
+    class Config:
+        from_attributes = True
+
+
+class InvoicePaymentOut(BaseModel):
+    id: int
+    invoice_id: int
+    amount: float
+    paid_on: Optional[str] = None
+    method: Optional[str] = None
+    note: Optional[str] = None
+    created_at: Optional[datetime] = None
+
     class Config:
         from_attributes = True
 
@@ -287,6 +303,13 @@ class MarkAsPaidRequest(BaseModel):
     utr: Optional[str] = None
     is_partial: Optional[bool] = False
     amount_paid: Optional[float] = None
+
+# A single installment recorded against an invoice.
+class InvoicePaymentCreate(BaseModel):
+    amount: float
+    paid_on: Optional[str] = None   # YYYY-MM-DD; defaults to today
+    method: Optional[str] = None    # Cash, UPI, Card, ...
+    note: Optional[str] = None
 
 # X-ray Image Schemas
 class XrayImageCreate(BaseModel):

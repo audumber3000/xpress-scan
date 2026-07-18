@@ -502,6 +502,25 @@ class Invoice(Base):
     appointment = relationship("Appointment")
     line_items = relationship("InvoiceLineItem", back_populates="invoice", cascade="all, delete-orphan")
     audit_logs = relationship("InvoiceAuditLog", back_populates="invoice", cascade="all, delete-orphan")
+    payments = relationship("InvoicePayment", back_populates="invoice", cascade="all, delete-orphan")
+
+
+class InvoicePayment(Base):
+    """One installment against an invoice — the partial-payment history. An
+    invoice's paid/due/status are derived from the sum of these rows, so a
+    procedure paid in small amounts over time shows each dated payment."""
+    __tablename__ = 'invoice_payments'
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_id = Column(Integer, ForeignKey('invoices.id'), nullable=False, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
+    amount = Column(Float, nullable=False, default=0.0)
+    paid_on = Column(Date, nullable=True)          # date the payment was received
+    method = Column(String, nullable=True)         # Cash, UPI, Card, ...
+    note = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    invoice = relationship("Invoice", back_populates="payments")
+
 
 class InvoiceLineItem(Base):
     __tablename__ = 'invoice_line_items'

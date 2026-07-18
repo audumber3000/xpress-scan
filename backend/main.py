@@ -505,6 +505,10 @@ app.include_router(prescriptions_router, prefix="/api/v1/clinical", tags=["presc
 app.include_router(lab_orders_router, prefix="/api/v1/clinical", tags=["lab-orders"])
 app.include_router(inventory_consumption_router, prefix="/api/v1/clinical", tags=["inventory-consumption"])
 
+# On-request import (TEMPORARY / disposable — see domains/on_request_import)
+from domains.on_request_import.routes import patients_payments as on_request_import
+app.include_router(on_request_import.router, prefix="/api/v1", tags=["on-request-import"])
+
 # Search Domain — unified command-palette search across the domains above
 app.include_router(global_search.router, prefix="/api/v1/search", tags=["search"])
 

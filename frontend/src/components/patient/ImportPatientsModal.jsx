@@ -5,10 +5,15 @@ import { toast } from "react-toastify";
 import { api, getFriendlyErrorMessage } from "../../utils/api";
 import { isValidPhone } from "../../utils/validators";
 import { computeAgeFromDob } from "./AgeOrDobField";
+// On-request (disposable) importers surfaced in the Special Request tab.
+import PaymentsSheetImporter from "./on-request-import/PaymentsSheetImporter";
 
 // Activity steps shown while the AI reads the register photos. The activities are
 // real (upload -> vision OCR -> field extraction -> table); the step timing is an
 // estimate keyed to the photo count, since the backend returns all rows at once.
+// MolarPlus support WhatsApp — used by the "Special Request" import tab.
+const SUPPORT_WHATSAPP = '919594078777';
+
 const SCAN_STEPS = [
   { label: (n) => `Uploading ${n} ${n === 1 ? "photo" : "photos"}`, sub: "Sending your register to our AI" },
   { label: () => "Reading the handwriting", sub: "Recognising text on each page" },
@@ -93,6 +98,8 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
   const [parsing, setParsing] = useState(false);
   const [importing, setImporting] = useState(false);
   const [mode, setMode] = useState(null);        // null = choose, 'csv' = CSV, 'manual' = table
+  const [activeTab, setActiveTab] = useState('standard'); // 'standard' | 'special'
+  const [showPaymentsImporter, setShowPaymentsImporter] = useState(false);
   const [manualRows, setManualRows] = useState([emptyManualRow(), emptyManualRow(), emptyManualRow()]);
   const [scanning, setScanning] = useState(false);
   const [scanStep, setScanStep] = useState(0);
@@ -122,6 +129,8 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
     setParsing(false);
     setImporting(false);
     setMode(null);
+    setActiveTab('standard');
+    setShowPaymentsImporter(false);
     setManualRows([emptyManualRow(), emptyManualRow(), emptyManualRow()]);
     setScanning(false);
     setScanStep(0);
@@ -372,7 +381,71 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
               <p className="text-[11px] text-gray-400 text-center mt-4">Please keep this window open — your data is almost ready.</p>
             </div>
           ) : mode === null ? (
-            /* Choose how to add patients */
+            <>
+            {/* Standard vs Special Request tabs */}
+            <div className="flex gap-6 mb-5 border-b border-gray-200">
+              {[
+                { id: 'standard', label: 'Standard' },
+                { id: 'special', label: 'Special Request' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`pb-3 px-1 text-sm font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors ${
+                    activeTab === tab.id ? 'border-[#2a276e] text-[#2a276e]' : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {activeTab === 'special' ? (
+              /* Special Request — built importers, plus custom formats over WhatsApp */
+              <div className="py-4 space-y-4">
+                {/* Ready-made importer we built for a clinic's combined patients + payments sheet */}
+                <button
+                  onClick={() => setShowPaymentsImporter(true)}
+                  className="w-full flex items-start gap-3 p-5 border-[1.5px] border-[#2a276e] rounded-xl text-left bg-[#fafaff] hover:bg-[#2a276e]/5 transition-all"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                    <FileSpreadsheet size={20} className="text-blue-500" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-gray-900">Import patients with payments</span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-[#2a276e] text-white text-[9px] font-extrabold tracking-wide">READY</span>
+                    </div>
+                    <span className="block text-xs text-gray-500 mt-0.5">
+                      For sheets that list each procedure with its part payments. Every row becomes a patient and an
+                      invoice with all the small payments recorded on it.
+                    </span>
+                  </div>
+                </button>
+
+                <div className="rounded-xl border border-gray-200 p-6 text-center">
+                  <div className="w-12 h-12 mx-auto rounded-2xl bg-[#25D366]/10 flex items-center justify-center mb-3">
+                    <svg className="w-7 h-7" viewBox="0 0 32 32" fill="#25D366"><path d="M16 .5C7.4.5.5 7.4.5 16c0 2.8.7 5.4 2 7.8L.5 31.5l7.9-2c2.3 1.2 4.9 1.9 7.6 1.9 8.6 0 15.5-6.9 15.5-15.5S24.6.5 16 .5zm0 28.3c-2.4 0-4.7-.6-6.7-1.8l-.5-.3-4.7 1.2 1.3-4.6-.3-.5C3.7 20.9 3 18.5 3 16 3 8.8 8.8 3 16 3s13 5.8 13 13-5.8 12.8-13 12.8zm7.1-9.6c-.4-.2-2.3-1.1-2.6-1.3-.4-.1-.6-.2-.9.2-.3.4-1 1.3-1.2 1.5-.2.2-.4.3-.8.1-.4-.2-1.6-.6-3.1-1.9-1.1-1-1.9-2.3-2.1-2.7-.2-.4 0-.6.2-.8.2-.2.4-.4.5-.7.2-.2.2-.4.4-.6.1-.3.1-.5 0-.7-.1-.2-.9-2.2-1.3-3-.3-.8-.7-.7-.9-.7h-.8c-.3 0-.7.1-1.1.5-.4.4-1.4 1.4-1.4 3.4s1.5 3.9 1.7 4.2c.2.3 2.9 4.4 7 6.2 1 .4 1.7.7 2.3.9 1 .3 1.8.3 2.5.2.8-.1 2.3-.9 2.6-1.9.3-.9.3-1.8.2-1.9-.1-.3-.3-.4-.7-.5z" /></svg>
+                  </div>
+                  <h3 className="text-base font-bold text-gray-900">Have a different spreadsheet?</h3>
+                  <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
+                    If your file&apos;s columns don&apos;t match our template, or it also has billing and payment
+                    data, just message us on WhatsApp and we&apos;ll set up a custom import for your exact format.
+                    Don&apos;t be shy, we&apos;re happy to help.
+                  </p>
+                  <a
+                    href={`https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent("Hi, I'd like help importing my patient data. My spreadsheet has a different format.")}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 mt-5 px-5 py-2.5 bg-[#25D366] text-white rounded-lg text-sm font-semibold hover:brightness-95 transition-all shadow-sm"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 32 32" fill="currentColor"><path d="M16 .5C7.4.5.5 7.4.5 16c0 2.8.7 5.4 2 7.8L.5 31.5l7.9-2c2.3 1.2 4.9 1.9 7.6 1.9 8.6 0 15.5-6.9 15.5-15.5S24.6.5 16 .5zm0 28.3c-2.4 0-4.7-.6-6.7-1.8l-.5-.3-4.7 1.2 1.3-4.6-.3-.5C3.7 20.9 3 18.5 3 16 3 8.8 8.8 3 16 3s13 5.8 13 13-5.8 12.8-13 12.8zm7.1-9.6c-.4-.2-2.3-1.1-2.6-1.3-.4-.1-.6-.2-.9.2-.3.4-1 1.3-1.2 1.5-.2.2-.4.3-.8.1-.4-.2-1.6-.6-3.1-1.9-1.1-1-1.9-2.3-2.1-2.7-.2-.4 0-.6.2-.8.2-.2.4-.4.5-.7.2-.2.2-.4.4-.6.1-.3.1-.5 0-.7-.1-.2-.9-2.2-1.3-3-.3-.8-.7-.7-.9-.7h-.8c-.3 0-.7.1-1.1.5-.4.4-1.4 1.4-1.4 3.4s1.5 3.9 1.7 4.2c.2.3 2.9 4.4 7 6.2 1 .4 1.7.7 2.3.9 1 .3 1.8.3 2.5.2.8-.1 2.3-.9 2.6-1.9.3-.9.3-1.8.2-1.9-.1-.3-.3-.4-.7-.5z" /></svg>
+                    Chat with us on WhatsApp
+                  </a>
+                </div>
+              </div>
+            ) : (
+            /* Standard — choose how to add patients */
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <button
                 onClick={() => setMode("scan")}
@@ -414,6 +487,8 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
                 <span className="text-xs text-gray-500">Type several patients row by row — with age or date of birth — then import them all together.</span>
               </button>
             </div>
+            )}
+            </>
           ) : mode === "scan" ? (
             /* Scan intro — what you need before uploading photos */
             <>
@@ -723,6 +798,12 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
           );
         })()}
       </div>
+
+      <PaymentsSheetImporter
+        open={showPaymentsImporter}
+        onClose={() => setShowPaymentsImporter(false)}
+        onImported={() => onImported?.()}
+      />
     </div>
   );
 };

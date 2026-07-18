@@ -5,6 +5,7 @@ import { getCurrencySymbol } from "../../utils/currency";
 import GearLoader from "../GearLoader";
 import InvoiceHeader from "./InvoiceHeader";
 import InvoiceLineItems from "./InvoiceLineItems";
+import InvoicePayments from "./InvoicePayments";
 import InvoiceActions from "./InvoiceActions";
 import MarkAsPaidModal from "./MarkAsPaidModal";
 import { generatePatientPersona, generateInitialsAvatar } from "../../utils/avatar";
@@ -216,6 +217,28 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
       toast.error("Failed to add line item");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleAddPayment = async (payload) => {
+    try {
+      const updated = await api.post(`/invoices/${currentInvoiceId}/payments`, payload);
+      setInvoice(updated);
+      toast.success("Payment recorded");
+    } catch (error) {
+      console.error("Error recording payment:", error);
+      toast.error(error?.message || "Failed to record payment");
+    }
+  };
+
+  const handleDeletePayment = async (paymentId) => {
+    try {
+      const updated = await api.delete(`/invoices/${currentInvoiceId}/payments/${paymentId}`);
+      setInvoice(updated);
+      toast.success("Payment removed");
+    } catch (error) {
+      console.error("Error removing payment:", error);
+      toast.error("Failed to remove payment");
     }
   };
 
@@ -520,6 +543,14 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
                   onUpdateInvoice={handleUpdateInvoiceStats}
                   canEdit={canEdit}
                 />
+
+            {/* Partial-payment schedule — visible once the invoice is finalized */}
+            <InvoicePayments
+              invoice={invoice}
+              onAdd={handleAddPayment}
+              onDelete={handleDeletePayment}
+              canEdit={canEdit}
+            />
 
             {invoice?.notes && (
               <div className="mt-6">
