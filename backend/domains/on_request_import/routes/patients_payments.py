@@ -4,7 +4,8 @@ ON-REQUEST IMPORT — TEMPORARY / DISPOSABLE.
 Purpose-built importer for one clinic's combined patient + payments spreadsheet
 (Patient ID, Name, Village, Mobile, Doctor, Tooth, Procedure, Start Date, Total
 Amount, Pay 1..10 Date/Amount, ...). It maps each row to:
-  - a patient (matched by the sheet's Patient ID -> our display_id, else created)
+  - a patient (matched by mobile; the sheet's Patient ID is ignored and the
+    display_id is auto-generated onto the clinic's own sequence)
   - one finalized invoice for the procedure (Total Amount as the line item)
   - one invoice_payment per non-empty Pay N
 
@@ -17,7 +18,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import desc
+from sqlalchemy import Integer, cast, desc, func
 from sqlalchemy.orm import Session
 
 from core.auth_utils import get_current_user
@@ -65,6 +66,26 @@ def _parse_date(s: Optional[str]) -> Optional[date]:
     return None
 
 
+def _next_display_id(db: Session, clinic_id: int) -> str:
+    """Next 6-digit patient display_id for a clinic (MAX numeric + 1, from 100001).
+
+    Mirrors the core single-add path (patient_service) so imported patients share
+    the clinic's own sequence. The sheet's Patient ID is intentionally ignored.
+    Called after each flush, so patients created earlier in the same batch count.
+    """
+    max_id = (
+        db.query(func.max(cast(Patient.display_id, Integer)))
+        .filter(
+            Patient.clinic_id == clinic_id,
+            Patient.display_id.isnot(None),
+            Patient.display_id.op("~")(r"^[0-9]+$"),
+        )
+        .scalar()
+        or 100000
+    )
+    return str(max_id + 1)
+
+
 def _next_invoice_number(db: Session, clinic_id: int, year: int, offset: int) -> str:
     last = (
         db.query(Invoice)
@@ -105,14 +126,12 @@ def import_patients_payments(
             if not mobile:
                 raise ValueError("Mobile is required")
 
-            # ── Patient: match by the sheet's Patient ID (our display_id), else phone.
+            # ── Patient: match by mobile only. The sheet's Patient ID is ignored;
+            # display IDs are always auto-generated onto the clinic's own sequence.
+            # Rows sharing a mobile collapse into one patient (many procedures ->
+            # many invoices on that patient).
             patient = None
-            ref = (row.patient_ref or "").strip()
-            if ref:
-                patient = db.query(Patient).filter(
-                    Patient.clinic_id == clinic_id, Patient.display_id == ref
-                ).first()
-            if not patient and mobile:
+            if mobile:
                 patient = db.query(Patient).filter(
                     Patient.clinic_id == clinic_id, Patient.phone == mobile
                 ).first()
@@ -125,7 +144,7 @@ def import_patients_payments(
                     name=name,
                     phone=mobile,
                     village=(row.village or "").strip() or None,
-                    display_id=ref or None,
+                    display_id=_next_display_id(db, clinic_id),
                     treatment_type=(row.procedure or "").strip() or "General Consultation",
                     referred_by=(row.doctor or "").strip() or None,
                 )
