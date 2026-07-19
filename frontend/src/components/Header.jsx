@@ -143,7 +143,7 @@ const Header = ({ onOpenMobileSidebar }) => {
       '/patients': 'Patients',
       '/patient-files': 'Patient Files',
       '/payments': 'Payments',
-      '/vendors': 'Inventory & Vendors',
+      '/vendors': 'Inventory',
       '/consent-forms': 'Consent Forms',
       '/lab': 'Laboratory',
       '/reports': 'Reports',

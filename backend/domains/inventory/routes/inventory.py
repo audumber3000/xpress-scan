@@ -57,7 +57,7 @@ async def create_inventory_item(
     # Record the opening stock as an 'in' movement (stock already set on the item).
     from domains.inventory.services.ledger import record_movement
     record_movement(
-        db, clinic_id=clinic_id, item=item, direction="in",
+        db, clinic_id=clinic_id, item=item, direction="in", action="added",
         quantity=item.quantity, note="Opening stock", adjust_stock=False,
     )
 
@@ -99,6 +99,7 @@ async def update_inventory_item(
             record_movement(
                 db, clinic_id=item.clinic_id, item=item,
                 direction="in" if delta > 0 else "out", quantity=abs(delta),
+                action="restocked" if delta > 0 else "deducted",
                 note="Stock adjustment", adjust_stock=False,
             )
 
@@ -124,9 +125,16 @@ async def delete_inventory_item(item_id: int, db: Session = Depends(get_db), cur
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
+    # Log the removal (item_name snapshot survives the delete).
+    from models import InventoryTransaction
+    db.add(InventoryTransaction(
+        clinic_id=item.clinic_id, direction="out", action="removed",
+        item_name=item.name, unit=item.unit, quantity=item.quantity or 0.0,
+        note="Item deleted",
+    ))
+
     # Detach ledger rows before deleting: they keep their item_name/unit
     # snapshot, so the history survives while the FK no longer blocks the delete.
-    from models import InventoryTransaction
     db.query(InventoryTransaction).filter(
         InventoryTransaction.inventory_item_id == item_id
     ).update({"inventory_item_id": None}, synchronize_session=False)

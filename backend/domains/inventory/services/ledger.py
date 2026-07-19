@@ -10,7 +10,10 @@ from models import InventoryTransaction
 
 
 def record_movement(db, *, clinic_id, item, direction, quantity,
-                    note=None, patient_id=None, case_paper_id=None, adjust_stock=True):
+                    note=None, action=None, patient_id=None, case_paper_id=None,
+                    adjust_stock=True, kind='stock'):
+    """Write one ledger row. `kind` = 'stock' (InventoryItem) or 'medication'
+    (MedicationStock); `action` is the human event (added/restocked/used/…)."""
     if quantity is None or quantity <= 0:
         return None
 
@@ -18,8 +21,10 @@ def record_movement(db, *, clinic_id, item, direction, quantity,
         clinic_id=clinic_id,
         patient_id=patient_id,
         case_paper_id=case_paper_id,
-        inventory_item_id=item.id,
+        inventory_item_id=item.id if kind == 'stock' else None,
+        medication_stock_id=item.id if kind == 'medication' else None,
         direction=direction,
+        action=action,
         item_name=item.name,
         unit=item.unit,
         quantity=quantity,

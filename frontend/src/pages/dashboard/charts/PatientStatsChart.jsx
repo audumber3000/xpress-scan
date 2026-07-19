@@ -13,6 +13,7 @@ const Icon = () => (
 const PatientStatsChart = ({ data, loading, delta }) => (
   <ChartCard
     title="New vs Returning Patients"
+    description="First-time versus repeat patients over the period"
     loading={loading}
     isEmpty={data.length === 0}
     delta={delta}

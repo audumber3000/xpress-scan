@@ -50,7 +50,7 @@ const mainNavItems = [
   },
 
   {
-    name: "Inv & Vendors",
+    name: "Inventory",
     path: "/vendors",
     permissionKeys: ["vendors", "inventory"],
     icon: (

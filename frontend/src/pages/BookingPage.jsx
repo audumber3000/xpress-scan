@@ -71,14 +71,15 @@ const BookingPage = () => {
     time: '',
     duration: '1',
     date: new Date().toISOString().split('T')[0],
-    clinicId: '',
   });
 
-  const clinicId = searchParams.get('clinic');
+  // The public link carries the clinic's unguessable code (e.g. CLN-A3X9K2B7FQ),
+  // never the numeric id, so the booking flow can't be enumerated.
+  const clinicCode = searchParams.get('clinic');
 
-  // Seed from URL params immediately (works with old & new URLs)
+  // Seed from URL params immediately
   useEffect(() => {
-    if (!clinicId) { setClinicLoading(false); return; }
+    if (!clinicCode) { setClinicLoading(false); return; }
 
     const urlName    = searchParams.get('name');
     const urlAddress = searchParams.get('address');
@@ -93,7 +94,7 @@ const BookingPage = () => {
     }
 
     // Then fetch from API to get logo + specialization + structured timings
-    fetch(`${BASE_URL}/appointments/public/clinic-info?clinic_id=${clinicId}`)
+    fetch(`${BASE_URL}/appointments/public/clinic-info?clinic_code=${encodeURIComponent(clinicCode)}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data) {
@@ -106,28 +107,27 @@ const BookingPage = () => {
       })
       .catch(() => setClinicLoading(false));
 
-    setFormData(prev => ({ ...prev, clinicId }));
-  }, [clinicId]);
+  }, [clinicCode]);
 
   useEffect(() => {
-    if (formData.date && clinicId) {
+    if (formData.date && clinicCode) {
       fetchExistingAppointments(formData.date);
       fetchNextAvailableSlot(formData.date, parseFloat(formData.duration));
     }
   }, [formData.date, formData.duration]);
 
   const fetchExistingAppointments = async (date) => {
-    if (!clinicId || !date) return;
+    if (!clinicCode || !date) return;
     try {
-      const res = await fetch(`${BASE_URL}/appointments/public?date_from=${date}&date_to=${date}&clinic_id=${clinicId}`);
+      const res = await fetch(`${BASE_URL}/appointments/public?date_from=${date}&date_to=${date}&clinic_code=${encodeURIComponent(clinicCode)}`);
       if (res.ok) setExistingAppointments(await res.json());
     } catch { setExistingAppointments([]); }
   };
 
   const getNextAvailableSlot = async (date, durationHours = 1) => {
-    if (!clinicId || !date) return null;
+    if (!clinicCode || !date) return null;
     try {
-      const res = await fetch(`${BASE_URL}/appointments/public/next-slot?clinic_id=${clinicId}&date=${date}&duration=${durationHours * 60}`);
+      const res = await fetch(`${BASE_URL}/appointments/public/next-slot?clinic_code=${encodeURIComponent(clinicCode)}&date=${date}&duration=${durationHours * 60}`);
       if (!res.ok) return null;
       const data = await res.json();
       return data.next_slot || null;
@@ -206,7 +206,7 @@ const BookingPage = () => {
     const endTime = `${String(Math.floor(endMin/60)).padStart(2,'0')}:${String(endMin%60).padStart(2,'0')}`;
 
     try {
-      const res = await fetch(`${BASE_URL}/appointments/public`, {
+      const res = await fetch(`${BASE_URL}/appointments/public?clinic_code=${encodeURIComponent(clinicCode)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -218,7 +218,6 @@ const BookingPage = () => {
           end_time: endTime,
           duration: parseInt(durMin),
           status: 'confirmed',
-          clinic_id: parseInt(formData.clinicId),
           patient_age: formData.age ? parseInt(formData.age) : null,
           notes: formData.village ? `Address: ${formData.village}` : null,
         })

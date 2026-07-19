@@ -142,6 +142,13 @@ run_migration "inventory_transactions" "CREATE TABLE IF NOT EXISTS inventory_tra
 run_migration "invoice_payments" "CREATE TABLE IF NOT EXISTS invoice_payments (id SERIAL PRIMARY KEY, invoice_id INTEGER NOT NULL REFERENCES invoices(id), clinic_id INTEGER NOT NULL REFERENCES clinics(id), amount DOUBLE PRECISION NOT NULL DEFAULT 0, paid_on DATE, method VARCHAR, note VARCHAR, created_at TIMESTAMP DEFAULT NOW())"
 run_migration "invoice_payments_backfill" "INSERT INTO invoice_payments (invoice_id, clinic_id, amount, paid_on, method, note, created_at) SELECT i.id, i.clinic_id, i.paid_amount, COALESCE(i.paid_at::date, i.created_at::date), i.payment_mode, 'Existing paid amount', COALESCE(i.paid_at, i.created_at, NOW()) FROM invoices i WHERE COALESCE(i.paid_amount,0) > 0 AND NOT EXISTS (SELECT 1 FROM invoice_payments p WHERE p.invoice_id = i.id)"
 
+run_migration "inv_batch_number" "ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS batch_number VARCHAR"
+run_migration "inv_expiry_date"  "ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS expiry_date DATE"
+run_migration "medication_stock" "CREATE TABLE IF NOT EXISTS medication_stock (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL REFERENCES clinics(id), vendor_id INTEGER REFERENCES vendors(id), name VARCHAR NOT NULL, generic_name VARCHAR, strength VARCHAR, form VARCHAR, quantity DOUBLE PRECISION DEFAULT 0, unit VARCHAR, min_stock_level DOUBLE PRECISION DEFAULT 0, price_per_unit DOUBLE PRECISION DEFAULT 0, batch_number VARCHAR, expiry_date DATE, schedule VARCHAR, is_active BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())"
+run_migration "default_medications_seeded" "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS default_medications_seeded BOOLEAN DEFAULT FALSE"
+run_migration "inv_txn_action" "ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS action VARCHAR"
+run_migration "inv_txn_med_id" "ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS medication_stock_id INTEGER REFERENCES medication_stock(id)"
+
 # ── Schema migration check (run against RDS) ──────────────────────────────────
 echo ""
 echo "▶ Running schema migration check against RDS..."

@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, IndianRupee } from 'lucide-react';
 import { getCurrencySymbol } from '../../utils/currency';
+import { formatDate, formatTime, clinicToday } from '../../utils/datetime';
 
 const money = (n) => `${getCurrencySymbol()}${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
-const fmtDate = (s) => {
-  if (!s) return '';
-  const d = new Date(/\dT\d|Z/.test(s) ? s : `${s}T00:00:00`);
-  return isNaN(d) ? s : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-};
+// Renders in the clinic's timezone; pure dates (paid_on) are shown as-is.
+const fmtDate = (s) => formatDate(s);
 
 /**
  * InvoicePayments — the partial-payment schedule for an invoice. Lists each
@@ -18,7 +16,7 @@ const fmtDate = (s) => {
  */
 const InvoicePayments = ({ invoice, onAdd, onDelete, canEdit = true }) => {
   const [amount, setAmount] = useState('');
-  const [paidOn, setPaidOn] = useState(new Date().toISOString().slice(0, 10));
+  const [paidOn, setPaidOn] = useState(clinicToday());
   const [method, setMethod] = useState('Cash');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
@@ -71,7 +69,9 @@ const InvoicePayments = ({ invoice, onAdd, onDelete, canEdit = true }) => {
             <li key={p.id} className="flex items-center justify-between gap-3 px-5 py-3">
               <div className="min-w-0">
                 <span className="text-sm font-semibold text-gray-900">{money(p.amount)}</span>
-                <span className="text-xs text-gray-500 ml-2">{fmtDate(p.paid_on || p.created_at)}</span>
+                <span className="text-xs text-gray-500 ml-2">
+                  {fmtDate(p.paid_on || p.created_at)}{p.created_at ? `, ${formatTime(p.created_at)}` : ''}
+                </span>
                 {p.method && <span className="text-xs text-gray-400 ml-2">· {p.method}</span>}
                 {p.note && <span className="text-xs text-gray-400 ml-2">· {p.note}</span>}
               </div>
@@ -100,7 +100,7 @@ const InvoicePayments = ({ invoice, onAdd, onDelete, canEdit = true }) => {
               className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2a276e] focus:ring-2 focus:ring-[#2a276e]/20 col-span-2 md:col-span-1"
             />
             <input
-              type="date" value={paidOn} max={new Date().toISOString().slice(0, 10)}
+              type="date" value={paidOn} max={clinicToday()}
               onChange={(e) => setPaidOn(e.target.value)}
               className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2a276e] focus:ring-2 focus:ring-[#2a276e]/20"
             />

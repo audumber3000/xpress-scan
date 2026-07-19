@@ -77,6 +77,7 @@ def create_transaction(
         patient_id=payload.patient_id,
         inventory_item_id=item.id,
         direction=payload.direction,
+        action=("received" if payload.direction == "in" else "used"),
         item_name=item.name,
         unit=item.unit,
         quantity=payload.quantity,

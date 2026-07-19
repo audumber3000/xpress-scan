@@ -106,7 +106,7 @@ const PracticeSettings = () => {
 
   useEffect(() => {
     if (!category) {
-      navigate('/admin/practice-settings/procedures', { replace: true });
+      navigate('/admin/practice-settings/chief-complaints', { replace: true });
       return;
     }
     setSearchQuery('');

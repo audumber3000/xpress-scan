@@ -16,6 +16,7 @@ const DemographicsChart = ({ data, loading }) => {
   return (
     <ChartCard
       title="Patients by Age"
+      description="How your patient base breaks down by age"
       loading={loading}
       isEmpty={data.length === 0 || total === 0}
       icon={<Icon />}

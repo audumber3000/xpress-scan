@@ -1453,10 +1453,12 @@ const Calendar = () => {
     }
   };
 
-  // Generate clinic-based booking URL
+  // Public booking URL keyed by the clinic's unguessable code (not its numeric
+  // id, which could be enumerated). Returns null until the code is loaded, which
+  // hides the Booking Link button rather than linking to a broken page.
   const getBookingUrl = () => {
-    const clinicId = clinicData?.id || "1";
-    return `/booking?clinic=${clinicId}`;
+    const code = clinicData?.clinic_code;
+    return code ? `/booking?clinic=${code}` : null;
   };
 
   const weekDates = getWeekDates();

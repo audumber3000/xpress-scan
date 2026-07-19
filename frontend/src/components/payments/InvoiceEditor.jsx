@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { Trash2 } from "lucide-react";
 import { api } from "../../utils/api";
 import { toast } from "react-toastify";
 import { getCurrencySymbol } from "../../utils/currency";
@@ -21,6 +22,7 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
   const [downloadingPDF, setDownloadingPDF] = useState(false);
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isCreating, setIsCreating] = useState(invoiceId === 'new');
   const [autoCreatingFromPrefill, setAutoCreatingFromPrefill] = useState(false);
   const [patients, setPatients] = useState([]);
@@ -349,16 +351,17 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
   };
 
   const handleDeleteInvoice = async () => {
-    if (!window.confirm("Are you sure you want to completely delete this invoice? This action cannot be undone.")) return;
     try {
       setDeleting(true);
       await api.delete(`/invoices/${currentInvoiceId}`);
       toast.success("Invoice deleted successfully");
+      setShowDeleteConfirm(false);
       if (onSave) onSave();
       onClose();
     } catch (error) {
       console.error("Delete error:", error);
-      toast.error("Failed to delete invoice");
+      // Surface the backend's reason (e.g. a paid invoice can't be deleted).
+      toast.error(error?.response?.data?.detail || error?.message || "Failed to delete invoice");
     } finally {
       setDeleting(false);
     }
@@ -389,6 +392,11 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
   };
 
   const canEdit = invoice?.status === 'draft';
+  // An invoice can be deleted only while it carries no money: no payments and a
+  // non-paid status. Paid / partially-paid invoices are kept (the backend also
+  // refuses to delete them). Managing money on those happens per-payment instead.
+  const PAID_STATUSES = ['partially_paid', 'paid_verified', 'paid_unverified'];
+  const canDelete = !!invoice && !PAID_STATUSES.includes(invoice.status) && Number(invoice.paid_amount || 0) === 0;
   const isLoadingDrawer = loading || autoCreatingFromPrefill;
 
   // Client-side patient filter — searches name or phone, case-insensitive.
@@ -564,18 +572,7 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
 
           {/* Footer */}
           {!isCreating && invoice && (
-            <div className="p-6 border-t border-gray-200 bg-gray-50 flex flex-col gap-4">
-              <div className="flex justify-start">
-                {canEdit && (
-                  <button
-                    onClick={handleDeleteInvoice}
-                    disabled={deleting || saving}
-                    className="px-4 py-2 border border-red-300 text-red-700 bg-white hover:bg-red-50 rounded-lg transition-colors text-sm font-medium flex items-center"
-                  >
-                    {deleting ? 'Deleting...' : 'Delete Invoice'}
-                  </button>
-                )}
-              </div>
+            <div className="p-6 border-t border-gray-200 bg-gray-50">
               <InvoiceActions
                 invoice={invoice}
                 onFinalize={handleFinalize}
@@ -583,6 +580,9 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
                 onDownloadPDF={handleDownloadPDF}
                 onSendWhatsApp={handleSendWhatsApp}
                 canEdit={canEdit}
+                canDelete={canDelete}
+                onDelete={() => setShowDeleteConfirm(true)}
+                deleting={deleting}
                 downloadingPDF={downloadingPDF}
                 sendingWhatsApp={sendingWhatsApp}
                 finalizing={finalizing}
@@ -600,6 +600,49 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
           onClose={() => setShowMarkPaidModal(false)}
           onConfirm={handleMarkAsPaid}
         />
+      )}
+
+      {/* Delete invoice — on-brand confirm (soft backdrop, matches the app's dialogs). */}
+      {showDeleteConfirm && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          onClick={() => !deleting && setShowDeleteConfirm(false)}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <Trash2 size={18} className="text-red-600" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-lg font-semibold text-gray-900">Delete invoice?</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Are you sure you want to delete invoice{" "}
+                  <span className="font-semibold">{invoice?.invoice_number || `#${currentInvoiceId}`}</span>?
+                  This will remove it and its line items, and <span className="font-semibold">cannot be undone</span>.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteInvoice}
+                disabled={deleting}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {deleting && <GearLoader size="w-4 h-4" />}
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

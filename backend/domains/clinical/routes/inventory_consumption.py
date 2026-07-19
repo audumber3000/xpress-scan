@@ -59,6 +59,7 @@ def record_consumption(
         case_paper_id=payload.case_paper_id,
         inventory_item_id=item.id,
         direction="out",
+        action="used",
         item_name=item.name,
         unit=item.unit,
         quantity=payload.quantity,

@@ -58,6 +58,7 @@ from domains.gmail.routes import gmail_routes
 from domains.google_business.routes import google_business_routes, google_places_routes
 from domains.vendor.routes import vendors
 from domains.inventory.routes import inventory
+from domains.inventory.routes import medications as medication_stock
 from domains.inventory.routes import transactions as inventory_transactions
 from domains.consent.routes import consents, consents_internal
 from domains.document.routes import documents
@@ -132,6 +133,25 @@ async def lifespan(app: FastAPI):
             ))
             conn.execute(text(
                 "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS is_trial BOOLEAN DEFAULT FALSE"
+            ))
+            # Inventory: batch/expiry so consumables that expire feed the expiry alert.
+            conn.execute(text(
+                "ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS batch_number VARCHAR"
+            ))
+            conn.execute(text(
+                "ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS expiry_date DATE"
+            ))
+            # Default medications are now seeded per-clinic (deletable like normal
+            # data); this flag guards one-time seeding so deletions don't come back.
+            conn.execute(text(
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS default_medications_seeded BOOLEAN DEFAULT FALSE"
+            ))
+            # Inventory ledger: event label + medication link, so Usage is a full log.
+            conn.execute(text(
+                "ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS action VARCHAR"
+            ))
+            conn.execute(text(
+                "ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS medication_stock_id INTEGER REFERENCES medication_stock(id)"
             ))
             conn.execute(text(
                 "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP"
@@ -480,6 +500,7 @@ app.include_router(vendors.router, prefix="/api/v1/vendors", tags=["vendors"])
 # Ledger BEFORE the item router so /inventory/transactions isn't parsed as /inventory/{item_id}
 app.include_router(inventory_transactions.router, prefix="/api/v1", tags=["inventory-transactions"])
 app.include_router(inventory.router, prefix="/api/v1/inventory", tags=["inventory"])
+app.include_router(medication_stock.router, prefix="/api/v1/medication-stock", tags=["medication-stock"])
 app.include_router(consents.router, prefix="/api/v1/consents", tags=["consents"])
 # Internal service-to-service routes (Nexus calls these). Auth via shared
 # X-Internal-Auth header; never call from public clients.

@@ -25,7 +25,7 @@ class AppointmentCreate(BaseModel):
     patient_name: str
     patient_email: Optional[str] = None
     patient_phone: Optional[str] = None
-    clinic_id: int  # Required for clinic-based booking
+    clinic_id: Optional[int] = None  # Authenticated create uses the user's clinic; public booking resolves it from the URL code
     doctor_id: Optional[int] = None
     treatment: Optional[str] = None
     appointment_date: str  # YYYY-MM-DD
@@ -213,17 +213,27 @@ async def create_appointment(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error creating appointment: {str(e)}")
 
+def _resolve_public_clinic(db: Session, clinic_code: str) -> Clinic:
+    """Resolve a clinic for the public booking flow by its unguessable code.
+
+    Public links use clinic_code (e.g. CLN-A3X9K2B7FQ), never the sequential
+    numeric id, so the booking endpoints can't be enumerated as 1, 2, 3, ...
+    """
+    clinic = db.query(Clinic).filter(Clinic.clinic_code == clinic_code).first()
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clinic not found")
+    return clinic
+
+
 @router.get("/public/clinic-info")
 async def get_public_clinic_info(
-    clinic_id: int = Query(...),
+    clinic_code: str = Query(..., description="Clinic's public booking code"),
     db: Session = Depends(get_db)
 ):
     """Return public clinic info for the booking page"""
-    clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
-    if not clinic:
-        raise HTTPException(status_code=404, detail="Clinic not found")
+    clinic = _resolve_public_clinic(db, clinic_code)
     return {
-        "id": clinic.id,
+        "clinic_code": clinic.clinic_code,
         "name": clinic.name,
         "address": clinic.address,
         "phone": clinic.phone,
@@ -237,15 +247,14 @@ async def get_public_clinic_info(
 async def get_public_appointments(
     date_from: str = Query(..., description="Start date (YYYY-MM-DD)"),
     date_to: str = Query(..., description="End date (YYYY-MM-DD)"),
-    clinic_id: int = Query(..., description="Filter by clinic"),
+    clinic_code: str = Query(..., description="Clinic's public booking code"),
     db: Session = Depends(get_db)
 ):
     """Get appointments for public booking page (no auth required)"""
     try:
         # Validate clinic exists
-        clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
-        if not clinic:
-            raise HTTPException(status_code=404, detail=f"Clinic with ID {clinic_id} not found")
+        clinic = _resolve_public_clinic(db, clinic_code)
+        clinic_id = clinic.id
 
         # Get all appointments for this clinic
         query = db.query(Appointment).filter(Appointment.clinic_id == clinic_id)
@@ -311,19 +320,14 @@ async def get_public_appointments(
 @router.post("/public", response_model=AppointmentOut)
 async def create_public_appointment(
     appointment: AppointmentCreate,
+    clinic_code: str = Query(..., description="Clinic's public booking code"),
     db: Session = Depends(get_db)
 ):
     """Create a new appointment from public booking page"""
     try:
-        # For clinic-based booking, we expect clinic_id in the appointment data
-        # If not provided, we can't create the appointment
-        if not hasattr(appointment, 'clinic_id') or not appointment.clinic_id:
-            raise HTTPException(status_code=400, detail="Clinic ID is required for public booking")
-
-        # Validate clinic exists
-        clinic = db.query(Clinic).filter(Clinic.id == appointment.clinic_id).first()
-        if not clinic:
-            raise HTTPException(status_code=404, detail="Clinic not found")
+        # The clinic is identified by its unguessable code in the URL, not by a
+        # client-supplied numeric id in the body.
+        clinic = _resolve_public_clinic(db, clinic_code)
 
         # Parse the date and time
         appointment_datetime = datetime.strptime(
@@ -333,7 +337,7 @@ async def create_public_appointment(
 
         # Create appointment for the clinic (doctor can be assigned later)
         db_appointment = Appointment(
-            clinic_id=appointment.clinic_id,  # Use clinic directly
+            clinic_id=clinic.id,  # Resolved from the public code
             patient_id=None,  # Public booking doesn't have patient_id yet
             patient_name=appointment.patient_name,
             patient_email=appointment.patient_email,
@@ -405,7 +409,7 @@ async def create_public_appointment(
 
 @router.get("/public/next-slot", response_model=dict)
 async def get_next_available_slot(
-    clinic_id: int = Query(..., description="Clinic ID"),
+    clinic_code: str = Query(..., description="Clinic's public booking code"),
     date: str = Query(..., description="Date (YYYY-MM-DD)"),
     duration: int = Query(60, description="Duration in minutes"),
     db: Session = Depends(get_db)
@@ -413,9 +417,8 @@ async def get_next_available_slot(
     """Get the next available time slot for a clinic on a specific date"""
     try:
         # Validate clinic
-        clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
-        if not clinic:
-            raise HTTPException(status_code=404, detail=f"Clinic with ID {clinic_id} not found")
+        clinic = _resolve_public_clinic(db, clinic_code)
+        clinic_id = clinic.id
 
         # Use clinic timings
         clinic_timings = clinic.timings

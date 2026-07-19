@@ -76,6 +76,37 @@ def seed_system_medications(db: Session | None = None) -> int:
             db.close()
 
 
+def seed_clinic_medications(db: Session, clinic_id: int) -> int:
+    """Copy the default medication catalogue into a clinic (idempotent, once).
+
+    Each clinic gets its own copies so defaults behave like normal clinic data:
+    editable and deletable, individually or in bulk. Guarded by the clinic's
+    `default_medications_seeded` flag so deleting a default never re-adds it.
+    """
+    from models import Clinic
+    clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
+    if not clinic or getattr(clinic, "default_medications_seeded", False):
+        return 0
+
+    existing = {
+        n.lower() for (n,) in db.query(Medication.name).filter(
+            Medication.clinic_id == clinic_id
+        ).all()
+    }
+    inserted = 0
+    for name, dosage, duration, quantity, category, notes in COMMON_DENTAL_MEDICATIONS:
+        if name.lower() in existing:
+            continue
+        db.add(Medication(
+            clinic_id=clinic_id, name=name, dosage=dosage, duration=duration,
+            quantity=quantity, category=category, notes=notes, is_active=True,
+        ))
+        inserted += 1
+    clinic.default_medications_seeded = True
+    db.commit()
+    return inserted
+
+
 if __name__ == "__main__":
     n = seed_system_medications()
     print(f"Seeded {n} system medications.")

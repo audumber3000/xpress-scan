@@ -19,16 +19,23 @@ const DeltaCaption = ({ delta }) => {
  * Standardized white card wrapper for a dashboard chart. Shows a skeleton while
  * fetching, a proper empty state when there's no data, then the chart.
  */
-const ChartCard = ({ title, icon, children, loading, isEmpty, delta, emptyTitle, emptyHint, emptyIcon }) => (
+const ChartCard = ({ title, icon, children, loading, isEmpty, delta, description, emptyTitle, emptyHint, emptyIcon }) => (
   <div className="bg-white border border-gray-200 rounded-2xl p-4 md:p-6 flex flex-col w-full h-full shadow-sm hover:shadow-md transition-all duration-300">
-    <div className="flex items-center gap-3 mb-5 md:mb-6">
-      <div className="p-2.5 bg-[#f0f0fd] rounded-xl text-[#2a276e] border border-[#c5c2f0]/30 shadow-sm">
-        {icon}
+    <div className="flex items-start justify-between gap-3 mb-5 md:mb-6">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="p-2.5 bg-[#f0f0fd] rounded-xl text-[#2a276e] border border-[#c5c2f0]/30 shadow-sm flex-shrink-0">
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <h3 className="font-bold text-gray-800 tracking-tight text-base md:text-lg leading-tight">{title}</h3>
+          {description && <p className="text-xs text-gray-400 mt-0.5 leading-snug">{description}</p>}
+        </div>
       </div>
-      <div className="min-w-0">
-        <h3 className="font-bold text-gray-800 tracking-tight text-base md:text-lg leading-tight">{title}</h3>
-        {!loading && !isEmpty && <DeltaCaption delta={delta} />}
-      </div>
+      {!loading && !isEmpty && delta && (
+        <div className="flex-shrink-0 whitespace-nowrap pt-0.5">
+          <DeltaCaption delta={delta} />
+        </div>
+      )}
     </div>
 
     <div className="flex-1 relative min-h-[220px]">

@@ -666,6 +666,8 @@ class LedgerItemOut(BaseModel):
     status: Optional[str] = None
     bill_file_url: Optional[str] = None # for expenses
     invoice_number: Optional[str] = None # for invoices
+    invoice_id: Optional[int] = None # invoice this income row belongs to (for opening it)
+    recorded_at: Optional[datetime] = None # real timestamp (with time) for display; date field may be a pure day
     
     class Config:
         from_attributes = True
@@ -882,7 +884,9 @@ class InventoryTransactionOut(BaseModel):
     patient_id: Optional[int] = None
     case_paper_id: Optional[int] = None
     inventory_item_id: Optional[int] = None
+    medication_stock_id: Optional[int] = None
     direction: str
+    action: Optional[str] = None
     item_name: str
     quantity: float
     unit: Optional[str] = None

@@ -16,6 +16,7 @@ const RevenueChart = ({ data, loading, delta }) => {
   return (
     <ChartCard
       title="Revenue: Billed vs Collected"
+      description="What you invoiced versus what actually came in"
       loading={loading}
       isEmpty={data.length === 0}
       delta={delta}

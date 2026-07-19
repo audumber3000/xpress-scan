@@ -49,7 +49,8 @@ const NAV_GROUPS = [
 ];
 
 const PRACTICE_SETTING_TABS = [
-  'Procedures', 'Chief Complaints', 'Medical History', 'Clinical Advice',
+  // 'Procedures' lives in Treatment & Pricing now, so it's not duplicated here.
+  'Chief Complaints', 'Medical History', 'Clinical Advice',
   'On Examination', 'Dental History', 'Diagnosis', 'Allergies',
   'Ongoing Medication', 'Additional Fees',
 ];

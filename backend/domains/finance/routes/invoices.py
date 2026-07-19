@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, text
+from sqlalchemy import desc, func, or_, text
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from domains.finance.invoice_pdf_engine import generate_invoice_html
 import os
+import csv
+import io
 import requests
 import re
 
@@ -20,6 +22,7 @@ def get_db():
         db.close()
 from models import Invoice, InvoiceLineItem, InvoiceAuditLog, Patient, User, Clinic, Appointment
 from core.auth_utils import get_current_user
+from core.clinic_time import clinic_today
 from schemas import (
     InvoiceOut, InvoiceLineItemCreate, InvoiceLineItemOut,
     MarkAsPaidRequest, InvoiceCreate, InvoicePaymentCreate
@@ -262,6 +265,275 @@ async def create_invoice(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error creating invoice: {str(e)}")
 
+INVOICE_STATUS_LABELS = {
+    "draft": "Draft", "finalized": "Finalized", "partially_paid": "Partially Paid",
+    "paid_verified": "Paid", "paid_unverified": "Paid (Unverified)", "cancelled": "Cancelled",
+}
+
+
+def _filtered_invoices_query(
+    db: Session, clinic_id: int, *,
+    status: Optional[str] = None,
+    patient_id: Optional[int] = None,
+    appointment_id: Optional[int] = None,
+    search: Optional[str] = None,
+    payment_mode: Optional[str] = None,
+):
+    """Build the invoice query with the shared list/count filters.
+
+    Kept in one place so the list endpoint and the count endpoint always agree,
+    which is what makes server-side pagination land on the right total.
+    """
+    query = db.query(Invoice).filter(Invoice.clinic_id == clinic_id)
+
+    if status:
+        query = query.filter(Invoice.status == status)
+    if patient_id:
+        query = query.filter(Invoice.patient_id == patient_id)
+    if appointment_id:
+        query = query.filter(Invoice.appointment_id == appointment_id)
+    if payment_mode:
+        query = query.filter(Invoice.payment_mode.ilike(payment_mode))
+
+    # Search matches the invoice number or the patient's name / phone. Requires
+    # 2+ chars (mirrors the patient list) so a single keystroke doesn't scan all.
+    if search and len(search.strip()) >= 2:
+        like = f"%{search.strip()}%"
+        query = query.outerjoin(Patient, Invoice.patient_id == Patient.id).filter(
+            or_(
+                Invoice.invoice_number.ilike(like),
+                Patient.name.ilike(like),
+                Patient.phone.ilike(like),
+            )
+        )
+
+    return query
+
+
+@router.get("/count")
+async def count_invoices(
+    status: Optional[str] = None,
+    patient_id: Optional[int] = None,
+    appointment_id: Optional[int] = None,
+    search: Optional[str] = Query(None),
+    payment_mode: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Total invoices matching the same filters as the list (for pagination)."""
+    try:
+        _ensure_invoice_columns(db)
+        query = _filtered_invoices_query(
+            db, current_user.clinic_id,
+            status=status, patient_id=patient_id, appointment_id=appointment_id,
+            search=search, payment_mode=payment_mode,
+        )
+        total = query.with_entities(func.count(Invoice.id)).scalar() or 0
+        return {"total": int(total)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error counting invoices: {str(e)}")
+
+
+@router.get("/collections")
+async def get_collections(
+    date_from: Optional[str] = Query(None, description="YYYY-MM-DD, default today"),
+    date_to: Optional[str] = Query(None, description="YYYY-MM-DD, default = date_from"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Payments actually received in a date window (default: today).
+
+    Keyed on InvoicePayment.paid_on, so a partial paid today against an older
+    invoice still counts as today's money in. Powers the Today's Collection tab.
+    """
+    from models import InvoicePayment
+    _ensure_invoice_columns(db)
+    clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+    today = clinic_today(clinic)
+    try:
+        d_from = datetime.strptime(date_from, "%Y-%m-%d").date() if date_from else today
+        d_to = datetime.strptime(date_to, "%Y-%m-%d").date() if date_to else d_from
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates must be YYYY-MM-DD")
+
+    rows = (
+        db.query(InvoicePayment, Invoice, Patient)
+        .join(Invoice, InvoicePayment.invoice_id == Invoice.id)
+        .outerjoin(Patient, Invoice.patient_id == Patient.id)
+        .filter(
+            InvoicePayment.clinic_id == current_user.clinic_id,
+            InvoicePayment.paid_on >= d_from,
+            InvoicePayment.paid_on <= d_to,
+        )
+        .order_by(desc(InvoicePayment.paid_on), desc(InvoicePayment.id))
+        .all()
+    )
+
+    entries = []
+    total = cash = online = 0.0
+    for pay, inv, pat in rows:
+        amt = float(pay.amount or 0)
+        total += amt
+        if (pay.method or "").strip().lower() == "cash":
+            cash += amt
+        else:
+            online += amt
+        entries.append({
+            "payment_id": pay.id,
+            "amount": amt,
+            "method": pay.method,
+            "paid_on": pay.paid_on.isoformat() if pay.paid_on else None,
+            "created_at": pay.created_at.isoformat() if pay.created_at else None,
+            "note": pay.note,
+            "invoice_id": inv.id,
+            "invoice_number": inv.invoice_number,
+            "invoice_status": inv.status,
+            "patient_id": pat.id if pat else None,
+            "patient_name": pat.name if pat else None,
+            "patient_phone": pat.phone if pat else None,
+            "patient_display_id": pat.display_id if pat else None,
+        })
+
+    return {
+        "entries": entries,
+        "total": round(total, 2),
+        "cash": round(cash, 2),
+        "online": round(online, 2),
+        "count": len(entries),
+        "date_from": d_from.isoformat(),
+        "date_to": d_to.isoformat(),
+    }
+
+
+@router.get("/export")
+async def export_invoices(
+    status: Optional[str] = Query(None, description="all | unpaid | partial | paid"),
+    date_from: Optional[str] = Query(None, description="YYYY-MM-DD (invoice date)"),
+    date_to: Optional[str] = Query(None, description="YYYY-MM-DD (invoice date)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Download filtered invoices as CSV, one row per invoice, with patient and
+    payment details. Status maps: unpaid = nothing paid, partial = partially_paid,
+    paid = fully paid. Date range filters the invoice creation date (inclusive)."""
+    _ensure_invoice_columns(db)
+    query = db.query(Invoice).filter(Invoice.clinic_id == current_user.clinic_id)
+
+    try:
+        if date_from:
+            query = query.filter(Invoice.created_at >= datetime.strptime(date_from, "%Y-%m-%d"))
+        if date_to:
+            query = query.filter(Invoice.created_at < datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates must be YYYY-MM-DD")
+
+    s = (status or "all").lower()
+    if s == "unpaid":
+        query = query.filter(Invoice.status != "cancelled", func.coalesce(Invoice.paid_amount, 0) == 0)
+    elif s == "partial":
+        query = query.filter(Invoice.status == "partially_paid")
+    elif s == "paid":
+        query = query.filter(Invoice.status.in_(["paid_verified", "paid_unverified"]))
+
+    invoices = query.order_by(desc(Invoice.created_at)).all()
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "Invoice Number", "Date", "Patient ID", "Patient Name", "Phone",
+        "Status", "Total", "Paid", "Due", "Payment Mode", "Payments", "Notes",
+    ])
+    for inv in invoices:
+        pat = inv.patient
+        total = float(inv.total or 0)
+        paid = float(inv.paid_amount or 0)
+        due = float(inv.due_amount if inv.due_amount is not None else max(0.0, total - paid))
+        pays = sorted(inv.payments or [], key=lambda p: (p.paid_on or date.min))
+        pay_summary = "; ".join(
+            f"{(p.paid_on.isoformat() if p.paid_on else '?')}: {float(p.amount or 0):.2f}"
+            + (f" ({p.method})" if p.method else "")
+            for p in pays
+        )
+        writer.writerow([
+            inv.invoice_number,
+            inv.created_at.strftime("%Y-%m-%d") if inv.created_at else "",
+            (pat.display_id if pat else "") or "",
+            (pat.name if pat else "") or "",
+            (pat.phone if pat else "") or "",
+            INVOICE_STATUS_LABELS.get(inv.status, inv.status),
+            f"{total:.2f}", f"{paid:.2f}", f"{due:.2f}",
+            inv.payment_mode or "",
+            pay_summary,
+            (inv.notes or "").replace("\n", " "),
+        ])
+
+    filename = f"invoices_{s}_{datetime.utcnow().strftime('%Y%m%d')}.csv"
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/collections/export")
+async def export_collections(
+    date_from: Optional[str] = Query(None, description="YYYY-MM-DD, default today"),
+    date_to: Optional[str] = Query(None, description="YYYY-MM-DD, default = date_from"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """CSV of money received in a date window (default today). One row per payment,
+    so partials on older invoices each appear. Matches the Today's Collection view."""
+    from models import InvoicePayment
+    _ensure_invoice_columns(db)
+    clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+    today = clinic_today(clinic)
+    try:
+        d_from = datetime.strptime(date_from, "%Y-%m-%d").date() if date_from else today
+        d_to = datetime.strptime(date_to, "%Y-%m-%d").date() if date_to else d_from
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates must be YYYY-MM-DD")
+
+    rows = (
+        db.query(InvoicePayment, Invoice, Patient)
+        .join(Invoice, InvoicePayment.invoice_id == Invoice.id)
+        .outerjoin(Patient, Invoice.patient_id == Patient.id)
+        .filter(
+            InvoicePayment.clinic_id == current_user.clinic_id,
+            InvoicePayment.paid_on >= d_from,
+            InvoicePayment.paid_on <= d_to,
+        )
+        .order_by(desc(InvoicePayment.paid_on), desc(InvoicePayment.id))
+        .all()
+    )
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "Date", "Invoice Number", "Patient ID", "Patient Name", "Phone",
+        "Amount Collected", "Method", "Invoice Status", "Note",
+    ])
+    for pay, inv, pat in rows:
+        writer.writerow([
+            pay.paid_on.isoformat() if pay.paid_on else "",
+            inv.invoice_number,
+            (pat.display_id if pat else "") or "",
+            (pat.name if pat else "") or "",
+            (pat.phone if pat else "") or "",
+            f"{float(pay.amount or 0):.2f}",
+            pay.method or "",
+            INVOICE_STATUS_LABELS.get(inv.status, inv.status),
+            (pay.note or "").replace("\n", " "),
+        ])
+
+    filename = f"collections_{d_from.isoformat()}_to_{d_to.isoformat()}.csv"
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("", response_model=List[InvoiceOut])
 async def get_invoices(
     skip: int = Query(0),
@@ -269,21 +541,19 @@ async def get_invoices(
     status: Optional[str] = None,
     patient_id: Optional[int] = None,
     appointment_id: Optional[int] = None,
+    search: Optional[str] = Query(None),
+    payment_mode: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Get all invoices for the clinic"""
     try:
         _ensure_invoice_columns(db)
-        query = db.query(Invoice).filter(Invoice.clinic_id == current_user.clinic_id)
-        
-        if status:
-            query = query.filter(Invoice.status == status)
-        if patient_id:
-            query = query.filter(Invoice.patient_id == patient_id)
-        if appointment_id:
-            query = query.filter(Invoice.appointment_id == appointment_id)
-        
+        query = _filtered_invoices_query(
+            db, current_user.clinic_id,
+            status=status, patient_id=patient_id, appointment_id=appointment_id,
+            search=search, payment_mode=payment_mode,
+        )
         invoices = query.order_by(desc(Invoice.created_at)).offset(skip).limit(limit).all()
         return [enrich_invoice(db, inv) for inv in invoices]
     except Exception as e:
@@ -336,7 +606,7 @@ async def add_invoice_payment(
         except ValueError:
             raise HTTPException(status_code=400, detail="paid_on must be YYYY-MM-DD")
     else:
-        paid_on = datetime.utcnow().date()
+        paid_on = clinic_today(invoice.clinic)
 
     payment = InvoicePayment(
         invoice_id=invoice.id, clinic_id=current_user.clinic_id,
@@ -698,7 +968,7 @@ async def mark_invoice_as_paid(
         from models import InvoicePayment
         db.add(InvoicePayment(
             invoice_id=invoice.id, clinic_id=current_user.clinic_id,
-            amount=float(payment_amount), paid_on=datetime.utcnow().date(),
+            amount=float(payment_amount), paid_on=clinic_today(invoice.clinic),
             method=payment_data.payment_mode, note=None,
         ))
         db.flush()

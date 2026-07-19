@@ -1060,10 +1060,13 @@ const Patients = () => {
         onImported={fetchPatients}
       />
 
-      {/* Delete patient — single on-brand confirm (matches the app's modal style). */}
+      {/* Delete patient — single on-brand confirm (soft backdrop, matches the app's dialogs). */}
       {deleteTarget && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          onClick={() => deleteLoading !== deleteTarget.id && setDeleteTarget(null)}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
                 <Trash2 size={18} className="text-red-600" />

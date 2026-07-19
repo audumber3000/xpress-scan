@@ -4,9 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { useHeader } from "../contexts/HeaderContext";
 import { useAuth } from "../contexts/AuthContext";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
-import { ChevronLeft, Search, Plus, Pill, Layers, Info } from 'lucide-react';
+import { ChevronLeft, Search, Plus, Upload, Info, Trash2 } from 'lucide-react';
 import GearLoader from "../components/GearLoader";
 import { getCurrencySymbol } from "../utils/currency";
+import PracticeItemDrawer from "../components/settings/PracticeItemDrawer";
+import BulkImportModal from "../components/settings/BulkImportModal";
 
 /* ── GST Info Popover (reusable) ─────────────────────────────────────────── */
 const GST_DATA = {
@@ -52,7 +54,7 @@ const GSTInfoPopover = () => {
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 998 }} />
           <div style={{
-            position: 'absolute', left: 0, top: 36, zIndex: 999,
+            position: 'absolute', right: 0, top: 36, zIndex: 999,
             width: 440, maxHeight: '75vh', overflowY: 'auto',
             background: '#fff', border: '1px solid #e2e8f0',
             borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,.15)',
@@ -84,569 +86,342 @@ const GSTInfoPopover = () => {
   );
 };
 
+const IMPORT_COLUMNS = {
+  services: [
+    { key: 'name', label: 'Name', required: true, placeholder: 'Root Canal' },
+    { key: 'price', label: 'Price', required: true, type: 'number', placeholder: '2000' },
+  ],
+  medications: [
+    { key: 'name', label: 'Name', required: true, placeholder: 'Amoxicillin' },
+    { key: 'category', label: 'Category', placeholder: 'Antibiotics' },
+    { key: 'dosage', label: 'Dosage', placeholder: '1-0-1' },
+    { key: 'duration', label: 'Duration', placeholder: '5 days' },
+    { key: 'quantity', label: 'Quantity', placeholder: '10' },
+    { key: 'notes', label: 'Notes', placeholder: '' },
+  ],
+};
+
 const TreatmentsPricing = () => {
   const { setTitle } = useHeader();
-  const { user } = useAuth();
+  const { user } = useAuth(); // eslint-disable-line no-unused-vars
   const navigate = useNavigate();
-  
-  // Tab State
-  const [activeTab, setActiveTab] = useState('services'); // 'services' or 'medications'
-  
-  // Services State
+
+  const [activeTab, setActiveTab] = useState('services'); // 'services' | 'medications'
+
   const [treatmentTypes, setTreatmentTypes] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('All Services');
   const serviceCategories = ['All Services', 'General', 'Orthodontics', 'Cosmetic'];
-  
-  // Medications State
+
   const [medications, setMedications] = useState([]);
   const [selectedMedCategory, setSelectedMedCategory] = useState('All');
   const medCategories = ['All', 'General', 'Antibiotics', 'Analgesics', 'Gastrointestinal', 'Dental'];
-  
-  // Common UI State
+
   const [loading, setLoading] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
-  
-  const [formData, setFormData] = useState({ 
-    name: "", 
-    price: "", 
-    category: "General",
-    dosage: "",
-    duration: "",
-    quantity: "",
-    notes: ""
-  });
+  const [importing, setImporting] = useState(false);
+
+  const [drawer, setDrawer] = useState({ open: false, item: null });
+  const [showImport, setShowImport] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
+  const isServices = activeTab === 'services';
+  const endpoint = isServices ? '/treatment-types' : '/medications';
 
   useEffect(() => {
     setTitle(
       <div className="flex items-center gap-2">
-        <button
-          onClick={() => navigate('/admin')}
-          className="flex items-center gap-1 text-gray-600 hover:text-gray-900 transition"
-        >
+        <button onClick={() => navigate('/admin')} className="flex items-center gap-1 text-gray-600 hover:text-gray-900 transition">
           <ChevronLeft className="w-5 h-5" />
           <span className="text-sm font-medium">Control Center</span>
         </button>
       </div>
     );
     fetchData();
+    setSelectedIds(new Set());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setTitle, navigate, activeTab]);
 
-  const fetchData = () => {
-    if (activeTab === 'services') {
-      fetchTreatmentTypes();
-    } else {
-      fetchMedications();
-    }
-  };
-
-  const hasPermission = (permission) => {
-    if (!user) return false;
-    if (user.role === "clinic_owner") return true;
-    if (!user.permissions) return false;
-    const [section, action] = permission.split(":");
-    return user.permissions[section]?.[action] === true;
-  };
+  const fetchData = () => { isServices ? fetchTreatmentTypes() : fetchMedications(); };
 
   const fetchTreatmentTypes = async () => {
     try {
       setLoading(true);
-      const data = await api.get("/treatment-types");
-      setTreatmentTypes(data);
+      setTreatmentTypes(await api.get("/treatment-types"));
     } catch (error) {
-      console.error("Error fetching treatment types:", error);
-      toast.error(getPermissionAwareErrorMessage(
-        error,
-        "Failed to load treatment types",
-        "You don't have permission to view treatment services."
-      ));
-    } finally {
-      setLoading(false);
-    }
+      toast.error(getPermissionAwareErrorMessage(error, "Failed to load treatment types", "You don't have permission to view treatment services."));
+    } finally { setLoading(false); }
   };
 
   const fetchMedications = async () => {
     try {
       setLoading(true);
-      const data = await api.get("/medications");
-      setMedications(data);
+      setMedications(await api.get("/medications"));
     } catch (error) {
-      console.error("Error fetching medications:", error);
-      toast.error(getPermissionAwareErrorMessage(
-        error,
-        "Failed to load medications",
-        "You don't have permission to view medications."
-      ));
-    } finally {
-      setLoading(false);
-    }
+      toast.error(getPermissionAwareErrorMessage(error, "Failed to load medications", "You don't have permission to view medications."));
+    } finally { setLoading(false); }
   };
 
-  const handleAddItem = async (e) => {
-    e.preventDefault();
+  // ── Save (add/edit) via the drawer ─────────────────────────────
+  const saveItem = async (payload) => {
+    setSaving(true);
     try {
-      setSaving(true);
-      if (activeTab === 'services') {
-        await api.post("/treatment-types", {
-          name: formData.name,
-          price: formData.price,
-          category: formData.category
-        });
-        toast.success("Treatment type added successfully");
-        fetchTreatmentTypes();
-      } else {
-        await api.post("/medications", {
-          name: formData.name,
-          category: formData.category,
-          dosage: formData.dosage,
-          duration: formData.duration,
-          quantity: formData.quantity,
-          notes: formData.notes
-        });
-        toast.success("Medication added successfully");
-        fetchMedications();
-      }
-      closeModal();
+      if (drawer.item) await api.put(`${endpoint}/${drawer.item.id}`, payload);
+      else await api.post(endpoint, payload);
+      toast.success(drawer.item ? "Updated successfully" : "Added successfully");
+      setDrawer({ open: false, item: null });
+      fetchData();
     } catch (error) {
-      console.error("Error adding item:", error);
-      toast.error(`Failed to add ${activeTab === 'services' ? 'treatment' : 'medication'}`);
-    } finally {
-      setSaving(false);
-    }
+      toast.error(error.response?.data?.detail || `Failed to save ${isServices ? 'treatment' : 'medication'}`);
+    } finally { setSaving(false); }
   };
 
-  const handleEditItem = async (e) => {
-    e.preventDefault();
+  // ── Bulk import ────────────────────────────────────────────────
+  const runImport = async (rows) => {
+    setImporting(true);
     try {
-      setSaving(true);
-      if (activeTab === 'services') {
-        await api.put(`/treatment-types/${editingItem.id}`, {
-          name: formData.name,
-          price: formData.price,
-          category: formData.category
-        });
-        toast.success("Treatment type updated successfully");
-        fetchTreatmentTypes();
-      } else {
-        await api.put(`/medications/${editingItem.id}`, {
-          name: formData.name,
-          category: formData.category,
-          dosage: formData.dosage,
-          duration: formData.duration,
-          quantity: formData.quantity,
-          notes: formData.notes
-        });
-        toast.success("Medication updated successfully");
-        fetchMedications();
-      }
-      closeModal();
+      const items = isServices
+        ? rows.map(r => ({ name: r.name, price: parseFloat(r.price) || 0 }))
+        : rows.map(r => ({ name: r.name, category: r.category || 'General', dosage: r.dosage || '', duration: r.duration || '', quantity: String(r.quantity || ''), notes: r.notes || '' }));
+      const res = await api.post(`${endpoint}/bulk`, { items });
+      toast.success(`Imported ${res.created_count} ${isServices ? 'treatment(s)' : 'medication(s)'}`);
+      if (res.errors?.length) toast.warning(`${res.errors.length} row(s) skipped. ${res.errors[0].message}`);
+      setShowImport(false);
+      fetchData();
     } catch (error) {
-      console.error("Error updating item:", error);
-      toast.error(error.response?.data?.detail || "Failed to update item");
-    } finally {
-      setSaving(false);
-    }
+      toast.error(error.response?.data?.detail || "Import failed");
+    } finally { setImporting(false); }
   };
 
-  const handleDeleteItem = async (id, clinic_id) => {
-    if (activeTab === 'medications' && clinic_id === null) {
-      toast.info("System medications cannot be deleted");
-      return;
-    }
+  // ── Delete (single + bulk) ─────────────────────────────────────
+  // Everything is removable: clinic items are deleted; system default meds are
+  // hidden from this clinic's list (server handles the distinction).
+  const isDeletable = () => true;
 
-    if (!window.confirm(`Are you sure you want to delete this ${activeTab === 'services' ? 'treatment' : 'medication'}?`)) return;
-    
+  const toggleSelect = (id) => setSelectedIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const toggleSelectGroup = (items) => setSelectedIds(prev => {
+    const ids = items.filter(isDeletable).map(i => i.id);
+    const allOn = ids.every(id => prev.has(id));
+    const next = new Set(prev);
+    ids.forEach(id => allOn ? next.delete(id) : next.add(id));
+    return next;
+  });
+
+  const bulkDelete = async () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    if (!window.confirm(`Delete ${ids.length} selected ${isServices ? 'treatment(s)' : 'medication(s)'}? This cannot be undone.`)) return;
+    setSaving(true);
+    const results = await Promise.allSettled(ids.map(id => api.delete(`${endpoint}/${id}`)));
+    const failed = results.filter(r => r.status === 'rejected').length;
+    toast[failed ? 'warning' : 'success'](`Deleted ${ids.length - failed}${failed ? `, ${failed} failed` : ''}`);
+    setSelectedIds(new Set());
+    setSaving(false);
+    fetchData();
+  };
+
+  const deleteOne = async (item) => {
+    if (!window.confirm(`Delete this ${isServices ? 'treatment' : 'medication'}?`)) return;
     try {
-      if (activeTab === 'services') {
-        await api.delete(`/treatment-types/${id}`);
-        fetchTreatmentTypes();
-      } else {
-        await api.delete(`/medications/${id}`);
-        fetchMedications();
-      }
-      toast.success("Deleted successfully");
+      await api.delete(`${endpoint}/${item.id}`);
+      toast.success("Deleted");
+      fetchData();
     } catch (error) {
-      console.error("Error deleting item:", error);
       toast.error(error.response?.data?.detail || "Failed to delete");
     }
   };
 
-  const openEditModal = (item) => {
-    setEditingItem(item);
-    setFormData({ 
-      name: item.name, 
-      price: item.price || "", 
-      category: item.category || 'General',
-      dosage: item.dosage || "",
-      duration: item.duration || "",
-      quantity: item.quantity || "",
-      notes: item.notes || ""
-    });
-    setShowEditModal(true);
-  };
-
-  const closeModal = () => {
-    setShowAddModal(false);
-    setShowEditModal(false);
-    setEditingItem(null);
-    setFormData({ 
-      name: "", 
-      price: "", 
-      category: "General",
-      dosage: "",
-      duration: "",
-      quantity: "",
-      notes: ""
-    });
-  };
-
-  // Filtering Logic
+  // ── Filtering / grouping ───────────────────────────────────────
   const filteredServices = treatmentTypes.filter(t => {
     const matchesCategory = selectedCategory === 'All Services' || t.category === selectedCategory || (!t.category && selectedCategory === 'General');
-    const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+    return matchesCategory && t.name.toLowerCase().includes(searchQuery.toLowerCase());
   });
-
   const filteredMedications = medications.filter(m => {
     const matchesCategory = selectedMedCategory === 'All' || m.category === selectedMedCategory;
-    const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+    return matchesCategory && m.name.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
-  const groupedServices = filteredServices.reduce((acc, treatment) => {
-    const category = treatment.category || 'General';
-    if (!acc[category]) acc[category] = [];
-    acc[category].push(treatment);
+  const groupBy = (list) => list.reduce((acc, it) => {
+    const c = it.category || 'General';
+    (acc[c] = acc[c] || []).push(it);
     return acc;
   }, {});
-
-  const groupedMeds = filteredMedications.reduce((acc, med) => {
-    const category = med.category || 'General';
-    if (!acc[category]) acc[category] = [];
-    acc[category].push(med);
-    return acc;
-  }, {});
+  const grouped = isServices ? groupBy(filteredServices) : groupBy(filteredMedications);
 
   if (loading && treatmentTypes.length === 0 && medications.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <GearLoader />
-      </div>
-    );
+    return <div className="flex items-center justify-center h-screen"><GearLoader /></div>;
   }
 
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-y-auto custom-scrollbar p-6 lg:p-8 pb-10">
-      
-      {/* Header */}
-      <div className="mb-6 flex justify-between items-end">
-        <div className="flex items-center gap-2 text-sm font-medium text-gray-500">
-          <span>Control Center</span>
-          <span>/</span>
-          <span className="text-gray-900">Treatment & Pricing</span>
+      <div className="mb-6 flex items-center gap-2 text-sm font-medium text-gray-500">
+        <span>Control Center</span><span>/</span><span className="text-gray-900">Treatment & Pricing</span>
+      </div>
+
+      {/* Tabs + top-right actions */}
+      <div className="mb-6 border-b border-gray-200">
+        <div className="flex items-center justify-between -mb-px">
+          <div className="flex gap-6">
+            <button onClick={() => setActiveTab('services')} className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'services' ? 'border-[#29828a] text-[#29828a]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}>Treatment & Pricing</button>
+            <button onClick={() => setActiveTab('medications')} className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'medications' ? 'border-[#29828a] text-[#29828a]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}>Medication</button>
+          </div>
+          <div className="flex items-center gap-3 pb-2">
+            {isServices && <GSTInfoPopover />}
+            <button
+              onClick={() => setShowImport(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-50 transition-colors"
+            >
+              <Upload size={16} className="text-[#2D9596]" /> Import
+            </button>
+            <button
+              onClick={() => setDrawer({ open: true, item: null })}
+              className="flex items-center gap-2 px-4 py-2 bg-[#2D9596] text-white rounded-lg text-sm font-semibold hover:bg-[#1F6B72] transition-colors shadow-sm"
+            >
+              <Plus size={16} strokeWidth={2.5} /> {isServices ? 'Add treatment' : 'Add medication'}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Top Level Tabs */}
-      <div className="mb-6 border-b border-gray-200">
-          <div className="flex items-center justify-between -mb-px">
-            <div className="flex gap-6">
-              <button
-                onClick={() => setActiveTab('services')}
-                className={`pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'services' ? 'border-[#29828a] text-[#29828a]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
-              >
-                Treatment & Pricing
-              </button>
-              <button
-                onClick={() => setActiveTab('medications')}
-                className={`pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'medications' ? 'border-[#29828a] text-[#29828a]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
-              >
-                Medication
-              </button>
-            </div>
-            {activeTab === 'services' && (
-              <div className="pb-2">
-                <GSTInfoPopover />
-              </div>
-            )}
-          </div>
-        </div>
+      {/* Search */}
+      <div className="mb-4 relative">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+        <input
+          type="text"
+          placeholder={`Search ${isServices ? 'treatments' : 'medications'}...`}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-[#2D9596]"
+        />
+      </div>
 
-        {/* Search Bar */}
-        <div className="mb-4">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder={`Search ${activeTab === 'services' ? 'treatments' : 'medications'}...`}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-[#2D9596]"
-            />
-          </div>
-        </div>
+      {/* Sub-category tabs */}
+      <div className="flex gap-6 mb-6 border-b border-gray-200 overflow-x-auto no-scrollbar">
+        {(isServices ? serviceCategories : medCategories).map((category) => (
+          <button
+            key={category}
+            onClick={() => isServices ? setSelectedCategory(category) : setSelectedMedCategory(category)}
+            className={`pb-3 px-1 font-semibold whitespace-nowrap transition relative ${(isServices ? selectedCategory : selectedMedCategory) === category ? 'text-[#2D9596]' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            {category}
+            {(isServices ? selectedCategory : selectedMedCategory) === category && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#2D9596] rounded-full" />}
+          </button>
+        ))}
+      </div>
 
-        {/* Sub-Category Tabs */}
-        <div className="flex gap-6 mb-6 border-b border-gray-200 overflow-x-auto no-scrollbar">
-          {(activeTab === 'services' ? serviceCategories : medCategories).map((category) => (
-            <button
-              key={category}
-              onClick={() => activeTab === 'services' ? setSelectedCategory(category) : setSelectedMedCategory(category)}
-              className={`pb-3 px-1 font-semibold whitespace-nowrap transition relative ${
-                (activeTab === 'services' ? selectedCategory : selectedMedCategory) === category
-                  ? 'text-[#2D9596]'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {category}
-              {(activeTab === 'services' ? selectedCategory : selectedMedCategory) === category && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#2D9596] rounded-full" />
-              )}
+      {/* Bulk-select action bar */}
+      {selectedIds.size > 0 && (
+        <div className="mb-4 flex items-center justify-between bg-[#2D9596] text-white rounded-xl px-4 py-2.5 shadow-sm">
+          <span className="text-sm font-semibold">{selectedIds.size} selected</span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setSelectedIds(new Set())} className="px-3 py-1.5 text-sm font-semibold rounded-lg hover:bg-white/10 transition">Clear</button>
+            <button onClick={bulkDelete} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 text-white text-sm font-semibold rounded-lg hover:bg-red-600 transition disabled:opacity-50">
+              <Trash2 size={15} /> Delete selected
             </button>
-          ))}
+          </div>
         </div>
+      )}
 
-        {/* Content Table */}
-        {Object.entries(activeTab === 'services' ? groupedServices : groupedMeds).map(([category, items]) => (
+      {/* Grouped tables */}
+      {Object.entries(grouped).map(([category, items]) => {
+        const deletableIds = items.filter(isDeletable).map(i => i.id);
+        const allSelected = deletableIds.length > 0 && deletableIds.every(id => selectedIds.has(id));
+        return (
           <div key={category} className="mb-8">
             <div className="flex items-center justify-between mb-3 px-1">
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">
-                {category.toUpperCase()}
-              </h3>
-              <span className="text-[10px] font-bold bg-[#E0F2F2] text-[#2D9596] px-2 py-0.5 rounded-full">
-                {items.length} {items.length === 1 ? 'ITEM' : 'ITEMS'}
-              </span>
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">{category.toUpperCase()}</h3>
+              <span className="text-[10px] font-bold bg-[#E0F2F2] text-[#2D9596] px-2 py-0.5 rounded-full">{items.length} {items.length === 1 ? 'ITEM' : 'ITEMS'}</span>
             </div>
-
             <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
               <div className="overflow-x-auto">
-              <table className="w-full divide-y divide-gray-100">
-                <thead className="bg-gray-50/50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                      Name
-                    </th>
-                    {activeTab === 'services' ? (
-                      <th className="px-6 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                        Price
+                <table className="w-full divide-y divide-gray-100">
+                  <thead className="bg-gray-50/50">
+                    <tr>
+                      <th className="px-4 py-3 w-10">
+                        <input type="checkbox" checked={allSelected} onChange={() => toggleSelectGroup(items)} disabled={deletableIds.length === 0}
+                          className="w-4 h-4 rounded border-gray-300 text-[#2D9596] focus:ring-[#2D9596]" />
                       </th>
-                    ) : (
-                      <>
-                        <th className="px-6 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                          Dosage
-                        </th>
-                        <th className="px-6 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                          Duration
-                        </th>
-                      </>
-                    )}
-                    <th className="px-6 py-3 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {items.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50/50 transition">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          {activeTab === 'medications' && item.clinic_id === null && (
-                            <div className="w-1.5 h-1.5 rounded-full bg-blue-400" title="System Medication"></div>
-                          )}
-                          <span className="text-sm font-bold text-gray-900">{item.name}</span>
-                        </div>
-                      </td>
-                      {activeTab === 'services' ? (
-                        <td className="px-6 py-4 text-sm font-mono text-[#2D9596] font-bold">
-                          {getCurrencySymbol()}{item.price}
-                        </td>
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Name</th>
+                      {isServices ? (
+                        <th className="px-6 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Price</th>
                       ) : (
                         <>
-                          <td className="px-6 py-4 text-sm text-gray-600 font-medium">
-                            {item.dosage || '-'}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-600 font-medium">
-                            {item.duration || '-'}
-                          </td>
+                          <th className="px-6 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Dosage</th>
+                          <th className="px-6 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Duration</th>
                         </>
                       )}
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end gap-3">
-                          <button
-                            onClick={() => openEditModal(item)}
-                            className="text-[#2D9596] hover:text-[#1F6B72] text-[11px] font-bold uppercase tracking-wider"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeleteItem(item.id, item.clinic_id)}
-                            className="text-red-400 hover:text-red-600 text-[11px] font-bold uppercase tracking-wider"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
+                      <th className="px-6 py-3 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {items.map((item) => (
+                      <tr key={item.id} className={`transition ${selectedIds.has(item.id) ? 'bg-[#2D9596]/5' : 'hover:bg-gray-50/50'}`}>
+                        <td className="px-4 py-4">
+                          <input type="checkbox" checked={selectedIds.has(item.id)} disabled={!isDeletable(item)} onChange={() => toggleSelect(item.id)}
+                            className="w-4 h-4 rounded border-gray-300 text-[#2D9596] focus:ring-[#2D9596] disabled:opacity-30" />
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            {!isServices && item.clinic_id === null && <div className="w-1.5 h-1.5 rounded-full bg-blue-400" title="System Medication"></div>}
+                            <span className="text-sm font-bold text-gray-900">{item.name}</span>
+                          </div>
+                        </td>
+                        {isServices ? (
+                          <td className="px-6 py-4 text-sm font-mono text-[#2D9596] font-bold">{getCurrencySymbol()}{item.price}</td>
+                        ) : (
+                          <>
+                            <td className="px-6 py-4 text-sm text-gray-600 font-medium">{item.dosage || '-'}</td>
+                            <td className="px-6 py-4 text-sm text-gray-600 font-medium">{item.duration || '-'}</td>
+                          </>
+                        )}
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex justify-end gap-3">
+                            <button onClick={() => setDrawer({ open: true, item })} className="text-[#2D9596] hover:text-[#1F6B72] text-[11px] font-bold uppercase tracking-wider">Edit</button>
+                            <button onClick={() => deleteOne(item)} className="text-red-400 hover:text-red-600 text-[11px] font-bold uppercase tracking-wider">Delete</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
-        ))}
+        );
+      })}
 
-        {((activeTab === 'services' && Object.keys(groupedServices).length === 0) || 
-          (activeTab === 'medications' && Object.keys(groupedMeds).length === 0)) && (
-          <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-gray-100">
-            <Search className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-            <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">No items found</p>
-          </div>
-        )}
+      {Object.keys(grouped).length === 0 && (
+        <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-gray-100">
+          <Search className="w-12 h-12 text-gray-200 mx-auto mb-4" />
+          <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">No items found</p>
+        </div>
+      )}
 
-        {/* Floating Add Button */}
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="fixed bottom-8 right-8 w-16 h-16 bg-[#2D9596] text-white rounded-2xl shadow-xl hover:bg-[#1F6B72] hover:-translate-y-1 transition-all flex items-center justify-center ring-4 ring-white"
-        >
-          <Plus className="w-8 h-8" />
-        </button>
+      {/* Add / edit drawer */}
+      <PracticeItemDrawer
+        open={drawer.open}
+        type={isServices ? 'service' : 'medication'}
+        item={drawer.item}
+        submitting={saving}
+        onClose={() => setDrawer({ open: false, item: null })}
+        onSubmit={saveItem}
+      />
 
-        {/* Modal Template */}
-        {(showAddModal || showEditModal) && (
-          <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
-              <div className="bg-[#2D9596] px-8 py-6">
-                <h3 className="text-xl font-bold text-white">
-                  {showAddModal ? `Add New ${activeTab === 'services' ? 'Service' : 'Medication'}` : `Edit ${activeTab === 'services' ? 'Service' : 'Medication'}`}
-                </h3>
-                <p className="text-white/80 text-sm mt-1">Fill in the details below</p>
-              </div>
-              
-              <form onSubmit={showAddModal ? handleAddItem : handleEditItem} className="p-8">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2 space-y-2">
-                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-1">
-                      {activeTab === 'services' ? 'Service Name' : 'Medicine Name'}
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2D9596] focus:bg-white transition-all text-sm font-bold"
-                      placeholder={activeTab === 'services' ? "eg. Root Canal" : "eg. Amoxicillin"}
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-1">
-                      Category
-                    </label>
-                    <select
-                      value={formData.category}
-                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2D9596] focus:bg-white transition-all text-sm font-bold"
-                    >
-                      {(activeTab === 'services' ? serviceCategories : medCategories).filter(c => c !== 'All Services' && c !== 'All').map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {activeTab === 'services' ? (
-                    <div className="space-y-2">
-                      <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-1">
-                        Price ({getCurrencySymbol()})
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.price}
-                        onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2D9596] focus:bg-white transition-all text-sm font-bold font-mono"
-                        placeholder="0.00"
-                        required
-                      />
-                    </div>
-                  ) : (
-                    <>
-                      <div className="space-y-2">
-                        <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-1">
-                          Dosage
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.dosage}
-                          onChange={(e) => setFormData({ ...formData, dosage: e.target.value })}
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2D9596] focus:bg-white transition-all text-sm font-bold"
-                          placeholder="1-0-1"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-1">
-                          Duration
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.duration}
-                          onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2D9596] focus:bg-white transition-all text-sm font-bold"
-                          placeholder="5 days"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-1">
-                          Default Qty
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.quantity}
-                          onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2D9596] focus:bg-white transition-all text-sm font-bold"
-                          placeholder="10"
-                        />
-                      </div>
-                      <div className="col-span-2 space-y-2">
-                        <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-1">
-                          Notes / Instructions
-                        </label>
-                        <textarea
-                          value={formData.notes}
-                          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2D9596] focus:bg-white transition-all text-sm font-medium"
-                          rows="2"
-                          placeholder="Special instructions..."
-                        />
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                <div className="flex gap-4 mt-8">
-                  <button
-                    type="button"
-                    onClick={closeModal}
-                    className="flex-1 px-6 py-3 text-gray-500 font-bold text-sm uppercase tracking-widest hover:bg-gray-100 rounded-xl transition-all"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="flex-1 px-6 py-3 bg-[#2D9596] text-white rounded-xl text-sm font-bold uppercase tracking-widest shadow-lg hover:shadow-xl hover:bg-[#1F6B72] transition-all disabled:opacity-50"
-                  >
-                    {saving ? "Saving..." : "Save Changes"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
+      {/* Bulk import */}
+      <BulkImportModal
+        open={showImport}
+        title={isServices ? 'Import treatments' : 'Import medications'}
+        columns={IMPORT_COLUMNS[activeTab]}
+        importing={importing}
+        onClose={() => setShowImport(false)}
+        onImport={runImport}
+      />
     </div>
   );
 };
 
 export default TreatmentsPricing;
-

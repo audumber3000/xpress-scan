@@ -2,6 +2,7 @@ import React, { memo, useState } from "react";
 import { generatePatientPersona, generateInitialsAvatar } from "../../utils/avatar";
 import { api } from "../../utils/api";
 import { getCurrencySymbol } from "../../utils/currency";
+import { formatRelative, clinicDateKey, clinicToday } from "../../utils/datetime";
 import { toast } from "react-toastify";
 
 const InvoiceItem = memo(({ invoice, onSelect }) => {
@@ -22,42 +23,12 @@ const InvoiceItem = memo(({ invoice, onSelect }) => {
   const formatAmount = (amount) =>
     `${getCurrencySymbol()}${Number(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  const formatDate = (dateString) => {
-    if (!dateString) return "";
-    const date = new Date(dateString);
-    return date.toLocaleString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  };
-
-  const getRelativeTime = (dateString) => {
-    if (!dateString) return { relative: 'Never', exact: '' };
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-    let relative;
-    if (diffMins < 1) relative = 'Just now';
-    else if (diffMins < 60) relative = `${diffMins}m ago`;
-    else if (diffHours < 24) relative = `${diffHours}h ago`;
-    else if (diffDays === 1) relative = 'Yesterday';
-    else if (diffDays < 7) relative = `${diffDays} days ago`;
-    else if (diffDays < 30) relative = `${Math.floor(diffDays / 7)}w ago`;
-    else if (diffDays < 365) relative = `${Math.floor(diffDays / 30)}mo ago`;
-    else relative = `${Math.floor(diffDays / 365)}y ago`;
-    return { relative, exact: formatDate(dateString) };
-  };
+  // Dates render in the clinic's timezone (see utils/datetime).
+  const getRelativeTime = (dateString) => formatRelative(dateString);
 
   const getStatusBadge = (invoice) => {
     const { status, payment_mode, created_at } = invoice;
-    const isCreatedToday = created_at && new Date(created_at).toDateString() === new Date().toDateString();
+    const isCreatedToday = created_at && clinicDateKey(created_at) === clinicToday();
     
     let displayStatus = "Draft";
     let color = "bg-gray-100 text-gray-800 border-gray-200";

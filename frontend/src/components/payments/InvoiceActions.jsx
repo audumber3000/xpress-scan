@@ -1,4 +1,5 @@
 import React from "react";
+import { Trash2 } from "lucide-react";
 import GearLoader from "../GearLoader";
 
 const InvoiceActions = ({
@@ -8,6 +9,9 @@ const InvoiceActions = ({
   onDownloadPDF,
   onSendWhatsApp,
   canEdit,
+  canDelete,
+  onDelete,
+  deleting,
   downloadingPDF,
   sendingWhatsApp,
   finalizing
@@ -19,7 +23,18 @@ const InvoiceActions = ({
   const canSendWhatsApp = invoice.status !== 'draft' && invoice.patient_phone;
 
   return (
-    <div className="border-t border-gray-200 pt-4 flex gap-3">
+    <div className="flex gap-3">
+      {canDelete && (
+        <button
+          onClick={onDelete}
+          disabled={deleting}
+          title="Delete invoice"
+          className="px-3 py-2 border border-red-200 text-red-600 bg-white rounded-lg hover:bg-red-50 transition font-medium flex items-center justify-center flex-shrink-0 disabled:opacity-50"
+        >
+          <Trash2 size={18} />
+        </button>
+      )}
+
       {canFinalize && (
         <button
           onClick={onFinalize}

@@ -4,8 +4,9 @@ from sqlalchemy import func, and_, extract, case
 from datetime import datetime, timedelta
 from typing import Optional
 from database import get_db
-from models import Patient, Report, Payment, User, TreatmentType, Appointment, Clinic, Invoice, LabOrder
+from models import Patient, Report, Payment, User, TreatmentType, Appointment, Clinic, Invoice, LabOrder, InventoryItem, MedicationStock
 from core.auth_utils import get_current_user
+from core.clinic_time import clinic_today
 
 router = APIRouter()
 
@@ -628,6 +629,36 @@ def get_today_overview(
         )
     ).scalar() or 0
 
+    # ── Inventory: low stock (at/below reorder level) and expiry (within 30
+    # days or already expired), across general stock and medication stock. ──
+    clinic = db.query(Clinic).filter(Clinic.id == final_clinic_id).first()
+    soon = clinic_today(clinic) + timedelta(days=30)
+
+    low_stock = (
+        (db.query(func.count(InventoryItem.id)).filter(
+            InventoryItem.clinic_id == final_clinic_id,
+            InventoryItem.min_stock_level > 0,
+            InventoryItem.quantity <= InventoryItem.min_stock_level,
+        ).scalar() or 0)
+        + (db.query(func.count(MedicationStock.id)).filter(
+            MedicationStock.clinic_id == final_clinic_id,
+            MedicationStock.min_stock_level > 0,
+            MedicationStock.quantity <= MedicationStock.min_stock_level,
+        ).scalar() or 0)
+    )
+    expiring = (
+        (db.query(func.count(InventoryItem.id)).filter(
+            InventoryItem.clinic_id == final_clinic_id,
+            InventoryItem.expiry_date.isnot(None),
+            InventoryItem.expiry_date <= soon,
+        ).scalar() or 0)
+        + (db.query(func.count(MedicationStock.id)).filter(
+            MedicationStock.clinic_id == final_clinic_id,
+            MedicationStock.expiry_date.isnot(None),
+            MedicationStock.expiry_date <= soon,
+        ).scalar() or 0)
+    )
+
     return {
         "summary": {
             "total": len(appts),
@@ -639,6 +670,8 @@ def get_today_overview(
             "outstanding_dues": {"count": dues_count, "amount": round(dues_amount, 2)},
             "overdue_labs": int(overdue_labs),
             "no_shows_today": no_shows,
+            "low_stock": int(low_stock),
+            "expiring_soon": int(expiring),
         },
     }
 

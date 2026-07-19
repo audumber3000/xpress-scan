@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
+import csv
+import io
 import uuid
 
 from database import get_db
-from models import User, Invoice, Expense, Patient, Vendor
+from models import User, Invoice, Expense, Patient, Vendor, InvoicePayment
 from core.auth_utils import get_current_user
 from schemas import ExpenseCreate, ExpenseUpdate, ExpenseOut, LedgerItemOut
 from domains.infrastructure.services.r2_storage import upload_bytes_to_r2
@@ -22,58 +24,83 @@ def enrich_expense(db: Session, expense: Expense):
         expense_out['creator_name'] = expense.creator.name
     return expense_out
 
-@router.get("", response_model=List[LedgerItemOut])
-async def get_ledger(
-    skip: int = 0,
-    limit: int = 100,
+@router.get("/count")
+async def count_ledger(
     type_filter: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get combined ledger of invoices (income) and expenses (outflow)"""
-    items = []
-    
-    # Get Invoices
+    """Total ledger rows matching the filter (for pagination). Income rows are
+    individual payments, so this counts payments + expenses, not invoices."""
+    total = 0
     if not type_filter or type_filter == 'invoice':
-        invoices = db.query(Invoice).filter(
-            Invoice.clinic_id == current_user.clinic_id
-        ).all()
-        
-        for inv in invoices:
-            patient_name = None
-            if inv.patient:
-                patient_name = inv.patient.name
-            
-            # Use paid_at for date if available, else created_at
-            item_date = inv.paid_at if inv.paid_at else inv.created_at
-            
+        total += db.query(InvoicePayment).filter(
+            InvoicePayment.clinic_id == current_user.clinic_id
+        ).count()
+    if not type_filter or type_filter == 'expense':
+        total += db.query(Expense).filter(
+            Expense.clinic_id == current_user.clinic_id
+        ).count()
+    return {"total": int(total)}
+
+
+def _build_ledger_items(db, clinic_id, type_filter=None, d_from=None, d_to=None):
+    """Combined day book rows: money in = each payment received, money out = each
+    expense. Optional date window filters on the movement date (paid_on / expense
+    date). Sorted newest first. Shared by the list, and the CSV export."""
+    items = []
+
+    # Money in — one entry per payment actually received (not the invoice total).
+    if not type_filter or type_filter == 'invoice':
+        pq = (
+            db.query(InvoicePayment, Invoice, Patient)
+            .join(Invoice, InvoicePayment.invoice_id == Invoice.id)
+            .outerjoin(Patient, Invoice.patient_id == Patient.id)
+            .filter(InvoicePayment.clinic_id == clinic_id)
+        )
+        if d_from:
+            pq = pq.filter(InvoicePayment.paid_on >= d_from)
+        if d_to:
+            pq = pq.filter(InvoicePayment.paid_on <= d_to)
+        for pay, inv, pat in pq.all():
+            if pay.paid_on:
+                # Anchor a pure payment date at noon UTC so it renders as the same
+                # calendar day in any clinic timezone (never rolls to the day before).
+                item_date = datetime(pay.paid_on.year, pay.paid_on.month, pay.paid_on.day, 12, 0)
+            else:
+                item_date = pay.created_at or inv.created_at
+
+            desc_txt = f"Payment for {inv.invoice_number}"
+            if pay.note:
+                desc_txt += f" — {pay.note}"
+
             items.append(
                 LedgerItemOut(
-                    id=inv.id,
+                    id=pay.id,
                     type='invoice',
                     date=item_date,
-                    amount=inv.total,
-                    payment_method=inv.payment_mode,
+                    amount=float(pay.amount or 0),
+                    payment_method=pay.method or inv.payment_mode,
                     category="Patient Payment",
-                    description=f"Invoice {inv.invoice_number}",
-                    entity_name=patient_name,
+                    description=desc_txt,
+                    entity_name=pat.name if pat else None,
                     entity_id=inv.patient_id,
                     status=inv.status,
-                    invoice_number=inv.invoice_number
+                    invoice_number=inv.invoice_number,
+                    invoice_id=inv.id,
+                    recorded_at=pay.created_at,
                 )
             )
 
-    # Get Expenses
+    # Money out — one entry per expense.
     if not type_filter or type_filter == 'expense':
-        expenses = db.query(Expense).filter(
-            Expense.clinic_id == current_user.clinic_id
-        ).all()
-        
-        for exp in expenses:
-            vendor_name = None
-            if exp.vendor:
-                vendor_name = exp.vendor.name
-                
+        eq = db.query(Expense).filter(Expense.clinic_id == clinic_id)
+        if d_from:
+            eq = eq.filter(Expense.date >= datetime(d_from.year, d_from.month, d_from.day))
+        if d_to:
+            eq = eq.filter(Expense.date < datetime(d_to.year, d_to.month, d_to.day) + timedelta(days=1))
+        for exp in eq.all():
+            vendor_name = exp.vendor.name if exp.vendor else None
             items.append(
                 LedgerItemOut(
                     id=exp.id,
@@ -86,15 +113,76 @@ async def get_ledger(
                     entity_name=vendor_name,
                     entity_id=exp.vendor_id,
                     status="paid",
-                    bill_file_url=exp.bill_file_url
+                    bill_file_url=exp.bill_file_url,
+                    recorded_at=exp.date,
                 )
             )
-            
-    # Sort by date descending
+
     items.sort(key=lambda x: x.date, reverse=True)
-    
-    # Paginate
-    return items[skip:skip+limit]
+    return items
+
+
+@router.get("", response_model=List[LedgerItemOut])
+async def get_ledger(
+    skip: int = 0,
+    limit: int = 100,
+    type_filter: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Combined ledger of money in (each payment received) and money out (each
+    expense). Income is per-payment, not per-invoice, so a procedure paid in
+    small amounts shows every dated collection, like a real day book."""
+    items = _build_ledger_items(db, current_user.clinic_id, type_filter)
+    return items[skip:skip + limit]
+
+
+@router.get("/export")
+async def export_ledger(
+    type_filter: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """CSV of the ledger: one row per money movement (payment in / expense out),
+    with direction, party, description and method. Dates filter the movement date."""
+    try:
+        d_from = datetime.strptime(date_from, "%Y-%m-%d").date() if date_from else None
+        d_to = datetime.strptime(date_to, "%Y-%m-%d").date() if date_to else None
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates must be YYYY-MM-DD")
+
+    items = _build_ledger_items(db, current_user.clinic_id, type_filter, d_from, d_to)
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "Date", "Direction", "Type", "Party", "Description", "Category",
+        "Amount", "Method", "Invoice Number", "Bill URL",
+    ])
+    for it in items:
+        is_in = it.type == 'invoice'
+        writer.writerow([
+            it.date.strftime("%Y-%m-%d") if it.date else "",
+            "In" if is_in else "Out",
+            "Payment" if is_in else "Expense",
+            it.entity_name or "",
+            (it.description or "").replace("\n", " "),
+            it.category or "",
+            f"{float(it.amount or 0):.2f}",
+            it.payment_method or "",
+            it.invoice_number or "",
+            it.bill_file_url or "",
+        ])
+
+    tag = type_filter or "all"
+    filename = f"ledger_{tag}_{datetime.utcnow().strftime('%Y%m%d')}.csv"
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 @router.post("/expenses", response_model=ExpenseOut)
 async def create_expense(

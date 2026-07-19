@@ -3,31 +3,55 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import Medication, User
 from core.dtos import MedicationCreateDTO, MedicationUpdateDTO, MedicationResponseDTO
+from seed_medications import seed_clinic_medications
 from core.auth_utils import get_current_user
 from typing import List, Optional
-from sqlalchemy import or_
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/medications", tags=["medications"])
+
+
+class MedicationBulkCreate(BaseModel):
+    items: List[MedicationCreateDTO]
+
+
+@router.post("/bulk", status_code=status.HTTP_201_CREATED)
+def bulk_create_medications(
+    payload: MedicationBulkCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create many medications at once (CSV / manual import)."""
+    created, errors = 0, []
+    for idx, item in enumerate(payload.items):
+        if not (item.name or "").strip():
+            errors.append({"row": idx + 1, "message": "Name is required"})
+            continue
+        try:
+            db.add(Medication(**item.model_dump(), clinic_id=current_user.clinic_id))
+            db.commit()
+            created += 1
+        except Exception:
+            db.rollback()
+            errors.append({"row": idx + 1, "message": f"'{item.name}' could not be added"})
+    return {"created_count": created, "errors": errors}
 
 @router.get("", response_model=List[MedicationResponseDTO])
 def get_medications(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Get all medications available to the clinic.
-    This includes system-wide medications (clinic_id is NULL)
-    and medications specific to the user's clinic.
+    """Get the clinic's medications.
+
+    Defaults are seeded per-clinic on first fetch (idempotent), so every row is
+    clinic-owned and can be edited or deleted like normal data.
     """
     clinic_id = current_user.clinic_id
-    medications = db.query(Medication).filter(
-        or_(
-            Medication.clinic_id == clinic_id,
-            Medication.clinic_id == None
-        ),
+    seed_clinic_medications(db, clinic_id)  # lazy, once per clinic
+    return db.query(Medication).filter(
+        Medication.clinic_id == clinic_id,
         Medication.is_active == True
     ).all()
-    return medications
 
 @router.post("", response_model=MedicationResponseDTO, status_code=status.HTTP_201_CREATED)
 def create_medication(
@@ -87,24 +111,12 @@ def delete_medication(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Soft delete a medication."""
+    """Soft-delete a clinic medication."""
     db_medication = db.query(Medication).filter(
         Medication.id == medication_id,
         Medication.clinic_id == current_user.clinic_id
     ).first()
-
     if not db_medication:
-         # Check if they are trying to delete a system medication
-        system_med = db.query(Medication).filter(
-            Medication.id == medication_id,
-            Medication.clinic_id == None
-        ).first()
-        
-        if system_med:
-             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="System medications cannot be deleted."
-            )
         raise HTTPException(status_code=404, detail="Medication not found")
 
     db_medication.is_active = False

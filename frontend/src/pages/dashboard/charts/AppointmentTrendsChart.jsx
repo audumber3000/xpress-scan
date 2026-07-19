@@ -15,6 +15,7 @@ const LABELS = { completed: 'Completed', missed: 'No-show / Cancelled', schedule
 const AppointmentTrendsChart = ({ data, loading, delta }) => (
   <ChartCard
     title="Appointment Outcomes"
+    description="Completed, cancelled and no-show visits"
     loading={loading}
     isEmpty={data.length === 0}
     delta={delta}

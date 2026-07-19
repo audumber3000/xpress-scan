@@ -33,25 +33,10 @@ class PatientService(PatientServiceProtocol):
         # Note: Phone duplicate check removed to allow multiple patients with same phone
         # This is needed for appointment workflow where duplicates are handled separately
 
-        # Validate treatment type exists in clinic
-        if 'treatment_type' in patient_data:
-            treatment_type = self._validate_treatment_type(patient_data['treatment_type'], clinic_id)
-            if not treatment_type:
-                # Auto-create the treatment type with default price instead of failing
-                try:
-                    from models import TreatmentType
-                    db = getattr(self.patient_repo, 'db', None)
-                    if db:
-                        new_tf = TreatmentType(
-                            clinic_id=clinic_id,
-                            name=patient_data['treatment_type'],
-                            price=2000.0,
-                            is_active=True
-                        )
-                        db.add(new_tf)
-                        db.flush()
-                except Exception as e:
-                    print(f"Warning: Could not auto-create treatment type: {e}")
+        # The patient's `treatment_type` is a free-text reason-for-visit label,
+        # stored as-is on the patient. It is intentionally NOT turned into a
+        # billable service, doing so used to pollute Treatment & Pricing with
+        # junk entries at a default ₹2000.
 
         # Create patient
         patient_dict = patient_data.copy()
@@ -173,25 +158,9 @@ class PatientService(PatientServiceProtocol):
             if duplicate_patient and duplicate_patient.id != patient_id:
                 raise ValueError(f"Patient with phone number {updates['phone']} already exists in this clinic")
 
-        # Validate treatment type if being updated
-        if 'treatment_type' in updates:
-            treatment_type = self._validate_treatment_type(updates['treatment_type'], clinic_id)
-            if not treatment_type:
-                # Auto-create the treatment type with default price instead of failing
-                try:
-                    from models import TreatmentType
-                    db = getattr(self.patient_repo, 'db', None)
-                    if db:
-                        new_tf = TreatmentType(
-                            clinic_id=clinic_id,
-                            name=updates['treatment_type'],
-                            price=2000.0,
-                            is_active=True
-                        )
-                        db.add(new_tf)
-                        db.flush()
-                except Exception as e:
-                    print(f"Warning: Could not auto-create treatment type during update: {e}")
+        # `treatment_type` here is a free-text label on the patient; it is stored
+        # directly and never auto-creates a billable service (that pollutes the
+        # Treatment & Pricing catalogue with ₹2000 junk entries).
 
         return self.patient_repo.update(patient_id, updates)
 

@@ -49,6 +49,9 @@ class Clinic(Base):
     name = Column(String, nullable=False)
     address = Column(String)
     phone = Column(String)
+    # True once the default medication catalogue has been copied into this clinic
+    # (so they're clinic-owned and deletable). Prevents re-seeding after deletion.
+    default_medications_seeded = Column(Boolean, default=False)
     email = Column(String)
     gst_number = Column(String)
     specialization = Column(String, default='dental')  # dental, cardiology, pathology, etc.
@@ -658,11 +661,13 @@ class InventoryItem(Base):
     category = Column(String)  # Consumables, Equipment, etc.
     quantity = Column(Float, default=0.0)
     unit = Column(String)  # pcs, ml, mg, etc.
-    min_stock_level = Column(Float, default=0.0)
+    min_stock_level = Column(Float, default=0.0)  # reorder level (kept internal, not shown as a table column)
     price_per_unit = Column(Float, default=0.0)
+    batch_number = Column(String, nullable=True)
+    expiry_date = Column(Date, nullable=True)     # consumables expire too; drives the expiry alert
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
-    
+
     clinic = relationship("Clinic")
     vendor = relationship("Vendor")
 
@@ -813,6 +818,34 @@ class LabOrder(Base):
     vendor = relationship("Vendor")
 
 
+class MedicationStock(Base):
+    """Medication inventory — physical stock of medicines, kept separate from
+    general consumables (InventoryItem) and from the prescription Medication
+    master. Each row is a stocked medicine with strength/form, batch, expiry and
+    quantity; expiry and low-stock drive the in-app alerts."""
+    __tablename__ = 'medication_stock'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
+    vendor_id = Column(Integer, ForeignKey('vendors.id'), nullable=True)
+    name = Column(String, nullable=False)          # brand / trade name
+    generic_name = Column(String, nullable=True)
+    strength = Column(String, nullable=True)       # e.g. "500 mg"
+    form = Column(String, nullable=True)           # Tablet, Capsule, Syrup, Injection, ...
+    quantity = Column(Float, default=0.0)
+    unit = Column(String, nullable=True)           # strip, bottle, vial, tube, pcs
+    min_stock_level = Column(Float, default=0.0)   # reorder level (internal)
+    price_per_unit = Column(Float, default=0.0)
+    batch_number = Column(String, nullable=True)
+    expiry_date = Column(Date, nullable=True)
+    schedule = Column(String, nullable=True)       # OTC, H, H1 (India Rx schedule)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    clinic = relationship("Clinic")
+    vendor = relationship("Vendor")
+
+
 class InventoryTransaction(Base):
     """A single stock movement — the inventory ledger.
 
@@ -828,8 +861,10 @@ class InventoryTransaction(Base):
     patient_id = Column(Integer, ForeignKey('patients.id'), nullable=True)
     case_paper_id = Column(Integer, ForeignKey('case_papers.id'), nullable=True)
     inventory_item_id = Column(Integer, ForeignKey('inventory_items.id'), nullable=True)
+    medication_stock_id = Column(Integer, ForeignKey('medication_stock.id'), nullable=True)  # for medication movements
 
     direction = Column(String, nullable=False, default='out')  # 'out' | 'in'
+    action = Column(String, nullable=True)        # added | restocked | received | used | deducted | adjusted | removed
     item_name = Column(String, nullable=False)   # snapshot at time of the movement
     quantity = Column(Float, nullable=False, default=0.0)  # always positive
     unit = Column(String, nullable=True)          # snapshot (pcs, ml, ...)

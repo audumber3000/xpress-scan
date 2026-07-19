@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wallet, FlaskConical, UserX, CalendarClock, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { Wallet, FlaskConical, UserX, CalendarClock, Package, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { SkeletonBox } from '../../components/Skeleton';
 import { getCurrencySymbol } from '../../utils/currency';
 
@@ -78,7 +78,9 @@ const NeedsAttention = ({ attention }) => {
   const dues = attention?.outstanding_dues || { count: 0, amount: 0 };
   const labs = attention?.overdue_labs || 0;
   const noShows = attention?.no_shows_today || 0;
-  const allClear = dues.count === 0 && labs === 0 && noShows === 0;
+  const lowStock = attention?.low_stock || 0;
+  const expiring = attention?.expiring_soon || 0;
+  const allClear = dues.count === 0 && labs === 0 && noShows === 0 && lowStock === 0 && expiring === 0;
 
   return (
     <div className="md:w-72 flex-shrink-0 border-t border-gray-100 pt-5 md:border-t-0 md:pt-0 md:border-l md:pl-6">
@@ -115,6 +117,24 @@ const NeedsAttention = ({ attention }) => {
               value={`${noShows} no-${noShows === 1 ? 'show' : 'shows'} today`}
               label="Follow up to rebook"
               onClick={() => navigate('/calendar')}
+            />
+          )}
+          {expiring > 0 && (
+            <AttentionTile
+              icon={CalendarClock}
+              tone="bg-red-50 border-red-200 text-red-700"
+              value={`${expiring} ${expiring === 1 ? 'item' : 'items'} expiring`}
+              label="Expired or within 30 days"
+              onClick={() => navigate('/vendors')}
+            />
+          )}
+          {lowStock > 0 && (
+            <AttentionTile
+              icon={Package}
+              tone="bg-amber-50 border-amber-200 text-amber-800"
+              value={`${lowStock} low on stock`}
+              label="At or below reorder level"
+              onClick={() => navigate('/vendors')}
             />
           )}
         </div>

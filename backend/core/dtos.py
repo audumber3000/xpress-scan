@@ -157,6 +157,9 @@ class ClinicUpdateDTO(BaseModel):
 
 class ClinicResponseDTO(ClinicBaseDTO):
     id: int
+    # Unguessable public code (e.g. CLN-A3X9K2B7FQ) used to build the public
+    # booking link, so the link can't be enumerated by numeric clinic id.
+    clinic_code: Optional[str] = None
     status: str = "active"
     # "main_branch" / "branch" — shown on the header's clinic tile. Optional so
     # clinics created before branches existed keep responding unchanged.
@@ -376,6 +379,8 @@ class InventoryItemBaseDTO(BaseModel):
     unit: Optional[str] = None
     min_stock_level: float = 0.0
     price_per_unit: float = 0.0
+    batch_number: Optional[str] = None
+    expiry_date: Optional[date] = None
 
 class InventoryItemCreateDTO(InventoryItemBaseDTO):
     vendor_id: Optional[int] = None
@@ -387,9 +392,54 @@ class InventoryItemUpdateDTO(BaseModel):
     unit: Optional[str] = None
     min_stock_level: Optional[float] = None
     price_per_unit: Optional[float] = None
+    batch_number: Optional[str] = None
+    expiry_date: Optional[date] = None
     vendor_id: Optional[int] = None
 
 class InventoryItemResponseDTO(InventoryItemBaseDTO):
+    id: int
+    clinic_id: int
+    vendor_id: Optional[int] = None
+    vendor_name: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# Medication stock DTOs
+class MedicationStockBaseDTO(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    generic_name: Optional[str] = None
+    strength: Optional[str] = None
+    form: Optional[str] = None
+    quantity: float = 0.0
+    unit: Optional[str] = None
+    min_stock_level: float = 0.0
+    price_per_unit: float = 0.0
+    batch_number: Optional[str] = None
+    expiry_date: Optional[date] = None
+    schedule: Optional[str] = None
+
+class MedicationStockCreateDTO(MedicationStockBaseDTO):
+    vendor_id: Optional[int] = None
+
+class MedicationStockUpdateDTO(BaseModel):
+    name: Optional[str] = None
+    generic_name: Optional[str] = None
+    strength: Optional[str] = None
+    form: Optional[str] = None
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    min_stock_level: Optional[float] = None
+    price_per_unit: Optional[float] = None
+    batch_number: Optional[str] = None
+    expiry_date: Optional[date] = None
+    schedule: Optional[str] = None
+    vendor_id: Optional[int] = None
+
+class MedicationStockResponseDTO(MedicationStockBaseDTO):
     id: int
     clinic_id: int
     vendor_id: Optional[int] = None

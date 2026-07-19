@@ -8,7 +8,10 @@ import { getCurrencyCode } from "../utils/currency";
 import InvoiceEditor from "../components/payments/InvoiceEditor";
 import InvoiceItem from "../components/payments/InvoiceItem";
 import ExpenseModal from "../components/payments/ExpenseModal";
+import ExportModal from "../components/payments/ExportModal";
 import FilterDropdown from "../components/FilterDropdown";
+import Pagination from "../components/Pagination";
+import { formatDate, formatTime } from "../utils/datetime";
 
 const INVOICES_PER_PAGE = 10;
 const LEDGER_PER_PAGE = 10;
@@ -28,7 +31,10 @@ const Payments = () => {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
   const [stats, setStats] = useState({ revenue: 0, pending: 0, total: 0, paidCount: 0, todayRevenue: 0, todayCash: 0, todayOnline: 0 });
   const [statsLoading, setStatsLoading] = useState(true);
-  const [todayInvoices, setTodayInvoices] = useState([]);
+  // Today's Collection is the money received today: one entry per payment
+  // (InvoicePayment.paid_on = today), including partials on older invoices.
+  const [todayCollections, setTodayCollections] = useState([]);
+  const [showExport, setShowExport] = useState(false);
 
   // Ledger states
   const [activeTab, setActiveTab] = useState('payments'); // 'payments' or 'ledger'
@@ -61,45 +67,26 @@ const Payments = () => {
       let totalRevenue = 0;
       let totalPending = 0;
       let paidCount = 0;
-      let todayRevenue = 0;
-      let todayCash = 0;
-      let todayOnline = 0;
-      const todayDate = new Date().toDateString();
-      const todaysInvs = [];
-      
+
       (allInvoices || []).forEach(inv => {
         const amount = parseFloat(inv.total) || 0;
         const due = parseFloat(inv.due_amount ?? amount) || 0;
-        const invDate = inv.created_at ? new Date(inv.created_at).toDateString() : '';
-        
-        if (invDate === todayDate) {
-          todaysInvs.push(inv);
-        }
 
         if (inv.status === 'paid_verified' || inv.status === 'paid_unverified') {
           totalRevenue += amount;
           paidCount += 1;
-          if (invDate === todayDate) {
-            todayRevenue += amount;
-            if (inv.payment_mode === 'Cash') todayCash += amount;
-            else todayOnline += amount;
-          }
         } else if (inv.status === 'draft' || inv.status === 'finalized' || inv.status === 'partially_paid') {
           totalPending += due;
         }
       });
-      
-      setTodayInvoices(todaysInvs);
-      
-      setStats({
+
+      setStats(prev => ({
+        ...prev,
         revenue: totalRevenue,
         pending: totalPending,
         total: (allInvoices || []).length,
         paidCount,
-        todayRevenue,
-        todayCash,
-        todayOnline
-      });
+      }));
     } catch (err) {
       console.error('Error fetching stats:', err);
     } finally {
@@ -107,27 +94,45 @@ const Payments = () => {
     }
   };
 
-  // Fetch invoices from API with pagination and search
+  // Today's Collection = money actually received today (each payment is an entry,
+  // including partials on older invoices). Cash vs Online split by payment method.
+  const fetchTodayCollections = async () => {
+    try {
+      const res = await api.get('/invoices/collections');
+      setTodayCollections(res?.entries || []);
+      setStats(prev => ({
+        ...prev,
+        todayRevenue: res?.total || 0,
+        todayCash: res?.cash || 0,
+        todayOnline: res?.online || 0,
+      }));
+    } catch (err) {
+      console.error('Error fetching today collections:', err);
+      setTodayCollections([]);
+    }
+  };
+
+  // Server-side pagination + search: fetch one page and the matching total.
+  // Search and filters run in the DB so results span every invoice, not just the
+  // rows on the current page.
   const fetchInvoices = async () => {
     try {
       setLoading(true);
       setError("");
-      
-      const skip = (page - 1) * INVOICES_PER_PAGE;
-      
-      const params = {
-        skip: skip,
-        limit: INVOICES_PER_PAGE
-      };
-      
-      const invoicesData = await api.get('/invoices', { params });
+
+      // Backend requires 2+ chars for search; below that, list everything.
+      const filters = {};
+      if (debouncedSearch.trim().length >= 2) filters.search = debouncedSearch.trim();
+      if (filterStatus) filters.status = filterStatus;
+      if (filterMode) filters.payment_mode = filterMode;
+
+      const [invoicesData, countRes] = await Promise.all([
+        api.get('/invoices', { params: { skip: (page - 1) * INVOICES_PER_PAGE, limit: INVOICES_PER_PAGE, ...filters } }),
+        api.get('/invoices/count', { params: filters }),
+      ]);
+
       setInvoices(invoicesData || []);
-      
-      if (invoicesData && invoicesData.length === INVOICES_PER_PAGE) {
-        setTotalCount((page) * INVOICES_PER_PAGE + 1);
-      } else {
-        setTotalCount((page - 1) * INVOICES_PER_PAGE + (invoicesData?.length || 0));
-      }
+      setTotalCount(Number(countRes?.total) || 0);
     } catch (err) {
       console.error('Error fetching invoices:', err);
       setError(err.message || 'Failed to fetch invoices');
@@ -142,27 +147,25 @@ const Payments = () => {
       setLoading(true);
       setError("");
       const skip = (ledgerPage - 1) * LEDGER_PER_PAGE;
-      const data = await api.get('/ledger/', { params: { skip, limit: LEDGER_PER_PAGE } });
+      const [data, countRes, allLedgerData] = await Promise.all([
+        api.get('/ledger/', { params: { skip, limit: LEDGER_PER_PAGE } }),
+        api.get('/ledger/count'),
+        api.get('/ledger/', { params: { skip: 0, limit: 10000 } }),
+      ]);
       setLedgerItems(data || []);
-      
-      // Compute Ledger Stats (this could be optimized via a backend stats route)
-      const allLedgerData = await api.get('/ledger/', { params: { skip: 0, limit: 10000 } });
+      setLedgerTotalCount(Number(countRes?.total) || 0);
+
+      // Money in = every payment received; money out = every expense.
       let inflow = 0, outflow = 0, expensesCount = 0;
       (allLedgerData || []).forEach(item => {
-        if (item.type === 'invoice' && item.status?.includes('paid')) {
-          inflow += item.amount;
-        } else if (item.type === 'expense') {
+        if (item.type === 'expense') {
           outflow += item.amount;
           expensesCount++;
+        } else {
+          inflow += item.amount;
         }
       });
       setLedgerStats({ inflow, outflow, net: inflow - outflow, expensesCount });
-      
-      if (data && data.length === LEDGER_PER_PAGE) {
-        setLedgerTotalCount((ledgerPage) * LEDGER_PER_PAGE + 1);
-      } else {
-        setLedgerTotalCount((ledgerPage - 1) * LEDGER_PER_PAGE + (data?.length || 0));
-      }
     } catch (err) {
       console.error('Error fetching ledger:', err);
       setError(err.message || 'Failed to fetch ledger');
@@ -177,11 +180,15 @@ const Payments = () => {
       if (activeTab === 'payments') {
         fetchInvoices();
         fetchStats();
+      } else if (activeTab === 'today') {
+        fetchTodayCollections();
+        fetchStats();
       } else {
         fetchLedger();
       }
     });
     fetchStats();
+    fetchTodayCollections();
   }, [setTitle, setRefreshFunction, activeTab]);
 
   useEffect(() => {
@@ -191,7 +198,7 @@ const Payments = () => {
       fetchLedger();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, ledgerPage, debouncedSearch, activeTab]);
+  }, [page, ledgerPage, debouncedSearch, activeTab, filterStatus, filterMode]);
 
   // Deep links from global search: ?invoice=<id> opens that invoice,
   // ?tab=ledger lands on the ledger. Params are stripped once applied so a
@@ -219,6 +226,7 @@ const Payments = () => {
     setSelectedInvoiceId(null);
     fetchInvoices();
     fetchStats();
+    fetchTodayCollections();
     if (activeTab === 'ledger') fetchLedger();
   };
 
@@ -226,21 +234,24 @@ const Payments = () => {
     fetchLedger();
   };
 
-  // Filter items client-side for search + filters
-  const filteredInvoices = useMemo(() => {
-    const baseInvoices = activeTab === 'today' ? todayInvoices : invoices;
-    return baseInvoices.filter((invoice) => {
+  // The 'payments' tab is filtered/searched on the server (whole clinic).
+  const filteredInvoices = invoices;
+
+  // The 'today' tab is a small in-memory set of payments received today, so its
+  // search/filters run here. Mode matches the payment method; status the invoice.
+  const filteredTodayCollections = useMemo(() => {
+    return todayCollections.filter((e) => {
       if (searchTerm.trim()) {
-        const searchLower = searchTerm.toLowerCase();
-        if (!invoice.patient_name?.toLowerCase().includes(searchLower) &&
-            !invoice.invoice_number?.toLowerCase().includes(searchLower) &&
-            !invoice.patient_phone?.toLowerCase().includes(searchLower)) return false;
+        const s = searchTerm.toLowerCase();
+        if (!e.patient_name?.toLowerCase().includes(s) &&
+            !e.invoice_number?.toLowerCase().includes(s) &&
+            !e.patient_phone?.toLowerCase().includes(s)) return false;
       }
-      if (filterStatus && invoice.status !== filterStatus) return false;
-      if (filterMode && invoice.payment_mode?.toLowerCase() !== filterMode.toLowerCase() && invoice.payment_method?.toLowerCase() !== filterMode.toLowerCase()) return false;
+      if (filterStatus && e.invoice_status !== filterStatus) return false;
+      if (filterMode && (e.method || '').toLowerCase() !== filterMode.toLowerCase()) return false;
       return true;
     });
-  }, [invoices, todayInvoices, activeTab, searchTerm, filterStatus, filterMode]);
+  }, [todayCollections, searchTerm, filterStatus, filterMode]);
   
   const filteredLedger = useMemo(() => {
     return ledgerItems.filter((item) => {
@@ -254,13 +265,6 @@ const Payments = () => {
       return true;
     });
   }, [ledgerItems, searchTerm, filterLedgerType]);
-
-  const totalPages = activeTab === 'payments' 
-    ? Math.ceil(totalCount / INVOICES_PER_PAGE) || 1
-    : activeTab === 'today' ? 1 
-    : Math.ceil(ledgerTotalCount / LEDGER_PER_PAGE) || 1;
-    
-  const currentPageDisplay = activeTab === 'payments' ? page : activeTab === 'today' ? 1 : ledgerPage;
 
   const currentItems = activeTab === 'ledger' ? filteredLedger : filteredInvoices;
 
@@ -513,13 +517,22 @@ const Payments = () => {
                 value={filterLedgerType}
                 onChange={(v) => { setFilterLedgerType(v); setLedgerPage(1); }}
                 options={[
-                  { value: 'invoice', label: 'Invoice' },
-                  { value: 'expense', label: 'Expense' }
+                  { value: 'invoice', label: 'Payments (In)' },
+                  { value: 'expense', label: 'Expenses (Out)' }
                 ]}
               />
             )}
           </div>
           <div className="w-full sm:w-auto flex space-x-3">
+            <button
+              onClick={() => setShowExport(true)}
+              className="w-full sm:w-auto inline-flex justify-center items-center px-4 py-2.5 border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2a276e] transition-colors"
+            >
+              <svg className="mr-2 h-5 w-5 text-[#2a276e]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export
+            </button>
             {activeTab === 'payments' || activeTab === 'today' ? (
               <button
                  onClick={() => setSelectedInvoiceId('new')}
@@ -581,7 +594,7 @@ const Payments = () => {
                 </div>
               </div>
             </div>
-          ) : activeTab === 'payments' || activeTab === 'today' ? (
+          ) : activeTab === 'payments' ? (
             <table className="w-full">
               <thead className="bg-[#f8fafc] border-b border-gray-100 sticky top-0 z-10">
                 <tr>
@@ -618,6 +631,59 @@ const Payments = () => {
                 )}
               </tbody>
             </table>
+          ) : activeTab === 'today' ? (
+            /* Today's Collection — one row per payment received today (incl. partials on older invoices) */
+            <table className="w-full">
+              <thead className="bg-[#f8fafc] border-b border-gray-100 sticky top-0 z-10">
+                <tr>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Invoice #</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Patient Details</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Collected</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Time</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Method</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Invoice Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredTodayCollections.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                      <div>
+                        <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <p className="mt-2 text-lg font-medium text-gray-900">No payments collected today</p>
+                        <p className="text-sm text-gray-500 mt-1">Payments you record today, including part payments, show up here.</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTodayCollections.map((e) => (
+                    <tr
+                      key={e.payment_id}
+                      onClick={() => handleInvoiceSelect(e.invoice_id)}
+                      className="hover:bg-gray-50 cursor-pointer transition-colors"
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-[#2a276e]">{e.invoice_number}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-sm font-medium text-gray-900">{e.patient_name || 'Unknown'}</span>
+                        {e.patient_display_id && <span className="text-xs text-gray-400"> · {e.patient_display_id}</span>}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{e.patient_phone || '-'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600">+{formatCurrency(e.amount)}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{e.created_at ? formatTime(e.created_at) : '-'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{e.method || '-'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 capitalize">
+                          {(e.invoice_status || '').replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           ) : (
             <table className="w-full">
               <thead className="bg-[#f8fafc] border-b border-gray-100 sticky top-0 z-10">
@@ -645,9 +711,10 @@ const Payments = () => {
                   </tr>
                 ) : (
                   currentItems.map((item) => (
-                    <tr key={`${item.type}_${item.id}`} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => item.type === 'invoice' ? handleInvoiceSelect(item.id) : setSelectedExpenseId(item.id)}>
+                    <tr key={`${item.type}_${item.id}`} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => item.type === 'invoice' ? handleInvoiceSelect(item.invoice_id) : setSelectedExpenseId(item.id)}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(item.date).toLocaleDateString()}
+                        <div>{formatDate(item.date)}</div>
+                        {item.recorded_at && <div className="text-xs text-gray-400">{formatTime(item.recorded_at)}</div>}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">{item.entity_name || 'N/A'}</div>
@@ -690,74 +757,24 @@ const Payments = () => {
         </div>
       </div>
 
-      {/* Pagination Container */}
-      {totalPages > 1 && (
-        <div className="bg-white px-6 py-3 flex items-center justify-between border-t border-gray-200 flex-shrink-0">
-          <div className="flex-1 flex justify-between sm:hidden">
-            <button
-              onClick={() => activeTab === 'payments' ? setPage(page - 1) : setLedgerPage(ledgerPage - 1)}
-              disabled={currentPageDisplay === 1}
-              className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Previous
-            </button>
-            <button
-              onClick={() => activeTab === 'payments' ? setPage(page + 1) : setLedgerPage(ledgerPage + 1)}
-              disabled={currentPageDisplay === totalPages}
-              className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Next
-            </button>
-          </div>
-          <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm text-gray-700">
-                Showing <span className="font-medium">{(currentPageDisplay - 1) * INVOICES_PER_PAGE + 1}</span> to{' '}
-                <span className="font-medium">{Math.min(currentPageDisplay * INVOICES_PER_PAGE, activeTab === 'payments' ? totalCount : ledgerTotalCount)}</span> of{' '}
-                <span className="font-medium">{activeTab === 'payments' ? totalCount : ledgerTotalCount}</span> results
-              </p>
-            </div>
-            <div>
-              <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                <button
-                  onClick={() => activeTab === 'payments' ? setPage(page - 1) : setLedgerPage(ledgerPage - 1)}
-                  disabled={currentPageDisplay === 1}
-                  className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <span className="sr-only">Previous</span>
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                </button>
-                
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-                  <button
-                    key={pageNum}
-                    onClick={() => activeTab === 'payments' ? setPage(pageNum) : setLedgerPage(pageNum)}
-                    className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium transition-colors ${
-                      currentPageDisplay === pageNum
-                        ? 'z-10 bg-[#2a276e] border-[#2a276e] text-white'
-                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {pageNum}
-                  </button>
-                ))}
-                
-                <button
-                  onClick={() => activeTab === 'payments' ? setPage(page + 1) : setLedgerPage(ledgerPage + 1)}
-                  disabled={currentPageDisplay === totalPages}
-                  className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <span className="sr-only">Next</span>
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </nav>
-            </div>
-          </div>
-        </div>
+      {/* Pagination — shared component (same as the patient section) */}
+      {activeTab === 'payments' && (
+        <Pagination
+          page={page}
+          pageSize={INVOICES_PER_PAGE}
+          totalItems={totalCount}
+          onPageChange={setPage}
+          className="flex-shrink-0"
+        />
+      )}
+      {activeTab === 'ledger' && (
+        <Pagination
+          page={ledgerPage}
+          pageSize={LEDGER_PER_PAGE}
+          totalItems={ledgerTotalCount}
+          onPageChange={setLedgerPage}
+          className="flex-shrink-0"
+        />
       )}
 
       {/* Invoice Editor Panel Drawer */}
@@ -777,6 +794,9 @@ const Payments = () => {
           onSave={handleExpenseSave}
         />
       )}
+
+      {/* Export to CSV — shape depends on the active tab */}
+      <ExportModal open={showExport} onClose={() => setShowExport(false)} mode={activeTab} />
     </div>
   );
 };

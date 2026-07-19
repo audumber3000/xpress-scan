@@ -1,12 +1,49 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from typing import List
+from pydantic import BaseModel
 from database import get_db
 from models import TreatmentType
 from schemas import TreatmentTypeCreate, TreatmentTypeUpdate, TreatmentTypeOut
 from core.auth_utils import get_current_user
 
 router = APIRouter()
+
+
+def _ensure_billing_edit(current_user):
+    if current_user.role != "clinic_owner":
+        perms = (current_user.permissions or {}).get("billing", {})
+        if not perms.get("edit", False):
+            raise HTTPException(status_code=403, detail="You don't have permission to edit billing information")
+
+
+class TreatmentTypeBulkItem(BaseModel):
+    name: str
+    price: float = 0.0
+
+
+class TreatmentTypeBulkCreate(BaseModel):
+    items: List[TreatmentTypeBulkItem]
+
+
+@router.post("/bulk", status_code=status.HTTP_201_CREATED)
+def bulk_create_treatment_types(payload: TreatmentTypeBulkCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    """Create many treatment types at once (CSV / manual import)."""
+    _ensure_billing_edit(current_user)
+    created, errors = 0, []
+    for idx, item in enumerate(payload.items):
+        name = (item.name or "").strip()
+        if not name:
+            errors.append({"row": idx + 1, "message": "Name is required"})
+            continue
+        try:
+            db.add(TreatmentType(name=name, price=float(item.price or 0), clinic_id=current_user.clinic_id))
+            db.commit()
+            created += 1
+        except Exception:
+            db.rollback()
+            errors.append({"row": idx + 1, "message": f"'{name}' could not be added (maybe a duplicate)"})
+    return {"created_count": created, "errors": errors}
 
 @router.get("", response_model=List[TreatmentTypeOut])
 def list_treatment_types(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
