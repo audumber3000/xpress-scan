@@ -2,6 +2,8 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wallet, FlaskConical, UserX, CalendarClock, Package, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { SkeletonBox } from '../../components/Skeleton';
+import EmptyState from '../../components/common/EmptyState';
+import { onlineCalendar } from '../../assets/illustrations';
 import { getCurrencySymbol } from '../../utils/currency';
 
 const STATUS_STYLES = {
@@ -35,10 +37,12 @@ const Schedule = ({ summary, appointments }) => (
     </div>
 
     {appointments.length === 0 ? (
-      <div className="flex flex-col items-center justify-center py-10 text-center">
-        <CalendarClock size={28} className="text-gray-200 mb-2" />
-        <p className="text-sm font-medium text-gray-400">No appointments today</p>
-      </div>
+      <EmptyState
+        image={onlineCalendar}
+        size="sm"
+        title="No appointments today"
+        subtitle="Today's bookings will show up here as they come in."
+      />
     ) : (
       <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
         {appointments.map((a) => (

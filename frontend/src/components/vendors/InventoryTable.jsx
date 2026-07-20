@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Package, Edit2, Trash2 } from 'lucide-react';
 import Pagination from '../Pagination';
+import EmptyState from '../common/EmptyState';
+import { takeOutBoxes } from '../../assets/illustrations';
 import { formatDateTime } from '../../utils/datetime';
 import { StockStatusBadge, ExpiryCell } from './StockBadges';
 
@@ -88,12 +90,12 @@ const InventoryTable = ({ inventory, onEditItem, onDeleteItem }) => {
             ))}
             {paginatedItems.length === 0 && (
               <tr>
-                <td colSpan="7" className="px-6 py-12">
-                  <div className="flex flex-col items-center justify-center text-center">
-                    <Package className="w-12 h-12 text-gray-300 mb-3" strokeWidth={1.5} />
-                    <p className="text-sm font-bold text-gray-900">No stock items</p>
-                    <p className="text-sm text-gray-500 mt-1">Add items to track stock levels.</p>
-                  </div>
+                <td colSpan="7" className="px-6 py-8">
+                  <EmptyState
+                    image={takeOutBoxes}
+                    title="No stock items yet"
+                    subtitle="Add items to start tracking stock levels and expiry."
+                  />
                 </td>
               </tr>
             )}

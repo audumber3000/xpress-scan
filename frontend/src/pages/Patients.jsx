@@ -11,6 +11,8 @@ import Pagination from "../components/Pagination";
 import FilterDropdown from "../components/FilterDropdown";
 import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
 import ImportPatientsModal from "../components/patient/ImportPatientsModal";
+import EmptyState from "../components/common/EmptyState";
+import { medicalCare } from "../assets/illustrations";
 import AgeOrDobField, { computeAgeFromDob } from "../components/patient/AgeOrDobField";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
@@ -626,14 +628,12 @@ const Patients = () => {
                 <tbody className="bg-white divide-y divide-gray-100">
                   {paginatedData.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
-                        <div>
-                          <svg className="mx-auto h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                          <p className="mt-2 text-sm font-medium text-gray-900">No patients found</p>
-                          <p className="text-xs text-gray-400 mt-1">Try adjusting your search or add a new patient.</p>
-                        </div>
+                      <td colSpan={7} className="px-6 py-8">
+                        <EmptyState
+                          image={medicalCare}
+                          title="No patients yet"
+                          subtitle="Add your first patient, or adjust your search to find someone."
+                        />
                       </td>
                     </tr>
                   ) : (
@@ -793,8 +793,12 @@ const Patients = () => {
             <div className="flex-1 overflow-auto p-8">
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-10">
                 {paginatedData.length === 0 ? (
-                  <div className="col-span-full py-12 text-center text-gray-500 font-medium">
-                    No folders found.
+                  <div className="col-span-full">
+                    <EmptyState
+                      image={medicalCare}
+                      title="No patients yet"
+                      subtitle="Add your first patient, or adjust your search to find someone."
+                    />
                   </div>
                 ) : (
                   paginatedData.map((p) => (
