@@ -153,6 +153,13 @@ run_migration "medstock_units_per_pack" "ALTER TABLE medication_stock ADD COLUMN
 run_migration "invoice_case_paper_id" "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS case_paper_id INTEGER REFERENCES case_papers(id)"
 run_migration "inv_txn_line_item_id" "ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS invoice_line_item_id INTEGER REFERENCES invoice_line_items(id)"
 run_migration "lab_order_invoice_line" "ALTER TABLE lab_orders ADD COLUMN IF NOT EXISTS invoice_line_item_id INTEGER REFERENCES invoice_line_items(id)"
+# Backfill: older case-paper invoices were linked only via appointment_id (the
+# case paper id was stored there before case_paper_id existed), so they never
+# showed in a case paper's invoice list. Heal them by copying appointment_id ->
+# case_paper_id, but ONLY when appointment_id points to a case paper of the SAME
+# patient/clinic (appointment_id is overloaded and can also hold a real
+# appointments.id for someone else). Idempotent: the NULL guard makes re-runs no-ops.
+run_migration "backfill_invoice_case_paper" "UPDATE invoices i SET case_paper_id = i.appointment_id FROM case_papers cp WHERE i.case_paper_id IS NULL AND i.appointment_id IS NOT NULL AND cp.id = i.appointment_id AND cp.patient_id = i.patient_id AND cp.clinic_id = i.clinic_id"
 
 # ── Schema migration check (run against RDS) ──────────────────────────────────
 echo ""
