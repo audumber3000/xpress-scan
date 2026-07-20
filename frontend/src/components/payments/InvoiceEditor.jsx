@@ -38,10 +38,11 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
   // on close if it was left completely empty (avoids ₹0 orphan drafts).
   const createdHereRef = useRef(false);
 
-  const createDraftInvoice = async ({ patientId, appointmentId = null, notes = "", lineItems = [] }) => {
+  const createDraftInvoice = async ({ patientId, appointmentId = null, caseId = null, notes = "", lineItems = [] }) => {
     const newInvoice = await api.post('/invoices', {
       patient_id: parseInt(patientId),
       appointment_id: appointmentId ? parseInt(appointmentId) : null,
+      case_paper_id: caseId ? parseInt(caseId) : null,
       notes
     });
 
@@ -90,6 +91,7 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
         createDraftInvoice({
           patientId: prefill.patientId,
           appointmentId: prefill.appointmentId,
+          caseId: prefill.caseId,
           notes: prefill.notes || "",
           lineItems: prefill.lineItems || []
         })
@@ -616,9 +618,30 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
               <div className="min-w-0">
                 <h3 className="text-lg font-semibold text-gray-900">Delete invoice?</h3>
                 <p className="text-sm text-gray-600 mt-1">
-                  Are you sure you want to delete invoice{" "}
-                  <span className="font-semibold">{invoice?.invoice_number || `#${currentInvoiceId}`}</span>?
-                  This will remove it and its line items, and <span className="font-semibold">cannot be undone</span>.
+                  Deleting invoice{" "}
+                  <span className="font-semibold">{invoice?.invoice_number || `#${currentInvoiceId}`}</span>{" "}
+                  removes the bill and all of the charges below. This{" "}
+                  <span className="font-semibold">cannot be undone</span>.
+                </p>
+                {(invoice?.line_items?.length ?? 0) > 0 && (
+                  <ul className="mt-3 max-h-40 overflow-y-auto rounded-lg border border-gray-100 bg-gray-50 divide-y divide-gray-100 text-sm">
+                    {invoice.line_items.map((li) => (
+                      <li key={li.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                        <span className="text-gray-700 truncate">
+                          {li.description}
+                          {(li.quantity ?? 1) > 1 && (
+                            <span className="text-gray-400"> × {li.quantity}</span>
+                          )}
+                        </span>
+                        <span className="text-gray-500 flex-shrink-0">
+                          ₹{Number(li.amount ?? 0).toLocaleString('en-IN')}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="text-xs text-gray-400 mt-2">
+                  Any medicines or materials recorded as used stay in your stock ledger. Only their billing here is removed.
                 </p>
               </div>
             </div>

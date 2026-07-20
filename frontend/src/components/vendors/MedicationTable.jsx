@@ -52,7 +52,10 @@ const MedicationTable = ({ medications, onEditItem, onDeleteItem }) => {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   <span className="font-medium tabular-nums">{item.quantity}</span>
-                  <span className="text-xs text-gray-500 ml-1">{item.unit || 'strip'}</span>
+                  <span className="text-xs text-gray-500 ml-1">{item.unit || 'unit'}</span>
+                  {item.units_per_pack > 0 && item.pack_unit && (
+                    <span className="block text-[11px] text-gray-400">≈ {(item.quantity / item.units_per_pack).toFixed(1)} {item.pack_unit.toLowerCase()}</span>
+                  )}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap"><ExpiryCell date={item.expiry_date} /></td>
                 <td className="px-6 py-4 whitespace-nowrap"><StockStatusBadge item={item} /></td>

@@ -15,6 +15,7 @@ const DocumentsNotesGrid = ({
   onUploadClick,
   consumptions,
   inventoryItems,
+  medicationItems,
   onAddConsumption,
   onDeleteConsumption,
 }) => {
@@ -69,6 +70,7 @@ const DocumentsNotesGrid = ({
       <InventoryUsedSection
         consumptions={consumptions}
         inventoryItems={inventoryItems}
+        medicationItems={medicationItems}
         onAdd={onAddConsumption}
         onDelete={onDeleteConsumption}
       />

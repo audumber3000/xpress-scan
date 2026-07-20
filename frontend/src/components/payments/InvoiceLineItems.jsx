@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { api } from "../../utils/api";
 import InvoiceLineItemForm from "./InvoiceLineItemForm";
 import { getCurrencySymbol } from "../../utils/currency";
 
@@ -103,6 +104,29 @@ const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdat
   const [editingId, setEditingId] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
+  // Add-from-stock: pick a medication, bill it AND deduct from stock.
+  const [medStock, setMedStock] = useState([]);
+  const [showStock, setShowStock] = useState(false);
+  const [stockSel, setStockSel] = useState('');
+  const [stockQty, setStockQty] = useState('');
+  useEffect(() => {
+    if (!canEdit) return;
+    api.get('/medication-stock').then((d) => setMedStock(Array.isArray(d) ? d : [])).catch(() => {});
+  }, [canEdit]);
+
+  const addFromStock = async () => {
+    const med = medStock.find((m) => String(m.id) === String(stockSel));
+    const q = parseFloat(stockQty);
+    if (!med || !q || q <= 0) return;
+    await onAdd({
+      description: med.name + (med.strength ? ` ${med.strength}` : ''),
+      quantity: q,
+      unit_price: Number(med.price_per_unit || 0),
+      medication_stock_id: med.id,
+    });
+    setShowStock(false); setStockSel(''); setStockQty('');
+  };
+
   // Local discount state for toggling without immediately spamming API
   const [localDiscount, setLocalDiscount] = useState(invoice?.discount || 0);
   const [localDiscountType, setLocalDiscountType] = useState(invoice?.discount_type || 'amount');
@@ -148,17 +172,47 @@ const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdat
           <GSTInfoPopover />
         </div>
         {canEdit && (
-          <button
-            onClick={() => {
-              setShowAddForm(true);
-              setEditingId(null);
-            }}
-            className="px-4 py-2 bg-[#25D366] text-white rounded-lg hover:bg-[#20BA5A] transition text-sm font-medium"
-          >
-            + Add Item
-          </button>
+          <div className="flex items-center gap-2">
+            {medStock.length > 0 && (
+              <button
+                onClick={() => { setShowStock((v) => !v); setShowAddForm(false); setEditingId(null); }}
+                className="px-4 py-2 bg-white border border-emerald-300 text-emerald-700 rounded-lg hover:bg-emerald-50 transition text-sm font-medium"
+              >
+                + From stock
+              </button>
+            )}
+            <button
+              onClick={() => { setShowAddForm(true); setEditingId(null); setShowStock(false); }}
+              className="px-4 py-2 bg-[#25D366] text-white rounded-lg hover:bg-[#20BA5A] transition text-sm font-medium"
+            >
+              + Add Item
+            </button>
+          </div>
         )}
       </div>
+
+      {canEdit && showStock && (
+        <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end bg-emerald-50/60 border border-emerald-100 rounded-xl p-3">
+          <div className="flex-1">
+            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Medication (from stock)</label>
+            <select value={stockSel} onChange={(e) => setStockSel(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2a276e]">
+              <option value="">Select a medicine…</option>
+              {medStock.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}{m.strength ? ` ${m.strength}` : ''} — {m.quantity} {m.unit || 'left'} left
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="w-full sm:w-24">
+            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Qty</label>
+            <input type="number" min="0" step="any" value={stockQty} onChange={(e) => setStockQty(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2a276e]" />
+          </div>
+          <button onClick={addFromStock} disabled={!stockSel || !stockQty} className="px-4 py-2 bg-[#2a276e] text-white rounded-lg text-sm font-semibold hover:bg-[#1a1548] transition disabled:opacity-50">
+            Add & deduct
+          </button>
+        </div>
+      )}
 
 
       {showAddForm && !editingId && (

@@ -25,7 +25,7 @@ from core.auth_utils import get_current_user
 from core.clinic_time import clinic_today
 from schemas import (
     InvoiceOut, InvoiceLineItemCreate, InvoiceLineItemOut,
-    MarkAsPaidRequest, InvoiceCreate, InvoicePaymentCreate
+    MarkAsPaidRequest, InvoiceCreate, InvoicePaymentCreate, ProcedureChargeCreate
 )
 from domains.infrastructure.services.pdf_service import html_template_to_pdf
 from domains.infrastructure.services.r2_storage import upload_pdf_to_r2
@@ -62,6 +62,7 @@ def enrich_invoice(db: Session, invoice: Invoice):
         'payment_mode': invoice.payment_mode,
         'utr': invoice.utr,
         'appointment_id': invoice.appointment_id,
+        'case_paper_id': getattr(invoice, 'case_paper_id', None),
         'subtotal': invoice.subtotal,
         'tax': invoice.tax,
         'discount': invoice.discount or 0.0,
@@ -145,6 +146,50 @@ def recalculate_invoice_totals(db: Session, invoice: Invoice):
     else:
         invoice.paid_amount = 0.0
         invoice.due_amount = max(total, 0.0)
+
+def generate_invoice_number(db: Session, clinic_id: int) -> str:
+    """Next INV-YYYY-#### for the clinic."""
+    year = datetime.utcnow().year
+    last = (
+        db.query(Invoice)
+        .filter(Invoice.clinic_id == clinic_id, Invoice.invoice_number.like(f"INV-{year}-%"))
+        .order_by(desc(Invoice.invoice_number))
+        .first()
+    )
+    n = 1
+    if last:
+        try:
+            n = int(last.invoice_number.split('-')[-1]) + 1
+        except (ValueError, IndexError):
+            n = 1
+    return f"INV-{year}-{n:04d}"
+
+
+def get_or_create_draft_invoice(db: Session, clinic_id: int, patient_id: int, case_paper_id, created_by=None) -> Invoice:
+    """The case paper's current draft invoice, created if none. This is the one
+    bill that procedures and used/dispensed stock both accumulate into."""
+    inv = (
+        db.query(Invoice)
+        .filter(
+            Invoice.clinic_id == clinic_id,
+            Invoice.case_paper_id == case_paper_id,
+            Invoice.status == 'draft',
+        )
+        .order_by(desc(Invoice.id))
+        .first()
+    )
+    if inv:
+        return inv
+    inv = Invoice(
+        clinic_id=clinic_id, patient_id=patient_id, case_paper_id=case_paper_id,
+        invoice_number=generate_invoice_number(db, clinic_id), status='draft',
+        subtotal=0.0, tax=0.0, total=0.0, paid_amount=0.0, due_amount=0.0,
+        created_by=created_by,
+    )
+    db.add(inv)
+    db.flush()
+    return inv
+
 
 def sync_invoice_from_payments(invoice: Invoice):
     """Recompute paid/due/status from the sum of the invoice's payment rows —
@@ -242,6 +287,7 @@ async def create_invoice(
             clinic_id=current_user.clinic_id,
             patient_id=invoice_data.patient_id,
             appointment_id=appointment_id,
+            case_paper_id=invoice_data.case_paper_id,
             invoice_number=invoice_number,
             status='draft',
             subtotal=0.0,
@@ -276,6 +322,7 @@ def _filtered_invoices_query(
     status: Optional[str] = None,
     patient_id: Optional[int] = None,
     appointment_id: Optional[int] = None,
+    case_paper_id: Optional[int] = None,
     search: Optional[str] = None,
     payment_mode: Optional[str] = None,
 ):
@@ -292,6 +339,8 @@ def _filtered_invoices_query(
         query = query.filter(Invoice.patient_id == patient_id)
     if appointment_id:
         query = query.filter(Invoice.appointment_id == appointment_id)
+    if case_paper_id:
+        query = query.filter(Invoice.case_paper_id == case_paper_id)
     if payment_mode:
         query = query.filter(Invoice.payment_mode.ilike(payment_mode))
 
@@ -315,6 +364,7 @@ async def count_invoices(
     status: Optional[str] = None,
     patient_id: Optional[int] = None,
     appointment_id: Optional[int] = None,
+    case_paper_id: Optional[int] = None,
     search: Optional[str] = Query(None),
     payment_mode: Optional[str] = Query(None),
     db: Session = Depends(get_db),
@@ -326,7 +376,7 @@ async def count_invoices(
         query = _filtered_invoices_query(
             db, current_user.clinic_id,
             status=status, patient_id=patient_id, appointment_id=appointment_id,
-            search=search, payment_mode=payment_mode,
+            case_paper_id=case_paper_id, search=search, payment_mode=payment_mode,
         )
         total = query.with_entities(func.count(Invoice.id)).scalar() or 0
         return {"total": int(total)}
@@ -541,6 +591,7 @@ async def get_invoices(
     status: Optional[str] = None,
     patient_id: Optional[int] = None,
     appointment_id: Optional[int] = None,
+    case_paper_id: Optional[int] = None,
     search: Optional[str] = Query(None),
     payment_mode: Optional[str] = Query(None),
     db: Session = Depends(get_db),
@@ -552,7 +603,7 @@ async def get_invoices(
         query = _filtered_invoices_query(
             db, current_user.clinic_id,
             status=status, patient_id=patient_id, appointment_id=appointment_id,
-            search=search, payment_mode=payment_mode,
+            case_paper_id=case_paper_id, search=search, payment_mode=payment_mode,
         )
         invoices = query.order_by(desc(Invoice.created_at)).offset(skip).limit(limit).all()
         return [enrich_invoice(db, inv) for inv in invoices]
@@ -690,7 +741,25 @@ async def add_line_item(
         )
         db.add(line_item)
         db.flush()
-        
+
+        # Optionally deduct this line from medication stock (dispense via invoice),
+        # logging a linked 'used' movement so it shows in the ledger and can reverse.
+        med_id = getattr(line_item_data, 'medication_stock_id', None)
+        if med_id:
+            from models import MedicationStock, InventoryTransaction
+            med = db.query(MedicationStock).filter(
+                MedicationStock.id == med_id, MedicationStock.clinic_id == current_user.clinic_id
+            ).first()
+            if med:
+                med.quantity = max(0.0, (med.quantity or 0.0) - line_item_data.quantity)
+                db.add(InventoryTransaction(
+                    clinic_id=current_user.clinic_id, patient_id=invoice.patient_id,
+                    case_paper_id=invoice.case_paper_id, medication_stock_id=med.id,
+                    invoice_line_item_id=line_item.id, direction='out', action='used',
+                    item_name=med.name, unit=med.unit, quantity=line_item_data.quantity,
+                    note='Dispensed via invoice',
+                ))
+
         # Recalculate totals
         recalculate_invoice_totals(db, invoice)
         
@@ -710,6 +779,57 @@ async def add_line_item(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error adding line item: {str(e)}")
+
+@router.post("/procedure-charge")
+async def add_procedure_charge(
+    payload: ProcedureChargeCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Auto-bill a completed procedure: add a priced line to the case paper's
+    draft invoice, creating the draft if none exists. Mirrors how used/dispensed
+    stock accumulates into the same bill. Returns the invoice + line ids so the
+    caller can later update or remove this exact line if the procedure changes."""
+    try:
+        if payload.quantity <= 0:
+            raise HTTPException(status_code=400, detail="Quantity must be greater than zero")
+
+        inv = get_or_create_draft_invoice(
+            db, current_user.clinic_id, payload.patient_id, payload.case_paper_id,
+            created_by=current_user.id,
+        )
+        line = InvoiceLineItem(
+            invoice_id=inv.id,
+            description=payload.description,
+            quantity=payload.quantity,
+            unit_price=payload.unit_price,
+            amount=payload.quantity * payload.unit_price,
+        )
+        db.add(line)
+        db.flush()
+
+        recalculate_invoice_totals(db, inv)
+        create_audit_log(db, inv.id, current_user.id, 'line_item_added', None, {
+            'description': line.description,
+            'quantity': line.quantity,
+            'unit_price': line.unit_price,
+            'amount': line.amount,
+            'source': 'procedure',
+        })
+
+        db.commit()
+        db.refresh(inv)
+        return {
+            'invoice_id': inv.id,
+            'line_item_id': line.id,
+            'invoice_number': inv.invoice_number,
+            'status': inv.status,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error billing procedure: {str(e)}")
 
 @router.put("/{invoice_id}/line-items/{line_item_id}", response_model=InvoiceOut)
 async def update_line_item(
@@ -808,7 +928,7 @@ async def delete_line_item(
         
         if not line_item:
             raise HTTPException(status_code=404, detail="Line item not found")
-        
+
         # Audit log before deletion
         create_audit_log(db, invoice_id, current_user.id, 'line_item_deleted', {
             'description': line_item.description,
@@ -816,7 +936,18 @@ async def delete_line_item(
             'unit_price': line_item.unit_price,
             'amount': line_item.amount
         }, None)
-        
+
+        # Detach ledger/lab-order rows that reference this line so the FK doesn't
+        # block the delete. The stock movement / lab order itself stays; it's
+        # just no longer billed to this line.
+        from models import InventoryTransaction, LabOrder
+        db.query(InventoryTransaction).filter(
+            InventoryTransaction.invoice_line_item_id == line_item_id
+        ).update({InventoryTransaction.invoice_line_item_id: None}, synchronize_session=False)
+        db.query(LabOrder).filter(
+            LabOrder.invoice_line_item_id == line_item_id
+        ).update({LabOrder.invoice_line_item_id: None}, synchronize_session=False)
+
         db.delete(line_item)
         db.flush()
         
@@ -1115,10 +1246,26 @@ async def delete_invoice(
         
         if invoice.status in ('paid_verified', 'paid_unverified', 'partially_paid'):
             raise HTTPException(status_code=400, detail="Paid invoices cannot be deleted")
-        
+
+        # Stock-ledger rows (used/dispensed items) reference the invoice's line
+        # items. Deleting the invoice cascades its line items, so unlink those
+        # references first or the FK blocks the delete. The stock movements stay
+        # in the ledger — the items were physically used; they're just no longer
+        # billed to this (now removed) invoice.
+        from models import InventoryTransaction, LabOrder
+        line_item_ids = [li.id for li in invoice.line_items]
+        if line_item_ids:
+            db.query(InventoryTransaction).filter(
+                InventoryTransaction.invoice_line_item_id.in_(line_item_ids)
+            ).update({InventoryTransaction.invoice_line_item_id: None}, synchronize_session=False)
+            db.query(LabOrder).filter(
+                LabOrder.invoice_line_item_id.in_(line_item_ids)
+            ).update({LabOrder.invoice_line_item_id: None}, synchronize_session=False)
+            db.flush()
+
         db.delete(invoice)
         db.commit()
-        
+
         return {"success": True, "message": "Invoice deleted successfully"}
     except HTTPException:
         raise

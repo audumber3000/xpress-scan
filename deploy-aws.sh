@@ -148,6 +148,11 @@ run_migration "medication_stock" "CREATE TABLE IF NOT EXISTS medication_stock (i
 run_migration "default_medications_seeded" "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS default_medications_seeded BOOLEAN DEFAULT FALSE"
 run_migration "inv_txn_action" "ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS action VARCHAR"
 run_migration "inv_txn_med_id" "ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS medication_stock_id INTEGER REFERENCES medication_stock(id)"
+run_migration "medstock_pack_unit" "ALTER TABLE medication_stock ADD COLUMN IF NOT EXISTS pack_unit VARCHAR"
+run_migration "medstock_units_per_pack" "ALTER TABLE medication_stock ADD COLUMN IF NOT EXISTS units_per_pack DOUBLE PRECISION"
+run_migration "invoice_case_paper_id" "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS case_paper_id INTEGER REFERENCES case_papers(id)"
+run_migration "inv_txn_line_item_id" "ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS invoice_line_item_id INTEGER REFERENCES invoice_line_items(id)"
+run_migration "lab_order_invoice_line" "ALTER TABLE lab_orders ADD COLUMN IF NOT EXISTS invoice_line_item_id INTEGER REFERENCES invoice_line_items(id)"
 
 # ── Schema migration check (run against RDS) ──────────────────────────────────
 echo ""

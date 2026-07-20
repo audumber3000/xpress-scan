@@ -103,6 +103,9 @@ const LabOrderDrawer = ({ isOpen, onClose, patientId, casePaperId, onSave, order
         try {
             const payload = {
                 ...formData,
+                // Cost is a text field that may be left blank — send a number so
+                // the API doesn't reject "" (a blank lab fee just bills at 0).
+                cost: Number(formData.cost) || 0,
                 patient_id: resolvedPatientId,
                 case_paper_id: casePaperId || null
             };

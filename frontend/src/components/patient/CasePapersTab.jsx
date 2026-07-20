@@ -11,6 +11,7 @@ import DiagnosticsGrid from './DiagnosticsGrid';
 import DocumentsNotesGrid from './DocumentsNotesGrid';
 import CasePaperActionBar from './CasePaperActionBar';
 import InvoiceEditor from '../payments/InvoiceEditor';
+import CasePaperInvoicesPanel from './CasePaperInvoicesPanel';
 import { toast } from 'react-toastify';
 import { api } from "../../utils/api";
 import { universalToFDI } from "../../utils/toothNumbering";
@@ -65,6 +66,8 @@ const CasePapersTab = ({
 
   // Invoice editing: null=closed, 'new'=create, number=existing
   const [invoiceEditId, setInvoiceEditId] = useState(null);
+  // A case paper can carry several invoices — the list panel shows them all.
+  const [invoiceListOpen, setInvoiceListOpen] = useState(false);
   // Tracks if a finalized invoice already exists for this case paper
   const [existingCasePaperInvoiceId, setExistingCasePaperInvoiceId] = useState(null);
 
@@ -107,6 +110,7 @@ const CasePapersTab = ({
   // Inventory used during this visit + the clinic's stock list for the picker.
   const [inventoryConsumptions, setInventoryConsumptions] = useState([]);
   const [inventoryItems, setInventoryItems] = useState([]);
+  const [medicationStock, setMedicationStock] = useState([]);
 
   const [visitPrescriptions, setVisitPrescriptions] = useState([]);
 
@@ -134,6 +138,7 @@ const CasePapersTab = ({
         fetchCasePapers();
         fetchVisitPrescriptions();
         fetchInventoryItems();
+        fetchMedicationStock();
     }
   }, [patientData?.id]);
 
@@ -251,6 +256,15 @@ const CasePapersTab = ({
     }
   };
 
+  const fetchMedicationStock = async () => {
+    try {
+      const data = await api.get('/medication-stock');
+      setMedicationStock(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to fetch medication stock:', err);
+    }
+  };
+
   const fetchInventoryConsumption = async (casePaperId) => {
     const id = casePaperId ?? selectedCasePaper?.id;
     if (!id || selectedCasePaper?.isNew) { setInventoryConsumptions([]); return; }
@@ -262,28 +276,29 @@ const CasePapersTab = ({
     }
   };
 
-  const handleAddConsumption = async (inventoryItemId, quantity) => {
+  // kind: 'inv' (general stock) | 'med' (medication stock)
+  const handleAddConsumption = async (kind, id, quantity) => {
     try {
       const casePaperId = await ensureCasePaperSaved();
       await api.post('/clinical/inventory-consumption', {
         patient_id: patientData.id,
         case_paper_id: casePaperId,
-        inventory_item_id: inventoryItemId,
+        ...(kind === 'med' ? { medication_stock_id: id } : { inventory_item_id: id }),
         quantity,
       });
-      // Refresh both: the record list AND stock counts (which just changed).
-      await Promise.all([fetchInventoryConsumption(casePaperId), fetchInventoryItems()]);
-      toast.success('Inventory recorded');
+      // Refresh the record list AND both stock lists (counts just changed).
+      await Promise.all([fetchInventoryConsumption(casePaperId), fetchInventoryItems(), fetchMedicationStock()]);
+      toast.success(kind === 'med' ? 'Medication recorded' : 'Inventory recorded');
     } catch (err) {
       console.error('Failed to record inventory:', err);
-      toast.error(err?.message || 'Failed to record inventory');
+      toast.error(err?.message || 'Failed to record');
     }
   };
 
   const handleDeleteConsumption = async (consumptionId) => {
     try {
       await api.delete(`/clinical/inventory-consumption/${consumptionId}`);
-      await Promise.all([fetchInventoryConsumption(), fetchInventoryItems()]);
+      await Promise.all([fetchInventoryConsumption(), fetchInventoryItems(), fetchMedicationStock()]);
       toast.success('Removed — stock restored');
     } catch (err) {
       console.error('Failed to remove inventory record:', err);
@@ -455,33 +470,126 @@ const CasePapersTab = ({
     try { window.history.pushState(null, '', window.location.href); } catch { /* noop */ }
   }, [dirty]);
 
-  const onUpdatePlan = (updatedPlan) => {
-    // Update local session plan
-    setDirty(true);
-    setSessionTreatmentPlan(updatedPlan);
+  // Billing description for a procedure line — kept identical across add/update
+  // so we can detect real detail changes on an already-completed procedure.
+  const procedureChargeDesc = (item) =>
+    `${item.procedure} (Tooth #${item.tooth ? universalToFDI(item.tooth) : 'General'})`;
+  const isCompleted = (item) => (item?.status || '').toLowerCase() === 'completed';
 
-    // Detect newly completed items for billing
-    updatedPlan.forEach(item => {
-      const oldItem = sessionTreatmentPlan.find(p => p.id === item.id);
-      if (item.status === 'completed' && (!oldItem || oldItem.status !== 'completed')) {
-        const unitPrice = Number(item.cost) || 0;
-        const charge = {
-          description: `${item.procedure} (Tooth #${item.tooth ? universalToFDI(item.tooth) : 'General'})`,
-          quantity: item.qty || 1,
-          unit_price: unitPrice
-        };
-        setDraftCharges(prev => [...prev, charge]);
-        toast.info(
-          unitPrice > 0
-            ? `Treatment "${item.procedure}" added to billing draft`
-            : `"${item.procedure}" added — set its fee in the invoice`
-        );
-      }
+  // Auto-bill a newly completed procedure straight to the case paper's draft
+  // invoice (creating the draft if needed), just like used stock does. Returns
+  // the item with its invoice/line ids attached so we can update/remove it later.
+  const addProcedureLine = async (item, casePaperId) => {
+    const unitPrice = Number(item.cost) || 0;
+    const res = await api.post('/invoices/procedure-charge', {
+      patient_id: patientData.id,
+      case_paper_id: casePaperId,
+      description: procedureChargeDesc(item),
+      quantity: item.qty || 1,
+      unit_price: unitPrice,
     });
+    fetchExistingCasePaperInvoice();
+    toast.info(
+      unitPrice > 0
+        ? `"${item.procedure}" billed to draft ${res.invoice_number || ''}`.trim()
+        : `"${item.procedure}" added, set its fee in the invoice`
+    );
+    return { ...item, invoice_line_item_id: res.line_item_id, invoice_id: res.invoice_id };
+  };
+
+  // Remove a procedure's billed line (un-completed or deleted). Best-effort:
+  // if the invoice was already finalised the line stays — you did charge for it.
+  const removeProcedureLine = async (item) => {
+    if (!item?.invoice_id || !item?.invoice_line_item_id) return;
+    try {
+      await api.delete(`/invoices/${item.invoice_id}/line-items/${item.invoice_line_item_id}`);
+      fetchExistingCasePaperInvoice();
+    } catch (err) {
+      console.warn('Could not remove procedure line:', err);
+    }
+  };
+
+  // Keep an already-billed procedure's line in sync when its fee/qty/tooth changes.
+  const updateProcedureLine = async (item) => {
+    if (!item?.invoice_id || !item?.invoice_line_item_id) return;
+    try {
+      await api.put(`/invoices/${item.invoice_id}/line-items/${item.invoice_line_item_id}`, {
+        description: procedureChargeDesc(item),
+        quantity: item.qty || 1,
+        unit_price: Number(item.cost) || 0,
+      });
+      fetchExistingCasePaperInvoice();
+    } catch (err) {
+      console.warn('Could not update procedure line:', err);
+    }
+  };
+
+  // Reconcile billing side-effects between the old and new plan, returning the
+  // new plan with line ids attached/removed. Handles: newly completed (bill),
+  // un-completed or deleted (remove line), and edits to a completed item (update).
+  const syncProcedureBilling = async (updatedPlan) => {
+    const oldPlan = sessionTreatmentPlan;
+
+    // Completed items dropped from the plan entirely → remove their lines.
+    for (const oldItem of oldPlan) {
+      if (isCompleted(oldItem) && oldItem.invoice_line_item_id &&
+          !updatedPlan.some(p => p.id === oldItem.id)) {
+        await removeProcedureLine(oldItem);
+      }
+    }
+
+    // Resolve the case paper once. ensureCasePaperSaved persists a brand-new
+    // paper and returns its id; calling it per item in the loop would create
+    // duplicates because selectedCasePaper state lags within a single pass.
+    const hasNewlyCompleted = updatedPlan.some((item) => {
+      const oldItem = oldPlan.find(p => p.id === item.id);
+      return isCompleted(item) && !isCompleted(oldItem);
+    });
+    const casePaperId = hasNewlyCompleted ? await ensureCasePaperSaved() : selectedCasePaper?.id;
+
+    const result = [];
+    for (const item of updatedPlan) {
+      const oldItem = oldPlan.find(p => p.id === item.id);
+      const wasCompleted = isCompleted(oldItem);
+      const nowCompleted = isCompleted(item);
+
+      if (nowCompleted && !wasCompleted) {
+        result.push(await addProcedureLine(item, casePaperId));
+      } else if (!nowCompleted && wasCompleted && oldItem?.invoice_line_item_id) {
+        await removeProcedureLine(oldItem);
+        const unlinked = { ...item };
+        delete unlinked.invoice_line_item_id;
+        delete unlinked.invoice_id;
+        result.push(unlinked);
+      } else if (nowCompleted && item.invoice_line_item_id) {
+        const changed = oldItem && (
+          (Number(oldItem.cost) || 0) !== (Number(item.cost) || 0) ||
+          (oldItem.qty || 1) !== (item.qty || 1) ||
+          procedureChargeDesc(oldItem) !== procedureChargeDesc(item)
+        );
+        if (changed) await updateProcedureLine(item);
+        result.push(item);
+      } else {
+        result.push(item);
+      }
+    }
+    return result;
+  };
+
+  const onUpdatePlan = async (updatedPlan) => {
+    setDirty(true);
+    let nextPlan = updatedPlan;
+    try {
+      nextPlan = await syncProcedureBilling(updatedPlan);
+    } catch (err) {
+      console.error('Procedure billing sync failed:', err);
+      toast.error('Could not update the bill for that procedure');
+    }
+    setSessionTreatmentPlan(nextPlan);
 
     // Also update parent if needed (syncing global state)
     if (typeof parentUpdatePlan === 'function') {
-      parentUpdatePlan(updatedPlan);
+      parentUpdatePlan(nextPlan);
     }
   };
 
@@ -711,6 +819,7 @@ const CasePapersTab = ({
           }}
           consumptions={inventoryConsumptions}
           inventoryItems={inventoryItems}
+          medicationItems={medicationStock}
           onAddConsumption={handleAddConsumption}
           onDeleteConsumption={handleDeleteConsumption}
         />
@@ -751,11 +860,7 @@ const CasePapersTab = ({
               `${pending.length} treatment${pending.length > 1 ? 's are' : ' is'} still pending — mark ${pending.length > 1 ? 'them' : 'it'} complete to add to billing.`
             );
           }
-          if (existingCasePaperInvoiceId) {
-            setInvoiceEditId(String(existingCasePaperInvoiceId));
-            return;
-          }
-          handleAutoSaveForDrawer(() => setInvoiceEditId('new'));
+          handleAutoSaveForDrawer(() => setInvoiceListOpen(true));
         }}
       />
 
@@ -764,7 +869,7 @@ const CasePapersTab = ({
           onClose={() => setIsLabDrawerOpen(false)}
           patientId={patientData?.id}
           casePaperId={selectedCasePaper?.isNew ? null : selectedCasePaper?.id}
-          onSave={fetchLabOrders}
+          onSave={() => { fetchLabOrders(); fetchExistingCasePaperInvoice(); }}
           order={selectedLabOrder}
       />
 
@@ -788,6 +893,7 @@ const CasePapersTab = ({
                       toast.error("Please save case paper first");
                       return;
                   }
+                  const { dispenses = [], ...rxData } = data;
                   const casePrescriptions = selectedCasePaper?.isNew
                     ? []
                     : visitPrescriptions.filter(rx =>
@@ -797,19 +903,23 @@ const CasePapersTab = ({
                   const existingRx = casePrescriptions.length > 0 ? casePrescriptions[casePrescriptions.length - 1] : null;
                   if (existingRx?.id) {
                       await api.put(`/clinical/prescriptions/${existingRx.id}`, {
-                          ...data,
+                          ...rxData,
                           patient_id: patientData.id,
                       });
                       toast.success("Prescription updated");
                   } else {
                       await api.post('/clinical/prescriptions', {
-                          ...data,
+                          ...rxData,
                           patient_id: patientData.id,
                           case_paper_id: selectedCasePaper?.id?.toString().startsWith('new-') ? null : selectedCasePaper?.id
                       });
                       toast.success("Prescription saved");
                   }
                   await fetchVisitPrescriptions();
+                  // Deduct any medicines the doctor chose to dispense from stock.
+                  for (const d of dispenses) {
+                      await handleAddConsumption('med', d.medication_stock_id, d.quantity);
+                  }
               } catch (err) {
                   console.error("Prescription save error:", err);
                   toast.error("Failed to save prescription");
@@ -828,6 +938,32 @@ const CasePapersTab = ({
           }}
       />
       
+      <CasePaperInvoicesPanel
+        open={invoiceListOpen}
+        onClose={() => setInvoiceListOpen(false)}
+        casePaperId={selectedCasePaper?.isNew ? null : selectedCasePaper?.id}
+        onNew={async () => {
+          setInvoiceListOpen(false);
+          if (selectedCasePaper?.isNew) { setInvoiceEditId('new'); return; }
+          // If used stock already opened a draft for this case paper, add the
+          // pending procedures to that same draft instead of spawning another.
+          try {
+            const drafts = await api.get('/invoices', { params: { case_paper_id: selectedCasePaper.id, status: 'draft', limit: 1 } });
+            const draft = (drafts || [])[0];
+            if (draft) {
+              for (const ch of draftCharges) {
+                await api.post(`/invoices/${draft.id}/line-items`, { description: ch.description, quantity: ch.quantity || 1, unit_price: ch.unit_price || 0 });
+              }
+              setDraftCharges([]);
+              setInvoiceEditId(String(draft.id));
+              return;
+            }
+          } catch { /* fall through to a fresh invoice */ }
+          setInvoiceEditId('new');
+        }}
+        onOpen={(id) => { setInvoiceListOpen(false); setInvoiceEditId(String(id)); }}
+      />
+
       {invoiceEditId && (
         <InvoiceEditor
           invoiceId={invoiceEditId}
@@ -842,15 +978,12 @@ const CasePapersTab = ({
           prefill={invoiceEditId === 'new' ? {
             patientId: patientData?.id,
             appointmentId: selectedCasePaper?.isNew ? null : selectedCasePaper?.id,
+            caseId: selectedCasePaper?.isNew ? null : selectedCasePaper?.id,
             notes: `Case Paper #${selectedVisitNumber || selectedCasePaper?.id}`,
-            lineItems: [
-              ...draftCharges,
-              ...labOrders.map(order => ({
-                description: `Lab Work: ${order.work_type}${order.tooth_number ? ` (Tooth #${order.tooth_number})` : ''} — ${order.vendor_name || 'Lab'}`,
-                quantity: 1,
-                unit_price: order.cost || 0
-              }))
-            ]
+            // Procedures, used stock, and lab orders all bill themselves onto the
+            // case paper's draft the moment they happen, so nothing is prefilled
+            // here — that would double-bill.
+            lineItems: [...draftCharges]
           } : null}
         />
       )}

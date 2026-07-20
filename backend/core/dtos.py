@@ -414,8 +414,10 @@ class MedicationStockBaseDTO(BaseModel):
     generic_name: Optional[str] = None
     strength: Optional[str] = None
     form: Optional[str] = None
-    quantity: float = 0.0
-    unit: Optional[str] = None
+    quantity: float = 0.0            # in base units (unit)
+    unit: Optional[str] = None       # base/dispensing unit (tablet, ml, ...)
+    pack_unit: Optional[str] = None
+    units_per_pack: Optional[float] = None
     min_stock_level: float = 0.0
     price_per_unit: float = 0.0
     batch_number: Optional[str] = None
@@ -432,6 +434,8 @@ class MedicationStockUpdateDTO(BaseModel):
     form: Optional[str] = None
     quantity: Optional[float] = None
     unit: Optional[str] = None
+    pack_unit: Optional[str] = None
+    units_per_pack: Optional[float] = None
     min_stock_level: Optional[float] = None
     price_per_unit: Optional[float] = None
     batch_number: Optional[str] = None

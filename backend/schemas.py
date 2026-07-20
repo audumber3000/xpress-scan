@@ -221,7 +221,15 @@ class InvoiceLineItemBase(BaseModel):
     amount: Optional[float] = None  # Will be calculated as quantity * unit_price
 
 class InvoiceLineItemCreate(InvoiceLineItemBase):
-    pass
+    medication_stock_id: Optional[int] = None  # when set, deduct this from medication stock
+
+class ProcedureChargeCreate(BaseModel):
+    """A completed procedure auto-billed to its case paper's draft invoice."""
+    patient_id: int
+    case_paper_id: int
+    description: str
+    quantity: float = 1.0
+    unit_price: float = 0.0
 
 class InvoiceLineItemOut(InvoiceLineItemBase):
     id: int
@@ -237,6 +245,7 @@ class InvoiceLineItemOut(InvoiceLineItemBase):
 class InvoiceBase(BaseModel):
     patient_id: int
     appointment_id: Optional[int] = None
+    case_paper_id: Optional[int] = None
     payment_mode: Optional[str] = None
     utr: Optional[str] = None
     notes: Optional[str] = None
@@ -852,6 +861,7 @@ class LabOrderOut(LabOrderBase):
     clinic_id: int
     created_at: datetime
     updated_at: datetime
+    invoice_line_item_id: Optional[int] = None  # set once auto-billed to the draft
 
     # Nested info
     patient_name: Optional[str] = None
@@ -867,7 +877,8 @@ class LabOrderOut(LabOrderBase):
 class InventoryConsumptionCreate(BaseModel):
     patient_id: int
     case_paper_id: Optional[int] = None
-    inventory_item_id: int
+    inventory_item_id: Optional[int] = None   # general stock
+    medication_stock_id: Optional[int] = None # medication stock (one of the two)
     quantity: float
 
 # Manual ledger entry from Inventory & Vendors (in or out).
@@ -885,6 +896,7 @@ class InventoryTransactionOut(BaseModel):
     case_paper_id: Optional[int] = None
     inventory_item_id: Optional[int] = None
     medication_stock_id: Optional[int] = None
+    invoice_line_item_id: Optional[int] = None
     direction: str
     action: Optional[str] = None
     item_name: str
@@ -894,6 +906,9 @@ class InventoryTransactionOut(BaseModel):
     created_at: datetime
     # Enriched for display.
     patient_name: Optional[str] = None
+    invoice_id: Optional[int] = None
+    invoice_number: Optional[str] = None
+    invoice_status: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -153,6 +153,15 @@ async def lifespan(app: FastAPI):
             conn.execute(text(
                 "ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS medication_stock_id INTEGER REFERENCES medication_stock(id)"
             ))
+            # Medication pack size: base unit tracking (e.g. 10 tablets per strip).
+            conn.execute(text("ALTER TABLE medication_stock ADD COLUMN IF NOT EXISTS pack_unit VARCHAR"))
+            conn.execute(text("ALTER TABLE medication_stock ADD COLUMN IF NOT EXISTS units_per_pack DOUBLE PRECISION"))
+            # A case paper can carry several invoices.
+            conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS case_paper_id INTEGER REFERENCES case_papers(id)"))
+            # Link a stock movement to the invoice line it was auto-billed as.
+            conn.execute(text("ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS invoice_line_item_id INTEGER REFERENCES invoice_line_items(id)"))
+            # Link a lab order to the invoice line it was auto-billed as.
+            conn.execute(text("ALTER TABLE lab_orders ADD COLUMN IF NOT EXISTS invoice_line_item_id INTEGER REFERENCES invoice_line_items(id)"))
             conn.execute(text(
                 "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP"
             ))

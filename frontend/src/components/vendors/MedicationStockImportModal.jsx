@@ -14,12 +14,12 @@ import { api } from "../../utils/api";
 const FORMS = ["Tablet", "Capsule", "Syrup", "Injection", "Gel", "Drops", "Ointment", "Powder", "Other"];
 const cell = "w-full px-2 py-1.5 border border-gray-200 rounded text-sm outline-none focus:ring-1 focus:ring-[#2a276e] focus:border-[#2a276e]";
 
-const emptyRow = () => ({ name: "", generic_name: "", strength: "", form: "Tablet", quantity: "0", unit: "strip", price_per_unit: "0", batch_number: "", expiry_date: "", vendor_id: "" });
+const emptyRow = () => ({ name: "", generic_name: "", strength: "", form: "Tablet", quantity: "0", unit: "Tablet", units_per_pack: "", price_per_unit: "0", batch_number: "", expiry_date: "", vendor_id: "" });
 
 // CSV header label -> row field.
 const CSV_COLUMNS = [
   ["Brand / Name", "name"], ["Generic", "generic_name"], ["Strength", "strength"], ["Form", "form"], ["Quantity", "quantity"],
-  ["Unit", "unit"], ["Price", "price_per_unit"], ["Batch", "batch_number"], ["Expiry", "expiry_date"],
+  ["Unit", "unit"], ["Units/pack", "units_per_pack"], ["Price", "price_per_unit"], ["Batch", "batch_number"], ["Expiry", "expiry_date"],
 ];
 const norm = (h) => String(h || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
@@ -49,7 +49,7 @@ const MedicationStockImportModal = ({ open, onClose, onImported, vendors = [] })
   const startManual = () => { setRows([emptyRow(), emptyRow(), emptyRow()]); setMode("manual"); };
 
   const downloadTemplate = () => {
-    const csv = Papa.unparse({ fields: CSV_COLUMNS.map(([l]) => l), data: [["Augmentin 625", "Amoxicillin + Clavulanic acid", "625 mg", "Tablet", "10", "strip", "180", "", "2027-01-31"]] });
+    const csv = Papa.unparse({ fields: CSV_COLUMNS.map(([l]) => l), data: [["Augmentin 625", "Amoxicillin + Clavulanic acid", "625 mg", "Tablet", "100", "Tablet", "10", "18", "", "2027-01-31"]] });
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
     const a = document.createElement("a");
     a.href = url; a.download = "medication-stock-template.csv"; a.click();
@@ -93,7 +93,8 @@ const MedicationStockImportModal = ({ open, onClose, onImported, vendors = [] })
         strength: r.strength.trim() || null,
         form: r.form || null,
         quantity: parseFloat(r.quantity) || 0,
-        unit: r.unit.trim() || "strip",
+        unit: r.unit.trim() || "Tablet",
+        units_per_pack: parseFloat(r.units_per_pack) || null,
         price_per_unit: parseFloat(r.price_per_unit) || 0,
         batch_number: r.batch_number.trim() || null,
         expiry_date: r.expiry_date || null,
@@ -171,6 +172,7 @@ const MedicationStockImportModal = ({ open, onClose, onImported, vendors = [] })
                         <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Form</th>
                         <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 w-20">Qty</th>
                         <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Unit</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 w-20">Units/pack</th>
                         <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 w-24">Price</th>
                         <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Batch</th>
                         <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Expiry</th>
@@ -196,7 +198,8 @@ const MedicationStockImportModal = ({ open, onClose, onImported, vendors = [] })
                               </select>
                             </td>
                             <td className="px-2 py-1.5"><input type="number" min="0" className={cell} value={r.quantity} onChange={(e) => setCell(i, "quantity", e.target.value)} /></td>
-                            <td className="px-2 py-1.5"><input className={cell} value={r.unit} onChange={(e) => setCell(i, "unit", e.target.value)} placeholder="strip" /></td>
+                            <td className="px-2 py-1.5"><input className={cell} value={r.unit} onChange={(e) => setCell(i, "unit", e.target.value)} placeholder="Tablet" /></td>
+                            <td className="px-2 py-1.5"><input type="number" min="0" className={cell} value={r.units_per_pack} onChange={(e) => setCell(i, "units_per_pack", e.target.value)} placeholder="10" /></td>
                             <td className="px-2 py-1.5"><input type="number" min="0" className={cell} value={r.price_per_unit} onChange={(e) => setCell(i, "price_per_unit", e.target.value)} /></td>
                             <td className="px-2 py-1.5"><input className={cell} value={r.batch_number} onChange={(e) => setCell(i, "batch_number", e.target.value)} /></td>
                             <td className="px-2 py-1.5"><input type="date" className={cell} value={r.expiry_date} onChange={(e) => setCell(i, "expiry_date", e.target.value)} /></td>

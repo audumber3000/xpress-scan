@@ -477,6 +477,7 @@ class Invoice(Base):
     clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
     patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False)
     appointment_id = Column(Integer, ForeignKey('appointments.id'), nullable=True)
+    case_paper_id = Column(Integer, ForeignKey('case_papers.id'), nullable=True)  # a case paper can carry several invoices
     invoice_number = Column(String, nullable=False, index=True)  # Auto-generated: INV-YYYY-XXXX
     status = Column(String, nullable=False, default='draft')  # draft, finalized, partially_paid, paid_unverified, paid_verified, cancelled
     payment_mode = Column(String, nullable=True)  # UPI, Cash, Card, etc.
@@ -807,10 +808,11 @@ class LabOrder(Base):
     due_date = Column(DateTime, nullable=True)
     status = Column(String, default='Draft')    # Draft, Sent, Received, Completed, Cancelled
     cost = Column(Float, default=0.0)
-    
+    invoice_line_item_id = Column(Integer, ForeignKey('invoice_line_items.id'), nullable=True)  # billed line on the case paper's draft, if any
+
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
-    
+
     # Relationships
     clinic = relationship("Clinic")
     patient = relationship("Patient")
@@ -831,9 +833,11 @@ class MedicationStock(Base):
     generic_name = Column(String, nullable=True)
     strength = Column(String, nullable=True)       # e.g. "500 mg"
     form = Column(String, nullable=True)           # Tablet, Capsule, Syrup, Injection, ...
-    quantity = Column(Float, default=0.0)
-    unit = Column(String, nullable=True)           # strip, bottle, vial, tube, pcs
-    min_stock_level = Column(Float, default=0.0)   # reorder level (internal)
+    quantity = Column(Float, default=0.0)          # counted in `unit` (the dispensing/base unit)
+    unit = Column(String, nullable=True)           # base/dispensing unit: tablet, capsule, ml, ...
+    pack_unit = Column(String, nullable=True)      # how it's bought: strip, box, bottle (optional)
+    units_per_pack = Column(Float, nullable=True)  # base units per pack, e.g. 10 tablets/strip (optional)
+    min_stock_level = Column(Float, default=0.0)   # reorder level (internal), in base units
     price_per_unit = Column(Float, default=0.0)
     batch_number = Column(String, nullable=True)
     expiry_date = Column(Date, nullable=True)
@@ -862,6 +866,7 @@ class InventoryTransaction(Base):
     case_paper_id = Column(Integer, ForeignKey('case_papers.id'), nullable=True)
     inventory_item_id = Column(Integer, ForeignKey('inventory_items.id'), nullable=True)
     medication_stock_id = Column(Integer, ForeignKey('medication_stock.id'), nullable=True)  # for medication movements
+    invoice_line_item_id = Column(Integer, ForeignKey('invoice_line_items.id'), nullable=True)  # billed line, if auto-added to an invoice
 
     direction = Column(String, nullable=False, default='out')  # 'out' | 'in'
     action = Column(String, nullable=True)        # added | restocked | received | used | deducted | adjusted | removed

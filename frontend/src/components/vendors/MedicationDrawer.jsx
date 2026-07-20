@@ -3,10 +3,13 @@ import FormDrawer, { Field, TextInput, SelectInput } from "../FormDrawer";
 
 const FORMS = ["Tablet", "Capsule", "Syrup", "Injection", "Gel", "Drops", "Ointment", "Powder", "Other"];
 const SCHEDULES = ["OTC", "H", "H1", "X"];
+const BASE_UNITS = ["Tablet", "Capsule", "ml", "Drop", "Sachet", "Piece", "Bottle", "Vial", "Tube"];
+const PACK_UNITS = ["Strip", "Box", "Bottle", "Vial", "Sheet", "Pack"];
 
 const blank = {
   name: "", generic_name: "", strength: "", form: "Tablet",
-  quantity: "0", unit: "strip", min_stock_level: "10", price_per_unit: "0",
+  quantity: "0", qty_as: "base", unit: "Tablet", pack_unit: "Strip", units_per_pack: "",
+  min_stock_level: "10", price_per_unit: "0",
   batch_number: "", expiry_date: "", schedule: "OTC", vendor_id: "",
 };
 
@@ -20,8 +23,11 @@ const MedicationDrawer = ({ open, onClose, onSubmit, submitting, item, vendors =
       generic_name: item.generic_name || "",
       strength: item.strength || "",
       form: item.form || "Tablet",
-      quantity: String(item.quantity ?? 0),
-      unit: item.unit || "strip",
+      quantity: String(item.quantity ?? 0),   // stored in base units
+      qty_as: "base",
+      unit: item.unit || "Tablet",
+      pack_unit: item.pack_unit || "",
+      units_per_pack: item.units_per_pack != null ? String(item.units_per_pack) : "",
       min_stock_level: String(item.min_stock_level ?? 10),
       price_per_unit: String(item.price_per_unit ?? 0),
       batch_number: item.batch_number || "",
@@ -33,6 +39,12 @@ const MedicationDrawer = ({ open, onClose, onSubmit, submitting, item, vendors =
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
+  const upp = parseFloat(form.units_per_pack) || 0;
+  const enteredAsPack = form.qty_as === "pack" && upp > 0;
+  const baseQty = enteredAsPack ? (parseFloat(form.quantity) || 0) * upp : (parseFloat(form.quantity) || 0);
+  const baseUnitOptions = Array.from(new Set([...BASE_UNITS, form.unit].filter(Boolean)));
+  const packUnitOptions = Array.from(new Set([...PACK_UNITS, form.pack_unit].filter(Boolean)));
+
   const submit = (e) => {
     e.preventDefault();
     onSubmit({
@@ -40,8 +52,10 @@ const MedicationDrawer = ({ open, onClose, onSubmit, submitting, item, vendors =
       generic_name: form.generic_name.trim() || null,
       strength: form.strength.trim() || null,
       form: form.form,
-      quantity: parseFloat(form.quantity) || 0,
-      unit: form.unit.trim() || "strip",
+      quantity: baseQty,
+      unit: (form.unit || "").trim() || "Tablet",
+      pack_unit: form.pack_unit || null,
+      units_per_pack: upp || null,
       min_stock_level: parseFloat(form.min_stock_level) || 0,
       price_per_unit: parseFloat(form.price_per_unit) || 0,
       batch_number: form.batch_number.trim() || null,
@@ -77,16 +91,39 @@ const MedicationDrawer = ({ open, onClose, onSubmit, submitting, item, vendors =
           </SelectInput>
         </Field>
       </div>
+
+      {/* Units + pack size — stock is counted in the dispensing unit */}
+      <Field label="Dispensing unit" hint="What you give out and deduct (tablet, ml, ...)">
+        <SelectInput value={form.unit} onChange={(e) => set("unit", e.target.value)}>
+          {baseUnitOptions.map((u) => <option key={u} value={u}>{u}</option>)}
+        </SelectInput>
+      </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Quantity">
-          <TextInput type="number" min="0" step="any" required value={form.quantity} onChange={(e) => set("quantity", e.target.value)} />
+        <Field label="Units per pack (optional)" hint="e.g. 10 tablets/strip">
+          <TextInput type="number" min="0" step="any" value={form.units_per_pack} onChange={(e) => set("units_per_pack", e.target.value)} placeholder="10" />
         </Field>
-        <Field label="Unit">
-          <TextInput value={form.unit} onChange={(e) => set("unit", e.target.value)} placeholder="strip, bottle, vial" />
+        <Field label="Pack unit (optional)">
+          <SelectInput value={form.pack_unit} onChange={(e) => set("pack_unit", e.target.value)}>
+            <option value="">None</option>
+            {packUnitOptions.map((p) => <option key={p} value={p}>{p}</option>)}
+          </SelectInput>
         </Field>
       </div>
+
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Reorder level" hint="Warn at or below this stock">
+        <Field label="Quantity in stock" hint={enteredAsPack ? `= ${baseQty} ${form.unit || "units"}` : `In ${form.unit || "units"}`}>
+          <TextInput type="number" min="0" step="any" required value={form.quantity} onChange={(e) => set("quantity", e.target.value)} />
+        </Field>
+        <Field label="Entered as">
+          <SelectInput value={form.qty_as} onChange={(e) => set("qty_as", e.target.value)}>
+            <option value="base">{form.unit || "unit"}s</option>
+            {upp > 0 && form.pack_unit && <option value="pack">{form.pack_unit}s</option>}
+          </SelectInput>
+        </Field>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Reorder level" hint={`In ${form.unit || "units"}`}>
           <TextInput type="number" min="0" step="any" value={form.min_stock_level} onChange={(e) => set("min_stock_level", e.target.value)} />
         </Field>
         <Field label="Price / unit">

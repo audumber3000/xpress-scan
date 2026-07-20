@@ -15,6 +15,7 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
     
     // Autocomplete state
     const [masterMedications, setMasterMedications] = useState([]);
+    const [medStock, setMedStock] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(null);
     const [filteredMeds, setFilteredMeds] = useState([]);
     const suggestionRef = useRef(null);
@@ -30,6 +31,7 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
                 setNotes('');
             }
             fetchMasterMedications();
+            fetchMedStock();
             fetchDoctorSignature();
         }
     }, [isOpen, initialData]);
@@ -39,6 +41,25 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
             const data = await api.get('/medications/');
             setMasterMedications(data || []);
         } catch { /* silent */ }
+    };
+
+    const fetchMedStock = async () => {
+        try {
+            const data = await api.get('/medication-stock');
+            setMedStock(Array.isArray(data) ? data : []);
+        } catch { /* silent */ }
+    };
+
+    // Match a prescribed medicine to a stock item by name (case-insensitive).
+    // Exact match first, then a forgiving contains-either-way so "Augmentin"
+    // still matches "Augmentin 625" in stock.
+    const stockFor = (name) => {
+        const n = (name || '').trim().toLowerCase();
+        if (n.length < 2) return null;
+        const norm = (s) => (s || '').trim().toLowerCase();
+        return medStock.find((m) => norm(m.name) === n)
+            || medStock.find((m) => { const s = norm(m.name); return s && (s.includes(n) || n.includes(s)); })
+            || null;
     };
 
     const fetchDoctorSignature = async () => {
@@ -81,10 +102,26 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
     const handleSave = async () => {
         const validItems = items.filter(i => i.medicine_name.trim());
         if (!validItems.length) return;
-        
+
+        // Dispense-from-stock: deduct any ticked medicines from Medication Stock.
+        const dispenses = [];
+        validItems.forEach((it) => {
+            if (!it.dispense) return;
+            const match = stockFor(it.medicine_name);
+            const q = parseFloat(it.dispense_qty);
+            if (match && q > 0) dispenses.push({ medication_stock_id: match.id, quantity: q });
+        });
+        // Send clean prescription items (without the dispense-only fields).
+        const cleanItems = validItems.map((it) => {
+            const rest = { ...it };
+            delete rest.dispense;
+            delete rest.dispense_qty;
+            return rest;
+        });
+
         setIsLoading(true);
         try {
-            await onSave({ items: validItems, notes });
+            await onSave({ items: cleanItems, notes, dispenses });
             onClose();
         } finally {
             setIsLoading(false);
@@ -492,6 +529,30 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
                                                     {['After Food','Before Food','Empty Stomach','At Bedtime'].map(d => <option key={d} value={d}>{d}</option>)}
                                                 </select>
                                             </div>
+                                            {/* Dispense from stock — shown when this medicine is in Medication Stock */}
+                                            {(() => {
+                                                const match = stockFor(item.medicine_name);
+                                                if (!match) return null;
+                                                return (
+                                                    <div className="mt-2 flex items-center gap-2 flex-wrap bg-emerald-50/60 border border-emerald-100 rounded-lg px-2.5 py-1.5">
+                                                        <label className="flex items-center gap-1.5 text-xs font-semibold text-emerald-800 cursor-pointer">
+                                                            <input type="checkbox" checked={!!item.dispense}
+                                                                onChange={e => setItems(prev => prev.map((row, idx) => idx === i ? { ...row, dispense: e.target.checked, dispense_qty: row.dispense_qty || (parseFloat(row.quantity) ? String(parseFloat(row.quantity)) : '1') } : row))}
+                                                                className="w-3.5 h-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+                                                            Dispense from stock
+                                                        </label>
+                                                        <span className="text-[11px] text-emerald-700/80">{match.quantity} {match.unit || 'in stock'} left</span>
+                                                        {item.dispense && (
+                                                            <div className="flex items-center gap-1 ml-auto">
+                                                                <input type="number" min="0" step="any" value={item.dispense_qty ?? ''}
+                                                                    onChange={e => updateItem(i, 'dispense_qty', e.target.value)}
+                                                                    className="w-16 bg-white border border-emerald-200 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-emerald-400" placeholder="Qty" />
+                                                                <span className="text-[11px] text-emerald-700">{match.unit || 'units'}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
                                         <button onClick={() => removeItem(i)} disabled={items.length === 1}
                                             className="mt-1.5 p-1 text-gray-300 hover:text-red-500 disabled:opacity-0 transition-colors">
