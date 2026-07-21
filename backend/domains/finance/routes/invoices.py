@@ -51,6 +51,17 @@ def enrich_invoice(db: Session, invoice: Invoice):
     if due_amount is None:
         due_amount = max(0.0, total_amount - paid_amount)
 
+    # Which of this invoice's lines are billed from a case-paper stock usage
+    # record (one batched lookup, so the editor can offer restock-on-delete).
+    from models import InventoryTransaction
+    _line_ids = [li.id for li in invoice.line_items]
+    _stock_linked_line_ids = set()
+    if _line_ids:
+        _stock_linked_line_ids = {
+            r[0] for r in db.query(InventoryTransaction.invoice_line_item_id)
+            .filter(InventoryTransaction.invoice_line_item_id.in_(_line_ids)).all()
+        }
+
     invoice_dict = {
         'id': invoice.id,
         'clinic_id': invoice.clinic_id,
@@ -90,7 +101,10 @@ def enrich_invoice(db: Session, invoice: Invoice):
                 'created_at': item.created_at.isoformat() if item.created_at else None,
                 'updated_at': getattr(item, 'updated_at', item.created_at).isoformat() if getattr(item, 'updated_at', item.created_at) else None,
                 'synced_at': getattr(item, 'synced_at', None).isoformat() if getattr(item, 'synced_at', None) else None,
-                'sync_status': getattr(item, 'sync_status', 'local')
+                'sync_status': getattr(item, 'sync_status', 'local'),
+                # True when a case-paper stock usage record bills to this line, so
+                # the editor can offer "remove from bill only" vs "restock too".
+                'linked_stock': item.id in _stock_linked_line_ids,
             }
             for item in invoice.line_items
         ],
@@ -934,10 +948,17 @@ async def update_line_item(
 async def delete_line_item(
     invoice_id: int,
     line_item_id: int,
+    restock: bool = Query(False, description="Also delete the linked stock usage record and restore its quantity"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Delete a line item"""
+    """Delete a line item.
+
+    A line billed from a case-paper stock usage record is, by default, just
+    unbilled: the usage record stays and stock remains consumed. With
+    `restock=true`, the linked usage record is also deleted and its quantity is
+    put back on the item — "remove entirely" from the invoice side.
+    """
     try:
         _ensure_invoice_columns(db)
         invoice = db.query(Invoice).filter(
@@ -967,13 +988,37 @@ async def delete_line_item(
             'amount': line_item.amount
         }, None)
 
-        # Detach ledger/lab-order rows that reference this line so the FK doesn't
-        # block the delete. The stock movement / lab order itself stays; it's
-        # just no longer billed to this line.
-        from models import InventoryTransaction, LabOrder
-        db.query(InventoryTransaction).filter(
-            InventoryTransaction.invoice_line_item_id == line_item_id
-        ).update({InventoryTransaction.invoice_line_item_id: None}, synchronize_session=False)
+        # Handle rows that reference this line so the FK doesn't block the delete.
+        from models import InventoryTransaction, LabOrder, InventoryItem, MedicationStock
+        if restock:
+            # "Remove entirely": delete each linked stock usage record and put its
+            # quantity back on the still-existing item (general or medication).
+            usage_rows = db.query(InventoryTransaction).filter(
+                InventoryTransaction.invoice_line_item_id == line_item_id
+            ).all()
+            for u in usage_rows:
+                if u.inventory_item_id:
+                    it = db.query(InventoryItem).filter(
+                        InventoryItem.id == u.inventory_item_id,
+                        InventoryItem.clinic_id == current_user.clinic_id,
+                    ).first()
+                    if it:
+                        it.quantity = (it.quantity or 0.0) + (u.quantity or 0.0)
+                elif u.medication_stock_id:
+                    med = db.query(MedicationStock).filter(
+                        MedicationStock.id == u.medication_stock_id,
+                        MedicationStock.clinic_id == current_user.clinic_id,
+                    ).first()
+                    if med:
+                        med.quantity = (med.quantity or 0.0) + (u.quantity or 0.0)
+                db.delete(u)
+            db.flush()
+        else:
+            # Default "unbill only": keep the stock movement, just detach it.
+            db.query(InventoryTransaction).filter(
+                InventoryTransaction.invoice_line_item_id == line_item_id
+            ).update({InventoryTransaction.invoice_line_item_id: None}, synchronize_session=False)
+        # Lab orders always just detach (their own delete flow restocks separately).
         db.query(LabOrder).filter(
             LabOrder.invoice_line_item_id == line_item_id
         ).update({LabOrder.invoice_line_item_id: None}, synchronize_session=False)

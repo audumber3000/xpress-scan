@@ -238,7 +238,10 @@ class InvoiceLineItemOut(InvoiceLineItemBase):
     updated_at: datetime
     synced_at: Optional[datetime] = None
     sync_status: str = "local"
-    
+    # True when a case-paper stock/medication usage record points at this line,
+    # so the invoice editor can offer "remove from bill only" vs "restock too".
+    linked_stock: bool = False
+
     class Config:
         from_attributes = True
 
@@ -845,6 +848,9 @@ class LabOrderBase(BaseModel):
 
 class LabOrderCreate(LabOrderBase):
     clinic_id: Optional[int] = None
+    # Off by default: a lab order is only added to the case paper's bill when the
+    # user explicitly ticks "add to billing".
+    add_to_billing: bool = False
 
 class LabOrderUpdate(BaseModel):
     vendor_id: Optional[int] = None
@@ -855,17 +861,24 @@ class LabOrderUpdate(BaseModel):
     due_date: Optional[datetime] = None
     status: Optional[str] = None
     cost: Optional[float] = None
+    # None = leave billing as-is; True = bill it (or update the line); False =
+    # remove it from the bill (only possible while the invoice is a draft).
+    add_to_billing: Optional[bool] = None
 
 class LabOrderOut(LabOrderBase):
     id: int
     clinic_id: int
     created_at: datetime
     updated_at: datetime
-    invoice_line_item_id: Optional[int] = None  # set once auto-billed to the draft
+    invoice_line_item_id: Optional[int] = None  # set once billed to the draft
 
     # Nested info
     patient_name: Optional[str] = None
     vendor_name: Optional[str] = None
+    # The bill this order is on (for the "added to bill INV-xxx · status" chip).
+    invoice_id: Optional[int] = None
+    invoice_number: Optional[str] = None
+    invoice_status: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -880,6 +893,9 @@ class InventoryConsumptionCreate(BaseModel):
     inventory_item_id: Optional[int] = None   # general stock
     medication_stock_id: Optional[int] = None # medication stock (one of the two)
     quantity: float
+    # When False, record the usage (and decrement stock) but do NOT add it to the
+    # case paper's draft invoice. The user can bill it later from the case paper.
+    add_to_billing: bool = True
 
 # Manual ledger entry from Inventory & Vendors (in or out).
 class InventoryTransactionCreate(BaseModel):

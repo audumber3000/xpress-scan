@@ -9,6 +9,7 @@ import InvoiceLineItems from "./InvoiceLineItems";
 import InvoicePayments from "./InvoicePayments";
 import InvoiceActions from "./InvoiceActions";
 import MarkAsPaidModal from "./MarkAsPaidModal";
+import ConfirmDialog from "../common/ConfirmDialog";
 import { generatePatientPersona, generateInitialsAvatar } from "../../utils/avatar";
 
 const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
@@ -23,6 +24,7 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteLinePrompt, setDeleteLinePrompt] = useState(null); // line item pending stock-aware delete
   const [isCreating, setIsCreating] = useState(invoiceId === 'new');
   const [autoCreatingFromPrefill, setAutoCreatingFromPrefill] = useState(false);
   const [patients, setPatients] = useState([]);
@@ -260,14 +262,26 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
     }
   };
 
-  const handleDeleteLineItem = async (lineItemId) => {
-    if (!window.confirm("Are you sure you want to delete this line item?")) {
+  // A line billed from case-paper stock usage gets the same choice the case
+  // paper offers: drop it from the bill only, or remove it entirely and restock.
+  // Plain lines delete after a simple confirm.
+  const requestDeleteLineItem = (item) => {
+    if (item?.linked_stock) {
+      setDeleteLinePrompt(item);
       return;
     }
+    if (!window.confirm("Are you sure you want to delete this line item?")) return;
+    performDeleteLineItem(item.id, false);
+  };
 
+  const performDeleteLineItem = async (lineItemId, restock) => {
     try {
       setSaving(true);
-      const updated = await api.delete(`/invoices/${currentInvoiceId}/line-items/${lineItemId}`);
+      const updated = await api.delete(
+        `/invoices/${currentInvoiceId}/line-items/${lineItemId}`,
+        { params: { restock } }
+      );
+      setDeleteLinePrompt(null);
       if (updated?.deleted) {
         toast.success("Invoice deleted — no items remaining");
         if (onSave) onSave();
@@ -275,7 +289,7 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
         return;
       }
       setInvoice(updated);
-      toast.success("Line item deleted successfully");
+      toast.success(restock ? "Removed and stock restored" : "Line item deleted");
     } catch (error) {
       console.error("Error deleting line item:", error);
       toast.error("Failed to delete line item");
@@ -549,7 +563,7 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
                   lineItems={invoice?.line_items || []}
                   onAdd={handleAddLineItem}
                   onEdit={handleEditLineItem}
-                  onDelete={handleDeleteLineItem}
+                  onDelete={requestDeleteLineItem}
                   onUpdateInvoice={handleUpdateInvoiceStats}
                   canEdit={canEdit}
                 />
@@ -603,6 +617,23 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
           onConfirm={handleMarkAsPaid}
         />
       )}
+
+      {/* Stock-linked line: remove from bill only, or entirely (restock too). */}
+      <ConfirmDialog
+        open={!!deleteLinePrompt}
+        onClose={() => !saving && setDeleteLinePrompt(null)}
+        tone="danger"
+        title="Remove this item?"
+        message={
+          <>
+            <span className="font-semibold text-gray-700">{deleteLinePrompt?.description}</span> was recorded as stock used on the case paper. Remove it from this bill only, or remove it entirely and put the stock back.
+          </>
+        }
+        actions={[
+          { label: 'Remove from bill only', variant: 'secondary', onClick: () => performDeleteLineItem(deleteLinePrompt.id, false), disabled: saving },
+          { label: 'Remove entirely & restock', variant: 'danger', onClick: () => performDeleteLineItem(deleteLinePrompt.id, true), disabled: saving },
+        ]}
+      />
 
       {/* Delete invoice — on-brand confirm (soft backdrop, matches the app's dialogs). */}
       {showDeleteConfirm && (

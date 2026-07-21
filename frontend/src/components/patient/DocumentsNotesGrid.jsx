@@ -18,6 +18,7 @@ const DocumentsNotesGrid = ({
   medicationItems,
   onAddConsumption,
   onDeleteConsumption,
+  onBillConsumption,
 }) => {
   return (
     <section className="grid grid-cols-1 lg:grid-cols-2 gap-12 pt-8 border-t border-gray-100">
@@ -73,6 +74,7 @@ const DocumentsNotesGrid = ({
         medicationItems={medicationItems}
         onAdd={onAddConsumption}
         onDelete={onDeleteConsumption}
+        onBill={onBillConsumption}
       />
     </section>
   );

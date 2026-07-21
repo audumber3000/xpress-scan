@@ -21,11 +21,13 @@ def _lab_line_description(order: LabOrder) -> str:
     return desc
 
 
-def _sync_lab_order_billing(db: Session, order: LabOrder, clinic_id: int, user_id=None):
-    """Keep a lab order's line on the case paper's draft invoice in sync, the
-    same way used stock and completed procedures accumulate onto one bill.
-    Best-effort: if the linked invoice is no longer a draft we leave the line
-    alone (it was already billed). Only bills orders tied to a case paper."""
+def _sync_lab_order_billing(db: Session, order: LabOrder, clinic_id: int, user_id=None, create_if_missing=False):
+    """Keep a lab order's line on the case paper's draft invoice in sync.
+
+    An existing draft line is always kept in step with the order's cost/work
+    type. A NEW line is only created when `create_if_missing` is set (i.e. the
+    user opted the order into billing) — lab orders are not billed by default.
+    If the linked invoice is no longer a draft, the line is left alone."""
     from domains.finance.routes.invoices import (
         get_or_create_draft_invoice, recalculate_invoice_totals,
     )
@@ -48,8 +50,9 @@ def _sync_lab_order_billing(db: Session, order: LabOrder, clinic_id: int, user_i
             recalculate_invoice_totals(db, line.invoice)
         return
 
-    # No line yet — create one on the case paper's draft.
-    if not order.case_paper_id:
+    # No line yet — only create one when explicitly billing, and only for a
+    # case-paper order.
+    if not create_if_missing or not order.case_paper_id:
         return
     inv = get_or_create_draft_invoice(db, clinic_id, order.patient_id, order.case_paper_id, created_by=user_id)
     line = InvoiceLineItem(invoice_id=inv.id, description=desc, quantity=1, unit_price=cost, amount=cost)
@@ -57,6 +60,33 @@ def _sync_lab_order_billing(db: Session, order: LabOrder, clinic_id: int, user_i
     db.flush()
     order.invoice_line_item_id = line.id
     recalculate_invoice_totals(db, inv)
+
+
+def _lab_billing_locked(db: Session, order: LabOrder) -> bool:
+    """True when the order is billed onto an invoice that's past draft, so its
+    charge can no longer be changed from the case paper."""
+    if not order.invoice_line_item_id:
+        return False
+    from models import InvoiceLineItem
+    line = db.query(InvoiceLineItem).filter(InvoiceLineItem.id == order.invoice_line_item_id).first()
+    return bool(line and line.invoice and line.invoice.status != 'draft')
+
+
+def _enrich_lab_order(db: Session, order: LabOrder):
+    """Attach display names + the bill this order sits on (number + status)."""
+    order.patient_name = order.patient.name if order.patient else "Unknown"
+    order.vendor_name = order.vendor.name if order.vendor else "Unknown"
+    order.invoice_id = None
+    order.invoice_number = None
+    order.invoice_status = None
+    if order.invoice_line_item_id:
+        from models import InvoiceLineItem
+        line = db.query(InvoiceLineItem).filter(InvoiceLineItem.id == order.invoice_line_item_id).first()
+        if line and line.invoice:
+            order.invoice_id = line.invoice.id
+            order.invoice_number = line.invoice.invoice_number
+            order.invoice_status = line.invoice.status
+    return order
 
 
 def _remove_lab_order_billing(db: Session, order: LabOrder):
@@ -93,12 +123,11 @@ def get_lab_orders(
         query = query.filter(LabOrder.case_paper_id == case_paper_id)
     
     orders = query.order_by(LabOrder.created_at.desc()).all()
-    
-    # Enrichment for frontend display (names)
+
+    # Enrichment for frontend display (names + the bill it's on).
     for o in orders:
-        o.patient_name = o.patient.name if o.patient else "Unknown"
-        o.vendor_name = o.vendor.name if o.vendor else "Unknown"
-        
+        _enrich_lab_order(db, o)
+
     return orders
 
 @router.post("", response_model=LabOrderOut)
@@ -107,23 +136,18 @@ def create_lab_order(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    db_order = LabOrder(
-        **order.model_dump(exclude={"clinic_id"}),
-        clinic_id=current_user.clinic_id
-    )
+    data = order.model_dump(exclude={"clinic_id", "add_to_billing"})
+    db_order = LabOrder(**data, clinic_id=current_user.clinic_id)
     db.add(db_order)
     db.flush()
 
-    # Auto-bill onto the case paper's draft invoice (same bill as procedures/stock).
-    _sync_lab_order_billing(db, db_order, current_user.clinic_id, user_id=current_user.id)
+    # Only bill it onto the case paper's draft invoice when the user opted in.
+    if order.add_to_billing:
+        _sync_lab_order_billing(db, db_order, current_user.clinic_id, user_id=current_user.id, create_if_missing=True)
 
     db.commit()
     db.refresh(db_order)
-
-    # Enrichment
-    db_order.patient_name = db_order.patient.name if db_order.patient else "Unknown"
-    db_order.vendor_name = db_order.vendor.name if db_order.vendor else "Unknown"
-
+    _enrich_lab_order(db, db_order)
     return db_order
 
 @router.put("/{order_id}", response_model=LabOrderOut)
@@ -140,22 +164,36 @@ def update_lab_order(
     
     if not db_order:
         raise HTTPException(status_code=404, detail="Lab order not found")
-        
+
     update_data = order_update.model_dump(exclude_unset=True)
+    want_billing = update_data.pop("add_to_billing", None)  # None = leave as-is
+    currently_billed = bool(db_order.invoice_line_item_id)
+
+    # Only a CHANGE to the billing state is blocked when the invoice is locked;
+    # editing other fields on a billed-and-paid order is still fine.
+    if want_billing is not None and want_billing != currently_billed and _lab_billing_locked(db, db_order):
+        raise HTTPException(
+            status_code=400,
+            detail="This order is billed on a finalized or paid invoice and can't be changed here.",
+        )
+
     for key, value in update_data.items():
         setattr(db_order, key, value)
     db.flush()
 
-    # Keep the billed line in step with the order's new cost/work type, or bill
-    # it now if it wasn't before (e.g. a case paper was attached).
-    _sync_lab_order_billing(db, db_order, current_user.clinic_id, user_id=current_user.id)
+    if want_billing is False and currently_billed:
+        # Opted out of billing — pull its draft line (keeps the lab order).
+        _remove_lab_order_billing(db, db_order)
+    else:
+        # Keep an existing draft line in step; create one only if opting in now.
+        _sync_lab_order_billing(
+            db, db_order, current_user.clinic_id, user_id=current_user.id,
+            create_if_missing=bool(want_billing),
+        )
 
     db.commit()
     db.refresh(db_order)
-
-    db_order.patient_name = db_order.patient.name if db_order.patient else "Unknown"
-    db_order.vendor_name = db_order.vendor.name if db_order.vendor else "Unknown"
-
+    _enrich_lab_order(db, db_order)
     return db_order
 
 @router.delete("/{order_id}")

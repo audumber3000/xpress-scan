@@ -282,7 +282,7 @@ const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdat
                               </svg>
                             </button>
                             <button
-                              onClick={() => onDelete(item.id)}
+                              onClick={() => onDelete(item)}
                               className="text-red-600 hover:bg-red-50 p-1.5 rounded-md transition"
                               title="Delete"
                             >

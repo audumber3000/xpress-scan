@@ -277,7 +277,9 @@ const CasePapersTab = ({
   };
 
   // kind: 'inv' (general stock) | 'med' (medication stock)
-  const handleAddConsumption = async (kind, id, quantity) => {
+  // addToBilling: also add a priced line to the visit's draft invoice (default
+  // true — auto-record paths like the prescription drawer keep billing).
+  const handleAddConsumption = async (kind, id, quantity, addToBilling = true) => {
     try {
       const casePaperId = await ensureCasePaperSaved();
       await api.post('/clinical/inventory-consumption', {
@@ -285,24 +287,38 @@ const CasePapersTab = ({
         case_paper_id: casePaperId,
         ...(kind === 'med' ? { medication_stock_id: id } : { inventory_item_id: id }),
         quantity,
+        add_to_billing: addToBilling,
       });
       // Refresh the record list AND both stock lists (counts just changed).
       await Promise.all([fetchInventoryConsumption(casePaperId), fetchInventoryItems(), fetchMedicationStock()]);
-      toast.success(kind === 'med' ? 'Medication recorded' : 'Inventory recorded');
+      toast.success(addToBilling ? 'Recorded and added to bill' : 'Recorded (not billed)');
     } catch (err) {
       console.error('Failed to record inventory:', err);
       toast.error(err?.message || 'Failed to record');
     }
   };
 
-  const handleDeleteConsumption = async (consumptionId) => {
+  // mode: 'entirely' (delete + restock + unbill) | 'billing_only' (drop from bill, keep usage)
+  const handleDeleteConsumption = async (consumptionId, mode = 'entirely') => {
     try {
-      await api.delete(`/clinical/inventory-consumption/${consumptionId}`);
+      await api.delete(`/clinical/inventory-consumption/${consumptionId}`, { params: { mode } });
       await Promise.all([fetchInventoryConsumption(), fetchInventoryItems(), fetchMedicationStock()]);
-      toast.success('Removed — stock restored');
+      toast.success(mode === 'billing_only' ? 'Removed from bill' : 'Removed — stock restored');
     } catch (err) {
       console.error('Failed to remove inventory record:', err);
       toast.error('Failed to remove');
+    }
+  };
+
+  // Bill an already-recorded usage that wasn't billed at the time.
+  const handleBillConsumption = async (consumptionId) => {
+    try {
+      await api.post(`/clinical/inventory-consumption/${consumptionId}/bill`);
+      await fetchInventoryConsumption();
+      toast.success('Added to bill');
+    } catch (err) {
+      console.error('Failed to bill inventory record:', err);
+      toast.error(err?.message || 'Failed to add to bill');
     }
   };
 
@@ -822,6 +838,7 @@ const CasePapersTab = ({
           medicationItems={medicationStock}
           onAddConsumption={handleAddConsumption}
           onDeleteConsumption={handleDeleteConsumption}
+          onBillConsumption={handleBillConsumption}
         />
 
         {/* 7. Clinical Notes — full width, below the grid */}

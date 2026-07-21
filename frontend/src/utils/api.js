@@ -210,9 +210,10 @@ export const api = {
     });
     return result.data;
   },
-  delete: async (url) => {
+  delete: async (url, options = {}) => {
     const result = await authenticatedFetch(url, {
-      method: 'DELETE'
+      method: 'DELETE',
+      ...options
     });
     return result.data;
   }

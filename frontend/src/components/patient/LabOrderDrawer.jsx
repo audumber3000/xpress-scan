@@ -20,8 +20,13 @@ const LabOrderDrawer = ({ isOpen, onClose, patientId, casePaperId, onSave, order
         instructions: '',
         due_date: '',
         cost: '',
-        status: 'Sent'
+        status: 'Sent',
+        add_to_billing: false,
     });
+
+    // An order already billed onto a finalized/paid invoice can't have its
+    // billing changed from here — the checkbox is shown checked and disabled.
+    const billLocked = !!(order?.invoice_number && order?.invoice_status && order.invoice_status !== 'draft');
 
     const isStandalone = !patientId;
 
@@ -43,7 +48,9 @@ const LabOrderDrawer = ({ isOpen, onClose, patientId, casePaperId, onSave, order
                     instructions: order.instructions || '',
                     due_date: order.due_date ? new Date(order.due_date).toISOString().split('T')[0] : '',
                     cost: order.cost || '',
-                    status: order.status
+                    status: order.status,
+                    // Reflect whether this order is currently on the bill.
+                    add_to_billing: !!order.invoice_line_item_id,
                 });
             } else {
                 setFormData({
@@ -54,7 +61,8 @@ const LabOrderDrawer = ({ isOpen, onClose, patientId, casePaperId, onSave, order
                     instructions: '',
                     due_date: '',
                     cost: '',
-                    status: 'Sent'
+                    status: 'Sent',
+                    add_to_billing: false,
                 });
             }
         }
@@ -296,6 +304,29 @@ const LabOrderDrawer = ({ isOpen, onClose, patientId, casePaperId, onSave, order
                                 onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
                                 className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:border-[#2a276e] focus:ring-2 focus:ring-[#2a276e]/20 transition-all text-sm font-medium outline-none"
                             />
+
+                            {/* Add-to-billing toggle — off by default. Only meaningful on a case paper. */}
+                            {casePaperId && (
+                                <label className={`mt-2 flex items-start gap-2.5 rounded-lg border p-3 transition-colors ${
+                                    billLocked ? 'border-gray-100 bg-gray-50 cursor-not-allowed' : 'border-gray-200 bg-white hover:border-[#2a276e]/40 cursor-pointer'
+                                }`}>
+                                    <input
+                                        type="checkbox"
+                                        checked={formData.add_to_billing}
+                                        disabled={billLocked}
+                                        onChange={(e) => setFormData({ ...formData, add_to_billing: e.target.checked })}
+                                        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[#2a276e] focus:ring-[#2a276e] disabled:opacity-60"
+                                    />
+                                    <span className="text-sm">
+                                        <span className="font-semibold text-gray-800">Add this order to billing</span>
+                                        <span className="block text-xs text-gray-500 mt-0.5">
+                                            {billLocked
+                                                ? "Already on a finalized/paid bill — can't be changed here."
+                                                : 'Adds the lab cost to this visit’s draft invoice. Off by default.'}
+                                        </span>
+                                    </span>
+                                </label>
+                            )}
                         </div>
 
                         {/* Instructions */}
