@@ -22,7 +22,7 @@ def get_db():
         db.close()
 from models import Invoice, InvoiceLineItem, InvoiceAuditLog, Patient, User, Clinic, Appointment
 from core.auth_utils import get_current_user
-from core.clinic_time import clinic_today
+from core.clinic_time import clinic_today, clinic_day_bounds_utc
 from schemas import (
     InvoiceOut, InvoiceLineItemCreate, InvoiceLineItemOut,
     MarkAsPaidRequest, InvoiceCreate, InvoicePaymentCreate, ProcedureChargeCreate
@@ -325,11 +325,16 @@ def _filtered_invoices_query(
     case_paper_id: Optional[int] = None,
     search: Optional[str] = None,
     payment_mode: Optional[str] = None,
+    created_from: Optional[datetime] = None,
+    created_to: Optional[datetime] = None,
 ):
     """Build the invoice query with the shared list/count filters.
 
     Kept in one place so the list endpoint and the count endpoint always agree,
     which is what makes server-side pagination land on the right total.
+
+    `created_from`/`created_to` are naive UTC datetime bounds (end is exclusive)
+    for the invoice date range; the caller resolves them from clinic-local dates.
     """
     query = db.query(Invoice).filter(Invoice.clinic_id == clinic_id)
 
@@ -343,6 +348,10 @@ def _filtered_invoices_query(
         query = query.filter(Invoice.case_paper_id == case_paper_id)
     if payment_mode:
         query = query.filter(Invoice.payment_mode.ilike(payment_mode))
+    if created_from is not None:
+        query = query.filter(Invoice.created_at >= created_from)
+    if created_to is not None:
+        query = query.filter(Invoice.created_at < created_to)
 
     # Search matches the invoice number or the patient's name / phone. Requires
     # 2+ chars (mirrors the patient list) so a single keystroke doesn't scan all.
@@ -359,6 +368,19 @@ def _filtered_invoices_query(
     return query
 
 
+def _resolve_date_bounds(db: Session, clinic_id: int, date_from: Optional[str], date_to: Optional[str]):
+    """Parse YYYY-MM-DD clinic-local dates into naive UTC (start, end-exclusive) bounds."""
+    if not date_from and not date_to:
+        return None, None
+    try:
+        d_from = datetime.strptime(date_from, "%Y-%m-%d").date() if date_from else None
+        d_to = datetime.strptime(date_to, "%Y-%m-%d").date() if date_to else None
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates must be YYYY-MM-DD")
+    clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
+    return clinic_day_bounds_utc(clinic, d_from, d_to)
+
+
 @router.get("/count")
 async def count_invoices(
     status: Optional[str] = None,
@@ -367,16 +389,20 @@ async def count_invoices(
     case_paper_id: Optional[int] = None,
     search: Optional[str] = Query(None),
     payment_mode: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None, description="YYYY-MM-DD, invoice date (clinic tz)"),
+    date_to: Optional[str] = Query(None, description="YYYY-MM-DD, invoice date (clinic tz)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Total invoices matching the same filters as the list (for pagination)."""
     try:
         _ensure_invoice_columns(db)
+        created_from, created_to = _resolve_date_bounds(db, current_user.clinic_id, date_from, date_to)
         query = _filtered_invoices_query(
             db, current_user.clinic_id,
             status=status, patient_id=patient_id, appointment_id=appointment_id,
             case_paper_id=case_paper_id, search=search, payment_mode=payment_mode,
+            created_from=created_from, created_to=created_to,
         )
         total = query.with_entities(func.count(Invoice.id)).scalar() or 0
         return {"total": int(total)}
@@ -594,16 +620,20 @@ async def get_invoices(
     case_paper_id: Optional[int] = None,
     search: Optional[str] = Query(None),
     payment_mode: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None, description="YYYY-MM-DD, invoice date (clinic tz)"),
+    date_to: Optional[str] = Query(None, description="YYYY-MM-DD, invoice date (clinic tz)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Get all invoices for the clinic"""
     try:
         _ensure_invoice_columns(db)
+        created_from, created_to = _resolve_date_bounds(db, current_user.clinic_id, date_from, date_to)
         query = _filtered_invoices_query(
             db, current_user.clinic_id,
             status=status, patient_id=patient_id, appointment_id=appointment_id,
             case_paper_id=case_paper_id, search=search, payment_mode=payment_mode,
+            created_from=created_from, created_to=created_to,
         )
         invoices = query.order_by(desc(Invoice.created_at)).offset(skip).limit(limit).all()
         return [enrich_invoice(db, inv) for inv in invoices]

@@ -24,24 +24,30 @@ def enrich_expense(db: Session, expense: Expense):
         expense_out['creator_name'] = expense.creator.name
     return expense_out
 
+def _parse_ledger_dates(date_from: Optional[str], date_to: Optional[str]):
+    """Parse optional YYYY-MM-DD strings into date objects for the movement window."""
+    try:
+        d_from = datetime.strptime(date_from, "%Y-%m-%d").date() if date_from else None
+        d_to = datetime.strptime(date_to, "%Y-%m-%d").date() if date_to else None
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates must be YYYY-MM-DD")
+    return d_from, d_to
+
+
 @router.get("/count")
 async def count_ledger(
     type_filter: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Total ledger rows matching the filter (for pagination). Income rows are
-    individual payments, so this counts payments + expenses, not invoices."""
-    total = 0
-    if not type_filter or type_filter == 'invoice':
-        total += db.query(InvoicePayment).filter(
-            InvoicePayment.clinic_id == current_user.clinic_id
-        ).count()
-    if not type_filter or type_filter == 'expense':
-        total += db.query(Expense).filter(
-            Expense.clinic_id == current_user.clinic_id
-        ).count()
-    return {"total": int(total)}
+    individual payments, so this counts payments + expenses, not invoices. Shares
+    the builder with the list so the count and the rows always agree."""
+    d_from, d_to = _parse_ledger_dates(date_from, date_to)
+    items = _build_ledger_items(db, current_user.clinic_id, type_filter, d_from, d_to)
+    return {"total": len(items)}
 
 
 def _build_ledger_items(db, clinic_id, type_filter=None, d_from=None, d_to=None):
@@ -127,13 +133,16 @@ async def get_ledger(
     skip: int = 0,
     limit: int = 100,
     type_filter: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Combined ledger of money in (each payment received) and money out (each
     expense). Income is per-payment, not per-invoice, so a procedure paid in
     small amounts shows every dated collection, like a real day book."""
-    items = _build_ledger_items(db, current_user.clinic_id, type_filter)
+    d_from, d_to = _parse_ledger_dates(date_from, date_to)
+    items = _build_ledger_items(db, current_user.clinic_id, type_filter, d_from, d_to)
     return items[skip:skip + limit]
 
 

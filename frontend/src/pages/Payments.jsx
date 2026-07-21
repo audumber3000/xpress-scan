@@ -9,7 +9,7 @@ import InvoiceEditor from "../components/payments/InvoiceEditor";
 import InvoiceItem from "../components/payments/InvoiceItem";
 import ExpenseModal from "../components/payments/ExpenseModal";
 import ExportModal from "../components/payments/ExportModal";
-import FilterDropdown from "../components/FilterDropdown";
+import FilterPanel from "../components/FilterPanel";
 import Pagination from "../components/Pagination";
 import EmptyState from "../components/common/EmptyState";
 import { receipt } from "../assets/illustrations";
@@ -46,10 +46,30 @@ const Payments = () => {
   const [ledgerPage, setLedgerPage] = useState(1);
   const [selectedExpenseId, setSelectedExpenseId] = useState(null);
 
-  // Filter states
+  // Filter states — all filters now live in one unified FilterPanel per tab.
   const [filterStatus, setFilterStatus] = useState('');
   const [filterMode, setFilterMode] = useState('');
   const [filterLedgerType, setFilterLedgerType] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [datePreset, setDatePreset] = useState('');
+
+  // Apply the whole filter set at once (fired by FilterPanel's Apply button).
+  const applyFilters = (next) => {
+    setFilterStatus(next.status || '');
+    setFilterMode(next.mode || '');
+    setFilterLedgerType(next.ledgerType || '');
+    setDateFrom(next.dateFrom || '');
+    setDateTo(next.dateTo || '');
+    setDatePreset(next.preset || '');
+    setPage(1);
+    setLedgerPage(1);
+  };
+
+  const filterValue = {
+    dateFrom, dateTo, preset: datePreset,
+    status: filterStatus, mode: filterMode, ledgerType: filterLedgerType,
+  };
 
   // Debounce search term to avoid too many API calls
   useEffect(() => {
@@ -127,6 +147,8 @@ const Payments = () => {
       if (debouncedSearch.trim().length >= 2) filters.search = debouncedSearch.trim();
       if (filterStatus) filters.status = filterStatus;
       if (filterMode) filters.payment_mode = filterMode;
+      if (dateFrom) filters.date_from = dateFrom;
+      if (dateTo) filters.date_to = dateTo;
 
       const [invoicesData, countRes] = await Promise.all([
         api.get('/invoices', { params: { skip: (page - 1) * INVOICES_PER_PAGE, limit: INVOICES_PER_PAGE, ...filters } }),
@@ -149,10 +171,18 @@ const Payments = () => {
       setLoading(true);
       setError("");
       const skip = (ledgerPage - 1) * LEDGER_PER_PAGE;
+      // Date + type filter the page and its count (server-side, so pagination is
+      // right). The stats aggregate honors the date window but not type, so
+      // inflow/outflow always reflect the whole window regardless of the toggle.
+      const dateParams = {};
+      if (dateFrom) dateParams.date_from = dateFrom;
+      if (dateTo) dateParams.date_to = dateTo;
+      const pageParams = { ...dateParams };
+      if (filterLedgerType) pageParams.type_filter = filterLedgerType;
       const [data, countRes, allLedgerData] = await Promise.all([
-        api.get('/ledger/', { params: { skip, limit: LEDGER_PER_PAGE } }),
-        api.get('/ledger/count'),
-        api.get('/ledger/', { params: { skip: 0, limit: 10000 } }),
+        api.get('/ledger/', { params: { skip, limit: LEDGER_PER_PAGE, ...pageParams } }),
+        api.get('/ledger/count', { params: pageParams }),
+        api.get('/ledger/', { params: { skip: 0, limit: 10000, ...dateParams } }),
       ]);
       setLedgerItems(data || []);
       setLedgerTotalCount(Number(countRes?.total) || 0);
@@ -200,7 +230,7 @@ const Payments = () => {
       fetchLedger();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, ledgerPage, debouncedSearch, activeTab, filterStatus, filterMode]);
+  }, [page, ledgerPage, debouncedSearch, activeTab, filterStatus, filterMode, filterLedgerType, dateFrom, dateTo]);
 
   // Deep links from global search: ?invoice=<id> opens that invoice,
   // ?tab=ledger lands on the ledger. Params are stripped once applied so a
@@ -492,38 +522,12 @@ const Payments = () => {
                 className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] transition-all"
               />
             </div>
-            {activeTab === 'payments' || activeTab === 'today' ? (
-              <>
-                <FilterDropdown
-                  label="Status"
-                  value={filterStatus}
-                  onChange={(v) => { setFilterStatus(v); setPage(1); }}
-                  options={[
-                    { value: 'draft', label: 'Draft' },
-                    { value: 'finalized', label: 'Finalized' },
-                    { value: 'partially_paid', label: 'Partial' },
-                    { value: 'paid_verified', label: 'Paid (Verified)' },
-                    { value: 'paid_unverified', label: 'Paid (Unverified)' }
-                  ]}
-                />
-                <FilterDropdown
-                  label="Mode"
-                  value={filterMode}
-                  onChange={(v) => { setFilterMode(v); setPage(1); }}
-                  options={['Cash', 'UPI', 'Card', 'Bank Transfer', 'Other']}
-                />
-              </>
-            ) : (
-              <FilterDropdown
-                label="Type"
-                value={filterLedgerType}
-                onChange={(v) => { setFilterLedgerType(v); setLedgerPage(1); }}
-                options={[
-                  { value: 'invoice', label: 'Payments (In)' },
-                  { value: 'expense', label: 'Expenses (Out)' }
-                ]}
-              />
-            )}
+            <FilterPanel
+              tab={activeTab}
+              value={filterValue}
+              onApply={applyFilters}
+              dateEnabled={activeTab !== 'today'}
+            />
           </div>
           <div className="w-full sm:w-auto flex space-x-3">
             <button
