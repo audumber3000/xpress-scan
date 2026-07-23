@@ -41,6 +41,7 @@ const PatientProfile = () => {
   const [prescriptions, setPrescriptions] = useState([]);
   const [normalizedPrescriptions, setNormalizedPrescriptions] = useState([]);
   const [casePapers, setCasePapers] = useState([]);
+  const [dailyVisits, setDailyVisits] = useState([]);
 
   const tabs = [
     { id: "case-papers", name: "Case Papers" },
@@ -168,12 +169,26 @@ const PatientProfile = () => {
           }
         };
 
+        // Days this patient appeared in the daily register. Without these, a
+        // walk-in seen briefly with no case paper and no bill leaves no trace
+        // anywhere on their file.
+        const fetchDailyVisits = async () => {
+          try {
+            const res = await api.get(`/daily-register/patient/${patientId}`);
+            setDailyVisits(Array.isArray(res) ? res : []);
+          } catch (error) {
+            console.error('Error fetching daily visits:', error);
+            setDailyVisits([]);
+          }
+        };
+
         await Promise.allSettled([
           fetchAppointments(),
           fetchPayments(),
           fetchInvoices(),
           fetchNormalizedPrescriptions(),
           fetchCasePapers(),
+          fetchDailyVisits(),
         ]);
 
       } catch (error) {
@@ -581,6 +596,7 @@ const PatientProfile = () => {
                   prescriptions={normalizedPrescriptions}
                   invoices={payments}
                   casePapers={casePapers}
+                  dailyVisits={dailyVisits}
                 />
               )
             )}

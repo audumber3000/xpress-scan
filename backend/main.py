@@ -42,6 +42,7 @@ from domains.infrastructure.services.r2_storage import get_presigned_url
 from fastapi import Depends
 # Domain imports (using clean architecture routes)
 from domains.patient.routes import patients_clean as patients
+from domains.patient.routes import daily_register
 from domains.patient.routes import treatment_types, referring_doctors, treatment_plans, patient_files
 from domains.search.routes import global_search
 from domains.auth.routes import auth_clean as auth
@@ -116,6 +117,16 @@ async def lifespan(app: FastAPI):
             # patients list with "column patients.date_of_birth does not exist".
             conn.execute(text(
                 "ALTER TABLE patients ADD COLUMN IF NOT EXISTS date_of_birth DATE"
+            ))
+            # Registration date (added 2026-07). Back-dateable and clinic-local,
+            # unlike created_at. Backfilled from created_at so existing patients
+            # never show a blank date and the daily register can tell new from
+            # repeat for people registered before this column existed.
+            conn.execute(text(
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS registered_on DATE"
+            ))
+            conn.execute(text(
+                "UPDATE patients SET registered_on = created_at::date WHERE registered_on IS NULL"
             ))
             conn.execute(text(
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS dashboard_preferences JSONB"
@@ -477,6 +488,7 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(clinic_users.router, prefix="/api/v1/clinic-users", tags=["clinic_users"])
 app.include_router(permissions.router, prefix="/api/v1/permissions", tags=["permissions"])
 app.include_router(patients.router, prefix="/api/v1/patients", tags=["patients"])
+app.include_router(daily_register.router, prefix="/api/v1/daily-register", tags=["daily-register"])
 app.include_router(treatment_plans.router, prefix="/api/v1/patients", tags=["treatment_plans"])
 app.include_router(patient_files.router, prefix="/api/v1/patients", tags=["patient_files"])
 app.include_router(treatment_types.router, prefix="/api/v1/treatment-types", tags=["treatment_types"])

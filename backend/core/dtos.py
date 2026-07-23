@@ -33,6 +33,9 @@ class PatientCreateDTO(PatientBaseDTO):
     # Optional back-date for historical patients — sets the patient's created_at
     # (registration date). Defaults to "now" when omitted.
     registered_at: Optional[datetime] = None
+    # The date of registration as staff record it. Defaults to the clinic's today
+    # when omitted. May be back-dated; future dates are rejected.
+    registered_on: Optional[date] = None
 
 
 class PatientUpdateDTO(BaseModel):
@@ -47,6 +50,7 @@ class PatientUpdateDTO(BaseModel):
     treatment_type: Optional[str] = Field(None, min_length=1, max_length=100)
     notes: Optional[str] = None
     payment_type: Optional[str] = Field(None, pattern="^(Cash|Card|UPI|Online)$")
+    registered_on: Optional[date] = None
     dental_chart: Optional[Dict[str, Any]] = None
     tooth_notes: Optional[Dict[str, Any]] = None
     treatment_plan: Optional[List[Dict[str, Any]]] = None
@@ -75,6 +79,9 @@ class PatientResponseDTO(PatientBaseDTO):
     clinic_id: int
     display_id: Optional[str] = None
     last_visit: Optional[datetime] = None
+    # Nullable on read: rows created before this column existed are backfilled
+    # from created_at by migration, but an unbackfilled row must still respond.
+    registered_on: Optional[date] = None
     created_at: datetime
     updated_at: datetime
     synced_at: Optional[datetime] = None

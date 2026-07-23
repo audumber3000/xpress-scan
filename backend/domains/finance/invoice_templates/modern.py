@@ -16,6 +16,7 @@ Layout uses tables and `display: flex` with explicit margins where needed.
 import datetime
 
 from domains.infrastructure.services.pdf_safety import safe_color, safe_signature_data_uri, safe_text, safe_url
+from domains.finance.invoice_templates.discount_block import render_discount_block
 
 
 def render_invoice(invoice, clinic, config=None) -> str:
@@ -104,6 +105,9 @@ def render_invoice(invoice, clinic, config=None) -> str:
 
     # ── Summary rows ────────────────────────────────────────────────────────
     disc_row = f'<tr><td>Discount</td><td>– {currency} {discount:,.2f}</td></tr>' if discount > 0 else ''
+    # Concessions granted after issue are already inside `discount` above; this
+    # itemises them so the patient can see why the total changed.
+    discount_block = render_discount_block(invoice, currency=currency, accent=primary_color)
     if is_india:
         half = inv_tax / 2 if inv_tax > 0 else 0
         cgst_row = f'<tr><td>CGST 9%</td><td>{currency} {half:,.2f}</td></tr>' if half else ''
@@ -305,6 +309,8 @@ body {{
       {f'<p class="tight">{notes}</p>' if notes else ''}
     </div>
   </div>
+
+  {discount_block}
 
   <!-- ITEMS -->
   <table class="items">

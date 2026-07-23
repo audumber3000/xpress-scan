@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, date
 
 # Clinic Schemas
 class ClinicBase(BaseModel):
@@ -84,7 +84,8 @@ class PatientBase(BaseModel):
     last_visit: Optional[datetime] = None
     notes: Optional[str] = None
     payment_type: str = "Cash"
-    
+    registered_on: Optional[date] = None
+
     # Dental specific data
     dental_chart: Optional[Dict[str, Any]] = None
     tooth_notes: Optional[Dict[str, Any]] = None
@@ -287,6 +288,7 @@ class InvoiceOut(InvoiceBase):
     # Nested patient info
     patient_name: Optional[str] = None
     patient_phone: Optional[str] = None
+    patient_display_id: Optional[str] = None
     
     # Line items
     line_items: List[InvoiceLineItemOut] = []
@@ -294,8 +296,32 @@ class InvoiceOut(InvoiceBase):
     # Itemised partial-payment history
     payments: List["InvoicePaymentOut"] = []
 
+    # Concessions granted after the invoice was issued. `discount_amount` above
+    # already includes these; this is the dated, attributed breakdown.
+    post_issue_discounts: List["InvoiceDiscountOut"] = []
+    post_issue_discount_total: float = 0.0
+
     class Config:
         from_attributes = True
+
+
+class InvoiceDiscountOut(BaseModel):
+    id: int
+    value: float
+    discount_type: str = "amount"
+    amount: float
+    reason: str
+    applied_by_name: Optional[str] = None
+    applied_at: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class InvoiceDiscountCreate(BaseModel):
+    value: float
+    discount_type: str = "amount"  # 'amount' | 'percentage'
+    reason: str
 
 
 class InvoicePaymentOut(BaseModel):
@@ -303,6 +329,10 @@ class InvoicePaymentOut(BaseModel):
     invoice_id: int
     amount: float
     paid_on: Optional[str] = None
+    # The clinic-local day this was entered, and whether that came after the day
+    # the money actually changed hands.
+    recorded_on: Optional[str] = None
+    is_back_dated: bool = False
     method: Optional[str] = None
     note: Optional[str] = None
     created_at: Optional[datetime] = None
@@ -315,6 +345,10 @@ class MarkAsPaidRequest(BaseModel):
     utr: Optional[str] = None
     is_partial: Optional[bool] = False
     amount_paid: Optional[float] = None
+    # The day the money was actually received (YYYY-MM-DD). Defaults to the
+    # clinic's today; an earlier date records cash taken before it was entered.
+    paid_on: Optional[str] = None
+    note: Optional[str] = None
 
 # A single installment recorded against an invoice.
 class InvoicePaymentCreate(BaseModel):

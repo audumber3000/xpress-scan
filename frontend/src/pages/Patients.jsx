@@ -14,6 +14,8 @@ import ImportPatientsModal from "../components/patient/ImportPatientsModal";
 import EmptyState from "../components/common/EmptyState";
 import { medicalCare } from "../assets/illustrations";
 import AgeOrDobField, { computeAgeFromDob } from "../components/patient/AgeOrDobField";
+import { clinicToday } from "../utils/datetime";
+import DailyRegisterTab from "../components/patient/DailyRegisterTab";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
 
@@ -35,7 +37,9 @@ const Patients = () => {
   const location = useLocation();
 
   // Tabs state
-  const [activeTab, setActiveTab] = useState('list'); // 'list' or 'files'
+  // 'today' | 'list' | 'files' | 'birthdays'. The daily register leads, the way
+  // Payments opens on Today's Collection — it's the screen the front desk lives on.
+  const [activeTab, setActiveTab] = useState('today');
   
   // Data states. `patients` now holds ONE server page, not the whole clinic.
   const [patients, setPatients] = useState([]);
@@ -66,6 +70,7 @@ const Patients = () => {
     blood_group: "",
     patient_history: "",
     display_id: "",
+    registered_on: clinicToday(),
     notes: ""
   });
   // Whether the Age/DOB field is collecting an age or a date of birth.
@@ -81,13 +86,20 @@ const Patients = () => {
   const [birthdays, setBirthdays] = useState([]);
   const [birthdaysLoading, setBirthdaysLoading] = useState(false);
 
+  // Daily register tab. When the register sends someone into the create form,
+  // this flag makes the new patient land in the day's register on save — the
+  // register reuses this one patient form rather than growing its own.
+  const [addToRegisterAfterCreate, setAddToRegisterAfterCreate] = useState(false);
+  const [registerRefreshKey, setRegisterRefreshKey] = useState(0);
+
   // Parse URL params for tab state
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tab = params.get('tab');
     if (tab === 'files') setActiveTab('files');
     else if (tab === 'birthdays') setActiveTab('birthdays');
-    else setActiveTab('list');
+    else if (tab === 'list') setActiveTab('list');
+    else setActiveTab('today');
   }, [location.search]);
 
   const fetchBirthdays = async () => {
@@ -172,13 +184,19 @@ const Patients = () => {
   }, [page, debouncedSearch, filterGender, filterTreatment]);
 
   useEffect(() => {
-    setTitle(activeTab === 'list' ? 'Patients' : activeTab === 'birthdays' ? 'Upcoming Birthdays' : 'Patient Files');
+    setTitle(
+      activeTab === 'list' ? 'All Patients'
+        : activeTab === 'birthdays' ? 'Upcoming Birthdays'
+        : activeTab === 'today' ? "Today's Patients"
+        : 'All Files'
+    );
     setRefreshFunction(() => fetchPatients);
   }, [setTitle, setRefreshFunction, activeTab, fetchPatients]);
 
-  // Refetch whenever the page, search or filters change.
+  // Refetch whenever the page, search or filters change. The birthdays and
+  // daily-register tabs load their own data and don't need the patient page.
   useEffect(() => {
-    if (activeTab !== 'birthdays') fetchPatients();
+    if (activeTab !== 'birthdays' && activeTab !== 'today') fetchPatients();
   }, [fetchPatients, activeTab]);
 
   // A new search or filter always returns to page 1.
@@ -229,6 +247,7 @@ const Patients = () => {
   }, [patients]);
 
   const handleEditPatient = (patient) => {
+    setAddToRegisterAfterCreate(false);
     setEditingPatient(patient);
     setEditFormData({
       name: patient.name || "",
@@ -242,6 +261,9 @@ const Patients = () => {
       blood_group: patient.blood_group || "",
       patient_history: patient.patient_history || "",
       display_id: patient.display_id || "",
+      // Older rows are backfilled from created_at server-side; fall back here
+      // too so the field is never blank on an unmigrated record.
+      registered_on: patient.registered_on || (patient.created_at || "").slice(0, 10),
       notes: patient.notes || ""
     });
     setAgeMode(patient.date_of_birth ? "dob" : "age");
@@ -253,6 +275,9 @@ const Patients = () => {
   const handleCreatePatient = () => {
     setDrawerMode('create');
     setEditingPatient(null);
+    // Plain "Create Patient" is not the register flow (handleRegisterNewFromRegister
+    // re-arms this straight after calling us).
+    setAddToRegisterAfterCreate(false);
     setEditFormData({
       name: "",
       age: "",
@@ -265,11 +290,21 @@ const Patients = () => {
       blood_group: "",
       patient_history: "",
       display_id: "",
+      registered_on: clinicToday(),
       notes: ""
     });
     setAgeMode("age");
     setEditErrors({});
     setEditDrawerOpen(true);
+  };
+
+  // The daily register found no existing match: open the normal create-patient
+  // drawer with what the front desk already typed, and remember to add the
+  // patient to the day's register once they're saved.
+  const handleRegisterNewFromRegister = ({ name = "", phone = "" } = {}) => {
+    handleCreatePatient();
+    setEditFormData(prev => ({ ...prev, name, phone }));
+    setAddToRegisterAfterCreate(true);
   };
 
   // Deep link: /patients?new=1 opens the create drawer — the entry point the
@@ -314,6 +349,13 @@ const Patients = () => {
       errors.phone = "Phone number is required.";
     } else if (editFormData.phone.replace(/\D/g, "").length < 7) {
       errors.phone = "Enter a valid phone number (at least 7 digits).";
+    }
+
+    if (!editFormData.registered_on) {
+      errors.registered_on = "Registration date is required.";
+    } else if (editFormData.registered_on > clinicToday()) {
+      // String compare is safe: both are YYYY-MM-DD.
+      errors.registered_on = "Registration date can't be in the future.";
     }
 
     if (!editFormData.village?.trim()) errors.village = "Village/City is required.";
@@ -361,11 +403,29 @@ const Patients = () => {
         const created = await api.post(`/patients/`, payload);
         toast.success("Patient created successfully");
         setEditDrawerOpen(false);
+
+        // Came from the daily register: put them straight into today's list, so
+        // the front desk doesn't have to register the same person twice.
+        if (created?.id && addToRegisterAfterCreate) {
+          try {
+            await api.post('/daily-register', { patient_id: created.id });
+            setRegisterRefreshKey(k => k + 1);
+            toast.success(`${created.name || editFormData.name} added to today's register`);
+          } catch (regError) {
+            console.error("Error adding the new patient to the register:", regError);
+            toast.error("Patient saved, but we couldn't add them to today's register.");
+          }
+        }
+        setAddToRegisterAfterCreate(false);
+
         // Nudge the user to start the patient's case paper — turns creation
-        // into a flow rather than a dead end.
-        if (created?.id) setCasePaperPrompt({ id: created.id, name: created.name || editFormData.name });
+        // into a flow rather than a dead end. Skipped when the register is
+        // driving, so the front desk isn't pulled out of the day's list.
+        if (created?.id && !addToRegisterAfterCreate) {
+          setCasePaperPrompt({ id: created.id, name: created.name || editFormData.name });
+        }
       }
-      fetchPatients();
+      if (activeTab !== 'today') fetchPatients();
     } catch (e) {
       console.error("Error saving patient:", e);
       // Surface the real reason (duplicate phone, etc.) instead of a generic message.
@@ -498,6 +558,16 @@ const Patients = () => {
       <div className="px-6 pt-4 border-b border-gray-200 bg-white flex items-end justify-between">
         <nav className="-mb-px flex space-x-8">
           <button
+            onClick={() => handleTabChange('today')}
+            className={`${
+              activeTab === 'today'
+                ? 'border-[#2a276e] text-[#2a276e]'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+          >
+            Today's Patients
+          </button>
+          <button
             onClick={() => handleTabChange('list')}
             className={`${
               activeTab === 'list'
@@ -505,7 +575,7 @@ const Patients = () => {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
           >
-            Patient List
+            All Patients
           </button>
           <button
             onClick={() => handleTabChange('files')}
@@ -515,7 +585,7 @@ const Patients = () => {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
           >
-            Patient Files
+            All Files
           </button>
           <button
             onClick={() => handleTabChange('birthdays')}
@@ -530,7 +600,7 @@ const Patients = () => {
         </nav>
 
         {/* Patient-base stat — steady clinic total, or "X of Y" while filtering. */}
-        {activeTab !== 'birthdays' && totalPatients > 0 && (
+        {activeTab !== 'birthdays' && activeTab !== 'today' && totalPatients > 0 && (
           <div className="mb-2 hidden sm:inline-flex items-center gap-2 rounded-full bg-[#2a276e]/[0.06] border border-[#2a276e]/10 px-3.5 py-1.5">
             <Users size={15} className="text-[#2a276e]" />
             <span className="text-sm font-semibold text-[#2a276e]">
@@ -545,7 +615,9 @@ const Patients = () => {
         )}
       </div>
 
-      {/* Search, Filters & Actions Area */}
+      {/* Search, Filters & Actions Area — the daily register carries its own
+          day picker and register button, so this bar would only get in its way. */}
+      {activeTab !== 'today' && (
       <div className="px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-3 w-full md:w-auto flex-1">
           <div className="w-full md:max-w-sm relative">
@@ -593,11 +665,18 @@ const Patients = () => {
           </button>
         </div>
       </div>
+      )}
 
-      {/* Content Area */}
+      {activeTab === 'today' ? (
+        <DailyRegisterTab
+          onRegisterNew={handleRegisterNewFromRegister}
+          refreshKey={registerRefreshKey}
+        />
+      ) : (
+      /* Content Area */
       <div className="flex-1 overflow-hidden px-6 pb-6">
         <div className="h-full bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
-          
+
           {loading ? (
             <div className="flex-1 overflow-auto">
               <table className="w-full divide-y divide-gray-200">
@@ -834,6 +913,7 @@ const Patients = () => {
           )}
         </div>
       </div>
+      )}
 
       {/* Edit Drawer (Modern update but keeping original fields) */}
       {editDrawerOpen && (
@@ -905,6 +985,22 @@ const Patients = () => {
                     </select>
                     <FieldError name="gender" />
                   </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date of Registration <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={editFormData.registered_on || ""}
+                    max={clinicToday()}
+                    onChange={(e) => setField("registered_on", e.target.value)}
+                    className={fieldClass("registered_on")}
+                  />
+                  <p className="mt-1 text-xs text-gray-400">
+                    Defaults to today. Change it if this patient first came in earlier.
+                  </p>
+                  <FieldError name="registered_on" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone <span className="text-red-500">*</span></label>

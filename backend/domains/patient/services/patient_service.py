@@ -8,6 +8,7 @@ from core.dtos import PatientCreateDTO, PatientUpdateDTO, PatientResponseDTO, Pa
 from models import Patient, Clinic, TreatmentType, Invoice, InvoiceLineItem, Appointment
 from sqlalchemy import func, cast, Integer
 from core.posthog_client import track_event, EVENTS
+from core.clinic_time import clinic_today
 
 
 class PatientService(PatientServiceProtocol):
@@ -47,6 +48,16 @@ class PatientService(PatientServiceProtocol):
         registered_at = patient_dict.pop('registered_at', None)
         if registered_at:
             patient_dict['created_at'] = registered_at
+
+        # Registration date: what staff entered, else the back-dated created_at
+        # from an import, else the clinic's today. Stored as a clinic-local date
+        # so "registered today" means the clinic's day, not the server's UTC day.
+        registered_on = patient_dict.get('registered_on')
+        if registered_on is None:
+            registered_on = registered_at.date() if registered_at else clinic_today(clinic)
+        if registered_on > clinic_today(clinic):
+            raise ValueError("Registration date can't be in the future")
+        patient_dict['registered_on'] = registered_on
 
         # Age / DOB are interchangeable on intake. If a date of birth was given
         # but no age, derive the age from it so list/summary views stay populated.
@@ -151,6 +162,14 @@ class PatientService(PatientServiceProtocol):
             updates['age'] = today.year - dob.year - (
                 (today.month, today.day) < (dob.month, dob.day)
             )
+
+        # A corrected registration date may move earlier but never into the future.
+        # Note this does NOT rewrite is_repeat on already-recorded daily visits —
+        # those are snapshotted at registration so past days' KPIs stay stable.
+        if updates.get('registered_on'):
+            clinic = self.clinic_repo.get_by_id(clinic_id)
+            if updates['registered_on'] > clinic_today(clinic):
+                raise ValueError("Registration date can't be in the future")
 
         # Validate phone number uniqueness if being updated
         if 'phone' in updates and updates['phone'] != existing_patient.phone:

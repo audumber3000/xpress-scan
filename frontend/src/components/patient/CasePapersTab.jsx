@@ -418,6 +418,27 @@ const CasePapersTab = ({
       onCasePaperStateChange?.(true);
   };
 
+  // Deep link from the daily register: ?action=new-case-paper opens a blank case
+  // paper, ?action=prescribe opens the prescription drawer, so a row there leads
+  // straight into the work instead of dumping the user on the profile. Runs once,
+  // and strips the param so a refresh or back-navigation doesn't re-trigger it.
+  const deepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (deepLinkHandled.current || !patientData?.id) return;
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get('action');
+    if (action !== 'new-case-paper' && action !== 'prescribe') return;
+
+    deepLinkHandled.current = true;
+    startNewCasePaper();
+    if (action === 'prescribe') setPrescriptionOpen(true);
+
+    params.delete('action');
+    const qs = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patientData?.id]);
+
   const handleSaveCasePaper = async () => {
       try {
           const payload = {

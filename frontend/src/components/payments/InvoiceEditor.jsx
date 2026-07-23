@@ -7,6 +7,7 @@ import GearLoader from "../GearLoader";
 import InvoiceHeader from "./InvoiceHeader";
 import InvoiceLineItems from "./InvoiceLineItems";
 import InvoicePayments from "./InvoicePayments";
+import InvoiceDiscounts from "./InvoiceDiscounts";
 import InvoiceActions from "./InvoiceActions";
 import MarkAsPaidModal from "./MarkAsPaidModal";
 import ConfirmDialog from "../common/ConfirmDialog";
@@ -245,6 +246,33 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
     } catch (error) {
       console.error("Error removing payment:", error);
       toast.error("Failed to remove payment");
+    }
+  };
+
+  // Discounts granted after the invoice was issued. Errors are rethrown so the
+  // discount form can show the server's reason (e.g. "more than the amount due")
+  // inline next to the field, rather than only as a toast.
+  const handleAddDiscount = async (payload) => {
+    try {
+      const updated = await api.post(`/invoices/${currentInvoiceId}/discounts`, payload);
+      setInvoice(updated);
+      toast.success("Discount applied");
+      if (onSave) onSave();
+    } catch (error) {
+      console.error("Error applying discount:", error);
+      throw error;
+    }
+  };
+
+  const handleRemoveDiscount = async (discountId) => {
+    try {
+      const updated = await api.delete(`/invoices/${currentInvoiceId}/discounts/${discountId}`);
+      setInvoice(updated);
+      toast.success("Discount removed");
+      if (onSave) onSave();
+    } catch (error) {
+      console.error("Error removing discount:", error);
+      toast.error(error?.response?.data?.detail || "Failed to remove discount");
     }
   };
 
@@ -567,6 +595,14 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
                   onUpdateInvoice={handleUpdateInvoiceStats}
                   canEdit={canEdit}
                 />
+
+            {/* Concessions granted after issue — only shown once there's an
+                issued bill to discount (the component hides itself on drafts). */}
+            <InvoiceDiscounts
+              invoice={invoice}
+              onAdd={handleAddDiscount}
+              onRemove={handleRemoveDiscount}
+            />
 
             {/* Partial-payment schedule — visible once the invoice is finalized */}
             <InvoicePayments

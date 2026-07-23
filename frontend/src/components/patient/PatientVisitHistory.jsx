@@ -1,23 +1,25 @@
 import React, { useMemo } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { getCurrencySymbol } from '../../utils/currency';
+import { formatTime as formatClinicTime, clinicDateKey } from '../../utils/datetime';
 
 const formatTime = (value) => {
   if (!value) return null;
-  // Accept either an "HH:MM" string from appointment.start_time or an ISO timestamp.
+  // An "HH:MM" from appointment.start_time is already clinic-local wall time —
+  // it carries no date, so there is nothing to convert.
   if (/^\d{1,2}:\d{2}/.test(value)) {
     const [h, m] = value.split(':').map(Number);
     const period = h >= 12 ? 'PM' : 'AM';
     const hour = h % 12 === 0 ? 12 : h % 12;
     return `${hour}:${String(m).padStart(2, '0')} ${period}`;
   }
-  const d = new Date(value);
-  return Number.isNaN(d.getTime())
-    ? null
-    : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+  // Everything else is a server timestamp: stored UTC, shown in the clinic's
+  // timezone. A bare new Date() would read the naive string as browser-local and
+  // show a 19:00 UTC visit as 7:00 PM instead of 12:30 AM in India.
+  return formatClinicTime(value);
 };
 
-const PatientVisitHistory = ({ appointments = [], prescriptions = [], invoices = [], casePapers = [], registrationDate = null }) => {
+const PatientVisitHistory = ({ appointments = [], prescriptions = [], invoices = [], casePapers = [], dailyVisits = [], registrationDate = null }) => {
   const visits = useMemo(() => {
     const grouped = {};
     const ensureDay = (dateKey) => {
@@ -28,7 +30,9 @@ const PatientVisitHistory = ({ appointments = [], prescriptions = [], invoices =
     // Each case paper is a real clinical encounter — the most reliable "visit".
     casePapers.forEach((cp) => {
       const raw = cp.date || cp.created_at;
-      const dateKey = raw ? raw.split('T')[0] : 'unknown';
+      // Group by the clinic's calendar day, not UTC's: a 7 PM UTC event is the
+      // next morning in India and belongs on that day in the timeline.
+      const dateKey = raw ? (clinicDateKey(raw) || 'unknown') : 'unknown';
       const complaints = Array.isArray(cp.chief_complaint) ? cp.chief_complaint.filter(Boolean) : [];
       ensureDay(dateKey).events.push({
         type: 'casepaper',
@@ -40,7 +44,9 @@ const PatientVisitHistory = ({ appointments = [], prescriptions = [], invoices =
     });
 
     appointments.forEach((apt) => {
-      const dateKey = apt.appointment_date || apt.date || 'unknown';
+      // appointment_date is already a bare calendar date; clinicDateKey passes
+      // those through untouched.
+      const dateKey = clinicDateKey(apt.appointment_date || apt.date) || 'unknown';
       if (!grouped[dateKey]) grouped[dateKey] = { date: dateKey, events: [] };
       grouped[dateKey].events.push({
         type: 'appointment',
@@ -58,7 +64,7 @@ const PatientVisitHistory = ({ appointments = [], prescriptions = [], invoices =
     });
 
     prescriptions.forEach((rx) => {
-      const dateKey = rx.created_at ? rx.created_at.split('T')[0] : 'unknown';
+      const dateKey = rx.created_at ? (clinicDateKey(rx.created_at) || 'unknown') : 'unknown';
       if (!grouped[dateKey]) grouped[dateKey] = { date: dateKey, events: [] };
       grouped[dateKey].events.push({
         type: 'prescription',
@@ -72,7 +78,7 @@ const PatientVisitHistory = ({ appointments = [], prescriptions = [], invoices =
     });
 
     invoices.forEach((inv) => {
-      const dateKey = inv.date || (inv.created_at ? inv.created_at.split('T')[0] : 'unknown');
+      const dateKey = clinicDateKey(inv.date || inv.created_at) || 'unknown';
       if (!grouped[dateKey]) grouped[dateKey] = { date: dateKey, events: [] };
       grouped[dateKey].events.push({
         type: 'invoice',
@@ -83,10 +89,32 @@ const PatientVisitHistory = ({ appointments = [], prescriptions = [], invoices =
       });
     });
 
+    // The daily register. This is what guarantees a visit leaves a trace: a
+    // walk-in seen briefly, with no case paper and no bill, would otherwise be
+    // invisible on their file. Skipped on days that already have a case paper,
+    // since that says the same thing with more detail.
+    const clinicalDays = new Set(
+      casePapers
+        .map((cp) => clinicDateKey(cp.date || cp.created_at))
+        .filter(Boolean)
+    );
+    dailyVisits.forEach((dv) => {
+      const dateKey = dv.visit_date;
+      if (!dateKey || clinicalDays.has(dateKey)) return;
+      ensureDay(dateKey).events.push({
+        type: 'dailyvisit',
+        id: dv.id,
+        time: formatTime(dv.created_at),
+        title: 'Visited the clinic',
+        notes: dv.reason || null,
+        status: dv.is_repeat ? 'Repeat' : 'New',
+      });
+    });
+
     // Registration counts as the patient's first visit — useful when a doctor
     // just registers a walk-in without ever creating an appointment.
     if (registrationDate) {
-      const dateKey = registrationDate.split('T')[0];
+      const dateKey = clinicDateKey(registrationDate) || 'unknown';
       ensureDay(dateKey).events.push({
         type: 'registration',
         time: formatTime(registrationDate),
@@ -95,14 +123,20 @@ const PatientVisitHistory = ({ appointments = [], prescriptions = [], invoices =
     }
 
     return Object.values(grouped).sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [appointments, prescriptions, invoices, casePapers, registrationDate]);
+  }, [appointments, prescriptions, invoices, casePapers, dailyVisits, registrationDate]);
 
+  // The keys are bare calendar dates. new Date('2026-07-23').getDate() reads
+  // UTC midnight in local time, which shows the 22nd west of Greenwich — so
+  // build the parts from the string itself and keep the formatting in UTC.
   const formatDateParts = (dateStr) => {
     if (!dateStr || dateStr === 'unknown') return { day: '??', month: '---' };
-    const d = new Date(dateStr);
+    const [y, m, d] = dateStr.split('-').map(Number);
+    if (!y || !m || !d) return { day: '??', month: '---' };
     return {
-      day: d.getDate(),
-      month: d.toLocaleString('en-US', { month: 'short' }).toUpperCase(),
+      day: d,
+      month: new Date(Date.UTC(y, m - 1, d))
+        .toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
+        .toUpperCase(),
     };
   };
 
@@ -169,6 +203,16 @@ const PatientVisitHistory = ({ appointments = [], prescriptions = [], invoices =
                         {event.type === 'casepaper' && (
                           <span className="text-[10px] font-semibold px-2 py-1 rounded-md bg-[#9B8CFF]/15 text-[#2a276e]">
                             Consultation
+                          </span>
+                        )}
+
+                        {event.type === 'dailyvisit' && (
+                          <span className={`text-[10px] font-semibold px-2 py-1 rounded-md ${
+                            event.status === 'Repeat'
+                              ? 'bg-amber-50 text-amber-700'
+                              : 'bg-green-50 text-green-700'
+                          }`}>
+                            {event.status} visit
                           </span>
                         )}
 

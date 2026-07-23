@@ -183,7 +183,7 @@ const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdat
             )}
             <button
               onClick={() => { setShowAddForm(true); setEditingId(null); setShowStock(false); }}
-              className="px-4 py-2 bg-[#25D366] text-white rounded-lg hover:bg-[#20BA5A] transition text-sm font-medium"
+              className="px-4 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition text-sm font-medium"
             >
               + Add Item
             </button>
@@ -354,10 +354,21 @@ const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdat
                 </div>
               ) : (
                 invoice.discount_amount > 0 && (
-                  <div className="flex justify-between text-sm text-gray-600">
-                    <span>Discount:</span>
-                    <span className="font-medium text-red-600">- {formatAmount(invoice.discount_amount)}</span>
-                  </div>
+                  <>
+                    <div className="flex justify-between text-sm text-gray-600">
+                      <span>Discount:</span>
+                      <span className="font-medium text-red-600">- {formatAmount(invoice.discount_amount)}</span>
+                    </div>
+                    {/* How much of that deduction was granted after the bill was
+                        issued, so the total reconciles against what the patient
+                        was originally quoted. */}
+                    {Number(invoice.post_issue_discount_total || 0) > 0 && (
+                      <div className="flex justify-between text-xs text-gray-400 -mt-1">
+                        <span>incl. after issue:</span>
+                        <span>{formatAmount(invoice.post_issue_discount_total)}</span>
+                      </div>
+                    )}
+                  </>
                 )
               )}
 

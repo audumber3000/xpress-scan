@@ -161,6 +161,20 @@ run_migration "lab_order_invoice_line" "ALTER TABLE lab_orders ADD COLUMN IF NOT
 # appointments.id for someone else). Idempotent: the NULL guard makes re-runs no-ops.
 run_migration "backfill_invoice_case_paper" "UPDATE invoices i SET case_paper_id = i.appointment_id FROM case_papers cp WHERE i.case_paper_id IS NULL AND i.appointment_id IS NOT NULL AND cp.id = i.appointment_id AND cp.patient_id = i.patient_id AND cp.clinic_id = i.clinic_id"
 
+# Patient registration date — back-dateable, clinic-local, and what decides
+# new-vs-repeat in the daily register. Backfilled from created_at so existing
+# patients are never blank.
+run_migration "patient_registered_on" "ALTER TABLE patients ADD COLUMN IF NOT EXISTS registered_on DATE"
+run_migration "patient_registered_on_backfill" "UPDATE patients SET registered_on = created_at::date WHERE registered_on IS NULL"
+
+# Discounts granted after an invoice was issued (append-only, one row each).
+run_migration "invoice_discounts" "CREATE TABLE IF NOT EXISTS invoice_discounts (id SERIAL PRIMARY KEY, invoice_id INTEGER NOT NULL REFERENCES invoices(id), clinic_id INTEGER NOT NULL REFERENCES clinics(id), value DOUBLE PRECISION NOT NULL DEFAULT 0, discount_type VARCHAR NOT NULL DEFAULT 'amount', amount DOUBLE PRECISION NOT NULL DEFAULT 0, reason VARCHAR NOT NULL, applied_by INTEGER REFERENCES users(id), applied_at TIMESTAMP DEFAULT NOW())"
+run_migration "invoice_discounts_idx" "CREATE INDEX IF NOT EXISTS ix_invoice_discounts_invoice_id ON invoice_discounts (invoice_id)"
+
+# Daily patient register — one row per patient per clinic-local day.
+run_migration "daily_visits" "CREATE TABLE IF NOT EXISTS daily_visits (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL REFERENCES clinics(id), patient_id INTEGER NOT NULL REFERENCES patients(id), visit_date DATE NOT NULL, is_repeat BOOLEAN NOT NULL DEFAULT FALSE, doctor_id INTEGER REFERENCES users(id), reason VARCHAR, source VARCHAR NOT NULL DEFAULT 'manual', appointment_id INTEGER REFERENCES appointments(id), notes TEXT, created_by INTEGER REFERENCES users(id), created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW(), CONSTRAINT uq_daily_visit_patient_day UNIQUE (clinic_id, patient_id, visit_date))"
+run_migration "daily_visits_day_idx" "CREATE INDEX IF NOT EXISTS ix_daily_visits_clinic_date ON daily_visits (clinic_id, visit_date)"
+
 # ── Schema migration check (run against RDS) ──────────────────────────────────
 echo ""
 echo "▶ Running schema migration check against RDS..."
@@ -169,7 +183,7 @@ declare -A REQUIRED_COLS=(
   ["clinics"]="id clinic_code name address phone email gst_number specialization subscription_plan status razorpay_customer_id cashfree_customer_id logo_url invoice_template primary_color number_of_chairs timings created_at updated_at synced_at sync_status referred_by_code clinic_label parent_clinic_id country currency_code currency_symbol timezone tax_label tax_id license_number license_authority license_expiry account_manager_name account_manager_role account_manager_email account_manager_phone"
   ["users"]="id email name first_name last_name role is_active permissions created_at updated_at email_report_unsubscribed"
   ["user_clinics"]="user_id clinic_id role is_active created_at"
-  ["patients"]="id clinic_id name phone date_of_birth created_at updated_at"
+  ["patients"]="id clinic_id name phone date_of_birth registered_on created_at updated_at"
   ["appointments"]="id clinic_id patient_name appointment_date start_time end_time status created_at updated_at"
   ["subscriptions"]="id plan_name status current_start current_end is_trial trial_ends_at"
 )

@@ -73,6 +73,16 @@ const InvoicePayments = ({ invoice, onAdd, onDelete, canEdit = true }) => {
                   {fmtDate(p.paid_on || p.created_at)}{p.created_at ? `, ${formatTime(p.created_at)}` : ''}
                 </span>
                 {p.method && <span className="text-xs text-gray-400 ml-2">· {p.method}</span>}
+                {/* Money dated earlier than the day it was written down — worth
+                    seeing at a glance when the books are reconciled. */}
+                {p.is_back_dated && (
+                  <span
+                    title={`Money received ${fmtDate(p.paid_on)}, entered ${fmtDate(p.recorded_on)}`}
+                    className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700"
+                  >
+                    Back-dated
+                  </span>
+                )}
                 {p.note && <span className="text-xs text-gray-400 ml-2">· {p.note}</span>}
               </div>
               {canEdit && (
@@ -92,24 +102,38 @@ const InvoicePayments = ({ invoice, onAdd, onDelete, canEdit = true }) => {
       {/* Add payment */}
       {canEdit && due > 0 && (
         <div className="px-5 py-4 border-t border-gray-100 bg-white">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            <input
-              type="number" min="0" step="any" value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder={`Amount (due ${money(due)})`}
-              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2a276e] focus:ring-2 focus:ring-[#2a276e]/20 col-span-2 md:col-span-1"
-            />
-            <input
-              type="date" value={paidOn} max={clinicToday()}
-              onChange={(e) => setPaidOn(e.target.value)}
-              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2a276e] focus:ring-2 focus:ring-[#2a276e]/20"
-            />
-            <select
-              value={method} onChange={(e) => setMethod(e.target.value)}
-              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2a276e] focus:ring-2 focus:ring-[#2a276e]/20"
-            >
-              {['Cash', 'UPI', 'Card', 'Net Banking', 'Cheque', 'Other'].map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
+          {/* Labelled, because an unlabelled date box next to an amount reads as
+              decoration — the field existed before but nobody could find it. */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 items-end">
+            <div className="col-span-2 md:col-span-1">
+              <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Amount</label>
+              <input
+                type="number" min="0" step="any" value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder={`Due ${money(due)}`}
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2a276e] focus:ring-2 focus:ring-[#2a276e]/20"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                Payment date
+              </label>
+              <input
+                type="date" value={paidOn} max={clinicToday()}
+                onChange={(e) => setPaidOn(e.target.value)}
+                title="The day the money was actually received. Pick an earlier date to record a payment taken before today."
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2a276e] focus:ring-2 focus:ring-[#2a276e]/20"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Method</label>
+              <select
+                value={method} onChange={(e) => setMethod(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2a276e] focus:ring-2 focus:ring-[#2a276e]/20"
+              >
+                {['Cash', 'UPI', 'Card', 'Net Banking', 'Cheque', 'Other'].map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
             <button
               onClick={submit}
               disabled={saving || !amount}
@@ -123,6 +147,14 @@ const InvoicePayments = ({ invoice, onAdd, onDelete, canEdit = true }) => {
             placeholder="Note (optional)"
             className="mt-2 w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2a276e] focus:ring-2 focus:ring-[#2a276e]/20"
           />
+          {/* Recording money that came in on an earlier day is normal; saying so
+              out loud is what keeps the books and the cash drawer agreeing. */}
+          {paidOn < clinicToday() && (
+            <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+              This payment will be dated <span className="font-semibold">{fmtDate(paidOn)}</span>, so it counts
+              towards that day's collection. We'll note that you entered it today.
+            </p>
+          )}
         </div>
       )}
     </div>

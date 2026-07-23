@@ -153,6 +153,10 @@ class Patient(Base):
     display_id = Column(String, nullable=True, index=True)
     notes = Column(Text)
     payment_type = Column(String, nullable=False, default="Cash")
+    # The clinic-local date this patient was registered. Distinct from created_at
+    # (a UTC row timestamp): staff can back-date it for a patient first seen
+    # earlier, and it is what decides new-vs-repeat in the daily register.
+    registered_on = Column(Date, nullable=True, index=True)
     
     # Dental History & Planning data (stored as JSON for flexibility)
     dental_chart = Column(JSON, nullable=True)  # Stores teethData
@@ -231,6 +235,42 @@ class CasePaper(Base):
     patient = relationship("Patient")
     appointment = relationship("Appointment")
     dentist = relationship("User")
+
+
+class DailyVisit(Base):
+    """One row per patient per clinic-local day — the daily register the front
+    desk keeps. Deliberately lighter than CasePaper: a walk-in who is registered
+    for the day and leaves still belongs here, without creating a clinical record.
+
+    `is_repeat` is stored, not derived on read. It is decided once at registration
+    (from the patient's registered_on) so a later correction to a patient's
+    registration date can't retroactively rewrite past days' KPIs."""
+    __tablename__ = 'daily_visits'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False, index=True)
+    visit_date = Column(Date, nullable=False, index=True)  # clinic-local calendar day
+    is_repeat = Column(Boolean, nullable=False, default=False)
+    doctor_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    reason = Column(String, nullable=True)          # free-text reason for visit
+    source = Column(String, nullable=False, default='manual')  # 'manual' | 'check_in'
+    appointment_id = Column(Integer, ForeignKey('appointments.id'), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    # One register entry per patient per day — a walk-in already checked in via
+    # the calendar must not be counted twice when staff also add them by hand.
+    __table_args__ = (
+        UniqueConstraint('clinic_id', 'patient_id', 'visit_date', name='uq_daily_visit_patient_day'),
+    )
+
+    clinic = relationship("Clinic")
+    patient = relationship("Patient")
+    doctor = relationship("User", foreign_keys=[doctor_id])
+    creator = relationship("User", foreign_keys=[created_by])
+    appointment = relationship("Appointment")
 
 
 class Report(Base):
@@ -507,6 +547,7 @@ class Invoice(Base):
     line_items = relationship("InvoiceLineItem", back_populates="invoice", cascade="all, delete-orphan")
     audit_logs = relationship("InvoiceAuditLog", back_populates="invoice", cascade="all, delete-orphan")
     payments = relationship("InvoicePayment", back_populates="invoice", cascade="all, delete-orphan")
+    post_issue_discounts = relationship("InvoiceDiscount", back_populates="invoice", cascade="all, delete-orphan")
 
 
 class InvoicePayment(Base):
@@ -524,6 +565,31 @@ class InvoicePayment(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     invoice = relationship("Invoice", back_populates="payments")
+
+
+class InvoiceDiscount(Base):
+    """A discount applied to an invoice *after* it was issued (finalized, part-paid
+    or paid). Append-only: each concession is its own dated row with a reason and
+    the staff member who granted it, so a bill's history is never overwritten.
+
+    Draft invoices keep using Invoice.discount / discount_type — this table is
+    only for concessions granted once the bill was already in the patient's hands.
+    `amount` is the resolved deduction: a percentage is snapshotted to currency at
+    the moment it's applied, so later edits to the line items can't silently
+    re-scale a concession that was already agreed with the patient."""
+    __tablename__ = 'invoice_discounts'
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_id = Column(Integer, ForeignKey('invoices.id'), nullable=False, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
+    value = Column(Float, nullable=False, default=0.0)        # as typed by the user
+    discount_type = Column(String, nullable=False, default='amount')  # 'amount' | 'percentage'
+    amount = Column(Float, nullable=False, default=0.0)       # resolved deduction in currency
+    reason = Column(String, nullable=False)
+    applied_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    applied_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    invoice = relationship("Invoice", back_populates="post_issue_discounts")
+    user = relationship("User")
 
 
 class InvoiceLineItem(Base):

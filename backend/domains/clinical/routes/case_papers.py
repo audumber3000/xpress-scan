@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from database import get_db
-from models import CasePaper, User, Appointment
+from models import CasePaper, User, Appointment, Clinic, Patient
 from schemas import CasePaperCreate, CasePaperUpdate, CasePaperOut
 from core.auth_utils import get_current_user, require_doctor_or_owner
 from typing import List, Optional, Any
@@ -52,6 +52,26 @@ def create_case_paper(
         clinic_id=current_user.clinic_id
     )
     db.add(db_paper)
+    db.flush()
+
+    # A case paper means the patient was in the clinic, so they belong in the
+    # day's register even if reception never entered them. Idempotent per patient
+    # per day, so someone already registered by hand isn't counted twice.
+    # Best-effort: never block recording clinical work.
+    try:
+        from domains.patient.routes.daily_register import record_daily_visit
+        reg_clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+        reg_patient = db.query(Patient).filter(Patient.id == db_paper.patient_id).first()
+        if reg_clinic and reg_patient:
+            record_daily_visit(
+                db, reg_clinic, reg_patient,
+                source='case_paper',
+                doctor_id=db_paper.dentist_id,
+                created_by=current_user.id,
+            )
+    except Exception as e:
+        print(f"⚠️ Could not add case paper {db_paper.id} to the daily register: {e}")
+
     db.commit()
     db.refresh(db_paper)
     return db_paper

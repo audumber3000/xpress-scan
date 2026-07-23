@@ -753,15 +753,37 @@ async def update_appointment(
                     logf.write(traceback.format_exc())
                 traceback.print_exc()
         
+        # ── Daily register ───────────────────────────────────────────
+        # Checking a patient in is them arriving at the clinic, so they belong in
+        # the day's register. Idempotent per patient per day, so a walk-in the
+        # front desk already added by hand isn't counted twice. Best-effort: a
+        # failure here must never block the check-in itself.
+        if appointment.status == 'checking' and appointment.patient_id:
+            try:
+                from domains.patient.routes.daily_register import record_daily_visit
+                reg_clinic = db.query(Clinic).filter(Clinic.id == appointment.clinic_id).first()
+                reg_patient = db.query(Patient).filter(Patient.id == appointment.patient_id).first()
+                if reg_clinic and reg_patient:
+                    record_daily_visit(
+                        db, reg_clinic, reg_patient,
+                        source='check_in',
+                        appointment_id=appointment.id,
+                        doctor_id=appointment.doctor_id,
+                        reason=appointment.treatment,
+                        created_by=current_user.id,
+                    )
+            except Exception as e:
+                print(f"⚠️ Could not add appointment {appointment.id} to the daily register: {e}")
+
         db.commit()
         db.refresh(appointment)
-        
+
         doctor_name = None
         if appointment.doctor_id:
             doctor = db.query(User).filter(User.id == appointment.doctor_id).first()
             if doctor:
                 doctor_name = doctor.name
-        
+
         # Get clinic information for email
         clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
         

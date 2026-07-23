@@ -4,6 +4,7 @@ import { api } from "../../utils/api";
 import { getCurrencySymbol } from "../../utils/currency";
 import { formatRelative, clinicDateKey, clinicToday } from "../../utils/datetime";
 import { toast } from "react-toastify";
+import WorkDoneCell from "./WorkDoneCell";
 
 const InvoiceItem = memo(({ invoice, onSelect }) => {
   const [isSendingWA, setIsSendingWA] = useState(false);
@@ -65,27 +66,36 @@ const InvoiceItem = memo(({ invoice, onSelect }) => {
       onClick={() => onSelect(invoice.id)}
       className="hover:bg-indigo-50/30 transition-colors duration-150 cursor-pointer group"
     >
+      {/* Invoice number with the patient's ID beneath it — the two references
+          someone quotes on the phone, together. */}
       <td className="px-6 py-4 whitespace-nowrap">
-        <span className="text-sm font-semibold text-[#2a276e]">
+        <div className="text-sm font-semibold text-[#2a276e]">
           {invoice.invoice_number}
-        </span>
+        </div>
+        <div className="text-xs text-gray-400">
+          {invoice.patient_display_id ? `Patient #${invoice.patient_display_id}` : '—'}
+        </div>
       </td>
+
+      {/* Name over contact number, so the phone no longer needs its own column */}
       <td className="px-6 py-5 whitespace-nowrap">
         <div className="flex items-center gap-3">
-          <img 
-            src={generatePatientPersona({ name: invoice.patient_name }, 80)} 
+          <img
+            src={generatePatientPersona({ name: invoice.patient_name }, 80)}
             onError={(e) => { e.target.onerror = null; e.target.src = generateInitialsAvatar(invoice.patient_name || 'Patient'); }}
-            alt={invoice.patient_name || 'Patient'} 
+            alt={invoice.patient_name || 'Patient'}
             className="w-9 h-9 rounded-full flex-shrink-0 object-cover border border-gray-100"
           />
           <div>
             <div className="text-sm font-semibold text-gray-900">{invoice.patient_name || 'Unknown Patient'}</div>
-            <div className="text-xs text-gray-400">Patient</div>
+            <div className="text-xs text-gray-400">{invoice.patient_phone || 'No phone'}</div>
           </div>
         </div>
       </td>
-      <td className="px-6 py-4 whitespace-nowrap">
-        <span className="text-sm text-gray-700">{invoice.patient_phone || '—'}</span>
+
+      {/* The column the phone number was taking up: what this bill was for */}
+      <td className="px-6 py-4">
+        <WorkDoneCell items={invoice.line_items} />
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
         <span className="text-sm font-semibold text-gray-900">{formatAmount(invoice.total)}</span>

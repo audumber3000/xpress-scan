@@ -2,6 +2,7 @@ import React from 'react';
 import { Clock } from 'lucide-react';
 import PatientVisitHistory from './PatientVisitHistory';
 import { generatePatientPersona, generateInitialsAvatar } from '../../utils/avatar';
+import { formatDate } from '../../utils/datetime';
 
 /**
  * PatientInfo - Renders detailed information about a patient
@@ -15,7 +16,8 @@ const PatientInfo = ({
   appointments = [],
   prescriptions = [],
   invoices = [],
-  casePapers = []
+  casePapers = [],
+  dailyVisits = []
 }) => {
     if (!patientData) return null;
 
@@ -73,14 +75,16 @@ const PatientInfo = ({
                                 {patientData.village}
                             </div>
                         </div>
-                        {patientData.created_at && (
+                        {(patientData.registered_on || patientData.created_at) && (
                             <div className="p-3 bg-gray-50 rounded-lg border border-gray-100 sm:col-span-2">
                                 <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Registration Date</p>
                                 <div className="flex items-center text-gray-900 font-medium">
                                     <svg className="w-4 h-4 mr-2 text-[#9B8CFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                     </svg>
-                                    {new Date(patientData.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                                    {/* registered_on is the staff-recorded date (back-dateable);
+                                        created_at is only the fallback for unmigrated rows. */}
+                                    {formatDate(patientData.registered_on || patientData.created_at)}
                                 </div>
                             </div>
                         )}
@@ -101,7 +105,8 @@ const PatientInfo = ({
                         prescriptions={prescriptions}
                         invoices={invoices}
                         casePapers={casePapers}
-                        registrationDate={patientData.created_at}
+                        dailyVisits={dailyVisits}
+                        registrationDate={patientData.registered_on || patientData.created_at}
                     />
                 </div>
             </div>

@@ -12,8 +12,12 @@ import ExportModal from "../components/payments/ExportModal";
 import FilterPanel from "../components/FilterPanel";
 import Pagination from "../components/Pagination";
 import EmptyState from "../components/common/EmptyState";
+import TrendBadge from "../components/common/TrendBadge";
+import WorkDoneCell from "../components/payments/WorkDoneCell";
+import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
+import DayExportModal from "../components/common/DayExportModal";
 import { receipt } from "../assets/illustrations";
-import { formatDate, formatTime } from "../utils/datetime";
+import { formatDate, formatTime, clinicToday } from "../utils/datetime";
 
 const INVOICES_PER_PAGE = 10;
 const LEDGER_PER_PAGE = 10;
@@ -36,6 +40,11 @@ const Payments = () => {
   // Today's Collection is the money received today: one entry per payment
   // (InvoicePayment.paid_on = today), including partials on older invoices.
   const [todayCollections, setTodayCollections] = useState([]);
+  // The same weekday a week earlier, so each today-card can show its change.
+  const [todayPrevious, setTodayPrevious] = useState(null);
+  // Which day the collection tab is showing. Defaults to the clinic's today.
+  const [collectionDate, setCollectionDate] = useState(clinicToday());
+  const [showDayExport, setShowDayExport] = useState(false);
   const [showExport, setShowExport] = useState(false);
 
   // Ledger states
@@ -120,7 +129,8 @@ const Payments = () => {
   // including partials on older invoices). Cash vs Online split by payment method.
   const fetchTodayCollections = async () => {
     try {
-      const res = await api.get('/invoices/collections');
+      // One clinic-local day at a time, like the daily register's picker.
+      const res = await api.get('/invoices/collections', { params: { date_from: collectionDate } });
       setTodayCollections(res?.entries || []);
       setStats(prev => ({
         ...prev,
@@ -128,6 +138,8 @@ const Payments = () => {
         todayCash: res?.cash || 0,
         todayOnline: res?.online || 0,
       }));
+      // Same weekday last week, for the change pills on the cards.
+      setTodayPrevious(res?.previous || null);
     } catch (err) {
       console.error('Error fetching today collections:', err);
       setTodayCollections([]);
@@ -221,7 +233,14 @@ const Payments = () => {
     });
     fetchStats();
     fetchTodayCollections();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setTitle, setRefreshFunction, activeTab]);
+
+  // Changing the day on the collection tab reloads that day's payments and KPIs.
+  useEffect(() => {
+    if (activeTab === 'today') fetchTodayCollections();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collectionDate]);
 
   useEffect(() => {
     if (activeTab === 'payments') {
@@ -300,6 +319,16 @@ const Payments = () => {
 
   const currentItems = activeTab === 'ledger' ? filteredLedger : filteredInvoices;
 
+  // "last Saturday (12 Jul)" — names the day each today-card is measured against,
+  // so the percentage is never an unexplained number.
+  const comparedTo = useMemo(() => {
+    const prevDate = todayPrevious?.date_from;
+    if (!prevDate) return "last week";
+    const [y, m, d] = prevDate.split("-").map(Number);
+    const weekday = new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { weekday: "long", timeZone: "UTC" });
+    return `last ${weekday} (${formatDate(prevDate)})`;
+  }, [todayPrevious?.date_from]);
+
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -359,8 +388,12 @@ const Payments = () => {
                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Today's Total</p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    {/* Not "Today's" — the day picker can point at any past day */}
+                    <p className="text-sm font-medium text-gray-500">Total Collected</p>
+                    <TrendBadge current={stats.todayRevenue} previous={todayPrevious?.total} comparedTo={comparedTo} loading={statsLoading} />
+                  </div>
                   <h4 className="text-2xl font-bold text-gray-900 mt-1">{statsLoading ? "..." : formatCurrency(stats.todayRevenue || 0)}</h4>
                 </div>
               </div>
@@ -372,8 +405,11 @@ const Payments = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Cash Collection</p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-gray-500">Cash Collection</p>
+                    <TrendBadge current={stats.todayCash} previous={todayPrevious?.cash} comparedTo={comparedTo} loading={statsLoading} />
+                  </div>
                   <h4 className="text-2xl font-bold text-gray-900 mt-1">{statsLoading ? "..." : formatCurrency(stats.todayCash || 0)}</h4>
                 </div>
               </div>
@@ -385,8 +421,11 @@ const Payments = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                   </svg>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Online Collection</p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-gray-500">Online Collection</p>
+                    <TrendBadge current={stats.todayOnline} previous={todayPrevious?.online} comparedTo={comparedTo} loading={statsLoading} />
+                  </div>
                   <h4 className="text-2xl font-bold text-gray-900 mt-1">{statsLoading ? "..." : formatCurrency(stats.todayOnline || 0)}</h4>
                 </div>
               </div>
@@ -522,16 +561,31 @@ const Payments = () => {
                 className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] transition-all"
               />
             </div>
-            <FilterPanel
-              tab={activeTab}
-              value={filterValue}
-              onApply={applyFilters}
-              dateEnabled={activeTab !== 'today'}
-            />
+            {/* Status and mode filters don't belong on a single day's cash
+                sheet — the day picker and search are the whole story there. */}
+            {activeTab !== 'today' && (
+              <FilterPanel
+                tab={activeTab}
+                value={filterValue}
+                onApply={applyFilters}
+                dateEnabled={activeTab !== 'today'}
+              />
+            )}
+            {/* The collection tab is one day at a time, so it gets the same
+                simple day picker the daily register uses rather than a range. */}
+            {activeTab === 'today' && (
+              <input
+                type="date"
+                value={collectionDate}
+                max={clinicToday()}
+                onChange={(e) => setCollectionDate(e.target.value || clinicToday())}
+                className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] transition-all"
+              />
+            )}
           </div>
           <div className="w-full sm:w-auto flex space-x-3">
             <button
-              onClick={() => setShowExport(true)}
+              onClick={() => activeTab === 'today' ? setShowDayExport(true) : setShowExport(true)}
               className="w-full sm:w-auto inline-flex justify-center items-center px-4 py-2.5 border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2a276e] transition-colors"
             >
               <svg className="mr-2 h-5 w-5 text-[#2a276e]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -604,9 +658,9 @@ const Payments = () => {
             <table className="w-full">
               <thead className="bg-[#f8fafc] border-b border-gray-100 sticky top-0 z-10">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Invoice #</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Patient Details</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Invoice / Patient ID</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Patient</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Work Done</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Amount</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Date & Time</th>
@@ -640,9 +694,9 @@ const Payments = () => {
             <table className="w-full">
               <thead className="bg-[#f8fafc] border-b border-gray-100 sticky top-0 z-10">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Invoice #</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Patient Details</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Invoice / Patient ID</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Patient</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Work Done</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Collected</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Time</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Method</th>
@@ -667,12 +721,28 @@ const Payments = () => {
                       onClick={() => handleInvoiceSelect(e.invoice_id)}
                       className="hover:bg-gray-50 cursor-pointer transition-colors"
                     >
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-[#2a276e]">{e.invoice_number}</td>
+                      {/* Invoice number over patient ID, matching All payments */}
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm font-medium text-gray-900">{e.patient_name || 'Unknown'}</span>
-                        {e.patient_display_id && <span className="text-xs text-gray-400"> · {e.patient_display_id}</span>}
+                        <div className="text-sm font-medium text-[#2a276e]">{e.invoice_number}</div>
+                        <div className="text-xs text-gray-400">
+                          {e.patient_display_id ? `Patient #${e.patient_display_id}` : '—'}
+                        </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{e.patient_phone || '-'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={generatePatientPersona({ id: e.patient_id, name: e.patient_name }, 80)}
+                            onError={(ev) => { ev.target.onerror = null; ev.target.src = generateInitialsAvatar(e.patient_name || 'Patient'); }}
+                            alt={e.patient_name || 'Patient'}
+                            className="w-9 h-9 rounded-full flex-shrink-0 object-cover border border-gray-100"
+                          />
+                          <div>
+                            <div className="text-sm font-semibold text-gray-900">{e.patient_name || 'Unknown'}</div>
+                            <div className="text-xs text-gray-400">{e.patient_phone || 'No phone'}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4"><WorkDoneCell items={e.items} /></td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600">+{formatCurrency(e.amount)}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{e.created_at ? formatTime(e.created_at) : '-'}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{e.method || '-'}</td>
@@ -798,6 +868,19 @@ const Payments = () => {
 
       {/* Export to CSV — shape depends on the active tab */}
       <ExportModal open={showExport} onClose={() => setShowExport(false)} mode={activeTab} />
+
+      {/* Collections export — same dialog and the same two formats as the
+          daily register's day sheet. */}
+      <DayExportModal
+        open={showDayExport}
+        onClose={() => setShowDayExport(false)}
+        date={collectionDate}
+        endpoint="/invoices/collections/export"
+        dateParam="date_from"
+        fileTag="collections"
+        title="Export collections"
+        subtitle="One row per payment, part payments included"
+      />
     </div>
   );
 };

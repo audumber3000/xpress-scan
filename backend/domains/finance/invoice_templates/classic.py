@@ -7,6 +7,7 @@ deliberate redesign, not a drift.
 import datetime
 
 from domains.infrastructure.services.pdf_safety import safe_color, safe_signature_data_uri, safe_text, safe_url
+from domains.finance.invoice_templates.discount_block import render_discount_block
 
 
 # ── Amount-in-words (Indian numbering) ───────────────────────────────────────
@@ -165,6 +166,9 @@ def _render_indian_tax(
         f'<tr><td>Discount</td><td>– {currency} {discount:,.2f}</td></tr>'
         if discount > 0 else ''
     )
+    # Concessions granted after issue are already inside `discount` above; this
+    # itemises them so the patient can see why the total changed.
+    discount_block = render_discount_block(invoice, currency=currency, accent=primary_color)
     # India splits tax into CGST + SGST; everywhere else shows a single tax line
     # labelled with the country's tax term (VAT, Tax, etc.).
     if is_india:
@@ -358,6 +362,8 @@ body {{
         </td>
       </tr>
     </table>
+
+    {discount_block}
 
     <!-- LINE ITEMS TABLE -->
     <table class="items-table">
