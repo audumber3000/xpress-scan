@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FileText } from 'lucide-react';
 import { api } from "../../utils/api";
 import { toast } from 'react-toastify';
+import { openWhatsApp } from "../../utils/whatsapp";
 
 /**
  * PatientPrescriptions - Multi-visit prescription manager with right-side detail drawer
@@ -188,7 +189,8 @@ const PatientPrescriptions = ({ patientId, patientPhone, visits = [], hideHeader
         if (!patientPhone) { toast.error('Patient phone number not available'); return; }
         if (!selectedRx?.pdf_url) { toast.error('Generate a PDF first to share via WhatsApp'); return; }
         const msg = `Hello, here is your prescription: ${selectedRx.pdf_url}`;
-        window.open(`https://wa.me/${patientPhone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
+        // Shared helper: native WhatsApp app on desktop, one reused tab on web.
+        openWhatsApp(patientPhone, msg);
     };
 
     const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';

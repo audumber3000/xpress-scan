@@ -4,6 +4,8 @@ import { toast } from 'react-toastify';
 import { getCurrencySymbol } from '../../utils/currency';
 import { Eye, MessageCircle } from 'lucide-react';
 import InvoiceEditor from '../payments/InvoiceEditor';
+import { useAuth } from '../../contexts/AuthContext';
+import { isManualWhatsApp, shareInvoiceManually } from '../../utils/whatsapp';
 
 /**
  * PatientBilling - Simplified billing tab following standard app table styling
@@ -16,6 +18,7 @@ const PatientBilling = ({
     refreshInvoices,
     refreshPayments 
 }) => {
+    const { user } = useAuth();
     const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
     const [sendingWhatsApp, setSendingWhatsApp] = useState(null);
 
@@ -28,11 +31,18 @@ const PatientBilling = ({
         if (refreshPayments) refreshPayments();
     };
 
-    const handleSendWhatsApp = async (invoiceId) => {
-        setSendingWhatsApp(invoiceId);
+    const handleSendWhatsApp = async (inv) => {
+        setSendingWhatsApp(inv.id);
         try {
-            await api.post(`/invoices/${invoiceId}/send-whatsapp`);
-            toast.success("Invoice sent successfully via WhatsApp");
+            // Manual mode (desktop): download the PDF + open WhatsApp from own number.
+            if (isManualWhatsApp(user)) {
+                const opened = await shareInvoiceManually(inv, user);
+                if (opened) toast.success('Invoice PDF downloaded — attach it in the WhatsApp chat');
+                else toast.error('Patient phone number is required');
+            } else {
+                await api.post(`/invoices/${inv.id}/send-whatsapp`);
+                toast.success("Invoice sent successfully via WhatsApp");
+            }
         } catch (error) {
             console.error("WhatsApp error:", error);
             toast.error(error.response?.data?.detail || "Failed to send invoice via WhatsApp");
@@ -120,7 +130,7 @@ const PatientBilling = ({
                                                 <button onClick={() => setSelectedInvoiceId(inv.id)} title="Open" className="hover:text-[#2a276e] transition-colors"><Eye size={18} /></button>
                                                 {inv.status !== 'draft' && (
                                                     <button 
-                                                        onClick={() => handleSendWhatsApp(inv.id)} 
+                                                        onClick={() => handleSendWhatsApp(inv)}
                                                         disabled={sendingWhatsApp === inv.id}
                                                         title="WhatsApp" 
                                                         className={`hover:text-[#25D366] transition-colors ${sendingWhatsApp === inv.id ? 'animate-pulse' : ''}`}

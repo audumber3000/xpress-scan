@@ -5,16 +5,26 @@ import { getCurrencySymbol } from "../../utils/currency";
 import { formatRelative, clinicDateKey, clinicToday } from "../../utils/datetime";
 import { toast } from "react-toastify";
 import WorkDoneCell from "./WorkDoneCell";
+import { useAuth } from "../../contexts/AuthContext";
+import { isManualWhatsApp, shareInvoiceManually } from "../../utils/whatsapp";
 
 const InvoiceItem = memo(({ invoice, onSelect }) => {
+  const { user } = useAuth();
   const [isSendingWA, setIsSendingWA] = useState(false);
 
   const handleWhatsApp = async (e) => {
     e.stopPropagation();
     setIsSendingWA(true);
     try {
-        await api.post(`/invoices/${invoice.id}/send-whatsapp`);
-        toast.success("Invoice sent successfully via WhatsApp");
+        // Manual mode (desktop): download the PDF + open WhatsApp from own number.
+        if (isManualWhatsApp(user)) {
+            const opened = await shareInvoiceManually(invoice, user);
+            if (opened) toast.success('Invoice PDF downloaded — attach it in the WhatsApp chat');
+            else toast.error('Patient phone number is required');
+        } else {
+            await api.post(`/invoices/${invoice.id}/send-whatsapp`);
+            toast.success("Invoice sent successfully via WhatsApp");
+        }
     } catch (err) {
         toast.error(err.response?.data?.detail || "Failed to send invoice via WhatsApp");
     } finally {

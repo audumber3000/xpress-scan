@@ -157,6 +157,10 @@ async def lifespan(app: FastAPI):
             conn.execute(text(
                 "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS default_medications_seeded BOOLEAN DEFAULT FALSE"
             ))
+            # Manual WhatsApp: clinic sends patient messages from its own number.
+            conn.execute(text(
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS manual_whatsapp BOOLEAN DEFAULT FALSE"
+            ))
             # Inventory ledger: event label + medication link, so Usage is a full log.
             conn.execute(text(
                 "ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS action VARCHAR"

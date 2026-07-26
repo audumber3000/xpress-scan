@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { ExternalLink, CheckCircle2, AlertTriangle, Smartphone, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { api } from '../../../utils/api';
+import { useAuth } from '../../../contexts/AuthContext';
 
 const WAREACH_PORTAL = 'http://116.203.142.56:3000/';
 
@@ -12,6 +13,25 @@ const WAREACH_PORTAL = 'http://116.203.142.56:3000/';
  * from that number for free. The MSG91 platform path is untouched.
  */
 const IntegrationsTab = () => {
+  const { user, refreshUser } = useAuth();
+  const [savingManual, setSavingManual] = useState(false);
+  const manualOn = !!user?.clinic?.manual_whatsapp;
+
+  // Toggle "send patient WhatsApp manually from my own number" (a clinic
+  // setting). It only takes effect in the installed desktop app.
+  const toggleManual = async (val) => {
+    try {
+      setSavingManual(true);
+      await api.put('/clinics/me', { manual_whatsapp: val });
+      await refreshUser?.();
+      toast.success(val ? 'Manual WhatsApp turned on' : 'Manual WhatsApp turned off');
+    } catch (e) {
+      toast.error('Could not update the setting');
+    } finally {
+      setSavingManual(false);
+    }
+  };
+
   const [loading, setLoading] = useState(true);
   const [isPro, setIsPro] = useState(false);
   const [status, setStatus] = useState('disconnected'); // disconnected|connecting|connected|failed
@@ -99,6 +119,32 @@ const IntegrationsTab = () => {
 
   return (
     <div className="max-w-2xl">
+      {/* Manual WhatsApp — send from your own number by opening WhatsApp yourself.
+          Applies to the installed desktop app only. */}
+      <div className="mb-6 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-gray-900">Send WhatsApp manually from my own number</h3>
+            <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+              When on, patient WhatsApp buttons (invoices, prescriptions) open WhatsApp with the message
+              pre-filled to the patient, so you send it from your own account. Works in the installed
+              desktop app (opens the WhatsApp Desktop app). When off, messages send automatically from
+              the MolarPlus number.
+            </p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+            <input
+              type="checkbox"
+              className="sr-only peer"
+              checked={manualOn}
+              disabled={savingManual}
+              onChange={(e) => toggleManual(e.target.checked)}
+            />
+            <div className="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-[#2a276e]/20 rounded-full peer peer-checked:bg-[#2a276e] after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5 transition-all" />
+          </label>
+        </div>
+      </div>
+
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-gray-900">WhatsApp integration</h3>
         <p className="text-xs text-gray-400 mt-0.5">

@@ -62,6 +62,10 @@ class Clinic(Base):
     logo_url = Column(String)
     invoice_template = Column(String, default='modern_orange')
     primary_color = Column(String, default='#10B981')  # Green default
+    # When True, patient WhatsApp buttons open WhatsApp (native app on desktop,
+    # one reused web tab) with a prefilled message instead of auto-sending via
+    # the MolarPlus/MSG91 number — so the clinic sends from their own number.
+    manual_whatsapp = Column(Boolean, default=False)
     number_of_chairs = Column(Integer, default=1)  # Number of dental chairs
     timings = Column(JSON, default=lambda: {
         'monday': {'open': '08:00', 'close': '20:00', 'closed': False},

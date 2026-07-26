@@ -3,6 +3,8 @@ import { Trash2 } from "lucide-react";
 import { api } from "../../utils/api";
 import { toast } from "react-toastify";
 import { getCurrencySymbol } from "../../utils/currency";
+import { useAuth } from "../../contexts/AuthContext";
+import { isManualWhatsApp, shareInvoiceManually } from "../../utils/whatsapp";
 import GearLoader from "../GearLoader";
 import InvoiceHeader from "./InvoiceHeader";
 import InvoiceLineItems from "./InvoiceLineItems";
@@ -14,6 +16,7 @@ import ConfirmDialog from "../common/ConfirmDialog";
 import { generatePatientPersona, generateInitialsAvatar } from "../../utils/avatar";
 
 const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
+  const { user } = useAuth();
   const [invoice, setInvoice] = useState(null);
   // For "new", there's nothing to fetch — start in the form view immediately.
   // For an existing id, start in the spinner view until fetchInvoice resolves.
@@ -412,15 +415,33 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
   };
 
   const handleSendWhatsApp = async () => {
-    try {
-      if (!invoice?.patient_phone) {
-        toast.error("Patient phone number is required");
-        return;
-      }
+    if (!invoice?.patient_phone) {
+      toast.error("Patient phone number is required");
+      return;
+    }
 
+    // Manual mode (desktop app): download the PDF and open WhatsApp with a
+    // prefilled message, so the clinic sends it from their own number.
+    if (isManualWhatsApp(user)) {
+      try {
+        setSendingWhatsApp(true);
+        const opened = await shareInvoiceManually(invoice, user);
+        if (opened) toast.success('Invoice PDF downloaded — attach it in the WhatsApp chat that opened');
+        else toast.error('Could not open WhatsApp — check the patient phone number');
+      } catch (error) {
+        console.error('Manual WhatsApp failed:', error);
+        toast.error('Failed to prepare the WhatsApp message');
+      } finally {
+        setSendingWhatsApp(false);
+      }
+      return;
+    }
+
+    // Automated mode: backend sends via the MolarPlus/Nexus number.
+    try {
       setSendingWhatsApp(true);
       const response = await api.post(`/invoices/${currentInvoiceId}/send-whatsapp`);
-      
+
       if (response.success) {
         toast.success(`Invoice sent successfully to ${invoice.patient_phone}`);
       } else {

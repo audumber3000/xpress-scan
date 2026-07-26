@@ -146,6 +146,7 @@ run_migration "inv_batch_number" "ALTER TABLE inventory_items ADD COLUMN IF NOT 
 run_migration "inv_expiry_date"  "ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS expiry_date DATE"
 run_migration "medication_stock" "CREATE TABLE IF NOT EXISTS medication_stock (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL REFERENCES clinics(id), vendor_id INTEGER REFERENCES vendors(id), name VARCHAR NOT NULL, generic_name VARCHAR, strength VARCHAR, form VARCHAR, quantity DOUBLE PRECISION DEFAULT 0, unit VARCHAR, min_stock_level DOUBLE PRECISION DEFAULT 0, price_per_unit DOUBLE PRECISION DEFAULT 0, batch_number VARCHAR, expiry_date DATE, schedule VARCHAR, is_active BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())"
 run_migration "default_medications_seeded" "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS default_medications_seeded BOOLEAN DEFAULT FALSE"
+run_migration "manual_whatsapp" "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS manual_whatsapp BOOLEAN DEFAULT FALSE"
 run_migration "inv_txn_action" "ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS action VARCHAR"
 run_migration "inv_txn_med_id" "ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS medication_stock_id INTEGER REFERENCES medication_stock(id)"
 run_migration "medstock_pack_unit" "ALTER TABLE medication_stock ADD COLUMN IF NOT EXISTS pack_unit VARCHAR"

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { api } from "../../utils/api";
 import { useAuth } from '../../contexts/AuthContext';
+import { isManualWhatsApp, openWhatsApp, downloadAuthedFile } from "../../utils/whatsapp";
 
 const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, initialData }) => {
     const { user } = useAuth();
@@ -319,8 +320,18 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
         
         setIsLoading(true);
         try {
-            await api.post(`/clinical/prescriptions/${initialData.id}/send-whatsapp`);
-            alert("Prescription sharing initiated via WhatsApp! Please check the recipient's phone.");
+            // Manual mode (desktop): download the PDF + open WhatsApp from own number.
+            if (isManualWhatsApp(user)) {
+                const phone = patientData?.phone;
+                if (!phone) { alert('Patient phone number is required'); return; }
+                await downloadAuthedFile(`/clinical/prescriptions/${initialData.id}/pdf`, `prescription_${initialData.id}.pdf`);
+                const clinicName = user?.clinic?.name || 'our clinic';
+                const msg = `Hello${patientData?.name ? ' ' + patientData.name : ''}, here is your prescription from ${clinicName}. I've attached the PDF here.`;
+                openWhatsApp(phone, msg, user?.clinic?.country || 'IN');
+            } else {
+                await api.post(`/clinical/prescriptions/${initialData.id}/send-whatsapp`);
+                alert("Prescription sharing initiated via WhatsApp! Please check the recipient's phone.");
+            }
         } catch (error) {
             console.error("WhatsApp error:", error);
             alert(error.detail || error.message || "Failed to share prescription via WhatsApp.");

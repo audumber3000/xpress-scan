@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
 import { toast } from 'react-toastify';
 import { getCurrencySymbol } from '../../utils/currency';
+import { openWhatsApp } from '../../utils/whatsapp';
 
 /**
  * GenerateInvoiceDrawer - Literally copied from InvoiceEditor.jsx style
@@ -50,7 +51,8 @@ const GenerateInvoiceDrawer = ({ isOpen, onClose, patientId, draftItems = [], on
             if (sendWhatsApp && patientPhone) {
                 const total = calculateTotal();
                 const msg = `Hello! A new invoice has been generated for your recent visit. Total: ${getCurrencySymbol()}${total.toLocaleString('en-US')}. Thank you!`;
-                window.open(`https://wa.me/${patientPhone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
+                // Shared helper: native WhatsApp app on desktop, one reused tab on web.
+                openWhatsApp(patientPhone, msg);
             }
             if (onSuccess) onSuccess();
             onClose();
