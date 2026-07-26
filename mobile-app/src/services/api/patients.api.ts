@@ -49,6 +49,8 @@ export interface Patient {
   lastVisit: string;
   nextAppointment?: string;
   status: 'Active' | 'Inactive';
+  // Bare YYYY-MM-DD registration date (falls back to created_at's date).
+  registeredOn?: string;
   billingHistory?: BillingRecord[];
   dentalChart?: any;
   toothNotes?: any;
@@ -147,6 +149,8 @@ export class PatientsApiService extends BaseApiService {
         }) : 'N/A',
         nextAppointment: data.next_appointment,
         status: data.sync_status === 'synced' || data.created_at ? 'Active' : 'Inactive',
+        // registered_on is the staff-recorded date; older rows fall back to created_at.
+        registeredOn: (data.registered_on || (data.created_at ? String(data.created_at).slice(0, 10) : '')) || undefined,
         dentalChart: data.dental_chart || {},
         toothNotes: data.tooth_notes || {},
         treatmentPlan: data.treatment_plan || [],
@@ -172,6 +176,8 @@ export class PatientsApiService extends BaseApiService {
     treatment_type: string;
     notes?: string;
     payment_type: string;
+    registered_on?: string;
+    date_of_birth?: string;
   }): Promise<any> {
     try {
       console.log('👥 [API] Creating patient...');

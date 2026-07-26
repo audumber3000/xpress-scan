@@ -9,7 +9,7 @@ import { useNavigationState } from '@react-navigation/native';
 const TAB_LABELS: Record<string, string> = {
   Home: 'Home',
   Appointments: 'Appointments',
-  Admin: 'Admin',
+  Admin: 'Control',
   Patients: 'Patients',
   Utilities: 'Utilities',
 };

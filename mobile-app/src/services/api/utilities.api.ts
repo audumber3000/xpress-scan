@@ -76,8 +76,25 @@ export interface ConsentTemplateCreate {
 export interface Vendor {
   id: number;
   name: string;
+  category?: string;
+  contact_name?: string;
   email?: string;
   phone?: string;
+  address?: string;
+  gst_number?: string;
+  is_active: boolean;
+}
+
+export interface MedicationStock {
+  id: number;
+  name: string;
+  generic_name?: string;
+  strength?: string;
+  form?: string;
+  quantity: number;
+  unit?: string;
+  min_stock_level: number;
+  price_per_unit: number;
   is_active: boolean;
 }
 
@@ -224,7 +241,7 @@ export class UtilitiesApiService extends BaseApiService {
     } catch { return null; }
   }
 
-  // Vendors (for lab order vendor selection)
+  // Vendors
   async getVendors(): Promise<Vendor[]> {
     try {
       const headers = await this.getAuthHeaders();
@@ -232,6 +249,46 @@ export class UtilitiesApiService extends BaseApiService {
       if (!res.ok) return [];
       return res.json();
     } catch { return []; }
+  }
+
+  async createVendor(data: { name: string; category?: string; contact_name?: string; email?: string; phone?: string; address?: string; gst_number?: string }): Promise<Vendor | null> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const res = await this.fetchWithTimeout(`${this.baseURL}/vendors`, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+      });
+      if (!res.ok) { let d = `HTTP ${res.status}`; try { d = (await res.json())?.detail || d; } catch {} throw new Error(d); }
+      return res.json();
+    } catch (e: any) { throw e; }
+  }
+
+  // Medication stock
+  async getMedicationStock(): Promise<MedicationStock[]> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const res = await this.fetchWithTimeout(`${this.baseURL}/medication-stock`, { headers });
+      if (!res.ok) return [];
+      return res.json();
+    } catch { return []; }
+  }
+
+  async createMedicationStock(data: { name: string; strength?: string; form?: string; quantity?: number; unit?: string; min_stock_level?: number; price_per_unit?: number }): Promise<MedicationStock | null> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const res = await this.fetchWithTimeout(`${this.baseURL}/medication-stock`, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+      });
+      if (!res.ok) { let d = `HTTP ${res.status}`; try { d = (await res.json())?.detail || d; } catch {} throw new Error(d); }
+      return res.json();
+    } catch (e: any) { throw e; }
+  }
+
+  async deleteMedicationStock(id: number): Promise<boolean> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const res = await this.fetchWithTimeout(`${this.baseURL}/medication-stock/${id}`, { method: 'DELETE', headers });
+      return res.ok;
+    } catch { return false; }
   }
 }
 

@@ -13,12 +13,13 @@ import { colors } from '../../../../shared/constants/colors';
 import { componentRadius } from '../../../../shared/constants/theme';
 import { transactionsApiService, Transaction, LedgerItem } from '../../../../services/api/transactions.api';
 import { getCurrencySymbol } from '../../../../shared/utils/currency';
+import { CollectionsView } from '../components/CollectionsView';
 
 interface AllTransactionsScreenProps {}
 
 export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [activeTab, setActiveTab] = useState<'payments' | 'ledger'>('payments');
+  const [activeTab, setActiveTab] = useState<'collections' | 'payments' | 'ledger'>('collections');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [ledgerItems, setLedgerItems] = useState<LedgerItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,6 +31,8 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () =>
   }, [activeTab]);
 
   const loadData = async () => {
+    // The collections tab loads its own data inside CollectionsView.
+    if (activeTab === 'collections') { setLoading(false); return; }
     setLoading(true);
     try {
       if (activeTab === 'payments') {
@@ -83,7 +86,7 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () =>
     }
   };
 
-  const renderTab = (tab: 'payments' | 'ledger', label: string) => (
+  const renderTab = (tab: 'collections' | 'payments' | 'ledger', label: string) => (
     <TouchableOpacity
       style={[styles.tab, activeTab === tab && styles.activeTab]}
       onPress={() => setActiveTab(tab)}
@@ -109,11 +112,14 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () =>
 
       {/* Tabs */}
       <View style={styles.tabContainer}>
-        {renderTab('payments', 'Payments (Patients)')}
-        {renderTab('ledger', 'Ledger (All Transactions)')}
+        {renderTab('collections', "Today's Collection")}
+        {renderTab('payments', 'Payments')}
+        {renderTab('ledger', 'Ledger')}
       </View>
 
-      {loading ? (
+      {activeTab === 'collections' ? (
+        <CollectionsView onOpenInvoice={(invoiceId) => navigation.navigate('InvoiceDetails', { invoiceId: String(invoiceId) })} />
+      ) : loading ? (
         <View style={styles.loadingContainer}>
           <GearLoader text={`Loading ${activeTab}...`} />
         </View>
@@ -156,8 +162,14 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () =>
                           </View>
                         </View>
                         <View style={styles.transactionInfo}>
-                          <Text style={styles.itemTitle}>{transaction.patientName}</Text>
-                          <Text style={styles.itemSubtitle}>{transaction.time || '10:30 AM'} • {transaction.treatment || 'Treatment'}</Text>
+                          <Text style={styles.itemTitle} numberOfLines={1}>
+                            {transaction.patientName}
+                            {transaction.patientDisplayId ? <Text style={styles.itemId}>  #{transaction.patientDisplayId}</Text> : null}
+                          </Text>
+                          <Text style={styles.itemSubtitle} numberOfLines={1}>{transaction.workDone || transaction.treatment || 'Treatment'}</Text>
+                          <Text style={styles.itemMeta} numberOfLines={1}>
+                            {transaction.invoiceNumber ? `${transaction.invoiceNumber} · ` : ''}{transaction.time || ''}
+                          </Text>
                         </View>
                         <View style={styles.transactionRight}>
                           <Text style={styles.itemAmount}>{getCurrencySymbol()}{transaction.amount.toLocaleString()}</Text>
@@ -254,7 +266,9 @@ const styles = StyleSheet.create({
   iconIndicator: { position: 'absolute', bottom: 0, right: 0, width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center' },
   transactionInfo: { flex: 1, marginLeft: 15 },
   itemTitle: { fontSize: 15, fontWeight: '600', color: '#111827' },
-  itemSubtitle: { fontSize: 13, color: '#6B7280', marginTop: 2 },
+  itemId: { fontSize: 12, fontWeight: '500', color: '#9CA3AF' },
+  itemSubtitle: { fontSize: 13, color: '#374151', marginTop: 2 },
+  itemMeta: { fontSize: 11, color: '#9CA3AF', marginTop: 1 },
   transactionRight: { alignItems: 'flex-end' },
   itemAmount: { fontSize: 16, fontWeight: '700', color: '#111827' },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: componentRadius.pill, marginTop: 4 },

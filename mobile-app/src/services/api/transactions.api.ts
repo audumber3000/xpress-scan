@@ -11,6 +11,9 @@ export interface Transaction {
   status: 'completed' | 'pending' | 'success';
   description?: string;
   treatment?: string;
+  patientDisplayId?: string;
+  invoiceNumber?: string;
+  workDone?: string;
 }
 
 export interface LedgerItem {
@@ -27,6 +30,44 @@ export interface LedgerItem {
   billFileUrl?: string;
   invoice_number?: string;
   time?: string;
+}
+
+export interface CollectionEntry {
+  payment_id: number;
+  amount: number;
+  method?: string;
+  paid_on?: string;
+  created_at?: string;
+  note?: string;
+  invoice_id: number;
+  invoice_number: string;
+  invoice_status: string;
+  patient_id?: number;
+  patient_name?: string;
+  patient_phone?: string;
+  patient_display_id?: string;
+  items?: Array<{ description: string; quantity: number }>;
+}
+
+export interface CollectionsResponse {
+  entries: CollectionEntry[];
+  total: number;
+  cash: number;
+  online: number;
+  count: number;
+  date_from: string;
+  date_to: string;
+  previous?: { total: number; cash: number; online: number; count: number; date_from: string; date_to: string };
+}
+
+/** "Root Canal +2 more" — the first line item and how many others, for list rows. */
+export function buildWorkDone(lineItems?: any[]): string | undefined {
+  const list = Array.isArray(lineItems) ? lineItems.filter((i) => i && i.description) : [];
+  if (list.length === 0) return undefined;
+  const first = list[0];
+  const q = Number(first.quantity ?? 1);
+  const label = q > 1 ? `${first.description} ×${q}` : String(first.description);
+  return list.length > 1 ? `${label} +${list.length - 1} more` : label;
 }
 
 export class TransactionsApiService extends BaseApiService {
@@ -78,7 +119,11 @@ export class TransactionsApiService extends BaseApiService {
           status: status,
           patientName: invoice.patient_name || 'Unknown Patient',
           patientId: invoice.patient_id?.toString() || 'unknown',
+          patientDisplayId: invoice.patient_display_id || undefined,
+          invoiceNumber: invoice.invoice_number,
           treatment: invoice.notes || invoice.line_items?.[0]?.description || 'Dental Treatment',
+          // What the bill was for — first item plus a count, mirroring the web's Work Done.
+          workDone: buildWorkDone(invoice.line_items),
         };
       });
 
@@ -235,7 +280,7 @@ export class TransactionsApiService extends BaseApiService {
   /** Record a payment on a finalized / partially-paid invoice. Returns the updated invoice. */
   async markInvoicePaid(
     invoiceId: string | number,
-    payload: { payment_mode: string; utr?: string | null; is_partial: boolean; amount_paid?: number | null }
+    payload: { payment_mode: string; utr?: string | null; is_partial: boolean; amount_paid?: number | null; paid_on?: string | null; note?: string | null }
   ): Promise<any> {
     const headers = await this.getAuthHeaders();
     const response = await this.fetchWithTimeout(`${this.baseURL}/invoices/${invoiceId}/mark-as-paid`, {
@@ -249,6 +294,54 @@ export class TransactionsApiService extends BaseApiService {
       throw new Error(detail);
     }
     return response.json();
+  }
+
+  /** Grant a discount on an already-issued invoice. Returns the updated invoice. */
+  async addPostIssueDiscount(
+    invoiceId: string | number,
+    payload: { value: number; discount_type: 'amount' | 'percentage'; reason: string }
+  ): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/invoices/${invoiceId}/discounts`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      let detail = `HTTP ${response.status}`;
+      try { detail = (await response.json())?.detail || detail; } catch {}
+      throw new Error(detail);
+    }
+    return response.json();
+  }
+
+  /** Reverse a post-issue discount. Returns the updated invoice. */
+  async removePostIssueDiscount(invoiceId: string | number, discountId: number): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/invoices/${invoiceId}/discounts/${discountId}`, {
+      method: 'DELETE',
+      headers,
+    });
+    if (!response.ok) {
+      let detail = `HTTP ${response.status}`;
+      try { detail = (await response.json())?.detail || detail; } catch {}
+      throw new Error(detail);
+    }
+    return response.json();
+  }
+
+  /** Money received on a day (defaults to today), one row per payment. */
+  async getCollections(date?: string): Promise<CollectionsResponse> {
+    const headers = await this.getAuthHeaders();
+    const qs = date ? `?date_from=${encodeURIComponent(date)}` : '';
+    const res = await this.fetchWithTimeout(`${this.baseURL}/invoices/collections${qs}`, { headers });
+    if (!res.ok) throw new Error(`Failed to load collections (HTTP ${res.status})`);
+    return res.json();
+  }
+
+  /** Absolute URL for the collections export (csv | pdf). */
+  collectionsExportUrl(date: string, format: 'csv' | 'pdf'): string {
+    return `${this.baseURL}/invoices/collections/export?date_from=${encodeURIComponent(date)}&format=${format}`;
   }
 
   /** Finalize a draft invoice (locks it, requires ≥1 line item). Returns the updated invoice. */

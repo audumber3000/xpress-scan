@@ -3,7 +3,9 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-nat
 import { Phone, Mail, MapPin, User, Info, Clock, Calendar } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
 import { Patient, patientsApiService } from '../../../../services/api/patients.api';
+import { dailyRegisterApiService } from '../../../../services/api/dailyRegister.api';
 import { PatientAvatar } from '../../../../shared/components/PatientAvatar';
+import { formatDisplayDate } from '../../../../shared/utils/datetime';
 
 interface PatientInfoViewProps {
     patient: Patient;
@@ -21,8 +23,29 @@ export const PatientInfoView: React.FC<PatientInfoViewProps> = ({ patient }) => 
     useEffect(() => {
         (async () => {
             try {
-                const data = await patientsApiService.getCasePapers(patient.id);
-                setVisits(Array.isArray(data) ? data : []);
+                // Case papers are the clinical visits; daily-register entries add the
+                // walk-ins that never got a case paper, so a brief visit still shows.
+                const [papers, dv] = await Promise.all([
+                    patientsApiService.getCasePapers(patient.id).catch(() => []),
+                    dailyRegisterApiService.getPatientVisits(Number(patient.id)).catch(() => []),
+                ]);
+                const paperList = Array.isArray(papers) ? papers : [];
+                const clinicalDays = new Set(
+                    paperList.map((p: any) => String(p.date || p.created_at || '').slice(0, 10)).filter(Boolean)
+                );
+                // A register entry on a day that already has a case paper is redundant.
+                const visitOnly = (Array.isArray(dv) ? dv : [])
+                    .filter((v: any) => v.visit_date && !clinicalDays.has(v.visit_date))
+                    .map((v: any) => ({
+                        id: `dv-${v.id}`,
+                        kind: 'visit',
+                        date: v.visit_date,
+                        chief_complaint: v.reason || 'Visited the clinic',
+                        status: v.is_repeat ? 'Repeat' : 'New',
+                    }));
+                const merged = [...paperList.map((p: any) => ({ ...p, kind: 'casepaper' })), ...visitOnly]
+                    .sort((a, b) => String(b.date || b.created_at || '').localeCompare(String(a.date || a.created_at || '')));
+                setVisits(merged);
             } catch { setVisits([]); }
             finally { setLoadingVisits(false); }
         })();
@@ -129,6 +152,15 @@ export const PatientInfoView: React.FC<PatientInfoViewProps> = ({ patient }) => 
                             </Text>
                         </View>
                     </View>
+                    {patient.registeredOn ? (
+                        <>
+                            <View style={styles.divider} />
+                            <View style={styles.infoRow}>
+                                <Text style={styles.label}>Registered On</Text>
+                                <Text style={styles.value}>{formatDisplayDate(patient.registeredOn)}</Text>
+                            </View>
+                        </>
+                    ) : null}
                     <View style={styles.divider} />
                     <View style={styles.infoRow}>
                         <Text style={styles.label}>Last Visit</Text>
@@ -169,13 +201,13 @@ export const PatientInfoView: React.FC<PatientInfoViewProps> = ({ patient }) => 
                                     </View>
                                     <View style={[
                                         styles.visitStatusBadge,
-                                        { backgroundColor: visit.status === 'Completed' ? '#F0FDF4' : '#FFFBEB' }
+                                        { backgroundColor: (visit.status === 'Completed' || visit.status === 'New') ? '#F0FDF4' : '#FFFBEB' }
                                     ]}>
                                         <Text style={[
                                             styles.visitStatusText,
-                                            { color: visit.status === 'Completed' ? '#15803D' : '#B45309' }
+                                            { color: (visit.status === 'Completed' || visit.status === 'New') ? '#15803D' : '#B45309' }
                                         ]}>
-                                            {visit.status || 'In Progress'}
+                                            {visit.kind === 'visit' ? `${visit.status} visit` : (visit.status || 'In Progress')}
                                         </Text>
                                     </View>
                                 </View>

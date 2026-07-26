@@ -23,9 +23,21 @@ export const API_CONFIG = {
   NEXUS_PRODUCTION: 'https://nexus.molarplus.com',
   NEXUS_LOCALHOST: 'http://localhost:8001',
   NEXUS_ANDROID_EMULATOR: 'http://10.0.2.2:8001',
-  
+
+  // Responsive web app (shown inside a WebView on tablets). Only app.molarplus.com
+  // is CORS-allowed to hit the backend, so that is the authenticated app origin.
+  WEB_APP_PRODUCTION: 'https://app.molarplus.com',
+
   // Timeout settings
   TIMEOUT: 30000, // 30 seconds
+};
+
+// Helper to get the responsive web app origin (hosted in a WebView on tablets).
+// Defaults to production, like getApiBaseUrl(); override with EXPO_PUBLIC_WEB_URL
+// to point a dev/tablet build at a staging frontend.
+export const getWebAppUrl = (): string => {
+  if (process.env.EXPO_PUBLIC_WEB_URL) return process.env.EXPO_PUBLIC_WEB_URL;
+  return API_CONFIG.WEB_APP_PRODUCTION;
 };
 
 // Helper to get the Nexus service base URL

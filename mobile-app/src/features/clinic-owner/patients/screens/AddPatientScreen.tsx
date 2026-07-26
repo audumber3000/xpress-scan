@@ -21,6 +21,7 @@ import { patientsApiService } from '../../../../services/api/patients.api';
 import { treatmentApiService } from '../../../../services/api/treatment.api';
 import { appointmentsApiService } from '../../../../services/api/appointments.api';
 import { getCurrencySymbol } from '../../../../shared/utils/currency';
+import { todayISO, isValidPastDate } from '../../../../shared/utils/datetime';
 
 interface AddPatientScreenProps {
   visible: boolean;
@@ -59,6 +60,8 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
     treatmentType: '',
     notes: '',
     paymentType: 'Cash',
+    // Defaults to today; the front desk can back-date a patient first seen earlier.
+    registeredOn: todayISO(),
   });
 
   // Whether the Age/DOB field collects an age or a date of birth.
@@ -160,6 +163,10 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
       newErrors.village = 'Village is required';
     }
 
+    if (!isValidPastDate(formData.registeredOn)) {
+      newErrors.registeredOn = "Enter a valid registration date (YYYY-MM-DD), not in the future";
+    }
+
     if (!formData.phone.trim()) {
       newErrors.phone = 'Phone number is required';
     }
@@ -193,6 +200,7 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
         treatment_type: formData.treatmentType.trim() || 'General Consultation',
         notes: formData.notes.trim() || undefined,
         payment_type: formData.paymentType,
+        registered_on: formData.registeredOn,
       };
 
       // Send either age or date of birth based on the toggle.
@@ -258,6 +266,7 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
         treatmentType: '',
         notes: '',
         paymentType: 'Cash',
+        registeredOn: todayISO(),
       });
       setAgeMode('age');
       setErrors({});
@@ -267,7 +276,7 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
   const updateFormData = (field: string, value: string) => {
     if (field === 'age') {
       value = value.replace(/[^0-9]/g, '');
-    } else if (field === 'dateOfBirth') {
+    } else if (field === 'dateOfBirth' || field === 'registeredOn') {
       value = maskDate(value);
     }
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -407,6 +416,22 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
                   placeholderTextColor={colors.gray400}
                 />
                 {errors.village && <Text style={styles.errorText}>{errors.village}</Text>}
+              </View>
+
+              {/* Date of Registration */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Date of Registration *</Text>
+                <TextInput
+                  style={[styles.input, errors.registeredOn && styles.inputError]}
+                  value={formData.registeredOn}
+                  onChangeText={(value) => updateFormData('registeredOn', value)}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={colors.gray400}
+                  keyboardType="numeric"
+                  maxLength={10}
+                />
+                <Text style={styles.helperText}>Defaults to today. Change it if this patient first came in earlier.</Text>
+                {errors.registeredOn && <Text style={styles.errorText}>{errors.registeredOn}</Text>}
               </View>
 
               {/* Phone Number */}

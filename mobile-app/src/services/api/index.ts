@@ -8,3 +8,10 @@ export { transactionsApiService, type Transaction } from './transactions.api';
 export { analyticsApiService, type Analytics } from './analytics.api';
 export { appointmentsApiService, type Appointment } from './appointments.api';
 export { treatmentApiService } from './treatment.api';
+export {
+  dailyRegisterApiService,
+  type DailyVisit,
+  type DailyRegisterResponse,
+  type DailyRegisterKpis,
+  type DuplicateMatch,
+} from './dailyRegister.api';

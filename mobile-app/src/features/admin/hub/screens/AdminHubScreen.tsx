@@ -11,6 +11,7 @@ import {
   MapPin, CheckCircle2, Building2, Users, Settings2, FileText, Bell,
   ChevronRight, ChevronDown, Plus,
   ClipboardList, Stethoscope, Leaf, TestTube, Activity, Pill, DollarSign,
+  CalendarClock, Shield, CreditCard,
 } from 'lucide-react-native';
 import { adminColors } from '../../../../shared/constants/adminColors';
 import { colors } from '../../../../shared/constants/colors';
@@ -138,7 +139,7 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
     return (
       <View style={[styles.container, styles.center]}>
         <StatusBar barStyle="light-content" backgroundColor={adminColors.gradientStart} />
-        <GearLoader text="Opening Admin Hub..." />
+        <GearLoader text="Opening Control Center..." />
       </View>
     );
   }
@@ -167,7 +168,7 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
         <LinearGradient colors={[adminColors.gradientStart, adminColors.gradientEnd]} style={styles.header}>
           <View style={styles.headerTop}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.title}>Admin hub</Text>
+              <Text style={styles.title}>Control Center</Text>
               <View style={styles.locationRow}>
                 <MapPin size={13} color="rgba(255,255,255,0.8)" />
                 <Text style={styles.locationText} numberOfLines={1}>{clinicName}</Text>
@@ -253,8 +254,8 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
           </TouchableOpacity>
         </View>
 
-        {/* Configuration */}
-        <Text style={styles.sectionLabel}>CONFIGURATION</Text>
+        {/* Team & access */}
+        <Text style={styles.sectionLabel}>TEAM &amp; ACCESS</Text>
         <View style={styles.card}>
           <ConfigRow
             icon={Users} iconBg="#EEF0FF" iconColor="#6366F1"
@@ -263,8 +264,24 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
           />
           <View style={styles.rowDivider} />
           <ConfigRow
+            icon={CalendarClock} iconBg="#FFF4E6" iconColor="#FF8C42"
+            title="Attendance" subtitle="Daily staff check-in & leave"
+            onPress={() => navigation.navigate('Attendance')}
+          />
+          <View style={styles.rowDivider} />
+          <ConfigRow
+            icon={Shield} iconBg="#E8F4F9" iconColor="#5DADE2"
+            title="Permissions" subtitle="What each role can access"
+            onPress={() => navigation.navigate('Permissions')}
+          />
+        </View>
+
+        {/* Clinical */}
+        <Text style={styles.sectionLabel}>CLINICAL</Text>
+        <View style={styles.card}>
+          <ConfigRow
             icon={Settings2} iconBg="#E6F7EF" iconColor="#10B981"
-            title="Practice settings" subtitle="Procedures, complaints, fees…"
+            title="Practice settings" subtitle="Complaints, findings, diagnoses…"
             chevron={practiceExpanded ? 'down' : 'right'}
             onPress={() => setPracticeExpanded(p => !p)}
           />
@@ -286,6 +303,16 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
           )}
           <View style={styles.rowDivider} />
           <ConfigRow
+            icon={Stethoscope} iconBg="#E0F7F5" iconColor="#4ECDC4"
+            title="Treatments & pricing" subtitle="Your service catalogue & fees"
+            onPress={() => navigation.navigate('TreatmentsPricing')}
+          />
+        </View>
+
+        {/* Communication */}
+        <Text style={styles.sectionLabel}>COMMUNICATION</Text>
+        <View style={styles.card}>
+          <ConfigRow
             icon={FileText} iconBg="#FEF3C7" iconColor="#F59E0B"
             title="Templates" subtitle="Invoice, prescription layouts"
             onPress={() => navigation.navigate('Templates')}
@@ -296,11 +323,21 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
             title="Notifications" subtitle="WhatsApp, push, reminders"
             onPress={() => navigation.navigate('NotificationSettings')}
           />
-          <View style={styles.rowDivider} />
+        </View>
+
+        {/* Clinic & plan */}
+        <Text style={styles.sectionLabel}>CLINIC &amp; PLAN</Text>
+        <View style={styles.card}>
           <ConfigRow
             icon={Building2} iconBg="#E0F2F2" iconColor="#2D9596"
             title="Clinic settings" subtitle="Name, logo, address"
             onPress={() => navigation.navigate('ClinicSettings')}
+          />
+          <View style={styles.rowDivider} />
+          <ConfigRow
+            icon={CreditCard} iconBg="#E8ECFF" iconColor="#6B7FFF"
+            title="Subscription" subtitle="Plan, branches & billing"
+            onPress={() => navigation.navigate('Subscription')}
           />
         </View>
 

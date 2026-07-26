@@ -30,6 +30,8 @@ import {
   Plus,
   X,
   Wallet,
+  Trash2,
+  TicketPercent,
 } from 'lucide-react-native';
 import { WhatsAppIcon } from '../../../../shared/components/icons/WhatsAppIcon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,6 +39,8 @@ import { colors } from '../../../../shared/constants/colors';
 import { componentRadius } from '../../../../shared/constants/theme';
 import { transactionsApiService } from '../../../../services/api/transactions.api';
 import { getCurrencySymbol } from '../../../../shared/utils/currency';
+import { showAlert } from '../../../../shared/components/alertService';
+import { todayISO, isValidPastDate, formatDisplayDate } from '../../../../shared/utils/datetime';
 
 interface InvoiceDetailsScreenProps {
   route: any;
@@ -108,6 +112,7 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
   const [showAdd, setShowAdd] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [showPay, setShowPay] = useState(false);
+  const [showDiscount, setShowDiscount] = useState(false);
 
   useEffect(() => {
     fetchInvoiceDetails();
@@ -164,7 +169,7 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
     }
   };
 
-  const handleMarkPaid = async (payload: { payment_mode: string; utr?: string | null; is_partial: boolean; amount_paid?: number | null }) => {
+  const handleMarkPaid = async (payload: { payment_mode: string; utr?: string | null; is_partial: boolean; amount_paid?: number | null; paid_on?: string | null; note?: string | null }) => {
     try {
       const updated = await transactionsApiService.markInvoicePaid(invoice.id, payload);
       setShowPay(false);
@@ -173,6 +178,32 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
     } catch (e: any) {
       toast.error(e?.message || 'Failed to record payment');
     }
+  };
+
+  const handleAddDiscount = async (payload: { value: number; discount_type: 'amount' | 'percentage'; reason: string }) => {
+    // Rethrow so the modal can show the server's reason (e.g. "more than due") inline.
+    const updated = await transactionsApiService.addPostIssueDiscount(invoice.id, payload);
+    setShowDiscount(false);
+    await fetchInvoiceDetails();
+    toast.success('Discount applied');
+    return updated;
+  };
+
+  const handleRemoveDiscount = (discountId: number) => {
+    showAlert('Remove this discount?', 'The invoice total goes back up by this amount.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove', style: 'destructive', onPress: async () => {
+          try {
+            await transactionsApiService.removePostIssueDiscount(invoice.id, discountId);
+            await fetchInvoiceDetails();
+            toast.success('Discount removed');
+          } catch (e: any) {
+            toast.error(e?.message || 'Failed to remove discount');
+          }
+        },
+      },
+    ]);
   };
 
   if (loading) {
@@ -357,12 +388,57 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
                 <Text style={styles.totalValue}>{money(invoice.tax)}</Text>
               </View>
             )}
+            {Number(invoice.post_issue_discount_total) > 0 && (
+              <View style={styles.totalRow}>
+                <Text style={[styles.muted, { fontSize: 11 }]}>incl. after issue</Text>
+                <Text style={[styles.muted, { fontSize: 11 }]}>-{money(invoice.post_issue_discount_total)}</Text>
+              </View>
+            )}
             <View style={[styles.totalRow, styles.grandRow]}>
               <Text style={styles.grandLabel}>Total</Text>
               <Text style={styles.grandValue}>{money(total)}</Text>
             </View>
           </View>
         </View>
+
+        {/* Discounts granted after the invoice was issued — only once it's
+            no longer a draft (a draft edits its discount directly). */}
+        {!isDraft && status !== 'cancelled' && (
+          <>
+            <View style={styles.discountHead}>
+              <Text style={styles.sectionLabel}>DISCOUNTS AFTER ISSUE</Text>
+              {due > 0 && (
+                <TouchableOpacity onPress={() => setShowDiscount(true)} hitSlop={8} style={styles.addDiscountBtn}>
+                  <TicketPercent size={14} color={colors.primary} />
+                  <Text style={styles.addDiscountText}>Add</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            <View style={styles.card}>
+              {Array.isArray(invoice.post_issue_discounts) && invoice.post_issue_discounts.length > 0 ? (
+                invoice.post_issue_discounts.map((d: any, i: number) => (
+                  <View key={d.id} style={[styles.discountRow, i > 0 && styles.discountRowBorder]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.discountAmt}>
+                        -{money(d.amount)}
+                        {d.discount_type === 'percentage' ? <Text style={styles.discountPct}>  ({d.value}% of subtotal)</Text> : null}
+                      </Text>
+                      <Text style={styles.discountReason}>{d.reason}</Text>
+                      <Text style={styles.discountMeta}>
+                        {formatDisplayDate(d.applied_at)}{d.applied_by_name ? ` · by ${d.applied_by_name}` : ''}
+                      </Text>
+                    </View>
+                    <TouchableOpacity onPress={() => handleRemoveDiscount(d.id)} hitSlop={8} style={{ padding: 6 }}>
+                      <Trash2 size={15} color={colors.gray400} />
+                    </TouchableOpacity>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.discountEmpty}>No discount given on this invoice since it was issued.</Text>
+              )}
+            </View>
+          </>
+        )}
 
         {/* Payment — only relevant fields */}
         <Text style={styles.sectionLabel}>PAYMENT</Text>
@@ -446,6 +522,14 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
         due={due}
         onClose={() => setShowPay(false)}
         onConfirm={handleMarkPaid}
+      />
+
+      <DiscountModal
+        visible={showDiscount}
+        subtotal={Number(invoice.subtotal || 0)}
+        outstanding={due}
+        onClose={() => setShowDiscount(false)}
+        onConfirm={handleAddDiscount}
       />
     </View>
   );
@@ -543,13 +627,12 @@ const AddItemModal = ({
           </View>
 
           <TouchableOpacity
-            style={[styles.primaryBtn, { marginTop: 20 }, !valid && { opacity: 0.5 }]}
+            style={[styles.modalBtn, { marginTop: 20 }, !valid && { opacity: 0.5 }]}
             onPress={submit}
             disabled={!valid || saving}
             activeOpacity={0.85}
           >
-            {saving ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Plus size={17} color="#FFFFFF" />}
-            <Text style={styles.primaryText}>Add to invoice</Text>
+            {saving ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.primaryText}>Add to invoice</Text>}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -606,23 +689,30 @@ const MarkAsPaidModal = ({
   paid: number;
   due: number;
   onClose: () => void;
-  onConfirm: (p: { payment_mode: string; utr?: string | null; is_partial: boolean; amount_paid?: number | null }) => Promise<void>;
+  onConfirm: (p: { payment_mode: string; utr?: string | null; is_partial: boolean; amount_paid?: number | null; paid_on?: string | null }) => Promise<void>;
 }) => {
-  const [mode, setMode] = useState('UPI');
+  const [mode, setMode] = useState('Cash');
   const [utr, setUtr] = useState('');
   const [partial, setPartial] = useState(false);
   const [amount, setAmount] = useState('');
+  const [paidOn, setPaidOn] = useState(todayISO());
   const [saving, setSaving] = useState(false);
 
-  const reset = () => { setMode('UPI'); setUtr(''); setPartial(false); setAmount(''); setSaving(false); };
+  const reset = () => { setMode('Cash'); setUtr(''); setPartial(false); setAmount(''); setPaidOn(todayISO()); setSaving(false); };
   const close = () => { reset(); onClose(); };
 
   const parsed = Number(amount || 0);
   const partialValid = !partial || (parsed > 0 && parsed < due);
+  const dateValid = isValidPastDate(paidOn);
+  const isBackDated = paidOn < todayISO();
 
   const submit = async () => {
     if (partial && (parsed <= 0 || parsed >= due)) {
       toast.error(`Partial amount must be between ${sym}1 and ${money(due)}`);
+      return;
+    }
+    if (!dateValid) {
+      toast.error('Enter a valid payment date (YYYY-MM-DD), not in the future');
       return;
     }
     setSaving(true);
@@ -632,6 +722,7 @@ const MarkAsPaidModal = ({
         utr: utr.trim() || null,
         is_partial: partial,
         amount_paid: partial ? parsed : null,
+        paid_on: paidOn,
       });
       reset();
     } finally {
@@ -655,6 +746,24 @@ const MarkAsPaidModal = ({
             {paid > 0 && <View style={styles.payRow}><Text style={styles.muted}>Already paid</Text><Text style={styles.payVal}>{money(paid)}</Text></View>}
             <View style={styles.payRow}><Text style={styles.muted}>Due now</Text><Text style={[styles.payVal, { color: '#D97706' }]}>{money(due)}</Text></View>
           </View>
+
+          <Text style={styles.inputLabel}>Payment date</Text>
+          <TextInput
+            style={[styles.input, !dateValid && { borderColor: colors.error }]}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={colors.gray400}
+            value={paidOn}
+            onChangeText={setPaidOn}
+            keyboardType="numeric"
+            maxLength={10}
+          />
+          {isBackDated && dateValid && (
+            <View style={styles.backDateNote}>
+              <Text style={styles.backDateText}>
+                This will count towards {formatDisplayDate(paidOn)}, not today. We'll note that you entered it today.
+              </Text>
+            </View>
+          )}
 
           <Text style={styles.inputLabel}>Payment mode</Text>
           <View style={styles.modeRow}>
@@ -706,13 +815,115 @@ const MarkAsPaidModal = ({
           )}
 
           <TouchableOpacity
-            style={[styles.primaryBtn, styles.payBtn, { marginTop: 20 }, (saving || !partialValid) && { opacity: 0.5 }]}
+            style={[styles.modalBtn, styles.payBtn, { marginTop: 20 }, (saving || !partialValid || !dateValid) && { opacity: 0.5 }]}
             onPress={submit}
-            disabled={saving || !partialValid}
+            disabled={saving || !partialValid || !dateValid}
             activeOpacity={0.85}
           >
-            {saving ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Wallet size={17} color="#FFFFFF" />}
-            <Text style={styles.primaryText}>{partial ? 'Record partial payment' : 'Mark as fully paid'}</Text>
+            {saving ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.primaryText}>{partial ? 'Record partial payment' : 'Mark as fully paid'}</Text>}
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+};
+
+// ── Post-issue discount modal ────────────────────────────────────────────
+const DiscountModal = ({
+  visible,
+  subtotal,
+  outstanding,
+  onClose,
+  onConfirm,
+}: {
+  visible: boolean;
+  subtotal: number;
+  outstanding: number;
+  onClose: () => void;
+  onConfirm: (p: { value: number; discount_type: 'amount' | 'percentage'; reason: string }) => Promise<any>;
+}) => {
+  const [type, setType] = useState<'amount' | 'percentage'>('amount');
+  const [value, setValue] = useState('');
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (visible) { setType('amount'); setValue(''); setReason(''); setError(''); setSaving(false); }
+  }, [visible]);
+
+  const num = Number(value || 0);
+  const preview = type === 'percentage' ? (subtotal * num) / 100 : num;
+  const exceeds = preview > outstanding + 0.005;
+
+  const submit = async () => {
+    setError('');
+    if (!num || num <= 0) { setError('Enter a discount greater than zero.'); return; }
+    if (!reason.trim()) { setError('Please give a reason for this discount.'); return; }
+    if (exceeds) { setError(`You can discount up to ${money(outstanding)} on this invoice.`); return; }
+    try {
+      setSaving(true);
+      await onConfirm({ value: num, discount_type: type, reason: reason.trim() });
+    } catch (e: any) {
+      setError(e?.message || 'Could not apply this discount.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+        <View style={styles.sheet}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.sheetHeader}>
+            <Text style={styles.sheetTitle}>Add discount</Text>
+            <TouchableOpacity style={styles.iconBtn} onPress={onClose}><X size={18} color="#111827" /></TouchableOpacity>
+          </View>
+
+          <Text style={styles.inputLabel}>Discount</Text>
+          <View style={styles.discountInputRow}>
+            <View style={styles.typeToggle}>
+              <TouchableOpacity onPress={() => setType('percentage')} style={[styles.typeChip, type === 'percentage' && styles.typeChipActive]}>
+                <Text style={[styles.typeChipText, type === 'percentage' && styles.typeChipTextActive]}>%</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setType('amount')} style={[styles.typeChip, type === 'amount' && styles.typeChipActive]}>
+                <Text style={[styles.typeChipText, type === 'amount' && styles.typeChipTextActive]}>{sym}</Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={[styles.input, { flex: 1, marginBottom: 0 }]}
+              keyboardType="decimal-pad"
+              placeholder="0"
+              placeholderTextColor={colors.gray400}
+              value={value}
+              onChangeText={setValue}
+            />
+          </View>
+
+          <Text style={styles.inputLabel}>Reason</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. Goodwill, long-standing patient"
+            placeholderTextColor={colors.gray400}
+            value={reason}
+            onChangeText={setReason}
+          />
+
+          <Text style={styles.partialHint}>
+            {type === 'percentage' && num > 0 ? `That's ${money(preview)} off. ` : ''}
+            Up to {money(outstanding)} can be discounted.
+          </Text>
+
+          {!!error && <Text style={styles.discountError}>{error}</Text>}
+
+          <TouchableOpacity
+            style={[styles.modalBtn, { marginTop: 20 }, (saving || exceeds) && { opacity: 0.5 }]}
+            onPress={submit}
+            disabled={saving || exceeds}
+            activeOpacity={0.85}
+          >
+            {saving ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.primaryText}>Apply discount</Text>}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -818,6 +1029,15 @@ const styles = StyleSheet.create({
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     backgroundColor: colors.primary, paddingVertical: 14, borderRadius: componentRadius.bottomActionButton,
   },
+  // Modal action button. Deliberately NOT flex:1 — inside a hug-content bottom
+  // sheet, flex:1 (flexBasis 0) collapses the button height and clips the label,
+  // which is why the modal buttons showed only their icon. An explicit height
+  // sizes it correctly. `primaryBtn` (flex:1) is only right in the action *row*.
+  modalBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    width: '100%', height: 52, backgroundColor: colors.primary,
+    borderRadius: componentRadius.bottomActionButton,
+  },
   whatsappBtn: { backgroundColor: '#25D366' },
   payBtn: { backgroundColor: '#15803D' },
   primaryText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
@@ -846,4 +1066,27 @@ const styles = StyleSheet.create({
   partialRow: { flexDirection: 'row', alignItems: 'center', marginTop: 18, paddingVertical: 4 },
   partialLabel: { fontSize: 15, fontWeight: '700', color: '#111827' },
   partialHint: { fontSize: 12, color: colors.gray500, marginTop: 2 },
+
+  // Back-dated payment note
+  backDateNote: { backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FEF3C7', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginTop: 8 },
+  backDateText: { fontSize: 12, color: '#B45309' },
+
+  // Post-issue discount section
+  discountHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 16 },
+  addDiscountBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6, paddingHorizontal: 8 },
+  addDiscountText: { fontSize: 13, fontWeight: '700', color: colors.primary },
+  discountRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 10 },
+  discountRowBorder: { borderTopWidth: 1, borderTopColor: '#F3F4F6' },
+  discountAmt: { fontSize: 14, fontWeight: '700', color: colors.error },
+  discountPct: { fontSize: 11, fontWeight: '400', color: colors.gray400 },
+  discountReason: { fontSize: 13, color: '#374151', marginTop: 2 },
+  discountMeta: { fontSize: 11, color: colors.gray400, marginTop: 2 },
+  discountEmpty: { fontSize: 13, color: colors.gray500, paddingVertical: 4 },
+  discountError: { fontSize: 13, color: colors.error, marginTop: 10 },
+  discountInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  typeToggle: { flexDirection: 'row', backgroundColor: '#F3F4F6', borderRadius: 8, padding: 2, borderWidth: 1, borderColor: '#E5E7EB' },
+  typeChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6 },
+  typeChipActive: { backgroundColor: colors.primary },
+  typeChipText: { fontSize: 14, fontWeight: '700', color: colors.gray500 },
+  typeChipTextActive: { color: '#FFFFFF' },
 });

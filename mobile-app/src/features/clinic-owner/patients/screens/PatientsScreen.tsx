@@ -2,8 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, Linking, StatusBar } from 'react-native';
 import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Plus, Users, UploadCloud, Gift } from 'lucide-react-native';
+import { Plus, Users, UploadCloud, Gift, CalendarClock } from 'lucide-react-native';
 import { patientsApiService, Patient } from '../../../../services/api/patients.api';
+import { dailyRegisterApiService } from '../../../../services/api/dailyRegister.api';
+import { TodayPatientsView } from '../components/TodayPatientsView';
+import { toast } from '../../../../shared/components/toastService';
 import { useAuth } from '../../../../app/AuthContext';
 import { SearchBar } from '../components/SearchBar';
 import { FilterTabs } from '../components/FilterTabs';
@@ -23,7 +26,13 @@ interface PatientsScreenProps {
 
 export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, route }) => {
   const [searchQuery, setSearchQuery] = useState(route?.params?.initialSearchQuery || '');
-  const [selectedTab, setSelectedTab] = useState('all');
+  const [selectedTab, setSelectedTab] = useState('today');
+  // When true, a patient created via Add Patient came from the register flow and
+  // should be dropped into today's register once saved. Holds the prefill too.
+  const [registerAfterAdd, setRegisterAfterAdd] = useState<{ name: string; phone: string } | null>(null);
+  const [registerRefreshKey, setRegisterRefreshKey] = useState(0);
+  // Bumped by the header "+" while on Today's Patients, to open the register flow.
+  const [registerSignal, setRegisterSignal] = useState(0);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -119,8 +128,21 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
     ]);
   };
 
-  // Prepare tabs with counts
+  // The register flow found no existing match: open Add Patient prefilled, and
+  // remember to drop the new patient into today's register once saved.
+  const handleRegisterNew = (name: string, phone: string) => {
+    setRegisterAfterAdd({ name, phone });
+    setShowAddPatient(true);
+  };
+
+  // Prepare tabs. Today's Patients leads, matching the web layout.
   const tabs = [
+    {
+      key: 'today',
+      label: "Today's Patients",
+      value: 'today',
+      icon: <CalendarClock size={15} color={selectedTab === 'today' ? colors.primary : '#6B7280'} />,
+    },
     { key: 'all', label: 'All Patients', value: 'all', count: patients.length },
     {
       key: 'birthdays',
@@ -141,22 +163,33 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
         onBackPress={navigation.canGoBack() ? () => navigation.goBack() : undefined}
         rightComponent={
           <View style={styles.headerActions}>
-            <TouchableOpacity onPress={() => setShowImport(true)} style={styles.headerAddBtn}>
-              <UploadCloud color={colors.white} size={20} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowAddPatient(true)} style={styles.headerAddBtn}>
+            {/* Import is bulk-CSV, not relevant to the daily register. */}
+            {selectedTab !== 'today' && (
+              <TouchableOpacity onPress={() => setShowImport(true)} style={styles.headerAddBtn}>
+                <UploadCloud color={colors.white} size={20} />
+              </TouchableOpacity>
+            )}
+            {/* On Today's Patients the "+" opens the register flow; elsewhere it creates a patient. */}
+            <TouchableOpacity
+              onPress={() => selectedTab === 'today' ? setRegisterSignal((n) => n + 1) : setShowAddPatient(true)}
+              style={styles.headerAddBtn}
+            >
               <Plus color={colors.white} size={22} />
             </TouchableOpacity>
           </View>
         }
       />
 
-      <SearchBar
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-        placeholder="Search by name, ID or phone"
-        autoFocus={route?.params?.fromHomeSearch || !!route?.params?.initialSearchQuery}
-      />
+      {/* The register carries its own search + day picker, so the global search
+          bar only shows for the patient list tabs. */}
+      {selectedTab !== 'today' && (
+        <SearchBar
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search by name, ID or phone"
+          autoFocus={route?.params?.fromHomeSearch || !!route?.params?.initialSearchQuery}
+        />
+      )}
 
       <FilterTabs
         tabs={tabs}
@@ -164,7 +197,14 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
         onTabChange={setSelectedTab}
       />
 
-      {selectedTab === 'birthdays' ? (
+      {selectedTab === 'today' ? (
+        <TodayPatientsView
+          navigation={navigation}
+          onRegisterNew={handleRegisterNew}
+          refreshKey={registerRefreshKey}
+          registerSignal={registerSignal}
+        />
+      ) : selectedTab === 'birthdays' ? (
         <BirthdaysView onPatientPress={(id) => navigation.navigate('PatientDetails', { patientId: String(id) })} />
       ) : loading && !refreshing ? (
         <View style={{ padding: 20 }}>
@@ -196,9 +236,21 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
 
       <AddPatientScreen
         visible={showAddPatient}
-        onClose={() => setShowAddPatient(false)}
-        onPatientAdded={() => {
+        onClose={() => { setShowAddPatient(false); setRegisterAfterAdd(null); }}
+        initialData={registerAfterAdd ? { name: registerAfterAdd.name, phone: registerAfterAdd.phone } : undefined}
+        onPatientAdded={async (created: any) => {
           setShowAddPatient(false);
+          // Came from the register flow: drop the new patient into today's list.
+          if (registerAfterAdd && created?.id) {
+            try {
+              await dailyRegisterApiService.addEntry({ patient_id: Number(created.id) });
+              setRegisterRefreshKey((k) => k + 1);
+              toast.success(`${created.name || registerAfterAdd.name} added to today's register`);
+            } catch (e: any) {
+              toast.error("Patient saved, but couldn't add to today's register");
+            }
+          }
+          setRegisterAfterAdd(null);
           loadPatients();
         }}
       />

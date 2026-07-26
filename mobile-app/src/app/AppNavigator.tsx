@@ -19,6 +19,7 @@ import { HelpSupportScreen } from '../features/receptionist/screens/HelpSupportS
 import { NotificationsScreen } from '../features/clinic-owner/home/screens/NotificationsScreen';
 import { PatientsScreen } from '../features/clinic-owner/patients/screens/PatientsScreen';
 import { UtilitiesScreen } from '../features/clinic-owner/utilities/screens/UtilitiesScreen';
+import { UtilitySectionScreen } from '../features/clinic-owner/utilities/screens/UtilitySectionScreen';
 import { AllTransactionsScreen } from '../features/clinic-owner/transactions/screens/AllTransactionsScreen';
 import { InvoiceDetailsScreen } from '../features/clinic-owner/transactions/screens/InvoiceDetailsScreen';
 import { ExpenseDetailsScreen } from '../features/clinic-owner/transactions/screens/ExpenseDetailsScreen';
@@ -43,6 +44,8 @@ import { PracticeSettingsScreen } from '../features/admin/practice-settings/scre
 import { TemplatesScreen } from '../features/admin/templates/screens/TemplatesScreen';
 import { TeamScreen } from '../features/admin/team/screens/TeamScreen';
 import { GoogleReviewsScreen } from '../features/clinic-owner/marketing/screens/GoogleReviewsScreen';
+import { TabletWebAppScreen } from '../features/tablet/screens/TabletWebAppScreen';
+import { IS_TABLET } from '../shared/utils/device';
 
 export type RootStackParamList = {
   Onboarding: undefined;
@@ -78,7 +81,9 @@ export type RootStackParamList = {
   Patients: undefined;
   Appointments: undefined;
   Utilities: { initialTab?: 'lab' | 'inventory' | 'consent' } | undefined;
+  UtilitySection: { section: 'inventory' | 'lab' | 'consent' };
   GoogleReviews: undefined;
+  TabletWebApp: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -124,6 +129,8 @@ export const AppNavigator = () => {
       // dead-end screen that tells them to set up their clinic on the web.
       return IS_SIGNUP_ENABLED ? 'Signup' : 'NoClinicLinked';
     }
+    // Tablets get the responsive web app in a WebView instead of the native tabs.
+    if (IS_TABLET) return 'TabletWebApp';
     if (backendUser?.role === 'receptionist') return 'ReceptionistHome';
     return 'ClinicOwnerTabs';
   };
@@ -154,6 +161,12 @@ export const AppNavigator = () => {
                   <Stack.Screen name="NoClinicLinked" component={NoClinicLinkedScreen} />
                 </>
               )
+            ) : IS_TABLET ? (
+              // Tablet shell: the responsive web app in a WebView. Login stays
+              // native (branches above); only the post-login surface is web.
+              <>
+                <Stack.Screen name="TabletWebApp" component={TabletWebAppScreen} />
+              </>
             ) : backendUser?.role === 'receptionist' ? (
               <>
                 <Stack.Screen name="ReceptionistHome" component={ReceptionistHomeScreen} />
@@ -167,6 +180,7 @@ export const AppNavigator = () => {
                 <Stack.Screen name="Patients" component={PatientsScreen} />
                 <Stack.Screen name="Appointments" component={AppointmentsScreen} />
                 <Stack.Screen name="Utilities" component={UtilitiesScreen} />
+                <Stack.Screen name="UtilitySection" component={UtilitySectionScreen} />
                 <Stack.Screen name="AllTransactions" component={AllTransactionsScreen} />
                 <Stack.Screen name="InvoiceDetails" component={InvoiceDetailsScreen} />
                 <Stack.Screen name="ExpenseDetails" component={ExpenseDetailsScreen} />
@@ -174,6 +188,7 @@ export const AppNavigator = () => {
             ) : (
               <>
                 <Stack.Screen name="ClinicOwnerTabs" component={ClinicOwnerTabNavigator} />
+                <Stack.Screen name="UtilitySection" component={UtilitySectionScreen} />
                 <Stack.Screen name="AllTransactions" component={AllTransactionsScreen} />
                 <Stack.Screen name="PatientDetails" component={PatientDetailsScreen} />
                 <Stack.Screen name="AppointmentDetails" component={AppointmentDetailsScreen} />
