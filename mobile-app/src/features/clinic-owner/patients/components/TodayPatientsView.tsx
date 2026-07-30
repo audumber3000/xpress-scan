@@ -25,9 +25,12 @@ interface Props {
   refreshKey?: number;
   // Bumped by the parent's header "+" to open the register flow.
   registerSignal?: number;
+  // The Today/All/Birthdays tab switcher, rendered inside this view's scroll
+  // header (after the KPI card) so the metric card sits at the very top.
+  tabsSlot?: React.ReactNode;
 }
 
-export const TodayPatientsView: React.FC<Props> = ({ navigation, onRegisterNew, refreshKey = 0, registerSignal = 0 }) => {
+export const TodayPatientsView: React.FC<Props> = ({ navigation, onRegisterNew, refreshKey = 0, registerSignal = 0, tabsSlot }) => {
   const [date, setDate] = useState(todayISO());
   const [data, setData] = useState<DailyRegisterResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -188,6 +191,9 @@ export const TodayPatientsView: React.FC<Props> = ({ navigation, onRegisterNew, 
           </View>
         </View>
       </View>
+
+      {/* Tab switcher sits right after the KPI card (metric card at the top). */}
+      {tabsSlot ? <View style={styles.tabsSlot}>{tabsSlot}</View> : null}
 
       {/* Close-of-day nudge */}
       {!!data?.pending && (data.pending.not_billed > 0 || data.pending.no_case_paper > 0) && (
@@ -388,6 +394,7 @@ const styles = StyleSheet.create({
   exportBtn: { width: 38, height: 38, borderRadius: 10, borderWidth: 1, borderColor: colors.borderColor, backgroundColor: colors.cardBg, alignItems: 'center', justifyContent: 'center' },
 
   kpiCard: { marginHorizontal: 16, marginTop: 12, padding: 16, backgroundColor: colors.cardBg, borderRadius: 16, borderWidth: 1, borderColor: colors.borderColor },
+  tabsSlot: { marginTop: 12 },
   kpiTop: { flexDirection: 'row', alignItems: 'flex-start' },
   kpiTopLabel: { fontSize: 12, fontWeight: '700', color: colors.textSecondary, letterSpacing: 0.5 },
   kpiTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },

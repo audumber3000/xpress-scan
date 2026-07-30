@@ -108,11 +108,13 @@ Everything an AI agent or new contributor needs to ship a release. **Don't** ask
 
 | File | Purpose |
 |---|---|
-| `mobile-app/android/app/molarplus-release.keystore` | Android signing keystore. SHA1 `D1:3B:EB:56:36:6B:5D:63:3E:C6:1A:B6:F3:4C:D9:3F:72:1A:74:0A`. Google Play permanently bound to this key — never replace. |
-| `mobile-app/android/keystore.properties` | Stores keystore + key passwords (both `molarplusrelease`). |
-| `mobile-app/credentials.json` | EAS local credentials pointing at the keystore. |
+| `mobile-app/signing/` | **Stable signing vault** — see `signing/SIGNING.md` for the full key reference (SHA-1s, alias, passwords, backups). Lives outside `android/` so `prebuild --clean` can't wipe it. Gitignored. |
+| `mobile-app/signing/molarplus-upload.keystore` | Current Android **upload** key (alias `molarplus-upload`, SHA-1 `82:C4:11:F8:E4:97:70:83:A2:C9:64:F2:79:F8:5F:D0:85:21:D6:E3`). Passwords in `signing/SIGNING.md`. |
+| `mobile-app/credentials.json` | EAS local credentials → points at `signing/molarplus-upload.keystore`. |
 | `mobile-app/play-service-account.json` | Google Play API service-account key for `eas submit`. |
 | `~/.appstoreconnect/private_keys/AuthKey_2V3J5NXDXC.p8` | **Sign in with Apple** key (backend JWT verification). NOT an ASC API key. |
+
+> **Key history (2026-07-26):** the original upload key `molarplus-release.keystore` (alias `molarplus`, SHA-1 `D1:3B:EB:…`) was lost when the `android/` folder was removed. Since **Play App Signing** is enrolled (Google holds the real app-signing key `D1:9C:98:…`), we did a Play Console **upload-key reset** to the new key above. The EAS-cloud keystore (SHA-1 `7E:CD:…`, alias `3a8f1dc4…`) is a wrong throwaway — never use it.
 
 ### What's already configured server-side
 
@@ -227,21 +229,25 @@ When submission fails, the CLI prints a useless `✖ Something went wrong when s
 
 ### 7. Android: never let EAS auto-generate a fresh keystore for production.
 
-The first .aab uploaded to Play Console (Apr 17, 2026) was signed with `mobile-app/android/app/molarplus-release.keystore` (SHA1 `D1:3B:EB:…`). Google permanently bound the app to that keystore — every future upload **must** be signed with the same one or it's rejected:
+Google Play only accepts uploads signed with the registered **upload key**. Sign
+with anything else and the submission is rejected:
 
-> Google Api Error: Invalid request - The Android App Bundle was signed with the wrong key. Found: SHA1: 7E:CD:…, expected: SHA1: D1:3B:…
+> Google Api Error: Invalid request - The Android App Bundle was signed with the wrong key. Found: SHA1: 7E:CD:…, expected: SHA1: <registered upload key>
 
-This was already burned once today: when EAS prompted "Generate a new Android Keystore?" we said yes, the build succeeded, the submission was rejected, and we had to rebuild. To prevent it:
+The correct upload key lives **only** in the local vault `mobile-app/signing/` — it is
+never on EAS servers. Guardrails:
 
 - `eas.json` production profile has `"android": { "credentialsSource": "local" }`
-- `mobile-app/credentials.json` points at the original keystore + passwords
-- Both files are gitignored
+- `mobile-app/credentials.json` → `signing/molarplus-upload.keystore`
+- Both are gitignored; `signing/` sits outside `android/` so `prebuild --clean` can't wipe it
 
-If `eas build --platform android --profile production` ever asks "Generate a new Android Keystore?", **say no and abort**. Verify the local keystore + credentials.json are present before retrying. Verify SHA1 matches with:
+If `eas build --platform android --profile production` ever asks "Generate a new Android Keystore?", **say no and abort** — the local keystore is missing or the path is wrong. Verify the current upload key before building:
 ```bash
-keytool -list -v -keystore mobile-app/android/app/molarplus-release.keystore -storepass molarplusrelease | grep SHA1
+keytool -list -v -keystore mobile-app/signing/molarplus-upload.keystore -storepass molarplusupload | grep SHA1
 ```
-Expected: `D1:3B:EB:56:36:6B:5D:63:3E:C6:1A:B6:F3:4C:D9:3F:72:1A:74:0A`.
+Expected (current, post 2026-07-26 reset): `82:C4:11:F8:E4:97:70:83:A2:C9:64:F2:79:F8:5F:D0:85:21:D6:E3`.
+
+**If the upload key is ever lost again:** Play App Signing is enrolled, so Google holds the real app-signing key (`D1:9C:98:…`) and the app is never bricked. Recover the keystore from a backup, or generate a new one and do Play Console → App integrity → App signing → **Request upload key reset** (~a few hours to 48h), then update `credentials.json` + `signing/SIGNING.md`. Full details live in `mobile-app/signing/SIGNING.md`.
 
 ### 8. Android: Play Console submission has multiple separate gates.
 
@@ -276,15 +282,15 @@ Same EAS API quirk as iOS — the submissions field on a build object is unrelia
 1. Bump `version` in `app.json` (e.g. `3.14.1` → `3.15.0`). EAS auto-increments iOS `buildNumber` and Android `versionCode`.
 2. Commit any pending mobile changes; push to `main`.
 3. **iOS only:** if a new capability was added since the last release (Sign in with Apple, HealthKit, Push, App Groups, etc.), export the `EXPO_ASC_*` env vars before `eas build` (see Gotcha #1 + the Reference card above for exact values).
-4. **Android only:** confirm `mobile-app/credentials.json` and `mobile-app/android/app/molarplus-release.keystore` exist locally. If credentials.json is missing, recreate from:
+4. **Android only:** confirm `mobile-app/credentials.json` and `mobile-app/signing/molarplus-upload.keystore` exist locally (see `signing/SIGNING.md`). If credentials.json is missing, recreate from:
    ```json
    {
      "android": {
        "keystore": {
-         "keystorePath": "android/app/molarplus-release.keystore",
-         "keystorePassword": "molarplusrelease",
-         "keyAlias": "molarplus",
-         "keyPassword": "molarplusrelease"
+         "keystorePath": "signing/molarplus-upload.keystore",
+         "keystorePassword": "molarplusupload",
+         "keyAlias": "molarplus-upload",
+         "keyPassword": "molarplusupload"
        }
      }
    }

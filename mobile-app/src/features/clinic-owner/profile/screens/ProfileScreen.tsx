@@ -9,6 +9,7 @@ import {
   requestNotificationPermissionsWithUI
 } from '../../../../services/notifications';
 import { ProfileHeader } from '../components/ProfileHeader';
+import { EditProfileModal } from '../components/EditProfileModal';
 import { SettingsSection } from '../components/SettingsSection';
 import { SettingsMenuItem } from '../components/SettingsMenuItem';
 import { colors } from '../../../../shared/constants/colors';
@@ -26,11 +27,12 @@ interface ProfileScreenProps {
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
   const posthog = usePostHog();
-  const { user, backendUser, logout, isLoading, switchBranch } = useAuth();
+  const { user, backendUser, logout, isLoading, switchBranch, refreshBackendUser } = useAuth();
   const [showClinicSwitcher, setShowClinicSwitcher] = useState(false);
+  const [showEditProfile, setShowEditProfile] = useState(false);
 
   const handleEditProfile = () => {
-    showAlert('Edit Profile', 'Edit profile functionality coming soon!');
+    setShowEditProfile(true);
   };
 
   const handleClinicInfo = () => {
@@ -93,7 +95,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
     }
   };
 
-  const userName = user?.displayName || 'Dr. Aris Thorne';
+  // Prefer the backend name so an in-app profile edit reflects immediately
+  // (Firebase displayName isn't updated by our PATCH /auth/me).
+  const userName = backendUser?.name || user?.displayName || 'Dr. Aris Thorne';
 
   return (
     <SafeAreaView style={styles.container} edges={[]}>
@@ -211,6 +215,13 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
         isVisible={showClinicSwitcher}
         onClose={() => setShowClinicSwitcher(false)}
         onClinicSelected={handleClinicSelected}
+      />
+
+      <EditProfileModal
+        visible={showEditProfile}
+        user={backendUser}
+        onClose={() => setShowEditProfile(false)}
+        onSaved={() => refreshBackendUser()}
       />
     </SafeAreaView>
   );

@@ -191,11 +191,15 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
         />
       )}
 
-      <FilterTabs
-        tabs={tabs}
-        selectedTab={selectedTab}
-        onTabChange={setSelectedTab}
-      />
+      {/* On Today's Patients the tabs move below the metric card (rendered inside
+          TodayPatientsView); every other tab keeps them up here under the search. */}
+      {selectedTab !== 'today' && (
+        <FilterTabs
+          tabs={tabs}
+          selectedTab={selectedTab}
+          onTabChange={setSelectedTab}
+        />
+      )}
 
       {selectedTab === 'today' ? (
         <TodayPatientsView
@@ -203,6 +207,13 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
           onRegisterNew={handleRegisterNew}
           refreshKey={registerRefreshKey}
           registerSignal={registerSignal}
+          tabsSlot={
+            <FilterTabs
+              tabs={tabs}
+              selectedTab={selectedTab}
+              onTabChange={setSelectedTab}
+            />
+          }
         />
       ) : selectedTab === 'birthdays' ? (
         <BirthdaysView onPatientPress={(id) => navigation.navigate('PatientDetails', { patientId: String(id) })} />

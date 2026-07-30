@@ -1,9 +1,9 @@
 import React, { useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, PanResponder } from 'react-native';
 import { showAlert } from '../../../../shared/components/alertService';
-import { Trash2 } from 'lucide-react-native';
+import { Trash2, ChevronRight } from 'lucide-react-native';
 import { PatientAvatar } from '../../../../shared/components/PatientAvatar';
-import { WhatsAppIcon } from '../../../../shared/components/icons/WhatsAppIcon';
+import { colors } from '../../../../shared/constants/colors';
 
 interface PatientCardProps {
   patient: {
@@ -16,11 +16,13 @@ interface PatientCardProps {
     gender: string;
   };
   onPress: () => void;
-  onPhonePress: () => void;
+  // Contact now lives inside the patient file; the row just opens it. Kept
+  // optional for callers that still pass it.
+  onPhonePress?: () => void;
   onDelete: () => void;
 }
 
-export const PatientCard: React.FC<PatientCardProps> = ({ patient, onPress, onPhonePress, onDelete }) => {
+export const PatientCard: React.FC<PatientCardProps> = ({ patient, onPress, onDelete }) => {
   const translateX = useRef(new Animated.Value(0)).current;
   const lastOffset = useRef(0);
 
@@ -121,26 +123,18 @@ export const PatientCard: React.FC<PatientCardProps> = ({ patient, onPress, onPh
           {/* Patient Info */}
           <View style={styles.patientInfo}>
             <View style={styles.nameRow}>
-              <Text style={styles.patientName}>{patient.name}</Text>
+              <Text style={styles.patientName} numberOfLines={1}>{patient.name}</Text>
             </View>
-            <Text style={styles.statusText}>
+            <Text style={styles.statusText} numberOfLines={1}>
               {patient.phone}
             </Text>
-            <Text style={styles.lastVisit}>Last visit: {patient.lastVisit}</Text>
+            <Text style={styles.lastVisit} numberOfLines={1}>Last visit: {patient.lastVisit}</Text>
           </View>
 
-          {/* Contact button — opens Call / WhatsApp action sheet */}
-          <TouchableOpacity
-            style={styles.phoneButton}
-            onPress={(e) => {
-              e.stopPropagation();
-              onPhonePress();
-            }}
-            activeOpacity={0.6}
-            accessibilityLabel={`Contact ${patient.name}`}
-          >
-            <WhatsAppIcon size={28} />
-          </TouchableOpacity>
+          {/* Chevron — the whole row opens the patient file (contact lives inside). */}
+          <View style={styles.chevron} pointerEvents="none">
+            <ChevronRight size={22} color={colors.gray300} />
+          </View>
         </TouchableOpacity>
       </Animated.View>
 
@@ -205,6 +199,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#111827',
     marginRight: 8,
+    flexShrink: 1,
   },
   statusText: {
     fontSize: 14,
@@ -215,12 +210,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#9CA3AF',
   },
-  phoneButton: {
-    width: 40,
+  chevron: {
+    width: 28,
     height: 40,
-    borderRadius: 20,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'flex-end',
+    marginLeft: 4,
   },
   separator: {
     height: 1,

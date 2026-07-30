@@ -1,100 +1,89 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Switch, TouchableOpacity,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch,
   Linking, ActivityIndicator, Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import {
-  Smartphone, Mail, MessageSquare, Bell, Wallet, CheckCircle2,
-  XCircle, ChevronRight, Save,
+  BarChart3, MessageSquare, FileText, Plug, Bell, ChevronRight, Save, RefreshCw,
 } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
 import { showAlert } from '../../../../shared/components/alertService';
+import { toast } from '../../../../shared/components/toastService';
 import { checkNotificationPermissions } from '../../../../services/notifications/permissions';
 import { adminColors } from '../../../../shared/constants/adminColors';
 import { colors } from '../../../../shared/constants/colors';
-import { BaseApiService } from '../../../../services/api/base.api';
-import { getCurrencySymbol } from '../../../../shared/utils/currency';
+import { useAuth } from '../../../../app/AuthContext';
+import { notificationsApi, Preference, Wallet } from '../../notifications/notifications.api';
+import { OverviewTab } from '../../notifications/tabs/OverviewTab';
+import { PreferencesTab } from '../../notifications/tabs/PreferencesTab';
+import { LogsTab } from '../../notifications/tabs/LogsTab';
+import { IntegrationsTab } from '../../notifications/tabs/IntegrationsTab';
+import { TestSendSheet } from '../../notifications/TestSendSheet';
 
-const EVENT_LABELS: Record<string, string> = {
-  appointment_confirmation: 'Appointment Confirmation',
-  invoice_notification:     'Invoice Sent',
-  prescription_notification:'Prescription Sent',
-  appointment_reminder:     'Appointment Reminder',
-  google_review:            'Google Review Request',
-  consent_form:             'Consent Form',
-  daily_report:             'Daily Report',
-};
+type TabId = 'overview' | 'preferences' | 'logs' | 'channels';
+const TABS: { id: TabId; label: string; Icon: React.ComponentType<{ size?: number; color?: string }> }[] = [
+  { id: 'overview',    label: 'Overview',    Icon: BarChart3 },
+  { id: 'preferences', label: 'Preferences', Icon: MessageSquare },
+  { id: 'logs',        label: 'Logs',        Icon: FileText },
+  { id: 'channels',    label: 'Integrations', Icon: Plug },
+];
 
-const CHANNEL_META = {
-  whatsapp: { label: 'WhatsApp', color: '#25D366', bg: '#E8FFF1', Icon: Smartphone },
-  email:    { label: 'Email',    color: '#0EA5E9', bg: '#E0F2FE', Icon: Mail },
-  sms:      { label: 'SMS',     color: '#F59E0B', bg: '#FEF3C7', Icon: MessageSquare },
-};
+interface Props { navigation: any; }
 
-class NotifApiService extends BaseApiService {
-  async getChannelStatus() {
-    try {
-      const h = await this.getAuthHeaders();
-      const r = await this.fetchWithTimeout(`${this.baseURL}/notification-admin/channel-status`, { headers: h });
-      return r.ok ? await r.json() : null;
-    } catch { return null; }
-  }
-  async getPreferences() {
-    try {
-      const h = await this.getAuthHeaders();
-      const r = await this.fetchWithTimeout(`${this.baseURL}/notification-admin/preferences`, { headers: h });
-      return r.ok ? await r.json() : [];
-    } catch { return []; }
-  }
-  async savePreferences(preferences: any[]) {
-    try {
-      const h = await this.getAuthHeaders();
-      const r = await this.fetchWithTimeout(`${this.baseURL}/notification-admin/preferences`, {
-        method: 'PUT', headers: h, body: JSON.stringify({ preferences }),
-      });
-      return r.ok;
-    } catch { return false; }
-  }
-  async getWallet() {
-    try {
-      const h = await this.getAuthHeaders();
-      const r = await this.fetchWithTimeout(`${this.baseURL}/notification-admin/wallet`, { headers: h });
-      return r.ok ? await r.json() : null;
-    } catch { return null; }
-  }
-  async getStats() {
-    try {
-      const h = await this.getAuthHeaders();
-      const r = await this.fetchWithTimeout(`${this.baseURL}/notification-admin/stats`, { headers: h });
-      return r.ok ? await r.json() : null;
-    } catch { return null; }
-  }
-}
-
-const notifApi = new NotifApiService();
-
-interface Preference {
-  event_type: string;
-  channels: string[];
-  is_enabled: boolean;
-}
-
-interface NotificationSettingsScreenProps {
-  navigation: any;
-}
-
-export const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ({ navigation }) => {
+export const NotificationSettingsScreen: React.FC<Props> = ({ navigation }) => {
+  const { backendUser, refreshBackendUser } = useAuth();
+  const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [toppingUp, setToppingUp] = useState(false);
+  const [savingManual, setSavingManual] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
+
   const [channelStatus, setChannelStatus] = useState<any>(null);
-  const [preferences, setPreferences] = useState<Preference[]>([]);
-  const [wallet, setWallet] = useState<any>(null);
   const [stats, setStats] = useState<any>(null);
+  const [wallet, setWallet] = useState<Wallet>({ balance: 0, transactions: [] });
+  const [preferences, setPreferences] = useState<Preference[]>([]);
+  const [manualOn, setManualOn] = useState(!!backendUser?.clinic?.manual_whatsapp);
+
+  const [testSheet, setTestSheet] = useState<{ open: boolean; eventType: string | null; channel?: string }>({ open: false, eventType: null });
   const saveAnim = useRef(new Animated.Value(0)).current;
+  const pendingOrderId = useRef<string | null>(null);
+
+  // ── Cashfree callback (lazy-required so an older build never crashes the screen)
+  useEffect(() => {
+    let CFPaymentGatewayService: any;
+    try {
+      ({ CFPaymentGatewayService } = require('react-native-cashfree-pg-sdk'));
+    } catch {
+      return; // SDK not in this build — top-up will surface a friendly message.
+    }
+    CFPaymentGatewayService.setCallback({
+      onVerify: async (orderID: string) => {
+        try {
+          const res = await notificationsApi.verifyTopup(orderID);
+          if (res.success) {
+            toast.success('Wallet topped up!');
+            const w = await notificationsApi.getWallet();
+            setWallet(w);
+          } else {
+            toast.error('Payment not confirmed yet. If debited, it reflects within 24h.');
+          }
+        } catch {
+          toast.error('Could not verify payment. Please refresh.');
+        } finally {
+          setToppingUp(false);
+        }
+      },
+      onError: (err: any) => {
+        setToppingUp(false);
+        const msg = err?.message || 'Payment failed';
+        if (msg !== 'Payment cancelled') toast.error(msg);
+      },
+    });
+    return () => { try { CFPaymentGatewayService.removeCallback(); } catch {} };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -103,44 +92,41 @@ export const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProp
     }, [])
   );
 
+  useEffect(() => { setManualOn(!!backendUser?.clinic?.manual_whatsapp); }, [backendUser]);
+
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [cs, prefs, w, st] = await Promise.all([
-        notifApi.getChannelStatus(),
-        notifApi.getPreferences(),
-        notifApi.getWallet(),
-        notifApi.getStats(),
+      const [cs, st, w, prefs] = await Promise.all([
+        notificationsApi.getChannelStatus(),
+        notificationsApi.getStats(),
+        notificationsApi.getWallet(),
+        notificationsApi.getPreferences(),
       ]);
       setChannelStatus(cs);
-      setPreferences(prefs);
-      setWallet(w);
       setStats(st);
-    } catch (e) {
-      console.error('Load notif settings:', e);
+      setWallet(w);
+      setPreferences(prefs);
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleEventEnabled = (eventType: string) => {
-    setPreferences(prev => prev.map(p =>
-      p.event_type === eventType ? { ...p, is_enabled: !p.is_enabled } : p
-    ));
-  };
+  // ── Preferences editing ──────────────────────────────────
+  const toggleEnabled = (eventType: string) =>
+    setPreferences((prev) => prev.map((p) => p.event_type === eventType ? { ...p, is_enabled: !p.is_enabled } : p));
 
-  const toggleEventChannel = (eventType: string, channel: string) => {
-    setPreferences(prev => prev.map(p => {
+  const toggleChannel = (eventType: string, channel: string) =>
+    setPreferences((prev) => prev.map((p) => {
       if (p.event_type !== eventType) return p;
       const has = p.channels.includes(channel);
-      const next = has ? p.channels.filter(c => c !== channel) : [...p.channels, channel];
+      const next = has ? p.channels.filter((c) => c !== channel) : [...p.channels, channel];
       return { ...p, channels: next.length > 0 ? next : [channel] };
     }));
-  };
 
   const handleSave = async () => {
     setSaving(true);
-    const ok = await notifApi.savePreferences(preferences);
+    const ok = await notificationsApi.savePreferences(preferences);
     setSaving(false);
     if (ok) {
       Animated.sequence([
@@ -153,12 +139,49 @@ export const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProp
     }
   };
 
-  const fmt = (n: number) => `${getCurrencySymbol()}${n?.toFixed(2) ?? '0.00'}`;
+  // ── Wallet top-up (Cashfree) ─────────────────────────────
+  const handleTopUp = async (amount: number) => {
+    if (amount < 100) { toast.error('Minimum top-up is 100'); return; }
+    setToppingUp(true);
+    try {
+      let CFSession: any, CFEnvironment: any, CFPaymentGatewayService: any;
+      try {
+        ({ CFPaymentGatewayService } = require('react-native-cashfree-pg-sdk'));
+        ({ CFSession, CFEnvironment } = require('cashfree-pg-api-contract'));
+      } catch {
+        setToppingUp(false);
+        toast.error('Payments need the latest app build. Please update the app.');
+        return;
+      }
+      const res = await notificationsApi.topupWallet(amount);
+      pendingOrderId.current = res.order_id;
+      const session = new CFSession(res.payment_session_id, res.order_id, CFEnvironment.PRODUCTION);
+      CFPaymentGatewayService.doWebPayment(session);
+    } catch (e: any) {
+      setToppingUp(false);
+      toast.error(e?.message || 'Failed to start payment.');
+    }
+  };
+
+  // ── Manual WhatsApp toggle ───────────────────────────────
+  const handleToggleManual = async (value: boolean) => {
+    setSavingManual(true);
+    setManualOn(value); // optimistic
+    const ok = await notificationsApi.setManualWhatsApp(value);
+    if (ok) {
+      await refreshBackendUser();
+      toast.success(value ? 'Own-number WhatsApp turned on' : 'Turned off');
+    } else {
+      setManualOn(!value);
+      toast.error('Could not update the setting');
+    }
+    setSavingManual(false);
+  };
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <ScreenHeader title="Notification Settings" onBackPress={() => navigation.goBack()} variant="admin" />
+        <ScreenHeader title="Notifications" onBackPress={() => navigation.goBack()} variant="admin" />
         <View style={styles.center}><ActivityIndicator size="large" color={adminColors.primary} /></View>
       </SafeAreaView>
     );
@@ -166,181 +189,121 @@ export const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProp
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader title="Notification Settings" onBackPress={() => navigation.goBack()} variant="admin" />
-
-      <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
-        {/* Wallet + Stats Banner */}
-        <LinearGradient colors={[adminColors.gradientStart, adminColors.gradientEnd]} style={styles.banner}>
-          <View style={styles.bannerLeft}>
-            <View style={styles.bannerIconWrap}>
-              <Wallet size={20} color="#fff" />
-            </View>
-            <View>
-              <Text style={styles.bannerLabel}>Wallet Balance</Text>
-              <Text style={styles.bannerValue}>{fmt(wallet?.balance ?? 0)}</Text>
-            </View>
-          </View>
-          <View style={styles.bannerDivider} />
-          <View style={styles.bannerRight}>
-            {(['whatsapp', 'email', 'sms'] as const).map(ch => (
-              <View key={ch} style={styles.statChip}>
-                <Text style={styles.statNum}>{stats?.[ch]?.sent ?? 0}</Text>
-                <Text style={styles.statLabel}>{CHANNEL_META[ch].label}</Text>
-              </View>
-            ))}
-          </View>
-        </LinearGradient>
-
-        {/* Channel Status Cards */}
-        <Text style={styles.sectionTitle}>CHANNEL STATUS</Text>
-        <View style={styles.channelRow}>
-          {(['whatsapp', 'email', 'sms'] as const).map(ch => {
-            const meta = CHANNEL_META[ch];
-            const configured = channelStatus?.[ch]?.configured ?? false;
-            return (
-              <View key={ch} style={[styles.channelCard, { backgroundColor: meta.bg }]}>
-                <View style={[styles.channelIconWrap, { backgroundColor: meta.color + '22' }]}>
-                  <meta.Icon size={18} color={meta.color} />
-                </View>
-                <Text style={[styles.channelName, { color: meta.color }]}>{meta.label}</Text>
-                <View style={styles.channelStatus}>
-                  {configured
-                    ? <CheckCircle2 size={14} color="#10B981" />
-                    : <XCircle size={14} color="#EF4444" />}
-                  <Text style={[styles.channelStatusText, { color: configured ? '#10B981' : '#EF4444' }]}>
-                    {configured ? 'Active' : 'Inactive'}
-                  </Text>
-                </View>
-              </View>
-            );
-          })}
-        </View>
-
-        {/* Push Notifications */}
-        <Text style={styles.sectionTitle}>DEVICE PUSH</Text>
-        <View style={styles.card}>
-          <View style={styles.prefRow}>
-            <View style={[styles.prefIcon, { backgroundColor: colors.primaryBg }]}>
-              <Bell size={18} color={colors.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.prefTitle}>Push Notifications</Text>
-              <Text style={styles.prefSub}>App alerts on your device</Text>
-            </View>
-            <Switch
-              value={pushEnabled}
-              onValueChange={() => Linking.openSettings()}
-              trackColor={{ false: '#E5E7EB', true: colors.primaryBg }}
-              thumbColor={pushEnabled ? colors.primary : '#9CA3AF'}
-            />
-          </View>
-          <TouchableOpacity style={styles.openSettings} onPress={() => Linking.openSettings()}>
-            <Text style={styles.openSettingsText}>Open device settings</Text>
-            <ChevronRight size={14} color={colors.primary} />
+      <ScreenHeader
+        title="Notifications"
+        onBackPress={() => navigation.goBack()}
+        variant="admin"
+        rightComponent={
+          <TouchableOpacity onPress={loadAll} style={styles.refreshHeaderBtn}>
+            <RefreshCw size={18} color={adminColors.primary} />
           </TouchableOpacity>
-        </View>
+        }
+      />
 
-        {/* Per-event Preferences */}
-        <Text style={styles.sectionTitle}>EVENT PREFERENCES</Text>
-        <Text style={styles.sectionHint}>Choose which channels each event uses</Text>
-
-        {preferences.map((pref) => {
-          const label = EVENT_LABELS[pref.event_type] ?? pref.event_type.replace(/_/g, ' ');
+      {/* Tab bar */}
+      <View style={styles.tabBar}>
+        {TABS.map(({ id, label, Icon }) => {
+          const on = activeTab === id;
           return (
-            <View key={pref.event_type} style={[styles.card, !pref.is_enabled && styles.cardDisabled]}>
-              <View style={styles.prefRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.prefTitle, !pref.is_enabled && { color: '#9CA3AF' }]}>{label}</Text>
-                </View>
-                <Switch
-                  value={pref.is_enabled}
-                  onValueChange={() => toggleEventEnabled(pref.event_type)}
-                  trackColor={{ false: '#E5E7EB', true: colors.primaryBg }}
-                  thumbColor={pref.is_enabled ? colors.primary : '#9CA3AF'}
-                />
-              </View>
-              {pref.is_enabled && (
-                <View style={styles.channelChips}>
-                  {(['whatsapp', 'email', 'sms'] as const).map(ch => {
-                    const meta = CHANNEL_META[ch];
-                    const selected = pref.channels.includes(ch);
-                    return (
-                      <TouchableOpacity
-                        key={ch}
-                        onPress={() => toggleEventChannel(pref.event_type, ch)}
-                        style={[styles.chip, selected && { backgroundColor: meta.color + '18', borderColor: meta.color }]}
-                        activeOpacity={0.7}
-                      >
-                        <meta.Icon size={12} color={selected ? meta.color : '#9CA3AF'} />
-                        <Text style={[styles.chipText, selected && { color: meta.color }]}>{meta.label}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
+            <TouchableOpacity key={id} style={[styles.tab, on && styles.tabOn]} onPress={() => setActiveTab(id)} activeOpacity={0.7}>
+              <Icon size={15} color={on ? colors.primary : colors.gray400} />
+              <Text style={[styles.tabText, on && styles.tabTextOn]} numberOfLines={1}>{label}</Text>
+            </TouchableOpacity>
           );
         })}
+      </View>
 
-        <View style={{ height: 100 }} />
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        {activeTab === 'overview' && (
+          <>
+            {/* Device push (mobile-only bonus) */}
+            <View style={styles.pushCard}>
+              <View style={[styles.pushIcon, { backgroundColor: colors.primaryBg }]}>
+                <Bell size={18} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.pushTitle}>Device Push Notifications</Text>
+                <Text style={styles.pushSub}>App alerts on this device</Text>
+              </View>
+              <TouchableOpacity style={styles.pushSettingsBtn} onPress={() => Linking.openSettings()}>
+                <Text style={styles.pushSettingsText}>{pushEnabled ? 'On' : 'Off'}</Text>
+                <ChevronRight size={14} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
+            <OverviewTab stats={stats} channelStatus={channelStatus} wallet={wallet} toppingUp={toppingUp} onTopUp={handleTopUp} />
+          </>
+        )}
+
+        {activeTab === 'preferences' && (
+          <PreferencesTab
+            preferences={preferences}
+            onToggleEnabled={toggleEnabled}
+            onToggleChannel={toggleChannel}
+            onTest={(pref) => setTestSheet({ open: true, eventType: pref.event_type, channel: (pref as any).channels?.[0] })}
+          />
+        )}
+
+        {activeTab === 'logs' && <LogsTab />}
+
+        {activeTab === 'channels' && (
+          <IntegrationsTab
+            manualOn={manualOn}
+            savingManual={savingManual}
+            onToggleManual={handleToggleManual}
+            onUpgrade={() => navigation.navigate('Subscription')}
+          />
+        )}
+
+        <View style={{ height: activeTab === 'preferences' ? 96 : 24 }} />
       </ScrollView>
 
-      {/* Save FAB */}
-      <View style={styles.fabWrap}>
-        <Animated.Text style={[styles.savedText, {
-          opacity: saveAnim,
-          transform: [{ translateY: saveAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
-        }]}>Saved!</Animated.Text>
-        <TouchableOpacity style={styles.fab} onPress={handleSave} disabled={saving} activeOpacity={0.85}>
-          {saving
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <><Save size={18} color="#fff" /><Text style={styles.fabText}>Save Changes</Text></>}
-        </TouchableOpacity>
-      </View>
+      {/* Save FAB — only on Preferences */}
+      {activeTab === 'preferences' && (
+        <View style={styles.fabWrap}>
+          <Animated.Text style={[styles.savedText, {
+            opacity: saveAnim,
+            transform: [{ translateY: saveAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
+          }]}>Saved!</Animated.Text>
+          <TouchableOpacity style={styles.fab} onPress={handleSave} disabled={saving} activeOpacity={0.85}>
+            {saving ? <ActivityIndicator size="small" color="#fff" /> : <><Save size={18} color="#fff" /><Text style={styles.fabText}>Save Changes</Text></>}
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <TestSendSheet
+        visible={testSheet.open}
+        eventType={testSheet.eventType}
+        defaultChannel={testSheet.channel}
+        walletBalance={wallet.balance ?? 0}
+        onClose={() => setTestSheet({ open: false, eventType: null })}
+        onSent={(newBalance) => setWallet((w) => ({ ...w, balance: newBalance }))}
+      />
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container:     { flex: 1, backgroundColor: '#F9FAFB' },
-  center:        { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: { flex: 1, backgroundColor: '#F9FAFB' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  refreshHeaderBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
 
-  banner:        { marginHorizontal: 16, marginTop: 16, borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center' },
-  bannerLeft:    { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  bannerIconWrap:{ width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.22)', justifyContent: 'center', alignItems: 'center' },
-  bannerLabel:   { fontSize: 11, color: 'rgba(255,255,255,0.75)', fontWeight: '500' },
-  bannerValue:   { fontSize: 18, fontWeight: '700', color: '#fff', marginTop: 1 },
-  bannerDivider: { width: 1, height: 36, backgroundColor: 'rgba(255,255,255,0.25)', marginHorizontal: 14 },
-  bannerRight:   { flexDirection: 'row', gap: 10 },
-  statChip:      { alignItems: 'center' },
-  statNum:       { fontSize: 16, fontWeight: '700', color: '#fff' },
-  statLabel:     { fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: '500', marginTop: 1 },
+  tabBar: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6', paddingHorizontal: 8 },
+  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 13, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabOn: { borderBottomColor: colors.primary },
+  tabText: { fontSize: 12, fontWeight: '600', color: colors.gray400 },
+  tabTextOn: { color: colors.primary, fontWeight: '700' },
 
-  sectionTitle:  { fontSize: 11, fontWeight: '700', color: '#9CA3AF', letterSpacing: 1, paddingHorizontal: 20, marginTop: 20, marginBottom: 8 },
-  sectionHint:   { fontSize: 12, color: '#6B7280', paddingHorizontal: 20, marginTop: -4, marginBottom: 8 },
+  scroll: { padding: 16 },
 
-  channelRow:    { flexDirection: 'row', paddingHorizontal: 16, gap: 8 },
-  channelCard:   { flex: 1, borderRadius: 14, padding: 12, alignItems: 'center', gap: 6 },
-  channelIconWrap:{ width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  channelName:   { fontSize: 11, fontWeight: '700' },
-  channelStatus: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  channelStatusText: { fontSize: 10, fontWeight: '600' },
+  pushCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#F3F4F6', marginBottom: 16 },
+  pushIcon: { width: 40, height: 40, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
+  pushTitle: { fontSize: 14, fontWeight: '600', color: '#111827' },
+  pushSub: { fontSize: 12, color: colors.gray500, marginTop: 1 },
+  pushSettingsBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  pushSettingsText: { fontSize: 13, fontWeight: '600', color: colors.primary },
 
-  card:          { backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 8, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#F3F4F6' },
-  cardDisabled:  { opacity: 0.6 },
-  prefRow:       { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  prefIcon:      { width: 38, height: 38, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  prefTitle:     { fontSize: 14, fontWeight: '600', color: '#111827' },
-  prefSub:       { fontSize: 12, color: '#6B7280', marginTop: 1 },
-  openSettings:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#F3F4F6', gap: 4 },
-  openSettingsText: { fontSize: 13, fontWeight: '600', color: colors.primary },
-
-  channelChips:  { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
-  chip:          { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB' },
-  chipText:      { fontSize: 11, fontWeight: '600', color: '#9CA3AF' },
-
-  fabWrap:       { position: 'absolute', bottom: 24, left: 20, right: 20, alignItems: 'center' },
-  fab:           { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: adminColors.primary, paddingVertical: 14, paddingHorizontal: 28, borderRadius: 16, shadowColor: adminColors.primary, shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
-  fabText:       { fontSize: 15, fontWeight: '700', color: '#fff' },
-  savedText:     { fontSize: 13, fontWeight: '600', color: adminColors.primary, marginBottom: 6 },
+  fabWrap: { position: 'absolute', bottom: 24, left: 20, right: 20, alignItems: 'center' },
+  fab: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: adminColors.primary, paddingVertical: 14, paddingHorizontal: 28, borderRadius: 16, shadowColor: adminColors.primary, shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
+  fabText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  savedText: { fontSize: 13, fontWeight: '600', color: adminColors.primary, marginBottom: 6 },
 });

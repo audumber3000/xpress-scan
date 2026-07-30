@@ -10,8 +10,10 @@ import { CasePapersTab } from '../components/CasePapersTab';
 import { BillingTab } from '../components/BillingTab';
 import { PatientInfoView } from '../components/PatientInfoView';
 import { FilesView } from '../components/FilesView';
+import { EditPatientModal } from '../components/EditPatientModal';
+import { toast } from '../../../../shared/components/toastService';
 
-import { Phone } from 'lucide-react-native';
+import { Phone, Pencil, Trash2 } from 'lucide-react-native';
 import { WhatsAppIcon } from '../../../../shared/components/icons/WhatsAppIcon';
 
 interface PatientDetailsScreenProps {
@@ -39,6 +41,8 @@ export const PatientDetailsScreen: React.FC<PatientDetailsScreenProps> = ({ navi
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>((initialTab as TabType) || 'case-papers');
+  const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadPatientData();
@@ -75,6 +79,32 @@ export const PatientDetailsScreen: React.FC<PatientDetailsScreenProps> = ({ navi
     }
   };
 
+  const handleDelete = () => {
+    if (!patient) return;
+    showAlert(
+      'Delete patient?',
+      `This permanently removes ${patient.name} and their records. This can't be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeleting(true);
+              await patientsApiService.deletePatient(patientId);
+              toast.success('Patient deleted');
+              navigation.goBack();
+            } catch (err: any) {
+              setDeleting(false);
+              toast.error(err?.message?.includes('body:') ? 'Could not delete this patient.' : (err?.message || 'Delete failed'));
+            }
+          },
+        },
+      ],
+    );
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -109,10 +139,16 @@ export const PatientDetailsScreen: React.FC<PatientDetailsScreenProps> = ({ navi
         rightComponent={
           <View style={styles.headerActions}>
             <TouchableOpacity onPress={handleCall} style={styles.headerActionBtn}>
-              <Phone size={20} color={colors.primary} />
+              <Phone size={18} color={colors.primary} />
             </TouchableOpacity>
             <TouchableOpacity onPress={handleWhatsApp} style={styles.headerActionBtn}>
-              <WhatsAppIcon size={22} />
+              <WhatsAppIcon size={20} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setEditing(true)} style={styles.headerActionBtn}>
+              <Pencil size={17} color={colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleDelete} style={[styles.headerActionBtn, styles.headerDeleteBtn]} disabled={deleting}>
+              <Trash2 size={17} color={colors.error} />
             </TouchableOpacity>
           </View>
         }
@@ -150,6 +186,17 @@ export const PatientDetailsScreen: React.FC<PatientDetailsScreenProps> = ({ navi
           <FilesView patientId={patientId} />
         )}
       </View>
+
+      <EditPatientModal
+        visible={editing}
+        patient={patient}
+        onClose={() => setEditing(false)}
+        onSaved={(updated) => {
+          // Merge the returned fields, then refresh from the server for the full record.
+          setPatient((prev) => (prev ? { ...prev, ...updated } : prev));
+          loadPatientData();
+        }}
+      />
     </SafeAreaView>
   );
 };
@@ -170,15 +217,18 @@ const styles = StyleSheet.create({
   },
   headerActions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
   },
   headerActionBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: 'rgba(155, 140, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  headerDeleteBtn: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
   },
   // Tab bar — simple underline style matching admin screens
   tabBar: {

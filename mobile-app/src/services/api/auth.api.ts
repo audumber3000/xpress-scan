@@ -14,6 +14,9 @@ export interface ClinicInfo {
   plan_ends_at?: string | null;
   trial_days_remaining?: number | null;
   currency_symbol?: string;
+  // Clinic sends patient WhatsApp manually from its own number (opt-in). When on,
+  // the installed app shares via the OS share sheet instead of the automated send.
+  manual_whatsapp?: boolean;
 }
 
 export interface BackendUser {
@@ -21,6 +24,8 @@ export interface BackendUser {
   email?: string | null;       // Optional — staff may have only a username
   username?: string | null;
   name: string;
+  first_name?: string;
+  last_name?: string;
   role: 'clinic_owner' | 'receptionist' | 'doctor';
   phone?: string;
   clinic?: ClinicInfo;
@@ -82,6 +87,8 @@ export class AuthApiService extends BaseApiService {
       email: userData.email ?? null,
       username: userData.username ?? null,
       name: userData.name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
+      first_name: userData.first_name ?? undefined,
+      last_name: userData.last_name ?? undefined,
       role: userData.role,
       phone: userData.phone,
       clinic: clinicSource ? {
@@ -95,6 +102,7 @@ export class AuthApiService extends BaseApiService {
         plan_ends_at: clinicSource.plan_ends_at ?? null,
         trial_days_remaining: clinicSource.trial_days_remaining ?? null,
         currency_symbol: clinicSource.currency_symbol ?? '₹',
+        manual_whatsapp: !!clinicSource.manual_whatsapp,
       } : undefined,
       clinics: clinicsSource ? clinicsSource.map((c: any) => ({
         id: c.id.toString(),
@@ -107,9 +115,31 @@ export class AuthApiService extends BaseApiService {
         plan_ends_at: c.plan_ends_at ?? null,
         trial_days_remaining: c.trial_days_remaining ?? null,
         currency_symbol: c.currency_symbol ?? '₹',
+        manual_whatsapp: !!c.manual_whatsapp,
       })) : [],
       permissions: userData.permissions || {},
     };
+  }
+
+  /**
+   * Self-service edit of the signed-in user's personal profile. Hits
+   * PATCH /auth/me (name + phone only — never role, email, clinic or password).
+   * Returns the refreshed name parts so callers can update local state.
+   */
+  async updateProfile(payload: { first_name?: string; last_name?: string; phone?: string }):
+    Promise<{ first_name: string; last_name: string; name: string; phone?: string }> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/auth/me`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      let detail = `HTTP ${response.status}`;
+      try { detail = (await response.json())?.detail || detail; } catch {}
+      throw new Error(detail);
+    }
+    return response.json();
   }
 
   async getCurrentUser(): Promise<BackendUser | null> {

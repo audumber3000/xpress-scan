@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { X, ChevronLeft } from 'lucide-react-native';
+import { X, CalendarDays } from 'lucide-react-native';
 import { useAuth } from '../../../../app/AuthContext';
 import { GearLoader } from '../../../../shared/components/GearLoader';
 import { colors } from '../../../../shared/constants/colors';
@@ -21,7 +21,8 @@ import { patientsApiService } from '../../../../services/api/patients.api';
 import { treatmentApiService } from '../../../../services/api/treatment.api';
 import { appointmentsApiService } from '../../../../services/api/appointments.api';
 import { getCurrencySymbol } from '../../../../shared/utils/currency';
-import { todayISO, isValidPastDate } from '../../../../shared/utils/datetime';
+import { todayISO, isValidPastDate, formatDisplayDate } from '../../../../shared/utils/datetime';
+import { DatePickerModal } from '../../../../shared/components/DatePickerModal';
 
 interface AddPatientScreenProps {
   visible: boolean;
@@ -36,6 +37,39 @@ interface AddPatientScreenProps {
     appointmentId: string;
   }>;
 }
+
+/**
+ * Turn the raw API error (message shaped like `HTTP error! status: 500, body: {...}`)
+ * into a readable line for the alert. Pulls FastAPI's `detail`, handling both the
+ * string form (400/500) and the 422 validation array form, so the front desk sees
+ * the actual reason instead of a generic "please try again".
+ */
+const extractErrorMessage = (error: any): string => {
+  const raw: string = error?.message || '';
+  const bodyIdx = raw.indexOf('body:');
+  const body = bodyIdx >= 0 ? raw.slice(bodyIdx + 5).trim() : raw;
+  try {
+    const parsed = JSON.parse(body);
+    const detail = parsed?.detail;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+      // 422: [{ loc: [...,'phone'], msg: 'string too short' }, ...]
+      return detail
+        .map((d: any) => {
+          const field = Array.isArray(d?.loc) ? d.loc[d.loc.length - 1] : undefined;
+          return field ? `${field}: ${d?.msg}` : d?.msg;
+        })
+        .filter(Boolean)
+        .join('\n');
+    }
+  } catch {
+    // Not JSON — fall through.
+  }
+  if (raw.includes('Network') || raw.includes('timeout') || raw.includes('Aborted')) {
+    return 'Network problem. Check your connection and try again.';
+  }
+  return body || 'Something went wrong. Please try again.';
+};
 
 export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
   visible,
@@ -71,6 +105,8 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
   const [referringDoctors, setReferringDoctors] = useState<Array<{ id: number; name: string }>>([]);
   const [showTreatmentDropdown, setShowTreatmentDropdown] = useState(false);
   const [showDoctorDropdown, setShowDoctorDropdown] = useState(false);
+  // Which date field's calendar is open, if any.
+  const [datePickerFor, setDatePickerFor] = useState<null | 'dob' | 'registeredOn'>(null);
 
   React.useEffect(() => {
     if (visible) {
@@ -143,39 +179,28 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
+    // Required (backend PatientCreateDTO requires only these two).
     if (!formData.name.trim()) {
       newErrors.name = 'Patient name is required';
     }
-
-    if (ageMode === 'dob') {
-      if (!isValidDate(formData.dateOfBirth)) {
-        newErrors.age = 'Enter a valid date of birth (YYYY-MM-DD)';
-      }
-    } else if (!formData.age.trim() || isNaN(Number(formData.age)) || Number(formData.age) < 0 || Number(formData.age) > 150) {
-      newErrors.age = 'Valid age is required (0-150)';
-    }
-
-    if (!formData.gender) {
-      newErrors.gender = 'Gender is required';
-    }
-
-    if (!formData.village.trim()) {
-      newErrors.village = 'Village is required';
-    }
-
-    if (!isValidPastDate(formData.registeredOn)) {
-      newErrors.registeredOn = "Enter a valid registration date (YYYY-MM-DD), not in the future";
-    }
-
     if (!formData.phone.trim()) {
       newErrors.phone = 'Phone number is required';
+    } else if (formData.phone.replace(/\D/g, '').length < 10) {
+      newErrors.phone = 'Enter a valid phone number';
     }
 
-    if (!formData.treatmentType.trim()) {
-      newErrors.treatmentType = 'Treatment type is required';
+    // Optional fields: validate only when the user actually entered something.
+    if (ageMode === 'dob') {
+      if (formData.dateOfBirth && !isValidDate(formData.dateOfBirth)) {
+        newErrors.age = 'Enter a valid date of birth';
+      }
+    } else if (formData.age.trim() && (isNaN(Number(formData.age)) || Number(formData.age) < 0 || Number(formData.age) > 150)) {
+      newErrors.age = 'Enter a valid age (0-150)';
     }
 
-    // referred_by is optional, so no validation needed
+    if (formData.registeredOn && !isValidPastDate(formData.registeredOn)) {
+      newErrors.registeredOn = 'Enter a valid date, not in the future';
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -191,24 +216,31 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
     try {
       console.log('🔄 [PATIENT] Creating new patient...');
 
+      // Only Name + Phone are guaranteed. Include optional fields only when set —
+      // the backend rejects empty strings for gender/village/etc. (pattern/min_length).
       const patientData: any = {
         name: formData.name.trim(),
-        gender: formData.gender,
-        village: formData.village.trim(),
         phone: formData.phone.trim(),
-        referred_by: formData.referredBy.trim() || 'None',
-        treatment_type: formData.treatmentType.trim() || 'General Consultation',
-        notes: formData.notes.trim() || undefined,
         payment_type: formData.paymentType,
-        registered_on: formData.registeredOn,
+        // treatment_type is NOT NULL on the backend (no DB default). Always send a
+        // value, falling back to the same label the bulk-importer uses when blank,
+        // so a name+phone-only registration never trips the NOT NULL constraint.
+        treatment_type: formData.treatmentType.trim() || 'General Consultation',
       };
+      if (formData.gender) patientData.gender = formData.gender;
+      if (formData.village.trim()) patientData.village = formData.village.trim();
+      if (formData.referredBy.trim()) patientData.referred_by = formData.referredBy.trim();
+      if (formData.notes.trim()) patientData.notes = formData.notes.trim();
+      if (formData.registeredOn) patientData.registered_on = formData.registeredOn;
 
-      // Send either age or date of birth based on the toggle.
+      // Send either age or date of birth based on the toggle, only if provided.
       if (ageMode === 'dob') {
-        patientData.date_of_birth = formData.dateOfBirth;
-        const derived = computeAge(formData.dateOfBirth);
-        if (derived !== null) patientData.age = derived;
-      } else {
+        if (formData.dateOfBirth) {
+          patientData.date_of_birth = formData.dateOfBirth;
+          const derived = computeAge(formData.dateOfBirth);
+          if (derived !== null) patientData.age = derived;
+        }
+      } else if (formData.age.trim()) {
         patientData.age = Number(formData.age);
       }
 
@@ -241,7 +273,7 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
       ]);
     } catch (error: any) {
       console.error('❌ [PATIENT] Create error:', error);
-      showAlert('Error', 'Failed to register patient. Please try again.');
+      showAlert('Could not register patient', extractErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -332,10 +364,24 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
                 {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
               </View>
 
+              {/* Phone Number (required) */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Phone Number *</Text>
+                <TextInput
+                  style={[styles.input, errors.phone && styles.inputError]}
+                  value={formData.phone}
+                  onChangeText={(value) => updateFormData('phone', value)}
+                  placeholder="Enter phone number"
+                  placeholderTextColor={colors.gray400}
+                  keyboardType="phone-pad"
+                />
+                {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
+              </View>
+
               {/* Age or Date of Birth */}
               <View style={styles.fieldGroup}>
                 <View style={styles.labelRow}>
-                  <Text style={styles.label}>{ageMode === 'dob' ? 'Date of Birth *' : 'Age *'}</Text>
+                  <Text style={styles.label}>{ageMode === 'dob' ? 'Date of Birth' : 'Age'}</Text>
                   <View style={styles.segmented}>
                     <TouchableOpacity
                       style={[styles.segmentBtn, ageMode === 'age' && styles.segmentBtnActive]}
@@ -353,15 +399,16 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
                 </View>
                 {ageMode === 'dob' ? (
                   <>
-                    <TextInput
-                      style={[styles.input, errors.age && styles.inputError]}
-                      value={formData.dateOfBirth}
-                      onChangeText={(value) => updateFormData('dateOfBirth', value)}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor={colors.gray400}
-                      keyboardType="numeric"
-                      maxLength={10}
-                    />
+                    <TouchableOpacity
+                      style={[styles.input, styles.dateInput, errors.age && styles.inputError]}
+                      onPress={() => setDatePickerFor('dob')}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.dateText, !formData.dateOfBirth && styles.placeholderText]}>
+                        {formData.dateOfBirth ? formatDisplayDate(formData.dateOfBirth) : 'Select date of birth'}
+                      </Text>
+                      <CalendarDays size={16} color={colors.gray400} />
+                    </TouchableOpacity>
                     {computeAge(formData.dateOfBirth) !== null && (
                       <Text style={styles.helperText}>Age: {computeAge(formData.dateOfBirth)} years</Text>
                     )}
@@ -382,7 +429,7 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
 
               {/* Gender */}
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Gender *</Text>
+                <Text style={styles.label}>Gender</Text>
                 <View style={styles.genderContainer}>
                   {['Male', 'Female', 'Other'].map((gender) => (
                     <TouchableOpacity
@@ -407,7 +454,7 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
 
               {/* Village */}
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Village *</Text>
+                <Text style={styles.label}>Village</Text>
                 <TextInput
                   style={[styles.input, errors.village && styles.inputError]}
                   value={formData.village}
@@ -420,32 +467,19 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
 
               {/* Date of Registration */}
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Date of Registration *</Text>
-                <TextInput
-                  style={[styles.input, errors.registeredOn && styles.inputError]}
-                  value={formData.registeredOn}
-                  onChangeText={(value) => updateFormData('registeredOn', value)}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={colors.gray400}
-                  keyboardType="numeric"
-                  maxLength={10}
-                />
+                <Text style={styles.label}>Date of Registration</Text>
+                <TouchableOpacity
+                  style={[styles.input, styles.dateInput, errors.registeredOn && styles.inputError]}
+                  onPress={() => setDatePickerFor('registeredOn')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.dateText, !formData.registeredOn && styles.placeholderText]}>
+                    {formData.registeredOn ? formatDisplayDate(formData.registeredOn) : 'Select date'}
+                  </Text>
+                  <CalendarDays size={16} color={colors.gray400} />
+                </TouchableOpacity>
                 <Text style={styles.helperText}>Defaults to today. Change it if this patient first came in earlier.</Text>
                 {errors.registeredOn && <Text style={styles.errorText}>{errors.registeredOn}</Text>}
-              </View>
-
-              {/* Phone Number */}
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Phone Number *</Text>
-                <TextInput
-                  style={[styles.input, errors.phone && styles.inputError]}
-                  value={formData.phone}
-                  onChangeText={(value) => updateFormData('phone', value)}
-                  placeholder="Enter phone number"
-                  placeholderTextColor={colors.gray400}
-                  keyboardType="phone-pad"
-                />
-                {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
               </View>
 
               {/* Referred By */}
@@ -464,7 +498,7 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
 
               {/* Treatment Type */}
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Treatment Type *</Text>
+                <Text style={styles.label}>Treatment Type</Text>
                 <TouchableOpacity
                   style={[styles.input, styles.dropdownInput, errors.treatmentType && styles.inputError]}
                   onPress={() => setShowTreatmentDropdown(true)}
@@ -642,6 +676,19 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
             </View>
           </TouchableOpacity>
         </Modal>
+
+        {/* Calendar picker for DOB / registration date */}
+        <DatePickerModal
+          visible={datePickerFor !== null}
+          value={datePickerFor === 'dob' ? formData.dateOfBirth : formData.registeredOn}
+          title={datePickerFor === 'dob' ? 'Date of birth' : 'Date of registration'}
+          maxDate={todayISO()}
+          onSelect={(iso) => {
+            if (datePickerFor === 'dob') updateFormData('dateOfBirth', iso);
+            else if (datePickerFor === 'registeredOn') updateFormData('registeredOn', iso);
+          }}
+          onClose={() => setDatePickerFor(null)}
+        />
       </SafeAreaView>
       </KeyboardAvoidingView>
     </Modal>
@@ -746,6 +793,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  dateInput: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dateText: {
+    fontSize: 14,
+    color: colors.gray900,
   },
   dropdownText: {
     fontSize: 14,

@@ -12,6 +12,8 @@ import { WhatsAppIcon } from '../../../../shared/components/icons/WhatsAppIcon';
 import { patientsApiService } from '../../../../services/api/patients.api';
 import { colors } from '../../../../shared/constants/colors';
 import { getCurrencySymbol } from '../../../../shared/utils/currency';
+import { useAuth } from '../../../../app/AuthContext';
+import { isManualWhatsApp, sharePdfViaWhatsApp } from '../../../../shared/utils/whatsappShare';
 
 interface BillingTabProps {
   patientId: string;
@@ -31,6 +33,7 @@ const getStatusStyle = (status: string) => {
 };
 
 export const BillingTab: React.FC<BillingTabProps> = ({ patientId, patientPhone }) => {
+  const { backendUser } = useAuth();
   const [invoices, setInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -73,8 +76,20 @@ export const BillingTab: React.FC<BillingTabProps> = ({ patientId, patientPhone 
   const handleSendWhatsApp = async (invoiceId: string) => {
     setSendingWA(invoiceId);
     try {
-      await patientsApiService.sendInvoiceWhatsApp(invoiceId);
-      toast.success('Invoice sent via WhatsApp.');
+      // Own-number clinics: open the share sheet with the invoice PDF so the
+      // dentist sends it from their own WhatsApp. Others: automated backend send.
+      if (isManualWhatsApp(backendUser)) {
+        const clinicName = backendUser?.clinic?.name || 'our clinic';
+        const result = await sharePdfViaWhatsApp(
+          `/invoices/${invoiceId}/pdf`,
+          `invoice_${invoiceId}.pdf`,
+          { phone: patientPhone, message: `Hello, here is your invoice from ${clinicName}. Thank you!` },
+        );
+        if (result === 'unavailable') toast.error('Add the patient’s phone number to share on WhatsApp.');
+      } else {
+        await patientsApiService.sendInvoiceWhatsApp(invoiceId);
+        toast.success('Invoice sent via WhatsApp.');
+      }
     } catch (e: any) {
       toast.error(e.message || 'Failed to send invoice.');
     } finally {

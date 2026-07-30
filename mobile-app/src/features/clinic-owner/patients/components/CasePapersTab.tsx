@@ -14,6 +14,8 @@ import { getCurrencySymbol } from '../../../../shared/utils/currency';
 import { colors } from '../../../../shared/constants/colors';
 import { DentalChart } from './DentalChart';
 import { WhatsAppIcon } from '../../../../shared/components/icons/WhatsAppIcon';
+import { useAuth } from '../../../../app/AuthContext';
+import { isManualWhatsApp, sharePdfViaWhatsApp } from '../../../../shared/utils/whatsappShare';
 
 // ─── Constants ────────────────────────────────────────────────
 const NEXT_VISIT_OPTIONS = [
@@ -199,6 +201,7 @@ const SuggestionTextArea: React.FC<{
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════
 export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId }) => {
+  const { backendUser } = useAuth();
   // ─── List state ──────────────────────────────────────────
   const [caseHistory, setCaseHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -226,8 +229,20 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
     if (sendingRxId) return;
     setSendingRxId(rxId);
     try {
-      await patientsApiService.sendPrescriptionWhatsApp(rxId);
-      Alert.alert('Sent', 'Prescription sent to patient via WhatsApp.');
+      // Own-number clinics: hand the prescription PDF to the share sheet so the
+      // dentist sends it from their own WhatsApp. Others: automated backend send.
+      if (isManualWhatsApp(backendUser)) {
+        const clinicName = backendUser?.clinic?.name || 'our clinic';
+        const result = await sharePdfViaWhatsApp(
+          `/clinical/prescriptions/${rxId}/pdf`,
+          `prescription_${rxId}.pdf`,
+          { phone: patient?.phone, message: `Hello, here is your prescription from ${clinicName}. Take care!` },
+        );
+        if (result === 'unavailable') Alert.alert('Phone number needed', 'Add the patient’s phone number to share on WhatsApp.');
+      } else {
+        await patientsApiService.sendPrescriptionWhatsApp(rxId);
+        Alert.alert('Sent', 'Prescription sent to patient via WhatsApp.');
+      }
     } catch (e: any) {
       const msg = (e?.message || '').toLowerCase();
       if (msg.includes('phone')) {
@@ -760,7 +775,7 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 20 }} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 20 }} showsVerticalScrollIndicator={false}>
 
           {/* ─── 1. Clinical Examination ─── */}
           <View style={s.section}>
@@ -953,44 +968,47 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
             </TouchableOpacity>
           </View>
 
+          {/* ─── Action Bar ─── */}
+          {/* Kept in the scroll flow (not pinned to the screen bottom) so it can
+              never sit behind Android on-screen navigation buttons. The
+              ScrollView's paddingBottom leaves a comfortable gap beneath it. */}
+          <View style={s.actionBar}>
+            {/* Save */}
+            <TouchableOpacity style={s.actionSave} onPress={handleSave} disabled={saving} activeOpacity={0.8}>
+              {saving
+                ? <ActivityIndicator size="small" color={colors.primary} />
+                : <><Save size={15} color={colors.primary} /><Text style={s.actionSaveText}>Save</Text></>}
+            </TouchableOpacity>
+
+            {/* Prescription */}
+            <TouchableOpacity style={s.actionBtn} onPress={openPrescriptionModal} activeOpacity={0.8}>
+              <Pill size={15} color="#10B981" />
+              <Text style={[s.actionBtnText, { color: '#10B981' }]}>Rx</Text>
+              {casePrescriptions.length > 0 && (
+                <View style={s.actionBadge}><Text style={s.actionBadgeText}>{casePrescriptions.length}</Text></View>
+              )}
+            </TouchableOpacity>
+
+            {/* Invoice */}
+            <TouchableOpacity
+              style={[s.actionBtn, invoice && { borderColor: invMeta.color + '40' }]}
+              onPress={openInvoice}
+              disabled={invoiceLoading}
+              activeOpacity={0.8}
+            >
+              {invoiceLoading
+                ? <ActivityIndicator size="small" color={colors.primary} />
+                : <>
+                  <Receipt size={15} color={invoice ? invMeta.color : colors.textMuted} />
+                  <Text style={[s.actionBtnText, invoice && { color: invMeta.color }]}>
+                    {invoice ? invMeta.label : 'Invoice'}
+                  </Text>
+                </>}
+            </TouchableOpacity>
+          </View>
+
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* ─── Action Bar ─── */}
-      <View style={s.actionBar}>
-        {/* Save */}
-        <TouchableOpacity style={s.actionSave} onPress={handleSave} disabled={saving} activeOpacity={0.8}>
-          {saving
-            ? <ActivityIndicator size="small" color={colors.primary} />
-            : <><Save size={15} color={colors.primary} /><Text style={s.actionSaveText}>Save</Text></>}
-        </TouchableOpacity>
-
-        {/* Prescription */}
-        <TouchableOpacity style={s.actionBtn} onPress={openPrescriptionModal} activeOpacity={0.8}>
-          <Pill size={15} color="#10B981" />
-          <Text style={[s.actionBtnText, { color: '#10B981' }]}>Rx</Text>
-          {casePrescriptions.length > 0 && (
-            <View style={s.actionBadge}><Text style={s.actionBadgeText}>{casePrescriptions.length}</Text></View>
-          )}
-        </TouchableOpacity>
-
-        {/* Invoice */}
-        <TouchableOpacity
-          style={[s.actionBtn, invoice && { borderColor: invMeta.color + '40' }]}
-          onPress={openInvoice}
-          disabled={invoiceLoading}
-          activeOpacity={0.8}
-        >
-          {invoiceLoading
-            ? <ActivityIndicator size="small" color={colors.primary} />
-            : <>
-              <Receipt size={15} color={invoice ? invMeta.color : colors.textMuted} />
-              <Text style={[s.actionBtnText, invoice && { color: invMeta.color }]}>
-                {invoice ? invMeta.label : 'Invoice'}
-              </Text>
-            </>}
-        </TouchableOpacity>
-      </View>
 
       {/* ════════════════════════════════════════════════════
           MODALS
@@ -1463,7 +1481,9 @@ const s = StyleSheet.create({
   nextVisitBtnText: { flex: 1, fontSize: 13, color: '#374151', fontWeight: '500' },
 
   // Action Bar
-  actionBar: { flexDirection: 'row', backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingHorizontal: 12, paddingVertical: 10, gap: 8, paddingBottom: Platform.OS === 'ios' ? 24 : 10 },
+  // Inline action row (flows with the scroll content). Spacing above/below comes
+  // from the ScrollView's gap + paddingBottom, so no borders or sticky insets here.
+  actionBar: { flexDirection: 'row', gap: 8, paddingTop: 4 },
   actionSave: { flex: 1.2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5, borderColor: colors.primary, borderRadius: 10, paddingVertical: 10 },
   actionSaveText: { fontSize: 13, fontWeight: '700', color: colors.primary },
   actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 10, paddingVertical: 10, position: 'relative' },

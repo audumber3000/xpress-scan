@@ -41,6 +41,8 @@ import { transactionsApiService } from '../../../../services/api/transactions.ap
 import { getCurrencySymbol } from '../../../../shared/utils/currency';
 import { showAlert } from '../../../../shared/components/alertService';
 import { todayISO, isValidPastDate, formatDisplayDate } from '../../../../shared/utils/datetime';
+import { useAuth } from '../../../../app/AuthContext';
+import { isManualWhatsApp, sharePdfViaWhatsApp } from '../../../../shared/utils/whatsappShare';
 
 interface InvoiceDetailsScreenProps {
   route: any;
@@ -105,6 +107,7 @@ const TONE: Record<string, { bg: string; border: string; fg: string; sub: string
 
 export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ route, navigation }) => {
   const { invoiceId } = route.params;
+  const { backendUser } = useAuth();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [invoice, setInvoice] = useState<any>(null);
@@ -135,8 +138,20 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
     if (!invoice?.id || busy) return;
     setBusy(true);
     try {
-      await transactionsApiService.sendInvoiceViaWhatsApp(invoice.id);
-      toast.success('Invoice sent via WhatsApp');
+      // Own-number clinics: open the share sheet with the invoice/receipt PDF so
+      // it's sent from the clinic's own WhatsApp. Others: automated backend send.
+      if (isManualWhatsApp(backendUser)) {
+        const clinicName = backendUser?.clinic?.name || 'our clinic';
+        const result = await sharePdfViaWhatsApp(
+          `/invoices/${invoice.id}/pdf`,
+          `invoice_${invoice.id}.pdf`,
+          { phone: invoice.patient_phone, message: `Hello, here is your invoice from ${clinicName}. Thank you!` },
+        );
+        if (result === 'unavailable') toast.error('Patient phone number is required to share on WhatsApp');
+      } else {
+        await transactionsApiService.sendInvoiceViaWhatsApp(invoice.id);
+        toast.success('Invoice sent via WhatsApp');
+      }
     } catch (error: any) {
       const msg = (error?.message || '').toLowerCase();
       toast.error(msg.includes('phone') ? 'Patient phone number is required to send via WhatsApp' : (error?.message || 'Failed to send invoice'));
@@ -156,8 +171,18 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
     try {
       await transactionsApiService.finalizeInvoice(invoice.id);
       try {
-        await transactionsApiService.sendInvoiceViaWhatsApp(invoice.id);
-        toast.success('Finalised and sent via WhatsApp');
+        if (isManualWhatsApp(backendUser)) {
+          const clinicName = backendUser?.clinic?.name || 'our clinic';
+          await sharePdfViaWhatsApp(
+            `/invoices/${invoice.id}/pdf`,
+            `invoice_${invoice.id}.pdf`,
+            { phone: invoice.patient_phone, message: `Hello, here is your invoice from ${clinicName}. Thank you!` },
+          );
+          toast.success('Invoice finalised');
+        } else {
+          await transactionsApiService.sendInvoiceViaWhatsApp(invoice.id);
+          toast.success('Finalised and sent via WhatsApp');
+        }
       } catch {
         toast.success('Invoice finalised'); // finalised, but send may need a phone number
       }

@@ -71,7 +71,7 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
                 : titleIcon}
             </View>
           )}
-          <Text style={[styles.headerTitle, { color: txtColor }]}>{title}</Text>
+          <Text style={[styles.headerTitle, { color: txtColor }]} numberOfLines={1}>{title}</Text>
         </View>
         {subtitle && (
           <Text style={[styles.headerSubtitle, variant === 'primary' && { color: 'rgba(255,255,255,0.9)' }]}>
@@ -120,6 +120,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#111827',
+    flexShrink: 1,
   },
   headerSubtitle: {
     fontSize: 12,
