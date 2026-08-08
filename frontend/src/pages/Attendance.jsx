@@ -6,10 +6,12 @@ import AttendanceMarkDrawer from "../components/attendance/AttendanceMarkDrawer"
 import AttendanceEmployeeDrawer from "../components/attendance/AttendanceEmployeeDrawer";
 import { useHeader } from "../contexts/HeaderContext";
 import { api } from "../utils/api";
-import { generateAvatarUrl } from "../utils/avatar";
+import TeamTabs from "../components/team/TeamTabs";
+import TableToolbar from "../components/common/TableToolbar";
+
 import { startOfWeek, endOfWeek, addWeeks, subWeeks, format, eachDayOfInterval } from "date-fns";
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Search } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 const Attendance = () => {
@@ -60,7 +62,10 @@ const Attendance = () => {
         role: emp.role,
         designation: emp.role, // Use role as designation
         phone: emp.phone || "",
-        avatar: emp.avatar || generateAvatarUrl(emp.email || emp.name),
+        // Pass the photo through rather than resolving it here — the grid and
+        // the details panel both call resolveUserAvatar, and baking a generated
+        // URL in at this point would hide a real uploaded one from them.
+        avatar_url: emp.avatar_url || null,
         attendance: emp.attendance || {}
       }));
       
@@ -161,43 +166,16 @@ const Attendance = () => {
   }, [employees, searchQuery]);
 
   return (
-    <div className="flex flex-col h-full bg-transparent overflow-y-auto custom-scrollbar p-6 lg:p-8 pb-10">
-      
-      {/* Header */}
-      <div className="mb-6 flex justify-between items-end">
-        <div className="flex items-center gap-2 text-sm font-medium text-gray-500">
-          <span>Control Center</span>
-          <span>/</span>
-          <span className="text-gray-900">Attendance</span>
-        </div>
-      </div>
-
-      {/* Team Tabs Header */}
-      <div className="mb-6 border-b border-gray-200">
-        <div className="flex gap-6 -mb-px">
-          <button 
-            onClick={() => navigate('/admin/staff')}
-            className="pb-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-900 transition-colors"
-          >
-            Staff
-          </button>
-          <button 
-            onClick={() => navigate('/admin/permissions')}
-            className="pb-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-900 transition-colors"
-          >
-            Permissions
-          </button>
-          <button 
-            className="pb-3 text-sm font-medium border-b-2 border-[#29828a] text-[#29828a]"
-          >
-            Attendance
-          </button>
-        </div>
-      </div>
+    <TeamTabs active="attendance">
+      <TableToolbar
+        search={searchQuery}
+        onSearchChange={setSearchQuery}
+        placeholder="Search employees..."
+      />
 
       <>
-        <div className="flex-1 flex flex-col overflow-hidden bg-white rounded-xl shadow-sm border border-gray-100 p-2">
-        {/* Attendance Header (Date Selector & Legend) */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        {/* Week picker + legend */}
         <AttendanceHeader
           currentWeekStart={currentWeekStart}
           onPreviousWeek={handlePreviousWeek}
@@ -206,27 +184,13 @@ const Attendance = () => {
           overallStats={statistics}
         />
 
-        {/* Search Bar */}
-        <div className="px-6 pt-4">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search employees..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-gray-100 border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2D9596]"
-            />
-          </div>
-        </div>
-
         {/* Attendance Grid */}
         <div className="flex-1 overflow-hidden">
           <div className="h-full overflow-auto">
             {loading ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2a276e] mx-auto"></div>
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#29828a] mx-auto"></div>
                   <p className="mt-4 text-gray-600">Loading attendance data...</p>
                 </div>
               </div>
@@ -264,7 +228,7 @@ const Attendance = () => {
         )}
         </div>
       </>
-    </div>
+    </TeamTabs>
   );
 };
 

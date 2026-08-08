@@ -91,6 +91,31 @@ class AuthService(AuthServiceProtocol):
         except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
             return None
 
+    @staticmethod
+    def device_block_reason(device: UserDevice, device_type: str) -> Optional[str]:
+        """Why this device may not sign in, or None when it may.
+
+        Two independent controls, both managed from Control Center → Security →
+        Devices:
+          - is_active=False → the device was revoked outright
+          - allowed_access  → that platform (desktop/mobile/web) was switched off
+
+        Call this on every login path. Until it existed, `is_active` was enforced
+        nowhere and `allowed_access` only on mobile, so revoking a device from the
+        API changed nothing for web or desktop sign-ins.
+
+        NOTE: this gates sign-in only. Tokens are not device-bound, so a session
+        that is already signed in keeps working until its token expires.
+        """
+        if device is None:
+            return None
+        if not device.is_active:
+            return "This device has been blocked by your clinic. Contact your clinic owner to restore access."
+        allowed = device.allowed_access or {"desktop": True, "mobile": True, "web": True}
+        if not allowed.get(device_type, True):
+            return f"Access from {device_type} devices is not allowed for this account."
+        return None
+
     def register_device(self, user_id: int, device_info: Dict[str, Any]) -> UserDevice:
         """Register or update device for user"""
         # Check if device already exists

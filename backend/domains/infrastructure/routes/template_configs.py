@@ -1,7 +1,7 @@
 import io
 import time
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 from database import get_db
 from models import TemplateConfiguration, Clinic
 from core.auth_utils import get_current_user
@@ -23,14 +23,42 @@ _LOGO_TARGET_DIMENSION = 600        # downscale on the server: logos render at ~
 _LOGO_ALLOWED_FORMATS = {"PNG", "JPEG"}
 _LOGO_ALLOWED_CATEGORIES = {"invoice", "prescription", "consent"}
 
+def _with_fresh_logo_url(config):
+    """Hand back a config whose logo_url is a link that actually works today.
+
+    What's stored is a presigned R2 URL, and a presigned URL expires — seven
+    days by default. The object outlives its link, so any read that returns the
+    stored string verbatim is handing the browser a URL that 403s once that week
+    is up (which is exactly how the admin's logo preview went blank). Re-signing
+    on read keeps the stored value untouched while the client always gets a live
+    one. PDF rendering doesn't come through here — it reads the object by key,
+    see pdf_branding.resolve_logo_data_uri.
+    """
+    if not config or not getattr(config, 'logo_url', None):
+        return config
+    stored = config.logo_url
+    if stored.startswith('data:'):
+        return config
+    fresh = get_presigned_url(stored)
+    if fresh and fresh != stored:
+        # Detached from the session so re-signing can never be flushed back to
+        # the DB as if the admin had saved a new URL.
+        db_state = object_session(config)
+        if db_state is not None:
+            db_state.expunge(config)
+        config.logo_url = fresh
+    return config
+
+
 @router.get("", response_model=List[TemplateConfigResponse])
 def get_template_configs(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    return db.query(TemplateConfiguration).filter(
+    configs = db.query(TemplateConfiguration).filter(
         TemplateConfiguration.clinic_id == current_user.clinic_id
     ).all()
+    return [_with_fresh_logo_url(c) for c in configs]
 
 @router.post("", response_model=TemplateConfigResponse)
 def upsert_template_config(
@@ -45,10 +73,16 @@ def upsert_template_config(
     ).first()
     
     if existing:
-        existing.template_id = config_in.template_id
-        existing.logo_url = config_in.logo_url
-        existing.primary_color = config_in.primary_color
-        existing.footer_text = config_in.footer_text
+        # Only the fields the caller actually sent. Assigning every field
+        # unconditionally is what made `config_json` and `secondary_color`
+        # unsavable, and a blanket overwrite would be worse now that the field
+        # toggles live in config_json: the mobile app never sends that key, so
+        # a save from the phone would wipe every toggle set on the web.
+        patch = config_in.model_dump(exclude_unset=True)
+        for field in ('template_id', 'logo_url', 'primary_color',
+                      'secondary_color', 'footer_text', 'config_json'):
+            if field in patch:
+                setattr(existing, field, patch[field])
         db.commit()
         db.refresh(existing)
         return existing
@@ -81,7 +115,7 @@ def get_category_config(
             template_id="default",
             clinic_id=current_user.clinic_id
         )
-    return config
+    return _with_fresh_logo_url(config)
 
 
 @router.get("/variants/{category}")
@@ -114,7 +148,7 @@ def preview_template(
     Body: { category, template_id?, primary_color?, footer_text?, logo_url? }
     """
     from domains.infrastructure.services.preview_samples import (
-        config_from_payload, sample_clinic, sample_consent, sample_invoice,
+        config_from_payload, preview_clinic, sample_consent, sample_invoice,
         sample_patient, sample_prescription_request,
     )
     from core.dtos import _validate_logo_url  # reuse the save-time validator
@@ -146,7 +180,12 @@ def preview_template(
         raise HTTPException(status_code=400, detail="footer_text too long")
 
     config = config_from_payload(payload)
-    clinic = sample_clinic()
+    # The real clinic's letterhead — the visibility toggles govern these very
+    # fields, so a fixture here would let the preview show a licence number or
+    # tagline the clinic has never filled in.
+    clinic = preview_clinic(
+        db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+    )
 
     if category == "invoice":
         from domains.finance.invoice_pdf_engine import generate_invoice_html

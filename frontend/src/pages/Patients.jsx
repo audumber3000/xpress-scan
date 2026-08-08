@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { api, getPermissionAwareErrorMessage, getFriendlyErrorMessage } from "../utils/api";
 import { toast } from 'react-toastify';
 import { FaEye, FaEdit, FaTrash, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
-import { Search, Plus, User, Users, Folder, X, Edit2, Trash2, UploadCloud, UserPlus, CheckCircle2 } from "lucide-react";
+import { Search, Plus, User, Users, Folder, X, Edit2, Trash2, UploadCloud, UserPlus, CheckCircle2, Download } from "lucide-react";
 import { isValidPhone } from "../utils/validators";
 import GearLoader from "../components/GearLoader";
 import { SkeletonTableRows } from "../components/Skeleton";
 import Pagination from "../components/Pagination";
-import FilterDropdown from "../components/FilterDropdown";
+import FilterPanel from "../components/FilterPanel";
 import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
 import ImportPatientsModal from "../components/patient/ImportPatientsModal";
 import EmptyState from "../components/common/EmptyState";
@@ -37,10 +37,14 @@ const Patients = () => {
   const location = useLocation();
 
   // Tabs state
-  // 'today' | 'list' | 'files' | 'birthdays'. The daily register leads, the way
-  // Payments opens on Today's Collection — it's the screen the front desk lives on.
-  const [activeTab, setActiveTab] = useState('today');
+  // 'today' | 'list' | 'files' | 'birthdays'. Opens on the full patient list:
+  // most trips to this screen are to find a specific person, and the daily
+  // register is one click away for the front desk that wants it.
+  const [activeTab, setActiveTab] = useState('list');
   
+  // Monotonic id for the newest patients request, so a slow stale response
+  // can't overwrite a newer one. See fetchPatients.
+  const patientsRequestIdRef = useRef(0);
   // Data states. `patients` now holds ONE server page, not the whole clinic.
   const [patients, setPatients] = useState([]);
   const [totalCount, setTotalCount] = useState(0);     // matches current search/filters
@@ -50,9 +54,61 @@ const Patients = () => {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
 
-  // Filter states
+  // Filter states — all live in one unified FilterPanel (like All Payments).
   const [filterTreatment, setFilterTreatment] = useState('');
   const [filterGender, setFilterGender] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [datePreset, setDatePreset] = useState('');
+  const [exporting, setExporting] = useState(false);
+
+  // Applied together by the FilterPanel's Apply button.
+  const applyPatientFilters = (next) => {
+    setFilterGender(next.gender || '');
+    setFilterTreatment(next.treatment_type || '');
+    setDateFrom(next.dateFrom || '');
+    setDateTo(next.dateTo || '');
+    setDatePreset(next.preset || '');
+    setPage(1);
+  };
+
+  const patientFilterValue = {
+    dateFrom, dateTo, preset: datePreset,
+    gender: filterGender, treatment_type: filterTreatment,
+  };
+
+  // Export the current filtered list to CSV (respects search + all filters).
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      const params = new URLSearchParams();
+      if (debouncedSearch.trim().length >= 2) params.set('search', debouncedSearch.trim());
+      if (filterGender) params.set('gender', filterGender);
+      if (filterTreatment) params.set('treatment_type', filterTreatment);
+      if (dateFrom) params.set('date_from', dateFrom);
+      if (dateTo) params.set('date_to', dateTo);
+      const baseURL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      const res = await fetch(`${baseURL}/api/v1/patients/export?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
+      });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `patients_${clinicToday()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Patients exported');
+    } catch (e) {
+      console.error('Export error:', e);
+      toast.error('Failed to export patients');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // Edit/Create states
   const [editDrawerOpen, setEditDrawerOpen] = useState(false);
@@ -98,8 +154,8 @@ const Patients = () => {
     const tab = params.get('tab');
     if (tab === 'files') setActiveTab('files');
     else if (tab === 'birthdays') setActiveTab('birthdays');
-    else if (tab === 'list') setActiveTab('list');
-    else setActiveTab('today');
+    else if (tab === 'today') setActiveTab('today');
+    else setActiveTab('list');
   }, [location.search]);
 
   const fetchBirthdays = async () => {
@@ -149,6 +205,11 @@ const Patients = () => {
   // filters run against the whole clinic, not a preloaded slice — so a clinic
   // with thousands of patients loads fast and search finds everyone.
   const fetchPatients = useCallback(async () => {
+    // Debouncing does not stop a slow earlier response landing after a newer
+    // one — type "sha" then "sharm", and if "sha" is slower it overwrites the
+    // correct list with no error shown. Every response checks it is still the
+    // newest before writing state.
+    const reqId = ++patientsRequestIdRef.current;
     try {
       setLoading(true);
       const filters = {};
@@ -156,20 +217,24 @@ const Patients = () => {
       if (debouncedSearch.trim().length >= 2) filters.search = debouncedSearch.trim();
       if (filterGender) filters.gender = filterGender;
       if (filterTreatment) filters.treatment_type = filterTreatment;
+      if (dateFrom) filters.date_from = dateFrom;
+      if (dateTo) filters.date_to = dateTo;
 
       const [list, countRes] = await Promise.all([
         api.get("/patients/", { params: { skip: (page - 1) * PATIENTS_PER_PAGE, limit: PATIENTS_PER_PAGE, ...filters } }),
         api.get("/patients/count", { params: filters }),
       ]);
+      if (reqId !== patientsRequestIdRef.current) return;  // superseded
       setPatients(Array.isArray(list) ? list : []);
       const count = Number(countRes?.total) || 0;
       setTotalCount(count);
       // On the unfiltered view this count IS the clinic total — capture it for
       // the header stat so it stays steady while searching (no extra request).
-      if (!filters.search && !filters.gender && !filters.treatment_type) {
+      if (!filters.search && !filters.gender && !filters.treatment_type && !filters.date_from && !filters.date_to) {
         setTotalPatients(count);
       }
     } catch (e) {
+      if (reqId !== patientsRequestIdRef.current) return;
       console.error("Error fetching patients:", e);
       toast.error(getPermissionAwareErrorMessage(
         e,
@@ -179,9 +244,11 @@ const Patients = () => {
       setPatients([]);
       setTotalCount(0);
     } finally {
-      setLoading(false);
+      // Only the newest request owns the spinner, or a stale one clears it
+      // while the current search is still in flight.
+      if (reqId === patientsRequestIdRef.current) setLoading(false);
     }
-  }, [page, debouncedSearch, filterGender, filterTreatment]);
+  }, [page, debouncedSearch, filterGender, filterTreatment, dateFrom, dateTo]);
 
   useEffect(() => {
     setTitle(
@@ -214,7 +281,7 @@ const Patients = () => {
 
   // The server already returned exactly this page, filtered and searched.
   const paginatedData = patients;
-  const isFiltered = debouncedSearch.trim().length >= 2 || !!filterGender || !!filterTreatment;
+  const isFiltered = debouncedSearch.trim().length >= 2 || !!filterGender || !!filterTreatment || !!dateFrom || !!dateTo;
 
   // "Just added" highlight: patients created in the last few seconds get a New
   // badge + tinted row, then fade on their own — brief, so it reads as "just now".
@@ -633,24 +700,28 @@ const Patients = () => {
             />
           </div>
           {activeTab === 'list' && (
-            <>
-              <FilterDropdown
-                label="Treatment"
-                value={filterTreatment}
-                onChange={(v) => { setFilterTreatment(v); setPage(1); }}
-                options={uniqueTreatmentTypes}
-              />
-              <FilterDropdown
-                label="Gender"
-                value={filterGender}
-                onChange={(v) => { setFilterGender(v); setPage(1); }}
-                options={['Male', 'Female', 'Other']}
-              />
-            </>
+            <FilterPanel
+              value={patientFilterValue}
+              onApply={applyPatientFilters}
+              dateLabel="Registered"
+              filters={[
+                { key: 'gender', label: 'Gender', options: ['Male', 'Female', 'Other'] },
+                { key: 'treatment_type', label: 'Treatment', options: uniqueTreatmentTypes },
+              ]}
+            />
           )}
         </div>
-        
+
         <div className="flex items-center gap-3">
+          {activeTab === 'list' && (
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-50 transition-all shadow-sm whitespace-nowrap disabled:opacity-50"
+            >
+              <Download size={18} className="text-[#2a276e]" /> {exporting ? 'Exporting…' : 'Export'}
+            </button>
+          )}
           <button
             onClick={() => setShowImportModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-50 transition-all shadow-sm whitespace-nowrap"

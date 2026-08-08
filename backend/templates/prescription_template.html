@@ -184,7 +184,7 @@
                 <div style="margin-right:20px;flex-shrink:0;">{{logo_html}}</div>
                 <div class="clinic-info-left">
                     <h1>{{clinic_name}}</h1>
-                    <div class="tagline">{{clinic_tagline}}</div>
+                    {{clinic_tagline_html}}
                 </div>
             </div>
             <div class="clinic-info-right">
@@ -241,11 +241,7 @@
         <!-- FOOTER -->
         <div class="footer">
             <div class="follow-up">{{follow_up_html}}</div>
-            <div class="signature-box">
-                {{signature_image_html}}
-                <div class="signature-line">{{doctor_signature_label}}</div>
-                <p style="margin:5px 0 0 0;color:var(--text-muted);font-weight:bold;">{{clinic_name}}</p>
-            </div>
+            {{signature_box_html}}
         </div>
 
         {{footer_text_html}}

@@ -12,6 +12,7 @@ import {
   WelcomeHeaderStats
 } from './components/WelcomeHeader';
 import { MetricChartCard } from '../../../../../shared/components/home/MetricChartCard';
+import { resolveUserPhoto } from '../../../../../shared/utils/avatar';
 import { getCurrencySymbol } from '../../../../../shared/utils/currency';
 import { ErrorBanner } from './components/ErrorBanner';
 import { GetStartedChecklist } from './components/GetStartedChecklist';
@@ -356,7 +357,7 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
           trialDaysRemaining={backendUser?.clinic?.trial_days_remaining}
           onUpgradePress={() => navigation.navigate('Purchase')}
           onPlanPress={() => navigation.navigate('Subscription')}
-          photoURL={user?.photoURL}
+          photoURL={resolveUserPhoto(backendUser, user)}
           avatarSeed={user?.email || backendUser?.email}
           onAddInvoice={goToInvoice}
           onAddPatient={goToPatient}

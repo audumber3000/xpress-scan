@@ -11,8 +11,10 @@ strings (color / footer / logo URL / signature data URI).
 from datetime import datetime
 
 from domains.infrastructure.services.pdf_safety import (
-    safe_color, safe_signature_data_uri, safe_text, safe_url,
+    safe_color, safe_signature_data_uri, safe_text,
 )
+from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
+from domains.infrastructure.services.pdf_fields import resolve_field_visibility
 
 
 def render_consent(clinic, patient_name, patient_id, template_name,
@@ -26,26 +28,20 @@ def render_consent(clinic, patient_name, patient_id, template_name,
         or getattr(clinic, 'primary_color', None),
         default='#1a2a6c',
     )
+    # Flags default to shown and can only hide — see pdf_fields.
+    vis = resolve_field_visibility(config)
+
     footer_text = safe_text(
         (config.footer_text if config and config.footer_text else '') if config else ''
-    )
+    ) if vis.footer else ''
 
-    raw_logo_url = (config.logo_url if config and config.logo_url else None) if config else None
-    raw_logo_url = raw_logo_url or getattr(clinic, 'logo_url', None)
-    logo_url = safe_url(raw_logo_url)
-    
-    if logo_url:
-        try:
-            import requests, base64
-            resp = requests.get(logo_url, timeout=5)
-            if resp.status_code == 200:
-                b64 = base64.b64encode(resp.content).decode('utf-8')
-                ct = resp.headers.get('content-type', 'image/png')
-                logo_url = f"data:{ct};base64,{b64}"
-            else:
-                logo_url = None
-        except Exception:
-            logo_url = None
+    # Was an unauthenticated requests.get on the stored URL, which had been
+    # returning 403 ever since that presigned link expired. Resolved by key with
+    # our own credentials instead. See pdf_branding.resolve_logo_data_uri.
+    logo_url = resolve_logo_data_uri(
+        (config.logo_url if config else None),
+        getattr(clinic, 'logo_url', None),
+    )
 
     if logo_url:
         logo_html = f'<img src="{logo_url}" alt="Logo" style="width:75px;height:75px;object-fit:contain;">'
@@ -59,14 +55,24 @@ def render_consent(clinic, patient_name, patient_id, template_name,
 
     # ── Clinic fields ───────────────────────────────────────────────────────
     c_name    = safe_text(clinic.name    if clinic else 'Dental Clinic')
-    c_tagline = safe_text(getattr(clinic, 'tagline', '') or '')
-    c_address = safe_text(getattr(clinic, 'address', '') or '')
-    c_phone   = safe_text(getattr(clinic, 'phone',   '') or '')
-    c_email   = safe_text(getattr(clinic, 'email',   '') or '')
-    c_reg     = safe_text(getattr(clinic, 'reg_number', '') or '')
+    c_tagline = safe_text((getattr(clinic, 'tagline', '') or '') if vis.tagline else '')
+    c_address = safe_text((getattr(clinic, 'address', '') or '') if vis.address else '')
+    c_phone   = safe_text((getattr(clinic, 'phone',   '') or '') if vis.contact else '')
+    c_email   = safe_text((getattr(clinic, 'email',   '') or '') if vis.contact else '')
+    c_reg     = safe_text((getattr(clinic, 'license_number', '') or '') if vis.license_number else '')
     c_doctor  = safe_text(getattr(clinic, 'doctor_name', '') or '')
 
     reg_line = f'<p>Reg No: {c_reg}</p>' if c_reg else ''
+
+    # The clinic's countersignature line. Deliberately NOT the patient's
+    # signature block above — that one is the whole point of the document and
+    # is not something a display setting may remove.
+    signature_box = (
+        f'''<div class="signature-box">
+        <div class="signature-line">{c_doctor or 'Authorized Signatory'}</div>
+        <p style="margin:5px 0 0 0;color:var(--text-muted);font-weight:bold;">{c_name}</p>
+      </div>''' if vis.signature else ''
+    )
 
     # ── Signature image (Phase 0: validate before embedding) ────────────────
     sig_img_html = ''
@@ -292,10 +298,7 @@ body {{
           <li>This is a digitally signed document and is legally valid under the IT Act, 2000.</li>
         </ul>
       </div>
-      <div class="signature-box">
-        <div class="signature-line">{c_doctor or 'Authorized Signatory'}</div>
-        <p style="margin:5px 0 0 0;color:var(--text-muted);font-weight:bold;">{c_name}</p>
-      </div>
+      {signature_box}
     </div>
     <div class="color-strip"></div>
   </div>

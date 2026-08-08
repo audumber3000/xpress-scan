@@ -1234,8 +1234,11 @@ const Settings = () => {
     );
   };
 
+  // No z-index on this shell: `relative z-0` made it a stacking context at 0,
+  // so any drawer inside Settings resolved its z-50 within that box and painted
+  // beneath the app header (z-30) — the same trap that hit the Control Center.
   return (
-    <div className="flex h-[calc(100vh-50px)] w-full bg-[#f8fafc] overflow-hidden -m-6 animate-fade-in rounded-xl border border-gray-200 shadow-sm relative z-0">
+    <div className="flex h-[calc(100vh-50px)] w-full bg-[#f8fafc] overflow-hidden -m-6 animate-fade-in rounded-xl border border-gray-200 relative">
       {/* Secondary Sidebar Navigation */}
       <div className="w-72 bg-white/60 backdrop-blur-xl border-r border-gray-200/60 flex flex-col h-full shrink-0 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.1)] z-10 relative">
         <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent pointer-events-none"></div>
@@ -1269,7 +1272,7 @@ const Settings = () => {
       <div className="flex-1 flex flex-col h-full overflow-hidden relative">
         {/* Subtle background pattern */}
         <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#2a276e 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
-        <div className="flex-1 overflow-y-auto p-8 md:p-10 xl:p-12 custom-scrollbar relative z-10">
+        <div className="flex-1 overflow-y-auto p-8 md:p-10 xl:p-12 custom-scrollbar relative">
           <div className="max-w-6xl mx-auto min-h-full">
             <div className="mb-8">
               <h1 className="text-3xl font-bold text-gray-900 tracking-tight capitalize">
@@ -1332,8 +1335,6 @@ const Settings = () => {
                         loadingUserDevices={loadingUserDevices}
                         onUserClick={handleUserClick}
                         getUserInitials={getUserInitials}
-                        formatDate={formatDate}
-                        formatLastSeen={formatLastSeen}
                         getDeviceIcon={getDeviceIcon}
                       />
                     </div>

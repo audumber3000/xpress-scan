@@ -1,5 +1,7 @@
 import React from 'react';
 import { Beaker, ClipboardList, ExternalLink } from 'lucide-react';
+import EmptyState from '../common/EmptyState';
+import { noData } from '../../assets/illustrations';
 
 // Invoice status chip shown when a lab order is on a bill.
 const INV_STATUS = {
@@ -91,9 +93,13 @@ const DiagnosticsGrid = ({
               </tbody>
             </table>
           ) : (
-            <div className="p-8 text-center bg-gray-50">
-              <p className="text-sm text-gray-500">No lab work recorded</p>
-            </div>
+            <EmptyState
+              image={noData}
+              size="sm"
+              title="No lab work recorded"
+              subtitle="Crowns, dentures and other lab orders for this visit appear here."
+              className="bg-gray-50"
+            />
           )}
         </div>
       </div>

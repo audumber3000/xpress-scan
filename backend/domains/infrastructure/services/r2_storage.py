@@ -67,33 +67,59 @@ def get_r2_path(clinic_id: int, patient_id: Optional[int] = None, category: str 
             
     return f"{base}/{filename}" if filename else base
 
+def extract_r2_key(key_or_url: str) -> Optional[str]:
+    """The bucket-relative object key behind a stored value.
+
+    Accepts a bare key, a full R2 API URL (with or without an expired signature
+    on the query string), or a public-URL form. Returns None when the value
+    isn't an R2 reference at all. Signed URLs are the common case: what gets
+    stored is a presigned link whose signature dies long before the object
+    does, so the key is the only durable part of it.
+    """
+    if not key_or_url or not isinstance(key_or_url, str):
+        return None
+
+    bucket_name = os.getenv("R2_BUCKET_NAME")
+    r2_public_url = os.getenv("R2_PUBLIC_URL")
+
+    key = key_or_url
+    if r2_public_url and key.startswith(r2_public_url):
+        key = key[len(r2_public_url):].lstrip('/')
+    elif "://" in key:
+        if "cloudflarestorage.com" not in key:
+            return None
+        parsed = urllib.parse.urlparse(key)
+        # Path is /bucket/key/path/to/file; the query holds the signature, which
+        # urlparse already keeps out of `path`.
+        path_parts = parsed.path.lstrip('/').split('/')
+        if len(path_parts) < 2:
+            return None
+        key = "/".join(path_parts[1:])
+
+    # If bucket name is already in the key (legacy), remove it
+    if bucket_name and key.startswith(f"{bucket_name}/"):
+        key = key[len(bucket_name) + 1:]
+
+    key = urllib.parse.unquote(key)
+    return key or None
+
+
 def get_presigned_url(key_or_url: str, expires_in: int = 604800) -> Optional[str]:
     """Generate a presigned GET URL for an R2 object (key or full API URL)"""
     if not key_or_url: return None
-    
+
     try:
         client = _get_r2_client()
         if not client: return key_or_url
-        
+
         bucket_name = os.getenv("R2_BUCKET_NAME")
         r2_public_url = os.getenv("R2_PUBLIC_URL")
-        
+
         # If it's already a public URL, just return it
         if r2_public_url and key_or_url.startswith(r2_public_url):
             return key_or_url
-            
-        # Extract key if it's a full R2 API URL
-        key = key_or_url
-        if "cloudflarestorage.com" in key_or_url:
-            parsed = urllib.parse.urlparse(key_or_url)
-            path_parts = parsed.path.lstrip('/').split('/')
-            if len(path_parts) > 1:
-                # Format: /bucket/key/path/to/file
-                key = "/".join(path_parts[1:])
-        
-        # If bucket name is already in the key (legacy), remove it
-        if bucket_name and key.startswith(f"{bucket_name}/"):
-            key = key[len(bucket_name)+1:]
+
+        key = extract_r2_key(key_or_url) or key_or_url
 
         if r2_public_url:
             return f"{r2_public_url.rstrip('/')}/{key}"

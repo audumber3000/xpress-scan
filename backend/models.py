@@ -47,6 +47,11 @@ class Clinic(Base):
     id = Column(Integer, primary_key=True, index=True)
     clinic_code = Column(String(14), unique=True, nullable=True, index=True, default=generate_clinic_code)  # e.g. CLN-A3X9K2B7FQ
     name = Column(String, nullable=False)
+    # Printed under the clinic name on letterheads. Until now the renderers
+    # asked for this with getattr and a hardcoded default, so every clinic's
+    # documents said "Comprehensive Dental & Orthodontic Care" whether that was
+    # true or not. Real column, blank by default, clinic types its own.
+    tagline = Column(String(120), nullable=True)
     address = Column(String)
     phone = Column(String)
     # True once the default medication catalogue has been copied into this clinic
@@ -66,6 +71,13 @@ class Clinic(Base):
     # one reused web tab) with a prefilled message instead of auto-sending via
     # the MolarPlus/MSG91 number — so the clinic sends from their own number.
     manual_whatsapp = Column(Boolean, default=False)
+    # Security contact — a phone + email for account recovery and sensitive
+    # actions, each verified via OTP (Control Center → Security). Kept separate
+    # from the public phone/email above.
+    security_phone = Column(String, nullable=True)
+    security_email = Column(String, nullable=True)
+    security_phone_verified = Column(Boolean, default=False)
+    security_email_verified = Column(Boolean, default=False)
     number_of_chairs = Column(Integer, default=1)  # Number of dental chairs
     timings = Column(JSON, default=lambda: {
         'monday': {'open': '08:00', 'close': '20:00', 'closed': False},
@@ -531,6 +543,7 @@ class Invoice(Base):
     discount = Column(Float, default=0.0)
     discount_type = Column(String, default='amount')  # 'amount' or 'percentage'
     discount_amount = Column(Float, default=0.0)  # The finalized deduction value
+    applied_offer_id = Column(Integer, ForeignKey('offers.id'), nullable=True)  # which Offer set this discount (for the label on the bill)
     total = Column(Float, default=0.0)
     notes = Column(Text, nullable=True)
     created_by = Column(Integer, ForeignKey('users.id'), nullable=True)
@@ -548,6 +561,7 @@ class Invoice(Base):
     patient = relationship("Patient")
     creator = relationship("User", foreign_keys=[created_by])
     appointment = relationship("Appointment")
+    applied_offer = relationship("Offer", foreign_keys=[applied_offer_id])
     line_items = relationship("InvoiceLineItem", back_populates="invoice", cascade="all, delete-orphan")
     audit_logs = relationship("InvoiceAuditLog", back_populates="invoice", cascade="all, delete-orphan")
     payments = relationship("InvoicePayment", back_populates="invoice", cascade="all, delete-orphan")
@@ -567,6 +581,16 @@ class InvoicePayment(Base):
     method = Column(String, nullable=True)         # Cash, UPI, Card, ...
     note = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    # ── Receipt for this installment ────────────────────────────────────────
+    # The PDF itself is rendered on demand and never stored: rendering is
+    # deterministic, so a saved blob would only add storage and a stale copy the
+    # moment a later correction moves the invoice total. What must survive is the
+    # identity and the arithmetic of the moment the money was taken — a reprint
+    # has to carry the same number and the same figures the patient was given.
+    receipt_number = Column(String, nullable=True, index=True)   # RCP-YYYY-####
+    receipt_paid_to_date = Column(Float, nullable=True)  # total paid incl. this one, frozen
+    receipt_balance_due = Column(Float, nullable=True)   # balance right after this one, frozen
 
     invoice = relationship("Invoice", back_populates="payments")
 
@@ -594,6 +618,46 @@ class InvoiceDiscount(Base):
 
     invoice = relationship("Invoice", back_populates="post_issue_discounts")
     user = relationship("User")
+
+
+class Offer(Base):
+    """A reusable, clinic-defined discount offer that staff apply to an invoice
+    (whole-invoice). Distinct from InvoiceDiscount (a one-off post-issue
+    concession) and from subscription coupons. Applying an offer simply sets the
+    invoice's discount + discount_type, so it flows through the normal totals
+    math — this table is just the catalogue managed in Control Center → Offers."""
+    __tablename__ = 'offers'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    code = Column(String, nullable=True)                       # optional short code
+    discount_type = Column(String, nullable=False, default='percentage')  # 'amount' | 'percentage'
+    value = Column(Float, nullable=False, default=0.0)         # percent, or flat currency amount
+    valid_from = Column(Date, nullable=True)
+    valid_to = Column(Date, nullable=True)
+    min_invoice_amount = Column(Float, nullable=True)          # only applies at/above this subtotal
+    is_active = Column(Boolean, default=True)
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    clinic = relationship("Clinic")
+
+
+class OtpVerification(Base):
+    """Short-lived OTP challenge for verifying a clinic's security phone/email.
+    Codes are stored hashed with a short expiry and an attempt cap; the send
+    endpoint keeps only one active (unconsumed) row per (clinic, channel, target)."""
+    __tablename__ = 'otp_verifications'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    channel = Column(String, nullable=False)      # 'whatsapp' | 'email'
+    target = Column(String, nullable=False)        # the phone or email being verified
+    code_hash = Column(String, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    attempts = Column(Integer, default=0)
+    consumed = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 
 class InvoiceLineItem(Base):
@@ -1045,6 +1109,43 @@ class ActivityLog(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     clinic = relationship("Clinic")
+
+
+class AuditLog(Base):
+    """Who changed what, from where.
+
+    Distinct from ActivityLog, which is a 10-row FIFO feed for the dashboard's
+    "recent activity" card and is trimmed constantly. This one is the record you
+    consult when money or a patient record went missing: append-only, keeps the
+    actor's name as a snapshot (the staff member may since have been deleted),
+    and captures the device and IP the action came from.
+
+    Only consequential actions are recorded — deletions, money edits, permission
+    and clinic-setting changes. Logging every read would bury the one row that
+    matters.
+    """
+    __tablename__ = 'audit_logs'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    # Snapshotted, not joined: a deleted staff member must not erase the record
+    # of what they did.
+    actor_name = Column(String, nullable=True)
+    actor_role = Column(String, nullable=True)
+
+    action = Column(String, nullable=False, index=True)   # e.g. 'patient.deleted'
+    summary = Column(String, nullable=False)              # human-readable line
+    entity_type = Column(String, nullable=True)           # 'patient' | 'invoice' | ...
+    entity_id = Column(Integer, nullable=True)
+
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+
+    clinic = relationship("Clinic")
+    user = relationship("User")
 
 
 class GooglePlaceLink(Base):

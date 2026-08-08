@@ -284,10 +284,13 @@ async def login_user(
                 detail="Invalid credentials"
             )
 
-        # Register device if device info provided
+        # Register device if device info provided, then honour its access rules.
         if login_data.device:
             device_info = auth_service.detect_device_info(request, login_data.device)
-            auth_service.register_device(user.id, device_info)
+            device = auth_service.register_device(user.id, device_info)
+            blocked = auth_service.device_block_reason(device, device_info["device_type"])
+            if blocked:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=blocked)
 
         token = auth_service.create_jwt_token(user.id)
         
@@ -347,7 +350,10 @@ async def oauth_login(
 
         if oauth_data.device:
             device_info = auth_service.detect_device_info(request, oauth_data.device.dict() if hasattr(oauth_data.device, 'dict') else oauth_data.device)
-            auth_service.register_device(user.id, device_info)
+            device = auth_service.register_device(user.id, device_info)
+            blocked = auth_service.device_block_reason(device, device_info["device_type"])
+            if blocked:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=blocked)
 
         # Load clinics for the user
         user_clinics_list = (
@@ -433,7 +439,10 @@ async def oauth_code_login(
                 request,
                 oauth_data.device if isinstance(oauth_data.device, dict) else oauth_data.device.dict(),
             )
-            auth_service.register_device(user.id, device_info)
+            device = auth_service.register_device(user.id, device_info)
+            blocked = auth_service.device_block_reason(device, device_info["device_type"])
+            if blocked:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=blocked)
         token = auth_service.create_jwt_token(user.id)
         
         # Load clinics for the user

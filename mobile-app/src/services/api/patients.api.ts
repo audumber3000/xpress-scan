@@ -58,13 +58,35 @@ export interface Patient {
   prescriptions?: any[];
 }
 
+export interface GetPatientsOptions {
+  skip?: number;
+  limit?: number;
+  /** Server-side search across the whole clinic, not just the loaded page. */
+  search?: string;
+}
+
 export class PatientsApiService extends BaseApiService {
-  async getPatients(): Promise<Patient[]> {
+  /**
+   * One page of patients.
+   *
+   * The backend caps `limit` at 100 by default (and 1000 max), so callers MUST
+   * page — reading `.length` off a single unpaged call reports 100 for any
+   * clinic with more than that, and silently hides the rest.
+   */
+  async getPatients(opts: GetPatientsOptions = {}): Promise<Patient[]> {
     try {
-      console.log('👥 [API] Fetching patients from:', `${this.baseURL}/patients`);
+      const params = new URLSearchParams();
+      params.set('skip', String(opts.skip ?? 0));
+      params.set('limit', String(opts.limit ?? 100));
+      // The backend rejects a 1-character search (min_length=2).
+      if (opts.search && opts.search.trim().length >= 2) {
+        params.set('search', opts.search.trim());
+      }
+      const url = `${this.baseURL}/patients/?${params.toString()}`;
+      console.log('👥 [API] Fetching patients from:', url);
 
       const headers = await this.getAuthHeaders();
-      const response = await this.fetchWithTimeout(`${this.baseURL}/patients/`, {
+      const response = await this.fetchWithTimeout(url, {
         method: 'GET',
         headers,
       });
@@ -103,6 +125,33 @@ export class PatientsApiService extends BaseApiService {
       console.error('❌ [API] Error fetching patients:', error);
       console.error('❌ [API] Error message:', error.message);
       return [];
+    }
+  }
+
+  /**
+   * Total patients in the clinic matching the same search — the real count,
+   * independent of how many pages have been loaded. Returns null when it can't
+   * be fetched, so callers can fall back to the loaded length rather than
+   * showing a confident zero.
+   */
+  async getPatientsCount(opts: { search?: string } = {}): Promise<number | null> {
+    try {
+      const params = new URLSearchParams();
+      if (opts.search && opts.search.trim().length >= 2) {
+        params.set('search', opts.search.trim());
+      }
+      const qs = params.toString();
+      const headers = await this.getAuthHeaders();
+      const response = await this.fetchWithTimeout(
+        `${this.baseURL}/patients/count${qs ? `?${qs}` : ''}`,
+        { method: 'GET', headers },
+      );
+      if (!response.ok) return null;
+      const data = await response.json();
+      return typeof data?.total === 'number' ? data.total : null;
+    } catch (error: any) {
+      console.error('❌ [API] Error counting patients:', error?.message);
+      return null;
     }
   }
 

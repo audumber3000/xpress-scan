@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
 import {
-  Search, X, Menu, Bell, ChevronRight, Keyboard,
+  Search, X, Menu, Bell, ChevronRight, Keyboard, Headset, Phone, Clock, Mail,
   UserRound, CreditCard, LifeBuoy, LogOut, Settings, BadgeCheck,
   UserPlus, CalendarDays, Pill, Receipt, Trash2,
 } from "lucide-react";
@@ -13,8 +13,10 @@ import {
   ALL_SHORTCUTS, ACTION_HELP, ACTION_SEARCH, matchesCombo, isTypingTarget,
 } from "../utils/shortcuts";
 import { FaSync } from "react-icons/fa";
+import { FaWhatsapp } from "react-icons/fa6";
 import { api } from "../utils/api";
-import { generateAvatarUrl } from "../utils/avatar";
+import { resolveUserAvatar } from "../utils/avatar";
+import { SUPPORT_PHONE, SUPPORT_EMAIL, isSupportOnline, supportResponseTime, supportWhatsAppLink } from "../constants/support";
 import { SkeletonBox } from "./Skeleton";
 import GlobalSearchModal from "./GlobalSearchModal";
 import { useNavigationGuard } from "../contexts/NavigationGuardContext";
@@ -121,6 +123,14 @@ const Header = ({ onOpenMobileSidebar }) => {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showClinicDropdown, setShowClinicDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showSupport, setShowSupport] = useState(false);
+  // Re-checked on a timer, not just at mount: the app stays open all day, and a
+  // dot still claiming "online" at 9:30pm is worse than no dot at all.
+  const [supportOnline, setSupportOnline] = useState(isSupportOnline);
+  useEffect(() => {
+    const id = setInterval(() => setSupportOnline(isSupportOnline()), 60_000);
+    return () => clearInterval(id);
+  }, []);
   const [notifications, setNotifications] = useState([]);
   const [notifLoading, setNotifLoading] = useState(false);
   const [isSwitching, setIsSwitching] = useState(false);
@@ -159,6 +169,7 @@ const Header = ({ onOpenMobileSidebar }) => {
       '/admin/doctors': 'Referring Doctors',
       '/admin/templates-editor': 'Templates Editor',
       '/admin/notifications': 'Notifications',
+      '/admin/security/devices': 'Device Security',
       '/admin/subscription': 'Subscription & Billing',
       '/user-management': 'Settings',
       '/doctor-profile': 'Profile Settings',
@@ -174,6 +185,7 @@ const Header = ({ onOpenMobileSidebar }) => {
 
     if (staticTitles[pathname]) return staticTitles[pathname];
     if (pathname.startsWith('/admin/practice-settings/')) return 'Practice Settings';
+    if (pathname.startsWith('/admin/integrations')) return 'Integrations';
     if (pathname.startsWith('/patient-profile/')) return 'Patient Profile';
     if (pathname.startsWith('/consent/sign/')) return 'Consent Form';
     return '';
@@ -210,10 +222,9 @@ const Header = ({ onOpenMobileSidebar }) => {
   const userName = `${titlePrefix}${userNameRaw}`;
 
   const userEmail = user?.email || "";
-  const userAvatar =
-    user?.user_metadata?.avatar_url ||
-    user?.user_metadata?.picture ||
-    generateAvatarUrl(userEmail || userName);
+  // Prefers the photo the person uploaded on their profile, whatever shape the
+  // sign-in put it in; falls back to the generated avatar.
+  const userAvatar = resolveUserAvatar(user);
 
   // Get role info
   const getRoleInfo = (role) => {
@@ -555,6 +566,98 @@ const Header = ({ onOpenMobileSidebar }) => {
         >
           <Keyboard size={22} />
         </button>
+
+        {/* Support — a headset rather than a question mark: this is a person to
+            talk to, not a help article. */}
+        <div className="relative">
+          <button
+            onClick={() => setShowSupport(!showSupport)}
+            className={`${ICON_BUTTON} relative`}
+            title={supportOnline ? 'Support is online' : 'Support is offline right now'}
+            aria-label={`Contact support — ${supportOnline ? 'online' : 'offline'}`}
+            aria-haspopup="dialog"
+            aria-expanded={showSupport}
+          >
+            <Headset size={20} className="sm:w-[22px] sm:h-[22px]" />
+            <span
+              className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white ${
+                supportOnline ? 'bg-emerald-500' : 'bg-amber-400'
+              }`}
+            />
+          </button>
+
+          {showSupport && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setShowSupport(false)} />
+              <div className="absolute right-0 mt-2 w-[22rem] max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-lg border border-gray-200 z-20 overflow-hidden">
+                <div className="px-5 py-4 border-b border-gray-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-full bg-[#2a276e]/10 text-[#2a276e] flex items-center justify-center shrink-0">
+                      <Headset size={21} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-base font-bold text-gray-900 leading-tight">Talk to support</p>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          supportOnline
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                            : 'bg-amber-50 text-amber-700 border-amber-100'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${supportOnline ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                          {supportOnline ? 'Online' : 'Offline'}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-0.5">
+                        {supportOnline
+                          ? "We're here to help you out."
+                          : 'Leave a message — the team picks it up when they’re back.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="px-5 py-4 space-y-3">
+                  <a
+                    href={`tel:${SUPPORT_PHONE.replace(/\s/g, '')}`}
+                    className="flex items-center gap-3 group"
+                  >
+                    <Phone size={17} className="text-gray-400 shrink-0" />
+                    <span className="text-base font-semibold text-gray-900 group-hover:text-[#2a276e] transition-colors">
+                      {SUPPORT_PHONE}
+                    </span>
+                  </a>
+
+                  <a
+                    href={`mailto:${SUPPORT_EMAIL}`}
+                    className="flex items-center gap-3 text-sm text-gray-600 hover:text-[#2a276e] transition-colors"
+                  >
+                    <Mail size={17} className="text-gray-400 shrink-0" />
+                    {SUPPORT_EMAIL}
+                  </a>
+
+                  {/* Says how long before you'd start wondering, not after. */}
+                  <div className="flex items-center gap-3 text-sm text-gray-500">
+                    <Clock size={17} className="text-gray-400 shrink-0" />
+                    Usually replies in&nbsp;
+                    <span className="font-semibold text-gray-700">{supportResponseTime(supportOnline)}</span>
+                  </div>
+                </div>
+
+                <div className="px-5 pb-5">
+                  <a
+                    href={supportWhatsAppLink(user)}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => setShowSupport(false)}
+                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#25D366] hover:bg-[#1da851] text-white text-base font-semibold transition-colors"
+                  >
+                    <FaWhatsapp size={19} /> Click to chat
+                  </a>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
 
         {/* Activity feed */}
         <button

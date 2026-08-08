@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, FlatList, RefreshControl, ActivityIndicator } from 'react-native';
 import { PatientCard } from './PatientCard';
 import { colors } from '../../../../shared/constants/colors';
 import { AppSkeleton } from '../../../../shared/components/Skeleton';
@@ -25,6 +25,10 @@ interface PatientsListProps {
   refreshing?: boolean;
   onRefresh?: () => void;
   loading?: boolean;
+  /** Fetch the next page — fired when the list nears its end. */
+  onEndReached?: () => void;
+  /** Shows a spinner under the last row while the next page is in flight. */
+  loadingMore?: boolean;
 }
 
 export const PatientsList: React.FC<PatientsListProps> = ({
@@ -36,6 +40,8 @@ export const PatientsList: React.FC<PatientsListProps> = ({
   refreshing = false,
   onRefresh,
   loading = false,
+  onEndReached,
+  loadingMore = false,
 }) => {
   if (!loading && patients.length === 0) {
     return (
@@ -81,6 +87,17 @@ export const PatientsList: React.FC<PatientsListProps> = ({
       }}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.listContent}
+      // Skeleton rows are placeholders, not real data — paging off them would
+      // fire a page fetch during the initial load.
+      onEndReached={loading ? undefined : onEndReached}
+      onEndReachedThreshold={0.4}
+      ListFooterComponent={
+        loadingMore ? (
+          <View style={styles.footerLoader}>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        ) : null
+      }
       refreshControl={
         onRefresh ? (
           <RefreshControl
@@ -98,6 +115,10 @@ export const PatientsList: React.FC<PatientsListProps> = ({
 const styles = StyleSheet.create({
   listContent: {
     paddingBottom: 100,
+  },
+  footerLoader: {
+    paddingVertical: 20,
+    alignItems: 'center',
   },
   emptyContainer: {
     flex: 1,

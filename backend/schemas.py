@@ -336,6 +336,12 @@ class InvoicePaymentOut(BaseModel):
     method: Optional[str] = None
     note: Optional[str] = None
     created_at: Optional[datetime] = None
+    # This installment's receipt: the number the patient quotes back, and the two
+    # running figures frozen when the money was taken. The PDF is rendered on
+    # demand from these, at /invoices/{id}/payments/{payment_id}/receipt.
+    receipt_number: Optional[str] = None
+    receipt_paid_to_date: Optional[float] = None
+    receipt_balance_due: Optional[float] = None
 
     class Config:
         from_attributes = True

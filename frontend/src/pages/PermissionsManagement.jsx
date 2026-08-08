@@ -6,26 +6,15 @@ import { useAuth } from "../contexts/AuthContext";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import GearLoader from "../components/GearLoader";
 import Pagination from "../components/Pagination";
-import { ChevronLeft, X, Shield, ChevronRight, Search } from 'lucide-react';
-import { generateAvatarUrl } from "../utils/avatar";
+import { ChevronLeft, X, Shield, ChevronRight, Lock } from 'lucide-react';
+import { resolveUserAvatar } from "../utils/avatar";
+import TeamTabs from "../components/team/TeamTabs";
+import TableToolbar from "../components/common/TableToolbar";
+import FilterPanel from "../components/FilterPanel";
+import { MODULES, canEditPermissions, permissionsLockReason } from "../constants/permissions";
 
 const USERS_PER_PAGE = 10;
 
-const MODULES = [
-  { key: 'dashboard',     label: 'Dashboard',     actions: ['read'] },
-  { key: 'appointments',  label: 'Appointments',   actions: ['read', 'write', 'edit', 'delete'] },
-  { key: 'patients',      label: 'Patients',       actions: ['read', 'write', 'edit', 'delete'] },
-  { key: 'finance',       label: 'Finance',        actions: ['read', 'write', 'edit', 'delete'] },
-  { key: 'vendors',       label: 'Vendors',        actions: ['read', 'write', 'edit', 'delete'] },
-  { key: 'inventory',     label: 'Inventory',      actions: ['read', 'write', 'edit', 'delete'] },
-  { key: 'inbox',         label: 'Inbox',          actions: ['read', 'write'] },
-  { key: 'reports',       label: 'Reports',        actions: ['read'] },
-  { key: 'marketing',     label: 'Marketing',      actions: ['read', 'write', 'edit'] },
-  { key: 'staff',         label: 'Staff / Admin',  actions: ['read', 'write', 'edit', 'delete'] },
-  { key: 'lab',           label: 'Lab',            actions: ['read', 'write', 'edit', 'delete'] },
-  { key: 'settings',      label: 'Settings',       actions: ['read', 'write', 'edit'] },
-  { key: 'consent',       label: 'Consent Forms',  actions: ['read', 'write', 'edit', 'delete'] },
-];
 
 const ALL_ACTIONS = ['read', 'write', 'edit', 'delete'];
 
@@ -76,7 +65,7 @@ const Toggle = ({ checked, onChange }) => (
     type="button"
     onClick={onChange}
     className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${
-      checked ? 'bg-[#2D9596]' : 'bg-gray-200'
+      checked ? 'bg-[#29828a]' : 'bg-gray-200'
     }`}
   >
     <span
@@ -151,6 +140,13 @@ const PermissionsManagement = () => {
     if (!id) return;
     const target = users.find(u => String(u.id) === id);
     if (!target) return; // still loading — retry when users arrive
+    // A hand-typed or stale link must not open an editor a click wouldn't.
+    if (!canEditPermissions(user, target)) {
+      toast.error(permissionsLockReason(user, target));
+      params.delete('user');
+      navigate({ search: params.toString() }, { replace: true });
+      return;
+    }
     openDrawer(target);
     params.delete('user');
     navigate({ search: params.toString() }, { replace: true });
@@ -185,6 +181,10 @@ const PermissionsManagement = () => {
   };
 
   const handleSave = async () => {
+    if (!canEditPermissions(user, drawerUser)) {
+      toast.error(permissionsLockReason(user, drawerUser));
+      return;
+    }
     if (!drawerUser) return;
     try {
       setSaving(true);
@@ -203,86 +203,84 @@ const PermissionsManagement = () => {
     }
   };
 
-  const filteredUsers = users.filter(u =>
-    !searchQuery ||
-    u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.email?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const [permFilters, setPermFilters] = useState({ role: '' });
+  const filteredUsers = users.filter(u => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q && ![u.name, u.email].some(v => String(v || '').toLowerCase().includes(q))) return false;
+    if (permFilters.role && (ROLE_LABELS[u.role] || u.role) !== permFilters.role) return false;
+    return true;
+  });
   const [usersPage, setUsersPage] = useState(1);
   const paginatedUsers = filteredUsers.slice((usersPage - 1) * USERS_PER_PAGE, usersPage * USERS_PER_PAGE);
 
   const initials = (name) => name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?';
 
   return (
-    <div className="flex flex-col h-full bg-transparent overflow-y-auto custom-scrollbar p-6 lg:p-8 pb-10">
-      {/* Breadcrumb */}
-      <div className="mb-6 flex items-center gap-2 text-sm font-medium text-gray-500">
-        <span>Control Center</span><span>/</span><span className="text-gray-900">Permissions</span>
-      </div>
-
-      {/* Tabs */}
-      <div className="mb-6 border-b border-gray-200">
-        <div className="flex gap-6 -mb-px">
-          <button onClick={() => navigate('/admin/staff')} className="pb-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-900 transition-colors">Staff</button>
-          <button className="pb-3 text-sm font-medium border-b-2 border-[#29828a] text-[#29828a]">Permissions</button>
-          <button onClick={() => navigate('/admin/attendance')} className="pb-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-900 transition-colors">Attendance</button>
-        </div>
-      </div>
+    <TeamTabs active="permissions">
+      <TableToolbar
+        search={searchQuery}
+        onSearchChange={setSearchQuery}
+        placeholder="Search staff by name or email..."
+      >
+        <FilterPanel
+          accent="teal"
+          dateEnabled={false}
+          value={permFilters}
+          onApply={setPermFilters}
+          filters={[
+            { key: 'role', label: 'Role', options: [...new Set(users.map(u => ROLE_LABELS[u.role] || u.role))].filter(Boolean) },
+          ]}
+        />
+      </TableToolbar>
 
       <>
-        <div className="flex-1 flex flex-col overflow-hidden bg-white rounded-xl shadow-sm border border-gray-100 p-2">
-          {/* Table toolbar */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <p className="text-sm font-semibold text-gray-700">{filteredUsers.length} staff members</p>
-            <div className="relative w-64">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search staff..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2D9596]/20 focus:border-[#2D9596]"
-              />
-            </div>
-          </div>
-
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {loading ? (
             <div className="flex items-center justify-center py-20"><GearLoader /></div>
           ) : (
-            <div className="flex-1 overflow-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-100">
+            <div className="overflow-x-auto">
+            <table className="w-full divide-y divide-gray-200">
+              <thead className="bg-[#f8fafc]">
                 <tr>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Role</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Modules Access</th>
-                  <th className="px-5 py-3" />
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Role</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Modules Access</th>
+                  <th className="px-6 py-4" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="bg-white divide-y divide-gray-100">
                 {paginatedUsers.map(u => {
                   const perms = (u.permissions && typeof Object.values(u.permissions)[0] === 'object') ? u.permissions : {};
                   const accessCount = MODULES.filter(m => m.actions.some(a => perms[m.key]?.[a])).length;
                   return (
-                    <tr key={u.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => openDrawer(u)}>
-                      <td className="px-5 py-3.5">
+                    <tr
+                      key={u.id}
+                      onClick={() => canEditPermissions(user, u) && openDrawer(u)}
+                      title={permissionsLockReason(user, u) || undefined}
+                      className={`transition-colors duration-150 ${
+                        canEditPermissions(user, u)
+                          ? 'hover:bg-indigo-50/30 cursor-pointer'
+                          : 'cursor-not-allowed'
+                      }`}
+                    >
+                      <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <img 
-                            src={u.avatar || generateAvatarUrl(u.email || u.name)} 
+                            src={resolveUserAvatar(u)} 
                             alt={u.name}
                             className="w-9 h-9 rounded-full object-cover shrink-0 bg-gray-100"
                           />
                           <span className="text-sm font-semibold text-gray-900">{u.name}</span>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-6 py-4">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${ROLE_COLORS[u.role] || 'bg-gray-100 text-gray-600'}`}>
                           {ROLE_LABELS[u.role] || u.role}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 text-sm text-gray-500">{u.email}</td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-6 py-4 text-sm text-gray-500">{u.email}</td>
+                      <td className="px-6 py-4">
                         {(() => {
                           const readCount = MODULES.filter(m => perms[m.key]?.read === true).length;
                           let label, cls;
@@ -294,8 +292,10 @@ const PermissionsManagement = () => {
                           );
                         })()}
                       </td>
-                      <td className="px-5 py-3.5 text-right">
-                        <ChevronRight size={16} className="text-gray-400 ml-auto" />
+                      <td className="px-6 py-4 text-right">
+                        {canEditPermissions(user, u)
+                          ? <ChevronRight size={16} className="text-gray-400 ml-auto" />
+                          : <Lock size={14} className="text-gray-300 ml-auto" />}
                       </td>
                     </tr>
                   );
@@ -321,7 +321,7 @@ const PermissionsManagement = () => {
               <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
                 <div className="flex items-center gap-3">
                   <img 
-                    src={drawerUser.avatar || generateAvatarUrl(drawerUser.email || drawerUser.name)} 
+                    src={resolveUserAvatar(drawerUser)} 
                     alt={drawerUser.name}
                     className="w-10 h-10 rounded-full object-cover shrink-0 bg-gray-100"
                   />
@@ -365,7 +365,7 @@ const PermissionsManagement = () => {
                       <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">All</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                  <tbody className="bg-white divide-y divide-gray-100">
                     {MODULES.map(m => (
                       <tr key={m.key} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-3.5 text-sm font-medium text-gray-800">{m.label}</td>
@@ -410,7 +410,7 @@ const PermissionsManagement = () => {
                 <button onClick={() => setDrawerUser(null)} className="flex-1 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">
                   Cancel
                 </button>
-                <button onClick={handleSave} disabled={saving} className="flex-1 py-2.5 text-sm font-bold text-white bg-[#2D9596] hover:bg-[#1F6B72] rounded-xl transition-colors disabled:opacity-50">
+                <button onClick={handleSave} disabled={saving} className="flex-1 py-2.5 text-sm font-bold text-white bg-[#29828a] hover:bg-[#216b71] rounded-xl transition-colors disabled:opacity-50">
                   {saving ? 'Saving...' : 'Save Permissions'}
                 </button>
               </div>
@@ -418,7 +418,7 @@ const PermissionsManagement = () => {
           </div>
         )}
       </>
-    </div>
+    </TeamTabs>
   );
 };
 

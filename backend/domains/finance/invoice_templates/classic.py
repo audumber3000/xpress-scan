@@ -6,7 +6,9 @@ deliberate redesign, not a drift.
 """
 import datetime
 
-from domains.infrastructure.services.pdf_safety import safe_color, safe_signature_data_uri, safe_text, safe_url
+from domains.infrastructure.services.pdf_safety import safe_color, safe_signature_data_uri, safe_text
+from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
+from domains.infrastructure.services.pdf_fields import resolve_field_visibility
 from domains.finance.invoice_templates.discount_block import render_discount_block
 
 
@@ -46,12 +48,19 @@ def render_invoice(invoice, clinic, config=None) -> str:
         or getattr(clinic, 'primary_color', None),
         default='#1a2a6c',
     )
-    footer_text = safe_text((config.footer_text if config and config.footer_text else '') if config else '')
+    # What this clinic wants printed. Every flag defaults to shown and can only
+    # ever hide, so a clinic that never opened the editor renders unchanged.
+    vis = resolve_field_visibility(config)
 
-    # Logo
-    raw_logo_url = (config.logo_url if config and config.logo_url else None) if config else None
-    raw_logo_url = raw_logo_url or getattr(clinic, 'logo_url', None)
-    logo_url = safe_url(raw_logo_url)
+    footer_text = safe_text((config.footer_text if config and config.footer_text else '') if config else '') if vis.footer else ''
+
+    # Logo — resolved to inline bytes. The stored config URL is a presigned R2
+    # link that expires, so it is recovered by key rather than fetched; if that
+    # fails we fall through to the clinic's own logo instead of giving up.
+    logo_url = resolve_logo_data_uri(
+        (config.logo_url if config else None),
+        getattr(clinic, 'logo_url', None),
+    )
     if logo_url:
         logo_html = f'<img src="{logo_url}" alt="Logo" style="width:75px;height:75px;object-fit:contain;">'
     else:
@@ -59,13 +68,15 @@ def render_invoice(invoice, clinic, config=None) -> str:
         logo_html = f'<div style="width:75px;height:75px;background:#f0f4f8;border:2px dashed {primary_color};display:flex;justify-content:center;align-items:center;color:{primary_color};font-weight:bold;font-size:11px;text-align:center;">{initials}</div>'
 
     # Clinic fields
+    # Each line is gated with `and`, never `or`: a flag may hide a field that
+    # would have printed, but must never make an empty one appear.
     c_name    = clinic.name    if clinic else 'Dental Clinic'
-    c_phone   = clinic.phone   if clinic and clinic.phone   else ''
-    c_email   = clinic.email   if clinic and clinic.email   else ''
-    c_address = clinic.address if clinic and clinic.address else ''
-    c_tagline = getattr(clinic, 'tagline', 'Comprehensive Dental & Orthodontic Care') if clinic else ''
-    c_reg     = getattr(clinic, 'reg_number', '') if clinic else ''
-    c_gst     = getattr(clinic, 'gst_number',  '') if clinic else ''
+    c_phone   = clinic.phone   if clinic and clinic.phone and vis.contact else ''
+    c_email   = clinic.email   if clinic and clinic.email and vis.contact else ''
+    c_address = clinic.address if clinic and clinic.address and vis.address else ''
+    c_tagline = (getattr(clinic, 'tagline', '') or '' if clinic else '') if vis.tagline else ''
+    c_reg     = (getattr(clinic, 'license_number', '') if clinic else '') if vis.license_number else ''
+    c_gst     = (getattr(clinic, 'gst_number',  '') if clinic else '') if vis.tax_number else ''
     c_doctor  = getattr(clinic, 'doctor_name', '') if clinic else ''
 
     # Status label
@@ -131,6 +142,7 @@ def render_invoice(invoice, clinic, config=None) -> str:
         subtotal=subtotal, total=total,
         inv_tax=inv_tax, discount=discount, taxable=taxable,
         currency=currency, tax_label=tax_label, is_india=is_india,
+        vis=vis,
     )
 
 
@@ -143,7 +155,10 @@ def _render_indian_tax(
     p_name, p_phone, p_age, p_gender, p_uhid,
     invoice_date, subtotal, total, inv_tax, discount, taxable,
     doctor_signature='', currency='₹', tax_label='GST No.', is_india=True,
+    vis=None,
 ):
+    from domains.infrastructure.services.pdf_fields import ALL_VISIBLE
+    vis = vis or ALL_VISIBLE
     # Line items
     rows = ''
     for i, item in enumerate(invoice.line_items, 1):
@@ -161,14 +176,21 @@ def _render_indian_tax(
             f'</tr>'
         )
 
-    # Summary rows
+    # Summary rows — label the discount with the offer name when one was applied.
+    _offer = getattr(invoice, 'applied_offer', None)
+    _disc_label = f'Discount ({_offer.name})' if _offer and getattr(_offer, 'name', None) else 'Discount'
+    show_discount = vis.discount and discount > 0
     disc_row = (
-        f'<tr><td>Discount</td><td>– {currency} {discount:,.2f}</td></tr>'
-        if discount > 0 else ''
+        f'<tr><td>{_disc_label}</td><td>– {currency} {discount:,.2f}</td></tr>'
+        if show_discount else ''
     )
+    # With the discount hidden, printing the pre-discount subtotal would leave
+    # the patient looking at figures that don't reconcile. Show the net instead:
+    # the concession disappears, the arithmetic still works.
+    display_subtotal = subtotal if show_discount else taxable
     # Concessions granted after issue are already inside `discount` above; this
     # itemises them so the patient can see why the total changed.
-    discount_block = render_discount_block(invoice, currency=currency, accent=primary_color)
+    discount_block = render_discount_block(invoice, currency=currency, accent=primary_color) if vis.discount else ''
     # India splits tax into CGST + SGST; everywhere else shows a single tax line
     # labelled with the country's tax term (VAT, Tax, etc.).
     if is_india:
@@ -190,6 +212,14 @@ def _render_indian_tax(
     # Payment
     pm  = getattr(invoice, 'payment_mode', '') or 'Pending'
     utr = getattr(invoice, 'utr', '') or ''
+
+    signature_box = (
+        f'''<div class="signature-box">
+        {f'<img src="{doctor_signature}" alt="Signature" style="max-width:140px;max-height:50px;display:block;margin:0 auto 4px auto;object-fit:contain;">' if doctor_signature else ''}
+        <div class="signature-line">Authorized Signatory / Seal</div>
+        <p style="margin:5px 0 0 0;color:var(--text-muted);font-weight:bold;">{c_name}</p>
+      </div>''' if vis.signature else ''
+    )
 
     age_gender = ' / '.join(filter(None, [p_age, p_gender]))
     notes      = getattr(invoice, 'notes', '') or ''
@@ -331,7 +361,7 @@ body {{
         <div style="margin-right:20px;flex-shrink:0;">{logo_html}</div>
         <div class="clinic-info-left">
           <h1>{c_name}</h1>
-          <div class="tagline">{c_tagline}</div>
+          {f'<div class="tagline">{c_tagline}</div>' if c_tagline else ''}
         </div>
       </div>
       <div class="clinic-info-right">
@@ -384,7 +414,7 @@ body {{
     <!-- BILLING SUMMARY -->
     <div class="summary-wrapper">
       <table class="summary-table">
-        <tr><td>Subtotal</td><td>{currency} {subtotal:,.2f}</td></tr>
+        <tr><td>Subtotal</td><td>{currency} {display_subtotal:,.2f}</td></tr>
         {disc_row}
         <tr><td>Net Taxable Amount</td><td>{currency} {taxable:,.2f}</td></tr>
         {cgst_row}
@@ -408,11 +438,7 @@ body {{
           <li>This is a computer-generated invoice and does not require a physical signature.</li>
         </ul>
       </div>
-      <div class="signature-box">
-        {f'<img src="{doctor_signature}" alt="Signature" style="max-width:140px;max-height:50px;display:block;margin:0 auto 4px auto;object-fit:contain;">' if doctor_signature else ''}
-        <div class="signature-line">Authorized Signatory / Seal</div>
-        <p style="margin:5px 0 0 0;color:var(--text-muted);font-weight:bold;">{c_name}</p>
-      </div>
+      {signature_box}
     </div>
 
     {f'<div style="text-align:center;color:#888;font-size:10px;margin-top:16px;border-top:1px solid #eee;padding-top:10px;">{footer_text}</div>' if footer_text else ''}

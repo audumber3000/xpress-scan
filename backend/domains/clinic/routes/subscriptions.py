@@ -1,3 +1,4 @@
+import logging
 import os
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from sqlalchemy.orm import Session
@@ -12,6 +13,8 @@ from models import Subscription, Clinic, User
 from schemas import SubscriptionOut, SubscriptionCreate, SubscriptionUpdate, CouponValidateRequest, CheckoutRequest
 from core.auth_utils import get_current_user
 from domains.clinic.services.subscription_service import SubscriptionService
+
+logger = logging.getLogger(__name__)
 
 def get_db():
     db = SessionLocal()
@@ -368,37 +371,31 @@ async def cashfree_webhook(
     request: Request,
     db: Session = Depends(get_db)
 ):
-    """Handle Cashfree webhooks"""
-    import hmac, hashlib, base64, json as _json
+    """Handle Cashfree webhooks. Rejects anything it cannot authenticate."""
+    import json as _json
+    from core import cashfree_webhook
+
+    raw_body = await request.body()
+
+    ok, reason = cashfree_webhook.verify_request(raw_body, request.headers)
+    if not ok:
+        # 401, and the reason stays in the log — echoing it back would tell an
+        # attacker exactly which part of their forgery to fix.
+        logger.warning(f"cashfree webhook rejected: {reason}")
+        raise HTTPException(status_code=401, detail="Invalid signature")
 
     try:
-        raw_body = await request.body()
-
-        # Signature verification — must use raw bytes, not parsed JSON
-        secret = os.getenv("CASHFREE_WEBHOOK_SECRET") or os.getenv("CASHFREE_SECRET_KEY", "")
-        signature = request.headers.get("x-webhook-signature", "")
-        timestamp = request.headers.get("x-webhook-timestamp", "")
-
-        if secret and signature and timestamp:
-            signed_payload = timestamp.encode() + raw_body
-            expected = base64.b64encode(
-                hmac.HMAC(secret.encode(), signed_payload, hashlib.sha256).digest()
-            ).decode()
-            if not hmac.compare_digest(expected, signature):
-                print("WEBHOOK SIGNATURE MISMATCH — rejecting")
-                return {"status": "error", "message": "Invalid signature"}
-
         payload = _json.loads(raw_body)
-        print(f"WEBHOOK RECEIVED: {payload}")
-
         subscription_service = SubscriptionService(db)
         success = subscription_service.handle_webhook("cashfree", payload)
         if success:
             return {"status": "ok", "message": "Processed successfully"}
-
         return {"status": "received", "message": "Webhook acknowledged"}
 
     except Exception as e:
-        print(f"WEBHOOK ERROR: {str(e)}")
-        return {"status": "error", "message": str(e)}
+        # 500, not 200 — a swallowed error told Cashfree the payment was handled
+        # and it never retried, so a transient DB failure silently lost a paid
+        # subscription. Let it retry.
+        logger.exception(f"cashfree webhook processing failed: {e}")
+        raise HTTPException(status_code=500, detail="Webhook processing failed")
 

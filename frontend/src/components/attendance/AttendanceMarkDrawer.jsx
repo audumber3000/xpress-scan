@@ -68,7 +68,7 @@ const AttendanceMarkDrawer = ({ employee, date, currentAttendance, onClose, onSa
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Employee Info */}
           <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border border-gray-100">
-            <div className="w-11 h-11 rounded-full bg-[#E0F2F2] flex items-center justify-center text-[#2D9596] font-bold text-sm shrink-0">
+            <div className="w-11 h-11 rounded-full bg-[#E0F2F2] flex items-center justify-center text-[#29828a] font-bold text-sm shrink-0">
               {initials}
             </div>
             <div>
@@ -79,7 +79,7 @@ const AttendanceMarkDrawer = ({ employee, date, currentAttendance, onClose, onSa
 
           {/* Date */}
           <div className="flex items-center gap-2 text-sm text-gray-600">
-            <Calendar size={15} className="text-[#2D9596]" />
+            <Calendar size={15} className="text-[#29828a]" />
             <span className="font-medium">{dateLabel}</span>
           </div>
 
@@ -120,7 +120,7 @@ const AttendanceMarkDrawer = ({ employee, date, currentAttendance, onClose, onSa
                 onChange={(e) => setReason(e.target.value)}
                 rows={3}
                 placeholder={status === "late" ? "e.g. Traffic, personal work..." : "e.g. Sick leave, emergency..."}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#2D9596]/30 focus:border-[#2D9596] resize-none bg-gray-50 transition-colors"
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#29828a]/30 focus:border-[#29828a] resize-none bg-gray-50 transition-colors"
               />
             </div>
           )}
@@ -137,7 +137,7 @@ const AttendanceMarkDrawer = ({ employee, date, currentAttendance, onClose, onSa
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex-1 py-2.5 text-sm font-bold text-white bg-[#2D9596] hover:bg-[#1F6B72] rounded-xl transition-colors disabled:opacity-50"
+            className="flex-1 py-2.5 text-sm font-bold text-white bg-[#29828a] hover:bg-[#216b71] rounded-xl transition-colors disabled:opacity-50"
           >
             {saving ? "Saving..." : "Save"}
           </button>

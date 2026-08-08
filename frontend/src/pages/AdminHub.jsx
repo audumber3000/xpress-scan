@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
+import SetupProgress from '../components/admin/SetupProgress';
+import { api } from '../utils/api';
 import { useHeader } from '../contexts/HeaderContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Building2, Users, Settings as SettingsIcon, FileText, Bell, CreditCard, PlusCircle, Activity, ChevronDown, Stethoscope, Shield, Calendar } from 'lucide-react';
+import { Building2, Users, FileText, ScrollText, Bell, CreditCard, Activity, ChevronDown, Stethoscope, Shield, Laptop, Plug, Tag } from 'lucide-react';
 
 /**
  * Control Center navigation, grouped by category.
@@ -20,10 +22,10 @@ const NAV_GROUPS = [
   {
     title: null,
     items: [
-      { id: 'branches', icon: Building2, label: 'Branches', hasChildren: true, activePath: '/admin/clinic' },
+      { id: 'clinic_details', icon: Building2, label: 'Clinic Details', path: '/admin/clinic' },
+      // Attendance and Permissions are tabs of the Staff screen, reached from
+      // there. Repeating them here made one section read as three.
       { id: 'staff', icon: Users, label: 'Staff', path: '/admin/staff' },
-      { id: 'attendance', icon: Calendar, label: 'Attendance', path: '/admin/attendance' },
-      { id: 'permissions', icon: Shield, label: 'Permissions', path: '/admin/permissions' },
     ],
   },
   {
@@ -31,6 +33,7 @@ const NAV_GROUPS = [
     items: [
       { id: 'practice_settings', icon: Activity, label: 'Practice Settings', hasChildren: true, activePath: '/admin/practice-settings' },
       { id: 'treatments', icon: Stethoscope, label: 'Treatments & Pricing', path: '/admin/treatments' },
+      { id: 'offers', icon: Tag, label: 'Offers & Discounts', path: '/admin/offers' },
     ],
   },
   {
@@ -38,6 +41,20 @@ const NAV_GROUPS = [
     items: [
       { id: 'templates_editor', icon: FileText, label: 'Templates Editor', path: '/admin/templates-editor' },
       { id: 'notifications', icon: Bell, label: 'Notifications', path: '/admin/notifications' },
+    ],
+  },
+  {
+    title: 'Security',
+    items: [
+      { id: 'security_contact', icon: Shield, label: 'Verification', path: '/admin/security/verification' },
+      { id: 'security_devices', icon: Laptop, label: 'Devices', path: '/admin/security/devices' },
+      { id: 'security_audit', icon: ScrollText, label: 'Audit Log', path: '/admin/security/audit-log' },
+    ],
+  },
+  {
+    title: 'Integrations',
+    items: [
+      { id: 'integrations', icon: Plug, label: 'Integrations', path: '/admin/integrations' },
     ],
   },
   {
@@ -66,7 +83,6 @@ const AdminHub = () => {
   }, [setTitle]);
 
   const getInitialOpenSection = () => {
-    if (location.pathname.includes('/admin/clinic')) return 'branches';
     if (location.pathname.includes('/admin/practice-settings')) return 'practice_settings';
     return '';
   };
@@ -74,7 +90,16 @@ const AdminHub = () => {
   // Mobile only: false = show the config menu, true = show the selected section.
   // Ignored on desktop (md+), where both panes always render side by side.
   const [mobileShowContent, setMobileShowContent] = useState(false);
-  const userBranches = (user?.clinics?.length > 0 ? user.clinics : [user?.clinic]).filter(Boolean);
+
+  // Setup checklist behind the progress ring. Re-read whenever the section
+  // changes, so ticking something off in one screen shows up when you leave it.
+  const [setupStatus, setSetupStatus] = useState(null);
+  const loadSetupStatus = React.useCallback(() => {
+    api.get('/clinics/me/setup-status')
+      .then(setSetupStatus)
+      .catch(() => setSetupStatus(null));  // the menu works fine without it
+  }, []);
+  React.useEffect(() => { loadSetupStatus(); }, [loadSetupStatus, location.pathname]);
 
   const toggleSection = (id) => {
     setOpenSection(openSection === id ? '' : id);
@@ -127,12 +152,14 @@ const AdminHub = () => {
     <div className="flex h-full w-full bg-[#f8fafc] overflow-hidden">
       {/* Secondary Sidebar Navigation — full-width on mobile, fixed pane on desktop */}
       <div className={`${mobileShowContent ? 'hidden md:flex' : 'flex'} w-full md:w-72 bg-white border-r border-gray-200 flex-col h-full shrink-0 shadow-sm z-10`}>
-        <div className="p-6 border-b border-gray-100/80 mt-1">
-          <h2 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-            <SettingsIcon size={22} className="text-[#29828a]" />
-            Control Center
-          </h2>
-          <p className="text-xs text-gray-500 mt-1 uppercase tracking-wider font-semibold ml-8">Configuration</p>
+        {/* Title flush left, setup ring on the right. The cog that used to sit
+            beside the title said nothing the word "Configuration" didn't. */}
+        <div className="p-6 border-b border-gray-100/80 mt-1 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-xl font-bold text-gray-900 tracking-tight">Control Center</h2>
+            <p className="text-xs text-gray-500 mt-1 uppercase tracking-wider font-semibold">Configuration</p>
+          </div>
+          <SetupProgress status={setupStatus} onRefresh={loadSetupStatus} />
         </div>
         
         <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
@@ -154,27 +181,6 @@ const AdminHub = () => {
                     path={item.path}
                     activePath={item.activePath}
                   />
-
-                  {/* Branches expands to the clinics this user can switch between. */}
-                  {item.id === 'branches' && openSection === 'branches' && (
-                    <div className="ml-9 border-l-2 border-gray-100 pl-3 space-y-1.5 mb-3 mt-1">
-                      {/* Each branch links to its own profile — previously every
-                          one navigated to /admin/clinic, which always showed the
-                          active clinic no matter which branch you clicked. */}
-                      {userBranches.map((branch) => {
-                        const isOpen = location.pathname.includes('/clinic')
-                          && Number(new URLSearchParams(location.search).get('clinic') || user?.clinic?.id) === branch.id;
-                        return (
-                          <button key={branch.id} onClick={() => goTo(`/admin/clinic?clinic=${branch.id}`)} className={`w-full text-left px-3 py-2 text-[13px] rounded-lg transition-colors ${isOpen ? 'text-[#29828a] font-semibold bg-[#29828a]/5' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}>
-                            {branch.name}
-                          </button>
-                        );
-                      })}
-                      <button onClick={() => goTo('/add-clinic')} className="w-full text-left px-3 py-2 text-[13px] rounded-lg text-[#29828a] font-medium flex items-center gap-2 hover:bg-gray-50">
-                        <PlusCircle size={14} /> Add New Branch
-                      </button>
-                    </div>
-                  )}
 
                   {/* Practice Settings expands to its per-category editors. */}
                   {item.id === 'practice_settings' && openSection === 'practice_settings' && (
@@ -211,7 +217,12 @@ const AdminHub = () => {
           <ChevronDown size={18} className="rotate-90" />
           Control Center menu
         </button>
-        <div className="flex-1 overflow-y-auto w-full h-full relative z-10 bg-[#f8fafc]">
+        {/* No z-index here on purpose. `relative z-10` used to sit on this div,
+            which made it a stacking context capped at 10 — so a drawer inside a
+            Control Center page resolved its z-50 *within* that box and still
+            painted under the app header (z-30). Keeping `relative` (z-auto) is
+            harmless: it anchors absolute children without trapping fixed ones. */}
+        <div className="flex-1 overflow-y-auto w-full h-full relative bg-[#f8fafc]">
             {/* The routed dynamic sub-component renders here */}
             <div className="w-full min-h-full">
                <Outlet />

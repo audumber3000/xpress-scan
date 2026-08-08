@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Plus, FileText, ChevronRight } from 'lucide-react';
+import { X, Plus, ChevronRight } from 'lucide-react';
 import { api } from '../../utils/api';
 import { getCurrencySymbol } from '../../utils/currency';
 import { formatDate } from '../../utils/datetime';
+import EmptyState from '../common/EmptyState';
+import { receipt } from '../../assets/illustrations';
 
 const STATUS = {
   draft: { label: 'Draft', cls: 'bg-gray-100 text-gray-700 border-gray-200' },
@@ -57,11 +59,12 @@ const CasePaperInvoicesPanel = ({ open, onClose, casePaperId, onNew, onOpen }) =
           {loading ? (
             <p className="text-center text-sm text-gray-400 py-10">Loading…</p>
           ) : invoices.length === 0 ? (
-            <div className="text-center py-12">
-              <FileText className="w-12 h-12 text-gray-200 mx-auto mb-3" strokeWidth={1.5} />
-              <p className="text-sm font-medium text-gray-500">No invoices yet</p>
-              <p className="text-xs text-gray-400 mt-1">Create one for this visit below.</p>
-            </div>
+            <EmptyState
+              image={receipt}
+              size="sm"
+              title="No invoices yet"
+              subtitle="Create one for this visit below."
+            />
           ) : (
             invoices.map((inv) => {
               const s = STATUS[inv.status] || STATUS.draft;

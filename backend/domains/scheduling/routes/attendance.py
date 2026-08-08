@@ -84,8 +84,8 @@ def get_employees(
                 'name': user.name,
                 'email': user.email,
                 'role': user.role,
-                'phone': None,  # Add phone field to User model if needed
-                'avatar': None,  # Add avatar field to User model if needed
+                'phone': user.phone,
+                'avatar_url': user.avatar_url,
             })
         
         return result
@@ -154,8 +154,8 @@ def get_attendance_week(
                 'name': employee.name,
                 'email': employee.email,
                 'role': employee.role,
-                'phone': None,
-                'avatar': None,
+                'phone': employee.phone,
+                'avatar_url': employee.avatar_url,
                 'attendance': employee_attendance
             })
         

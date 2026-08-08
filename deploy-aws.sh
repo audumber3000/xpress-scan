@@ -176,6 +176,40 @@ run_migration "invoice_discounts_idx" "CREATE INDEX IF NOT EXISTS ix_invoice_dis
 run_migration "daily_visits" "CREATE TABLE IF NOT EXISTS daily_visits (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL REFERENCES clinics(id), patient_id INTEGER NOT NULL REFERENCES patients(id), visit_date DATE NOT NULL, is_repeat BOOLEAN NOT NULL DEFAULT FALSE, doctor_id INTEGER REFERENCES users(id), reason VARCHAR, source VARCHAR NOT NULL DEFAULT 'manual', appointment_id INTEGER REFERENCES appointments(id), notes TEXT, created_by INTEGER REFERENCES users(id), created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW(), CONSTRAINT uq_daily_visit_patient_day UNIQUE (clinic_id, patient_id, visit_date))"
 run_migration "daily_visits_day_idx" "CREATE INDEX IF NOT EXISTS ix_daily_visits_clinic_date ON daily_visits (clinic_id, visit_date)"
 
+# ── 2026-08 release ──────────────────────────────────────────────────────────
+# Letterhead tagline. Deliberately NOT backfilled: renderers used to print a
+# hardcoded "Comprehensive Dental & Orthodontic Care" for every clinic because
+# no such column existed. Clinics now type their own in Clinic Details.
+run_migration "clinic_tagline" "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS tagline VARCHAR(120)"
+
+# Per-installment payment receipts. The PDF renders on demand, so only the
+# identity and the frozen arithmetic are stored. Backfilled so every payment
+# already on the books can produce a receipt with a stable number.
+run_migration "payment_receipt_number"  "ALTER TABLE invoice_payments ADD COLUMN IF NOT EXISTS receipt_number VARCHAR"
+run_migration "payment_receipt_paid"    "ALTER TABLE invoice_payments ADD COLUMN IF NOT EXISTS receipt_paid_to_date DOUBLE PRECISION"
+run_migration "payment_receipt_balance" "ALTER TABLE invoice_payments ADD COLUMN IF NOT EXISTS receipt_balance_due DOUBLE PRECISION"
+run_migration "payment_receipt_idx"     "CREATE INDEX IF NOT EXISTS ix_invoice_payments_receipt_number ON invoice_payments (receipt_number)"
+run_migration "payment_receipt_backfill_number" "WITH numbered AS (SELECT id, to_char(COALESCE(paid_on, created_at::date), 'YYYY') AS yr, ROW_NUMBER() OVER (PARTITION BY clinic_id, to_char(COALESCE(paid_on, created_at::date), 'YYYY') ORDER BY id) AS seq FROM invoice_payments WHERE receipt_number IS NULL) UPDATE invoice_payments p SET receipt_number = 'RCP-' || n.yr || '-' || lpad(n.seq::text, 4, '0') FROM numbered n WHERE p.id = n.id"
+run_migration "payment_receipt_backfill_totals" "WITH running AS (SELECT id, invoice_id, SUM(amount) OVER (PARTITION BY invoice_id ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS ptd FROM invoice_payments) UPDATE invoice_payments p SET receipt_paid_to_date = r.ptd, receipt_balance_due = GREATEST(COALESCE(i.total, 0) - r.ptd, 0) FROM running r JOIN invoices i ON i.id = r.invoice_id WHERE p.id = r.id AND p.receipt_paid_to_date IS NULL"
+
+# Template field-visibility toggles live in config_json. Both columns are older
+# than this release in models.py, but create_all never ALTERs an existing table —
+# so a prod table predating them would silently lack the column the save path
+# now writes. Defensive and idempotent.
+run_migration "tplcfg_config_json"     "ALTER TABLE template_configurations ADD COLUMN IF NOT EXISTS config_json JSON"
+run_migration "tplcfg_secondary_color" "ALTER TABLE template_configurations ADD COLUMN IF NOT EXISTS secondary_color VARCHAR"
+
+# Audit trail: who deleted or changed what, from which device. Distinct from
+# activity_logs, which is a 10-row FIFO feed for the dashboard card.
+run_migration "audit_logs" "CREATE TABLE IF NOT EXISTS audit_logs (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL REFERENCES clinics(id), user_id INTEGER REFERENCES users(id), actor_name VARCHAR, actor_role VARCHAR, action VARCHAR NOT NULL, summary VARCHAR NOT NULL, entity_type VARCHAR, entity_id INTEGER, ip_address VARCHAR, user_agent VARCHAR, created_at TIMESTAMP DEFAULT NOW())"
+run_migration "audit_logs_clinic_idx" "CREATE INDEX IF NOT EXISTS ix_audit_logs_clinic_created ON audit_logs (clinic_id, created_at DESC)"
+run_migration "audit_logs_action_idx"  "CREATE INDEX IF NOT EXISTS ix_audit_logs_action ON audit_logs (action)"
+
+# WhatsApp receipt messages need a preference row or notify_event no-ops in
+# silence. Seeded enabled for every existing clinic; new clinics get it from
+# DEFAULT_EVENT_TYPES.
+run_migration "receipt_notification_pref" "INSERT INTO notification_preferences (clinic_id, event_type, channels, is_enabled) SELECT c.id, 'receipt_notification', '[\"whatsapp\"]'::json, TRUE FROM clinics c WHERE NOT EXISTS (SELECT 1 FROM notification_preferences p WHERE p.clinic_id = c.id AND p.event_type = 'receipt_notification')"
+
 # ── Schema migration check (run against RDS) ──────────────────────────────────
 echo ""
 echo "▶ Running schema migration check against RDS..."

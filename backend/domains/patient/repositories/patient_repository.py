@@ -23,9 +23,11 @@ class PatientRepository(BaseRepository[Patient], PatientRepositoryProtocol):
         ).order_by(Patient.created_at.desc(), Patient.id.desc()).offset(skip).limit(limit).all()
 
     def _filtered_query(self, clinic_id: int, search: Optional[str] = None,
-                        gender: Optional[str] = None, treatment_type: Optional[str] = None):
+                        gender: Optional[str] = None, treatment_type: Optional[str] = None,
+                        date_from=None, date_to=None):
         """Base query for the paginated list + its count, so both apply the same
-        filters. Escapes LIKE wildcards in the search term."""
+        filters. Escapes LIKE wildcards in the search term. date_from/date_to are
+        an inclusive registration-date range (Patient.registered_on)."""
         q = self.db.query(Patient).filter(Patient.clinic_id == clinic_id)
         if search and search.strip():
             term = search.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -35,22 +37,27 @@ class PatientRepository(BaseRepository[Patient], PatientRepositoryProtocol):
             q = q.filter(Patient.gender == gender)
         if treatment_type:
             q = q.filter(Patient.treatment_type == treatment_type)
+        if date_from:
+            q = q.filter(Patient.registered_on >= date_from)
+        if date_to:
+            q = q.filter(Patient.registered_on <= date_to)
         return q
 
     def list_filtered(self, clinic_id: int, skip: int = 0, limit: int = 100,
                       search: Optional[str] = None, gender: Optional[str] = None,
-                      treatment_type: Optional[str] = None) -> List[Patient]:
+                      treatment_type: Optional[str] = None, date_from=None, date_to=None) -> List[Patient]:
         """One page of patients matching the filters, newest first."""
         return (
-            self._filtered_query(clinic_id, search, gender, treatment_type)
+            self._filtered_query(clinic_id, search, gender, treatment_type, date_from, date_to)
             .order_by(Patient.created_at.desc(), Patient.id.desc())
             .offset(skip).limit(limit).all()
         )
 
     def count_filtered(self, clinic_id: int, search: Optional[str] = None,
-                       gender: Optional[str] = None, treatment_type: Optional[str] = None) -> int:
+                       gender: Optional[str] = None, treatment_type: Optional[str] = None,
+                       date_from=None, date_to=None) -> int:
         """Total patients matching the filters — drives the page count."""
-        return self._filtered_query(clinic_id, search, gender, treatment_type).count()
+        return self._filtered_query(clinic_id, search, gender, treatment_type, date_from, date_to).count()
 
     def get_with_reports(self, patient_id: int) -> Optional[Patient]:
         """Get patient with related reports"""

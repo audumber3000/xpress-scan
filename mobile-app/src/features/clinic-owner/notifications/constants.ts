@@ -6,7 +6,7 @@ import { Mail, MessageSquare, Smartphone } from 'lucide-react-native';
  * per-message costs stay identical across platforms.
  */
 
-export const EVENT_AUDIENCE: Record<string, 'patient' | 'doctor' | 'owner'> = {
+export const EVENT_AUDIENCE: Record<string, 'patient' | 'doctor' | 'owner' | 'lab'> = {
   appointment_booked: 'patient',
   appointment_confirmation: 'patient',
   checked_in: 'patient',
@@ -17,6 +17,7 @@ export const EVENT_AUDIENCE: Record<string, 'patient' | 'doctor' | 'owner'> = {
   consent_form: 'patient',
   daily_summary: 'doctor',
   daily_report: 'doctor',
+  lab_order_placed: 'lab',
   molarplus_app_welcome: 'owner',
   molarplus_subscription_confirmed: 'owner',
   molarplus_topup_success: 'owner',
@@ -41,6 +42,7 @@ export const EVENT_LABELS: Record<string, string> = {
   consent_form: 'Consent Form Notification',
   daily_summary: 'Doctor Daily Summary',
   daily_report: 'Daily Report',
+  lab_order_placed: 'Lab Order Placed',
   molarplus_app_welcome: 'Welcome Message',
   molarplus_subscription_confirmed: 'Subscription Confirmed',
   molarplus_topup_success: 'Wallet Top-up Success',

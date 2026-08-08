@@ -46,9 +46,9 @@ from domains.patient.routes import daily_register
 from domains.patient.routes import treatment_types, referring_doctors, treatment_plans, patient_files
 from domains.search.routes import global_search
 from domains.auth.routes import auth_clean as auth
-from domains.auth.routes import clinic_users, permissions
+from domains.auth.routes import clinic_users, permissions, security
 from domains.clinic.routes import clinics, subscriptions
-from domains.finance.routes import payments_clean as payments, invoices, ledger
+from domains.finance.routes import payments_clean as payments, invoices, ledger, offers
 from domains.communication.routes import notifications, message_templates
 from domains.scheduling.routes import attendance, attendance_mobile, appointments
 from domains.medical.routes import reports, xray, medications
@@ -173,10 +173,17 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE medication_stock ADD COLUMN IF NOT EXISTS units_per_pack DOUBLE PRECISION"))
             # A case paper can carry several invoices.
             conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS case_paper_id INTEGER REFERENCES case_papers(id)"))
+            # Which Offer set the draft discount, so the bill can label it.
+            conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS applied_offer_id INTEGER"))
             # Link a stock movement to the invoice line it was auto-billed as.
             conn.execute(text("ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS invoice_line_item_id INTEGER REFERENCES invoice_line_items(id)"))
             # Link a lab order to the invoice line it was auto-billed as.
             conn.execute(text("ALTER TABLE lab_orders ADD COLUMN IF NOT EXISTS invoice_line_item_id INTEGER REFERENCES invoice_line_items(id)"))
+            # Security contact (recovery phone/email, OTP-verified) — Control Center → Security.
+            conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS security_phone VARCHAR"))
+            conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS security_email VARCHAR"))
+            conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS security_phone_verified BOOLEAN DEFAULT FALSE"))
+            conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS security_email_verified BOOLEAN DEFAULT FALSE"))
             conn.execute(text(
                 "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP"
             ))
@@ -501,6 +508,8 @@ app.include_router(clinics.router, prefix="/api/v1/clinics", tags=["clinics"])
 app.include_router(subscriptions.router, prefix="/api/v1/subscriptions", tags=["subscriptions"])
 app.include_router(payments.router, prefix="/api/v1/payments", tags=["payments"])
 app.include_router(invoices.router, prefix="/api/v1/invoices", tags=["invoices"])
+app.include_router(offers.router, prefix="/api/v1/offers", tags=["offers"])
+app.include_router(security.router, prefix="/api/v1/security", tags=["security"])
 app.include_router(ledger.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["notifications"])
 app.include_router(message_templates.router, prefix="/api/v1/message-templates", tags=["message_templates"])

@@ -1,12 +1,65 @@
+import logging
+
 from fastapi import APIRouter, HTTPException, Depends, status, Query
 from sqlalchemy.orm import Session
 from database import get_db
-from models import LabOrder, User, Patient, Vendor
+from models import LabOrder, User, Patient, Vendor, Clinic
 from schemas import LabOrderCreate, LabOrderUpdate, LabOrderOut
 from core.auth_utils import get_current_user
 from typing import List, Optional
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/lab-orders", tags=["lab-orders"])
+
+
+def _notify_vendor_of_order(db: Session, order: LabOrder, clinic_id: int):
+    """Tell the lab a new work order was placed.
+
+    Off by default — it only fires when the clinic enables `lab_order_placed`
+    in Notifications → Preferences (notify_event returns early otherwise).
+
+    Never raises. A lab order must save even when the lab has no contact
+    details, the wallet is empty, or Nexus is down.
+    """
+    try:
+        vendor = order.vendor
+        if not vendor:
+            return
+        # Nothing to send to — a vendor's email and phone are both optional.
+        if not (vendor.email or vendor.phone):
+            logger.info(f"lab_order_placed: vendor {vendor.id} has no email or phone, skipping")
+            return
+
+        clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
+        if not clinic:
+            return
+
+        from core.notification_dispatch import notify_event
+
+        notify_event(
+            "lab_order_placed",
+            db=db,
+            clinic_id=clinic_id,
+            to_phone=vendor.phone or "",
+            to_email=vendor.email or "",
+            to_name=vendor.contact_name or vendor.name or "",
+            template_data={
+                "clinic_name": clinic.name or "",
+                "clinic_logo_url": clinic.logo_url or "",
+                "clinic_phone": clinic.phone or "",
+                "lab_name": vendor.contact_name or vendor.name or "",
+                "work_type": order.work_type or "",
+                "patient_name": order.patient.name if order.patient else "",
+                "tooth_number": order.tooth_number or "",
+                "shade": order.shade or "",
+                "due_date": order.due_date.strftime("%d %b %Y") if order.due_date else "",
+                "instructions": order.instructions or "",
+            },
+        )
+    except Exception as exc:
+        # Includes InsufficientWalletBalance — a low wallet must not block the order.
+        logger.warning(f"lab_order_placed notify failed for order {order.id}: {exc}")
 
 
 def _lab_line_description(order: LabOrder) -> str:
@@ -147,6 +200,13 @@ def create_lab_order(
 
     db.commit()
     db.refresh(db_order)
+
+    # Only after the order is safely committed — the lab shouldn't hear about
+    # an order that failed to save. And only for a placed order ('Sent'); a
+    # Draft is still being prepared and mustn't ping the lab.
+    if db_order.status == 'Sent':
+        _notify_vendor_of_order(db, db_order, current_user.clinic_id)
+
     _enrich_lab_order(db, db_order)
     return db_order
 
@@ -177,6 +237,7 @@ def update_lab_order(
             detail="This order is billed on a finalized or paid invoice and can't be changed here.",
         )
 
+    prev_status = db_order.status
     for key, value in update_data.items():
         setattr(db_order, key, value)
     db.flush()
@@ -193,6 +254,12 @@ def update_lab_order(
 
     db.commit()
     db.refresh(db_order)
+
+    # Notify the lab the moment the order transitions into 'Sent' (e.g. a Draft
+    # that's now been placed). Re-saving an already-Sent order won't re-ping.
+    if prev_status != 'Sent' and db_order.status == 'Sent':
+        _notify_vendor_of_order(db, db_order, current_user.clinic_id)
+
     _enrich_lab_order(db, db_order)
     return db_order
 

@@ -45,7 +45,17 @@ let waWebWindow = null;
  * app always uses the automated (MolarPlus/MSG91) send, even if the clinic
  * flag is on.
  */
-export const isManualWhatsApp = (user) => isDesktopApp() && !!(user && user.clinic && user.clinic.manual_whatsapp);
+/**
+ * Is this clinic sending from its own number?
+ *
+ * The choice belongs to the clinic (Integrations → WhatsApp), not to the shell
+ * it happens to be running in. This used to also require the desktop app, so a
+ * clinic that had opted into their own number still got the automated path in a
+ * browser — and if the event wasn't configured, that path silently sends
+ * nothing. openWhatsApp already handles both worlds: the native app on desktop,
+ * wa.me in a browser.
+ */
+export const isManualWhatsApp = (user) => !!(user && user.clinic && user.clinic.manual_whatsapp);
 
 /**
  * Open WhatsApp with a prefilled message to `phone`, without piling up tabs.
@@ -129,4 +139,29 @@ export async function downloadAuthedFile(path, filename) {
   a.click();
   window.URL.revokeObjectURL(url);
   document.body.removeChild(a);
+}
+
+/**
+ * Manually share one installment's receipt: download the PDF (to attach in the
+ * chat) and open WhatsApp with a prefilled message. Same shape as
+ * shareInvoiceManually — the clinic sends from their own number.
+ */
+export async function shareReceiptManually(invoice, payment, user) {
+  const phone = invoice?.patient_phone;
+  if (!phone) return false;
+  await downloadAuthedFile(
+    `/invoices/${invoice.id}/payments/${payment.id}/receipt`,
+    `receipt_${payment.receipt_number || payment.id}.pdf`
+  );
+  const clinicName = user?.clinic?.name || 'our clinic';
+  const cur = getCurrencySymbol();
+  const amount = Number(payment.amount || 0).toLocaleString('en-IN');
+  const due = Number(payment.receipt_balance_due ?? 0);
+  // Saying what's left avoids the follow-up question the receipt exists to answer.
+  const balanceLine = due > 0
+    ? ` The remaining balance is ${cur}${due.toLocaleString('en-IN')}.`
+    : ' Your bill is now fully settled.';
+  const msg = `Hello ${invoice.patient_name || ''}, thank you for your payment of ${cur}${amount} at ${clinicName}. `
+    + `Receipt ${payment.receipt_number || ''} is attached.${balanceLine}`;
+  return openWhatsApp(phone, msg, user?.clinic?.country || 'IN');
 }

@@ -28,13 +28,35 @@ interface TabConfig {
   primary_color: string;
   footer_text: string;
   gst_number: string;
+  /** Which optional fields print. Mirrors backend pdf_fields.py. */
+  show: Record<string, boolean>;
 }
+
+// Everything shows until the clinic says otherwise — the backend resolver
+// defaults the same way, so a clinic that never opens this renders unchanged.
+const ALL_SHOWN: Record<string, boolean> = {
+  tax_number: true, contact: true, license_number: true, address: true,
+  tagline: true, footer: true, signature: true, discount: true,
+};
+
+// Tax and discount are invoice concepts: a prescription has no total to
+// discount and no tax to declare.
+const FIELD_ROWS: { key: string; label: string; hint: string; only?: TabId[] }[] = [
+  { key: 'tagline',        label: 'Tagline',           hint: 'The line under your clinic name' },
+  { key: 'address',        label: 'Address',           hint: 'Clinic street address' },
+  { key: 'contact',        label: 'Phone & email',     hint: 'Contact details in the letterhead' },
+  { key: 'license_number', label: 'Licence number',    hint: 'Your registration number' },
+  { key: 'tax_number',     label: 'GST / Tax number',  hint: 'Only meaningful on a tax document', only: ['invoice'] },
+  { key: 'signature',      label: 'Signature block',   hint: 'The authorised-signatory line' },
+  { key: 'footer',         label: 'Footer text',       hint: 'The disclaimer set above' },
+  { key: 'discount',       label: 'Discount',          hint: 'Hidden discounts are netted into the subtotal', only: ['invoice'] },
+];
 type Configs = Record<TabId, TabConfig>;
 
 const DEFAULT_CONFIGS: Configs = {
-  invoice:      { template_id: 'modern_orange', logo_url: '', primary_color: '#FF9800', footer_text: '', gst_number: '' },
-  prescription: { template_id: 'standard',      logo_url: '', primary_color: '#2a276e', footer_text: '', gst_number: '' },
-  consent:      { template_id: 'classic',       logo_url: '', primary_color: '#2a276e', footer_text: '', gst_number: '' },
+  invoice:      { template_id: 'classic', logo_url: '', primary_color: '#FF9800', footer_text: '', gst_number: '', show: { ...ALL_SHOWN } },
+  prescription: { template_id: 'classic', logo_url: '', primary_color: '#2a276e', footer_text: '', gst_number: '', show: { ...ALL_SHOWN } },
+  consent:      { template_id: 'classic', logo_url: '', primary_color: '#2a276e', footer_text: '', gst_number: '', show: { ...ALL_SHOWN } },
 };
 
 const PRESETS = [
@@ -163,7 +185,7 @@ export const TemplatesScreen: React.FC<TemplatesScreenProps> = ({ navigation }) 
       if (meData) {
         next.invoice.gst_number  = (meData as any).gst_number  || '';
         next.invoice.logo_url    = (meData as any).logo_url    || '';
-        next.invoice.template_id = (meData as any).invoice_template || 'modern_orange';
+        next.invoice.template_id = (meData as any).invoice_template || 'classic';
         setClinicMeta({ name: meData.name || 'Your Clinic', address: meData.address || '' });
       }
       (configData || []).forEach((cfg: any) => {
@@ -175,6 +197,9 @@ export const TemplatesScreen: React.FC<TemplatesScreenProps> = ({ navigation }) 
             logo_url:      cfg.logo_url        || '',
             primary_color: cfg.primary_color   || next[key].primary_color,
             footer_text:   cfg.footer_text     || '',
+            // Missing keys stay shown, so adding a toggle later can't
+            // retroactively hide it for clinics who saved before it existed.
+            show: { ...ALL_SHOWN, ...(cfg.config_json?.show || {}) },
           };
         }
       });
@@ -247,11 +272,19 @@ export const TemplatesScreen: React.FC<TemplatesScreenProps> = ({ navigation }) 
     const ok = await adminApiService.saveTemplateConfig({
       category: activeTab, template_id: cfg.template_id, logo_url: cfg.logo_url,
       primary_color: cfg.primary_color, footer_text: cfg.footer_text,
+      config_json: { show: cfg.show },
       ...(activeTab === 'invoice' ? { gst_number: cfg.gst_number } : {}),
     });
     setSaving(false);
     if (ok) toast.success(`${TABS.find(t => t.id === activeTab)?.label} template saved!`);
     else toast.error('Failed to save. Try again.');
+  };
+
+  const toggleField = (key: string) => {
+    setConfigs(prev => ({
+      ...prev,
+      [activeTab]: { ...prev[activeTab], show: { ...prev[activeTab].show, [key]: !prev[activeTab].show[key] } },
+    }));
   };
 
   const cfg = configs[activeTab];
@@ -424,6 +457,40 @@ export const TemplatesScreen: React.FC<TemplatesScreenProps> = ({ navigation }) 
               </View>
             </View>
 
+            {/* ── What prints on the document ── */}
+            <Text style={styles.sectionLabel}>VISIBLE FIELDS</Text>
+            <View style={styles.card}>
+              <Text style={styles.visHint}>
+                Unticking hides a field — it never invents one, so anything you haven't
+                filled in stays blank either way.
+              </Text>
+              {FIELD_ROWS.filter(f => !f.only || f.only.includes(activeTab)).map((f, i, arr) => {
+                const on = cfg.show?.[f.key] ?? true;
+                return (
+                  <TouchableOpacity
+                    key={f.key}
+                    style={[styles.visRow, i < arr.length - 1 && styles.visRowDivider]}
+                    onPress={() => toggleField(f.key)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.visLabel}>{f.label}</Text>
+                      <Text style={styles.visSub}>{f.hint}</Text>
+                    </View>
+                    <View style={[styles.visBox, on && { backgroundColor: adminColors.primary, borderColor: adminColors.primary }]}>
+                      {on && <Check size={13} color="#fff" strokeWidth={3} />}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+              {activeTab === 'invoice' && (
+                <Text style={styles.visFoot}>
+                  Payment receipts follow these same settings, so a field hidden on the
+                  bill stays hidden on the receipt for that payment.
+                </Text>
+              )}
+            </View>
+
             {/* ── Live preview ── */}
             <Text style={styles.sectionLabel}>LIVE PREVIEW</Text>
             <View style={styles.card}>
@@ -476,6 +543,16 @@ export const TemplatesScreen: React.FC<TemplatesScreenProps> = ({ navigation }) 
 };
 
 const styles = StyleSheet.create({
+  visHint: { fontSize: 12, color: '#6B7280', lineHeight: 17, marginBottom: 4 },
+  visRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
+  visRowDivider: { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  visLabel: { fontSize: 14, fontWeight: '600', color: '#111827' },
+  visSub: { fontSize: 11.5, color: '#9CA3AF', marginTop: 2, lineHeight: 16 },
+  visBox: {
+    width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: '#D1D5DB',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  visFoot: { fontSize: 11.5, color: '#9CA3AF', fontStyle: 'italic', marginTop: 10, lineHeight: 16 },
   container:   { flex: 1, backgroundColor: '#F3F4F6' },
   center:      { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   loadingText: { fontSize: 14, color: '#6B7280' },

@@ -47,7 +47,8 @@ const PatientProfile = () => {
     { id: "case-papers", name: "Case Papers" },
     { id: "billing", name: "Billing" },
     { id: "profile", name: "Patient Info" },
-    { id: "files", name: "Files" }
+    { id: "xrays", name: "X-rays" },
+    { id: "files", name: "Documents" }
   ];
 
   // Lightweight placeholder for tabs whose data is still streaming in.
@@ -582,8 +583,12 @@ const PatientProfile = () => {
               )
             )}
 
+            {activeTab === "xrays" && (
+              <PatientFilesTab patientId={patientId} variant="xray" />
+            )}
+
             {activeTab === "files" && (
-              <PatientFilesTab patientId={patientId} />
+              <PatientFilesTab patientId={patientId} variant="documents" />
             )}
 
             {activeTab === "profile" && (

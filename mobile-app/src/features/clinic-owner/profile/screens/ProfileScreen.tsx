@@ -16,6 +16,7 @@ import { colors } from '../../../../shared/constants/colors';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
 import { AppSkeleton } from '../../../../shared/components/Skeleton';
 import { ClinicSwitcherSheet } from '../../../../shared/components/ClinicSwitcherSheet';
+import { resolveUserPhoto } from '../../../../shared/utils/avatar';
 import { ClinicInfo } from '../../../../services/api/admin.api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { IS_PURCHASE_UI_ENABLED } from '../../../../shared/constants/platform';
@@ -125,7 +126,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
             name={userName}
             role={backendUser?.role?.toUpperCase() || "LEAD DENTIST"}
             clinic={backendUser?.clinic?.name || ""}
-            photoURL={user?.photoURL}
+            photoURL={resolveUserPhoto(backendUser, user)}
             avatarSeed={user?.email || backendUser?.email}
             onEditPress={handleEditProfile}
           />

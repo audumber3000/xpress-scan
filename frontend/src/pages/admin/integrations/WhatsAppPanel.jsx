@@ -7,12 +7,17 @@ import { useAuth } from '../../../contexts/AuthContext';
 const WAREACH_PORTAL = 'http://116.203.142.56:3000/';
 
 /**
- * Integrations tab — now a single, real integration: WA Reach (own-number
- * WhatsApp via WhatsApp Web, Pro only). Connecting links the clinic's own
- * number; once connected, patient WhatsApp (invoices, reminders, etc.) sends
- * from that number for free. The MSG91 platform path is untouched.
+ * WhatsApp tab of the Integrations section.
+ *
+ * Two independent settings live here:
+ *  - Manual WhatsApp: a clinic setting that makes patient WhatsApp buttons open
+ *    WhatsApp with the message pre-filled, so staff send it themselves. Desktop
+ *    app only.
+ *  - WA Reach: links the clinic's own number over WhatsApp Web so patient
+ *    messages send from it for free (Pro only). The MSG91 platform path is
+ *    untouched by either.
  */
-const IntegrationsTab = () => {
+const WhatsAppPanel = () => {
   const { user, refreshUser } = useAuth();
   const [savingManual, setSavingManual] = useState(false);
   const manualOn = !!user?.clinic?.manual_whatsapp;
@@ -266,4 +271,4 @@ const IntegrationsTab = () => {
   );
 };
 
-export default IntegrationsTab;
+export default WhatsAppPanel;

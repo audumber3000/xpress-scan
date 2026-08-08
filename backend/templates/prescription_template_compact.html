@@ -177,7 +177,7 @@ body {
       {{logo_html}}
       <div class="meta">
         <div class="name">{{clinic_name}}</div>
-        <div class="sub">{{clinic_tagline}}</div>
+        {{clinic_tagline_html}}
       </div>
     </div>
     <div class="doc">
@@ -234,11 +234,7 @@ body {
   <!-- FOOTER -->
   <div class="footer">
     <div class="follow-up">{{follow_up_html}}</div>
-    <div class="signature-box">
-      {{signature_image_html}}
-      <span class="signature-line">{{doctor_signature_label}}</span>
-      <p class="signature-clinic">{{clinic_name}}</p>
-    </div>
+    {{signature_box_html}}
   </div>
 
   {{footer_text_html}}

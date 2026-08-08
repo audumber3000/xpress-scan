@@ -68,3 +68,16 @@ mobile/android/
 !*.tfvars.example
 .terraform.lock.hcl
 crash.log
+
+# graphify knowledge-graph output (local cache, never commit)
+graphify-out/
+**/graphify-out/
+
+# dental-labs runtime uploads (ephemeral, user data)
+dental-labs/backend/uploads/
+
+# Android signing vault: private upload keystore + passwords. NEVER commit.
+# Stable home for the release key (android/ gets wiped by prebuild --clean).
+mobile-app/signing/
+*.keystore
+*.jks

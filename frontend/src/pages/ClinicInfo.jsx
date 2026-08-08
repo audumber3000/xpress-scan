@@ -5,7 +5,7 @@ import { api } from '../utils/api';
 import { toast } from 'react-toastify';
 import GearLoader from '../components/GearLoader';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Building2, IdCard, Receipt, MapPin, Clock, GitBranch, PlusCircle, Check } from 'lucide-react';
 
 /**
  * Clinic Profile — the details for one branch, split across tabs.
@@ -17,11 +17,15 @@ import { ChevronLeft } from 'lucide-react';
  */
 
 const TABS = [
-  { id: 'basic', label: 'Basic' },
-  { id: 'license', label: 'License' },
-  { id: 'taxation', label: 'Taxation' },
-  { id: 'location', label: 'Location' },
-  { id: 'timings', label: 'Timings' },
+  { id: 'basic',    label: 'Basic',    icon: Building2 },
+  { id: 'license',  label: 'License',  icon: IdCard },
+  { id: 'taxation', label: 'Taxation', icon: Receipt },
+  { id: 'location', label: 'Location', icon: MapPin },
+  { id: 'timings',  label: 'Timings',  icon: Clock },
+  // Branches used to be its own Control Center section with a sidebar tree. A
+  // branch is just another clinic record edited on this very screen, so it
+  // belongs here as a tab rather than as a parallel destination.
+  { id: 'branches', label: 'Branches', icon: GitBranch },
 ];
 
 const DEFAULT_TIMINGS = {
@@ -35,12 +39,12 @@ const DEFAULT_TIMINGS = {
 };
 
 const inputClass =
-  'w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2D9596] focus:border-transparent';
+  'w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#29828a] focus:border-transparent';
 const labelClass = 'block text-sm font-medium text-gray-700 mb-2';
 
 /** One tab's panel: a titled card the fields sit in. */
 const Panel = ({ title, description, children }) => (
-  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+  <div className="bg-white rounded-xl border border-gray-200 p-6">
     <div className="mb-5">
       <h3 className="text-lg font-bold text-gray-900">{title}</h3>
       {description && <p className="text-sm text-gray-500 mt-0.5">{description}</p>}
@@ -62,12 +66,24 @@ const ClinicInfo = () => {
   const isActiveClinic = targetClinicId === user?.clinic_id;
 
   const [activeTab, setActiveTab] = useState('basic');
+
+  // Every clinic this user belongs to. `clinics` is the multi-branch list;
+  // single-clinic accounts only have the one.
+  const branches = (user?.clinics?.length > 0 ? user.clinics : [user?.clinic]).filter(Boolean);
+
+  // Switching branch is a URL change on this same screen, so the reload below
+  // picks up the new id — no clinic switch, no page swap.
+  const openBranch = (id) => {
+    navigate(`/admin/clinic?clinic=${id}`);
+    setActiveTab('basic');
+  };
   const [clinicData, setClinicData] = useState({
     name: '',
     address: '',
     phone: '',
     email: '',
     logo_url: '',
+    tagline: '',
     gst_number: '',
     tax_label: 'GST No.',
     license_number: '',
@@ -106,6 +122,7 @@ const ClinicInfo = () => {
         email: data.email || '',
         logo_url: data.logo_url || data.logo || '',
         gst_number: data.gst_number || '',
+        tagline: data.tagline || '',
         tax_label: data.tax_label || 'GST No.',
         license_number: data.license_number || '',
         license_authority: data.license_authority || '',
@@ -197,42 +214,41 @@ const ClinicInfo = () => {
 
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-y-auto custom-scrollbar p-6 lg:p-8 pb-10">
-      {/* Breadcrumb */}
-      <div className="mb-4 flex items-center gap-2 text-sm font-medium text-gray-500">
-        <span>Control Center</span>
-        <span>/</span>
-        <span className="text-gray-900">Clinic Profile</span>
-      </div>
+      <div className="mb-6">
+        <div className="flex items-center justify-between gap-4 mb-5">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              Clinic Details
+              {!isActiveClinic && (
+                <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                  Other branch
+                </span>
+              )}
+            </h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {clinicData.name ? `Identity, licence and hours for ${clinicData.name}.` : 'Identity, licence and hours for this branch.'}
+            </p>
+          </div>
+        </div>
 
-      {/* Title */}
-      <div className="mb-5">
-        <h2 className="text-xl font-bold text-gray-900">
-          {clinicData.name || 'Clinic Profile'}
-          {!isActiveClinic && (
-            <span className="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-              Other branch
-            </span>
-          )}
-        </h2>
-        <p className="text-sm text-gray-500 mt-0.5">View or update the details below</p>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-6 mb-6 border-b border-gray-200 overflow-x-auto no-scrollbar">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`pb-3 px-1 font-semibold whitespace-nowrap transition relative ${
-              activeTab === tab.id ? 'text-[#2D9596]' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {tab.label}
-            {activeTab === tab.id && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#2D9596] rounded-full" />
-            )}
-          </button>
-        ))}
+        <div className="border-b border-gray-200">
+          <div className="flex gap-1 -mb-px overflow-x-auto no-scrollbar">
+            {TABS.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors rounded-t-lg whitespace-nowrap ${
+                  activeTab === id
+                    ? 'border-[#29828a] text-[#29828a] bg-white'
+                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+                }`}
+              >
+                <Icon size={14} />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Panels */}
@@ -249,7 +265,7 @@ const ClinicInfo = () => {
                 )}
               </div>
               <div className="flex items-center gap-3">
-                <label className="px-4 py-2 bg-[#2D9596] text-white rounded-lg hover:bg-[#1F6B72] cursor-pointer text-sm font-semibold transition-colors">
+                <label className="px-4 py-2 bg-[#29828a] text-white rounded-lg hover:bg-[#216b71] cursor-pointer text-sm font-semibold transition-colors">
                   {logoUploading ? 'Uploading...' : 'Upload Logo'}
                   <input
                     type="file"
@@ -277,6 +293,21 @@ const ClinicInfo = () => {
             <div>
               <label className={labelClass}>Clinic Name *</label>
               <input type="text" value={clinicData.name} onChange={setField('name')} className={inputClass} placeholder="Enter clinic name" />
+            </div>
+            <div className="xl:col-span-2">
+              <label className={labelClass}>Tagline</label>
+              <input
+                type="text"
+                value={clinicData.tagline}
+                onChange={setField('tagline')}
+                className={inputClass}
+                maxLength={120}
+                placeholder="e.g. Comprehensive Dental & Orthodontic Care"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Printed under your clinic name on invoices, prescriptions and consent forms.
+                Leave blank to show none. You can switch it off per document in Templates Editor.
+              </p>
             </div>
             <div>
               <label className={labelClass}>Phone *</label>
@@ -352,7 +383,7 @@ const ClinicInfo = () => {
                     value={timing.open}
                     onChange={(e) => setTiming(day, { open: e.target.value })}
                     disabled={timing.closed}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2D9596] focus:border-transparent disabled:bg-gray-200 disabled:text-gray-500"
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#29828a] focus:border-transparent disabled:bg-gray-200 disabled:text-gray-500"
                   />
                   <span className="text-gray-500">to</span>
                   <input
@@ -360,7 +391,7 @@ const ClinicInfo = () => {
                     value={timing.close}
                     onChange={(e) => setTiming(day, { close: e.target.value })}
                     disabled={timing.closed}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2D9596] focus:border-transparent disabled:bg-gray-200 disabled:text-gray-500"
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#29828a] focus:border-transparent disabled:bg-gray-200 disabled:text-gray-500"
                   />
                 </div>
                 <label className="flex items-center gap-2">
@@ -368,7 +399,7 @@ const ClinicInfo = () => {
                     type="checkbox"
                     checked={timing.closed}
                     onChange={(e) => setTiming(day, { closed: e.target.checked })}
-                    className="w-4 h-4 text-[#2D9596] border-gray-300 rounded focus:ring-[#2D9596]"
+                    className="w-4 h-4 text-[#29828a] border-gray-300 rounded focus:ring-[#29828a]"
                   />
                   <span className="text-sm text-gray-600">Closed</span>
                 </label>
@@ -378,16 +409,81 @@ const ClinicInfo = () => {
         </Panel>
       )}
 
-      {/* Save — one button for every tab; they all edit the same clinic record. */}
-      <div className="flex justify-end mt-6">
-        <button
-          onClick={handleSaveClinicData}
-          disabled={savingClinicData}
-          className="px-6 py-3 bg-[#2D9596] text-white rounded-lg hover:bg-[#1F6B72] disabled:opacity-50 font-semibold transition-colors shadow-sm"
+      {activeTab === 'branches' && (
+        <Panel
+          title="Branches"
+          description="Every clinic on this account. Open one to edit its details."
         >
-          {savingClinicData ? 'Saving...' : 'Save Changes'}
-        </button>
-      </div>
+          {branches.length === 0 ? (
+            <p className="text-sm text-gray-500">No branches on this account yet.</p>
+          ) : (
+            <div className="divide-y divide-gray-100 -mx-6 -mt-2">
+              {branches.map((branch) => {
+                const isViewing = branch.id === targetClinicId;
+                const isSignedInTo = branch.id === user?.clinic_id;
+                return (
+                  <button
+                    key={branch.id}
+                    onClick={() => openBranch(branch.id)}
+                    className={`w-full text-left px-6 py-4 flex items-center gap-3 transition-colors ${
+                      isViewing ? 'bg-[#29828a]/5' : 'hover:bg-indigo-50/30'
+                    }`}
+                  >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                      isViewing ? 'bg-[#29828a] text-white' : 'bg-gray-100 text-gray-500'
+                    }`}>
+                      <Building2 size={18} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-gray-900 truncate">{branch.name}</span>
+                        {isSignedInTo && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100">
+                            Signed in
+                          </span>
+                        )}
+                      </div>
+                      {(branch.address || branch.clinic_code) && (
+                        <p className="text-xs text-gray-500 truncate mt-0.5">
+                          {[branch.clinic_code, branch.address].filter(Boolean).join(' · ')}
+                        </p>
+                      )}
+                    </div>
+                    {isViewing
+                      ? <span className="flex items-center gap-1 text-xs font-semibold text-[#29828a] shrink-0"><Check size={14} /> Viewing</span>
+                      : <span className="text-xs font-medium text-gray-400 shrink-0">Open</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="mt-5 pt-5 border-t border-gray-100">
+            <button
+              onClick={() => navigate('/add-clinic')}
+              className="flex items-center gap-2 px-4 py-2 bg-[#29828a] text-white text-sm font-semibold rounded-lg hover:bg-[#216b71] transition-colors"
+            >
+              <PlusCircle size={16} /> Add New Branch
+            </button>
+            <p className="text-xs text-gray-400 mt-2">
+              Adding a second branch moves this account onto the paid plan.
+            </p>
+          </div>
+        </Panel>
+      )}
+
+      {/* Save — one button for every tab; they all edit the same clinic record. */}
+      {activeTab !== 'branches' && (
+        <div className="flex justify-end mt-6">
+          <button
+            onClick={handleSaveClinicData}
+            disabled={savingClinicData}
+            className="px-6 py-3 bg-[#29828a] text-white rounded-lg hover:bg-[#216b71] disabled:opacity-50 font-semibold transition-colors"
+          >
+            {savingClinicData ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      )}
 
     </div>
   );

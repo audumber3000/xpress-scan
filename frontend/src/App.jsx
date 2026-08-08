@@ -40,6 +40,11 @@ import ReferringDoctors from "./pages/ReferringDoctors";
 import Notifications from "./pages/admin/Notifications";
 import PracticeSettings from "./pages/admin/PracticeSettings";
 import TemplatesEditor from "./pages/admin/TemplatesEditor";
+import Integrations from "./pages/admin/integrations";
+import Devices from "./pages/admin/security/Devices";
+import AuditLog from "./pages/admin/security/AuditLog";
+import Security from "./pages/admin/security/Security";
+import Offers from "./pages/admin/Offers";
 import Vendors from "./pages/Vendors";
 import ConsentForms from "./pages/ConsentForms";
 import Reports from "./pages/Reports";
@@ -273,7 +278,10 @@ function AppContent() {
               <Route path="/marketing/reviews" element={<ProtectedRoute><GoogleReviews /></ProtectedRoute>} />
               <Route path="/marketing/posters" element={<ProtectedRoute><MarketingPosters /></ProtectedRoute>} />
               <Route path="/admin" element={<ProtectedRoute><AdminHub /></ProtectedRoute>}>
-                <Route index element={<Navigate to="attendance" replace />} />
+                {/* Lands on the first item in the Control Center menu. Used to
+                    go to Attendance, which is no longer listed there, so /admin
+                    opened a page with nothing highlighted in the sidebar. */}
+                <Route index element={<Navigate to="clinic" replace />} />
                 <Route path="attendance" element={<Attendance />} />
                 <Route path="staff" element={<StaffManagement />} />
                 <Route path="treatments" element={<TreatmentsPricing />} />
@@ -284,6 +292,15 @@ function AppContent() {
                 <Route path="templates-editor" element={<TemplatesEditor />} />
                 <Route path="practice-settings/:category" element={<PracticeSettings />} />
                 <Route path="notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+                {/* One section, tab in the URL — keeps older
+                    /admin/integrations/whatsapp links working. */}
+                <Route path="integrations" element={<Navigate to="xray" replace />} />
+                <Route path="integrations/:tab" element={<Integrations />} />
+                <Route path="security" element={<Navigate to="verification" replace />} />
+                <Route path="security/verification" element={<Security />} />
+                <Route path="security/devices" element={<Devices />} />
+                <Route path="security/audit-log" element={<AuditLog />} />
+                <Route path="offers" element={<Offers />} />
                 <Route path="subscription" element={<Subscription />} />
               </Route>
               <Route path="/subscription" element={<Navigate to="/admin/subscription" replace />} />

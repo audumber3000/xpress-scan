@@ -42,6 +42,7 @@ import { AddAppointmentScreen } from '../features/clinic-owner/appointments/scre
 import { ConnectivityBanner } from '../shared/components/ConnectivityBanner';
 import { PracticeSettingsScreen } from '../features/admin/practice-settings/screens/PracticeSettingsScreen';
 import { TemplatesScreen } from '../features/admin/templates/screens/TemplatesScreen';
+import { AuditLogScreen } from '../features/admin/security/screens/AuditLogScreen';
 import { TeamScreen } from '../features/admin/team/screens/TeamScreen';
 import { GoogleReviewsScreen } from '../features/clinic-owner/marketing/screens/GoogleReviewsScreen';
 import { TabletWebAppScreen } from '../features/tablet/screens/TabletWebAppScreen';
@@ -77,6 +78,7 @@ export type RootStackParamList = {
   ExpenseDetails: { expenseId: string };
   PracticeSettings: { category: string; backendKey: string; label: string };
   Templates: undefined;
+  AuditLog: undefined;
   Team: { initialTab?: 'staff' | 'attendance' | 'permissions' } | undefined;
   Patients: undefined;
   Appointments: undefined;
@@ -209,6 +211,7 @@ export const AppNavigator = () => {
                 <Stack.Screen name="ExpenseDetails" component={ExpenseDetailsScreen} />
                 <Stack.Screen name="PracticeSettings" component={PracticeSettingsScreen} />
                 <Stack.Screen name="Templates" component={TemplatesScreen} />
+                <Stack.Screen name="AuditLog" component={AuditLogScreen} />
                 <Stack.Screen name="Team" component={TeamScreen} />
                 <Stack.Screen name="Profile" component={ProfileScreen} />
                 <Stack.Screen name="GoogleReviews" component={GoogleReviewsScreen} />

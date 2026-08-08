@@ -6,6 +6,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 import datetime
 from core.auth_utils import get_current_user
+from core.audit import record_audit, STAFF_UPDATED, STAFF_DEACTIVATED, PERMISSIONS_CHANGED
 from domains.communication.services.email_service import EmailService
 import hashlib
 
@@ -46,6 +47,10 @@ class ClinicUserOut(BaseModel):
     created_at: datetime.datetime
     permissions: Optional[dict] = {}
     has_password: Optional[bool] = False  # Whether user has a password set
+    # The person's own profile photo. Without it every staff list falls back to
+    # a generated cartoon, so uploading a picture appeared to do nothing outside
+    # the profile page itself.
+    avatar_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -75,7 +80,8 @@ def get_clinic_users(db: Session = Depends(get_db), current_user = Depends(get_c
                 is_active=user.is_active,
                 created_at=user.created_at,
                 permissions=user.permissions or {},
-                has_password=bool(user.password_hash)
+                has_password=bool(user.password_hash),
+                avatar_url=user.avatar_url
             ) for user in users
         ]
     except Exception as e:
@@ -187,7 +193,7 @@ def delete_clinic_user(user_id: int, db: Session = Depends(get_db), current_user
     return {"message": "User deleted"}
 
 @router.put("/{user_id}", response_model=ClinicUserOut)
-def update_clinic_user(user_id: int, user_update: ClinicUserUpdate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def update_clinic_user(user_id: int, user_update: ClinicUserUpdate, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Update clinic user - scoped by clinic"""
     # Check if user has permission to edit users
     if current_user.role != "clinic_owner":
@@ -222,13 +228,42 @@ def update_clinic_user(user_id: int, user_update: ClinicUserUpdate, db: Session 
                 raise HTTPException(status_code=400, detail="This username is already taken")
         user.username = new_username
     if user_update.role is not None:
+        # Demoting yourself out of clinic_owner is the same trap as editing your
+        # own permissions: the screen that would undo it is the one you just lost.
+        if user.id == current_user.id and user.role == 'clinic_owner' and user_update.role != 'clinic_owner':
+            raise HTTPException(
+                status_code=400,
+                detail="You can't change your own role. Ask another owner to do it.",
+            )
         user.role = user_update.role
     if user_update.permissions is not None:
+        # Nobody edits their own permissions. An owner who switches off their own
+        # access loses the very screen that could restore it, and there is no
+        # in-app way back — it takes a database edit. Enforced here and not only
+        # in the UI, because a disabled button stops a slip, not a direct call.
+        if user.id == current_user.id:
+            raise HTTPException(
+                status_code=400,
+                detail="You can't change your own permissions — it would lock you out.",
+            )
+        # The owner's access is not editable by anyone: a staff member with
+        # staff:edit could otherwise strip the owner and take over the clinic.
+        if user.role == 'clinic_owner':
+            raise HTTPException(
+                status_code=400,
+                detail="The clinic owner always has full access, and it can't be edited.",
+            )
         user.permissions = user_update.permissions
+        record_audit(db, current_user, PERMISSIONS_CHANGED,
+                     f"Changed module permissions for {user.name}",
+                     request=request, entity_type='user', entity_id=user.id)
     if user_update.is_active is not None:
         if user.role == 'clinic_owner':
             raise HTTPException(status_code=400, detail="Cannot deactivate the clinic owner")
         user.is_active = user_update.is_active
+        record_audit(db, current_user, STAFF_DEACTIVATED if not user_update.is_active else STAFF_UPDATED,
+                     f"{'Deactivated' if not user_update.is_active else 'Reactivated'} {user.name}",
+                     request=request, entity_type='user', entity_id=user.id)
     if user_update.password is not None:
         if len(user_update.password) < 8:
             raise HTTPException(status_code=400, detail="Password must be at least 8 characters")

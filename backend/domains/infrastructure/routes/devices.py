@@ -131,6 +131,21 @@ def update_device(
     if not user or user.clinic_id != current_user.clinic_id:
         raise HTTPException(status_code=403, detail="You don't have permission to edit this device")
     
+    # Blocking is now enforced at login (AuthService.device_block_reason), so
+    # blocking your own device would lock you out at the next sign-in with no
+    # way back in. Removing it (DELETE) stays allowed — that only forgets the
+    # device, and it re-enrolls on the next sign-in.
+    if device.user_id == current_user.id:
+        blocking_self = (
+            device_update.get("is_active") is False
+            or any(v is False for v in (device_update.get("allowed_access") or {}).values())
+        )
+        if blocking_self:
+            raise HTTPException(
+                status_code=400,
+                detail="You can't block your own device — you'd be locked out at the next sign-in. Ask another clinic owner to do it, or remove the device instead.",
+            )
+
     # Update allowed fields
     if "device_name" in device_update:
         device.device_name = device_update["device_name"]

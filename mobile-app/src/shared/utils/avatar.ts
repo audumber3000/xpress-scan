@@ -47,3 +47,32 @@ export const generatePatientPersona = (patient?: PatientPersonaInput | null, siz
 
   return `https://api.dicebear.com/9.x/personas/svg?${options}`;
 };
+
+/** Anything that might carry a person's picture, in any of the shapes the
+ *  app's various sources use. */
+export interface UserPhotoSource {
+  avatar_url?: string | null;
+  photoURL?: string | null;
+  avatar?: string | null;
+  profile_photo_url?: string | null;
+}
+
+/**
+ * The photo to show for a person, or null to fall back to the generated avatar.
+ *
+ * Mirror of resolveUserAvatar in frontend/src/utils/avatar.js. Sources are
+ * checked in order, so pass the backend user before the Firebase one: a picture
+ * uploaded on the profile page is a deliberate choice and should beat the
+ * Google/Apple photo that merely arrived with sign-in.
+ *
+ *   photoURL={resolveUserPhoto(backendUser, user)}
+ */
+export const resolveUserPhoto = (
+  ...sources: (UserPhotoSource | null | undefined)[]
+): string | null => {
+  for (const s of sources) {
+    const photo = s?.avatar_url || s?.photoURL || s?.avatar || s?.profile_photo_url;
+    if (photo) return photo;
+  }
+  return null;
+};

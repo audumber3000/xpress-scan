@@ -9,6 +9,7 @@ import GearLoader from "../GearLoader";
 import InvoiceHeader from "./InvoiceHeader";
 import InvoiceLineItems from "./InvoiceLineItems";
 import InvoicePayments from "./InvoicePayments";
+import PartPaymentSummary from "./PartPaymentSummary";
 import InvoiceDiscounts from "./InvoiceDiscounts";
 import InvoiceActions from "./InvoiceActions";
 import MarkAsPaidModal from "./MarkAsPaidModal";
@@ -25,6 +26,12 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
   const [saving, setSaving] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [downloadingPDF, setDownloadingPDF] = useState(false);
+  const [drawerTab, setDrawerTab] = useState('invoice'); // 'invoice' | 'payments'
+  const paymentCount = (invoice?.payments || []).length;
+
+  // A different invoice always opens on its own terms, never on the tab the
+  // last one happened to be left on.
+  useEffect(() => { setDrawerTab('invoice'); }, [invoiceId]);
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -112,9 +119,9 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
           .finally(() => {
             setAutoCreatingFromPrefill(false);
           });
-      } else {
-        fetchPatients();
       }
+      // No fetchPatients() here — the debounced effect owns it and fires as
+      // soon as isCreating flips true.
     } else if (invoiceId && invoiceId !== 'new') {
       setIsCreating(false);
       fetchInvoice();
@@ -126,10 +133,19 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
   // client-side as the user types — no extra request per keystroke, no
   // dependence on /appointments/search-patients (which had a permission /
   // shape quirk that surfaced as an empty result on real accounts).
-  const fetchPatients = async () => {
+  // Searched on the server, not in the browser. This used to pull /patients/
+  // with no limit and filter the result in JS — but the endpoint defaults to 100
+  // rows, so on a clinic with more than that, everyone past the first hundred
+  // was simply unfindable, and it failed silently as "no patient matches".
+  const fetchPatients = async (term = '') => {
     try {
       setIsSearching(true);
-      const data = await api.get('/patients/');
+      const q = term.trim();
+      const data = await api.get('/patients/', {
+        // The endpoint requires 2+ chars to search; below that it's the first
+        // page, which is what an untouched dropdown should show anyway.
+        params: { skip: 0, limit: 20, ...(q.length >= 2 ? { search: q } : {}) },
+      });
       setPatients(data || []);
     } catch (error) {
       console.error("Error loading patients:", error);
@@ -138,6 +154,14 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
       setIsSearching(false);
     }
   };
+
+  // Debounced so a five-letter name is one request, not five.
+  useEffect(() => {
+    if (!isCreating) return;
+    const t = setTimeout(() => fetchPatients(patientSearch), 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patientSearch, isCreating]);
 
   const handleFinalize = async () => {
     try {
@@ -230,27 +254,9 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
     }
   };
 
-  const handleAddPayment = async (payload) => {
-    try {
-      const updated = await api.post(`/invoices/${currentInvoiceId}/payments`, payload);
-      setInvoice(updated);
-      toast.success("Payment recorded");
-    } catch (error) {
-      console.error("Error recording payment:", error);
-      toast.error(error?.message || "Failed to record payment");
-    }
-  };
-
-  const handleDeletePayment = async (paymentId) => {
-    try {
-      const updated = await api.delete(`/invoices/${currentInvoiceId}/payments/${paymentId}`);
-      setInvoice(updated);
-      toast.success("Payment removed");
-    } catch (error) {
-      console.error("Error removing payment:", error);
-      toast.error("Failed to remove payment");
-    }
-  };
+  // handleAddPayment / handleDeletePayment lived here for the payments panel's
+  // own form and row actions. Both are gone: recording goes through Mark as
+  // Paid, and the endpoints they called are still there if either comes back.
 
   // Discounts granted after the invoice was issued. Errors are rethrown so the
   // discount form can show the server's reason (e.g. "more than the amount due")
@@ -464,16 +470,9 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
   const canDelete = !!invoice && !PAID_STATUSES.includes(invoice.status) && Number(invoice.paid_amount || 0) === 0;
   const isLoadingDrawer = loading || autoCreatingFromPrefill;
 
-  // Client-side patient filter — searches name or phone, case-insensitive.
-  // Limit to first 20 matches so the dropdown stays scrollable.
-  const filteredPatients = (() => {
-    const q = patientSearch.trim().toLowerCase();
-    if (!q) return patients.slice(0, 20);
-    return patients.filter(p =>
-      (p.name || '').toLowerCase().includes(q) ||
-      (p.phone || '').toLowerCase().includes(q)
-    ).slice(0, 20);
-  })();
+  // The server already returned exactly this page, searched across the whole
+  // clinic — filtering again here would only re-introduce the 100-row ceiling.
+  const filteredPatients = patients;
 
   // One persistent drawer element. The slide-in animation runs exactly once on
   // mount; the inner content swaps between a loader and the full form when the
@@ -491,14 +490,41 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
             </div>
           ) : (
             <>
-          {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900">{isCreating ? "Invoice" : "Invoice Details"}</h2>
+          {/* Tabs sit on the top row with the close button, so the drawer spends
+              no height on a title. "Invoice Details" only repeated what the
+              invoice number below it already says. Same tab shape as the
+              Patients and Payments pages. */}
+          <div className="px-6 border-b border-gray-200 shrink-0 flex items-center justify-between gap-4">
+            {!isCreating && invoice ? (
+              <nav className="-mb-px flex space-x-8">
+                {[
+                  { id: 'invoice', label: 'Invoice' },
+                  { id: 'payments', label: `Part Payments${paymentCount ? ` (${paymentCount})` : ''}` },
+                ].map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setDrawerTab(t.id)}
+                    className={`${
+                      drawerTab === t.id
+                        ? 'border-[#2a276e] text-[#2a276e]'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </nav>
+            ) : (
+              // Creating: no tabs yet, but the row still carries the close button.
+              <h2 className="py-4 text-sm font-semibold text-gray-900">New Invoice</h2>
+            )}
+
             <button
               onClick={handleClose}
-              className="p-2 hover:bg-gray-100 rounded-full transition"
+              aria-label="Close"
+              className="p-2 -mr-2 hover:bg-gray-100 rounded-full transition shrink-0"
             >
-              <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
@@ -603,6 +629,8 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
                   {saving ? "Creating..." : "Create Draft Invoice"}
                 </button>
               </div>
+            ) : drawerTab === 'payments' ? (
+              <InvoicePayments invoice={invoice} />
             ) : (
               <>
                 <InvoiceHeader invoice={invoice} />
@@ -625,13 +653,9 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
               onRemove={handleRemoveDiscount}
             />
 
-            {/* Partial-payment schedule — visible once the invoice is finalized */}
-            <InvoicePayments
-              invoice={invoice}
-              onAdd={handleAddPayment}
-              onDelete={handleDeletePayment}
-              canEdit={canEdit}
-            />
+            {/* Where the money stands, with a way through to the detail. The
+                schedule itself lives in the Part Payments tab. */}
+            <PartPaymentSummary invoice={invoice} onOpen={() => setDrawerTab('payments')} />
 
             {invoice?.notes && (
               <div className="mt-6">

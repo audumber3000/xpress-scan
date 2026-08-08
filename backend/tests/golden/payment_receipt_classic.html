@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<style>
+@page { size: A4; margin: 2mm; }
+:root {
+  --primary-color: #FF9800;
+  --text-main: #333;
+  --text-muted: #555;
+  --border-light: #ddd;
+  --table-header-bg: #f8fafc;
+  --highlight-bg: #f0f4f8;
+}
+body {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color: var(--text-main);
+  line-height: 1.3;
+  background-color: #fff;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+}
+.receipt-container {
+  width: 100%;
+  min-height: 297mm;
+  margin: 0;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+.color-strip { height: 10px; background-color: var(--primary-color); }
+.receipt-body { padding: 40px 50px; flex-grow: 1; }
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 2px solid var(--border-light);
+  padding-bottom: 15px;
+  margin-bottom: 15px;
+}
+.header-left { display: flex; align-items: center; }
+.clinic-info-left h1 {
+  margin: 0;
+  color: var(--primary-color);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 24px;
+  line-height: 1.1;
+}
+.clinic-info-left .tagline { margin: 3px 0; font-size: 16px; color: var(--primary-color); font-weight: bold; }
+.clinic-info-right { text-align: right; }
+.clinic-info-right .doc-name { font-size: 14px; font-weight: bold; color: var(--primary-color); margin: 0 0 4px 0; }
+.clinic-info-right p { margin: 2px 0; font-size: 11px; color: var(--text-muted); font-weight: 500; }
+.receipt-title {
+  text-align: center;
+  font-size: 18px;
+  font-weight: bold;
+  margin: 10px 0 15px 0;
+  color: var(--text-main);
+  text-decoration: underline;
+}
+.info-table { width: 100%; margin-bottom: 15px; }
+.info-table td { vertical-align: top; width: 50%; }
+.info-table p { margin: 3px 0; }
+.info-table strong { display: inline-block; width: 120px; color: var(--primary-color); }
+.items-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+.items-table th, .items-table td {
+  border: 1px solid var(--border-light);
+  padding: 6px 8px;
+  text-align: center;
+}
+.items-table th {
+  background-color: var(--table-header-bg);
+  color: var(--primary-color);
+  font-weight: bold;
+  font-size: 11px;
+}
+.items-table .text-left { text-align: left; }
+.items-table .text-right { text-align: right; }
+.summary-wrapper { display: flex; justify-content: flex-end; margin-bottom: 15px; }
+.summary-table { width: 350px; border-collapse: collapse; }
+.summary-table td {
+  padding: 6px 8px;
+  text-align: right;
+  border-bottom: 1px solid var(--border-light);
+}
+.summary-table td:first-child { text-align: left; font-weight: bold; color: var(--text-muted); }
+.grand-total {
+  font-size: 15px;
+  font-weight: bold;
+  border-top: 2px solid var(--primary-color);
+  border-bottom: 2px solid var(--primary-color);
+  color: var(--primary-color);
+  background-color: var(--highlight-bg);
+}
+.amount-words {
+  font-style: italic;
+  margin-bottom: 15px;
+  background: var(--table-header-bg);
+  padding: 8px 12px;
+  border-left: 4px solid var(--primary-color);
+  color: #444;
+}
+.footer {
+  font-size: 11px;
+  color: #666;
+  margin-top: 20px;
+  display: flex;
+  justify-content: space-between;
+}
+.terms { width: 65%; }
+.terms h4 { margin-bottom: 4px; color: var(--primary-color); text-transform: uppercase; }
+.terms ul { padding-left: 15px; margin: 0; }
+.signature-box { width: 30%; text-align: center; margin-top: 10px; }
+.signature-line {
+  border-top: 1px solid var(--text-main);
+  margin-top: 40px;
+  padding-top: 5px;
+  font-weight: bold;
+  color: var(--primary-color);
+}
+</style>
+</head><body>
+
+<div class="receipt-container">
+  <div class="color-strip"></div>
+  <div class="receipt-body">
+
+    <!-- HEADER -->
+    <div class="header">
+      <div class="header-left">
+        <div style="margin-right:20px;flex-shrink:0;"><div style="width:75px;height:75px;background:#f0f4f8;border:2px dashed #FF9800;display:flex;justify-content:center;align-items:center;color:#FF9800;font-weight:bold;font-size:11px;text-align:center;">MO</div></div>
+        <div class="clinic-info-left">
+          <h1>MolarPlus Dental</h1>
+          <div class="tagline">Comprehensive Dental &amp; Orthodontic Care</div>
+        </div>
+      </div>
+      <div class="clinic-info-right">
+        <div class="doc-name">Dr. R. Sharma</div>
+        <p>12 Marine Drive, Mumbai 400020</p>
+        <p>Tel: +91 22 4000 1234</p>
+        <p>Email: hello@molarplus.example</p>
+        <p>Reg No: MH/DC/12345 | <strong>GSTIN: 27ABCDE1234F1Z5</strong></p>
+      </div>
+    </div>
+
+    <div class="receipt-title">PAYMENT RECEIPT</div>
+
+    <!-- RECEIPT / PATIENT INFO -->
+    <table class="info-table">
+      <tr>
+        <td>
+          <p><strong>Receipt No:</strong> RCP-2026-0031</p>
+          <p><strong>Date:</strong> 27 April 2026</p>
+          <p><strong>Payment Method:</strong> UPI</p>
+          <p><strong>Against Invoice:</strong> INV-101</p>
+          <p><strong>Note:</strong> Second installment</p>
+        </td>
+        <td>
+          <p><strong>Received From:</strong> Asha Mehta</p>
+          <p><strong>Patient ID:</strong> PT-42</p>
+          <p><strong>Contact:</strong> 9876543210</p>
+        </td>
+      </tr>
+    </table>
+
+    <!-- WHAT WAS RECEIVED -->
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th style="width:30px;">S.No.</th>
+          <th class="text-left">Particulars</th>
+          <th class="text-right" style="width:130px;">Amount (₹)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td class="text-left">
+            Payment received by UPI on 27 April 2026<br>
+            <span style="font-size:11px;color:#777;">Towards invoice INV-101</span>
+          </td>
+          <td class="text-right">2,500.00</td>
+        </tr>
+        
+      </tbody>
+    </table>
+
+    <!-- WHERE THIS PAYMENT LEAVES THE BILL -->
+    <div class="summary-wrapper">
+      <table class="summary-table">
+        <tr><td>Invoice Total</td><td>₹ 6,490.00</td></tr>
+        <tr><td>Amount Received (This Receipt)</td><td>₹ 2,500.00</td></tr>
+        <tr><td>Total Paid So Far</td><td>₹ 4,000.00</td></tr>
+        <tr class="grand-total">
+          <td>
+            Balance Due
+            <span style="display:block;font-weight:normal;font-size:11px;">as on 27 April 2026</span>
+          </td>
+          <td style="white-space:nowrap;">₹ 2,490.00</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- AMOUNT IN WORDS -->
+    <div class="amount-words">
+      <strong>Received Amount in Words:</strong> Two Thousand Five Hundred Rupees Only
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <div class="terms">
+        <h4>Terms &amp; Conditions</h4>
+        <ul>
+          <li>This receipt acknowledges the amount shown above against invoice INV-101.</li>
+          <li>The balance shown is as on 27 April 2026 and does not reflect any later adjustment.</li>
+          <li>This is a computer-generated receipt and does not require a physical signature.</li>
+        </ul>
+      </div>
+      <div class="signature-box">
+        
+        <div class="signature-line">Authorized Signatory / Seal</div>
+        <p style="margin:5px 0 0 0;color:var(--text-muted);font-weight:bold;">MolarPlus Dental</p>
+      </div>
+    </div>
+
+    <div style="text-align:center;color:#888;font-size:10px;margin-top:16px;border-top:1px solid #eee;padding-top:10px;">This is a computer-generated receipt. No signature required.</div>
+
+  </div>
+  <div class="color-strip"></div>
+</div>
+
+</body></html>

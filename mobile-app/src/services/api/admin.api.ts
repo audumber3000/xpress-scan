@@ -36,6 +36,39 @@ export class AdminApiService extends BaseApiService {
         }
     }
 
+    /** Setup checklist behind the Control Center progress ring. */
+    async getSetupStatus(): Promise<any | null> {
+        try {
+            const headers = await this.getAuthHeaders();
+            const r = await this.fetchWithTimeout(`${this.baseURL}/clinics/me/setup-status`, { headers });
+            return r.ok ? await r.json() : null;
+        } catch (error) {
+            // The hub is perfectly usable without the ring — never block it.
+            console.error('❌ [API] Error fetching setup status:', error);
+            return null;
+        }
+    }
+
+    /** Audit trail: who deleted or changed what, newest first. Owner-only. */
+    async getAuditLog(params: {
+        page?: number; per_page?: number; action?: string;
+        search?: string; date_from?: string; date_to?: string;
+    } = {}): Promise<any | null> {
+        try {
+            const headers = await this.getAuthHeaders();
+            const qs = new URLSearchParams(
+                Object.entries(params).filter(([, v]) => v !== undefined && v !== '') as any
+            ).toString();
+            const r = await this.fetchWithTimeout(
+                `${this.baseURL}/security/audit-log${qs ? `?${qs}` : ''}`, { headers },
+            );
+            return r.ok ? await r.json() : null;
+        } catch (error) {
+            console.error('❌ [API] Error fetching audit log:', error);
+            return null;
+        }
+    }
+
     async getClinicInfo(): Promise<ClinicInfo | null> {
         try {
             const headers = await this.getAuthHeaders();
@@ -460,18 +493,22 @@ export class AdminApiService extends BaseApiService {
         primary_color?: string;
         footer_text?: string;
         gst_number?: string;
+        /** Field-visibility toggles, shape { show: { tagline: false, ... } }.
+         *  Omit it and the server leaves whatever is stored alone — the save
+         *  endpoint patches only the keys it receives, so a save from the phone
+         *  can't wipe toggles set on the web. */
+        config_json?: { show: Record<string, boolean> };
     }): Promise<boolean> {
         try {
             const headers = await this.getAuthHeaders();
             const r = await this.fetchWithTimeout(`${this.baseURL}/template-configs`, {
                 method: 'POST', headers, body: JSON.stringify(data),
             });
-            if (r.ok && data.category === 'invoice' && data.gst_number !== undefined) {
-                await this.fetchWithTimeout(`${this.baseURL}/clinics/me`, {
-                    method: 'PATCH', headers,
-                    body: JSON.stringify({ gst_number: data.gst_number, logo_url: data.logo_url, invoice_template: data.template_id }),
-                }).catch(() => {});
-            }
+            // A PATCH /clinics/me used to fire here to mirror the GST number.
+            // That route does not exist — it 405'd into a swallowed catch, so
+            // the number never saved and the UI still reported success. The GST
+            // number is edited in Clinic Details; this endpoint only stores how
+            // the document is drawn.
             return r.ok;
         } catch (error) {
             console.error('❌ [API] Error saving template config:', error);

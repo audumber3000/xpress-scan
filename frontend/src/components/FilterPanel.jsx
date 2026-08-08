@@ -9,9 +9,23 @@ import {
 } from 'date-fns';
 import { clinicToday } from '../utils/datetime';
 
-// The page's own accent (matches Payments.jsx). Kept local so the panel looks
-// native to wherever it's dropped in.
-const ACCENT = '#2a276e';
+// Accent themes. The panel is dropped into pages with different accents (the
+// main app is navy, Control Center is teal), so both class sets are written out
+// in full — Tailwind's JIT only picks up literal strings, never interpolated
+// ones, so a computed `bg-[${color}]` would silently produce no CSS at all.
+const THEMES = {
+  navy: {
+    solid: 'bg-[#2a276e]', solidHover: 'hover:bg-[#1e1c4f]', text: 'text-[#2a276e]',
+    tint5: 'bg-[#2a276e]/5', tint10: 'bg-[#2a276e]/10', border: 'border-[#2a276e]/30',
+    ring: 'focus:ring-[#2a276e]/20',
+  },
+  teal: {
+    solid: 'bg-[#29828a]', solidHover: 'hover:bg-[#216b71]', text: 'text-[#29828a]',
+    tint5: 'bg-[#29828a]/5', tint10: 'bg-[#29828a]/10', border: 'border-[#29828a]/30',
+    ring: 'focus:ring-[#29828a]/20',
+  },
+};
+const themeOf = (accent) => THEMES[accent] || THEMES.navy;
 
 // Parse the clinic's "today" (YYYY-MM-DD) into a local-midnight Date so all the
 // preset math and calendar rendering happen on the clinic's calendar, not the
@@ -47,7 +61,7 @@ function buildPresets() {
 }
 
 // One month grid.
-function MonthGrid({ month, rangeStart, rangeEnd, hoverDate, onPick, onHover }) {
+function MonthGrid({ month, rangeStart, rangeEnd, hoverDate, onPick, onHover, t }) {
   const days = useMemo(() => {
     const start = startOfWeek(startOfMonth(month), { weekStartsOn: 1 });
     const end = endOfWeek(endOfMonth(month), { weekStartsOn: 1 });
@@ -89,9 +103,9 @@ function MonthGrid({ month, rangeStart, rangeEnd, hoverDate, onPick, onHover }) 
               className={[
                 'h-8 text-sm flex items-center justify-center transition-colors relative',
                 !inMonth ? 'text-gray-300 cursor-default' : 'cursor-pointer',
-                inRange && !isEdge ? 'bg-[#2a276e]/10 text-[#2a276e]' : '',
+                inRange && !isEdge ? `${t.tint10} ${t.text}` : '',
                 inRange && !isEdge ? '' : 'rounded-lg',
-                isEdge ? 'bg-[#2a276e] text-white font-semibold rounded-lg' : '',
+                isEdge ? `${t.solid} text-white font-semibold rounded-lg` : '',
                 inMonth && !inRange && !isEdge ? 'text-gray-700 hover:bg-gray-100 rounded-lg' : '',
                 isStart && effectiveEnd && !isSameDay(rangeStart, effectiveEnd) ? 'rounded-r-none' : '',
                 isEnd && rangeStart && !isSameDay(rangeStart, effectiveEnd) ? 'rounded-l-none' : '',
@@ -118,7 +132,8 @@ function MonthGrid({ month, rangeStart, rangeEnd, hoverDate, onPick, onHover }) 
  * `dateEnabled` — when false (e.g. the "Today" tab, which is fixed to today),
  *   the date range section is hidden and only the tab's own filters show.
  */
-const FilterPanel = ({ value, onApply, tab, dateEnabled = true }) => {
+const FilterPanel = ({ value, onApply, tab, dateEnabled = true, filters = null, dateLabel = 'Date range', accent = 'navy' }) => {
+  const t = themeOf(accent);
   const isLedger = tab === 'ledger';
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -212,7 +227,10 @@ const FilterPanel = ({ value, onApply, tab, dateEnabled = true }) => {
   const setField = (key, v) => setDraft((d) => ({ ...d, [key]: v }));
 
   const clearAll = () => {
-    const cleared = { dateFrom: '', dateTo: '', preset: '', status: '', mode: '', ledgerType: '' };
+    const base = { dateFrom: '', dateTo: '', preset: '' };
+    const cleared = filters
+      ? { ...base, ...Object.fromEntries(filters.map((f) => [f.key, ''])) }
+      : { ...base, status: '', mode: '', ledgerType: '' };
     setDraft(cleared);
   };
 
@@ -225,14 +243,16 @@ const FilterPanel = ({ value, onApply, tab, dateEnabled = true }) => {
   const activeCount = useMemo(() => {
     let n = 0;
     if (dateEnabled && (value.dateFrom || value.dateTo)) n += 1;
-    if (isLedger) {
+    if (filters) {
+      n += filters.filter((f) => value[f.key]).length;
+    } else if (isLedger) {
       if (value.ledgerType) n += 1;
     } else {
       if (value.status) n += 1;
       if (value.mode) n += 1;
     }
     return n;
-  }, [value, isLedger]);
+  }, [value, isLedger, filters, dateEnabled]);
 
   // Short human label for the committed range, shown on the trigger.
   const rangeLabel = useMemo(() => {
@@ -264,20 +284,20 @@ const FilterPanel = ({ value, onApply, tab, dateEnabled = true }) => {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className={`inline-flex items-center gap-2 pl-3 pr-2.5 py-2 rounded-lg text-sm font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 ${
+        className={`inline-flex items-center gap-2 pl-3 pr-2.5 py-2 rounded-lg text-sm font-medium border transition-all focus:outline-none focus:ring-2 ${t.ring} ${
           activeCount > 0
-            ? 'bg-[#2a276e]/5 border-[#2a276e]/30 text-[#2a276e]'
+            ? `${t.tint5} ${t.border} ${t.text}`
             : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
         }`}
       >
         <SlidersHorizontal size={15} />
         <span>{rangeLabel || 'Filters'}</span>
         {activeCount > 0 && (
-          <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#2a276e] text-white text-[11px] font-semibold">
+          <span className={`ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full ${t.solid} text-white text-[11px] font-semibold`}>
             {activeCount}
           </span>
         )}
-        <ChevronDown size={14} className={activeCount > 0 ? 'text-[#2a276e]' : 'text-gray-400'} />
+        <ChevronDown size={14} className={activeCount > 0 ? t.text : 'text-gray-400'} />
       </button>
 
       {open && (
@@ -290,7 +310,7 @@ const FilterPanel = ({ value, onApply, tab, dateEnabled = true }) => {
             <div className={`shrink-0 border-gray-100 p-3 space-y-1 bg-gray-50/60 ${pos?.two ? 'overflow-y-auto min-h-0' : ''} ${dateEnabled ? (pos?.two ? 'w-48 border-r' : 'w-full border-b') : 'w-full'}`}>
               {dateEnabled && (
               <>
-              <p className="px-2 pt-1 pb-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">Date range</p>
+              <p className="px-2 pt-1 pb-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">{dateLabel}</p>
               {presets.map((p) => {
                 const isActive = draft.preset === p.key;
                 return (
@@ -299,7 +319,7 @@ const FilterPanel = ({ value, onApply, tab, dateEnabled = true }) => {
                     type="button"
                     onClick={() => pickPreset(p)}
                     className={`w-full text-left px-2.5 py-1.5 rounded-lg text-sm transition-colors ${
-                      isActive ? 'bg-[#2a276e] text-white font-medium' : 'text-gray-600 hover:bg-gray-100'
+                      isActive ? `${t.solid} text-white font-medium` : 'text-gray-600 hover:bg-gray-100'
                     }`}
                   >
                     {p.label}
@@ -310,7 +330,7 @@ const FilterPanel = ({ value, onApply, tab, dateEnabled = true }) => {
                 type="button"
                 onClick={() => setField('preset', 'custom')}
                 className={`w-full text-left px-2.5 py-1.5 rounded-lg text-sm transition-colors ${
-                  draft.preset === 'custom' ? 'bg-[#2a276e] text-white font-medium' : 'text-gray-600 hover:bg-gray-100'
+                  draft.preset === 'custom' ? `${t.solid} text-white font-medium` : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
                 Custom range
@@ -320,13 +340,31 @@ const FilterPanel = ({ value, onApply, tab, dateEnabled = true }) => {
 
               {/* Tab-specific filters */}
               <div className={`space-y-2 ${dateEnabled ? 'pt-3 mt-2 border-t border-gray-200' : ''}`}>
-                {isLedger ? (
+                {filters ? (
+                  filters.map((f) => (
+                    <label key={f.key} className="block px-1">
+                      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{f.label}</span>
+                      <select
+                        value={draft[f.key] || ''}
+                        onChange={(e) => setField(f.key, e.target.value)}
+                        className={`mt-1 w-full px-2 py-1.5 rounded-lg text-sm border border-gray-200 bg-white focus:outline-none focus:ring-2 ${t.ring}`}
+                      >
+                        <option value="">All</option>
+                        {f.options.map((o) => {
+                          const val = typeof o === 'string' ? o : o.value;
+                          const lbl = typeof o === 'string' ? o : o.label;
+                          return <option key={val} value={val}>{lbl}</option>;
+                        })}
+                      </select>
+                    </label>
+                  ))
+                ) : isLedger ? (
                   <label className="block px-1">
                     <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Type</span>
                     <select
                       value={draft.ledgerType || ''}
                       onChange={(e) => setField('ledgerType', e.target.value)}
-                      className="mt-1 w-full px-2 py-1.5 rounded-lg text-sm border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20"
+                      className={`mt-1 w-full px-2 py-1.5 rounded-lg text-sm border border-gray-200 bg-white focus:outline-none focus:ring-2 ${t.ring}`}
                     >
                       <option value="">All</option>
                       {ledgerOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -339,7 +377,7 @@ const FilterPanel = ({ value, onApply, tab, dateEnabled = true }) => {
                       <select
                         value={draft.status || ''}
                         onChange={(e) => setField('status', e.target.value)}
-                        className="mt-1 w-full px-2 py-1.5 rounded-lg text-sm border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20"
+                        className={`mt-1 w-full px-2 py-1.5 rounded-lg text-sm border border-gray-200 bg-white focus:outline-none focus:ring-2 ${t.ring}`}
                       >
                         <option value="">All</option>
                         {statusOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -350,7 +388,7 @@ const FilterPanel = ({ value, onApply, tab, dateEnabled = true }) => {
                       <select
                         value={draft.mode || ''}
                         onChange={(e) => setField('mode', e.target.value)}
-                        className="mt-1 w-full px-2 py-1.5 rounded-lg text-sm border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20"
+                        className={`mt-1 w-full px-2 py-1.5 rounded-lg text-sm border border-gray-200 bg-white focus:outline-none focus:ring-2 ${t.ring}`}
                       >
                         <option value="">All</option>
                         {modeOptions.map((o) => <option key={o} value={o}>{o}</option>)}
@@ -384,6 +422,7 @@ const FilterPanel = ({ value, onApply, tab, dateEnabled = true }) => {
                   hoverDate={hoverDate}
                   onPick={pickDay}
                   onHover={setHoverDate}
+                  t={t}
                 />
                 {pos?.two && (
                 <div className="flex-1 min-w-0">
@@ -394,6 +433,7 @@ const FilterPanel = ({ value, onApply, tab, dateEnabled = true }) => {
                     hoverDate={hoverDate}
                     onPick={pickDay}
                     onHover={setHoverDate}
+                    t={t}
                   />
                 </div>
                 )}
@@ -422,7 +462,7 @@ const FilterPanel = ({ value, onApply, tab, dateEnabled = true }) => {
               <button
                 type="button"
                 onClick={apply}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-[#2a276e] hover:bg-[#1e1c4f] transition-colors"
+                className={`px-4 py-2 rounded-lg text-sm font-medium text-white ${t.solid} ${t.solidHover} transition-colors`}
               >
                 Apply
               </button>

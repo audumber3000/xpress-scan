@@ -4,9 +4,22 @@ import { useNavigate } from 'react-router-dom';
 import { useHeader } from "../contexts/HeaderContext";
 import { useAuth } from "../contexts/AuthContext";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
-import { ChevronLeft } from 'lucide-react';
+import { formatDate, formatRelative } from "../utils/datetime";
+import { canEditPermissions, permissionsLockReason } from "../constants/permissions";
+import { ChevronLeft, UserPlus } from 'lucide-react';
+
+// Display labels for the role filter, so the dropdown reads the way the table does.
+const ROLE_LABEL = {
+  clinic_owner: 'Clinic Owner',
+  doctor: 'Doctor',
+  dentist: 'Doctor',
+  receptionist: 'Receptionist',
+  assistant: 'Assistant',
+};
 import StaffTable from "../components/settings/StaffTable";
-import StaffTableHeader from "../components/settings/StaffTableHeader";
+import TeamTabs from "../components/team/TeamTabs";
+import TableToolbar from "../components/common/TableToolbar";
+import FilterPanel from "../components/FilterPanel";
 import UserDetailsPanel from "../components/settings/UserDetailsPanel";
 import EditUserTab from "../components/settings/EditUserTab";
 import PermissionsTab from "../components/settings/PermissionsTab";
@@ -19,6 +32,10 @@ const StaffManagement = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [availableRoles, setAvailableRoles] = useState([]);
+  // Sign-in devices, grouped by user. "Last active" was rendering "Never" for
+  // everyone because this was never fetched — the table defaulted it to {}.
+  const [userDevices, setUserDevices] = useState({});
+  const [loadingUserDevices, setLoadingUserDevices] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   
@@ -35,9 +52,9 @@ const StaffManagement = () => {
   const [addingUser, setAddingUser] = useState(false);
   const [formData, setFormData] = useState({ name: "", email: "", username: "", role: "receptionist", password: "" });
   
-  // Filter state
-  const [selectedFilter, setSelectedFilter] = useState('All');
-  const filters = ['All', 'Dentists', 'Receptionist', 'Inactive'];
+  // Role + status, applied together by the shared FilterPanel. Replaces the row
+  // of pill buttons, which could only express one choice at a time.
+  const [staffFilters, setStaffFilters] = useState({ role: '', status: '' });
 
   useEffect(() => {
     setTitle(
@@ -53,6 +70,7 @@ const StaffManagement = () => {
     );
     fetchUsers();
     fetchAvailableRoles();
+    fetchUserDevices();
   }, [setTitle, navigate]);
 
   const hasPermission = (permission) => {
@@ -64,6 +82,26 @@ const StaffManagement = () => {
     if (!user.permissions) return false;
     const [section, action] = permission.split(":");
     return user.permissions[section]?.[action] === true;
+  };
+
+  // One call for the whole clinic, then grouped here — a request per staff row
+  // would turn a ten-person list into ten round trips.
+  const fetchUserDevices = async () => {
+    try {
+      setLoadingUserDevices(true);
+      const devices = await api.get('/devices');
+      const byUser = {};
+      (Array.isArray(devices) ? devices : []).forEach((d) => {
+        (byUser[d.user_id] = byUser[d.user_id] || []).push(d);
+      });
+      setUserDevices(byUser);
+    } catch (err) {
+      // Not fatal: the staff list is still useful without last-seen times.
+      console.error('Error fetching devices:', err);
+      setUserDevices({});
+    } finally {
+      setLoadingUserDevices(false);
+    }
   };
 
   const fetchUsers = async () => {
@@ -132,6 +170,12 @@ const StaffManagement = () => {
   // Clicking a staff member goes to their permissions rather than squeezing the
   // table into a side panel — permissions is what this list is mostly used for.
   const handleUserClick = (clickedUser) => {
+    // Sending someone to a permissions screen they can't act on is a dead end;
+    // say why here instead.
+    if (!canEditPermissions(user, clickedUser)) {
+      toast.info(permissionsLockReason(user, clickedUser));
+      return;
+    }
     navigate(`/admin/permissions?user=${clickedUser.id}`);
   };
 
@@ -143,11 +187,18 @@ const StaffManagement = () => {
   };
 
   // Filter users based on selected filter
-  const filteredUsers = users.filter(user => {
-    if (selectedFilter === 'All') return true;
-    if (selectedFilter === 'Dentists') return user.role === 'dentist' || user.role === 'doctor';
-    if (selectedFilter === 'Receptionist') return user.role === 'receptionist';
-    if (selectedFilter === 'Inactive') return !user.is_active;
+  // Search was previously passed down to StaffTable, which has no such prop, so
+  // typing in the box did nothing. It filters here now, alongside the role and
+  // status choices from the filter panel.
+  const filteredUsers = users.filter((u) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q && ![u.name, u.email, u.username, u.role].some(
+      (v) => String(v || '').toLowerCase().includes(q)
+    )) return false;
+
+    if (staffFilters.role && (ROLE_LABEL[u.role] || u.role) !== staffFilters.role) return false;
+    if (staffFilters.status === 'Active' && !u.is_active) return false;
+    if (staffFilters.status === 'Inactive' && u.is_active) return false;
     return true;
   });
 
@@ -198,6 +249,11 @@ const StaffManagement = () => {
   };
 
   const handleSavePermissions = async (userId, permissions) => {
+    const target = users.find(u => String(u.id) === String(userId));
+    if (!canEditPermissions(user, target)) {
+      toast.error(permissionsLockReason(user, target) || 'These permissions cannot be changed.');
+      return;
+    }
     try {
       setSavingPermissions(true);
       await api.put(`/clinic-users/${userId}`, { permissions });
@@ -234,80 +290,41 @@ const StaffManagement = () => {
   }
 
   return (
-    <div className="flex flex-col h-full bg-transparent overflow-y-auto custom-scrollbar p-6 lg:p-8 pb-10">
-      
-      {/* Header */}
-      <div className="mb-6 flex justify-between items-end">
-        <div className="flex items-center gap-2 text-sm font-medium text-gray-500">
-          <span>Control Center</span>
-          <span>/</span>
-          <span className="text-gray-900">Staff</span>
-        </div>
-      </div>
+    <TeamTabs active="staff">
+      <TableToolbar
+        search={searchQuery}
+        onSearchChange={setSearchQuery}
+        placeholder="Search staff by name, email or role..."
+      >
+        <FilterPanel
+          accent="teal"
+          dateEnabled={false}
+          value={staffFilters}
+          onApply={setStaffFilters}
+          filters={[
+            { key: 'role', label: 'Role', options: [...new Set(users.map((u) => ROLE_LABEL[u.role] || u.role))].filter(Boolean) },
+            { key: 'status', label: 'Status', options: ['Active', 'Inactive'] },
+          ]}
+        />
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-[#29828a] text-white text-sm font-semibold rounded-lg hover:bg-[#216b71] transition-colors whitespace-nowrap"
+        >
+          <UserPlus size={18} /> Add Staff
+        </button>
+      </TableToolbar>
 
-      {/* Team Tabs Header */}
-      <div className="mb-6 border-b border-gray-200">
-        <div className="flex gap-6 -mb-px">
-          <button 
-            className="pb-3 text-sm font-medium border-b-2 border-[#29828a] text-[#29828a]"
-          >
-            Staff
-          </button>
-          <button 
-            onClick={() => navigate('/admin/permissions')}
-            className="pb-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-900 transition-colors"
-          >
-            Permissions
-          </button>
-          <button 
-            onClick={() => navigate('/admin/attendance')}
-            className="pb-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-900 transition-colors"
-          >
-            Attendance
-          </button>
-        </div>
-      </div>
+      <StaffTable
+        users={filteredUsers}
+        userDevices={userDevices}
+        loadingUserDevices={loadingUserDevices}
+        onUserClick={handleUserClick}
+        onEditUser={handleEditUser}
+        onToggleActive={handleToggleActive}
+        currentUserId={user?.id}
+      />
 
       <>
-        <div className="flex-1 flex overflow-hidden bg-white rounded-xl shadow-sm border border-gray-100 p-2">
-        <div className="flex-1 overflow-y-auto">
-          <div className="p-4">
-            <StaffTableHeader
-              userCount={filteredUsers.length}
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              onFiltersClick={() => setShowFilters(!showFilters)}
-              onAddUser={() => setShowAddModal(true)}
-            />
-            
-            {/* Filter Tabs */}
-            <div className="flex gap-3 mb-4">
-              {filters.map((filter) => (
-                <button
-                  key={filter}
-                  onClick={() => setSelectedFilter(filter)}
-                  className={`px-5 py-2.5 rounded-full font-semibold text-sm transition ${
-                    selectedFilter === filter
-                      ? 'bg-[#2D9596] text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  {filter}
-                </button>
-              ))}
-            </div>
-            
-            <StaffTable
-              users={filteredUsers}
-              onUserClick={handleUserClick}
-              onEditUser={handleEditUser}
-              searchQuery={searchQuery}
-              onToggleActive={handleToggleActive}
-              currentUserId={user?.id}
-            />
-          </div>
-        </div>
-
         {showUserPanel && selectedUser && (
           <UserDetailsPanel
             user={selectedUser}
@@ -332,7 +349,6 @@ const StaffManagement = () => {
             )}
           </UserDetailsPanel>
         )}
-      </div>
 
       {/* Add User Modal */}
       {showAddModal && (
@@ -356,7 +372,7 @@ const StaffManagement = () => {
                     name="name"
                     value={formData.name}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#29828a]"
                     required
                   />
                 </div>
@@ -369,7 +385,7 @@ const StaffManagement = () => {
                     name="email"
                     value={formData.email}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#29828a]"
                   />
                 </div>
                 <div className="mb-4">
@@ -383,7 +399,7 @@ const StaffManagement = () => {
                     onChange={handleInputChange}
                     autoCapitalize="none"
                     autoCorrect="off"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#29828a]"
                     placeholder="e.g. reception1"
                   />
                 </div>
@@ -393,7 +409,7 @@ const StaffManagement = () => {
                     name="role"
                     value={formData.role}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#29828a]"
                   >
                     {availableRoles.map((role) => (
                       <option key={role.value || role} value={role.value || role}>
@@ -409,7 +425,7 @@ const StaffManagement = () => {
                     name="password"
                     value={formData.password}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#29828a]"
                     placeholder="Leave empty for auto-generated password"
                   />
                 </div>
@@ -428,7 +444,7 @@ const StaffManagement = () => {
                   type="submit"
                   form="add-user-form"
                   disabled={addingUser}
-                  className="px-6 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="px-6 py-2 bg-[#29828a] text-white rounded-lg hover:bg-[#216b71] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {addingUser ? (
                     <>
@@ -445,7 +461,7 @@ const StaffManagement = () => {
         </div>
       )}
       </>
-    </div>
+    </TeamTabs>
   );
 };
 

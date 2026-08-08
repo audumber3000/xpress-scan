@@ -1,3 +1,4 @@
+import logging
 import os
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
@@ -8,6 +9,8 @@ from models import Subscription, Clinic, User, SubscriptionPayment
 from domains.finance.services.cashfree.cashfree_provider import CashfreeProvider
 from domains.notification.services.platform_notification_service import PlatformNotificationService
 from core.posthog_client import track_event
+
+logger = logging.getLogger(__name__)
 
 class SubscriptionService:
     def __init__(self, db: Session):
@@ -119,6 +122,13 @@ class SubscriptionService:
             return start + relativedelta(years=1)
         return start + relativedelta(months=1)
 
+    # List price per plan, in INR. Coupons can legitimately bring the paid
+    # amount below these, so they are a sanity check, not an authorisation gate.
+    PLAN_PRICES = {"professional": 899, "professional_annual": 8100}
+
+    def _plan_price(self, plan_name: str) -> float:
+        return self.PLAN_PRICES.get(plan_name, 0)
+
     def _log_payment(self, sub: Subscription, provider_payment_id: str, amount: float, paid_at: datetime = None):
         """Record a successful payment. Skips if already logged for this order."""
         existing = self.db.query(SubscriptionPayment).filter(
@@ -128,8 +138,7 @@ class SubscriptionService:
         if existing:
             return
 
-        PLAN_PRICES = {"professional": 899, "professional_annual": 8100}
-        payment_amount = amount or PLAN_PRICES.get(sub.plan_name, 899)
+        payment_amount = amount or self.PLAN_PRICES.get(sub.plan_name, 899)
         payment = SubscriptionPayment(
             subscription_id=sub.id,
             clinic_id=sub.clinic_id,
@@ -222,6 +231,28 @@ class SubscriptionService:
             if order_id and payment_status == "SUCCESS":
                 sub = self.db.query(Subscription).filter(Subscription.provider_order_id == order_id).first()
                 if sub:
+                    # Replay guard. Cashfree retries, and a retry used to re-run
+                    # the block below — resetting current_start/current_end and
+                    # handing out a fresh billing period for free. _log_payment
+                    # already deduped the payment ROW, but nothing stopped the
+                    # subscription itself being re-activated.
+                    already_paid = self.db.query(SubscriptionPayment).filter(
+                        SubscriptionPayment.provider_order_id == order_id,
+                        SubscriptionPayment.status == "paid",
+                    ).first()
+                    if already_paid:
+                        logger.info(f"cashfree webhook replay for order {order_id} — already processed, skipping")
+                        return True
+
+                    expected = self._plan_price(sub.plan_name)
+                    if payment_amount and expected and float(payment_amount) + 0.01 < expected:
+                        # Not fatal — coupons and partial promos legitimately pay
+                        # less — but it should never pass silently.
+                        logger.warning(
+                            f"cashfree webhook: order {order_id} paid {payment_amount} "
+                            f"but {sub.plan_name} lists {expected}"
+                        )
+
                     sub.status = "active"
                     sub.is_trial = False
                     sub.provider_subscription_id = cf_payment_id

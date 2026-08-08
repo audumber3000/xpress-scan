@@ -6,6 +6,8 @@ import { Eye, MessageCircle } from 'lucide-react';
 import InvoiceEditor from '../payments/InvoiceEditor';
 import { useAuth } from '../../contexts/AuthContext';
 import { isManualWhatsApp, shareInvoiceManually } from '../../utils/whatsapp';
+import EmptyState from '../common/EmptyState';
+import { receipt } from '../../assets/illustrations';
 
 /**
  * PatientBilling - Simplified billing tab following standard app table styling
@@ -144,8 +146,12 @@ const PatientBilling = ({
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan="6" className="px-6 py-12 text-center text-sm text-gray-400 italic">
-                                        No invoices found.
+                                    <td colSpan="6" className="px-6 py-8">
+                                        <EmptyState
+                                            image={receipt}
+                                            title="No invoices yet"
+                                            subtitle="Bills raised for this patient will show up here."
+                                        />
                                     </td>
                                 </tr>
                             )}

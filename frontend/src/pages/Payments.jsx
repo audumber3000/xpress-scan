@@ -91,32 +91,29 @@ const Payments = () => {
     return () => clearTimeout(timer);
   }, [searchTerm, activeTab]);
 
+  // The four cards describe the invoices the filters selected, not the clinic's
+  // whole history. They used to pull every invoice (limit 10000) and sum it in
+  // the browser regardless of what was filtered, so narrowing to one patient or
+  // one month left the headline figures unchanged — and quietly contradicting
+  // the rows underneath them. Aggregated server-side by the same filter helper
+  // the list and count endpoints use, so the two can't disagree.
   const fetchStats = async () => {
     try {
       setStatsLoading(true);
-      const allInvoices = await api.get('/invoices', { params: { skip: 0, limit: 10000 } });
-      let totalRevenue = 0;
-      let totalPending = 0;
-      let paidCount = 0;
+      const filters = {};
+      if (debouncedSearch.trim().length >= 2) filters.search = debouncedSearch.trim();
+      if (filterStatus) filters.status = filterStatus;
+      if (filterMode) filters.payment_mode = filterMode;
+      if (dateFrom) filters.date_from = dateFrom;
+      if (dateTo) filters.date_to = dateTo;
 
-      (allInvoices || []).forEach(inv => {
-        const amount = parseFloat(inv.total) || 0;
-        const due = parseFloat(inv.due_amount ?? amount) || 0;
-
-        if (inv.status === 'paid_verified' || inv.status === 'paid_unverified') {
-          totalRevenue += amount;
-          paidCount += 1;
-        } else if (inv.status === 'draft' || inv.status === 'finalized' || inv.status === 'partially_paid') {
-          totalPending += due;
-        }
-      });
-
+      const s = await api.get('/invoices/summary', { params: filters });
       setStats(prev => ({
         ...prev,
-        revenue: totalRevenue,
-        pending: totalPending,
-        total: (allInvoices || []).length,
-        paidCount,
+        revenue: Number(s?.revenue) || 0,
+        pending: Number(s?.pending) || 0,
+        total: Number(s?.total) || 0,
+        paidCount: Number(s?.paid_count) || 0,
       }));
     } catch (err) {
       console.error('Error fetching stats:', err);
@@ -225,13 +222,15 @@ const Payments = () => {
         fetchInvoices();
         fetchStats();
       } else if (activeTab === 'today') {
+        // The day's KPIs come from fetchTodayCollections; the invoice summary
+        // feeds cards this tab doesn't show.
         fetchTodayCollections();
-        fetchStats();
       } else {
         fetchLedger();
       }
     });
-    fetchStats();
+    // No fetchStats() here — the filter effect below owns it, and calling it
+    // from both fired two identical requests on every load.
     fetchTodayCollections();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setTitle, setRefreshFunction, activeTab]);
@@ -245,6 +244,9 @@ const Payments = () => {
   useEffect(() => {
     if (activeTab === 'payments') {
       fetchInvoices();
+      // Refetched alongside the list so the cards and the rows always describe
+      // the same set of invoices.
+      fetchStats();
     } else {
       fetchLedger();
     }

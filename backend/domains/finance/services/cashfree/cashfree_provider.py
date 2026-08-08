@@ -121,9 +121,18 @@ class CashfreeProvider(BasePaymentProvider):
         return {"status": "cancelled", "message": "Subscription cancelled locally"}
 
     def verify_webhook_signature(self, payload: str, signature: str, secret: str) -> bool:
+        """Deprecated — use core.cashfree_webhook.verify() at the route.
+
+        This used to `return True` unconditionally while claiming to verify. It
+        had no callers, but any future one would have silently accepted forged
+        payloads. It now delegates to the real implementation.
+
+        The real check needs the raw request BYTES and the timestamp header,
+        which this signature cannot express, so callers should use
+        core.cashfree_webhook directly.
         """
-        Verify Cashfree webhook signature
-        """
-        # Cashfree usually sends 'x-webhook-signature'
-        # Implementation depends on their specific webhook version
-        return True # Simplified for now, should use hmac verification in production
+        from core.cashfree_webhook import verify
+
+        raw = payload.encode() if isinstance(payload, str) else payload
+        ok, _ = verify(raw, signature, "")
+        return ok

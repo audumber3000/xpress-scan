@@ -10,6 +10,8 @@ import ConsentRecentLinks from "../components/consents/ConsentRecentLinks";
 import Pagination from "../components/Pagination";
 import FilterDropdown from "../components/FilterDropdown";
 import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
+import EmptyState from "../components/common/EmptyState";
+import { noData } from "../assets/illustrations";
 
 const CONSENT_PAGE_SIZE = 10;
 
@@ -54,8 +56,16 @@ const ConsentForms = () => {
     useEffect(() => {
         setTitle("Consent Forms");
         fetchTemplates();
-        fetchPatients();
+        // Patients are loaded by the debounced effect below, which also fires
+        // once on mount — calling it here too would double the request.
     }, []);
+
+    // Debounced so typing a name is one request, not one per keystroke.
+    useEffect(() => {
+        const t = setTimeout(() => fetchPatients(patientSearch), 300);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [patientSearch]);
 
     const fetchTemplates = async () => {
         setLoading(true);
@@ -73,12 +83,21 @@ const ConsentForms = () => {
         }
     };
 
-    const fetchPatients = async () => {
+    // Searched on the server. This used to pull /patients/ unpaged and filter in
+    // JS, but the endpoint returns 100 rows by default — so on a clinic larger
+    // than that, patients past the first hundred could never be picked, and the
+    // picker just said no match.
+    const fetchPatients = async (term = '') => {
         try {
-            const data = await api.get("/patients/");
-            setPatients(data);
+            const q = (term || '').trim();
+            const data = await api.get("/patients/", {
+                // 2+ chars to search, per the endpoint; below that it's page one.
+                params: { skip: 0, limit: 10, ...(q.length >= 2 ? { search: q } : {}) },
+            });
+            setPatients(data || []);
         } catch (error) {
             console.error("Failed to fetch patients");
+            setPatients([]);
         }
     };
 
@@ -222,10 +241,9 @@ const ConsentForms = () => {
         }
     };
 
-    const filteredPatients = patients.filter(p => 
-        p.name.toLowerCase().includes(patientSearch.toLowerCase()) ||
-        p.phone.includes(patientSearch)
-    ).slice(0, 5);
+    // Already searched clinic-wide by the server; filtering again here would put
+    // the 100-row ceiling straight back.
+    const filteredPatients = patients.slice(0, 5);
 
     return (
         <div className="flex flex-col h-screen p-8 max-w-[1600px] mx-auto bg-gray-50/50 overflow-hidden">
@@ -345,12 +363,12 @@ const ConsentForms = () => {
                                     </tr>
                                 ) : filteredLinks.length === 0 ? (
                                     <tr>
-                                        <td colSpan="5" className="px-6 py-12">
-                                            <div className="flex flex-col items-center justify-center text-center">
-                                                <Share2 className="w-12 h-12 mb-3 text-gray-300" strokeWidth={1.5} />
-                                                <p className="text-sm font-medium text-gray-900">No consent links yet</p>
-                                                <p className="text-xs text-gray-400 mt-1">Send a template to a patient from the Templates tab to track it here.</p>
-                                            </div>
+                                        <td colSpan="5" className="px-6 py-8">
+                                            <EmptyState
+                                                image={noData}
+                                                title="No consent links yet"
+                                                subtitle="Send a template to a patient from the Templates tab to track it here."
+                                            />
                                         </td>
                                     </tr>
                                 ) : filteredLinks.slice((linksPage - 1) * CONSENT_PAGE_SIZE, linksPage * CONSENT_PAGE_SIZE).map(link => {

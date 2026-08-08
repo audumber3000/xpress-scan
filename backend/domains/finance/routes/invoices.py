@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func, or_, text
 from typing import List, Optional
 from datetime import datetime, date, timedelta
 from domains.finance.invoice_pdf_engine import generate_invoice_html
+from domains.finance.receipt_pdf_engine import generate_receipt_html
 import os
 import csv
 import io
@@ -13,6 +14,9 @@ import re
 from database import SessionLocal
 from core.notification_dispatch import notify_event
 from core.posthog_client import track_event, EVENTS
+from core.audit import (
+    record_audit, INVOICE_DELETED, PAYMENT_DELETED, DISCOUNT_ADDED, DISCOUNT_REMOVED,
+)
 
 def get_db():
     db = SessionLocal()
@@ -107,6 +111,8 @@ def enrich_invoice(db: Session, invoice: Invoice):
         'discount': invoice.discount or 0.0,
         'discount_type': invoice.discount_type or 'amount',
         'discount_amount': invoice.discount_amount or 0.0,
+        'applied_offer_id': getattr(invoice, 'applied_offer_id', None),
+        'applied_offer_name': (invoice.applied_offer.name if getattr(invoice, 'applied_offer', None) else None),
         # Concessions granted after issue, newest first. `discount_amount` above
         # is the combined deduction; this is the itemised, dated breakdown.
         'post_issue_discounts': [
@@ -170,6 +176,15 @@ def enrich_invoice(db: Session, invoice: Invoice):
                 # the day the money changed hands.
                 'recorded_on': _recorded_on(invoice.clinic, p).isoformat() if p.created_at else None,
                 'is_back_dated': _is_back_dated(invoice.clinic, p),
+                # This installment's receipt. The PDF renders on demand from the
+                # figures frozen here; the number is what the patient quotes back.
+                'receipt_number': getattr(p, 'receipt_number', None),
+                'receipt_paid_to_date': (
+                    float(p.receipt_paid_to_date) if getattr(p, 'receipt_paid_to_date', None) is not None else None
+                ),
+                'receipt_balance_due': (
+                    float(p.receipt_balance_due) if getattr(p, 'receipt_balance_due', None) is not None else None
+                ),
             }
             for p in sorted(invoice.payments, key=lambda x: (x.paid_on or x.created_at), reverse=True)
         ]
@@ -232,6 +247,78 @@ def generate_invoice_number(db: Session, clinic_id: int) -> str:
         except (ValueError, IndexError):
             n = 1
     return f"INV-{year}-{n:04d}"
+
+
+def generate_receipt_number(db: Session, clinic_id: int, year: int) -> str:
+    """Next RCP-YYYY-#### for the clinic, in the year the money was received.
+
+    A back-dated payment receipts under its own year, the way a paper receipt
+    book would, so the sequence for each year stays contiguous.
+    """
+    from models import InvoicePayment
+    prefix = f"RCP-{year}-"
+    last = (
+        db.query(InvoicePayment)
+        .filter(
+            InvoicePayment.clinic_id == clinic_id,
+            InvoicePayment.receipt_number.like(f"{prefix}%"),
+        )
+        .order_by(desc(InvoicePayment.receipt_number))
+        .first()
+    )
+    n = 1
+    if last and last.receipt_number:
+        try:
+            n = int(last.receipt_number.split('-')[-1]) + 1
+        except (ValueError, IndexError):
+            n = 1
+    return f"{prefix}{n:04d}"
+
+
+def assign_receipt_details(db: Session, invoice: Invoice, payment) -> None:
+    """Stamp a payment with its receipt number and freeze the two running figures.
+
+    Called once, in the same transaction that records the money. The PDF itself
+    is rendered on demand, so these three values are the whole record: they are
+    what lets a reprint months later show the same numbers the patient was given
+    on the day, even after a later concession has moved the invoice total.
+
+    Paid-to-date counts the installments entered up to and including this one
+    (entry order, not payment date) — that is genuinely "what we had received by
+    the time this receipt was written", and it keeps earlier receipts from
+    silently changing when somebody back-dates an entry afterwards.
+    """
+    if payment.receipt_number:
+        return
+
+    paid_to_date = sum(
+        float(p.amount or 0)
+        for p in invoice.payments
+        if p.id is not None and p.id <= payment.id
+    )
+    total = float(invoice.total or 0)
+
+    on_date = payment.paid_on or (payment.created_at.date() if payment.created_at else clinic_today(invoice.clinic))
+    payment.receipt_number = generate_receipt_number(db, payment.clinic_id, on_date.year)
+    payment.receipt_paid_to_date = paid_to_date
+    payment.receipt_balance_due = max(total - paid_to_date, 0.0)
+
+
+def resync_receipt_running_totals(invoice: Invoice) -> None:
+    """Recompute the running figures on every receipt for this invoice.
+
+    Only for a *deleted* installment. A post-issue discount is a real later
+    event, so receipts already handed over stay as issued — they were true on
+    the day. A deletion is different: it says the money was never received, so
+    leaving it counted in later receipts would have them quoting a total that
+    never existed. Numbers already issued are kept; only the arithmetic moves.
+    """
+    total = float(invoice.total or 0)
+    running = 0.0
+    for p in sorted(invoice.payments, key=lambda x: x.id):
+        running += float(p.amount or 0)
+        p.receipt_paid_to_date = running
+        p.receipt_balance_due = max(total - running, 0.0)
 
 
 def get_or_create_draft_invoice(db: Session, clinic_id: int, patient_id: int, case_paper_id, created_by=None) -> Invoice:
@@ -488,6 +575,81 @@ async def count_invoices(
         return {"total": int(total)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error counting invoices: {str(e)}")
+
+
+@router.get("/summary")
+async def summarise_invoices(
+    status: Optional[str] = None,
+    patient_id: Optional[int] = None,
+    appointment_id: Optional[int] = None,
+    case_paper_id: Optional[int] = None,
+    search: Optional[str] = Query(None),
+    payment_mode: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None, description="YYYY-MM-DD, invoice date (clinic tz)"),
+    date_to: Optional[str] = Query(None, description="YYYY-MM-DD, invoice date (clinic tz)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Revenue / pending / counts for the invoices matching the current filters.
+
+    Same filter helper as the list and the count endpoints, so the figures on
+    the cards always describe the rows underneath them. Filter to one patient
+    and the totals are that patient's; they used to stay clinic-wide.
+
+    Aggregated in SQL rather than by pulling every invoice to the browser and
+    adding it up there — the page was fetching up to 10,000 rows on load to
+    produce four numbers.
+    """
+    try:
+        _ensure_invoice_columns(db)
+        created_from, created_to = _resolve_date_bounds(db, current_user.clinic_id, date_from, date_to)
+
+        def _q():
+            return _filtered_invoices_query(
+                db, current_user.clinic_id,
+                status=status, patient_id=patient_id, appointment_id=appointment_id,
+                case_paper_id=case_paper_id, search=search, payment_mode=payment_mode,
+                created_from=created_from, created_to=created_to,
+            )
+
+        PAID = ('paid_verified', 'paid_unverified')
+        # Draft invoices are unissued, so their balance isn't money anyone owes
+        # yet — matching how the list badges them.
+        OWING = ('finalized', 'partially_paid')
+
+        total = _q().with_entities(func.count(Invoice.id)).scalar() or 0
+
+        paid_row = (
+            _q().filter(Invoice.status.in_(PAID))
+            .with_entities(func.count(Invoice.id), func.coalesce(func.sum(Invoice.total), 0.0))
+            .first()
+        )
+        paid_count, revenue = (paid_row or (0, 0.0))
+
+        # A part-paid invoice contributes what's still outstanding, not its face
+        # value — the collected part is already counted as revenue.
+        pending = (
+            _q().filter(Invoice.status.in_(OWING))
+            .with_entities(func.coalesce(func.sum(
+                func.coalesce(Invoice.due_amount, Invoice.total)
+            ), 0.0))
+            .scalar()
+        ) or 0.0
+
+        # Money actually banked, including partials against still-open bills.
+        collected = (
+            _q().with_entities(func.coalesce(func.sum(Invoice.paid_amount), 0.0)).scalar()
+        ) or 0.0
+
+        return {
+            "revenue": round(float(revenue or 0), 2),
+            "pending": round(float(pending), 2),
+            "collected": round(float(collected), 2),
+            "total": int(total),
+            "paid_count": int(paid_count or 0),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error summarising invoices: {str(e)}")
 
 
 @router.get("/collections")
@@ -1136,8 +1298,12 @@ async def add_invoice_payment(
     if payload.method:
         invoice.payment_mode = payload.method
     sync_invoice_from_payments(invoice)
+    # Stamp the receipt in the same transaction as the money, so every
+    # installment has a number and a frozen balance from the moment it exists.
+    assign_receipt_details(db, invoice, payment)
     create_audit_log(db, invoice_id, current_user.id, 'payment_added', None,
-                     {'amount': float(payload.amount), 'paid_on': str(paid_on)})
+                     {'amount': float(payload.amount), 'paid_on': str(paid_on),
+                      'receipt_number': payment.receipt_number})
     db.commit()
     db.refresh(invoice)
     return enrich_invoice(db, invoice)
@@ -1147,6 +1313,7 @@ async def add_invoice_payment(
 async def delete_invoice_payment(
     invoice_id: int,
     payment_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1164,11 +1331,18 @@ async def delete_invoice_payment(
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
 
+    removed = {'amount': float(payment.amount or 0), 'receipt_number': payment.receipt_number}
     db.delete(payment)
     db.flush()
     sync_invoice_from_payments(invoice)
-    create_audit_log(db, invoice_id, current_user.id, 'payment_deleted',
-                     {'amount': float(payment.amount or 0)}, None)
+    # The money is gone from the history, so the receipts that counted it have
+    # to stop counting it. Their numbers stand; only the running totals move.
+    resync_receipt_running_totals(invoice)
+    create_audit_log(db, invoice_id, current_user.id, 'payment_deleted', removed, None)
+    record_audit(db, current_user, PAYMENT_DELETED,
+                 f"Removed a {removed['amount']:,.2f} payment ({removed['receipt_number'] or 'no receipt'}) "
+                 f"from invoice {invoice.invoice_number}",
+                 request=request, entity_type='invoice', entity_id=invoice_id)
     db.commit()
     db.refresh(invoice)
     return enrich_invoice(db, invoice)
@@ -1177,6 +1351,7 @@ async def delete_invoice_payment(
 async def add_post_issue_discount(
     invoice_id: int,
     payload: InvoiceDiscountCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1260,6 +1435,9 @@ async def add_post_issue_discount(
         {'total': float(invoice.total or 0), 'discount': amount, 'reason': reason},
         notes=reason,
     )
+    record_audit(db, current_user, DISCOUNT_ADDED,
+                 f"Granted a {amount:,.2f} discount on invoice {invoice.invoice_number} — {reason}",
+                 request=request, entity_type='invoice', entity_id=invoice_id)
     db.commit()
     db.refresh(invoice)
     return enrich_invoice(db, invoice)
@@ -1269,6 +1447,7 @@ async def add_post_issue_discount(
 async def remove_post_issue_discount(
     invoice_id: int,
     discount_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1294,6 +1473,9 @@ async def remove_post_issue_discount(
     if invoice.payments:
         sync_invoice_from_payments(invoice)
     create_audit_log(db, invoice_id, current_user.id, 'discount_removed', removed, None)
+    record_audit(db, current_user, DISCOUNT_REMOVED,
+                 f"Reversed a {removed['amount']:,.2f} discount on invoice {invoice.invoice_number}",
+                 request=request, entity_type='invoice', entity_id=invoice_id)
     db.commit()
     db.refresh(invoice)
     return enrich_invoice(db, invoice)
@@ -1739,16 +1921,19 @@ async def mark_invoice_as_paid(
             stamp = f"recorded on {entered_on.strftime('%d %b %Y')}"
             note = f"{note} ({stamp})" if note else f"Back-dated entry, {stamp}"
 
-        db.add(InvoicePayment(
+        payment = InvoicePayment(
             invoice_id=invoice.id, clinic_id=current_user.clinic_id,
             amount=float(payment_amount), paid_on=paid_on,
             method=payment_data.payment_mode, note=note,
-        ))
+        )
+        db.add(payment)
         db.flush()
         invoice.payment_mode = payment_data.payment_mode
         invoice.utr = payment_data.utr
         sync_invoice_from_payments(invoice)
-        
+        # Same receipt stamp as the payments panel — this route records money too.
+        assign_receipt_details(db, invoice, payment)
+
         # Audit log
         create_audit_log(db, invoice_id, current_user.id, 'marked_paid', {
             'status': old_status,
@@ -1760,7 +1945,8 @@ async def mark_invoice_as_paid(
             'utr': invoice.utr,
             'paid_amount': invoice.paid_amount,
             'due_amount': invoice.due_amount,
-            'payment_amount': payment_amount
+            'payment_amount': payment_amount,
+            'receipt_number': payment.receipt_number
         }, notes=f"Payment recorded via {invoice.payment_mode}")
         
         db.commit()
@@ -1846,7 +2032,14 @@ async def update_invoice(
             invoice.discount = float(invoice_update['discount'])
         if 'discount_type' in invoice_update:
             invoice.discount_type = invoice_update['discount_type']
-            
+        # Track which Offer set the discount (for the label on the bill). An offer
+        # apply passes applied_offer_id; a manual discount edit (discount without
+        # applied_offer_id) clears it so the label doesn't go stale.
+        if 'applied_offer_id' in invoice_update:
+            invoice.applied_offer_id = invoice_update.get('applied_offer_id')
+        elif 'discount' in invoice_update:
+            invoice.applied_offer_id = None
+
         recalculate_invoice_totals(db, invoice)
         
         new_values = {
@@ -1872,6 +2065,7 @@ async def update_invoice(
 @router.delete("/{invoice_id}")
 async def delete_invoice(
     invoice_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -1905,6 +2099,11 @@ async def delete_invoice(
             ).update({LabOrder.invoice_line_item_id: None}, synchronize_session=False)
             db.flush()
 
+        # Capture the identity before the row goes; afterwards it's just an id.
+        _num, _total = invoice.invoice_number, float(invoice.total or 0)
+        record_audit(db, current_user, INVOICE_DELETED,
+                     f"Deleted invoice {_num} ({_total:,.2f})",
+                     request=request, entity_type='invoice', entity_id=invoice_id)
         db.delete(invoice)
         db.commit()
 
@@ -1970,6 +2169,186 @@ async def download_invoice_pdf(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating PDF: {str(e)}")
+
+@router.get("/{invoice_id}/payments/{payment_id}/receipt")
+async def download_payment_receipt(
+    invoice_id: int,
+    payment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """The receipt for one installment: this payment, total paid so far, balance.
+
+    Rendered on demand rather than stored — the figures are frozen on the payment
+    row, so this produces the same document every time, including for payments
+    recorded before receipts existed (their number and totals were backfilled).
+    """
+    from models import InvoicePayment
+    try:
+        invoice = db.query(Invoice).filter(
+            Invoice.id == invoice_id,
+            Invoice.clinic_id == current_user.clinic_id
+        ).first()
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+
+        payment = db.query(InvoicePayment).filter(
+            InvoicePayment.id == payment_id,
+            InvoicePayment.invoice_id == invoice_id
+        ).first()
+        if not payment:
+            raise HTTPException(status_code=404, detail="Payment not found")
+
+        # A row from before this feature shipped, or one whose backfill didn't
+        # reach it: stamp it now so its number is stable from here on.
+        if not payment.receipt_number:
+            assign_receipt_details(db, invoice, payment)
+            db.commit()
+            db.refresh(payment)
+
+        clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+
+        # The clinic's invoice template drives the receipt too, so the bill and
+        # its receipts are visibly the same document family.
+        from models import TemplateConfiguration
+        config = db.query(TemplateConfiguration).filter(
+            TemplateConfiguration.clinic_id == current_user.clinic_id,
+            TemplateConfiguration.category == 'invoice'
+        ).first()
+
+        html_content = generate_receipt_html(invoice, payment, clinic, config)
+        pdf_path = html_template_to_pdf(html_content)
+        with open(pdf_path, 'rb') as pdf_file:
+            pdf_content = pdf_file.read()
+        try:
+            os.remove(pdf_path)
+        except OSError:
+            pass
+
+        filename = f"receipt_{payment.receipt_number or payment.id}.pdf"
+        return Response(
+            content=pdf_content,
+            media_type='application/pdf',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error generating receipt: {str(e)}")
+
+
+@router.post("/{invoice_id}/payments/{payment_id}/send-whatsapp")
+async def send_receipt_via_whatsapp(
+    invoice_id: int,
+    payment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Send one installment's receipt to the patient over WhatsApp.
+
+    Mirrors the invoice send: render the PDF, hand it to Nexus for hosting, then
+    dispatch the notification with the media URL. Rendering is on demand, so the
+    patient always gets the same document the clinic sees.
+    """
+    from models import InvoicePayment
+    try:
+        invoice = db.query(Invoice).filter(
+            Invoice.id == invoice_id, Invoice.clinic_id == current_user.clinic_id
+        ).first()
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+
+        payment = db.query(InvoicePayment).filter(
+            InvoicePayment.id == payment_id, InvoicePayment.invoice_id == invoice_id
+        ).first()
+        if not payment:
+            raise HTTPException(status_code=404, detail="Payment not found")
+
+        patient = db.query(Patient).filter(Patient.id == invoice.patient_id).first()
+        if not patient:
+            raise HTTPException(status_code=404, detail="Patient not found")
+        if not patient.phone:
+            raise HTTPException(status_code=400, detail="Patient phone number is required")
+
+        clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+
+        # Stamp it if it somehow never was, so the message quotes a real number.
+        if not payment.receipt_number:
+            assign_receipt_details(db, invoice, payment)
+            db.commit()
+            db.refresh(payment)
+
+        from models import TemplateConfiguration
+        config = db.query(TemplateConfiguration).filter(
+            TemplateConfiguration.clinic_id == current_user.clinic_id,
+            TemplateConfiguration.category == 'invoice'
+        ).first()
+
+        html_content = generate_receipt_html(invoice, payment, clinic, config)
+        pdf_path = html_template_to_pdf(html_content)
+
+        NEXUS_SERVICES_URL = os.getenv("NEXUS_SERVICES_URL", "http://localhost:8001")
+        try:
+            with open(pdf_path, 'rb') as f:
+                files = {'file': (f'Receipt_{payment.receipt_number}.pdf', f, 'application/pdf')}
+                data = {'clinic_id': str(current_user.clinic_id), 'patient_id': str(patient.id)}
+                resp = requests.post(
+                    f"{NEXUS_SERVICES_URL}/api/v1/notifications/media/upload",
+                    files=files, data=data, timeout=30,
+                )
+            if os.path.exists(pdf_path):
+                os.remove(pdf_path)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=500, detail=f"Nexus Upload Failed: {resp.text}")
+            media_id = resp.json().get("media_id")
+        except HTTPException:
+            raise
+        except Exception as e:
+            if os.path.exists(pdf_path):
+                os.remove(pdf_path)
+            raise HTTPException(status_code=500, detail=f"Nexus Connection Error: {str(e)}")
+
+        # Was this event ever switched on? notify_event returns quietly when the
+        # preference is missing or disabled, which would otherwise surface to the
+        # clinic as "Receipt sent" for a message that never left.
+        from models import NotificationPreference
+        pref = db.query(NotificationPreference).filter(
+            NotificationPreference.clinic_id == current_user.clinic_id,
+            NotificationPreference.event_type == 'receipt_notification',
+        ).first()
+        if not pref or not pref.is_enabled:
+            return {
+                "success": False,
+                "dispatched": False,
+                "reason": "not_configured",
+                "message": "Automatic receipt messages aren't switched on for this clinic.",
+            }
+
+        notify_event(
+            "receipt_notification",
+            db=db,
+            clinic_id=current_user.clinic_id,
+            to_phone=patient.phone,
+            to_name=patient.name,
+            # Keys match wa_receipt_sent in nexus whatsapp_templates.py. `amount`
+            # is numeric because the builder formats the currency itself, the
+            # same way the invoice builder does.
+            template_data={
+                "patient_name": patient.name,
+                "clinic_name": clinic.name,
+                "receipt_number": payment.receipt_number or invoice.invoice_number,
+                "amount": float(payment.amount or 0),
+                "clinic_phone": clinic.phone or "",
+                "media_id": media_id,
+            },
+        )
+        return {"success": True, "dispatched": True, "message": "Receipt sharing initiated"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error sending receipt via WhatsApp: {str(e)}")
+
 
 @router.post("/{invoice_id}/send-whatsapp")
 async def send_invoice_via_whatsapp(

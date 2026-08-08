@@ -192,13 +192,12 @@ async def mobile_login(request: Request, db: Session = Depends(get_db)):
             device_info = detect_device_info(request, device_data)
             device = register_or_update_device(db, user.id, device_info)
 
-            # Check device access restrictions
-            allowed_access = device.allowed_access or {"desktop": True, "mobile": True, "web": True}
-            if not allowed_access.get(device_info["device_type"], True):
-                raise HTTPException(
-                    status_code=403,
-                    detail=f"Access from {device_info['device_type']} devices is not allowed for this account."
-                )
+            # Check device access restrictions — shared with the web/OAuth login
+            # paths so a revoked device is refused everywhere, not just here.
+            from domains.auth.services.auth_service import AuthService
+            blocked = AuthService.device_block_reason(device, device_info["device_type"])
+            if blocked:
+                raise HTTPException(status_code=403, detail=blocked)
         except HTTPException:
             raise
         except Exception as device_error:
@@ -297,12 +296,10 @@ async def mobile_oauth_login(request: Request, db: Session = Depends(get_db)):
             device_info = detect_device_info(request, device_data)
             device = register_or_update_device(db, user.id, device_info)
 
-            allowed_access = device.allowed_access or {"desktop": True, "mobile": True, "web": True}
-            if not allowed_access.get(device_info["device_type"], True):
-                raise HTTPException(
-                    status_code=403,
-                    detail=f"Access from {device_info['device_type']} devices is not allowed."
-                )
+            from domains.auth.services.auth_service import AuthService
+            blocked = AuthService.device_block_reason(device, device_info["device_type"])
+            if blocked:
+                raise HTTPException(status_code=403, detail=blocked)
         except HTTPException:
             raise
         except Exception as device_error:
@@ -402,6 +399,10 @@ async def get_mobile_user_info(request: Request, db: Session = Depends(get_db)):
             "synced_at": getattr(user, 'synced_at', None).isoformat() if getattr(user, 'synced_at', None) else None,
             "sync_status": getattr(user, 'sync_status', 'local'),
             "permissions": user.permissions,
+            # The profile photo, so the app shows the person's own picture
+            # rather than a generated avatar wherever they appear.
+            "avatar_url": user.avatar_url,
+            "phone": user.phone,
             "clinic": clinic_info
         }
 

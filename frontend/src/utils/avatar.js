@@ -87,3 +87,33 @@ export const generatePatientPersona = (patient, size = 80) => {
 
   return `https://api.dicebear.com/9.x/personas/svg?${options}`;
 };
+
+/**
+ * The picture to show for a person, preferring the one they actually uploaded.
+ *
+ * A profile photo is stored on the user row as `avatar_url` (a data: URI, set
+ * from the profile page). Google/Supabase sign-ins instead carry theirs under
+ * `user_metadata`, and some list endpoints have historically used `avatar`. All
+ * three are the same idea, so they are checked in turn before falling back to
+ * the generated cartoon.
+ *
+ * Use this everywhere a staff member's face appears. Reading one field directly
+ * is how the header ended up ignoring uploaded photos entirely: it only ever
+ * looked at the Google shape, so a picture set from the profile page changed
+ * nothing anywhere else in the app.
+ *
+ * @param {object} user  a user-shaped object from any endpoint
+ * @param {number} size  px, used only for the generated fallback
+ * @returns {string} an image URL or data: URI, never empty
+ */
+export const resolveUserAvatar = (user, size = 80) => {
+  const uploaded =
+    user?.avatar_url ||
+    user?.user_metadata?.avatar_url ||
+    user?.user_metadata?.picture ||
+    user?.avatar ||
+    user?.profile_photo_url;
+  if (uploaded) return uploaded;
+  const seed = user?.email || user?.name || user?.id || 'default';
+  return generateAvatarUrl(seed, size);
+};

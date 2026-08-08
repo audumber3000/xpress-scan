@@ -4,7 +4,9 @@ from typing import List, Dict, Any
 from core.dtos import PrescriptionRequestDTO, PrescriptionItemDTO
 from domains.infrastructure.services.template_service import TemplateService
 from domains.infrastructure.services.pdf_service import html_template_to_pdf, generate_pdf_filename, cleanup_temp_file
-from domains.infrastructure.services.pdf_safety import safe_color, safe_signature_data_uri, safe_text, safe_url
+from domains.infrastructure.services.pdf_safety import safe_color, safe_signature_data_uri, safe_text
+from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
+from domains.infrastructure.services.pdf_fields import resolve_field_visibility
 from domains.infrastructure.services.r2_storage import upload_pdf_to_r2, StorageCategory
 from models import PatientDocument, Patient, Clinic, Prescription as PrescriptionModel
 from sqlalchemy.orm import Session
@@ -39,11 +41,16 @@ class PrescriptionService:
             or getattr(clinic, 'primary_color', None),
             default='#1a2a6c',
         )
-        logo_url = safe_url(
-            (config.logo_url if config and config.logo_url else None)
-            or getattr(clinic, 'logo_url', None)
+        # Inline bytes, not a URL — the stored config link is a presigned R2 URL
+        # that expires. See pdf_branding.resolve_logo_data_uri.
+        logo_url = resolve_logo_data_uri(
+            (config.logo_url if config else None),
+            getattr(clinic, 'logo_url', None),
         )
-        footer_text = safe_text((config.footer_text if config and config.footer_text else '') or '')
+        # Flags default to shown and can only hide — see pdf_fields.
+        vis = resolve_field_visibility(config)
+
+        footer_text = safe_text((config.footer_text if config and config.footer_text else '') or '') if vis.footer else ''
 
         # ── Logo HTML ─────────────────────────────────────────────────────────
         if logo_url:
@@ -59,11 +66,11 @@ class PrescriptionService:
 
         # ── Clinic fields ─────────────────────────────────────────────────────
         c_name    = clinic.name    if clinic else 'Dental Clinic'
-        c_tagline = getattr(clinic, 'tagline', 'Comprehensive Dental & Orthodontic Care') or ''
-        c_address = clinic.address if clinic and clinic.address else ''
-        c_phone   = clinic.phone   if clinic and clinic.phone   else ''
-        c_email   = clinic.email   if clinic and clinic.email   else ''
-        c_reg     = getattr(clinic, 'reg_number', '')           or ''
+        c_tagline = (getattr(clinic, 'tagline', '') or '') if vis.tagline else ''
+        c_address = clinic.address if clinic and clinic.address and vis.address else ''
+        c_phone   = clinic.phone   if clinic and clinic.phone   and vis.contact else ''
+        c_email   = clinic.email   if clinic and clinic.email   and vis.contact else ''
+        c_reg     = (getattr(clinic, 'license_number', '') or '') if vis.license_number else ''
         c_doctor  = getattr(clinic, 'doctor_name', '')          or ''
 
         doctor_name_html  = f'<div class="doc-name">{c_doctor}</div>'  if c_doctor  else ''
@@ -183,12 +190,46 @@ class PrescriptionService:
                 <td>{instructions}</td>
             </tr>"""
 
+        # These two carry their own wrapper markup, which used to live in the
+        # HTML file. Emptying the value there would have left a styled orphan —
+        # `.signature-line` has a border-top, so a blank box draws a stray rule.
+        from domains.medical.prescription_templates import resolve_variant
+        variant = resolve_variant(getattr(config, 'template_id', None) if config else None)
+        is_compact = 'compact' in (variant.get('template_file') or '')
+        if c_tagline:
+            clinic_tagline_html = (
+                f'<div class="sub">{c_tagline}</div>' if is_compact
+                else f'<div class="tagline">{c_tagline}</div>'
+            )
+        else:
+            clinic_tagline_html = ''
+
+        if vis.signature:
+            if is_compact:
+                signature_box_html = (
+                    '<div class="signature-box">\n'
+                    f'      {signature_image_html}\n'
+                    f'      <span class="signature-line">{doctor_signature_label}</span>\n'
+                    f'      <p class="signature-clinic">{c_name}</p>\n'
+                    '    </div>'
+                )
+            else:
+                signature_box_html = (
+                    '<div class="signature-box">\n'
+                    f'                {signature_image_html}\n'
+                    f'                <div class="signature-line">{doctor_signature_label}</div>\n'
+                    f'                <p style="margin:5px 0 0 0;color:var(--text-muted);font-weight:bold;">{c_name}</p>\n'
+                    '            </div>'
+                )
+        else:
+            signature_box_html = ''
+
         # ── Build template_data dict ──────────────────────────────────────────
         template_data = {
             'primary_color':        primary_color,
             'logo_html':            logo_html,
             'clinic_name':          c_name,
-            'clinic_tagline':       c_tagline,
+            'clinic_tagline_html':  clinic_tagline_html,
             'doctor_name_html':     doctor_name_html,
             'clinic_address_html':  clinic_address_html,
             'clinic_phone_html':    clinic_phone_html,
@@ -207,15 +248,13 @@ class PrescriptionService:
             'follow_up_html':       follow_up_html,
             'footer_text_html':     footer_text_html,
             'signature_image_html': signature_image_html,
+            'signature_box_html':   signature_box_html,
         }
 
         print(f"[PrescriptionService] Building HTML for Patient: {getattr(patient, 'name', '?')}")
         print(f"[PrescriptionService] Branding: color={primary_color}, logo={'yes' if logo_url else 'initials'}")
 
-        # ── Render template (variant-aware via registry) ──────────────────────
-        from domains.medical.prescription_templates import resolve_variant
-        template_id = getattr(config, 'template_id', None) if config else None
-        variant = resolve_variant(template_id)
+        # ── Render template (variant resolved above, alongside the blocks) ────
         try:
             template_content = self.template_service.load_template(variant['template_file'])
             html_content     = self.template_service.fill_template(template_content, template_data)
@@ -342,109 +381,3 @@ class PrescriptionService:
         )
         return html_content, {}
 
-    def _generate_prescription_pdf_from_model_legacy(self, prescription: PrescriptionModel, clinic: Clinic, config=None):
-        """Legacy implementation kept for reference — not called anywhere."""
-        patient = prescription.patient
-
-        if not config:
-            from models import TemplateConfiguration
-            config = self.db.query(TemplateConfiguration).filter(
-                TemplateConfiguration.clinic_id == clinic.id,
-                TemplateConfiguration.category == 'prescription'
-            ).first()
-
-        primary_color = (config.primary_color if config and config.primary_color else None) \
-                        or getattr(clinic, 'primary_color', None) or '#1a2a6c'
-        logo_url      = (config.logo_url if config and config.logo_url else None) \
-                        or getattr(clinic, 'logo_url', None)
-
-        # ── Logo HTML ─────────────────────────────────────────────────────────
-        if logo_url:
-            logo_html = f'<img src="{logo_url}" alt="Logo" style="width:75px;height:75px;object-fit:contain;">'
-        else:
-            initials = (clinic.name[:2].upper() if clinic and clinic.name else 'DC')
-            logo_html = (
-                f'<div style="width:75px;height:75px;background:#f0f4f8;'
-                f'border:2px dashed {primary_color};display:flex;justify-content:center;'
-                f'align-items:center;color:{primary_color};font-weight:bold;font-size:12px;'
-                f'text-align:center;">{initials}</div>'
-            )
-
-        # ── Clinical notes parsing (Legacy Feature) ───────────────────────────
-        notes_raw = prescription.notes or ''
-        chief_complaint = ''
-        diagnosis       = ''
-        advice_lines    = []
-        next_visit      = ''
-
-        for line in notes_raw.splitlines():
-            l = line.strip()
-            if not l: continue
-            if l.lower().startswith('cc:') or l.lower().startswith('chief complaint:'):
-                chief_complaint = l.split(':', 1)[-1].strip()
-            elif l.lower().startswith('dx:') or l.lower().startswith('diagnosis:'):
-                diagnosis = l.split(':', 1)[-1].strip()
-            elif l.lower().startswith('advice:') or l.lower().startswith('instructions:'):
-                advice_lines.append(l.split(':', 1)[-1].strip())
-            elif any(l.lower().startswith(p) for p in ['next visit:', 'follow up:', 'next appointment:']):
-                next_visit = l.split(':', 1)[-1].strip()
-            else:
-                advice_lines.append(l)
-
-        # Build clinical notes block
-        clinical_notes_parts = []
-        if chief_complaint: clinical_notes_parts.append(f'<div class="clinical-notes"><h4>Chief Complaint:</h4><p>{chief_complaint}</p></div>')
-        if diagnosis: clinical_notes_parts.append(f'<div class="clinical-notes"><h4>Diagnosis:</h4><p>{diagnosis}</p></div>')
-        clinical_notes_html = ''.join(clinical_notes_parts) if clinical_notes_parts else (f'<div class="clinical-notes"><p>{notes_raw}</p></div>' if notes_raw else '')
-
-        # Build advice block
-        advice_html = ''
-        if advice_lines:
-            items_li = ''.join(f'<li>{a}</li>' for a in advice_lines)
-            advice_html = f'<div class="advice-section"><h4>Advice / Instructions:</h4><ul>{items_li}</ul></div>'
-
-        # ── Medication rows ───────────────────────────────────────────────────
-        items_html = ''
-        for idx, item in enumerate(prescription.items or [], 1):
-            dosage = item.get('dosage', '')
-            duration = item.get('duration', '')
-            medicine = item.get('medicine_name', 'Unknown Medicine')
-            instr = item.get('notes', '') or item.get('quantity', '')
-            items_html += f"""
-            <tr>
-                <td>{idx}</td>
-                <td class="text-left"><span class="med-name">{medicine}</span></td>
-                <td>{dosage}</td>
-                <td>{duration}</td>
-                <td>{instr}</td>
-            </tr>"""
-
-        # ── Final Context Building (Legacy Synchronized) ──────────────────────
-        template_data = {
-            'primary_color':        primary_color,
-            'logo_html':            logo_html,
-            'clinic_name':          clinic.name,
-            'clinic_tagline':       getattr(clinic, 'tagline', 'Dental Excellence'),
-            'doctor_name_html':     f'<div class="doc-name">{getattr(clinic, "doctor_name", "")}</div>',
-            'clinic_address_html':  f'<p>{clinic.address or ""}</p>',
-            'clinic_phone_html':    f'<p>Tel: {clinic.phone or ""}</p>',
-            'clinic_email_html':    f'<p>Email: {clinic.email or ""}</p>',
-            'clinic_reg_html':      f'<p>Reg: {getattr(clinic, "reg_number", "")}</p>',
-            'doctor_signature_label': getattr(clinic, 'doctor_name', 'Authorized Signature'),
-            'patient_name':         patient.name,
-            'patient_id':           getattr(patient, 'display_id', str(patient.id)),
-            'patient_age':          str(patient.age or 'N/A'),
-            'patient_gender':       (patient.gender or 'N/A').capitalize(),
-            'patient_phone':        patient.phone or 'N/A',
-            'current_date':         datetime.now().strftime('%d %B %Y'),
-            'clinical_notes_html':  clinical_notes_html,
-            'prescription_items':   items_html,
-            'advice_html':          advice_html,
-            'follow_up_html':       f'Next Appointment: {next_visit}' if next_visit else '',
-            'footer_text_html':     f'<div style="text-align:center;font-size:10px;">{config.footer_text or ""}</div>' if config and config.footer_text else '',
-        }
-
-        template_content = self.template_service.load_template("prescription_template.html")
-        html_content     = self.template_service.fill_template(template_content, template_data)
-        
-        return html_content, template_data

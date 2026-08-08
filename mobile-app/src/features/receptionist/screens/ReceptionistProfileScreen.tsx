@@ -11,6 +11,7 @@ import { RootStackParamList } from '../../../app/AppNavigator';
 import { useAuth } from '../../../app/AuthContext';
 import { getCurrencySymbol } from '../../../shared/utils/currency';
 import { UserAvatar } from '../../../shared/components/UserAvatar';
+import { resolveUserPhoto } from '../../../shared/utils/avatar';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ReceptionistProfile'>;
 
@@ -33,7 +34,7 @@ export const ReceptionistProfileScreen: React.FC<Props> = ({ navigation }) => {
         <View style={styles.bigAvatar}>
           <UserAvatar
             size={70}
-            photoURL={user?.photoURL}
+            photoURL={resolveUserPhoto(backendUser, user)}
             seed={user?.email || backendUser?.email}
             name={backendUser?.name || 'Receptionist'}
             fallbackBg={VIOLET_LIGHT}

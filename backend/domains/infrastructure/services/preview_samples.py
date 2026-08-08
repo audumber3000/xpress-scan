@@ -15,6 +15,7 @@ from types import SimpleNamespace
 
 
 def sample_clinic() -> SimpleNamespace:
+    """A stand-in clinic, used when there is no real one to hand (tests)."""
     return SimpleNamespace(
         id=1,
         name="MolarPlus Dental",
@@ -22,12 +23,36 @@ def sample_clinic() -> SimpleNamespace:
         email="hello@molarplus.example",
         address="12 Marine Drive, Mumbai 400020",
         tagline="Comprehensive Dental & Orthodontic Care",
-        reg_number="MH/DC/12345",
+        license_number="MH/DC/12345",
         gst_number="27ABCDE1234F1Z5",
         doctor_name="Dr. R. Sharma",
         primary_color=None,
         logo_url=None,
     )
+
+
+# Letterhead fields the visibility checkboxes actually control. The preview has
+# to read these from the real clinic, or an admin ticking "show licence number"
+# sees a number in the preview that their own documents will never carry.
+_REAL_LETTERHEAD_FIELDS = (
+    "name", "phone", "email", "address", "tagline",
+    "license_number", "gst_number", "currency_symbol", "tax_label", "country",
+)
+
+
+def preview_clinic(clinic) -> SimpleNamespace:
+    """The real clinic's letterhead, with sample values only where it is blank
+    for presentational fields. Anything the checkboxes govern is taken verbatim
+    so the preview cannot promise something the PDF won't print."""
+    if clinic is None:
+        return sample_clinic()
+    out = sample_clinic()
+    for field in _REAL_LETTERHEAD_FIELDS:
+        setattr(out, field, getattr(clinic, field, None) or "")
+    out.name = getattr(clinic, "name", None) or "Your Clinic"
+    out.primary_color = getattr(clinic, "primary_color", None)
+    out.logo_url = getattr(clinic, "logo_url", None)
+    return out
 
 
 def sample_patient() -> SimpleNamespace:
@@ -138,9 +163,14 @@ def sample_consent() -> dict:
 def config_from_payload(payload: dict) -> SimpleNamespace:
     """Convert preview request body → engine-compatible config object.
     Same shape as a TemplateConfiguration row, attribute access only."""
+    from domains.infrastructure.services.pdf_fields import sanitize_visibility
+
     return SimpleNamespace(
         primary_color=payload.get("primary_color") or None,
         footer_text=payload.get("footer_text") or "",
         logo_url=payload.get("logo_url") or None,
         template_id=payload.get("template_id") or "classic",
+        # Sanitised the same way the save path does it, so ticking a box in the
+        # editor previews exactly what saving it would produce.
+        config_json=sanitize_visibility(payload.get("config_json")),
     )

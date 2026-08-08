@@ -1,6 +1,8 @@
 import React from 'react';
 import { Pencil } from 'lucide-react';
-import { generateAvatarUrl } from '../../utils/avatar';
+import { resolveUserAvatar } from '../../utils/avatar';
+import { accessSummary } from '../../constants/permissions';
+import { formatDate, formatRelative } from '../../utils/datetime';
 
 const StaffTable = ({
   users,
@@ -11,54 +13,41 @@ const StaffTable = ({
   onToggleActive,
   currentUserId,
   getUserInitials = (name) => name?.split(' ').map(n => n[0]).join('').toUpperCase() || '??',
-  formatDate = (date) => date ? new Date(date).toLocaleDateString() : 'N/A',
-  formatLastSeen = (date) => date ? new Date(date).toLocaleString() : 'Never',
   getDeviceIcon = () => null
 }) => {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead className="bg-[#f8fafc]">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 User name
               </th>
-              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Access
               </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Last active
               </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Date added
               </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white divide-y divide-gray-100">
             {users.map((u) => {
+              // Most recently seen device wins; `sort` mutates, so copy first.
               const devices = userDevices[u.id] || [];
-              const lastActiveDevice = devices.length > 0 
-                ? devices.sort((a, b) => new Date(b.last_seen || 0) - new Date(a.last_seen || 0))[0]
-                : null;
+              const lastActiveDevice = [...devices]
+                .sort((a, b) => new Date(b.last_seen || 0) - new Date(a.last_seen || 0))[0] || null;
+              const lastActive = lastActiveDevice?.last_seen ? formatRelative(lastActiveDevice.last_seen) : null;
+              const isOnline = devices.some((d) => d.is_online);
               
-              // Get permissions as tags
-              const permissionTags = [];
-              if (u.role === "clinic_owner") {
-                permissionTags.push({ label: "Admin", color: "green" });
-              }
-              if (u.permissions?.patients?.view || u.role === "clinic_owner") {
-                permissionTags.push({ label: "Patients", color: "blue" });
-              }
-              if (u.permissions?.reports?.view || u.role === "clinic_owner") {
-                permissionTags.push({ label: "Reports", color: "purple" });
-              }
-              if (u.permissions?.billing?.view || u.role === "clinic_owner") {
-                permissionTags.push({ label: "Billing", color: "indigo" });
-              }
+              const access = accessSummary(u);
               
               const isOwner = u.role === 'clinic_owner';
               const isInactive = u.is_active === false;
@@ -66,13 +55,13 @@ const StaffTable = ({
                 <tr 
                   key={u.id} 
                   onClick={() => onUserClick(u)}
-                  className={`hover:bg-gray-50 cursor-pointer transition-colors ${isInactive ? 'opacity-50' : ''}`}
+                  className={`hover:bg-indigo-50/30 cursor-pointer transition-colors duration-150 ${isInactive ? 'opacity-50' : ''}`}
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-10 w-10 relative">
                         <img 
-                          src={u.avatar || generateAvatarUrl(u.email || u.name)} 
+                          src={resolveUserAvatar(u)} 
                           alt={u.name}
                           className="h-10 w-10 rounded-full object-cover bg-gray-100"
                         />
@@ -93,39 +82,35 @@ const StaffTable = ({
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center justify-center gap-2 flex-wrap">
-                      {permissionTags.map((tag, idx) => (
-                        <span
-                          key={idx}
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            tag.color === "green"
-                              ? "bg-green-100 text-green-800"
-                              : tag.color === "blue"
-                              ? "bg-blue-100 text-blue-800 border border-blue-200"
-                              : tag.color === "purple"
-                              ? "bg-purple-100 text-purple-800 border border-purple-200"
-                              : "bg-indigo-100 text-indigo-800 border border-indigo-200"
-                          }`}
-                        >
-                          {tag.label}
-                        </span>
-                      ))}
+                    <div className="flex justify-center">
+                      <span
+                        title={`Can open ${access.readCount} of ${access.total} modules`}
+                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          access.level === 'all'
+                            ? 'bg-[#E0F2F2] text-[#1F6B72]'
+                            : access.level === 'partial'
+                              ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                              : 'bg-gray-100 text-gray-500'
+                        }`}
+                      >
+                        {access.label}
+                      </span>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-500">
-                    {lastActiveDevice ? (
-                      <div className="flex items-center justify-end gap-2">
-                        <span className={`w-2 h-2 rounded-full ${
-                          lastActiveDevice.is_online ? 'bg-green-400' : 'bg-gray-400'
-                        }`}></span>
-                        <span>{formatLastSeen(lastActiveDevice.last_seen)}</span>
+                    {loadingUserDevices ? (
+                      <span className="inline-block h-3 w-16 rounded bg-gray-100 animate-pulse" />
+                    ) : lastActive ? (
+                      <div className="flex items-center justify-end gap-2" title={lastActive.exact}>
+                        <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-gray-300'}`} />
+                        <span>{isOnline ? 'Online now' : lastActive.relative}</span>
                       </div>
                     ) : (
-                      <span className="text-gray-400">Never</span>
+                      <span className="text-gray-400">Never signed in</span>
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-500">
-                    {formatDate(u.created_at)}
+                    {u.created_at ? formatDate(u.created_at) : '—'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center justify-end gap-2">
@@ -145,7 +130,7 @@ const StaffTable = ({
                                 ? 'cursor-not-allowed opacity-40 bg-gray-200'
                                 : isInactive
                                   ? 'bg-gray-200 cursor-pointer'
-                                  : 'bg-[#2D9596] cursor-pointer'
+                                  : 'bg-[#29828a] cursor-pointer'
                             }`}
                           >
                             <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ${isInactive ? 'translate-x-0' : 'translate-x-4'}`} />
@@ -157,7 +142,7 @@ const StaffTable = ({
                       {onEditUser && (
                         <button
                           onClick={(e) => { e.stopPropagation(); onEditUser(u); }}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-[#2D9596] hover:bg-gray-100 transition-colors"
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-[#29828a] hover:bg-gray-100 transition-colors"
                           title="Edit staff details"
                           aria-label={`Edit ${u.name}`}
                         >

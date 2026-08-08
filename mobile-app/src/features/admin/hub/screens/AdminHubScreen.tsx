@@ -11,12 +11,14 @@ import {
   MapPin, CheckCircle2, Building2, Users, Settings2, FileText, Bell,
   ChevronRight, ChevronDown, Plus,
   ClipboardList, Stethoscope, Leaf, TestTube, Activity, Pill, DollarSign,
-  CalendarClock, Shield, CreditCard,
+  CalendarClock, Shield, CreditCard, ScrollText,
 } from 'lucide-react-native';
 import { adminColors } from '../../../../shared/constants/adminColors';
 import { colors } from '../../../../shared/constants/colors';
 import { componentRadius } from '../../../../shared/constants/theme';
 import { adminApiService, ClinicInfo } from '../../../../services/api/admin.api';
+import { SetupProgressRing, SetupStatus } from '../components/SetupProgressRing';
+import { SupportCard } from '../components/SupportCard';
 import { GearLoader } from '../../../../shared/components/GearLoader';
 import { toast } from '../../../../shared/components/toastService';
 import { useAuth } from '../../../../app/AuthContext';
@@ -47,6 +49,9 @@ interface AdminHubScreenProps {
 
 export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) => {
   const { backendUser, switchBranch } = useAuth();
+  // The audit endpoint is owner-only, so hide the row rather than show one that
+  // always comes back empty.
+  const isOwner = backendUser?.role === 'clinic_owner';
   const [clinic, setClinic] = useState<ClinicInfo | null>(null);
   const [staffCount, setStaffCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
@@ -60,15 +65,18 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
   const [branchPhone, setBranchPhone] = useState('');
   const [branchEmail, setBranchEmail] = useState('');
   const [addingBranch, setAddingBranch] = useState(false);
+  const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
 
   const loadData = async () => {
     try {
-      const [clinicData, staffData] = await Promise.all([
+      const [clinicData, staffData, setup] = await Promise.all([
         adminApiService.getClinicInfo(),
         adminApiService.getStaff(),
+        adminApiService.getSetupStatus(),
       ]);
       setClinic(clinicData);
       setStaffCount(staffData.length);
+      setSetupStatus(setup);
     } catch (err) {
       console.error('❌ [ADMIN HUB] Load error:', err);
     } finally {
@@ -174,9 +182,17 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
                 <Text style={styles.locationText} numberOfLines={1}>{clinicName}</Text>
               </View>
             </View>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initialsOf(clinicName)}</Text>
-            </View>
+            {setupStatus && setupStatus.percent < 100 ? (
+              <SetupProgressRing
+                status={setupStatus}
+                onNavigate={(screen) => navigation.navigate(screen as never)}
+                onRefresh={loadData}
+              />
+            ) : (
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{initialsOf(clinicName)}</Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.chipRow}>
@@ -339,6 +355,24 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
             title="Subscription" subtitle="Plan, branches & billing"
             onPress={() => navigation.navigate('Subscription')}
           />
+        </View>
+
+        {/* Security — owner-only; the backend returns nothing for anyone else. */}
+        {isOwner && (
+          <>
+            <Text style={styles.sectionLabel}>SECURITY</Text>
+            <View style={styles.card}>
+              <ConfigRow
+                icon={ScrollText} iconBg="#FEE2E2" iconColor="#EF4444"
+                title="Audit log" subtitle="Who deleted or changed what"
+                onPress={() => navigation.navigate('AuditLog')}
+              />
+            </View>
+          </>
+        )}
+
+        <View style={{ paddingHorizontal: 16, marginTop: 20 }}>
+          <SupportCard clinicName={clinicName} />
         </View>
 
         <View style={{ height: 120 }} />

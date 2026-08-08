@@ -19,6 +19,12 @@ import {
 import { api } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 import FeatureRequestsBoard from '../components/support/FeatureRequestsBoard';
+// Shared with the header's support card — see constants/support.js. Two copies
+// of a phone number is one number that eventually goes stale.
+import {
+  SUPPORT_EMAIL, SUPPORT_PHONE, SUPPORT_PHONE_RAW,
+  SUPPORT_WHATSAPP_TEXT as WHATSAPP_TEXT,
+} from '../constants/support';
 
 const STATUS_COLORS = {
   open: 'bg-amber-100 text-amber-700 border border-amber-200',
@@ -34,12 +40,6 @@ const PRIORITY_COLORS = {
   low: 'bg-gray-100 text-gray-500 border border-gray-200',
 };
 
-const SUPPORT_EMAIL = 'support@molarplus.com';
-const SUPPORT_PHONE = '+91 9594078777';
-const SUPPORT_PHONE_RAW = '919594078777';
-const WHATSAPP_TEXT = encodeURIComponent(
-  'Hi MolarPlus support team, I need help with the app.'
-);
 
 const heroVideo = {
   title: 'MolarPlus Demo — Modern Dental Clinic Management Software',

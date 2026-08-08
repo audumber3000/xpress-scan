@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<style>
+@page { size: A4; margin: 2mm; }
+:root {
+  --accent: #FF9800;
+  --ink: #111827;
+  --muted: #6B7280;
+  --line: #E5E7EB;
+  --soft: #F9FAFB;
+}
+* { box-sizing: border-box; }
+body {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color: var(--ink);
+  background: #fff;
+  margin: 0; padding: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.page { width: 100%; padding: 34px 42px; }
+
+/* Letterhead */
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 16px;
+}
+/* Explicit widths: without them WeasyPrint shrink-to-fits the brand column and
+   the clinic name wraps mid-word next to a half-empty right column. */
+.head .brand { display: flex; align-items: center; width: 63%; }
+.head .brand .logo { flex: none; }
+.head .brand .meta { margin-left: 12px; }
+.head .brand .name { font-size: 17px; font-weight: 700; color: var(--ink); }
+.head .brand .sub  { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.head .doc { text-align: right; width: 33%; }
+.head .doc .label {
+  font-size: 11px; color: var(--muted); text-transform: uppercase;
+  letter-spacing: 1.5px; font-weight: 600; margin-bottom: 4px;
+}
+.head .doc .number { font-size: 20px; font-weight: 700; color: var(--accent); letter-spacing: 0.5px; }
+.head .doc .date { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* Received-from strip */
+.strip { display: flex; justify-content: space-between; margin: 20px 0 18px; }
+.strip .col { width: 48%; }
+.strip .col h4 {
+  margin: 0 0 6px 0; font-size: 10px; text-transform: uppercase;
+  letter-spacing: 1px; color: var(--muted); font-weight: 600;
+}
+.strip .col p { margin: 1px 0; font-size: 11.5px; }
+.strip .col .tight { color: var(--muted); font-size: 10.5px; }
+
+/* The headline: what was actually received */
+.received {
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+  padding: 16px 18px;
+  margin-bottom: 18px;
+}
+.received .cap {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--muted); font-weight: 600;
+}
+.received .amt {
+  font-size: 30px; font-weight: 700; color: var(--accent);
+  margin-top: 4px; font-variant-numeric: tabular-nums;
+}
+.received .words { font-size: 10.5px; color: var(--muted); font-style: italic; margin-top: 4px; }
+.received .mode { font-size: 11px; color: var(--ink); margin-top: 8px; }
+
+/* Where this payment leaves the bill */
+.ledger { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+.ledger th {
+  text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--muted); font-weight: 600; padding: 9px 8px;
+  border-bottom: 2px solid var(--line);
+}
+.ledger th.amt, .ledger td.amt { text-align: right; }
+.ledger td {
+  padding: 9px 8px; border-bottom: 1px solid var(--line);
+  font-size: 12px; font-variant-numeric: tabular-nums;
+}
+.ledger td .asof { color: var(--muted); font-size: 10px; }
+.ledger tr.balance td {
+  font-weight: 700; border-bottom: none;
+  border-top: 1px solid var(--line);
+}
+.ledger tr.balance td.amt { color: #B45309; }
+
+.chip {
+  display: inline-block; padding: 3px 9px; border-radius: 10px;
+  font-size: 10px; font-weight: 700;
+}
+.chip.paid { background: #DCFCE7; color: #15803D; }
+.chip.due  { background: #FEF3C7; color: #B45309; }
+
+.note { font-size: 10.5px; color: var(--muted); margin-bottom: 14px; }
+
+/* Footer */
+.foot {
+  margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--line);
+  display: flex; justify-content: space-between; align-items: flex-start;
+  font-size: 10.5px; color: var(--muted); line-height: 1.5;
+}
+.foot .terms { width: 60%; }
+.foot .sig { width: 35%; text-align: right; }
+.foot .sig .line {
+  display: inline-block; width: 150px; border-top: 1px solid var(--ink);
+  margin-top: 34px; padding-top: 4px; font-size: 10px;
+  color: var(--ink); font-weight: 600;
+}
+.disclaimer {
+  text-align: center; margin-top: 14px; padding-top: 10px;
+  font-size: 9.5px; color: var(--muted); font-style: italic;
+  border-top: 1px dashed var(--line);
+}
+</style>
+</head><body>
+<div class="page">
+
+  <!-- LETTERHEAD -->
+  <div class="head">
+    <div class="brand">
+      <div class="logo" style="width:52px;height:52px;background:#FF9800;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;letter-spacing:0.5px;border-radius:6px;">MO</div>
+      <div class="meta">
+        <div class="name">MolarPlus Dental</div>
+        <div class="sub">Dr. R. Sharma · 12 Marine Drive, Mumbai 400020</div>
+        <div class="sub">Tel: +91 22 4000 1234  ·  hello@molarplus.example</div>
+        <div class="sub">GSTIN: 27ABCDE1234F1Z5</div>
+      </div>
+    </div>
+    <div class="doc">
+      <div class="label">Payment Receipt</div>
+      <div class="number">RCP-2026-0031</div>
+      <div class="date">27 Apr 2026</div>
+    </div>
+  </div>
+
+  <!-- RECEIVED FROM / AGAINST -->
+  <div class="strip">
+    <div class="col">
+      <h4>Received From</h4>
+      <p style="font-weight:600;">Asha Mehta</p>
+      <p class="tight">ID: PT-42</p>
+      <p class="tight">9876543210</p>
+    </div>
+    <div class="col" style="text-align:right;">
+      <h4>Against Invoice</h4>
+      <p style="font-weight:600;">INV-101</p>
+      <p class="tight">Invoice total ₹ 6,490.00</p>
+      <p style="margin-top:6px;"><span class="chip due">Balance ₹ 2,490.00</span></p>
+    </div>
+  </div>
+
+  <!-- THE AMOUNT RECEIVED -->
+  <div class="received">
+    <div class="cap">Amount received</div>
+    <div class="amt">₹ 2,500.00</div>
+    <div class="words">Two Thousand Five Hundred Rupees Only</div>
+    <div class="mode">Paid by <strong>UPI</strong> on 27 Apr 2026</div>
+  </div>
+
+  <!-- WHERE THIS PAYMENT LEAVES THE BILL -->
+  <table class="ledger">
+    <thead>
+      <tr><th>Position on this invoice</th><th class="amt">Amount</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>This payment</td>
+        <td class="amt">₹ 2,500.00</td>
+      </tr>
+      <tr>
+        <td>Total paid so far <span class="asof">(including this payment)</span></td>
+        <td class="amt">₹ 4,000.00</td>
+      </tr>
+      <tr class="balance">
+        <td>Balance still due <span class="asof">(as on 27 Apr 2026)</span></td>
+        <td class="amt">₹ 2,490.00</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">Note: Second installment</div>
+
+  <!-- FOOTER -->
+  <div class="foot">
+    <div class="terms">
+      This receipt acknowledges the amount shown above against invoice INV-101.
+      Figures are as on 27 Apr 2026. Computer-generated; no signature required.
+    </div>
+    <div class="sig">
+      
+      <span class="line">Authorised Signatory</span>
+    </div>
+  </div>
+
+  <div class="disclaimer">This is a computer-generated receipt. No signature required.</div>
+
+</div>
+</body></html>

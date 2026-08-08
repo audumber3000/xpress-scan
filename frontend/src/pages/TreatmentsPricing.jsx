@@ -4,11 +4,15 @@ import { useNavigate } from 'react-router-dom';
 import { useHeader } from "../contexts/HeaderContext";
 import { useAuth } from "../contexts/AuthContext";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
-import { ChevronLeft, Search, Plus, Upload, Info, Trash2 } from 'lucide-react';
+import { ChevronLeft, Plus, Upload, Info, Trash2, Stethoscope, Pill } from 'lucide-react';
 import GearLoader from "../components/GearLoader";
 import { getCurrencySymbol } from "../utils/currency";
 import PracticeItemDrawer from "../components/settings/PracticeItemDrawer";
 import BulkImportModal from "../components/settings/BulkImportModal";
+import TableToolbar from "../components/common/TableToolbar";
+import FilterPanel from "../components/FilterPanel";
+import EmptyState from "../components/common/EmptyState";
+import { noData } from "../assets/illustrations";
 
 /* ── GST Info Popover (reusable) ─────────────────────────────────────────── */
 const GST_DATA = {
@@ -258,64 +262,81 @@ const TreatmentsPricing = () => {
 
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-y-auto custom-scrollbar p-6 lg:p-8 pb-10">
-      <div className="mb-6 flex items-center gap-2 text-sm font-medium text-gray-500">
-        <span>Control Center</span><span>/</span><span className="text-gray-900">Treatment & Pricing</span>
-      </div>
-
-      {/* Tabs + top-right actions */}
-      <div className="mb-6 border-b border-gray-200">
-        <div className="flex items-center justify-between -mb-px">
-          <div className="flex gap-6">
-            <button onClick={() => setActiveTab('services')} className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'services' ? 'border-[#29828a] text-[#29828a]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}>Treatment & Pricing</button>
-            <button onClick={() => setActiveTab('medications')} className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'medications' ? 'border-[#29828a] text-[#29828a]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}>Medication</button>
+      {/* Header + tabs, laid out like the Notifications section. */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between gap-4 mb-5">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Treatment &amp; Pricing</h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              What you offer and what it costs. These feed the picker when you bill a patient.
+            </p>
           </div>
-          <div className="flex items-center gap-3 pb-2">
-            {isServices && <GSTInfoPopover />}
-            <button
-              onClick={() => setShowImport(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-50 transition-colors"
-            >
-              <Upload size={16} className="text-[#2D9596]" /> Import
-            </button>
-            <button
-              onClick={() => setDrawer({ open: true, item: null })}
-              className="flex items-center gap-2 px-4 py-2 bg-[#2D9596] text-white rounded-lg text-sm font-semibold hover:bg-[#1F6B72] transition-colors shadow-sm"
-            >
-              <Plus size={16} strokeWidth={2.5} /> {isServices ? 'Add treatment' : 'Add medication'}
-            </button>
+          {isServices && <GSTInfoPopover />}
+        </div>
+
+        <div className="border-b border-gray-200">
+          <div className="flex gap-1 -mb-px">
+            {[
+              { id: 'services',    label: 'Treatments', icon: Stethoscope },
+              { id: 'medications', label: 'Medications', icon: Pill },
+            ].map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors rounded-t-lg ${
+                  activeTab === id
+                    ? 'border-[#29828a] text-[#29828a] bg-white'
+                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+                }`}
+              >
+                <Icon size={14} />
+                {label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Search */}
-      <div className="mb-4 relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-        <input
-          type="text"
-          placeholder={`Search ${isServices ? 'treatments' : 'medications'}...`}
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-[#2D9596]"
+      {/* Search left, actions right — the same bar as Patients and Staff. The
+          category list moved in here as a filter: it was a second row of tabs
+          under the first, and the tables below are already grouped by category. */}
+      <TableToolbar
+        search={searchQuery}
+        onSearchChange={setSearchQuery}
+        placeholder={`Search ${isServices ? 'treatments' : 'medications'}...`}
+      >
+        <FilterPanel
+          accent="teal"
+          dateEnabled={false}
+          value={{ category: isServices
+            ? (selectedCategory === 'All Services' ? '' : selectedCategory)
+            : (selectedMedCategory === 'All' ? '' : selectedMedCategory) }}
+          onApply={(next) => (isServices
+            ? setSelectedCategory(next.category || 'All Services')
+            : setSelectedMedCategory(next.category || 'All'))}
+          filters={[{
+            key: 'category',
+            label: 'Category',
+            options: (isServices ? serviceCategories : medCategories).slice(1),
+          }]}
         />
-      </div>
-
-      {/* Sub-category tabs */}
-      <div className="flex gap-6 mb-6 border-b border-gray-200 overflow-x-auto no-scrollbar">
-        {(isServices ? serviceCategories : medCategories).map((category) => (
-          <button
-            key={category}
-            onClick={() => isServices ? setSelectedCategory(category) : setSelectedMedCategory(category)}
-            className={`pb-3 px-1 font-semibold whitespace-nowrap transition relative ${(isServices ? selectedCategory : selectedMedCategory) === category ? 'text-[#2D9596]' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            {category}
-            {(isServices ? selectedCategory : selectedMedCategory) === category && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#2D9596] rounded-full" />}
-          </button>
-        ))}
-      </div>
+        <button
+          onClick={() => setShowImport(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-50 transition-colors whitespace-nowrap"
+        >
+          <Upload size={16} className="text-[#29828a]" /> Import
+        </button>
+        <button
+          onClick={() => setDrawer({ open: true, item: null })}
+          className="flex items-center gap-2 px-4 py-2 bg-[#29828a] text-white rounded-lg text-sm font-semibold hover:bg-[#216b71] transition-colors whitespace-nowrap"
+        >
+          <Plus size={16} strokeWidth={2.5} /> {isServices ? 'Add treatment' : 'Add medication'}
+        </button>
+      </TableToolbar>
 
       {/* Bulk-select action bar */}
       {selectedIds.size > 0 && (
-        <div className="mb-4 flex items-center justify-between bg-[#2D9596] text-white rounded-xl px-4 py-2.5 shadow-sm">
+        <div className="mb-4 flex items-center justify-between bg-[#29828a] text-white rounded-xl px-4 py-2.5">
           <span className="text-sm font-semibold">{selectedIds.size} selected</span>
           <div className="flex items-center gap-2">
             <button onClick={() => setSelectedIds(new Set())} className="px-3 py-1.5 text-sm font-semibold rounded-lg hover:bg-white/10 transition">Clear</button>
@@ -334,16 +355,16 @@ const TreatmentsPricing = () => {
           <div key={category} className="mb-8">
             <div className="flex items-center justify-between mb-3 px-1">
               <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">{category.toUpperCase()}</h3>
-              <span className="text-[10px] font-bold bg-[#E0F2F2] text-[#2D9596] px-2 py-0.5 rounded-full">{items.length} {items.length === 1 ? 'ITEM' : 'ITEMS'}</span>
+              <span className="text-[10px] font-bold bg-[#E0F2F2] text-[#29828a] px-2 py-0.5 rounded-full">{items.length} {items.length === 1 ? 'ITEM' : 'ITEMS'}</span>
             </div>
-            <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
+            <div className="bg-white rounded-xl overflow-hidden border border-gray-200">
               <div className="overflow-x-auto">
                 <table className="w-full divide-y divide-gray-100">
-                  <thead className="bg-gray-50/50">
+                  <thead className="bg-[#f8fafc]">
                     <tr>
                       <th className="px-4 py-3 w-10">
                         <input type="checkbox" checked={allSelected} onChange={() => toggleSelectGroup(items)} disabled={deletableIds.length === 0}
-                          className="w-4 h-4 rounded border-gray-300 text-[#2D9596] focus:ring-[#2D9596]" />
+                          className="w-4 h-4 rounded border-gray-300 text-[#29828a] focus:ring-[#29828a]" />
                       </th>
                       <th className="px-6 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Name</th>
                       {isServices ? (
@@ -359,10 +380,10 @@ const TreatmentsPricing = () => {
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {items.map((item) => (
-                      <tr key={item.id} className={`transition ${selectedIds.has(item.id) ? 'bg-[#2D9596]/5' : 'hover:bg-gray-50/50'}`}>
+                      <tr key={item.id} className={`transition ${selectedIds.has(item.id) ? 'bg-[#29828a]/5' : 'hover:bg-gray-50/50'}`}>
                         <td className="px-4 py-4">
                           <input type="checkbox" checked={selectedIds.has(item.id)} disabled={!isDeletable(item)} onChange={() => toggleSelect(item.id)}
-                            className="w-4 h-4 rounded border-gray-300 text-[#2D9596] focus:ring-[#2D9596] disabled:opacity-30" />
+                            className="w-4 h-4 rounded border-gray-300 text-[#29828a] focus:ring-[#29828a] disabled:opacity-30" />
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
@@ -371,7 +392,7 @@ const TreatmentsPricing = () => {
                           </div>
                         </td>
                         {isServices ? (
-                          <td className="px-6 py-4 text-sm font-mono text-[#2D9596] font-bold">{getCurrencySymbol()}{item.price}</td>
+                          <td className="px-6 py-4 text-sm font-mono text-[#29828a] font-bold">{getCurrencySymbol()}{item.price}</td>
                         ) : (
                           <>
                             <td className="px-6 py-4 text-sm text-gray-600 font-medium">{item.dosage || '-'}</td>
@@ -380,7 +401,7 @@ const TreatmentsPricing = () => {
                         )}
                         <td className="px-6 py-4 text-right">
                           <div className="flex justify-end gap-3">
-                            <button onClick={() => setDrawer({ open: true, item })} className="text-[#2D9596] hover:text-[#1F6B72] text-[11px] font-bold uppercase tracking-wider">Edit</button>
+                            <button onClick={() => setDrawer({ open: true, item })} className="text-[#29828a] hover:text-[#216b71] text-[11px] font-bold uppercase tracking-wider">Edit</button>
                             <button onClick={() => deleteOne(item)} className="text-red-400 hover:text-red-600 text-[11px] font-bold uppercase tracking-wider">Delete</button>
                           </div>
                         </td>
@@ -395,10 +416,14 @@ const TreatmentsPricing = () => {
       })}
 
       {Object.keys(grouped).length === 0 && (
-        <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-gray-100">
-          <Search className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-          <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">No items found</p>
-        </div>
+        <EmptyState
+          image={noData}
+          title={searchQuery ? 'Nothing matches that search' : `No ${isServices ? 'treatments' : 'medications'} yet`}
+          subtitle={searchQuery
+            ? 'Try a different name, or clear the category filter.'
+            : `Add your first ${isServices ? 'treatment' : 'medication'} and it becomes selectable when you bill a patient.`}
+          className="bg-white rounded-xl border border-gray-200"
+        />
       )}
 
       {/* Add / edit drawer */}

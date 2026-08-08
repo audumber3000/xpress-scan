@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  MessageSquare, BarChart2, FileText, Plug,
+  MessageSquare, BarChart2, FileText,
   RefreshCw, Send, Loader2, X,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -13,14 +13,14 @@ import { CHANNEL_META, EVENT_LABELS, EVENT_AUDIENCE, getChannelCost } from './co
 import OverviewTab from './OverviewTab';
 import PreferencesTab from './PreferencesTab';
 import LogsTab from './LogsTab';
-import IntegrationsTab from './IntegrationsTab';
 import { getCurrencySymbol } from '../../../utils/currency';
 
+// The former "Integrations" tab (WA Reach + manual WhatsApp) is now its own
+// Control Center section at /admin/integrations/whatsapp.
 const TABS = [
   { id: 'overview',    label: 'Overview',     icon: BarChart2     },
   { id: 'preferences', label: 'Preferences',  icon: MessageSquare },
   { id: 'logs',        label: 'Message Logs', icon: FileText      },
-  { id: 'channels',    label: 'Integrations', icon: Plug          },
 ];
 
 const Notifications = () => {
@@ -37,7 +37,6 @@ const Notifications = () => {
   const [savingPrefs, setSavingPrefs]     = useState(false);
   const [topUpAmount, setTopUpAmount]     = useState(500);
   const [toppingUp, setToppingUp]         = useState(false);
-  const [drawerProvider, setDrawerProvider] = useState(null);
   const [testDrawer, setTestDrawer]       = useState({
     open: false, pref: null, templates: {}, recipient: '',
     selectedChannel: '', loadingTpl: false, sending: false,
@@ -216,9 +215,13 @@ const Notifications = () => {
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                   audience === 'doctor' ? 'bg-blue-50 text-blue-600 border border-blue-100'
                   : audience === 'owner' ? 'bg-violet-50 text-violet-600 border border-violet-100'
+                  : audience === 'lab' ? 'bg-amber-50 text-amber-600 border border-amber-100'
                   : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
                 }`}>
-                  {audience === 'doctor' ? '👨‍⚕️ Doctor' : audience === 'owner' ? '🤖 Auto' : '🧑‍🦷 Patient'}
+                  {audience === 'doctor' ? '👨‍⚕️ Doctor'
+                    : audience === 'owner' ? '🤖 Auto'
+                    : audience === 'lab' ? '🦷 Lab'
+                    : '🧑‍🦷 Patient'}
                 </span>
               </div>
               <p className="text-xs text-gray-400">Preview template &amp; send a test notification</p>
@@ -395,13 +398,6 @@ const Notifications = () => {
             setLogsFilter={setLogsFilter}
             setLogsPage={setLogsPage}
             fetchLogs={fetchLogs}
-          />
-        )}
-
-        {activeTab === 'channels' && (
-          <IntegrationsTab
-            drawerProvider={drawerProvider}
-            setDrawerProvider={setDrawerProvider}
           />
         )}
       </div>

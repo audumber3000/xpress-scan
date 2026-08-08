@@ -1,5 +1,5 @@
 import React from "react";
-import { generateAvatarUrl } from "../../utils/avatar";
+import { resolveUserAvatar } from "../../utils/avatar";
 
 const EmployeeDetailsPanel = ({ employee, onClose }) => {
   if (!employee) return null;
@@ -50,7 +50,7 @@ const EmployeeDetailsPanel = ({ employee, onClose }) => {
           {/* Employee Profile */}
           <div className="flex flex-col items-center mb-6 pb-6 border-b border-gray-200">
             <img
-              src={employee.avatar || generateAvatarUrl(employee.email || employee.name, 120)}
+              src={resolveUserAvatar(employee, 120)}
               alt={employee.name}
               className="w-24 h-24 rounded-full object-cover mb-4"
             />

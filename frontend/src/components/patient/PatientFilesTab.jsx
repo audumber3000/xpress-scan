@@ -1,6 +1,8 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { api, getFriendlyErrorMessage } from '../../utils/api';
 import { toast } from 'react-toastify';
+import EmptyState from '../common/EmptyState';
+import { noData } from '../../assets/illustrations';
 
 // Lazy so the heavy DICOM decode libraries only load when a .dcm is opened.
 const DicomViewerModal = lazy(() => import('./DicomViewerModal'));
@@ -181,7 +183,11 @@ const FilesSkeleton = () => (
     </div>
 );
 
-const PatientFilesTab = ({ patientId }) => {
+// variant: 'xray' shows imaging (X-rays/DICOM/scan images); 'documents' shows
+// paperwork (PDFs, other files) + signed consents; 'all' = the original combined
+// view. Split by whether a file is imaging so the tabs stay clean without any
+// backend change.
+const PatientFilesTab = ({ patientId, variant = 'all' }) => {
     const [files, setFiles] = useState([]);
     const [consents, setConsents] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -311,17 +317,31 @@ const PatientFilesTab = ({ patientId }) => {
 
     if (loading) return <FilesSkeleton />;
 
+    // Split the combined list by whether a file is imaging (X-ray/DICOM/image).
+    const isImaging = (f) => isImage(f) || isDicom(f);
+    const visibleFiles = variant === 'xray'
+        ? files.filter(isImaging)
+        : variant === 'documents'
+            ? files.filter((f) => !isImaging(f))
+            : files;
+    const showConsents = variant !== 'xray';
+    const head = variant === 'xray'
+        ? { title: 'X-rays & Imaging', sub: 'Radiographs, DICOM and scan images', btn: 'Upload X-ray', accept: 'image/*,.dcm,.dicom', empty: 'No X-rays yet', emptyHint: 'X-rays, scans or DICOM images.' }
+        : variant === 'documents'
+            ? { title: 'Documents & Files', sub: 'Prescriptions, consents, PDFs and other attachments', btn: 'Upload Document', accept: ACCEPT, empty: 'No documents yet', emptyHint: 'PDFs and other attachments.' }
+            : { title: 'Patient Data & Files', sub: 'DICOM, PDF, images and clinical attachments', btn: 'Upload Document', accept: ACCEPT, empty: 'No clinical images yet', emptyHint: 'X-rays, scans or documents.' };
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between gap-3">
                 <div>
-                    <h3 className="text-lg md:text-xl font-bold text-gray-900">Patient Data & Files</h3>
-                    <p className="text-sm text-gray-500">DICOM, PDF, images and clinical attachments</p>
+                    <h3 className="text-lg md:text-xl font-bold text-gray-900">{head.title}</h3>
+                    <p className="text-sm text-gray-500">{head.sub}</p>
                 </div>
                 <label className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors cursor-pointer shadow-sm flex-shrink-0 ${uploading ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-[#2a276e] text-white hover:bg-[#1a1548]'}`}>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" /></svg>
-                    {uploading ? (progress ? `Uploading ${progress.done}/${progress.total}...` : 'Uploading...') : 'Upload Document'}
-                    <input type="file" multiple accept={ACCEPT} className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ''; }} disabled={uploading} />
+                    {uploading ? (progress ? `Uploading ${progress.done}/${progress.total}...` : 'Uploading...') : head.btn}
+                    <input type="file" multiple accept={head.accept} className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ''; }} disabled={uploading} />
                 </label>
             </div>
 
@@ -356,8 +376,8 @@ const PatientFilesTab = ({ patientId }) => {
                 className={`rounded-2xl transition-colors ${dragOver ? 'ring-2 ring-[#2a276e]/40 bg-[#2a276e]/5' : ''}`}
             >
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {files.length > 0 ? (
-                        files.map((file) => {
+                    {visibleFiles.length > 0 ? (
+                        visibleFiles.map((file) => {
                             const kind = fileKind(file);
                             return (
                                 <div key={file.id} className="group bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-xl transition-all">
@@ -422,16 +442,17 @@ const PatientFilesTab = ({ patientId }) => {
                             <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-4 border border-gray-100">
                                 <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h14a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                             </div>
-                            <h4 className="text-gray-900 font-bold">No clinical images yet</h4>
-                            <p className="text-gray-500 text-sm mt-1">Drag &amp; drop or <span className="text-[#2a276e] font-semibold">click to upload</span> X-rays, scans or documents.</p>
-                            <p className="text-gray-400 text-xs mt-1">Images &amp; PDFs, up to {MAX_FILE_MB} MB each.</p>
-                            <input type="file" multiple accept={ACCEPT} className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ''; }} disabled={uploading} />
+                            <h4 className="text-gray-900 font-bold">{head.empty}</h4>
+                            <p className="text-gray-500 text-sm mt-1">Drag &amp; drop or <span className="text-[#2a276e] font-semibold">click to upload</span> {head.emptyHint}</p>
+                            <p className="text-gray-400 text-xs mt-1">Up to {MAX_FILE_MB} MB each.</p>
+                            <input type="file" multiple accept={head.accept} className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ''; }} disabled={uploading} />
                         </label>
                     )}
                 </div>
             </div>
 
-            {/* Signed Consent Forms */}
+            {/* Signed Consent Forms — paperwork, so hidden on the X-rays tab. */}
+            {showConsents && (
             <div className="mt-8">
                 <div className="flex items-center gap-3 mb-5">
                     <div className="w-9 h-9 rounded-lg bg-[#2a276e]/5 text-[#2a276e] flex items-center justify-center">
@@ -451,12 +472,13 @@ const PatientFilesTab = ({ patientId }) => {
                 </div>
 
                 {consents.length === 0 ? (
-                    <div className="py-10 text-center bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-200">
-                        <svg className="w-10 h-10 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        <p className="text-sm font-semibold text-gray-500">No signed consent forms yet</p>
-                    </div>
+                    <EmptyState
+                        image={noData}
+                        size="sm"
+                        title="No signed consent forms yet"
+                        subtitle="Send a consent from the Consent Forms page and the signed copy lands here."
+                        className="bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-200"
+                    />
                 ) : (
                     <div className="flex flex-col gap-3">
                         {consents.map((consent) => (
@@ -495,6 +517,7 @@ const PatientFilesTab = ({ patientId }) => {
                     </div>
                 )}
             </div>
+            )}
 
             {/* Styled delete confirmation */}
             {pendingDelete && (

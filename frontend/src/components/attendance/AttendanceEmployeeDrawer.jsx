@@ -29,7 +29,7 @@ const DayDot = ({ status, isToday: today, isFuture: future, size = "md" }) => {
   const cfg = STATUS_CONFIG[status];
   return (
     <div className={`${sz} rounded-full flex items-center justify-center font-bold ${
-      today ? "ring-2 ring-offset-1 ring-[#2D9596]" : ""
+      today ? "ring-2 ring-offset-1 ring-[#29828a]" : ""
     } ${
       status === "on_time" ? "bg-emerald-100 text-emerald-700" :
       status === "late"    ? "bg-amber-100 text-amber-700" :
@@ -105,7 +105,7 @@ const MonthView = ({ records, month }) => {
           return (
             <div key={key} className="flex flex-col items-center gap-0.5 py-1">
               <DayDot status={status} isToday={isToday(day)} isFuture={future} size="sm" />
-              <span className={`text-[9px] font-medium ${isToday(day) ? "text-[#2D9596]" : "text-gray-400"}`}>
+              <span className={`text-[9px] font-medium ${isToday(day) ? "text-[#29828a]" : "text-gray-400"}`}>
                 {format(day, "d")}
               </span>
             </div>
@@ -295,7 +295,7 @@ const AttendanceEmployeeDrawer = ({ employee, onClose }) => {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-full bg-[#E0F2F2] flex items-center justify-center text-[#2D9596] font-bold text-sm shrink-0">
+            <div className="w-11 h-11 rounded-full bg-[#E0F2F2] flex items-center justify-center text-[#29828a] font-bold text-sm shrink-0">
               {initials(employee.name)}
             </div>
             <div>
@@ -330,7 +330,7 @@ const AttendanceEmployeeDrawer = ({ employee, onClose }) => {
               onClick={() => setActiveTab(t.key)}
               className={`py-3 px-4 text-xs font-semibold border-b-2 transition-colors ${
                 activeTab === t.key
-                  ? "border-[#2D9596] text-[#2D9596]"
+                  ? "border-[#29828a] text-[#29828a]"
                   : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
             >
@@ -346,7 +346,7 @@ const AttendanceEmployeeDrawer = ({ employee, onClose }) => {
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {loading ? (
             <div className="flex items-center justify-center h-32">
-              <div className="w-6 h-6 border-2 border-[#2D9596] border-t-transparent rounded-full animate-spin" />
+              <div className="w-6 h-6 border-2 border-[#29828a] border-t-transparent rounded-full animate-spin" />
             </div>
           ) : activeTab === "week" ? (
             <WeekView records={records} weekStart={weekStart} />

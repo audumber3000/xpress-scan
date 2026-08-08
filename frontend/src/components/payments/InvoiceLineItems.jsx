@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { toast } from "react-toastify";
 import { api } from "../../utils/api";
 import InvoiceLineItemForm from "./InvoiceLineItemForm";
 import { getCurrencySymbol } from "../../utils/currency";
@@ -132,6 +133,13 @@ const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdat
   const [localDiscountType, setLocalDiscountType] = useState(invoice?.discount_type || 'amount');
   const [discountEditing, setDiscountEditing] = useState(false);
 
+  // Saved offers valid today — applying one sets the invoice's discount fields.
+  const [activeOffers, setActiveOffers] = useState([]);
+  useEffect(() => {
+    if (!canEdit) return;
+    api.get('/offers/active').then((d) => setActiveOffers(Array.isArray(d) ? d : [])).catch(() => {});
+  }, [canEdit]);
+
   const handleEdit = (lineItem) => {
     setEditingId(lineItem.id);
     setShowAddForm(false);
@@ -158,6 +166,25 @@ const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdat
       discount_type: localDiscountType
     });
     setDiscountEditing(false);
+  };
+
+  // Resolve a saved offer server-side (checks active/in-date/min-bill), then set
+  // it as this invoice's discount — reusing the normal discount path.
+  const applyOffer = async (offerId) => {
+    if (!offerId) return;
+    try {
+      const res = await api.post('/offers/validate', {
+        offer_id: Number(offerId),
+        subtotal: Number(invoice?.subtotal || 0),
+      });
+      if (!res?.valid) { toast.error(res?.reason || "This offer can't be applied to this bill."); return; }
+      setLocalDiscount(res.discount);
+      setLocalDiscountType(res.discount_type);
+      onUpdateInvoice({ discount: res.discount, discount_type: res.discount_type, applied_offer_id: Number(offerId) });
+      toast.success('Offer applied');
+    } catch (e) {
+      toast.error('Could not apply the offer');
+    }
   };
 
   // Currency symbol comes from the clinic (same source as the rest of the app).
@@ -317,11 +344,30 @@ const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdat
                 <span className="font-medium text-gray-900">{formatAmount(invoice.subtotal)}</span>
               </div>
 
+              {/* Apply a saved offer (whole-invoice) */}
+              {canEdit && activeOffers.length > 0 && (
+                <div className="flex items-center justify-between pt-1 pb-1">
+                  <span className="text-sm text-gray-600">Apply offer:</span>
+                  <select
+                    value=""
+                    onChange={(e) => applyOffer(e.target.value)}
+                    className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 outline-none focus:border-[#2a276e] max-w-[55%]"
+                  >
+                    <option value="">Choose an offer…</option>
+                    {activeOffers.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name} — {o.discount_type === 'percentage' ? `${o.value}%` : `${getCurrencySymbol()}${o.value}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* Discount Row */}
               {canEdit ? (
                 <div className="flex items-center justify-between group pt-1 pb-1">
                   <span className="text-sm text-gray-600 flex items-center gap-1 cursor-pointer" onClick={() => setDiscountEditing(true)}>
-                    Discount:
+                    Discount{invoice.applied_offer_name ? ` (${invoice.applied_offer_name})` : ''}:
                     {!discountEditing && (
                       <svg className="w-3 h-3 text-blue-500 opacity-0 group-hover:opacity-100 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                     )}
@@ -356,7 +402,7 @@ const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdat
                 invoice.discount_amount > 0 && (
                   <>
                     <div className="flex justify-between text-sm text-gray-600">
-                      <span>Discount:</span>
+                      <span>Discount{invoice.applied_offer_name ? ` (${invoice.applied_offer_name})` : ''}:</span>
                       <span className="font-medium text-red-600">- {formatAmount(invoice.discount_amount)}</span>
                     </div>
                     {/* How much of that deduction was granted after the bill was

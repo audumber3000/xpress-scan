@@ -15,7 +15,9 @@ Layout uses tables and `display: flex` with explicit margins where needed.
 """
 import datetime
 
-from domains.infrastructure.services.pdf_safety import safe_color, safe_signature_data_uri, safe_text, safe_url
+from domains.infrastructure.services.pdf_safety import safe_color, safe_signature_data_uri, safe_text
+from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
+from domains.infrastructure.services.pdf_fields import resolve_field_visibility
 from domains.finance.invoice_templates.discount_block import render_discount_block
 
 
@@ -25,11 +27,17 @@ def render_invoice(invoice, clinic, config=None) -> str:
         or getattr(clinic, 'primary_color', None),
         default='#111827',
     )
-    footer_text = safe_text((config.footer_text if config and config.footer_text else '') if config else '')
+    # Flags default to shown and can only hide — see pdf_fields.
+    vis = resolve_field_visibility(config)
 
-    raw_logo_url = (config.logo_url if config and config.logo_url else None) if config else None
-    raw_logo_url = raw_logo_url or getattr(clinic, 'logo_url', None)
-    logo_url = safe_url(raw_logo_url)
+    footer_text = safe_text((config.footer_text if config and config.footer_text else '') if config else '') if vis.footer else ''
+
+    # Inline bytes, not a URL — the stored config link is a presigned R2 URL
+    # that expires. See pdf_branding.resolve_logo_data_uri.
+    logo_url = resolve_logo_data_uri(
+        (config.logo_url if config else None),
+        getattr(clinic, 'logo_url', None),
+    )
     if logo_url:
         logo_html = f'<img src="{logo_url}" alt="Logo" style="width:48px;height:48px;object-fit:contain;">'
     else:
@@ -41,10 +49,14 @@ def render_invoice(invoice, clinic, config=None) -> str:
         )
 
     c_name    = safe_text(clinic.name    if clinic else 'Dental Clinic')
-    c_phone   = safe_text(clinic.phone   if clinic and clinic.phone   else '')
-    c_email   = safe_text(clinic.email   if clinic and clinic.email   else '')
-    c_address = safe_text(clinic.address if clinic and clinic.address else '')
-    c_gst     = safe_text(getattr(clinic, 'gst_number',  '') if clinic else '')
+    c_phone   = safe_text(clinic.phone   if clinic and clinic.phone   and vis.contact else '')
+    c_email   = safe_text(clinic.email   if clinic and clinic.email   and vis.contact else '')
+    c_address = safe_text(clinic.address if clinic and clinic.address and vis.address else '')
+    c_gst     = safe_text((getattr(clinic, 'gst_number',  '') if clinic else '') if vis.tax_number else '')
+    # Modern didn't carry these before. They only render once a clinic actually
+    # fills them in, so nothing appears on an existing invoice unasked.
+    c_tagline = safe_text((getattr(clinic, 'tagline', '') or '' if clinic else '') if vis.tagline else '')
+    c_reg     = safe_text((getattr(clinic, 'license_number', '') or '' if clinic else '') if vis.license_number else '')
     c_doctor  = safe_text(getattr(clinic, 'doctor_name', '') if clinic else '')
 
     # Locale: currency symbol + tax label per clinic country.
@@ -86,6 +98,20 @@ def render_invoice(invoice, clinic, config=None) -> str:
     pm  = safe_text(getattr(invoice, 'payment_mode', '') or 'Pending')
     notes = safe_text(getattr(invoice, 'notes', '') or '')
 
+    # Joined from the parts that survived the flags, so hiding the address
+    # can't leave a trailing separator behind.
+    signature_box = (
+        f'''<div class="sig">
+      {f'<img src="{doctor_signature}" alt="Signature" style="display:block;max-width:140px;max-height:48px;margin-left:auto;margin-bottom:2px;object-fit:contain;">' if doctor_signature else ''}
+      <span class="line">Authorised Signatory</span>
+    </div>''' if vis.signature else ''
+    )
+
+    who_line = ' · '.join(filter(None, [doctor_name, c_tagline, c_address]))
+    contact_line = '  ·  '.join(filter(None, [
+        f'Tel: {c_phone}' if c_phone else '', c_email,
+    ]))
+
     age_gender = ' / '.join(filter(None, [p_age, p_gender])) or '–'
 
     # ── Line item rows (single-line, with tooth inlined) ─────────────────────
@@ -104,10 +130,16 @@ def render_invoice(invoice, clinic, config=None) -> str:
         )
 
     # ── Summary rows ────────────────────────────────────────────────────────
-    disc_row = f'<tr><td>Discount</td><td>– {currency} {discount:,.2f}</td></tr>' if discount > 0 else ''
+    _offer = getattr(invoice, 'applied_offer', None)
+    _disc_label = f'Discount ({safe_text(_offer.name)})' if _offer and getattr(_offer, 'name', None) else 'Discount'
+    show_discount = vis.discount and discount > 0
+    disc_row = f'<tr><td>{_disc_label}</td><td>– {currency} {discount:,.2f}</td></tr>' if show_discount else ''
+    # Hidden discount means Subtotal must already be net of it, or the column
+    # of figures stops adding up to the total.
+    display_subtotal = subtotal if show_discount else taxable
     # Concessions granted after issue are already inside `discount` above; this
     # itemises them so the patient can see why the total changed.
-    discount_block = render_discount_block(invoice, currency=currency, accent=primary_color)
+    discount_block = render_discount_block(invoice, currency=currency, accent=primary_color) if vis.discount else ''
     if is_india:
         half = inv_tax / 2 if inv_tax > 0 else 0
         cgst_row = f'<tr><td>CGST 9%</td><td>{currency} {half:,.2f}</td></tr>' if half else ''
@@ -283,9 +315,10 @@ body {{
       {logo_html}
       <div class="meta">
         <div class="name">{c_name}</div>
-        <div class="sub">{(doctor_name + ' · ') if doctor_name else ''}{c_address}</div>
-        <div class="sub">{('Tel: ' + c_phone) if c_phone else ''}{('  ·  ' + c_email) if c_email else ''}</div>
+        {f'<div class="sub">{who_line}</div>' if who_line else ''}
+        {f'<div class="sub">{contact_line}</div>' if contact_line else ''}
         {f'<div class="sub">{tax_reg_label}: {c_gst}</div>' if c_gst else ''}
+        {f'<div class="sub">Reg No: {c_reg}</div>' if c_reg else ''}
       </div>
     </div>
     <div class="invoice-meta">
@@ -329,7 +362,7 @@ body {{
   <!-- TOTALS -->
   <div class="totals-wrap">
     <table class="totals">
-      <tr><td>Subtotal</td><td>{currency} {subtotal:,.2f}</td></tr>
+      <tr><td>Subtotal</td><td>{currency} {display_subtotal:,.2f}</td></tr>
       {disc_row}
       {cgst_row}
       {sgst_row}
@@ -343,10 +376,7 @@ body {{
       {'''Clinical treatments (consultation, RCT, crowns, implants) are GST-exempt under SAC 9993.
       ''' if is_india else ''}Warranties valid only with this original invoice. Computer-generated; no signature required.
     </div>
-    <div class="sig">
-      {f'<img src="{doctor_signature}" alt="Signature" style="display:block;max-width:140px;max-height:48px;margin-left:auto;margin-bottom:2px;object-fit:contain;">' if doctor_signature else ''}
-      <span class="line">Authorised Signatory</span>
-    </div>
+    {signature_box}
   </div>
 
   {f'<div class="disclaimer">{footer_text}</div>' if footer_text else ''}

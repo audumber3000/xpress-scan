@@ -31,6 +31,10 @@ export interface BackendUser {
   clinic?: ClinicInfo;
   clinics?: ClinicInfo[];
   permissions?: Record<string, Record<string, boolean>>;
+  /** Profile photo the person uploaded in the app (a data: URI). Takes
+   *  precedence over the Google/Apple picture on the Firebase user, which
+   *  came along with sign-in rather than being chosen. */
+  avatar_url?: string | null;
 }
 
 export class AuthApiService extends BaseApiService {

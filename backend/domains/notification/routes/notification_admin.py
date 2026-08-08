@@ -35,15 +35,28 @@ DEFAULT_EVENT_TYPES = [
     "appointment_confirmation",
     "checked_in",
     "invoice_notification",
+    "receipt_notification",
     "prescription_notification",
     "appointment_reminder",
     "google_review",
     "consent_form",
     "daily_summary",
+    "lab_order_placed",
 ]
 
 # Events hidden from the preferences UI (system-scheduled, not user-configurable)
 _HIDDEN_EVENT_TYPES = {"daily_report"}
+
+# Per-event seeding overrides. Anything not listed defaults to WhatsApp, enabled.
+#
+# lab_order_placed goes to a third party (the clinic's lab) and spends the
+# clinic's wallet on every order, so it ships OFF — the clinic opts in from
+# Notifications → Preferences. Email is the default channel because the
+# WhatsApp side needs an approved `mp_lab_order_placed` template in Meta,
+# which email does not.
+_SEED_OVERRIDES = {
+    "lab_order_placed": {"channels": ["email"], "is_enabled": False},
+}
 
 def get_db():
     db = SessionLocal()
@@ -129,11 +142,12 @@ def get_preferences(
     # Seed defaults for any missing event types
     for event_type in DEFAULT_EVENT_TYPES:
         if event_type not in existing_types:
+            override = _SEED_OVERRIDES.get(event_type, {})
             pref = NotificationPreference(
                 clinic_id=clinic_id,
                 event_type=event_type,
-                channels=["whatsapp"],
-                is_enabled=True,
+                channels=override.get("channels", ["whatsapp"]),
+                is_enabled=override.get("is_enabled", True),
             )
             db.add(pref)
 
@@ -370,6 +384,37 @@ def initiate_wallet_topup(
     }
 
 
+def _credit_wallet_topup(db: Session, order_id: str):
+    """Credit a pending top-up exactly once. Returns (txn, new_balance), or None
+    if there was nothing to credit.
+
+    Two callers race here: /wallet/verify fires when the browser returns from
+    Cashfree, and /wallet/webhook fires from Cashfree itself. They routinely
+    arrive together. Without a lock both read status='pending' and both add the
+    amount, so a single top-up credits twice — an accident in normal use, not
+    just under attack.
+
+    SELECT ... FOR UPDATE serialises them: the second caller blocks until the
+    first commits, then sees 'completed' and does nothing.
+    """
+    txn = (
+        db.query(WalletTransaction)
+        .filter(WalletTransaction.order_id == order_id)
+        .with_for_update()
+        .first()
+    )
+    if not txn or txn.status != "pending":
+        return None
+
+    txn.status = "completed"
+    wallet = _get_or_create_wallet(txn.clinic_id, db)
+    wallet.balance += txn.amount
+    wallet.last_topup_at = datetime.utcnow()
+    db.commit()
+    db.refresh(wallet)
+    return txn, wallet.balance
+
+
 @router.get("/wallet/verify")
 def verify_wallet_topup(
     order_id: str = Query(...),
@@ -398,12 +443,15 @@ def verify_wallet_topup(
         raise HTTPException(status_code=500, detail=str(e))
 
     if cf_status == "PAID":
-        txn.status = "completed"
-        wallet = _get_or_create_wallet(clinic_id, db)
-        wallet.balance += txn.amount
-        wallet.last_topup_at = datetime.utcnow()
-        db.commit()
-        db.refresh(wallet)
+        credited = _credit_wallet_topup(db, order_id)
+        if not credited:
+            # The webhook won the race and already credited it.
+            return {
+                "success": True,
+                "message": "Already credited",
+                "balance": _get_or_create_wallet(clinic_id, db).balance,
+            }
+        txn, new_balance = credited
         owner = db.query(User).filter(User.clinic_id == clinic_id, User.role == 'clinic_owner').first()
         clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
         if owner and clinic:
@@ -411,9 +459,9 @@ def verify_wallet_topup(
                 clinic=clinic,
                 owner=owner,
                 amount=txn.amount,
-                new_balance=wallet.balance,
+                new_balance=new_balance,
             )
-        return {"success": True, "message": "Wallet credited successfully", "balance": wallet.balance}
+        return {"success": True, "message": "Wallet credited successfully", "balance": new_balance}
 
     return {"success": False, "status": cf_status, "message": f"Payment status: {cf_status}"}
 
@@ -423,24 +471,32 @@ async def wallet_cashfree_webhook(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """Handle Cashfree webhook for wallet top-up payments."""
+    """Handle Cashfree webhook for wallet top-up payments.
+
+    This endpoint credits real money and is publicly reachable, so it MUST
+    authenticate the payload. It previously did not: the clinic's own top-up
+    call hands back the order_id, so a caller could abandon payment, POST a
+    hand-written SUCCESS body here, and credit themselves for free.
+    """
+    import json as _json
+    from core import cashfree_webhook
+
+    raw_body = await request.body()
+
+    ok, reason = cashfree_webhook.verify_request(raw_body, request.headers)
+    if not ok:
+        logger.warning(f"wallet webhook rejected: {reason}")
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
     try:
-        payload = await request.json()
+        payload = _json.loads(raw_body)
         order_id = payload.get("data", {}).get("order", {}).get("order_id", "")
         payment_status = payload.get("data", {}).get("payment", {}).get("payment_status")
 
         if order_id.startswith("WALLET_") and payment_status == "SUCCESS":
-            txn = db.query(WalletTransaction).filter(
-                WalletTransaction.order_id == order_id,
-                WalletTransaction.status == "pending",
-            ).first()
-
-            if txn:
-                txn.status = "completed"
-                wallet = _get_or_create_wallet(txn.clinic_id, db)
-                wallet.balance += txn.amount
-                wallet.last_topup_at = datetime.utcnow()
-                db.commit()
+            credited = _credit_wallet_topup(db, order_id)
+            if credited:
+                txn, new_balance = credited
                 owner = db.query(User).filter(User.clinic_id == txn.clinic_id, User.role == 'clinic_owner').first()
                 clinic = db.query(Clinic).filter(Clinic.id == txn.clinic_id).first()
                 if owner and clinic:
@@ -448,12 +504,14 @@ async def wallet_cashfree_webhook(
                         clinic=clinic,
                         owner=owner,
                         amount=txn.amount,
-                        new_balance=wallet.balance,
+                        new_balance=new_balance,
                     )
 
         return {"status": "ok"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        # 500 so Cashfree retries — swallowing this lost real top-ups.
+        logger.exception(f"wallet webhook processing failed: {e}")
+        raise HTTPException(status_code=500, detail="Webhook processing failed")
 
 
 @router.post("/automation/run")

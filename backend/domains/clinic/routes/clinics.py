@@ -665,3 +665,102 @@ async def search_clinics(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to search clinics: {str(e)}"
         )
+
+@router.get(
+    "/me/setup-status",
+    summary="Clinic setup checklist",
+    description="What's configured and what still isn't, for the Control Center progress ring.",
+)
+async def get_setup_status(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    """One call, one round trip.
+
+    The alternative was the sidebar fanning out to /clinics/me, /clinic-users,
+    /treatment-types, /security and /template-configs on every render of every
+    Control Center page. Each check below is a cheap existence test, and each
+    one points at the screen that resolves it — a checklist that tells you
+    something is missing without saying where to go is just nagging.
+    """
+    from models import Clinic, User, TreatmentType, TemplateConfiguration
+
+    clinic_id = current_user.clinic_id
+    clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clinic not found")
+
+    def _filled(*values):
+        return all(str(v or '').strip() for v in values)
+
+    has_treatments = db.query(TreatmentType.id).filter(
+        TreatmentType.clinic_id == clinic_id,
+        TreatmentType.is_active == True,  # noqa: E712 — SQL boolean, not Python
+    ).first() is not None
+
+    # More than one, because the owner's own account doesn't count as a team.
+    team_size = db.query(User.id).filter(User.clinic_id == clinic_id).count()
+
+    has_branding = db.query(TemplateConfiguration.id).filter(
+        TemplateConfiguration.clinic_id == clinic_id
+    ).first() is not None
+
+    items = [
+        {
+            "key": "contact", "label": "Clinic name, phone and address",
+            "hint": "Printed at the top of every invoice and prescription.",
+            "path": "/admin/clinic",
+            "done": _filled(clinic.name, clinic.phone, clinic.address),
+        },
+        {
+            "key": "logo", "label": "Clinic logo",
+            "hint": "Without one, documents fall back to your initials.",
+            "path": "/admin/clinic",
+            "done": _filled(clinic.logo_url),
+        },
+        {
+            "key": "hours", "label": "Opening hours",
+            "hint": "Drives the booking page and appointment slots.",
+            "path": "/admin/clinic",
+            "done": bool(clinic.timings),
+        },
+        {
+            "key": "licence", "label": "Registration number",
+            "hint": "Appears on documents when you choose to show it.",
+            "path": "/admin/clinic",
+            "done": _filled(clinic.license_number),
+        },
+        {
+            "key": "treatments", "label": "Treatments and prices",
+            "hint": "Until these exist there is nothing to pick when billing.",
+            "path": "/admin/treatments",
+            "done": has_treatments,
+        },
+        {
+            "key": "team", "label": "Invite your team",
+            "hint": "Give reception and other doctors their own sign-in.",
+            "path": "/admin/staff",
+            "done": team_size > 1,
+        },
+        {
+            "key": "recovery", "label": "Verify a recovery contact",
+            "hint": "How you get back in if you're locked out.",
+            "path": "/admin/security/verification",
+            "done": bool(clinic.security_phone_verified or clinic.security_email_verified),
+        },
+        {
+            "key": "branding", "label": "Document appearance",
+            "hint": "Pick a layout and choose what prints on it.",
+            "path": "/admin/templates-editor",
+            "done": has_branding,
+        },
+    ]
+
+    completed = sum(1 for i in items if i["done"])
+    total = len(items)
+    return {
+        "completed": completed,
+        "total": total,
+        "percent": round(completed * 100 / total) if total else 0,
+        "items": items,
+    }

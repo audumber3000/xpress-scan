@@ -161,6 +161,27 @@ def wa_invoice_sent(patient_name: str, clinic_name: str,
     }
 
 
+def wa_receipt_sent(patient_name: str, clinic_name: str,
+                    receipt_number: str = "", amount: float = 0,
+                    clinic_phone: str = "", document_url: str = "",
+                    media_id: str = "", **_) -> dict:
+    """
+    Payment receipt for one installment. Header: the receipt PDF.
+
+    Falls back to the invoice template (`mp_invoice_sent`), which is already
+    approved and delivering — a receipt is the same shape of message (name,
+    clinic, document number, amount, phone) and this way receipts send today.
+    Set WA_TPL_RECEIPT once a dedicated template is approved.
+    """
+    tpl = _get_tpl("WA_TPL_RECEIPT", _get_tpl("WA_TPL_INVOICE", "mp_invoice_sent"))
+    components = [_body_params(
+        patient_name, clinic_name, receipt_number, f"₹{float(amount or 0):,.2f}", clinic_phone
+    )]
+    if media_id or document_url:
+        components.insert(0, _header_document(document_url, f"Receipt_{receipt_number}.pdf", media_id))
+    return {"template_name": tpl, "components": components}
+
+
 def wa_prescription_sent(patient_name: str, clinic_name: str, doctor_name: str = "",
                          clinic_phone: str = "", document_url: str = "",
                          media_id: str = "") -> dict:
@@ -234,6 +255,53 @@ def wa_daily_summary(doctor_name: str, clinic_name: str, date: str,
     }
 
 
+def wa_lab_order_placed(clinic_name: str, work_type: str = "", patient_name: str = "",
+                        tooth_number: str = "", due_date: str = "",
+                        clinic_phone: str = "", **_) -> dict:
+    """
+    Clinic → dental lab: a new work order was placed.
+
+    Body params: {{1}} clinic_name, {{2}} work_type, {{3}} patient_name,
+                 {{4}} tooth_number, {{5}} due_date, {{6}} clinic_phone
+
+    NOTE: this only delivers once `mp_lab_order_placed` is approved in Meta.
+    Until then the WA Reach path (free text, see build_whatsapp_text) works and
+    the MSG91 path fails soft with "template not found".
+    """
+    tpl = _get_tpl("WA_TPL_LAB_ORDER_PLACED", "mp_lab_order_placed")
+    return {
+        "template_name": tpl,
+        # Every parameter needs a non-empty value — Meta rejects blank ones.
+        "components": [_body_params(
+            clinic_name, work_type or "Lab work", patient_name or "-",
+            tooth_number or "-", due_date or "-", clinic_phone or "-",
+        )],
+    }
+
+
+def wa_otp_verification(otp: str = "", code: str = "", **_) -> dict:
+    """
+    Clinic security-contact verification — Meta AUTHENTICATION template
+    (`mp_otp_verification`). Body is fixed ("{{1}} is your verification code.")
+    and there's a Copy-code button; both carry the same code, so we pass the
+    code as the body param AND the button param.
+    """
+    the_code = str(otp or code or "")
+    tpl = _get_tpl("WA_TPL_OTP_VERIFICATION", "mp_otp_verification")
+    return {
+        "template_name": tpl,
+        "components": [
+            _body_params(the_code),
+            {
+                "type": "button",
+                "sub_type": "copy_code",
+                "index": "0",
+                "parameters": [{"type": "coupon_code", "coupon_code": the_code}],
+            },
+        ],
+    }
+
+
 def wa_passthrough_template(template_name: str, *values) -> dict:
     """Build a passthrough template with optional ordered body params."""
     components = [_body_params(*values)] if values else []
@@ -256,10 +324,13 @@ def build_whatsapp(event_type: str, **kwargs) -> dict:
         "checked_in":                wa_checked_in,
         "appointment_reminder":      wa_appointment_reminder,
         "invoice_notification":      wa_invoice_sent,
+        "receipt_notification":      wa_receipt_sent,
         "prescription_notification": wa_prescription_sent,
         "consent_form":              wa_consent_form,
         "google_review":             wa_google_review,
         "daily_summary":             wa_daily_summary,
+        "lab_order_placed":          wa_lab_order_placed,
+        "otp_verification":          wa_otp_verification,
         "molarplus_app_welcome":     lambda **kw: {
             "template_name": "molarplus_app_welcome",
             "components": [_header_text(kw.get("owner_name", ""))],  # {{1}} in header only, 0 body
@@ -380,8 +451,9 @@ def build_whatsapp_text(event_type: str, **kw) -> str:
     (whatsapp-web.js sends free text, not Meta templates).
 
     Additive and used only on the WA Reach path; the MSG91 template path above
-    is unchanged. Only patient-facing events route here (the platform→owner
-    `molarplus_*` messages never go through a clinic's own number).
+    is unchanged. Patient-facing events route here, plus `lab_order_placed`
+    (clinic → its own lab, which is legitimately sent from the clinic's number).
+    The platform→owner `molarplus_*` messages never go through a clinic's number.
     """
     cn = kw.get("clinic_name", "our clinic")
     pn = kw.get("patient_name", "")
@@ -403,6 +475,10 @@ def build_whatsapp_text(event_type: str, **kw) -> str:
         body = f"Reminder: {pn}, you have an appointment at {cn} on {date} at {time}. Reply here if you need to reschedule."
     elif event_type == "invoice_notification":
         body = f"Hi {pn}, please find your invoice from {cn} attached. Thank you for visiting us."
+    elif event_type == "receipt_notification":
+        amt = kw.get("amount", "")
+        body = (f"Hi {pn}, thank you for your payment{f' of {amt}' if amt else ''} at {cn}. "
+                f"Your receipt is attached.")
     elif event_type == "prescription_notification":
         body = f"Hi {pn}, your prescription from {cn}" + (f" (Dr. {dn})" if dn else "") + " is attached. Get well soon!"
     elif event_type == "consent_form":
@@ -411,6 +487,22 @@ def build_whatsapp_text(event_type: str, **kw) -> str:
     elif event_type == "google_review":
         link = kw.get("review_link", "")
         body = f"Hi {pn}, thank you for visiting {cn}! We'd love your feedback — please leave us a review: {link}"
+    elif event_type == "lab_order_placed":
+        lab = kw.get("lab_name", "")
+        bits = [b for b in [
+            f"Work: {kw.get('work_type', '')}" if kw.get("work_type") else "",
+            f"Patient: {pn}" if pn else "",
+            f"Tooth: {kw.get('tooth_number', '')}" if kw.get("tooth_number") else "",
+            f"Shade: {kw.get('shade', '')}" if kw.get("shade") else "",
+            f"Due: {kw.get('due_date', '')}" if kw.get("due_date") else "",
+        ] if b]
+        notes = kw.get("instructions", "")
+        body = (
+            (f"Hi {lab}, " if lab else "Hi, ")
+            + f"a new lab order from {cn}:\n"
+            + "\n".join(bits)
+            + (f"\n\nInstructions: {notes}" if notes else "")
+        )
     else:
         # Generic fallback — prefer an explicit message if the caller passed one.
         body = kw.get("message") or kw.get("body") or f"Hi {pn}, you have an update from {cn}."

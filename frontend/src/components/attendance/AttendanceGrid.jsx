@@ -1,7 +1,7 @@
 import React from "react";
 import AttendanceCell from "./AttendanceCell";
 import { format } from "date-fns";
-import { generateAvatarUrl } from "../../utils/avatar";
+import { resolveUserAvatar } from "../../utils/avatar";
 
 const AttendanceGrid = ({ employees, weekDays, onEmployeeProfileClick, onCellClick }) => {
   const getDayName = (date) => {
@@ -43,7 +43,7 @@ const AttendanceGrid = ({ employees, weekDays, onEmployeeProfileClick, onCellCli
 
   return (
     <div className="p-6">
-      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div className="bg-white overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead className="bg-gray-50 sticky top-0 z-10">
@@ -75,7 +75,7 @@ const AttendanceGrid = ({ employees, weekDays, onEmployeeProfileClick, onCellCli
                 <div className="flex items-center gap-3">
                   <div className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0 bg-gray-100">
                     <img
-                      src={employee.avatar || generateAvatarUrl(employee.email || employee.name, 44)}
+                      src={resolveUserAvatar(employee, 44)}
                       alt={employee.name}
                       className="w-full h-full object-cover"
                     />

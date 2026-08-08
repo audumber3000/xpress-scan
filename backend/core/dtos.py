@@ -108,6 +108,7 @@ class PatientSummaryDTO(BaseModel):
 # Clinic DTOs
 class ClinicBaseDTO(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
+    tagline: Optional[str] = Field(None, max_length=120)
     address: Optional[str] = None
     phone: Optional[str] = Field(None, max_length=20)
     email: Optional[str] = Field(None, pattern=r"^[^@]+@[^@]+\.[^@]+$")
@@ -143,6 +144,7 @@ class ClinicCreateDTO(ClinicBaseDTO):
 
 class ClinicUpdateDTO(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
+    tagline: Optional[str] = Field(None, max_length=120)
     address: Optional[str] = None
     phone: Optional[str] = Field(None, max_length=20)
     email: Optional[str] = Field(None, pattern=r"^[^@]+@[^@]+\.[^@]+$")

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, Linking, StatusBar } from 'react-native';
 import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -36,15 +36,31 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // Total across the whole clinic, from GET /patients/count. Kept apart from
+  // patients.length, which is only what has been paged in so far — using the
+  // array length showed "100" for every clinic bigger than one page.
+  const [totalPatients, setTotalPatients] = useState<number | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [showAddPatient, setShowAddPatient] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [contactPatient, setContactPatient] = useState<Patient | null>(null);
 
   const { backendUser } = useAuth();
 
+  // Monotonic id for the newest list request. Debouncing alone does not stop a
+  // slow earlier response landing after a newer one — type "sha" then "sharm",
+  // and if "sha" is slower it overwrites the correct results with no error
+  // shown. Every response checks it is still the latest before it writes state.
+  const requestIdRef = useRef(0);
+
+  // Reload on clinic switch, and whenever the search term settles. Search runs
+  // server-side across the whole clinic — filtering the loaded page in JS meant
+  // a patient beyond the first 100 could not be found at all.
   useEffect(() => {
-    loadPatients();
-  }, [backendUser?.clinic?.id]);
+    const handle = setTimeout(() => { loadPatients(); }, searchQuery ? 350 : 0);
+    return () => clearTimeout(handle);
+  }, [backendUser?.clinic?.id, searchQuery]);
 
   // If initialSearchQuery changes (e.g. navigating again with different query), update state
   useEffect(() => {
@@ -59,42 +75,74 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
     setRefreshing(false);
   };
 
+  const PAGE_SIZE = 100;
+
   const loadPatients = async () => {
+    const reqId = ++requestIdRef.current;
     setLoading(true);
     try {
-      const data = await patientsApiService.getPatients();
+      const [data, total] = await Promise.all([
+        patientsApiService.getPatients({ skip: 0, limit: PAGE_SIZE, search: searchQuery }),
+        patientsApiService.getPatientsCount({ search: searchQuery }),
+      ]);
+      if (reqId !== requestIdRef.current) return;  // a newer search superseded this
       setPatients(data);
+      setTotalPatients(total);
+      setHasMore(data.length === PAGE_SIZE);
     } catch (err: any) {
+      if (reqId !== requestIdRef.current) return;
       console.error('Error loading patients:', err);
       showAlert('Error', `Failed to load patients: ${err.message}`);
       setPatients([]);
+      setTotalPatients(null);
+      setHasMore(false);
     } finally {
-      setLoading(false);
+      // Only the newest request owns the spinner, or a stale one turns it off
+      // while the current search is still running.
+      if (reqId === requestIdRef.current) setLoading(false);
     }
   };
 
-  const filterPatients = () => {
-    let filtered = patients;
-
-    if (selectedTab === 'active') {
-      filtered = filtered.filter(p => p.status === 'Active');
-    } else if (selectedTab === 'inactive') {
-      filtered = filtered.filter(p => p.status === 'Inactive');
+  // Next page, appended. Guarded so overlapping onEndReached fires (FlatList
+  // can emit several in a row) don't queue duplicate requests.
+  const loadMorePatients = async () => {
+    if (loadingMore || loading || !hasMore) return;
+    // Belongs to the search that is current right now. If a new search starts
+    // mid-flight, this page is for the old query and must not be appended.
+    const reqId = requestIdRef.current;
+    setLoadingMore(true);
+    try {
+      const next = await patientsApiService.getPatients({
+        skip: patients.length,
+        limit: PAGE_SIZE,
+        search: searchQuery,
+      });
+      if (reqId !== requestIdRef.current) return;
+      if (next.length === 0) {
+        setHasMore(false);
+        return;
+      }
+      // De-dupe on id: a patient added between pages shifts the offset and
+      // would otherwise reappear, and duplicate keys break FlatList.
+      setPatients((prev) => {
+        const seen = new Set(prev.map((p) => p.id));
+        return [...prev, ...next.filter((p) => !seen.has(p.id))];
+      });
+      setHasMore(next.length === PAGE_SIZE);
+    } catch (err: any) {
+      console.error('Error loading more patients:', err);
+    } finally {
+      setLoadingMore(false);
     }
-
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(p =>
-        // Guard name too: legacy/imported patients can have a null name, and an
-        // unguarded .toLowerCase() throws mid-render → app error screen on search.
-        (p.name?.toLowerCase().includes(query)) ||
-        (p.phone && p.phone.includes(query)) ||
-        (p.id && p.id.toString().includes(query))
-      );
-    }
-
-    return filtered;
   };
+
+  // No client-side filtering: the server already returned exactly this page,
+  // searched across the whole clinic. Filtering the loaded pages in JS is what
+  // made a patient past the first 100 unfindable, and it does not scale.
+  // Matches the web list (frontend/src/pages/Patients.jsx).
+  //
+  // Under 2 characters the backend rejects `search` (min_length=2), so the list
+  // stays unfiltered until the second character — same as web.
 
   const handlePatientPress = (patient: Patient) => {
     navigation.navigate('PatientDetails', { patientId: patient.id });
@@ -143,7 +191,8 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
       value: 'today',
       icon: <CalendarClock size={15} color={selectedTab === 'today' ? colors.primary : '#6B7280'} />,
     },
-    { key: 'all', label: 'All Patients', value: 'all', count: patients.length },
+    // The clinic-wide total, not how many have been paged in.
+    { key: 'all', label: 'All Patients', value: 'all', count: totalPatients ?? patients.length },
     {
       key: 'birthdays',
       label: 'Birthdays',
@@ -227,12 +276,14 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
         </View>
       ) : (
         <PatientsList
-          patients={filterPatients()}
+          patients={patients}
           onPatientPress={handlePatientPress}
           onPhonePress={handleContactPatient}
           onDelete={handleDeletePatient}
           refreshing={refreshing}
           onRefresh={onRefresh}
+          onEndReached={loadMorePatients}
+          loadingMore={loadingMore}
         />
       )}
 

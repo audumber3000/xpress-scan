@@ -462,6 +462,46 @@ def patient_google_review(patient_name: str, clinic_name: str, clinic_logo_url: 
     }
 
 
+def vendor_lab_order_placed(clinic_name: str, clinic_logo_url: str = "",
+                             lab_name: str = "", work_type: str = "",
+                             patient_name: str = "", tooth_number: str = "",
+                             shade: str = "", due_date: str = "",
+                             instructions: str = "", clinic_phone: str = "") -> dict:
+    """Clinic → dental lab: a new work order was placed.
+
+    Clinic-branded (not platform-branded) because the lab is the clinic's
+    supplier, not a MolarPlus customer.
+    """
+    rows = [("Work", work_type), ("Patient", patient_name), ("Tooth", tooth_number),
+            ("Shade", shade), ("Due", due_date)]
+    detail_lines = "".join(
+        f"<div>{label}: <strong>{value}</strong></div>"
+        for label, value in rows if value
+    )
+    notes = (
+        f'<p>Instructions:<br /><em>{instructions}</em></p>' if instructions else ""
+    )
+    contact = (
+        f'<p style="font-size:13px;color:#6b7280;">Questions about this order? Call us on {clinic_phone}.</p>'
+        if clinic_phone else ""
+    )
+    greeting = f"Dear <strong>{lab_name}</strong>," if lab_name else "Hello,"
+    body = f"""
+<p>{greeting}</p>
+<p><strong>{clinic_name}</strong> has placed a new lab work order.</p>
+<div class="info-box">
+  <strong>🦷 New Work Order</strong>
+  {detail_lines}
+</div>
+{notes}
+{contact}"""
+    subject_bits = " — ".join(b for b in [work_type, patient_name] if b)
+    return {
+        "subject": f"New lab order from {clinic_name}" + (f": {subject_bits}" if subject_bits else ""),
+        "html": _base_wrapper(_clinic_header(clinic_name, clinic_logo_url), body, _clinic_footer(clinic_name)),
+    }
+
+
 # ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 PLATFORM_EVENTS = {
@@ -525,6 +565,7 @@ def build_email(event_type: str, **kwargs) -> dict:
         "prescription_notification":  patient_prescription_sent,
         "consent_form":               patient_consent_form,
         "google_review":              patient_google_review,
+        "lab_order_placed":           vendor_lab_order_placed,
     }
     fn = builders.get(event_type)
     if not fn:

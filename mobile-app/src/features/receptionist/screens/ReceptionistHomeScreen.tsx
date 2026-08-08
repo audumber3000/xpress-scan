@@ -20,6 +20,7 @@ import { dashboardApiService, DashboardMetrics } from '../../../services/api/das
 import { utilitiesApiService } from '../../../services/api/utilities.api';
 import { getCurrencySymbol } from '../../../shared/utils/currency';
 import { UserAvatar } from '../../../shared/components/UserAvatar';
+import { resolveUserPhoto } from '../../../shared/utils/avatar';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ReceptionistHome'>;
 
@@ -244,7 +245,7 @@ export const ReceptionistHomeScreen: React.FC<Props> = ({ navigation }) => {
             >
               <UserAvatar
                 size={42}
-                photoURL={user?.photoURL}
+                photoURL={resolveUserPhoto(backendUser, user)}
                 seed={user?.email || backendUser?.email}
                 name={backendUser?.name || 'Staff'}
                 fallbackBg="rgba(255,255,255,0.25)"

@@ -99,7 +99,23 @@ class NotificationService:
                     for i, param in enumerate(params):
                         if param.get("type") == "text":
                             msg91_components[f"body_{i+1}"] = {"type": "text", "value": param.get("text")}
-                
+                elif comp_type == "button":
+                    # Copy-code / URL button on AUTHENTICATION templates (OTP) carries
+                    # the code. MSG91 expects it as button_<n> with the code value.
+                    params = comp.get("parameters", [])
+                    if params:
+                        p = params[0]
+                        val = p.get("coupon_code") or p.get("text") or ""
+                        try:
+                            idx = int(comp.get("index", 0)) + 1
+                        except (TypeError, ValueError):
+                            idx = 1
+                        msg91_components[f"button_{idx}"] = {
+                            "subtype": comp.get("sub_type", "url"),
+                            "type": "text",
+                            "value": val,
+                        }
+
         template_obj: Dict[str, Any] = {
             "name": template_name,
             "language": {

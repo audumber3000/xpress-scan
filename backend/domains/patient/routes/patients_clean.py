@@ -1,10 +1,13 @@
 """
 Patient routes using clean architecture
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, UploadFile, File, Response
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 from typing import List, Optional, Any
+from datetime import datetime
+import csv
+import io
 import re
 from sqlalchemy.orm import Session
 from database import get_db
@@ -20,11 +23,22 @@ from core.dtos import (
 from core.dependencies import get_patient_service
 from core.auth_utils import get_current_user, require_patients_view, require_patients_edit, require_patients_delete
 from domains.activity.routes.activity_log import push_activity
+from core.audit import record_audit, PATIENT_DELETED
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _parse_patient_dates(date_from: Optional[str], date_to: Optional[str]):
+    """Parse optional YYYY-MM-DD registration-range strings into date objects."""
+    try:
+        d_from = datetime.strptime(date_from, "%Y-%m-%d").date() if date_from else None
+        d_to = datetime.strptime(date_to, "%Y-%m-%d").date() if date_to else None
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates must be YYYY-MM-DD")
+    return d_from, d_to
 
 
 @router.get(
@@ -76,6 +90,8 @@ async def get_patients(
     search: Optional[str] = Query(None, min_length=2, description="Search query for patient name or phone"),
     gender: Optional[str] = Query(None, description="Filter by gender"),
     treatment_type: Optional[str] = Query(None, description="Filter by treatment type"),
+    date_from: Optional[str] = Query(None, description="Registered on/after (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="Registered on/before (YYYY-MM-DD)"),
     current_user = Depends(require_patients_view),
     patient_service = Depends(get_patient_service)
 ):
@@ -87,8 +103,9 @@ async def get_patients(
     `GET /patients/count` for the total to drive page numbers.
     """
     try:
+        d_from, d_to = _parse_patient_dates(date_from, date_to)
         patients = patient_service.list_patients(
-            current_user.clinic_id, skip, limit, search, gender, treatment_type
+            current_user.clinic_id, skip, limit, search, gender, treatment_type, d_from, d_to
         )
 
         # Serialize per-row: a single unserializable patient must not 500 the
@@ -121,18 +138,75 @@ async def count_patients(
     search: Optional[str] = Query(None, min_length=2),
     gender: Optional[str] = Query(None),
     treatment_type: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
     current_user = Depends(require_patients_view),
     patient_service = Depends(get_patient_service),
 ):
     try:
+        d_from, d_to = _parse_patient_dates(date_from, date_to)
         total = patient_service.count_patients(
-            current_user.clinic_id, search, gender, treatment_type
+            current_user.clinic_id, search, gender, treatment_type, d_from, d_to
         )
         return {"total": total}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to count patients: {str(e)}",
+        )
+
+
+@router.get("/export", summary="Export patients as CSV")
+async def export_patients(
+    search: Optional[str] = Query(None),
+    gender: Optional[str] = Query(None),
+    treatment_type: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    current_user = Depends(require_patients_view),
+    patient_service = Depends(get_patient_service),
+):
+    """CSV of every patient matching the current search/filters (not paginated)."""
+    try:
+        d_from, d_to = _parse_patient_dates(date_from, date_to)
+        # Search requires 2+ chars elsewhere; mirror that so a stray char is ignored.
+        s = search if (search and len(search.strip()) >= 2) else None
+        patients = patient_service.list_patients(
+            current_user.clinic_id, 0, 100000, s, gender, treatment_type, d_from, d_to
+        )
+
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow([
+            "Patient ID", "Name", "Gender", "Age", "Date of Birth", "Phone",
+            "Village/Address", "Treatment Type", "Registered On", "Created At",
+        ])
+        for p in patients:
+            writer.writerow([
+                getattr(p, "display_id", "") or "",
+                p.name or "",
+                p.gender or "",
+                getattr(p, "age", "") if getattr(p, "age", None) is not None else "",
+                p.date_of_birth.strftime("%Y-%m-%d") if getattr(p, "date_of_birth", None) else "",
+                p.phone or "",
+                getattr(p, "village", "") or getattr(p, "address", "") or "",
+                p.treatment_type or "",
+                p.registered_on.strftime("%Y-%m-%d") if getattr(p, "registered_on", None) else "",
+                p.created_at.strftime("%Y-%m-%d") if getattr(p, "created_at", None) else "",
+            ])
+
+        filename = f"patients_{datetime.utcnow().strftime('%Y%m%d')}.csv"
+        return Response(
+            content=buf.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to export patients: {str(e)}",
         )
 
 
@@ -607,8 +681,10 @@ async def update_patient(
 )
 async def delete_patient(
     patient_id: int,
+    request: Request,
     current_user = Depends(require_patients_delete),
-    patient_service = Depends(get_patient_service)
+    patient_service = Depends(get_patient_service),
+    db: Session = Depends(get_db),
 ):
     """
     Delete a patient.
@@ -617,7 +693,17 @@ async def delete_patient(
     The patient must belong to the current user's clinic.
     """
     try:
+        # Name it before it's gone — afterwards the log could only say "patient 41".
+        victim = patient_service.get_patient(patient_id, current_user.clinic_id)
+        label = f"{victim.name} (#{patient_id})" if victim else f"#{patient_id}"
+
         success = patient_service.delete_patient(patient_id, current_user.clinic_id)
+
+        if success:
+            record_audit(db, current_user, PATIENT_DELETED,
+                         f"Deleted patient {label} and all their records",
+                         request=request, entity_type='patient', entity_id=patient_id)
+            db.commit()
 
         if not success:
             raise HTTPException(

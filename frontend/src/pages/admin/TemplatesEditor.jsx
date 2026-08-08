@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Save, FileText, Stethoscope, ClipboardCheck, Upload, X,
-  ChevronDown, ChevronUp, Loader2, Check,
+  ArrowLeft, Save, FileText, Stethoscope, ClipboardCheck, X, Eye,
+  ChevronDown, ChevronUp, Loader2, Check, LayoutTemplate, ExternalLink,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { api, authenticatedFetch } from '../../utils/api';
+import { api } from '../../utils/api';
 
 const TABS = [
   { id: 'invoice',      label: 'Invoices',      icon: FileText },
@@ -13,11 +13,31 @@ const TABS = [
   { id: 'consent',      label: 'Consent Forms', icon: ClipboardCheck },
 ];
 
-const DEFAULT_CONFIGS = {
-  invoice:      { template_id: 'classic', logo_url: '', primary_color: '#FF9800', footer_text: '', gst_number: '' },
-  prescription: { template_id: 'classic', logo_url: '', primary_color: '#2a276e', footer_text: '', gst_number: '' },
-  consent:      { template_id: 'classic', logo_url: '', primary_color: '#2a276e', footer_text: '', gst_number: '' },
+// Everything is shown until the clinic says otherwise, matching the backend
+// resolver — see backend/domains/infrastructure/services/pdf_fields.py.
+const ALL_SHOWN = {
+  tax_number: true, contact: true, license_number: true, address: true,
+  tagline: true, footer: true, signature: true, discount: true,
 };
+
+const DEFAULT_CONFIGS = {
+  invoice:      { template_id: 'classic', logo_url: '', primary_color: '#FF9800', footer_text: '', show: { ...ALL_SHOWN } },
+  prescription: { template_id: 'classic', logo_url: '', primary_color: '#2a276e', footer_text: '', show: { ...ALL_SHOWN } },
+  consent:      { template_id: 'classic', logo_url: '', primary_color: '#2a276e', footer_text: '', show: { ...ALL_SHOWN } },
+};
+
+// Which switches make sense on which document. Tax and discount are invoice
+// concepts — a prescription has no total to discount and no tax to declare.
+const FIELD_ROWS = [
+  { key: 'tagline',        label: 'Tagline',            hint: 'The line under your clinic name', settingsLink: true },
+  { key: 'address',        label: 'Address',            hint: 'Clinic street address' },
+  { key: 'contact',        label: 'Phone & email',      hint: 'Contact details in the letterhead' },
+  { key: 'license_number', label: 'Licence number',     hint: 'Your registration number', settingsLink: true },
+  { key: 'tax_number',     label: 'GST / Tax number',   hint: 'Only meaningful on a tax document', only: ['invoice'] },
+  { key: 'signature',      label: 'Signature block',    hint: 'The authorised-signatory line', signatureLink: true },
+  { key: 'footer',         label: 'Footer text',        hint: 'The disclaimer set below' },
+  { key: 'discount',       label: 'Discount on invoice', hint: 'Hidden discounts are netted into the subtotal', only: ['invoice'] },
+];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Small UI primitives
@@ -55,14 +75,14 @@ const TemplatesEditor = () => {
   const [configs, setConfigs] = useState(DEFAULT_CONFIGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [previewHtml, setPreviewHtml] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState(null);
   const [variants, setVariants] = useState({ invoice: [], prescription: [], consent: [] });
   const [taxLabel, setTaxLabel] = useState('GST No.'); // clinic's country-specific tax label
-
-  const fileInputRef = useRef(null);
+  const [clinic, setClinic] = useState(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [zoomVariant, setZoomVariant] = useState(null); // variant being viewed full-size
 
   // Resolve a backend-relative thumbnail path to a fully-qualified URL.
   // The backend mounts /static — frontend is on a different origin
@@ -73,6 +93,8 @@ const TemplatesEditor = () => {
   const thumbUrl = (path) => path?.startsWith('http') ? path : `${apiBase}${path}`;
 
   const cfg = configs[activeTab];
+  const tabVariants = variants[activeTab] || [];
+  const activeVariant = tabVariants.find((v) => v.id === cfg.template_id) || tabVariants[0];
 
   // ── Load existing config + clinic info ─────────────────────────────────────
   const load = useCallback(async () => {
@@ -83,9 +105,7 @@ const TemplatesEditor = () => {
       ]);
       const next = JSON.parse(JSON.stringify(DEFAULT_CONFIGS));
       if (me) {
-        next.invoice.gst_number  = me.gst_number  || '';
-        next.invoice.logo_url    = me.logo_url    || '';
-        next.invoice.template_id = me.invoice_template || 'classic';
+        setClinic(me);
         if (me.tax_label) setTaxLabel(me.tax_label);
       }
       (configList || []).forEach((c) => {
@@ -97,6 +117,9 @@ const TemplatesEditor = () => {
             logo_url:      c.logo_url      || next[k].logo_url || '',
             primary_color: c.primary_color || next[k].primary_color,
             footer_text:   c.footer_text   || '',
+            // Absent keys stay shown, so a toggle added later doesn't
+            // retroactively hide itself for clinics who saved before it existed.
+            show: { ...ALL_SHOWN, ...(c.config_json?.show || {}) },
           };
         }
       });
@@ -142,6 +165,7 @@ const TemplatesEditor = () => {
           primary_color: cfg.primary_color,
           footer_text: cfg.footer_text,
           logo_url: cfg.logo_url || null,
+          config_json: { show: cfg.show },
         });
         if (!cancelled && data?.html) setPreviewHtml(data.html);
       } catch (err) {
@@ -151,50 +175,22 @@ const TemplatesEditor = () => {
       }
     }, 350);
     return () => { cancelled = true; clearTimeout(handle); };
-  }, [activeTab, cfg.template_id, cfg.primary_color, cfg.footer_text, cfg.logo_url, loading]);
+    // `show` is stringified into the dep list: it's a new object each render,
+    // so comparing by reference would refetch the preview on every keystroke.
+  }, [activeTab, cfg.template_id, cfg.primary_color, cfg.footer_text, cfg.logo_url,
+      JSON.stringify(cfg.show), loading]);
 
   // ── Mutators ────────────────────────────────────────────────────────────────
   const updateField = (field, value) => {
     setConfigs((prev) => ({ ...prev, [activeTab]: { ...prev[activeTab], [field]: value } }));
   };
 
-  const handlePickLogo = () => fileInputRef.current?.click();
-
-  const handleLogoChange = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!['image/png', 'image/jpeg'].includes(file.type)) {
-      toast.error('Logo must be PNG or JPEG');
-      e.target.value = '';
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Logo must be under 5 MB');
-      e.target.value = '';
-      return;
-    }
-    setUploadingLogo(true);
-    try {
-      const formData = new FormData();
-      formData.append('category', activeTab);
-      formData.append('file', file);
-      const data = await api.post('/template-configs/logo', formData);
-      if (data?.logo_url) {
-        updateField('logo_url', data.logo_url);
-        toast.success('Logo uploaded — remember to save changes');
-      } else {
-        toast.error('Upload failed. Try a different image.');
-      }
-    } catch (err) {
-      console.error('[TemplatesEditor] logo upload error', err);
-      toast.error(err?.detail || 'Could not upload logo');
-    } finally {
-      setUploadingLogo(false);
-      e.target.value = '';
-    }
+  const toggleField = (key) => {
+    setConfigs((prev) => ({
+      ...prev,
+      [activeTab]: { ...prev[activeTab], show: { ...prev[activeTab].show, [key]: !prev[activeTab].show[key] } },
+    }));
   };
-
-  const handleRemoveLogo = () => updateField('logo_url', '');
 
   const handleSave = async () => {
     setSaving(true);
@@ -202,22 +198,17 @@ const TemplatesEditor = () => {
       await api.post('/template-configs', {
         category:      activeTab,
         template_id:   cfg.template_id,
-        logo_url:      cfg.logo_url || null,
+        // Deliberately null: the logo now lives on the clinic record only, so a
+        // stale per-category override doesn't quietly outrank Clinic Details.
+        logo_url:      null,
         primary_color: cfg.primary_color,
         footer_text:   cfg.footer_text,
+        config_json:   { show: cfg.show },
       });
-      // Mirror invoice GST + logo onto the clinic record so legacy code paths
-      // that read clinic.gst_number / clinic.logo_url see the same source of truth.
-      if (activeTab === 'invoice') {
-        await authenticatedFetch('/clinics/me', {
-          method: 'PATCH',
-          body: JSON.stringify({
-            gst_number: cfg.gst_number,
-            logo_url: cfg.logo_url || null,
-            invoice_template: cfg.template_id,
-          }),
-        }).catch(() => { /* best-effort sync, don't fail the save */ });
-      }
+      // The old code also PATCHed /clinics/me here to mirror the GST number.
+      // That route doesn't exist — it 405'd into a swallowed catch, so the GST
+      // field never actually saved. GST is edited in Clinic Details; this
+      // screen only decides whether it prints.
       setLastSavedAt(new Date());
       toast.success(`${TABS.find(t => t.id === activeTab).label} template saved`);
     } catch (err) {
@@ -299,44 +290,29 @@ const TemplatesEditor = () => {
             ) : (
               <>
                 <Section title="Layout">
-                  <div className="grid grid-cols-2 gap-3">
-                    {(variants[activeTab] || []).map((v) => {
-                      const isActive = cfg.template_id === v.id;
-                      return (
-                        <button
-                          key={v.id}
-                          type="button"
-                          onClick={() => updateField('template_id', v.id)}
-                          className={`relative p-2 rounded-lg border-2 transition-all text-left ${
-                            isActive
-                              ? 'border-[#29828a] bg-[#29828a]/5 shadow-sm'
-                              : 'border-gray-200 hover:border-gray-300 bg-white'
-                          }`}
-                        >
-                          {isActive && (
-                            <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-[#29828a] flex items-center justify-center shadow">
-                              <Check size={12} className="text-white" />
-                            </div>
-                          )}
-                          <div className="aspect-[210/297] bg-white border border-gray-100 rounded overflow-hidden mb-2">
-                            <img
-                              src={thumbUrl(v.thumbnail)}
-                              alt={v.name}
-                              className="w-full h-full object-cover"
-                              onError={(e) => { e.currentTarget.style.opacity = '0.2'; }}
-                            />
-                          </div>
-                          <div className="text-xs font-semibold text-gray-900">{v.name}</div>
-                          <div className="text-[10px] text-gray-500 leading-tight mt-0.5 line-clamp-2">{v.description}</div>
-                        </button>
-                      );
-                    })}
-                    {(variants[activeTab] || []).length === 0 && (
-                      <div className="col-span-2 text-xs text-gray-400 italic py-4 text-center">
-                        No layout variants available.
-                      </div>
-                    )}
+                  {/* The chosen layout, stated plainly. Two page-shaped
+                      thumbnails used to fill this 380px column to express a
+                      choice between two things. */}
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-[#29828a]/10 text-[#29828a] flex items-center justify-center shrink-0">
+                      <LayoutTemplate size={17} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-gray-900">{activeVariant?.name || 'Classic'}</p>
+                      <p className="text-xs text-gray-500 leading-snug mt-0.5">
+                        {activeVariant?.description || 'The default layout for this document.'}
+                      </p>
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setPickerOpen(true)}
+                    disabled={tabVariants.length === 0}
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-md text-xs font-semibold text-[#29828a] hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  >
+                    Change template
+                    {tabVariants.length > 1 && ` (${tabVariants.length} available)`}
+                  </button>
                 </Section>
 
                 <Section title="Branding">
@@ -359,60 +335,91 @@ const TemplatesEditor = () => {
                     </div>
                   </div>
 
+                  {/* One logo, one place to set it. This screen used to upload
+                      its own per-document logo, which quietly outranked the one
+                      in Clinic Details and left two answers to one question. */}
                   <div>
                     <FieldLabel>Clinic Logo</FieldLabel>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/png,image/jpeg"
-                      onChange={handleLogoChange}
-                      className="hidden"
-                    />
-                    {cfg.logo_url ? (
-                      <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3">
+                      {clinic?.logo_url ? (
                         <img
-                          src={cfg.logo_url}
-                          alt="Logo"
-                          className="w-16 h-16 rounded-md border border-gray-200 object-contain bg-white"
+                          src={clinic.logo_url}
+                          alt="Clinic logo"
+                          className="w-14 h-14 rounded-md border border-gray-200 object-contain bg-white shrink-0"
                         />
-                        <div className="flex-1 flex flex-col gap-2">
-                          <button
-                            onClick={handlePickLogo}
-                            disabled={uploadingLogo}
-                            className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-md text-xs font-semibold text-[#29828a] hover:bg-gray-50 transition-colors disabled:opacity-50"
-                          >
-                            {uploadingLogo ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-                            Replace
-                          </button>
-                          <button
-                            onClick={handleRemoveLogo}
-                            disabled={uploadingLogo}
-                            className="flex items-center justify-center gap-2 px-3 py-2 bg-red-50 border border-red-100 rounded-md text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors disabled:opacity-50"
-                          >
-                            <X size={12} />
-                            Remove
-                          </button>
+                      ) : (
+                        <div className="w-14 h-14 rounded-md border border-dashed border-gray-300 bg-gray-50 flex items-center justify-center text-[10px] text-gray-400 shrink-0">
+                          None
                         </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-xs text-gray-500 leading-snug">
+                          Your clinic logo appears on all three documents.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => navigate('/admin/clinic')}
+                          className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-[#29828a] hover:underline"
+                        >
+                          Manage in Clinic Details <ExternalLink size={11} />
+                        </button>
                       </div>
-                    ) : (
-                      <button
-                        onClick={handlePickLogo}
-                        disabled={uploadingLogo}
-                        className="w-full flex flex-col items-center justify-center gap-1 py-6 bg-gray-50 border border-dashed border-gray-300 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
-                      >
-                        {uploadingLogo
-                          ? <Loader2 size={20} className="animate-spin text-[#29828a]" />
-                          : <Upload size={20} className="text-[#29828a]" />}
-                        <span className="text-sm font-semibold text-gray-900 mt-1">
-                          {uploadingLogo ? 'Uploading…' : 'Click to upload logo'}
-                        </span>
-                        <span className="text-[11px] text-gray-500">PNG or JPEG, up to 5 MB</span>
-                      </button>
-                    )}
-                    <p className="text-[11px] text-gray-400 italic mt-2">
-                      Used in the {activeTab} PDF header. Empty = use the clinic-wide logo.
-                    </p>
+                    </div>
                   </div>
+                </Section>
+
+                <Section title="Visible Fields">
+                  <p className="text-xs text-gray-500 -mt-1">
+                    What prints on the {activeTab}. Unticking hides the field — it never
+                    invents one, so anything you haven't filled in stays blank either way.
+                  </p>
+
+                  <div className="space-y-1">
+                    {FIELD_ROWS.filter((f) => !f.only || f.only.includes(activeTab)).map((f) => (
+                      <label
+                        key={f.key}
+                        className="flex items-start gap-2.5 py-2 px-2 -mx-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={cfg.show?.[f.key] ?? true}
+                          onChange={() => toggleField(f.key)}
+                          className="mt-0.5 rounded border-gray-300 text-[#29828a] focus:ring-[#29828a]/30 cursor-pointer"
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-sm text-gray-900">
+                            {f.key === 'tax_number' ? `${taxLabel.replace(/ No\.$/, '')} number` : f.label}
+                          </span>
+                          <span className="block text-[11px] text-gray-400 leading-snug">{f.hint}</span>
+                          {f.settingsLink && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.preventDefault(); navigate('/admin/clinic'); }}
+                              className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-[#29828a] hover:underline"
+                            >
+                              Set in Clinic Details <ExternalLink size={10} />
+                            </button>
+                          )}
+                          {f.signatureLink && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.preventDefault(); navigate('/doctor-profile'); }}
+                              className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-[#29828a] hover:underline"
+                            >
+                              Upload your signature <ExternalLink size={10} />
+                            </button>
+                          )}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+
+                  {activeTab === 'invoice' && (
+                    <p className="text-[11px] text-gray-400 italic border-t border-gray-100 pt-3">
+                      Payment receipts follow these same settings, so a field hidden on the
+                      bill stays hidden on the receipt for that payment.
+                    </p>
+                  )}
                 </Section>
 
                 <Section title="Footer / Disclaimer">
@@ -431,20 +438,6 @@ const TemplatesEditor = () => {
                   </div>
                 </Section>
 
-                {activeTab === 'invoice' && (
-                  <Section title="Tax & Identity">
-                    <div>
-                      <FieldLabel>Clinic {taxLabel}</FieldLabel>
-                      <input
-                        type="text"
-                        value={cfg.gst_number}
-                        onChange={(e) => updateField('gst_number', e.target.value.toUpperCase())}
-                        placeholder={`Enter ${taxLabel}`}
-                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-md text-sm font-mono uppercase focus:border-[#29828a] focus:ring-1 focus:ring-[#29828a] outline-none"
-                      />
-                    </div>
-                  </Section>
-                )}
               </>
             )}
           </div>
@@ -480,6 +473,141 @@ const TemplatesEditor = () => {
           </div>
         </main>
       </div>
+
+      {/* ── Template picker ─────────────────────────────────────────────────
+          A drawer rather than a strip in the sidebar: comparing layouts wants
+          room, and the sidebar is where you tune the one you already chose. */}
+      {pickerOpen && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setPickerOpen(false)} />
+          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl flex flex-col animate-slide-in-right">
+            <div className="flex items-start justify-between p-5 border-b border-gray-200">
+              <div>
+                <h3 className="font-bold text-gray-900">Choose a layout</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  For {TABS.find((t) => t.id === activeTab)?.label.toLowerCase()}. Applies straight away; save to keep it.
+                </p>
+              </div>
+              <button
+                onClick={() => setPickerOpen(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+              {tabVariants.map((v) => {
+                const isActive = cfg.template_id === v.id;
+                return (
+                  <div
+                    key={v.id}
+                    className={`rounded-xl border-2 transition-all overflow-hidden ${
+                      isActive ? 'border-[#29828a] bg-[#29828a]/5' : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => { updateField('template_id', v.id); setPickerOpen(false); }}
+                      className="w-full text-left p-3 flex gap-3"
+                    >
+                      <div className="w-20 shrink-0 aspect-[210/297] bg-white border border-gray-200 rounded overflow-hidden">
+                        <img
+                          src={thumbUrl(v.thumbnail)}
+                          alt=""
+                          className="w-full h-full object-cover"
+                          onError={(e) => { e.currentTarget.style.opacity = '0.15'; }}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-semibold text-gray-900">{v.name}</span>
+                          {isActive && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-[#29828a]">
+                              <Check size={11} /> In use
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 leading-snug mt-1">{v.description}</p>
+                      </div>
+                    </button>
+                    <div className="px-3 pb-3">
+                      <button
+                        type="button"
+                        onClick={() => setZoomVariant(v)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-gray-600 border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
+                      >
+                        <Eye size={13} /> View full size
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {tabVariants.length === 1 && (
+                <p className="text-xs text-gray-400 italic text-center pt-2">
+                  This is the only layout available for this document so far.
+                </p>
+              )}
+              {tabVariants.length === 0 && (
+                <p className="text-sm text-gray-400 italic text-center py-8">No layouts available.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full-size look at one layout, without committing to it. */}
+      {zoomVariant && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-6"
+          onClick={() => setZoomVariant(null)}
+        >
+          <div
+            className="bg-white rounded-xl max-w-[720px] w-full max-h-full flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+              <div>
+                <p className="text-sm font-bold text-gray-900">{zoomVariant.name}</p>
+                <p className="text-xs text-gray-500">{zoomVariant.description}</p>
+              </div>
+              <button
+                onClick={() => setZoomVariant(null)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto bg-gray-100 p-5 flex justify-center">
+              <img
+                src={thumbUrl(zoomVariant.thumbnail)}
+                alt={zoomVariant.name}
+                className="max-w-full h-auto border border-gray-200 bg-white"
+                onError={(e) => { e.currentTarget.style.opacity = '0.15'; }}
+              />
+            </div>
+            <div className="px-5 py-3 border-t border-gray-200 flex justify-end gap-2">
+              <button
+                onClick={() => setZoomVariant(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  updateField('template_id', zoomVariant.id);
+                  setZoomVariant(null);
+                  setPickerOpen(false);
+                }}
+                className="px-4 py-2 bg-[#29828a] hover:bg-[#216b71] text-white text-sm font-semibold rounded-lg transition-colors"
+              >
+                Use this layout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

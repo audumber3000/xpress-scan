@@ -77,7 +77,7 @@ def _sample_clinic():
         email="hello@molarplus.example",
         address="12 Marine Drive, Mumbai 400020",
         tagline="Comprehensive Dental & Orthodontic Care",
-        reg_number="MH/DC/12345",
+        license_number="MH/DC/12345",
         gst_number="27ABCDE1234F1Z5",
         doctor_name="Dr. R. Sharma",
         primary_color="#FF9800",
