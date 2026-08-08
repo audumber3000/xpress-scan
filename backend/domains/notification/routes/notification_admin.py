@@ -51,11 +51,15 @@ _HIDDEN_EVENT_TYPES = {"daily_report"}
 #
 # lab_order_placed goes to a third party (the clinic's lab) and spends the
 # clinic's wallet on every order, so it ships OFF — the clinic opts in from
-# Notifications → Preferences. Email is the default channel because the
-# WhatsApp side needs an approved `mp_lab_order_placed` template in Meta,
-# which email does not.
+# Notifications → Preferences. That part is a cost decision and stays.
+#
+# It used to be email-only as well, because `mp_lab_order_placed` had no
+# approved Meta template. That template is approved now, so the channel falls
+# back in line with every other event. Email is kept alongside WhatsApp because
+# a lab vendor may only have an address on file, and lab_orders.py skips the
+# send entirely when the chosen channel has nothing to send to.
 _SEED_OVERRIDES = {
-    "lab_order_placed": {"channels": ["email"], "is_enabled": False},
+    "lab_order_placed": {"channels": ["whatsapp", "email"], "is_enabled": False},
 }
 
 def get_db():

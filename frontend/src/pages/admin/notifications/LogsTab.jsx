@@ -6,6 +6,7 @@ import {
 import { EVENT_LABELS, CHANNEL_META } from './constants';
 import { getCurrencySymbol } from '../../../utils/currency';
 import Pagination from '../../../components/Pagination';
+import { formatDateTime } from '../../../utils/datetime';
 
 const LogsTab = ({ logs, logsTotal, logsPage, logsFilter, setLogsFilter, setLogsPage, fetchLogs }) => (
   <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
@@ -81,7 +82,7 @@ const LogsTab = ({ logs, logsTotal, logsPage, logsFilter, setLogsFilter, setLogs
                 <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
                   <td className="px-5 py-3.5 text-xs text-gray-500 whitespace-nowrap">
                     {log.created_at
-                      ? new Date(log.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                      ? formatDateTime(log.created_at, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
                       : '—'}
                   </td>
                   <td className="px-5 py-3.5">

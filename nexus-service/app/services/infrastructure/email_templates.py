@@ -314,6 +314,31 @@ def platform_trial_message(subject: str, headline: str, owner_name: str = "there
     }
 
 
+def platform_otp_verification(otp: str = "", code: str = "", clinic_name: str = "your clinic",
+                              expires_in_minutes: int = 10, **_) -> dict:
+    """
+    Verification code for the clinic's recovery email (Control Center > Security).
+
+    Deliberately a PLATFORM email: it comes from MolarPlus, not from the clinic,
+    and it goes to the owner rather than a patient. Accepts either `otp` or
+    `code` because the two names are both in use by callers.
+    """
+    the_code = str(otp or code or "")
+    body = f"""
+<p>Hi,</p>
+<p>Here is your verification code for <strong>{clinic_name}</strong>.</p>
+<div class="info-box" style="text-align:center;">
+  <strong style="font-size:30px;letter-spacing:8px;color:{BRAND_COLOR};">{the_code}</strong>
+</div>
+<p>It expires in {expires_in_minutes} minutes. If you did not ask to verify this
+address, you can safely ignore this email and nothing will change.</p>"""
+    body += _SUPPORT_BLOCK
+    return {
+        "subject": f"{the_code} is your MolarPlus verification code",
+        "html": _base_wrapper(_platform_header(), body, _platform_footer()),
+    }
+
+
 # ─── Clinic → Patient templates ───────────────────────────────────────────────
 
 def patient_appointment_booked(patient_name: str, clinic_name: str, clinic_logo_url: str,
@@ -510,6 +535,8 @@ PLATFORM_EVENTS = {
     "molarplus_lab_due_tomorrow", "molarplus_weekly_report_mk", "molarplus_monthly_report_mk",
     "molarplus_review_report_mk", "molarplus_trial_started_mk", "molarplus_trial_mid_mk",
     "molarplus_trial_ending_mk", "molarplus_trial_ended_mk",
+    # Goes to the clinic owner's recovery address, from the platform sender.
+    "otp_verification",
 }
 
 PATIENT_EVENTS = {
@@ -557,6 +584,7 @@ def build_email(event_type: str, **kwargs) -> dict:
             "Your MolarPlus trial has ended",
             **kwargs,
         ),
+        "otp_verification":           platform_otp_verification,
         "appointment_booked":         patient_appointment_booked,
         "appointment_confirmation":   patient_appointment_confirmed,
         "checked_in":                 patient_checked_in,

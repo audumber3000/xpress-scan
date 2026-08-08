@@ -1,6 +1,7 @@
 import React from "react";
 import { generatePatientPersona, generateInitialsAvatar } from "../../utils/avatar";
 import { getCurrencySymbol } from "../../utils/currency";
+import { clinicDateKey, clinicToday } from "../../utils/datetime";
 
 const InvoiceHeader = ({ invoice }) => {
   if (!invoice) return null;
@@ -18,7 +19,10 @@ const InvoiceHeader = ({ invoice }) => {
 
   const getStatusBadge = (invoice) => {
     const { status, payment_mode, created_at } = invoice;
-    const isCreatedToday = created_at && new Date(created_at).toDateString() === new Date().toDateString();
+    // Compared as clinic-local calendar days. Two bare new Date()s here compared
+    // the viewer's day against a UTC value read as local time, so an invoice
+    // raised in the evening stopped counting as "today" once IST crossed 18:30.
+    const isCreatedToday = !!created_at && clinicDateKey(created_at) === clinicToday();
     
     let displayStatus = "Draft";
     let color = "bg-gray-100 text-gray-800 border-gray-200";

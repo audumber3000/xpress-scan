@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { isManualWhatsApp, shareInvoiceManually } from '../../utils/whatsapp';
 import EmptyState from '../common/EmptyState';
 import { receipt } from '../../assets/illustrations';
+import { formatDate } from '../../utils/datetime';
 
 /**
  * PatientBilling - Simplified billing tab following standard app table styling
@@ -117,7 +118,7 @@ const PatientBilling = ({
                                             )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {new Date(inv.created_at).toLocaleDateString('en-GB')}
+                                            {formatDate(inv.created_at, { day: '2-digit', month: '2-digit', year: 'numeric' }, 'en-GB')}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-center">
                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${getStatusStyle(inv.status)}`}>

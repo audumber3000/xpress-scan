@@ -151,76 +151,68 @@ def send_otp(payload: OtpSendRequest, db=Depends(get_db), current_user: User = D
     # reported "code sent" whether or not anything left the building — and an
     # unapproved WhatsApp template failed invisibly. An OTP nobody receives, with
     # a UI that says it was sent, is the worst of both.
-    error = None
+    # BOTH channels go through Nexus. The backend has no email provider of its
+    # own in production — no ZOHO_* variables reach the container — so calling
+    # EmailService directly could only ever fail with "ZOHO_FROM_EMAIL
+    # environment variable not set", which is exactly what prod was logging.
+    # Nexus owns ZeptoMail and MSG91 and both otp_verification templates.
     if channel == "email":
-        from domains.communication.services.email_service import EmailService
-        html = (
-            f"<p>Your MolarPlus verification code is "
-            f"<strong style='font-size:22px;letter-spacing:2px'>{code}</strong>.</p>"
-            f"<p>It expires in {OTP_TTL_MIN} minutes. If you didn't request this, you can ignore this email.</p>"
-        )
-        try:
-            # Returns a result dict rather than raising, so the result has to be
-            # read — an unset sender address looks like success otherwise.
-            result = EmailService()._send_email(target, "Your MolarPlus verification code", html)
-            if isinstance(result, dict) and not result.get("success"):
-                error = result.get("error") or result.get("message") or "email provider rejected the message"
-        except Exception as exc:
-            error = str(exc)
         recipient, log_channel = target, "email"
+        destination = {"to_email": recipient}
     else:
         recipient = normalize_phone(target, getattr(c, "country", None))
         log_channel = "whatsapp"
-        # The row is created up front so MSG91's delivery webhook has something
-        # to update. Submission succeeding only means the provider accepted it —
-        # an unapproved Meta template is still accepted, then fails on delivery,
-        # which is exactly the case that looked like "nothing happened".
-        wa_log = NotificationLog(
-            clinic_id=c.id, channel="whatsapp", recipient=recipient,
-            event_type="otp_verification", status="queued",
-        )
-        db.add(wa_log)
-        db.commit()
-        db.refresh(wa_log)
-        try:
-            resp = requests.post(
-                f"{os.getenv('NEXUS_SERVICES_URL', 'http://localhost:8001')}"
-                f"/api/v1/notifications/send-event",
-                json={
-                    "event_type": "otp_verification",
-                    "channel": "whatsapp",
-                    "to_phone": recipient,
-                    "to_name": c.name or "",
-                    "template_data": {"otp": code, "clinic_name": c.name or ""},
-                    "log_id": wa_log.id,
-                    "callback_url": (
-                        f"{os.getenv('MAIN_BACKEND_URL', 'http://localhost:8000')}"
-                        f"/api/v1/notification-admin/logs/{wa_log.id}"
-                    ),
+        destination = {"to_phone": recipient}
+
+    # The row is created up front so MSG91's delivery webhook has something to
+    # update. Submission succeeding only means the provider accepted it — an
+    # unapproved or wrong-language Meta template is still accepted, then fails
+    # on delivery, which is exactly the case that looked like "nothing happened".
+    log = NotificationLog(
+        clinic_id=c.id, channel=log_channel, recipient=recipient,
+        event_type="otp_verification", status="queued",
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+
+    error = None
+    try:
+        resp = requests.post(
+            f"{os.getenv('NEXUS_SERVICES_URL', 'http://localhost:8001')}"
+            f"/api/v1/notifications/send-event",
+            json={
+                "event_type": "otp_verification",
+                "channel": log_channel,
+                **destination,
+                "to_name": c.name or "",
+                "template_data": {
+                    "otp": code,
+                    "clinic_name": c.name or "",
+                    "expires_in_minutes": OTP_TTL_MIN,
                 },
-                timeout=15,
-            )
-            if resp.status_code >= 400:
-                error = f"{resp.status_code}: {resp.text[:200]}"
-            else:
-                body = resp.json() if resp.content else {}
-                if isinstance(body, dict) and body.get("success") is False:
-                    error = str(body.get("error") or body.get("message") or "provider rejected the message")
-        except Exception as exc:
-            error = str(exc)
+                "log_id": log.id,
+                "callback_url": (
+                    f"{os.getenv('MAIN_BACKEND_URL', 'http://localhost:8000')}"
+                    f"/api/v1/notification-admin/logs/{log.id}"
+                ),
+            },
+            timeout=15,
+        )
+        if resp.status_code >= 400:
+            error = f"{resp.status_code}: {resp.text[:200]}"
+        else:
+            body = resp.json() if resp.content else {}
+            if isinstance(body, dict) and body.get("success") is False:
+                error = str(body.get("error") or body.get("message") or "provider rejected the message")
+    except Exception as exc:
+        error = str(exc)
 
     # Recorded either way, so a failed OTP shows up in Notifications → Message
     # Logs next to everything else instead of vanishing.
     try:
-        if log_channel == "whatsapp":
-            wa_log.status = "failed" if error else "sent"
-            wa_log.error_message = error
-        else:
-            db.add(NotificationLog(
-                clinic_id=c.id, channel=log_channel, recipient=recipient,
-                event_type="otp_verification", status="failed" if error else "sent",
-                error_message=error,
-            ))
+        log.status = "failed" if error else "sent"
+        log.error_message = error
         db.commit()
     except Exception:
         db.rollback()

@@ -2,6 +2,7 @@ import React from 'react';
 import { AlertCircle, CreditCard, Wallet, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { CHANNEL_META, getChannelPriceLabel } from './constants';
 import { getCurrencySymbol } from '../../../utils/currency';
+import { formatDate } from '../../../utils/datetime';
 
 const StatCard = ({ channel, stats, channelStatus }) => {
   const meta = CHANNEL_META[channel] || {};
@@ -56,7 +57,7 @@ const OverviewTab = ({ stats, channelStatus, wallet, topUpAmount, setTopUpAmount
                 <div>
                   <p className="text-sm font-medium text-gray-800">{txn.description || 'Wallet Top-up'}</p>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    {txn.created_at ? new Date(txn.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                    {txn.created_at ? formatDate(txn.created_at, { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                   </p>
                 </div>
                 <div className="text-right">

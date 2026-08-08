@@ -547,6 +547,10 @@ class NotificationService:
                 return await self.send_whatsapp(
                     mobile_number=to_phone,
                     template_name=wa["template_name"],
+                    # Templates are approved per language. Most are "en", but
+                    # AUTHENTICATION ones (mp_otp_verification) are "en_US", and
+                    # asking for the wrong one fails silently at delivery.
+                    language_code=wa.get("language") or "en",
                     components=wa["components"],
                 )
 

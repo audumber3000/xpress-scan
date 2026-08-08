@@ -20,6 +20,7 @@ import { SUPPORT_PHONE, SUPPORT_EMAIL, isSupportOnline, supportResponseTime, sup
 import { SkeletonBox } from "./Skeleton";
 import GlobalSearchModal from "./GlobalSearchModal";
 import { useNavigationGuard } from "../contexts/NavigationGuardContext";
+import { parseServerDate } from "../utils/datetime";
 
 /**
  * One row in the profile menu: icon, label, an optional right-hand value or
@@ -74,7 +75,12 @@ const ACTIVITY_ICONS = {
 
 /** "3h ago" / "2d ago" — relative age of an activity entry. */
 const timeAgo = (createdAt) => {
-  const diff = Date.now() - new Date(createdAt);
+  // parseServerDate, not new Date(): the API sends UTC with no timezone marker,
+  // which a bare new Date() reads as the viewer's local clock and reports hours
+  // in the past (5.5 of them in IST).
+  const d = parseServerDate(createdAt);
+  if (!d) return '';
+  const diff = Date.now() - d.getTime();
   const m = Math.floor(diff / 60000);
   if (m < 1) return 'Just now';
   if (m < 60) return `${m}m ago`;

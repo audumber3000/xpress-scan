@@ -209,6 +209,9 @@ run_migration "audit_logs_action_idx"  "CREATE INDEX IF NOT EXISTS ix_audit_logs
 # silence. Seeded enabled for every existing clinic; new clinics get it from
 # DEFAULT_EVENT_TYPES.
 run_migration "receipt_notification_pref" "INSERT INTO notification_preferences (clinic_id, event_type, channels, is_enabled) SELECT c.id, 'receipt_notification', '[\"whatsapp\"]'::json, TRUE FROM clinics c WHERE NOT EXISTS (SELECT 1 FROM notification_preferences p WHERE p.clinic_id = c.id AND p.event_type = 'receipt_notification')"
+# mp_lab_order_placed is approved in Meta now, so lab orders are no longer
+# email-only. Existing rows stay disabled; this only widens the channel list.
+run_migration "lab_order_whatsapp" "UPDATE notification_preferences SET channels = '[\"whatsapp\", \"email\"]'::json WHERE event_type = 'lab_order_placed' AND channels::text = '[\"email\"]'"
 
 # ── Schema migration check (run against RDS) ──────────────────────────────────
 echo ""

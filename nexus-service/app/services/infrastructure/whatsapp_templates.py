@@ -264,9 +264,8 @@ def wa_lab_order_placed(clinic_name: str, work_type: str = "", patient_name: str
     Body params: {{1}} clinic_name, {{2}} work_type, {{3}} patient_name,
                  {{4}} tooth_number, {{5}} due_date, {{6}} clinic_phone
 
-    NOTE: this only delivers once `mp_lab_order_placed` is approved in Meta.
-    Until then the WA Reach path (free text, see build_whatsapp_text) works and
-    the MSG91 path fails soft with "template not found".
+    `mp_lab_order_placed` is approved in Meta and live, in language "en"
+    (unlike mp_otp_verification, which is en_US).
     """
     tpl = _get_tpl("WA_TPL_LAB_ORDER_PLACED", "mp_lab_order_placed")
     return {
@@ -290,13 +289,21 @@ def wa_otp_verification(otp: str = "", code: str = "", **_) -> dict:
     tpl = _get_tpl("WA_TPL_OTP_VERIFICATION", "mp_otp_verification")
     return {
         "template_name": tpl,
+        # This template is registered under en_US, not en. Asking MSG91 for a
+        # language the template was not approved in is accepted at submission
+        # and then fails at delivery, so the send looks successful and no
+        # message ever arrives. Every other template here is plain "en".
+        "language": _get_tpl("WA_TPL_OTP_LANG", "en_US"),
         "components": [
             _body_params(the_code),
+            # MSG91 documents this button as subtype "url" for mp_otp_verification.
+            # It was "copy_code" before, which is the other AUTHENTICATION button
+            # style and is rejected for a template built with a URL button.
             {
                 "type": "button",
-                "sub_type": "copy_code",
+                "sub_type": "url",
                 "index": "0",
-                "parameters": [{"type": "coupon_code", "coupon_code": the_code}],
+                "parameters": [{"type": "text", "text": the_code}],
             },
         ],
     }
