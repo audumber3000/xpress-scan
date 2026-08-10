@@ -6,7 +6,7 @@ import { api, getFriendlyErrorMessage } from "../../utils/api";
 import { isValidPhone } from "../../utils/validators";
 import { computeAgeFromDob } from "./AgeOrDobField";
 // On-request (disposable) importers surfaced in the Special Request tab.
-import PaymentsSheetImporter from "./on-request-import/PaymentsSheetImporter";
+import InvoiceSheetImporter from "./on-request-import/InvoiceSheetImporter";
 
 // Activity steps shown while the AI reads the register photos. The activities are
 // real (upload -> vision OCR -> field extraction -> table); the step timing is an
@@ -99,7 +99,7 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
   const [importing, setImporting] = useState(false);
   const [mode, setMode] = useState(null);        // null = choose, 'csv' = CSV, 'manual' = table
   const [activeTab, setActiveTab] = useState('standard'); // 'standard' | 'special'
-  const [showPaymentsImporter, setShowPaymentsImporter] = useState(false);
+  const [showInvoiceImporter, setShowInvoiceImporter] = useState(false);
   const [manualRows, setManualRows] = useState([emptyManualRow(), emptyManualRow(), emptyManualRow()]);
   const [scanning, setScanning] = useState(false);
   const [scanStep, setScanStep] = useState(0);
@@ -405,7 +405,7 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
               <div className="py-4 space-y-4">
                 {/* Ready-made importer we built for a clinic's combined patients + payments sheet */}
                 <button
-                  onClick={() => setShowPaymentsImporter(true)}
+                  onClick={() => setShowInvoiceImporter(true)}
                   className="w-full flex items-start gap-3 p-5 border-[1.5px] border-[#2a276e] rounded-xl text-left bg-[#fafaff] hover:bg-[#2a276e]/5 transition-all"
                 >
                   <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
@@ -413,12 +413,12 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-gray-900">Import patients with payments</span>
+                      <span className="text-sm font-bold text-gray-900">Import invoices from a sheet</span>
                       <span className="px-1.5 py-0.5 rounded-full bg-[#2a276e] text-white text-[9px] font-extrabold tracking-wide">READY</span>
                     </div>
                     <span className="block text-xs text-gray-500 mt-0.5">
-                      For sheets that list each procedure with its part payments. Every row becomes a patient and an
-                      invoice with all the small payments recorded on it.
+                      For an invoice ledger export: invoice number, patient, total, discount, paid and date.
+                      Every row becomes a finalized invoice, and patients are created from the names in the file.
                     </span>
                   </div>
                 </button>
@@ -799,11 +799,12 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
         })()}
       </div>
 
-      <PaymentsSheetImporter
-        open={showPaymentsImporter}
-        onClose={() => setShowPaymentsImporter(false)}
-        onImported={() => onImported?.()}
-      />
+      {showInvoiceImporter && (
+        <InvoiceSheetImporter
+          onClose={() => setShowInvoiceImporter(false)}
+          onDone={() => onImported?.()}
+        />
+      )}
     </div>
   );
 };

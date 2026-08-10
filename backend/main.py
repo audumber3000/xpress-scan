@@ -561,7 +561,7 @@ app.include_router(lab_orders_router, prefix="/api/v1/clinical", tags=["lab-orde
 app.include_router(inventory_consumption_router, prefix="/api/v1/clinical", tags=["inventory-consumption"])
 
 # On-request import (TEMPORARY / disposable — see domains/on_request_import)
-from domains.on_request_import.routes import patients_payments as on_request_import
+from domains.on_request_import.routes import invoice_sheet as on_request_import
 app.include_router(on_request_import.router, prefix="/api/v1", tags=["on-request-import"])
 
 # Search Domain — unified command-palette search across the domains above
