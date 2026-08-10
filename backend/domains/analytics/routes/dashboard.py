@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, extract, case
 from datetime import datetime, timedelta
 from typing import Optional
+import csv
+import io
 from database import get_db
 from models import Patient, Report, Payment, User, TreatmentType, Appointment, Clinic, Invoice, LabOrder, InventoryItem, MedicationStock
 from core.auth_utils import get_current_user
@@ -104,8 +106,35 @@ def get_dashboard_metrics(
     ).scalar() or 0
     
     appointment_change = calculate_trend(appointments_count, prev_appointments)
-    
-    # 3. Checking (Appointments with status 'checking' in this period)
+
+    # 2b. Appointment outcome split, so the card can say what those bookings
+    # actually became instead of only how many there were.
+    outcome_rows = db.query(Appointment.status, func.count(Appointment.id)).filter(
+        and_(
+            Appointment.clinic_id == final_clinic_id,
+            Appointment.appointment_date >= start_date,
+            Appointment.appointment_date < end_date
+        )
+    ).group_by(Appointment.status).all()
+
+    appt_completed = appt_missed = appt_scheduled = 0
+    for raw_status, count in outcome_rows:
+        s = (raw_status or 'confirmed').lower()
+        if s == 'completed':
+            appt_completed += int(count)
+        elif s in ('no-show', 'no_show', 'cancelled'):
+            appt_missed += int(count)
+        else:
+            appt_scheduled += int(count)
+
+    # 2c. DEPRECATED: appointments in 'checking' status.
+    #
+    # The web dashboard dropped this card — it reads 0 almost every day, so it
+    # was a quarter of the KPI row showing nothing. It stays in the payload
+    # because the mobile app's home screen still renders it
+    # (mobile-app/src/services/api/analytics.api.ts). Remove once mobile moves
+    # to `outstanding`; until then dropping it would silently show 0 on a
+    # screen people actually use, since mobile reads it with `|| 0`.
     checking_count = db.query(func.count(Appointment.id)).filter(
         and_(
             Appointment.clinic_id == final_clinic_id,
@@ -114,7 +143,7 @@ def get_dashboard_metrics(
             Appointment.appointment_date < end_date
         )
     ).scalar() or 0
-    
+
     prev_checking = db.query(func.count(Appointment.id)).filter(
         and_(
             Appointment.clinic_id == final_clinic_id,
@@ -123,8 +152,63 @@ def get_dashboard_metrics(
             Appointment.appointment_date < prev_end
         )
     ).scalar() or 0
-    
+
     checking_trend = calculate_trend(checking_count, prev_checking)
+
+    # 3. Outstanding dues — finalized invoices still carrying a balance.
+    #
+    # Deliberately NOT period-filtered: money owed is owed regardless of which
+    # window the header is showing, and an "outstanding" figure that shrank when
+    # you switched to "Today" would be actively misleading. Same query shape as
+    # /dashboard/today so the KPI and the attention queue can never disagree.
+    dues_row = db.query(
+        func.count(Invoice.id),
+        func.coalesce(func.sum(Invoice.due_amount), 0.0),
+    ).filter(
+        and_(
+            Invoice.clinic_id == final_clinic_id,
+            Invoice.due_amount > 0,
+            Invoice.status.notin_(['draft', 'cancelled']),
+        )
+    ).first()
+    dues_count = int(dues_row[0] or 0)
+    dues_amount = float(dues_row[1] or 0.0)
+
+    # Aging: how much of that balance has been sitting for over 30 days, dated
+    # from when the invoice was finalized (falling back to creation for older
+    # rows that predate finalized_at).
+    aged_cutoff = today_start - timedelta(days=30)
+    invoice_date = func.coalesce(Invoice.finalized_at, Invoice.created_at)
+
+    aged_amount = float(db.query(func.coalesce(func.sum(Invoice.due_amount), 0.0)).filter(
+        and_(
+            Invoice.clinic_id == final_clinic_id,
+            Invoice.due_amount > 0,
+            Invoice.status.notin_(['draft', 'cancelled']),
+            invoice_date < aged_cutoff,
+        )
+    ).scalar() or 0.0)
+
+    oldest_dt = db.query(func.min(invoice_date)).filter(
+        and_(
+            Invoice.clinic_id == final_clinic_id,
+            Invoice.due_amount > 0,
+            Invoice.status.notin_(['draft', 'cancelled']),
+        )
+    ).scalar()
+    oldest_days = int((now - oldest_dt).days) if oldest_dt else 0
+
+    # Compared against the balance as it stood one period ago, approximated by
+    # excluding invoices raised inside the current window.
+    prev_dues_amount = float(db.query(func.coalesce(func.sum(Invoice.due_amount), 0.0)).filter(
+        and_(
+            Invoice.clinic_id == final_clinic_id,
+            Invoice.due_amount > 0,
+            Invoice.status.notin_(['draft', 'cancelled']),
+            invoice_date < start_date,
+        )
+    ).scalar() or 0.0)
+    dues_trend = calculate_trend(dues_amount, prev_dues_amount)
 
     # 4. Revenue (Sum of payments in this period)
     revenue_payments = db.query(func.sum(Payment.amount)).filter(
@@ -166,30 +250,96 @@ def get_dashboard_metrics(
     ).scalar() or 0
     
     prev_revenue = float(prev_revenue_payments) + float(prev_revenue_invoices)
-    
+
     revenue_trend = calculate_trend(revenue, prev_revenue)
-    
+
+    # Total billed in the window, so the card can show collected-of-billed
+    # rather than a bare collected figure with nothing to size it against.
+    billed = float(db.query(func.coalesce(func.sum(Invoice.total), 0.0)).filter(
+        and_(
+            Invoice.clinic_id == final_clinic_id,
+            Invoice.status.notin_(['draft', 'cancelled']),
+            func.coalesce(Invoice.finalized_at, Invoice.created_at) >= start_date,
+            func.coalesce(Invoice.finalized_at, Invoice.created_at) < end_date,
+        )
+    ).scalar() or 0.0)
+
+    # Collected today, for the hero card's footer line.
+    revenue_today = float(db.query(func.coalesce(func.sum(Payment.amount), 0.0)).filter(
+        and_(
+            Payment.clinic_id == final_clinic_id,
+            Payment.status == "success",
+            Payment.created_at >= today_start,
+        )
+    ).scalar() or 0.0)
+
+    # New patients per day for the last 7 days — a shape, not a series anyone
+    # reads values off, so 7 grouped counts is plenty.
+    spark_start = today_start - timedelta(days=6)
+    spark_rows = dict(
+        db.query(func.date(Patient.created_at), func.count(Patient.id))
+        .filter(
+            and_(
+                Patient.clinic_id == final_clinic_id,
+                Patient.created_at >= spark_start,
+            )
+        )
+        .group_by(func.date(Patient.created_at))
+        .all()
+    )
+    # func.date() comes back as a date on Postgres and a string on SQLite.
+    spark_by_day = {str(k): int(v) for k, v in spark_rows.items()}
+    patients_sparkline = [
+        spark_by_day.get(str((spark_start + timedelta(days=i)).date()), 0)
+        for i in range(7)
+    ]
+    patients_last_30 = int(db.query(func.count(Patient.id)).filter(
+        and_(
+            Patient.clinic_id == final_clinic_id,
+            Patient.created_at >= today_start - timedelta(days=30),
+        )
+    ).scalar() or 0)
+
     return {
         "total_patients": {
             "value": patients_count,
             "change": patient_change,
-            "change_type": "up" if patient_change >= 0 else "down"
+            "change_type": "up" if patient_change >= 0 else "down",
+            "sparkline": patients_sparkline,
+            "last_30_days": patients_last_30,
         },
         "appointments": {
             "value": appointments_count,
             "change": appointment_change,
-            "change_type": "up" if appointment_change >= 0 else "down"
+            "change_type": "up" if appointment_change >= 0 else "down",
+            "completed": appt_completed,
+            "scheduled": appt_scheduled,
+            "missed": appt_missed,
         },
+        # Deprecated — kept for the mobile home screen. See note above.
         "checking": {
             "value": checking_count,
             "change": checking_trend,
-            "change_type": "up" if checking_trend >= 0 else "down"
+            "change_type": "up" if checking_trend >= 0 else "down",
+        },
+        # `invert` tells the card that a rise is bad news, so the delta pill
+        # colours red on the way up instead of green.
+        "outstanding": {
+            "value": round(dues_amount, 2),
+            "change": dues_trend,
+            "change_type": "up" if dues_trend >= 0 else "down",
+            "invert": True,
+            "invoice_count": dues_count,
+            "aged_amount": round(aged_amount, 2),
+            "oldest_days": oldest_days,
         },
         "revenue": {
             "value": float(revenue),
             "change": revenue_trend,
-            "change_type": "up" if revenue_trend >= 0 else "down"
-        }
+            "change_type": "up" if revenue_trend >= 0 else "down",
+            "billed": round(billed, 2),
+            "collected_today": round(revenue_today, 2),
+        },
     }
 
 def calculate_trend(current, previous):
@@ -220,9 +370,55 @@ def all_time_months(db, clinic_id, now):
         cur = nxt
     return buckets
 
+def period_buckets(period: str, db, clinic_id: int, now: datetime = None):
+    """The x-axis for a chart at this period → [(label, start, end)].
+
+    One place decides the granularity, so every chart on the page shares the same
+    buckets: hourly for a single day, daily for a week or the current month,
+    monthly for all-time. The header's filter is what drives it.
+    """
+    now = now or datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if period == "all":
+        return all_time_months(db, clinic_id, now)
+
+    if period in ("today", "yesterday"):
+        day = today_start if period == "today" else today_start - timedelta(days=1)
+        return [(f"{i:02d}:00", day + timedelta(hours=i), day + timedelta(hours=i + 1)) for i in range(24)]
+
+    if period == "7days":
+        return [
+            ((today_start - timedelta(days=i)).strftime("%a"),
+             today_start - timedelta(days=i),
+             today_start - timedelta(days=i - 1))
+            for i in range(6, -1, -1)
+        ]
+
+    month_start = today_start.replace(day=1)
+    days_in_month = (today_start - month_start).days + 1
+    return [
+        ((month_start + timedelta(days=i)).strftime("%d %b"),
+         month_start + timedelta(days=i),
+         month_start + timedelta(days=i + 1))
+        for i in range(days_in_month)
+    ]
+
+
+def _bucket_index(buckets, when):
+    """Index of the bucket `when` falls into, or None. Buckets are contiguous and
+    ordered, so a linear scan is fine at these sizes (24 max)."""
+    if when is None:
+        return None
+    for i, (_, start, end) in enumerate(buckets):
+        if start <= when < end:
+            return i
+    return None
+
+
 @router.get("/patient-stats")
 def get_patient_statistics(
-    period: str = "month",  # today, yesterday, 7days, month
+    period: str = "month",  # today, yesterday, 7days, month, all
     clinic_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
@@ -232,88 +428,106 @@ def get_patient_statistics(
     - new:       patients first registered in the bucket
     - returning: existing patients (registered earlier) who had an appointment
                  in the bucket
+
+    Two queries total, bucketed in Python. This used to run two queries *per
+    bucket*, which was 48 round-trips for all-time and 62 for a full month — on
+    the first screen anyone opens, and now the default. Bucketing in Python
+    rather than SQL `date_trunc` keeps it working on both Postgres (server) and
+    SQLite (bundled desktop build).
     """
     final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
     now = datetime.utcnow()
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    def pstat(label, start, end):
-        new = db.query(func.count(Patient.id)).filter(
-            and_(Patient.clinic_id == final_clinic_id, Patient.created_at >= start, Patient.created_at < end)
-        ).scalar() or 0
-        returning = db.query(func.count(func.distinct(Appointment.patient_id))).join(
-            Patient, Patient.id == Appointment.patient_id
-        ).filter(
-            and_(
-                Appointment.clinic_id == final_clinic_id,
-                Appointment.appointment_date >= start, Appointment.appointment_date < end,
-                Patient.created_at < start,
-            )
-        ).scalar() or 0
-        return {"label": label, "new": int(new), "returning": int(returning)}
+    buckets = period_buckets(period, db, final_clinic_id, now)
+    if not buckets:
+        return []
 
-    if period == "all":
-        return [pstat(lbl, s, e) for (lbl, s, e) in all_time_months(db, final_clinic_id, now)]
+    range_start, range_end = buckets[0][1], buckets[-1][2]
+    new_counts = [0] * len(buckets)
+    returning_sets = [set() for _ in buckets]
 
-    if period in ("today", "yesterday"):
-        start_date = today_start if period == "today" else today_start - timedelta(days=1)
-        return [pstat(f"{i:02d}:00", start_date + timedelta(hours=i), start_date + timedelta(hours=i + 1)) for i in range(24)]
+    # 1. New registrations.
+    for created_at, in db.query(Patient.created_at).filter(
+        and_(
+            Patient.clinic_id == final_clinic_id,
+            Patient.created_at >= range_start,
+            Patient.created_at < range_end,
+        )
+    ).all():
+        idx = _bucket_index(buckets, created_at)
+        if idx is not None:
+            new_counts[idx] += 1
 
-    if period == "7days":
-        return [pstat((today_start - timedelta(days=i)).strftime("%a"),
-                      today_start - timedelta(days=i), today_start - timedelta(days=i - 1)) for i in range(6, -1, -1)]
+    # 2. Returning visits. "Returning" is per-bucket (registered before *this*
+    # bucket began), so the comparison has to happen after bucketing — hence
+    # carrying created_at along rather than filtering in SQL. Distinct patients
+    # per bucket, so a patient with three visits in a month counts once.
+    for appt_date, patient_id, created_at in db.query(
+        Appointment.appointment_date, Appointment.patient_id, Patient.created_at
+    ).join(Patient, Patient.id == Appointment.patient_id).filter(
+        and_(
+            Appointment.clinic_id == final_clinic_id,
+            Appointment.appointment_date >= range_start,
+            Appointment.appointment_date < range_end,
+        )
+    ).all():
+        idx = _bucket_index(buckets, appt_date)
+        if idx is not None and created_at is not None and created_at < buckets[idx][1]:
+            returning_sets[idx].add(patient_id)
 
-    month_start = today_start.replace(day=1)
-    days_in_month = (today_start - month_start).days + 1
-    return [pstat((month_start + timedelta(days=i)).strftime("%d %b"),
-                  month_start + timedelta(days=i), month_start + timedelta(days=i + 1)) for i in range(days_in_month)]
+    return [
+        {"label": label, "new": new_counts[i], "returning": len(returning_sets[i])}
+        for i, (label, _, _) in enumerate(buckets)
+    ]
+
+# Free-text `gender` normalised to the three slices the donut shows. The column
+# has no constraint, so real data holds "Male", "male", "M", "f", "" and NULL.
+_GENDER_ALIASES = {
+    'm': 'Male', 'male': 'Male', 'man': 'Male', 'boy': 'Male',
+    'f': 'Female', 'female': 'Female', 'woman': 'Female', 'girl': 'Female',
+}
+
 
 @router.get("/demographics")
 def get_patient_demographics(
-    period: str = "month",  # today, yesterday, 7days, month
+    period: str = "month",  # accepted for API compatibility; see note below
     clinic_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """Patient age-band distribution for the period (more useful than gender
-    for treatment planning)."""
+    """Gender split across the clinic's whole patient base.
+
+    Deliberately NOT period-filtered. "Who are my patients" is a property of the
+    roster, not of a date window — filtering it by registration date made the
+    chart answer a different question ("who did I register this month") while
+    still being labelled as the patient base. `period` is still accepted so the
+    frontend can pass it uniformly with the other charts.
+
+    Anything that isn't recognisably male or female lands in "Not recorded"
+    rather than being dropped, so the slices always sum to the patient count and
+    the gap in the data stays visible instead of silently vanishing.
+    """
     final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
-    now = datetime.utcnow()
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    if period == "today":
-        start_date = today_start
-    elif period == "yesterday":
-        start_date = today_start - timedelta(days=1)
-    elif period == "7days":
-        start_date = today_start - timedelta(days=7)
-    elif period == "all":
-        start_date = datetime(2000, 1, 1)
-    else:  # month
-        start_date = today_start.replace(day=1)
+    rows = (
+        db.query(Patient.gender, func.count(Patient.id))
+        .filter(Patient.clinic_id == final_clinic_id)
+        .group_by(Patient.gender)
+        .all()
+    )
 
-    # (label, min_age, max_age_inclusive_or_None, color)
-    bands = [
-        ("0–12", 0, 12, "#9B8CFF"),
-        ("13–18", 13, 18, "#6366f1"),
-        ("19–40", 19, 40, "#2a276e"),
-        ("40+", 41, None, "#1a1548"),
+    buckets = {'Female': 0, 'Male': 0, 'Not recorded': 0}
+    for raw, count in rows:
+        key = _GENDER_ALIASES.get((raw or '').strip().lower(), 'Not recorded')
+        buckets[key] += int(count or 0)
+
+    palette = {'Female': '#2a276e', 'Male': '#9B8CFF', 'Not recorded': '#e4e3ee'}
+    # Keep every slice, including empty ones, so the legend layout is stable as
+    # data arrives instead of the card reflowing on each refetch.
+    return [
+        {"name": name, "value": buckets[name], "color": palette[name]}
+        for name in ('Female', 'Male', 'Not recorded')
     ]
-
-    def count_band(lo, hi):
-        q = db.query(func.count(Patient.id)).filter(
-            and_(
-                Patient.clinic_id == final_clinic_id,
-                Patient.created_at >= start_date,
-                Patient.age.isnot(None),
-                Patient.age >= lo,
-            )
-        )
-        if hi is not None:
-            q = q.filter(Patient.age <= hi)
-        return q.scalar() or 0
-
-    return [{"name": label, "value": int(count_band(lo, hi)), "color": color} for (label, lo, hi, color) in bands]
 
 @router.get("/revenue")
 def get_revenue_analytics(
@@ -338,57 +552,54 @@ def get_revenue_analytics(
         and_(Payment.clinic_id == final_clinic_id, Payment.status == "success")
     ).scalar() or 0
 
-    def bucket(label, start, end, tgt):
-        rev_p = db.query(func.sum(Payment.amount)).filter(
-            and_(Payment.clinic_id == final_clinic_id, Payment.status == "success",
-                 Payment.created_at >= start, Payment.created_at < end)
-        ).scalar() or 0
-        rev_i = db.query(func.sum(Invoice.total)).filter(
-            and_(Invoice.clinic_id == final_clinic_id,
-                 Invoice.status.in_(["paid_verified", "paid_unverified"]),
-                 Invoice.updated_at >= start, Invoice.updated_at < end)
-        ).scalar() or 0
-        billed = db.query(func.sum(Invoice.total)).filter(
-            and_(Invoice.clinic_id == final_clinic_id,
-                 Invoice.status.notin_(["draft", "cancelled"]),
-                 Invoice.created_at >= start, Invoice.created_at < end)
-        ).scalar() or 0
-        collected = float(rev_p) + float(rev_i)
-        return {
-            "label": label,
-            "collected": round(collected, 2),
-            "billed": round(float(billed), 2),
-            "revenue": round(collected, 2),  # backwards-compat alias
-            "target": tgt,
-        }
-
-    if period == "all":
-        monthly_target = max(10000.0, float(avg_rev) * 1.2)
-        return [bucket(lbl, s, e, monthly_target) for (lbl, s, e) in all_time_months(db, final_clinic_id, now)]
-
-    if period in ("today", "yesterday"):
-        start_date = today_start if period == "today" else today_start - timedelta(days=1)
-        target = max(10000.0, float(avg_rev) * 1.2) / 24
-        return [
-            bucket(f"{i:02d}:00", start_date + timedelta(hours=i), start_date + timedelta(hours=i + 1), target)
-            for i in range(24)
-        ]
+    buckets = period_buckets(period, db, final_clinic_id, now)
+    if not buckets:
+        return []
 
     target = max(10000.0, float(avg_rev) * 1.2)
-    if period == "7days":
-        return [
-            bucket((today_start - timedelta(days=i)).strftime("%a"),
-                   today_start - timedelta(days=i), today_start - timedelta(days=i - 1), target)
-            for i in range(6, -1, -1)
-        ]
+    if period in ("today", "yesterday"):
+        target = target / 24
 
-    # month — daily breakdown for the current month
-    month_start = today_start.replace(day=1)
-    days_in_month = (today_start - month_start).days + 1
+    range_start, range_end = buckets[0][1], buckets[-1][2]
+    collected = [0.0] * len(buckets)
+    billed = [0.0] * len(buckets)
+
+    # Three queries for the whole chart instead of three per bucket.
+    for created_at, amount in db.query(Payment.created_at, Payment.amount).filter(
+        and_(Payment.clinic_id == final_clinic_id, Payment.status == "success",
+             Payment.created_at >= range_start, Payment.created_at < range_end)
+    ).all():
+        idx = _bucket_index(buckets, created_at)
+        if idx is not None:
+            collected[idx] += float(amount or 0)
+
+    for updated_at, total in db.query(Invoice.updated_at, Invoice.total).filter(
+        and_(Invoice.clinic_id == final_clinic_id,
+             Invoice.status.in_(["paid_verified", "paid_unverified"]),
+             Invoice.updated_at >= range_start, Invoice.updated_at < range_end)
+    ).all():
+        idx = _bucket_index(buckets, updated_at)
+        if idx is not None:
+            collected[idx] += float(total or 0)
+
+    for created_at, total in db.query(Invoice.created_at, Invoice.total).filter(
+        and_(Invoice.clinic_id == final_clinic_id,
+             Invoice.status.notin_(["draft", "cancelled"]),
+             Invoice.created_at >= range_start, Invoice.created_at < range_end)
+    ).all():
+        idx = _bucket_index(buckets, created_at)
+        if idx is not None:
+            billed[idx] += float(total or 0)
+
     return [
-        bucket((month_start + timedelta(days=i)).strftime("%d %b"),
-               month_start + timedelta(days=i), month_start + timedelta(days=i + 1), target)
-        for i in range(days_in_month)
+        {
+            "label": label,
+            "collected": round(collected[i], 2),
+            "billed": round(billed[i], 2),
+            "revenue": round(collected[i], 2),  # backwards-compat alias
+            "target": target,
+        }
+        for i, (label, _, _) in enumerate(buckets)
     ]
 
 @router.get("/capacity")
@@ -659,6 +870,61 @@ def get_today_overview(
         ).scalar() or 0)
     )
 
+    # ── Month activity, for the calendar dots ──
+    # One row per day of the current month carrying what is booked that day, so
+    # the calendar can show at a glance that Thursday is packed and Friday empty.
+    # Three grouped queries for the month, not three per day.
+    month_start = today_start.replace(day=1)
+    next_month = _shift_months(month_start, -1)
+    days_in_month = (next_month - month_start).days
+
+    activity = {
+        (month_start + timedelta(days=i)).date().isoformat(): {"appointments": 0, "labs": 0, "dues": 0}
+        for i in range(days_in_month)
+    }
+
+    def _bump(key, when, amount=1):
+        if when is None:
+            return
+        day = (when.date() if hasattr(when, 'date') else when).isoformat()
+        if day in activity:
+            activity[day][key] += amount
+
+    for (appt_date,) in db.query(Appointment.appointment_date).filter(
+        and_(
+            Appointment.clinic_id == final_clinic_id,
+            Appointment.appointment_date >= month_start,
+            Appointment.appointment_date < next_month,
+        )
+    ).all():
+        _bump("appointments", appt_date)
+
+    for (due_date,) in db.query(LabOrder.due_date).filter(
+        and_(
+            LabOrder.clinic_id == final_clinic_id,
+            LabOrder.due_date.isnot(None),
+            LabOrder.due_date >= month_start,
+            LabOrder.due_date < next_month,
+        )
+    ).all():
+        _bump("labs", due_date)
+
+    for (inv_date,) in db.query(func.coalesce(Invoice.finalized_at, Invoice.created_at)).filter(
+        and_(
+            Invoice.clinic_id == final_clinic_id,
+            Invoice.due_amount > 0,
+            Invoice.status.notin_(['draft', 'cancelled']),
+            func.coalesce(Invoice.finalized_at, Invoice.created_at) >= month_start,
+            func.coalesce(Invoice.finalized_at, Invoice.created_at) < next_month,
+        )
+    ).all():
+        _bump("dues", inv_date)
+
+    month_activity = [
+        {"date": day, **counts}
+        for day, counts in sorted(activity.items())
+    ]
+
     return {
         "summary": {
             "total": len(appts),
@@ -666,6 +932,12 @@ def get_today_overview(
             "remaining": remaining,
         },
         "appointments": appointments,
+        "month": {
+            "year": month_start.year,
+            "month": month_start.month,
+            "today": today_start.date().isoformat(),
+            "days": month_activity,
+        },
         "attention": {
             "outstanding_dues": {"count": dues_count, "amount": round(dues_amount, 2)},
             "overdue_labs": int(overdue_labs),
@@ -809,37 +1081,42 @@ def get_appointment_trends(
             return "missed"
         return "scheduled"
 
-    def appt_bucket(label, start, end):
-        rows = db.query(Appointment.status, func.count(Appointment.id)).filter(
-            and_(
-                Appointment.clinic_id == final_clinic_id,
-                Appointment.appointment_date >= start,
-                Appointment.appointment_date < end,
-            )
-        ).group_by(Appointment.status).all()
-        out = {"time": label, "completed": 0, "missed": 0, "scheduled": 0}
-        for status, count in rows:
-            out[categorize(status)] += int(count)
-        out["bookings"] = out["completed"] + out["missed"] + out["scheduled"]
-        return out
-
-    if period == "all":
-        return [appt_bucket(lbl, s, e) for (lbl, s, e) in all_time_months(db, final_clinic_id, now)]
-
     if period in ("today", "yesterday"):
-        start_date = today_start if period == "today" else today_start - timedelta(days=1)
-        # Group the day into 2-hour windows from 8 AM to 10 PM.
-        windows = [(f"{h % 12 or 12}{'AM' if h < 12 else 'PM'}", h) for h in range(8, 22, 2)]
-        return [appt_bucket(lbl, start_date + timedelta(hours=h), start_date + timedelta(hours=h + 2)) for (lbl, h) in windows]
+        # This chart groups a single day into 2-hour clinic-hours windows rather
+        # than the hourly buckets the other charts use, so it builds its own.
+        day = today_start if period == "today" else today_start - timedelta(days=1)
+        buckets = [
+            (f"{h % 12 or 12}{'AM' if h < 12 else 'PM'}", day + timedelta(hours=h), day + timedelta(hours=h + 2))
+            for h in range(8, 22, 2)
+        ]
+    else:
+        buckets = period_buckets(period, db, final_clinic_id, now)
 
-    if period == "7days":
-        return [appt_bucket((today_start - timedelta(days=i)).strftime("%a"),
-                            today_start - timedelta(days=i), today_start - timedelta(days=i - 1)) for i in range(6, -1, -1)]
+    if not buckets:
+        return []
 
-    month_start = today_start.replace(day=1)
-    days_in_month = (today_start - month_start).days + 1
-    return [appt_bucket((month_start + timedelta(days=i)).strftime("%d %b"),
-                        month_start + timedelta(days=i), month_start + timedelta(days=i + 1)) for i in range(days_in_month)]
+    out = [
+        {"time": label, "completed": 0, "missed": 0, "scheduled": 0, "bookings": 0}
+        for (label, _, _) in buckets
+    ]
+
+    # One query for the whole chart. Grouping by (bucket, status) in SQL would
+    # need date_trunc, which the bundled SQLite desktop build doesn't have, so
+    # the bucketing happens here.
+    for appt_date, status in db.query(Appointment.appointment_date, Appointment.status).filter(
+        and_(
+            Appointment.clinic_id == final_clinic_id,
+            Appointment.appointment_date >= buckets[0][1],
+            Appointment.appointment_date < buckets[-1][2],
+        )
+    ).all():
+        idx = _bucket_index(buckets, appt_date)
+        if idx is not None:
+            out[idx][categorize(status)] += 1
+
+    for row in out:
+        row["bookings"] = row["completed"] + row["missed"] + row["scheduled"]
+    return out
 
 @router.get("/appointments/quality")
 def get_appointment_quality(
@@ -1270,3 +1547,95 @@ def _get_mock_coordinates(location):
     lon = 68.7 + (hash_value % 1000) / 1000 * (97.25 - 68.7)  # 68.7°E to 97.25°E
 
     return {"lat": lat, "lon": lon}
+
+
+PERIOD_LABELS = {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "7days": "Last 7 days",
+    "month": "This month",
+    "all": "All time",
+}
+
+
+@router.get("/export")
+def export_dashboard(
+    period: str = "all",
+    clinic_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Everything on the dashboard for this period, as one CSV.
+
+    Synchronous and self-contained on purpose. The existing /dashboard-reports
+    pipeline hands off to nexus-service for AI-written PDFs, which is the right
+    tool for a monthly report but the wrong one for a button labelled "Export"
+    that should hand you a file immediately and work when nexus is down.
+
+    Sections are separated by blank lines so the file stays readable in Excel
+    while each block still parses as its own table.
+    """
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
+    clinic = db.query(Clinic).filter(Clinic.id == final_clinic_id).first()
+
+    metrics = get_dashboard_metrics(period=period, clinic_id=clinic_id, db=db, current_user=current_user)
+    patient_stats = get_patient_statistics(period=period, clinic_id=clinic_id, db=db, current_user=current_user)
+    genders = get_patient_demographics(period=period, clinic_id=clinic_id, db=db, current_user=current_user)
+    revenue = get_revenue_analytics(period=period, clinic_id=clinic_id, db=db, current_user=current_user)
+    appts = get_appointment_trends(period=period, clinic_id=clinic_id, db=db, current_user=current_user)
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+
+    w.writerow([f"{clinic.name if clinic else 'Clinic'} — dashboard export"])
+    w.writerow(["Period", PERIOD_LABELS.get(period, period)])
+    w.writerow(["Generated", datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")])
+    w.writerow([])
+
+    w.writerow(["Summary"])
+    w.writerow(["Metric", "Value", "Change %"])
+    w.writerow(["Revenue collected", metrics["revenue"]["value"], metrics["revenue"]["change"]])
+    w.writerow(["Revenue billed", metrics["revenue"]["billed"], ""])
+    w.writerow(["Total patients", metrics["total_patients"]["value"], metrics["total_patients"]["change"]])
+    w.writerow(["Outstanding dues", metrics["outstanding"]["value"], metrics["outstanding"]["change"]])
+    w.writerow(["Outstanding invoices", metrics["outstanding"]["invoice_count"], ""])
+    w.writerow(["Outstanding over 30 days", metrics["outstanding"]["aged_amount"], ""])
+    w.writerow(["Appointments", metrics["appointments"]["value"], metrics["appointments"]["change"]])
+    w.writerow(["  Completed", metrics["appointments"]["completed"], ""])
+    w.writerow(["  Scheduled", metrics["appointments"]["scheduled"], ""])
+    w.writerow(["  No-show / cancelled", metrics["appointments"]["missed"], ""])
+    w.writerow([])
+
+    w.writerow(["New vs returning patients"])
+    w.writerow(["Period", "New", "Returning"])
+    for row in patient_stats:
+        w.writerow([row["label"], row["new"], row["returning"]])
+    w.writerow([])
+
+    w.writerow(["Patients by gender"])
+    w.writerow(["Gender", "Patients"])
+    for row in genders:
+        w.writerow([row["name"], row["value"]])
+    w.writerow([])
+
+    w.writerow(["Revenue"])
+    w.writerow(["Period", "Billed", "Collected"])
+    for row in revenue:
+        w.writerow([row["label"], row["billed"], row["collected"]])
+    w.writerow([])
+
+    w.writerow(["Appointment outcomes"])
+    w.writerow(["Period", "Completed", "Scheduled", "No-show / cancelled", "Total"])
+    for row in appts:
+        w.writerow([row["time"], row["completed"], row["scheduled"], row["missed"], row["bookings"]])
+
+    slug = "".join(c if c.isalnum() else "-" for c in (clinic.name if clinic else "clinic")).strip("-").lower()
+    filename = f"{slug}-dashboard-{period}-{datetime.utcnow():%Y%m%d}.csv"
+
+    # BOM so Excel opens rupee amounts and patient names as UTF-8 instead of
+    # mangling them into Latin-1.
+    return Response(
+        content="﻿" + buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

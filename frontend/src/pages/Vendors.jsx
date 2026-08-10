@@ -15,6 +15,10 @@ import StockAlertCapsule from "../components/vendors/StockAlertCapsule";
 import MedicationStockImportModal from "../components/vendors/MedicationStockImportModal";
 import Pagination from "../components/Pagination";
 import FilterDropdown from "../components/FilterDropdown";
+import InventoryKpiRow, { inventorySetupGap } from "../components/vendors/InventoryKpiRow";
+import StockCardList from "../components/vendors/StockCardList";
+import KpiDetailDrawer from "../components/common/KpiDetailDrawer";
+import { useBreakpoint } from "../utils/useBreakpoint";
 
 const VENDORS_PAGE_SIZE = 10;
 
@@ -28,6 +32,9 @@ const Vendors = () => {
     const [loading, setLoading] = useState(true);
 
     const [activeTab, setActiveTab] = useState('stock');  // stock | medications | ledger | vendors
+    const [invSummary, setInvSummary] = useState(null);
+    const [selectedKpi, setSelectedKpi] = useState(null);
+    const breakpoint = useBreakpoint();
     const [vendorsPage, setVendorsPage] = useState(1);
 
     // Search & filters
@@ -194,6 +201,25 @@ const Vendors = () => {
         if (activeTab === 'vendors') return { label: 'Add vendor', onClick: () => setVendorDrawer({ open: true, vendor: null }) };
         return null;
     };
+    // The cards describe whatever the filters selected, and refresh when the
+    // underlying stock changes (a restock from the alerts drawer, an edit).
+    useEffect(() => {
+        const params = {};
+        if (filterCategory) params.category = filterCategory;
+        if (searchTerm.trim().length >= 2) params.search = searchTerm.trim();
+        api.get('/inventory/summary', { params })
+            .then(setInvSummary)
+            .catch(() => setInvSummary(null));
+    }, [filterCategory, searchTerm, inventory, medications]);
+
+    const kpiFilters = useMemo(() => {
+        const f = {};
+        if (filterCategory) f.category = filterCategory;
+        if (searchTerm.trim().length >= 2) f.search = searchTerm.trim();
+        return f;
+    }, [filterCategory, searchTerm]);
+
+    const setupGap = inventorySetupGap(invSummary);
     const addBtn = addButton();
 
     return (
@@ -215,6 +241,23 @@ const Vendors = () => {
                     ))}
                 </div>
             </div>
+
+            {/* KPI cards. Shown on the two tabs that are about what's on the
+                shelf; Ledger and Vendors answer different questions and get
+                their own treatment later. */}
+            {(activeTab === 'stock' || activeTab === 'medications') && (
+                <div className="mb-4">
+                    <InventoryKpiRow summary={invSummary} onSelect={setSelectedKpi} />
+                    {setupGap && (
+                        <button
+                            onClick={() => { setActiveTab('stock'); setFilterStockStatus(''); }}
+                            className="mt-2.5 inline-flex items-center gap-2 px-3 py-1.5 rounded border border-amber-200 bg-amber-50 text-amber-800 text-[11px] font-semibold hover:bg-amber-100 transition-colors text-left"
+                        >
+                            {setupGap}
+                        </button>
+                    )}
+                </div>
+            )}
 
             {/* Search & filters */}
             {showsFilters && (
@@ -284,19 +327,43 @@ const Vendors = () => {
             ) : (
                 <div className="h-[calc(100vh-250px)]">
                     <div className="flex flex-col h-full min-w-0">
+                        {/* Below 768px the stock tables have too many columns to
+                            shrink honestly, so each item becomes a stacked card.
+                            Tapping one opens the same edit drawer the table's
+                            edit button does. */}
                         {activeTab === 'stock' && (
-                            <InventoryTable
-                                inventory={filteredInventory}
-                                onEditItem={(item) => setStockDrawer({ open: true, item })}
-                                onDeleteItem={(id) => deleteItem('inventory', id, 'stock item')}
-                            />
+                            breakpoint === 'mobile' ? (
+                                <div className="bg-white rounded-xl border border-gray-200 overflow-y-auto">
+                                    <StockCardList
+                                        items={filteredInventory}
+                                        kind="stock"
+                                        onSelect={(item) => setStockDrawer({ open: true, item })}
+                                    />
+                                </div>
+                            ) : (
+                                <InventoryTable
+                                    inventory={filteredInventory}
+                                    onEditItem={(item) => setStockDrawer({ open: true, item })}
+                                    onDeleteItem={(id) => deleteItem('inventory', id, 'stock item')}
+                                />
+                            )
                         )}
                         {activeTab === 'medications' && (
-                            <MedicationTable
-                                medications={filteredMedications}
-                                onEditItem={(item) => setMedDrawer({ open: true, item })}
-                                onDeleteItem={(id) => deleteItem('medication-stock', id, 'medication')}
-                            />
+                            breakpoint === 'mobile' ? (
+                                <div className="bg-white rounded-xl border border-gray-200 overflow-y-auto">
+                                    <StockCardList
+                                        items={filteredMedications}
+                                        kind="medications"
+                                        onSelect={(item) => setMedDrawer({ open: true, item })}
+                                    />
+                                </div>
+                            ) : (
+                                <MedicationTable
+                                    medications={filteredMedications}
+                                    onEditItem={(item) => setMedDrawer({ open: true, item })}
+                                    onDeleteItem={(id) => deleteItem('medication-stock', id, 'medication')}
+                                />
+                            )
                         )}
                         {activeTab === 'ledger' && (
                             <InventoryLedger inventoryItems={inventory} onStockChanged={fetchData} />
@@ -415,6 +482,14 @@ const Vendors = () => {
                     </div>
                 </div>
             )}
+
+            {/* KPI detail drawer, same component as Payments and Lab. */}
+            <KpiDetailDrawer
+                card={selectedKpi}
+                filters={kpiFilters}
+                endpoint="/inventory/kpi-detail"
+                onClose={() => setSelectedKpi(null)}
+            />
         </div>
     );
 };

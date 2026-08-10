@@ -6,6 +6,10 @@ import { toast } from 'react-toastify';
 import LabOrderDrawer from '../../components/patient/LabOrderDrawer';
 import Pagination from '../../components/Pagination';
 import FilterDropdown from '../../components/FilterDropdown';
+import LabKpiRow from '../../components/lab/LabKpiRow';
+import LabCaseList from '../../components/lab/LabCaseList';
+import KpiDetailDrawer from '../../components/common/KpiDetailDrawer';
+import { useBreakpoint } from '../../utils/useBreakpoint';
 import { generatePatientPersona, generateInitialsAvatar } from '../../utils/avatar';
 
 const LAB_PAGE_SIZE = 10;
@@ -34,6 +38,9 @@ const LabHub = () => {
     const [activeTab, setActiveTab] = useState('orders');
     // Set by the ?order=<id> deep link so the matching row stands out.
     const [highlightOrderId, setHighlightOrderId] = useState(null);
+    const [labSummary, setLabSummary] = useState(null);
+    const [selectedKpi, setSelectedKpi] = useState(null);
+    const breakpoint = useBreakpoint();
     const [orders, setOrders] = useState([]);
     const [vendors, setVendors] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -155,6 +162,24 @@ const LabHub = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [location.search, filteredOrders]);
 
+    // The cards describe the same orders the list is showing, so they refetch
+    // whenever the filters move — the same contract as the Payments summary.
+    useEffect(() => {
+        const params = {};
+        if (filterStatus) params.status = filterStatus;
+        if (searchTerm.trim().length >= 2) params.search = searchTerm.trim();
+        api.get('/clinical/lab-orders/summary', { params })
+            .then(setLabSummary)
+            .catch(() => setLabSummary(null));
+    }, [filterStatus, searchTerm, orders]);
+
+    const kpiFilters = useMemo(() => {
+        const f = {};
+        if (filterStatus) f.status = filterStatus;
+        if (searchTerm.trim().length >= 2) f.search = searchTerm.trim();
+        return f;
+    }, [filterStatus, searchTerm]);
+
     // Let the highlight fade so it reads as "here it is", not a stuck selection.
     useEffect(() => {
         if (!highlightOrderId) return;
@@ -216,6 +241,13 @@ const LabHub = () => {
                     </div>
                 </div>
 
+                {/* KPI cards — clicking one opens the detail drawer */}
+                {activeTab === 'orders' && (
+                    <div className="pt-4">
+                        <LabKpiRow summary={labSummary} onSelect={setSelectedKpi} />
+                    </div>
+                )}
+
                 {/* Search & Filters toolbar */}
                 <div className="flex items-center gap-3 py-4">
                     <div className="w-full max-w-sm relative">
@@ -249,7 +281,16 @@ const LabHub = () => {
                         </div>
                     ) : activeTab === 'orders' ? (
                         <div className="flex flex-col flex-1 min-h-0">
-                            {orders.length > 0 ? (
+                            {orders.length > 0 && breakpoint === 'mobile' ? (
+                                // A nine-column table has no honest phone
+                                // layout; each case becomes a stacked card.
+                                <div className="bg-white rounded-xl border border-gray-200 overflow-y-auto flex-1 min-h-0">
+                                    <LabCaseList
+                                        orders={filteredOrders.slice((ordersPage - 1) * LAB_PAGE_SIZE, ordersPage * LAB_PAGE_SIZE)}
+                                        onSelect={() => setIsOrderDrawerOpen(true)}
+                                    />
+                                </div>
+                            ) : orders.length > 0 ? (
                                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col flex-1 min-h-0">
                                     <div className="flex-1 overflow-x-auto overflow-y-auto">
                                     <table className="w-full divide-y divide-gray-200">
@@ -516,6 +557,16 @@ const LabHub = () => {
                 patientId={null}
                 casePaperId={null}
                 onSave={() => { fetchData(); setIsOrderDrawerOpen(false); }}
+            />
+
+            {/* KPI detail drawer. Inherits the page's order filters so it
+                describes the same cases the cards counted; its own period
+                control drives the chart. */}
+            <KpiDetailDrawer
+                card={selectedKpi}
+                filters={kpiFilters}
+                endpoint="/clinical/lab-orders/kpi-detail"
+                onClose={() => setSelectedKpi(null)}
             />
         </div>
     );

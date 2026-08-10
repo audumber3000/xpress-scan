@@ -1,52 +1,88 @@
 import React from 'react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LabelList } from 'recharts';
 import ChartCard from '../ChartCard';
 import { formatToK, calculateYAxisDomain, tooltipStyle } from '../format';
-import { COLORS, CHART_HEIGHT, GRID_PROPS, AXIS_PROPS, LEGEND_PROPS, CHART_MARGIN, ChartDefs } from '../chartTheme';
+import { COLORS, GRID_PROPS, AXIS_PROPS, CHART_MARGIN, geometryFor, trimBuckets } from '../chartTheme';
 
 const Icon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4z" />
   </svg>
 );
 
-const PatientStatsChart = ({ data, loading, delta }) => (
-  <ChartCard
-    title="New vs Returning Patients"
-    description="First-time versus repeat patients over the period"
-    loading={loading}
-    isEmpty={data.length === 0}
-    delta={delta}
-    icon={<Icon />}
-    emptyTitle="No patient activity in this period"
-    emptyHint="New registrations and returning visits will appear here."
-  >
-    <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-      <AreaChart data={data} margin={CHART_MARGIN} accessibilityLayer>
-        <ChartDefs />
-        <CartesianGrid {...GRID_PROPS} />
-        <XAxis dataKey="label" {...AXIS_PROPS} interval="preserveStartEnd" />
-        <YAxis
-          {...AXIS_PROPS}
-          domain={calculateYAxisDomain(data, ['new', 'returning'])}
-          tickFormatter={formatToK}
-          allowDecimals={false}
-        />
-        <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [value, name === 'new' ? 'New' : 'Returning']} />
-        <Legend {...LEGEND_PROPS} formatter={(v) => (v === 'new' ? 'New' : 'Returning')} />
-        <Area
-          type="monotone" dataKey="new" stackId="p"
-          stroke={COLORS.primary} strokeWidth={2} fill="url(#areaPrimary)"
-          activeDot={{ r: 4, strokeWidth: 0 }}
-        />
-        <Area
-          type="monotone" dataKey="returning" stackId="p"
-          stroke={COLORS.primarySoft} strokeWidth={2} fill="url(#areaSoft)"
-          activeDot={{ r: 4, strokeWidth: 0 }}
-        />
-      </AreaChart>
-    </ResponsiveContainer>
-  </ChartCard>
-);
+const LABELS = { new: 'New', returning: 'Returning' };
+
+/**
+ * New against returning patients, as side-by-side bars.
+ *
+ * Was a stacked area chart, which made "returning" unreadable on its own — a
+ * stacked band's height is the sum, so you were eyeballing the difference
+ * between two curves. These are discrete counts per bucket, and the question is
+ * "how do the two compare", which is exactly what paired bars answer.
+ *
+ * Bucket granularity comes from the header's period filter: hours for a single
+ * day, days for a week or month, months for all-time.
+ */
+const PatientStatsChart = ({ data, loading, delta, breakpoint }) => {
+  const geo = geometryFor(breakpoint);
+  const rows = trimBuckets(data, geo.maxBuckets);
+  const trimmed = (data?.length || 0) > rows.length;
+
+  return (
+    <ChartCard
+      title="New vs returning patients"
+      description={trimmed ? `Most recent ${rows.length} periods` : 'First-time against repeat visits'}
+      loading={loading}
+      isEmpty={rows.length === 0}
+      delta={delta}
+      icon={<Icon />}
+      legend={[
+        { label: 'New', color: COLORS.primary },
+        { label: 'Returning', color: COLORS.primarySoft },
+      ]}
+      emptyTitle="No patient activity in this period"
+      emptyHint="New registrations and returning visits will appear here."
+    >
+      <ResponsiveContainer width="100%" height={geo.height}>
+        <BarChart data={rows} margin={{ ...CHART_MARGIN, top: geo.labels ? 18 : 8 }} barGap={geo.groupGap} accessibilityLayer>
+          <CartesianGrid {...GRID_PROPS} />
+          <XAxis dataKey="label" {...AXIS_PROPS} interval="preserveStartEnd" />
+          <YAxis
+            {...AXIS_PROPS}
+            domain={calculateYAxisDomain(rows, ['new', 'returning'])}
+            tickFormatter={formatToK}
+            allowDecimals={false}
+            width={34}
+          />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            cursor={{ fill: COLORS.grid, radius: 6 }}
+            formatter={(value, name) => [value, LABELS[name] || name]}
+          />
+          <Bar dataKey="new" fill={COLORS.primary} barSize={geo.barSize} radius={[4, 4, 0, 0]}>
+            {geo.labels && (
+              <LabelList
+                dataKey="new"
+                position="top"
+                formatter={(v) => (v > 0 ? v : '')}
+                style={{ fontSize: 10, fontWeight: 700, fill: '#4b5563' }}
+              />
+            )}
+          </Bar>
+          <Bar dataKey="returning" fill={COLORS.primarySoft} barSize={geo.barSize} radius={[4, 4, 0, 0]}>
+            {geo.labels && (
+              <LabelList
+                dataKey="returning"
+                position="top"
+                formatter={(v) => (v > 0 ? v : '')}
+                style={{ fontSize: 10, fontWeight: 700, fill: '#9ca3af' }}
+              />
+            )}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartCard>
+  );
+};
 
 export default PatientStatsChart;

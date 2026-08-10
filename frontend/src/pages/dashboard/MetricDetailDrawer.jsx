@@ -8,10 +8,14 @@ import { formatToK } from './format';
 const PERIOD_LABEL = { today: 'Today', yesterday: 'Yesterday', '7days': 'Last 7 days', month: 'This month', all: 'All time' };
 
 // "View all" target per metric → opens the matching full section.
+// Keyed on the metric's stable `key`, not its display title — the titles are
+// copy and get reworded, and a renamed card silently losing its button is the
+// kind of breakage nothing catches.
 const VIEW_ALL = {
-  'Total Patients': { to: '/patients', label: 'View all patients' },
-  Appointments:     { to: '/calendar', label: 'View all appointments' },
-  Revenue:          { to: '/payments', label: 'View all payments' },
+  patients:     { to: '/patients', label: 'View all patients' },
+  appointments: { to: '/calendar', label: 'View all appointments' },
+  revenue:      { to: '/payments', label: 'View all payments' },
+  outstanding:  { to: '/payments', label: 'View unpaid invoices' },
 };
 
 const initials = (name = '') =>
@@ -156,16 +160,18 @@ const MetricDetailDrawer = ({ metric, data, loading, period, onClose }) => {
   if (!metric) return null;
   const cur = getCurrencySymbol();
   const title = metric.title;
-  const viewAll = VIEW_ALL[title];
+  const viewAll = VIEW_ALL[metric.key];
 
   const goViewAll = () => {
     onClose();
     navigate(viewAll.to);
   };
-  const isPatients = title === 'Total Patients';
-  const isAppointments = title === 'Appointments';
-  const isRevenue = title === 'Revenue';
-  const isChairs = title === 'Checking';
+  const isPatients = metric.key === 'patients';
+  const isAppointments = metric.key === 'appointments';
+  // Outstanding lists the same payment records as revenue, so it renders the
+  // same rows.
+  const isRevenue = metric.key === 'revenue' || metric.key === 'outstanding';
+  const isChairs = metric.key === 'chairs';
 
   const items = Array.isArray(data) ? data : [];
   const isEmpty = isChairs ? !(data && data.total_chairs) : items.length === 0;
@@ -188,15 +194,21 @@ const MetricDetailDrawer = ({ metric, data, loading, period, onClose }) => {
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={onClose} />
-      <div className="absolute right-0 top-0 h-full w-full max-w-2xl bg-gray-50 shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
+      {/* Bottom sheet on phones, side drawer from `sm` up. A full-height side
+          panel on a 390px screen covers everything with only a small ✕ as the
+          way out; a sheet that stops short of the top keeps the page visible
+          behind it so the gesture to dismiss is obvious. */}
+      <div className="absolute inset-x-0 bottom-0 top-14 rounded-t-2xl sm:rounded-t-none sm:inset-y-0 sm:left-auto sm:right-0 sm:top-0 sm:h-full w-full sm:max-w-2xl bg-gray-50 shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
         {/* Gradient header */}
-        <div className="bg-gradient-to-r from-[#2a276e] to-[#403bb1] text-white p-6">
+        <div className="bg-gradient-to-r from-[#2a276e] to-[#403bb1] text-white p-5 md:p-6">
+          {/* Drag affordance — sheet only. */}
+          <div className="sm:hidden w-9 h-1 rounded-full bg-white/30 mx-auto mb-3" />
           <div className="flex items-start justify-between">
             <div>
-              <h3 className="text-xl font-bold">{title}</h3>
+              <h3 className="text-lg md:text-xl font-bold">{title}</h3>
               <p className="text-sm text-white/70 mt-0.5">{PERIOD_LABEL[period] || 'Details'}</p>
             </div>
-            <button onClick={onClose} className="p-2 hover:bg-white/15 rounded-full transition">
+            <button onClick={onClose} aria-label="Close" className="p-2 hover:bg-white/15 rounded-full transition">
               <X size={22} />
             </button>
           </div>

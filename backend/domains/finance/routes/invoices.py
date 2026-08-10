@@ -24,7 +24,7 @@ def get_db():
         yield db
     finally:
         db.close()
-from models import Invoice, InvoiceLineItem, InvoiceAuditLog, InvoiceDiscount, Patient, User, Clinic, Appointment
+from models import Invoice, InvoiceLineItem, InvoiceAuditLog, InvoiceDiscount, InvoicePayment, Patient, User, Clinic, Appointment
 from core.auth_utils import get_current_user
 from core.clinic_time import clinic_today, clinic_day_bounds_utc, clinic_now, clinic_tzinfo
 from zoneinfo import ZoneInfo
@@ -641,15 +641,500 @@ async def summarise_invoices(
             _q().with_entities(func.coalesce(func.sum(Invoice.paid_amount), 0.0)).scalar()
         ) or 0.0
 
+        # ── Everything below backs the storytelling KPI cards ──────────────
+        # Same _q() filter set throughout, so a card can never describe a
+        # different population than the rows underneath it.
+
+        # Total face value issued. `revenue` above counts only fully-paid
+        # invoices, so it can't size `collected` against anything.
+        billed = (
+            _q().filter(Invoice.status.notin_(('draft', 'cancelled')))
+            .with_entities(func.coalesce(func.sum(Invoice.total), 0.0)).scalar()
+        ) or 0.0
+
+        # How many people the balance is spread across — a number you act on in
+        # a way that a lump sum isn't.
+        owing_q = _q().filter(Invoice.due_amount > 0, Invoice.status.in_(OWING))
+        outstanding_patients = (
+            owing_q.with_entities(func.count(func.distinct(Invoice.patient_id))).scalar()
+        ) or 0
+        outstanding_invoices = owing_q.with_entities(func.count(Invoice.id)).scalar() or 0
+
+        invoice_date = func.coalesce(Invoice.finalized_at, Invoice.created_at)
+        now = datetime.utcnow()
+        aged_cutoff = now - timedelta(days=30)
+
+        aged_amount = (
+            _q().filter(
+                Invoice.due_amount > 0, Invoice.status.in_(OWING),
+                invoice_date < aged_cutoff,
+            ).with_entities(func.coalesce(func.sum(Invoice.due_amount), 0.0)).scalar()
+        ) or 0.0
+
+        oldest_dt = (
+            _q().filter(Invoice.due_amount > 0, Invoice.status.in_(OWING))
+            .with_entities(func.min(invoice_date)).scalar()
+        )
+        oldest_days = int((now - oldest_dt).days) if oldest_dt else 0
+
+        # ── Payment plans ──
+        # An invoice is "on a plan" when it has taken at least one instalment
+        # and still owes money. The distribution of plan lengths is what the
+        # card's mini chart draws.
+        #
+        # Scoped by a subquery on _q() rather than a materialised id list: the
+        # filtered set is unbounded (a clinic with 20k invoices and no filters
+        # would otherwise build a 20k-element IN clause), and this way the
+        # instalment figures inherit the page's filters for free.
+        filtered_ids = _q().with_entities(Invoice.id).subquery()
+
+        plan_counts = {}
+        method_split = {}
+        payments_total = 0
+
+        for invoice_id, n in db.query(
+            InvoicePayment.invoice_id, func.count(InvoicePayment.id)
+        ).filter(
+            InvoicePayment.clinic_id == current_user.clinic_id,
+            InvoicePayment.invoice_id.in_(db.query(filtered_ids.c.id)),
+        ).group_by(InvoicePayment.invoice_id).all():
+            plan_counts[invoice_id] = int(n)
+
+        for method, n, amt in db.query(
+            InvoicePayment.method, func.count(InvoicePayment.id),
+            func.coalesce(func.sum(InvoicePayment.amount), 0.0),
+        ).filter(
+            InvoicePayment.clinic_id == current_user.clinic_id,
+            InvoicePayment.invoice_id.in_(db.query(filtered_ids.c.id)),
+        ).group_by(InvoicePayment.method).all():
+            key = (method or 'Unknown').strip() or 'Unknown'
+            method_split[key] = {"count": int(n), "amount": round(float(amt or 0), 2)}
+            payments_total += int(n)
+
+        open_plan_ids = {
+            r[0] for r in owing_q.with_entities(Invoice.id).all()
+            if plan_counts.get(r[0], 0) >= 1
+        }
+        lengths = sorted(plan_counts.values())
+        median_len = lengths[len(lengths) // 2] if lengths else 0
+
+        # Histogram of "invoices that took N payments", for the card sparkline.
+        histogram = {}
+        for n in plan_counts.values():
+            histogram[n] = histogram.get(n, 0) + 1
+
+        # Cash vs everything else. Cash is the one that has to be counted by
+        # hand at close, so it's the split worth surfacing.
+        cash_amount = sum(
+            v["amount"] for k, v in method_split.items() if k.lower() == 'cash'
+        )
+        digital_amount = sum(
+            v["amount"] for k, v in method_split.items() if k.lower() != 'cash'
+        )
+        collected_via_payments = cash_amount + digital_amount
+
+        # Drafts: issued to nobody, owed by nobody, but also money never asked
+        # for. Excluded from every figure above; surfaced so it isn't invisible.
+        draft_row = (
+            _q().filter(Invoice.status == 'draft')
+            .with_entities(func.count(Invoice.id), func.coalesce(func.sum(Invoice.total), 0.0))
+            .first()
+        )
+
         return {
             "revenue": round(float(revenue or 0), 2),
             "pending": round(float(pending), 2),
             "collected": round(float(collected), 2),
             "total": int(total),
             "paid_count": int(paid_count or 0),
+
+            "billed": round(float(billed), 2),
+            "outstanding": {
+                "amount": round(float(pending), 2),
+                "invoices": int(outstanding_invoices),
+                "patients": int(outstanding_patients),
+                "aged_amount": round(float(aged_amount), 2),
+                "oldest_days": oldest_days,
+            },
+            "plans": {
+                "open": len(open_plan_ids),
+                "median_length": int(median_len),
+                "payments_total": payments_total,
+                "histogram": [
+                    {"payments": n, "invoices": histogram[n]} for n in sorted(histogram)
+                ],
+            },
+            "methods": {
+                "cash": round(float(cash_amount), 2),
+                "digital": round(float(digital_amount), 2),
+                "cash_share": round((cash_amount / collected_via_payments) * 100) if collected_via_payments else 0,
+                "breakdown": [
+                    {"method": k, **v}
+                    for k, v in sorted(method_split.items(), key=lambda x: -x[1]["amount"])
+                ],
+            },
+            "drafts": {
+                "count": int((draft_row or (0, 0))[0] or 0),
+                "amount": round(float((draft_row or (0, 0))[1] or 0), 2),
+            },
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error summarising invoices: {str(e)}")
+
+
+
+# ── KPI detail drawer ────────────────────────────────────────────────────────
+# One endpoint behind all four Payments KPI cards. Each metric needs a different
+# chart, a different narrative and a different row list, but they share the
+# period bucketing and the filter set, so four near-identical routes would have
+# been four places to fix the same bug.
+
+def _clinic_currency(db: Session, clinic_id: int) -> str:
+    """The clinic's currency symbol, for money inside the drawer's narrative.
+
+    The narrative sentences are composed server-side, so they need the symbol
+    here rather than leaving the frontend to reformat prose it didn't write."""
+    clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
+    return (clinic.currency_symbol if clinic and clinic.currency_symbol else '₹')
+
+
+def _kpi_buckets(period: str, now: datetime = None):
+    """[(label, start, end)] for the drawer's timeline filter.
+
+    Deliberately its own function rather than reusing the dashboard's: this one
+    is driven by the drawer's own filter, which is independent of the page
+    filters (a one-day page filter would otherwise leave every chart with a
+    single bar), and it tops out at 12 buckets because the drawer is narrower
+    than a dashboard card.
+    """
+    now = now or datetime.utcnow()
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if period == "today":
+        return [(f"{h:02d}:00", today + timedelta(hours=h), today + timedelta(hours=h + 1))
+                for h in range(8, 21)]
+    if period == "7days":
+        return [((today - timedelta(days=i)).strftime("%a"),
+                 today - timedelta(days=i), today - timedelta(days=i - 1))
+                for i in range(6, -1, -1)]
+    if period == "month":
+        start = today.replace(day=1)
+        days = (today - start).days + 1
+        return [((start + timedelta(days=i)).strftime("%d"),
+                 start + timedelta(days=i), start + timedelta(days=i + 1))
+                for i in range(days)]
+
+    # all — trailing 12 months
+    months = []
+    cur = today.replace(day=1)
+    for _ in range(12):
+        months.append(cur)
+        cur = (cur - timedelta(days=1)).replace(day=1)
+    months.reverse()
+    out = []
+    for i, m in enumerate(months):
+        nxt = months[i + 1] if i + 1 < len(months) else (
+            m.replace(year=m.year + 1, month=1) if m.month == 12 else m.replace(month=m.month + 1)
+        )
+        out.append((m.strftime("%b"), m, nxt))
+    return out
+
+
+def _bucket_of(buckets, when):
+    if when is None:
+        return None
+    if isinstance(when, date) and not isinstance(when, datetime):
+        when = datetime(when.year, when.month, when.day)
+    for i, (_, s, e) in enumerate(buckets):
+        if s <= when < e:
+            return i
+    return None
+
+
+@router.get("/kpi-detail")
+async def invoice_kpi_detail(
+    metric: str = Query(..., description="collected | outstanding | plans | methods"),
+    period: str = Query("all", description="today | 7days | month | all"),
+    status: Optional[str] = None,
+    patient_id: Optional[int] = None,
+    search: Optional[str] = Query(None),
+    payment_mode: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Chart buckets, a written read of them, and the underlying rows.
+
+    Inherits the page's invoice filters so the drawer describes the same
+    population as the card that opened it; `period` only controls the x-axis.
+    """
+    _ensure_invoice_columns(db)
+    created_from, created_to = _resolve_date_bounds(db, current_user.clinic_id, date_from, date_to)
+    cid = current_user.clinic_id
+
+    def _q():
+        return _filtered_invoices_query(
+            db, cid, status=status, patient_id=patient_id, search=search,
+            payment_mode=payment_mode, created_from=created_from, created_to=created_to,
+        )
+
+    filtered_ids = _q().with_entities(Invoice.id).subquery()
+    ids_q = db.query(filtered_ids.c.id)
+    now = datetime.utcnow()
+    buckets = _kpi_buckets(period, now)
+    labels = [b[0] for b in buckets]
+    OWING = ('finalized', 'partially_paid')
+    cur = _clinic_currency(db, cid)
+
+    def money(v):
+        return f"{cur}{int(round(v)):,}"
+
+    # ── Collected: money in per bucket, split cash / digital ──────────────
+    if metric == "collected":
+        cash = [0.0] * len(buckets)
+        digital = [0.0] * len(buckets)
+        for paid_on, amount, method in db.query(
+            InvoicePayment.paid_on, InvoicePayment.amount, InvoicePayment.method
+        ).filter(
+            InvoicePayment.clinic_id == cid,
+            InvoicePayment.invoice_id.in_(ids_q),
+        ).all():
+            idx = _bucket_of(buckets, paid_on)
+            if idx is None:
+                continue
+            if (method or '').strip().lower() == 'cash':
+                cash[idx] += float(amount or 0)
+            else:
+                digital[idx] += float(amount or 0)
+
+        series = [
+            {"label": labels[i], "cash": round(cash[i], 2), "digital": round(digital[i], 2),
+             "total": round(cash[i] + digital[i], 2)}
+            for i in range(len(buckets))
+        ]
+        total = sum(s["total"] for s in series)
+        best = max(series, key=lambda s: s["total"]) if series else None
+        billed = float(_q().filter(Invoice.status.notin_(('draft', 'cancelled')))
+                       .with_entities(func.coalesce(func.sum(Invoice.total), 0.0)).scalar() or 0)
+        gap = billed - total
+
+        if total == 0:
+            narrative = "No payments were received in this period."
+        else:
+            narrative = f"{money(total)} came in across {len([s for s in series if s['total'] > 0])} active periods"
+            if best and best["total"] > 0:
+                narrative += f", the strongest being {best['label']} at {money(best['total'])}"
+            narrative += ". "
+            if gap > 0:
+                narrative += f"Against {money(billed)} billed, {money(gap)} is still to be collected."
+            else:
+                narrative += "Everything billed in this window has been collected."
+
+        rows = []
+        for p, inv, pat in db.query(InvoicePayment, Invoice, Patient).join(
+            Invoice, Invoice.id == InvoicePayment.invoice_id
+        ).outerjoin(Patient, Patient.id == Invoice.patient_id).filter(
+            InvoicePayment.clinic_id == cid,
+            InvoicePayment.invoice_id.in_(ids_q),
+        ).order_by(desc(InvoicePayment.paid_on), desc(InvoicePayment.id)).limit(50).all():
+            rows.append({
+                "id": p.id,
+                "invoice_id": inv.id,
+                "title": pat.name if pat else "Unknown patient",
+                "subtitle": f"{inv.invoice_number} · {p.method or 'Unrecorded'}",
+                "amount": round(float(p.amount or 0), 2),
+                "date": p.paid_on.isoformat() if p.paid_on else None,
+            })
+
+        return {"metric": metric, "period": period, "series": series,
+                "keys": ["cash", "digital"], "narrative": narrative, "rows": rows,
+                "is_money": True, "row_label": "Recent payments"}
+
+    # ── Outstanding: ageing buckets, not a time series ────────────────────
+    if metric == "outstanding":
+        invoice_date = func.coalesce(Invoice.finalized_at, Invoice.created_at)
+        bands = [("0-30d", 0, 30), ("31-60d", 30, 60), ("61-90d", 60, 90), ("90d+", 90, None)]
+        series = []
+        for label, lo, hi in bands:
+            q = _q().filter(Invoice.due_amount > 0, Invoice.status.in_(OWING))
+            q = q.filter(invoice_date <= now - timedelta(days=lo))
+            if hi is not None:
+                q = q.filter(invoice_date > now - timedelta(days=hi))
+            amt, n = q.with_entities(
+                func.coalesce(func.sum(Invoice.due_amount), 0.0), func.count(Invoice.id)
+            ).first() or (0.0, 0)
+            series.append({"label": label, "total": round(float(amt or 0), 2), "count": int(n or 0)})
+
+        total = sum(s["total"] for s in series)
+        fresh = series[0]["total"]
+        stuck = sum(s["total"] for s in series[1:])
+        stuck_n = sum(s["count"] for s in series[1:])
+
+        if total == 0:
+            narrative = "Nothing is outstanding. Every issued invoice has been settled."
+        elif stuck == 0:
+            narrative = (f"All {money(total)} of what you are owed is under 30 days old. "
+                         "Nothing has gone stale yet.")
+        else:
+            narrative = (f"{money(fresh)} of the {money(total)} owed is recent and will likely "
+                         f"settle on its own. The concern is {money(stuck)} across {stuck_n} "
+                         f"{'invoice' if stuck_n == 1 else 'invoices'} older than 30 days.")
+
+        rows = []
+        for inv, pat in db.query(Invoice, Patient).outerjoin(
+            Patient, Patient.id == Invoice.patient_id
+        ).filter(
+            Invoice.id.in_(ids_q), Invoice.due_amount > 0, Invoice.status.in_(OWING)
+        ).order_by(func.coalesce(Invoice.finalized_at, Invoice.created_at).asc()).limit(50).all():
+            when = inv.finalized_at or inv.created_at
+            age = int((now - when).days) if when else 0
+            rows.append({
+                "id": inv.id,
+                "invoice_id": inv.id,
+                "title": pat.name if pat else "Unknown patient",
+                "subtitle": f"{inv.invoice_number} · {age} days old",
+                "amount": round(float(inv.due_amount or 0), 2),
+                "date": when.date().isoformat() if when else None,
+            })
+
+        return {"metric": metric, "period": period, "series": series,
+                "keys": ["total"], "narrative": narrative, "rows": rows,
+                "x_is_ageing": True, "is_money": True,
+                "row_label": "Who owes, oldest first"}
+
+    # ── Plans: distribution of instalment counts ──────────────────────────
+    if metric == "plans":
+        counts = {}
+        for invoice_id, n in db.query(
+            InvoicePayment.invoice_id, func.count(InvoicePayment.id)
+        ).filter(
+            InvoicePayment.clinic_id == cid, InvoicePayment.invoice_id.in_(ids_q)
+        ).group_by(InvoicePayment.invoice_id).all():
+            counts[invoice_id] = int(n)
+
+        histogram = {}
+        for n in counts.values():
+            histogram[n] = histogram.get(n, 0) + 1
+        series = [{"label": f"{n}", "total": histogram[n]} for n in sorted(histogram)]
+
+        open_rows = db.query(Invoice, Patient).outerjoin(
+            Patient, Patient.id == Invoice.patient_id
+        ).filter(
+            Invoice.id.in_(ids_q), Invoice.due_amount > 0, Invoice.status.in_(OWING)
+        ).all()
+
+        # A plan is stalled when its most recent instalment is over 30 days old.
+        last_paid = dict(
+            db.query(InvoicePayment.invoice_id, func.max(InvoicePayment.paid_on))
+            .filter(InvoicePayment.clinic_id == cid, InvoicePayment.invoice_id.in_(ids_q))
+            .group_by(InvoicePayment.invoice_id).all()
+        )
+        stalled, stalled_amt = 0, 0.0
+        rows = []
+        for inv, pat in open_rows:
+            n = counts.get(inv.id, 0)
+            if n == 0:
+                continue
+            lp = last_paid.get(inv.id)
+            lp_dt = datetime(lp.year, lp.month, lp.day) if lp else None
+            is_stalled = lp_dt is not None and (now - lp_dt).days > 30
+            if is_stalled:
+                stalled += 1
+                stalled_amt += float(inv.due_amount or 0)
+            total_v = float(inv.total or 0)
+            paid_v = float(inv.paid_amount or 0)
+            rows.append({
+                "id": inv.id,
+                "invoice_id": inv.id,
+                "title": pat.name if pat else "Unknown patient",
+                "subtitle": (f"{inv.invoice_number} · {n} paid so far"
+                             + (f" · last {(now - lp_dt).days}d ago" if lp_dt else "")),
+                "amount": round(float(inv.due_amount or 0), 2),
+                "amount_is_money": True,
+                "progress": round((paid_v / total_v) * 100) if total_v else 0,
+                "date": lp.isoformat() if lp else None,
+                "stalled": is_stalled,
+            })
+        rows.sort(key=lambda r: (not r["stalled"], -r["amount"]))
+
+        lengths = sorted(counts.values())
+        median_len = lengths[len(lengths) // 2] if lengths else 0
+        multi = sum(1 for n in counts.values() if n > 1)
+
+        if not counts:
+            narrative = "No invoice has taken an instalment in this selection."
+        else:
+            narrative = (f"{len(counts)} {'invoice has' if len(counts) == 1 else 'invoices have'} "
+                         f"taken instalments, {multi} of them more than one. A typical plan runs "
+                         f"{median_len} {'payment' if median_len == 1 else 'payments'}. ")
+            narrative += (f"{stalled} {'plan has' if stalled == 1 else 'plans have'} had nothing "
+                          f"paid in over 30 days, worth {money(stalled_amt)}."
+                          ) if stalled else "Every open plan has been paid within the last 30 days."
+
+        return {"metric": metric, "period": period, "series": series,
+                "keys": ["total"], "narrative": narrative, "rows": rows[:50],
+                "x_label": "payments per invoice",
+                # The chart counts invoices; the rows are rupee balances.
+                "is_money": False, "row_label": "Open plans"}
+
+    # ── Methods: cash vs digital over time ────────────────────────────────
+    if metric == "methods":
+        cash = [0.0] * len(buckets)
+        digital = [0.0] * len(buckets)
+        split = {}
+        for paid_on, amount, method in db.query(
+            InvoicePayment.paid_on, InvoicePayment.amount, InvoicePayment.method
+        ).filter(
+            InvoicePayment.clinic_id == cid, InvoicePayment.invoice_id.in_(ids_q)
+        ).all():
+            key = (method or 'Unrecorded').strip() or 'Unrecorded'
+            entry = split.setdefault(key, {"method": key, "count": 0, "amount": 0.0})
+            entry["count"] += 1
+            entry["amount"] += float(amount or 0)
+            idx = _bucket_of(buckets, paid_on)
+            if idx is None:
+                continue
+            if key.lower() == 'cash':
+                cash[idx] += float(amount or 0)
+            else:
+                digital[idx] += float(amount or 0)
+
+        series = [
+            {"label": labels[i], "cash": round(cash[i], 2), "digital": round(digital[i], 2),
+             "total": round(cash[i] + digital[i], 2)}
+            for i in range(len(buckets))
+        ]
+        cash_total = sum(v["amount"] for k, v in split.items() if k.lower() == 'cash')
+        digital_total = sum(v["amount"] for k, v in split.items() if k.lower() != 'cash')
+        grand = cash_total + digital_total
+        share = round((cash_total / grand) * 100) if grand else 0
+
+        if grand == 0:
+            narrative = "No payments recorded, so there is no method split to show yet."
+        elif share >= 80:
+            narrative = (f"{share}% of what you collect arrives as cash ({money(cash_total)}). "
+                         f"Only {money(digital_total)} comes in digitally, so most of your takings "
+                         "have to be counted and banked by hand.")
+        elif share <= 20:
+            narrative = (f"Only {share}% arrives as cash. {money(digital_total)} of "
+                         f"{money(grand)} lands digitally and reconciles itself.")
+        else:
+            narrative = (f"Your takings are split roughly {share}/{100 - share} between cash "
+                         f"({money(cash_total)}) and digital ({money(digital_total)}).")
+
+        rows = [
+            {"id": v["method"], "title": v["method"],
+             "subtitle": f"{v['count']} {'payment' if v['count'] == 1 else 'payments'}",
+             "amount": round(v["amount"], 2)}
+            for v in sorted(split.values(), key=lambda x: -x["amount"])
+        ]
+
+        return {"metric": metric, "period": period, "series": series,
+                "keys": ["cash", "digital"], "narrative": narrative, "rows": rows,
+                "is_money": True, "row_label": "By method"}
+
+    raise HTTPException(status_code=400, detail=f"Unknown metric '{metric}'")
 
 
 @router.get("/collections")

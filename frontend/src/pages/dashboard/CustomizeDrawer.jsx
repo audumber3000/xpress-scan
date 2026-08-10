@@ -2,7 +2,7 @@ import React from 'react';
 
 const WIDGETS = [
   { key: 'patientStats', icon: 'fi fi-sr-chart-histogram', color: 'text-[#9B8CFF]', title: 'New vs Returning', desc: 'Patient growth & retention' },
-  { key: 'demographics', icon: 'fi fi-sr-chart-pie', color: 'text-purple-600', title: 'Patients by Age', desc: 'Age-band distribution' },
+  { key: 'demographics', icon: 'fi fi-sr-chart-pie', color: 'text-purple-600', title: 'Patients by Gender', desc: 'Gender split of your patient base' },
   { key: 'revenue', icon: 'fi fi-sr-chart-line-up', color: 'text-[#2a276e]', title: 'Billed vs Collected', desc: 'Revenue & collection gap' },
   { key: 'appointments', icon: 'fi fi-sr-calendar-check', color: 'text-orange-600', title: 'Appointment Outcomes', desc: 'Completed vs missed' },
 ];

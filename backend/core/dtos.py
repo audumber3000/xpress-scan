@@ -542,6 +542,11 @@ class UnifiedFileResponseDTO(BaseModel):
     uploader_name: Optional[str] = "System"
     created_at: datetime
     category: str  # 'document' or 'report'
+    # Unguessable token for GET /documents/{id}/thumbnail. That endpoint stays
+    # header-less because it is used as an <img src>, so the token is what stops
+    # sequential ids from exposing every clinic's imaging. Absent for reports,
+    # which have no thumbnail endpoint.
+    thumbnail_token: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Path, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Path, Request, Header
 from sqlalchemy.orm import Session
 from database import SessionLocal
 from models import Patient, Payment, TreatmentType, PatientDocument
 from schemas import PatientCreate, PatientOut
-from typing import List
+from typing import List, Optional
 from schemas import PatientResponse
 from core.auth_utils import get_current_user, get_current_clinic, require_patients_view, require_patients_edit, require_patients_delete
 from datetime import datetime
@@ -310,12 +310,26 @@ async def import_patients(
 def add_external_document(
     patient_id: int,
     doc_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    x_internal_auth: Optional[str] = Header(None),
 ):
-    """Add a document reference from an external service (e.g. Consent PDF)"""
+    """Add a document reference from an external service (e.g. Consent PDF).
+
+    NOTE: this whole module is dead — main.py routes patients_clean.py instead.
+    Guarded anyway, because as written it took an arbitrary clinic_id and an
+    arbitrary R2 key with no authentication, and routing this file would make
+    that live instantly. The maintained equivalent is
+    POST /api/v1/documents/external/{patient_id}."""
+    from domains.document.routes.documents import _check_internal_auth
+    _check_internal_auth(x_internal_auth)
+
+    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
     new_doc = PatientDocument(
         patient_id=patient_id,
-        clinic_id=doc_data.get('clinic_id'),
+        clinic_id=patient.clinic_id,  # from the patient, never the request body
         file_name=doc_data.get('file_name'),
         file_path=doc_data.get('file_path'),
         file_type='pdf',

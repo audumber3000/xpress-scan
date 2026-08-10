@@ -26,6 +26,31 @@ export const CHART_HEIGHT = 240;
 export const BAR_SIZE = 28;
 export const BAR_RADIUS = [6, 6, 0, 0];
 
+/**
+ * Per-breakpoint chart geometry. A chart that keeps desktop proportions on a
+ * phone doesn't shrink gracefully — the bars go hairline-thin and the value
+ * labels collide — so each width gets its own numbers rather than one set that
+ * scales. `bp` comes from useBreakpoint().
+ *
+ * `maxBuckets` trims the x-axis instead of squashing it: on a phone you see the
+ * most recent 6 buckets at a readable width, not 24 at 4px each.
+ */
+export const CHART_GEOMETRY = {
+  mobile:  { height: 180, barSize: 18, groupGap: 3, labels: false, maxBuckets: 6 },
+  tablet:  { height: 210, barSize: 22, groupGap: 4, labels: true,  maxBuckets: 12 },
+  desktop: { height: 240, barSize: 26, groupGap: 5, labels: true,  maxBuckets: 24 },
+};
+
+export const geometryFor = (bp) => CHART_GEOMETRY[bp] || CHART_GEOMETRY.desktop;
+
+// Keep the most recent N buckets. Charts read left-to-right oldest-to-newest,
+// so the tail is the part worth keeping when space runs out.
+export const trimBuckets = (data, max) =>
+  Array.isArray(data) && data.length > max ? data.slice(-max) : (data || []);
+
+// Donut sizing for the gender breakdown.
+export const DONUT = { inner: 52, outer: 76, innerSm: 44, outerSm: 64 };
+
 export const GRID_PROPS = {
   strokeDasharray: '3 3',
   stroke: COLORS.grid,
@@ -43,7 +68,11 @@ export const LEGEND_PROPS = {
   wrapperStyle: { fontSize: 11, fontWeight: 600, paddingTop: 8 },
 };
 
-export const CHART_MARGIN = { left: -18, right: 8, top: 8, bottom: 0 };
+// left stays at 0. It used to be -18 to claw back space from recharts' default
+// 60px axis gutter, but the charts now set an explicit YAxis `width`, and a
+// negative margin on top of that shifts the tick labels out of the plot area
+// and clips their leading digits — "25" renders as "5".
+export const CHART_MARGIN = { left: 0, right: 8, top: 8, bottom: 0 };
 
 /**
  * Reusable gradient defs. Drop <ChartDefs /> once inside any recharts chart and

@@ -36,7 +36,7 @@ import {
 import GearLoader from '../components/GearLoader';
 import TrialCelebrationModal from '../components/TrialCelebrationModal';
 import { getCurrencySymbol } from '../utils/currency';
-import { getSubscriptionPricing } from '../utils/pricing';
+import { getSubscriptionPricing, localEstimateLabel, needsLocalEstimate, PLAN, inr } from '../utils/pricing';
 
 // Everything is free for a single clinic. The ONLY difference on the paid plan
 // is running multiple branches from one account — so every feature is `single: true`,
@@ -299,6 +299,14 @@ const Subscription = () => {
   const trialAvailable = subscription?.trial_available === true && !isPro && !isTrial;
   // Currency-aware pricing (₹ for India, $ internationally).
   const pricing = getSubscriptionPricing();
+  // One price for everyone, because the gateway raises an INR order whatever
+  // the clinic's country. Overseas clinics get a clearly approximate local
+  // figure so ₹899 reads as "about fifteen dollars" rather than a large number
+  // in an unfamiliar currency. Same helper the checkout uses, so the two
+  // screens cannot quote different amounts again.
+  const showsFx = needsLocalEstimate();
+  const fxMonthly = localEstimateLabel(PLAN.monthly);
+  const fxAnnual = localEstimateLabel(PLAN.annualTotal);
 
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-y-auto custom-scrollbar">
@@ -504,7 +512,7 @@ const Subscription = () => {
                   </div>
                   <div className="flex items-center justify-between px-4 py-2.5 bg-green-50 border-t border-green-100">
                     <p className="text-xs text-green-700 font-medium">
-                      💰 Save {pricing.symbol}{pricing.save.toLocaleString('en-US')}/year — pay <strong>{pricing.symbol}{pricing.annualMonthly}/month</strong> billed annually
+                      💰 Save {inr(PLAN.annualSave)}/year, pay <strong>{inr(PLAN.annualMonthly)}/month</strong> billed annually
                     </p>
                     <button
                       onClick={() => handleUpgrade('annual')}

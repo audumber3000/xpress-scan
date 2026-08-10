@@ -8,7 +8,11 @@ import { noData } from '../../assets/illustrations';
 const DicomViewerModal = lazy(() => import('./DicomViewerModal'));
 
 // Client-side guards so we fail fast instead of waiting on the server.
-const MAX_FILE_MB = 25;
+// Held just under the 50M `client_max_body_size` on the prod nginx in front of
+// the API. Going higher needs that raised first, otherwise the browser uploads
+// the whole file and nginx answers 413 — worse than refusing it up front.
+// 2D radiographs (RVG, OPG) run 2-20 MB, so this is ample; CBCT is out of scope.
+const MAX_FILE_MB = 48;
 const ACCEPT = 'image/*,application/pdf,.pdf,.dcm,application/dicom';
 
 const fileUrl = (file) => file.file_path || file.image_url || '';
@@ -138,7 +142,11 @@ const FilePreview = ({ file }) => {
     // DICOM/PDF previews are rendered server-side and cached — cheap and avoids
     // downloading large (e.g. ~15 MB) files just to show a thumbnail.
     if ((isDicom(file) || isPdf(file)) && file.category === 'document') {
-        return <ThumbnailImg src={`${API_BASE}/documents/${file.id}/thumbnail`} alt={file.file_name} />;
+        // The token comes from the (authenticated) list response. The thumbnail
+        // endpoint can't take an auth header because this is an <img src>, so
+        // the token is what keeps one clinic's imaging out of another's reach.
+        const t = file.thumbnail_token ? `?t=${encodeURIComponent(file.thumbnail_token)}` : '';
+        return <ThumbnailImg src={`${API_BASE}/documents/${file.id}/thumbnail${t}`} alt={file.file_name} />;
     }
     // Reports are PDFs in a different table (no thumbnail endpoint) — show page 1 inline.
     if (isPdf(file) && /^https?:\/\//i.test(src)) {

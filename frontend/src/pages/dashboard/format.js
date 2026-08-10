@@ -1,12 +1,18 @@
 // Number/axis formatting helpers shared by the dashboard charts.
 
-// 10000 -> "10k", 10200 -> "10.2k"
+// Money/number formatting lives in utils/currency.js so the Payments screen
+// can use the same helpers without importing out of the dashboard's folder.
+// Re-exported here because the dashboard's charts already import them from
+// this module.
+export { formatCompactMoney, formatMoney, formatCount } from '../../utils/currency';
+
+// 10000 -> "10k", 10200 -> "10.2k". Axis ticks only — no currency symbol.
 export const formatToK = (value) => {
   if (value >= 1000) {
     const kValue = value / 1000;
     return kValue % 1 === 0 ? `${kValue}k` : `${kValue.toFixed(1)}k`;
   }
-  return value.toString();
+  return String(value);
 };
 
 // Nice step size aiming for ~5 ticks.
@@ -55,8 +61,14 @@ export const calculateYAxisDomain = (data, dataKeys, paddingPercent = 0.15) => {
 
   const step = getNiceStep(domainMin, domainMax);
   const niceMin = Math.floor(domainMin / step) * step;
-  const minSteps = domainMax > 10 ? 5 : 2;
-  const niceMax = Math.max(Math.ceil(domainMax / step) * step, domainMin + step * minSteps);
+
+  // Round up to the next whole step and stop. There used to be a
+  // `domainMin + step * 5` floor here meant to guarantee ~5 gridlines, but the
+  // step is *already* sized for about five ticks, so the two compounded: a
+  // chart topping out at 96 got a domain of [0, 250] and every bar rendered
+  // at a third of its proper height. Tick count is recharts' business, not the
+  // domain's.
+  const niceMax = Math.max(Math.ceil(domainMax / step) * step, niceMin + step);
 
   return [niceMin, niceMax];
 };

@@ -298,79 +298,151 @@ const GoogleReviews = () => {
   }
 
   // ── NOT LINKED ────────────────────────────────────────────────────
+  // This screen has one job: get the clinic to link their Google listing. It
+  // used to be a narrow card pinned to the left of an empty page, explaining
+  // the mechanism ("no OAuth required, we use the Places API") rather than the
+  // benefit. Now it is centred, leads with what the clinic gets, and says
+  // plainly why linking today beats linking later.
   if (state === 'NOT_LINKED') {
-    return (
-      <div className="p-6 md:p-8 space-y-6 bg-[#f8fafc] min-h-screen">
-        <div className="flex items-center gap-3">
-          <h1 className="text-[28px] font-bold text-gray-900 tracking-tight flex items-center gap-3">
-            <GoogleIcon className="w-8 h-8" />
-            Google Reviews
-          </h1>
-        </div>
+    const benefits = [
+      {
+        icon: Award,
+        title: 'Every review, kept',
+        body: "Google only ever hands back your five most recent reviews. We save each one as it appears, so your history keeps growing instead of scrolling away.",
+      },
+      {
+        icon: Star,
+        title: 'Your rating at a glance',
+        body: 'Live star rating and review count, plus how many of your reviews are four star and above.',
+      },
+      {
+        icon: Users,
+        title: 'See how you compare',
+        body: 'Ratings and review counts for other clinics near you, so you know where you stand in your own area.',
+      },
+      {
+        icon: RefreshCw,
+        title: 'Checked every day',
+        body: 'New reviews show up on their own. Nothing to remember, nothing to paste in.',
+      },
+    ];
 
-        <div className="bg-white border border-gray-100 shadow-sm rounded-2xl p-8 max-w-2xl">
-          <div className="flex items-start gap-4 mb-6 pb-6 border-b border-gray-100">
-            <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center shrink-0">
-              <Link2 size={22} />
+    return (
+      <div className="min-h-screen bg-[#f8fafc] px-4 py-10 md:py-16">
+        <div className="max-w-4xl mx-auto">
+
+          {/* Hero. Centred rather than corner-pinned, because this is the only
+              thing on the page and it is asking for a decision. */}
+          <div className="text-center max-w-2xl mx-auto mb-8 md:mb-10">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-gray-200 mb-5">
+              <GoogleIcon className="w-4 h-4" />
+              <span className="text-xs font-semibold text-gray-600">Google Reviews</span>
             </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">Link Your Clinic</h2>
-              <p className="text-sm text-gray-500 mt-1">
-                Search for your clinic on Google to start tracking reviews. No OAuth required — we use the Places API.
-              </p>
-            </div>
+            <h1 className="text-2xl md:text-[34px] font-bold text-gray-900 tracking-tight leading-tight text-balance">
+              Every Google review your clinic gets, in one place
+            </h1>
+            <p className="text-sm md:text-base text-gray-500 mt-3 leading-relaxed">
+              Connect your clinic&apos;s Google listing and MolarPlus keeps track of what
+              patients are saying, how your rating is moving, and how you compare with
+              clinics nearby.
+            </p>
           </div>
 
-          <div className="mb-6">
+          {/* The action. Deliberately the widest, brightest thing on screen. */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-5 md:p-7 max-w-2xl mx-auto">
+            <label htmlFor="gplace" className="block text-sm font-bold text-gray-900 mb-1">
+              Find your clinic on Google
+            </label>
+            <p className="text-xs text-gray-500 mb-4">
+              Start typing your clinic name and city, then pick it from the list.
+            </p>
+
             <input
+              id="gplace"
               ref={inputRef}
               type="text"
-              placeholder={mapsReady ? "Type clinic name + city..." : "Loading map search..."}
+              placeholder={mapsReady ? 'e.g. Sharma Dental Clinic, Pune' : 'Loading search...'}
               disabled={!mapsReady}
               onChange={() => { if (selectedPlace) setSelectedPlace(null); }}
-              style={{
-                width: '100%',
-                height: '42px',
-                padding: '0 12px',
-                fontSize: '14px',
-                border: '1px solid #d1d5db',
-                borderRadius: '8px',
-                outline: 'none',
-                boxSizing: 'border-box',
-                backgroundColor: mapsReady ? '#fff' : '#f3f4f6',
-                color: '#111827',
-              }}
-              onFocus={e => { e.target.style.borderColor = '#2a276e'; e.target.style.boxShadow = '0 0 0 3px rgba(42,39,110,0.1)'; }}
-              onBlur={e => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = 'none'; }}
+              className="w-full h-12 px-4 text-sm text-gray-900 bg-white border border-gray-300 rounded-xl outline-none transition-colors focus:border-[#2a276e] focus:ring-4 focus:ring-[#2a276e]/10 disabled:bg-gray-100 disabled:text-gray-400"
             />
-          </div>
 
-          {/* Selected place confirmation chip */}
-          {selectedPlace && (
-            <div className="flex items-center gap-2 mb-4 px-3 py-2.5 bg-[#2a276e]/5 border border-[#2a276e]/20 rounded-xl">
-              <MapPin size={14} className="text-[#2a276e] shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-[#2a276e] truncate">{selectedPlace.name}</div>
-                <div className="text-xs text-gray-500 truncate">{selectedPlace.address}</div>
+            {selectedPlace && (
+              <div className="flex items-center gap-2.5 mt-3 px-3 py-2.5 bg-[#2a276e]/5 border border-[#2a276e]/20 rounded-xl">
+                <MapPin size={15} className="text-[#2a276e] shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-[#2a276e] truncate">{selectedPlace.name}</div>
+                  <div className="text-xs text-gray-500 truncate">{selectedPlace.address}</div>
+                </div>
+                <button
+                  onClick={() => { setSelectedPlace(null); setQuery(''); }}
+                  aria-label="Clear selection"
+                  className="text-gray-400 hover:text-gray-600 text-sm shrink-0 px-1"
+                >&#10005;</button>
               </div>
-              <button
-                onClick={() => { setSelectedPlace(null); setQuery(''); }}
-                className="text-gray-400 hover:text-gray-600 text-xs shrink-0"
-              >✕</button>
+            )}
+
+            <button
+              onClick={handleLink}
+              disabled={!selectedPlace || linking}
+              // Disabled reads as inert grey rather than a faded navy, which at
+              // 40% opacity still looks like a button you were meant to press.
+              className={`w-full mt-4 py-3.5 min-h-[3rem] text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2 ${
+                !selectedPlace || linking
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'bg-[#2a276e] hover:bg-[#1f1d52] text-white'
+              }`}
+            >
+              {linking
+                ? <><RefreshCw size={15} className="animate-spin" /> Connecting...</>
+                : <><Link2 size={15} /> Connect this clinic</>}
+            </button>
+
+            {/* Answers the objections people actually have before they click.
+                No separator characters: they strand a dangling bullet at
+                whichever point the row happens to wrap. */}
+            <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 mt-4 text-[11px] text-gray-400">
+              {[
+                'No Google sign in needed',
+                'Read only, we never post anything',
+                'Takes about 30 seconds',
+                'Disconnect whenever you like',
+              ].map((t) => <span key={t}>{t}</span>)}
             </div>
-          )}
-
-          <button
-            onClick={handleLink}
-            disabled={!selectedPlace || linking}
-            className="w-full py-3 text-sm font-bold text-white bg-[#2a276e] hover:bg-[#1f1d52] rounded-xl shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {linking ? <><RefreshCw size={15} className="animate-spin" /> Linking...</> : <><Link2 size={15} /> Link & Start Tracking</>}
-          </button>
-
-          <div className="mt-6 bg-blue-50 border border-blue-100 rounded-xl p-4 text-xs text-blue-700 leading-relaxed">
-            <strong>How it works:</strong> After linking, we'll sync up to 5 Google reviews now. Every day our system silently checks for new reviews and saves them to your database — so over time you'll accumulate a growing history that Google's API alone can't give you.
           </div>
+
+          {/* What you get. The old screen had all of this compressed into one
+              small blue box written from the system's point of view. */}
+          <div className="mt-10 md:mt-12">
+            <h2 className="text-center text-xs font-bold uppercase tracking-wider text-gray-400 mb-5">
+              What you get
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {benefits.map(({ icon: Icon, title, body }) => (
+                <div key={title} className="bg-white border border-gray-200 rounded-xl p-4">
+                  <span className="w-8 h-8 rounded-lg bg-[#9B8CFF]/12 text-[#2a276e] grid place-items-center mb-3">
+                    <Icon size={16} />
+                  </span>
+                  <h3 className="text-sm font-bold text-gray-900 mb-1">{title}</h3>
+                  <p className="text-xs text-gray-500 leading-relaxed">{body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* The honest reason to do it today rather than eventually. */}
+          <div className="mt-8 max-w-2xl mx-auto bg-white border border-gray-200 rounded-xl p-5 flex items-start gap-3.5">
+            <span className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 grid place-items-center shrink-0">
+              <TrendingUp size={16} />
+            </span>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              <b className="text-gray-900">Worth doing sooner rather than later.</b>{' '}
+              Google only shares the five most recent reviews at any moment, and there is no
+              way to fetch the older ones later. Everything from the day you connect is
+              saved and stays yours, so the earlier you link, the more history you end up with.
+            </p>
+          </div>
+
         </div>
       </div>
     );

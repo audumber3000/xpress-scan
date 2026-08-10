@@ -1,9 +1,9 @@
 import React from 'react';
-import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import ChartCard from '../ChartCard';
-import { formatToK, calculateYAxisDomain, tooltipStyle } from '../format';
+import { formatToK, calculateYAxisDomain, tooltipStyle, formatMoney } from '../format';
 import { getCurrencySymbol } from '../../../utils/currency';
-import { COLORS, CHART_HEIGHT, GRID_PROPS, AXIS_PROPS, LEGEND_PROPS, CHART_MARGIN, ChartDefs } from '../chartTheme';
+import { COLORS, GRID_PROPS, AXIS_PROPS, CHART_MARGIN, ChartDefs, geometryFor, trimBuckets } from '../chartTheme';
 
 const Icon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -11,34 +11,46 @@ const Icon = () => (
   </svg>
 );
 
-const RevenueChart = ({ data, loading, delta }) => {
+const RevenueChart = ({ data, loading, delta, breakpoint }) => {
   const cur = getCurrencySymbol();
+  const geo = geometryFor(breakpoint);
+  const rows = trimBuckets(data, geo.maxBuckets);
+
+  // Name the collection gap in the subtitle — the space between the two series
+  // is the whole point of the chart, and it shouldn't need measuring by eye.
+  const gap = rows.reduce((sum, r) => sum + (Number(r.billed) || 0) - (Number(r.collected) || 0), 0);
+
   return (
     <ChartCard
-      title="Revenue: Billed vs Collected"
-      description="What you invoiced versus what actually came in"
+      title="Revenue: billed vs collected"
+      description={gap > 0 ? `${formatMoney(gap)} billed but not yet collected` : 'What you invoiced against what came in'}
       loading={loading}
-      isEmpty={data.length === 0}
+      isEmpty={rows.length === 0}
       delta={delta}
       icon={<Icon />}
+      legend={[
+        { label: 'Collected', color: COLORS.primary },
+        { label: 'Billed', color: COLORS.warning },
+      ]}
       emptyTitle="No revenue in this period"
       emptyHint="Invoiced and collected amounts will appear here."
     >
-      <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-        <ComposedChart data={data} margin={CHART_MARGIN} accessibilityLayer>
+      <ResponsiveContainer width="100%" height={geo.height}>
+        <ComposedChart data={rows} margin={CHART_MARGIN} accessibilityLayer>
           <ChartDefs />
           <CartesianGrid {...GRID_PROPS} />
           <XAxis dataKey="label" {...AXIS_PROPS} interval="preserveStartEnd" />
           <YAxis
             {...AXIS_PROPS}
             tickFormatter={(val) => `${cur}${formatToK(val)}`}
-            domain={calculateYAxisDomain(data, ['billed', 'collected'], 0.15)}
+            domain={calculateYAxisDomain(rows, ['billed', 'collected'], 0.15)}
+            // Wide enough for the longest tick this can produce, "₹276.1k".
+            width={58}
           />
           <Tooltip
             contentStyle={tooltipStyle}
-            formatter={(value, name) => [`${cur}${formatToK(value)}`, name === 'collected' ? 'Collected' : 'Billed']}
+            formatter={(value, name) => [formatMoney(value), name === 'collected' ? 'Collected' : 'Billed']}
           />
-          <Legend {...LEGEND_PROPS} formatter={(v) => (v === 'collected' ? 'Collected' : 'Billed')} />
           <Area
             type="monotone" dataKey="collected"
             stroke={COLORS.primary} strokeWidth={2.5} fill="url(#areaPrimary)"
@@ -46,7 +58,7 @@ const RevenueChart = ({ data, loading, delta }) => {
           />
           <Line
             type="monotone" dataKey="billed"
-            stroke={COLORS.warning} strokeWidth={2.5} strokeDasharray="5 4" dot={false}
+            stroke={COLORS.warning} strokeWidth={2} strokeDasharray="5 4" dot={false}
           />
         </ComposedChart>
       </ResponsiveContainer>

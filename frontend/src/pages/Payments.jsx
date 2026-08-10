@@ -18,6 +18,10 @@ import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar"
 import DayExportModal from "../components/common/DayExportModal";
 import { receipt } from "../assets/illustrations";
 import { formatDate, formatTime, clinicToday } from "../utils/datetime";
+import PaymentKpiRow from "../components/payments/PaymentKpiRow";
+import KpiDetailDrawer from "../components/common/KpiDetailDrawer";
+import InvoiceCardList from "../components/payments/InvoiceCardList";
+import { useBreakpoint } from "../utils/useBreakpoint";
 
 const INVOICES_PER_PAGE = 10;
 const LEDGER_PER_PAGE = 10;
@@ -46,6 +50,9 @@ const Payments = () => {
   const [collectionDate, setCollectionDate] = useState(clinicToday());
   const [showDayExport, setShowDayExport] = useState(false);
   const [showExport, setShowExport] = useState(false);
+  // Which KPI card has its detail drawer open, if any.
+  const [selectedKpi, setSelectedKpi] = useState(null);
+  const breakpoint = useBreakpoint();
 
   // Ledger states
   const [activeTab, setActiveTab] = useState('payments'); // 'payments' or 'ledger'
@@ -79,6 +86,20 @@ const Payments = () => {
     dateFrom, dateTo, preset: datePreset,
     status: filterStatus, mode: filterMode, ledgerType: filterLedgerType,
   };
+
+  // What the KPI drawer inherits from the page: the invoice filters, so it
+  // describes the same population as the card that opened it — but not the date
+  // range, because the drawer's own period control owns the chart's x-axis and a
+  // one-day page filter would leave every chart with a single bar.
+  // Memoised because it's a dependency of the drawer's fetch effect; a fresh
+  // object each render would refetch on every keystroke.
+  const kpiFilters = useMemo(() => {
+    const f = {};
+    if (debouncedSearch.trim().length >= 2) f.search = debouncedSearch.trim();
+    if (filterStatus) f.status = filterStatus;
+    if (filterMode) f.payment_mode = filterMode;
+    return f;
+  }, [debouncedSearch, filterStatus, filterMode]);
 
   // Debounce search term to avoid too many API calls
   useEffect(() => {
@@ -114,6 +135,14 @@ const Payments = () => {
         pending: Number(s?.pending) || 0,
         total: Number(s?.total) || 0,
         paidCount: Number(s?.paid_count) || 0,
+        // Everything the storytelling cards need. Passed through as-is so the
+        // card layer stays the only place that decides how to phrase them.
+        billed: Number(s?.billed) || 0,
+        collected: Number(s?.collected) || 0,
+        outstanding: s?.outstanding || {},
+        plans: s?.plans || {},
+        methods: s?.methods || {},
+        drafts: s?.drafts || {},
       }));
     } catch (err) {
       console.error('Error fetching stats:', err);
@@ -197,16 +226,28 @@ const Payments = () => {
       setLedgerTotalCount(Number(countRes?.total) || 0);
 
       // Money in = every payment received; money out = every expense.
+      // Categories are tallied in the same pass — the rows are already here, so
+      // "where it went" costs nothing extra to answer.
       let inflow = 0, outflow = 0, expensesCount = 0;
+      const byCategory = {};
       (allLedgerData || []).forEach(item => {
         if (item.type === 'expense') {
           outflow += item.amount;
           expensesCount++;
+          const cat = item.category || 'Uncategorised';
+          byCategory[cat] = (byCategory[cat] || 0) + item.amount;
         } else {
           inflow += item.amount;
         }
       });
-      setLedgerStats({ inflow, outflow, net: inflow - outflow, expensesCount });
+      const categories = Object.entries(byCategory)
+        .map(([category, amount]) => ({ category, amount }))
+        .sort((a, b) => b.amount - a.amount);
+
+      setLedgerStats({
+        inflow, outflow, net: inflow - outflow, expensesCount,
+        categories, topCategory: categories[0]?.category || null,
+      });
     } catch (err) {
       console.error('Error fetching ledger:', err);
       setError(err.message || 'Failed to fetch ledger');
@@ -254,19 +295,25 @@ const Payments = () => {
   }, [page, ledgerPage, debouncedSearch, activeTab, filterStatus, filterMode, filterLedgerType, dateFrom, dateTo]);
 
   // Deep links from global search: ?invoice=<id> opens that invoice,
-  // ?tab=ledger lands on the ledger. Params are stripped once applied so a
-  // refresh doesn't force the editor back open.
+  // ?tab=ledger lands on the ledger, ?new=1 opens a blank invoice (the
+  // dashboard's "Create invoice" shortcut). Params are stripped once applied so
+  // a refresh doesn't force the editor back open.
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const invoiceId = params.get('invoice');
     const tabParam = params.get('tab');
-    if (!invoiceId && !tabParam) return;
+    const isNew = params.get('new') === '1';
+    if (!invoiceId && !tabParam && !isNew) return;
 
     if (tabParam === 'ledger' || tabParam === 'payments') setActiveTab(tabParam);
     if (invoiceId) setSelectedInvoiceId(Number(invoiceId));
+    // 'new' is the sentinel InvoiceEditor already understands for a blank
+    // invoice; an explicit ?invoice=<id> wins if somehow both are present.
+    else if (isNew) setSelectedInvoiceId('new');
 
     params.delete('invoice');
     params.delete('tab');
+    params.delete('new');
     navigate({ search: params.toString() }, { replace: true });
   }, [location.search, navigate]);
 
@@ -377,174 +424,34 @@ const Payments = () => {
           </button>
         </nav>
       </div>
-      {/* Summary Cards Section */}
-      <div className="px-6 pt-6 pb-2">
-        <div className={`grid gap-6 mb-8 ${activeTab === 'today' ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'}`}>
-          
-          {activeTab === 'today' ? (
-            <>
-              {/* Today Card 1: Total */}
-              <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm flex items-center">
-                <div className="p-3 rounded-lg bg-green-50 text-green-600 mr-4">
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    {/* Not "Today's" — the day picker can point at any past day */}
-                    <p className="text-sm font-medium text-gray-500">Total Collected</p>
-                    <TrendBadge current={stats.todayRevenue} previous={todayPrevious?.total} comparedTo={comparedTo} loading={statsLoading} />
-                  </div>
-                  <h4 className="text-2xl font-bold text-gray-900 mt-1">{statsLoading ? "..." : formatCurrency(stats.todayRevenue || 0)}</h4>
-                </div>
-              </div>
-              
-              {/* Today Card 2: Cash */}
-              <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm flex items-center">
-                <div className="p-3 rounded-lg bg-amber-50 text-amber-600 mr-4">
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium text-gray-500">Cash Collection</p>
-                    <TrendBadge current={stats.todayCash} previous={todayPrevious?.cash} comparedTo={comparedTo} loading={statsLoading} />
-                  </div>
-                  <h4 className="text-2xl font-bold text-gray-900 mt-1">{statsLoading ? "..." : formatCurrency(stats.todayCash || 0)}</h4>
-                </div>
-              </div>
+      {/* Summary cards + filters.
+          Spacing is the dashboard's (pt-4 / gap-3 / mb-4) rather than the old
+          pt-6 / gap-6 / mb-8. The tighter gaps pay for the story line and the
+          meter on each card, so the block above the table ends up marginally
+          shorter than before — the table gains height rather than losing it. */}
+      <div className="px-4 md:px-6 pt-4 pb-2 flex-shrink-0">
+        <PaymentKpiRow
+          tab={activeTab}
+          summary={stats}
+          todayPrevious={todayPrevious}
+          ledgerStats={ledgerStats}
+          onSelect={activeTab === 'payments' ? setSelectedKpi : undefined}
+        />
 
-              {/* Today Card 3: Online */}
-              <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm flex items-center">
-                <div className="p-3 rounded-lg bg-blue-50 text-blue-600 mr-4">
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                  </svg>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium text-gray-500">Online Collection</p>
-                    <TrendBadge current={stats.todayOnline} previous={todayPrevious?.online} comparedTo={comparedTo} loading={statsLoading} />
-                  </div>
-                  <h4 className="text-2xl font-bold text-gray-900 mt-1">{statsLoading ? "..." : formatCurrency(stats.todayOnline || 0)}</h4>
-                </div>
-              </div>
-            </>
-          ) : activeTab === 'payments' ? (
-            <>
-              {/* Card 1: Revenue */}
-              <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm flex items-center">
-                <div className="p-3 rounded-lg bg-green-50 text-green-600 mr-4">
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Total Revenue</p>
-                  <h4 className="text-2xl font-bold text-gray-900 mt-1">{statsLoading ? "..." : formatCurrency(stats.revenue)}</h4>
-                </div>
-              </div>
-              
-              {/* Card 2: Pending */}
-              <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm flex items-center">
-                <div className="p-3 rounded-lg bg-orange-50 text-orange-600 mr-4">
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Pending Amount</p>
-                  <h4 className="text-2xl font-bold text-gray-900 mt-1">{statsLoading ? "..." : formatCurrency(stats.pending)}</h4>
-                </div>
-              </div>
+        {/* Drafts are excluded from every figure above — correctly, a draft is
+            not a debt — but they are also money nobody has been asked for, so
+            they get a nudge rather than a whole card. */}
+        {activeTab === 'payments' && stats.drafts?.count > 0 && (
+          <button
+            onClick={() => { setFilterStatus('draft'); setPage(1); }}
+            className="mt-2.5 inline-flex items-center gap-2 px-3 py-1.5 rounded border border-amber-200 bg-amber-50 text-amber-800 text-[11px] font-semibold hover:bg-amber-100 transition-colors"
+          >
+            {stats.drafts.count} unissued {stats.drafts.count === 1 ? 'draft' : 'drafts'} worth {formatCurrency(stats.drafts.amount)} — never billed
+          </button>
+        )}
+      </div>
 
-              {/* Card 3: Total Invoices */}
-              <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm flex items-center">
-                <div className="p-3 rounded-lg bg-blue-50 text-blue-600 mr-4">
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Total Invoices</p>
-                  <h4 className="text-2xl font-bold text-gray-900 mt-1">{statsLoading ? "..." : stats.total}</h4>
-                </div>
-              </div>
-
-              {/* Card 4: Paid Invoices */}
-              <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm flex items-center">
-                <div className="p-3 rounded-lg bg-[#2a276e]/10 text-[#2a276e] mr-4">
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Paid Invoices</p>
-                  <h4 className="text-2xl font-bold text-gray-900 mt-1">{statsLoading ? "..." : stats.paidCount}</h4>
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              {/* Ledger Card 1: Total Inflow */}
-              <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm flex items-center">
-                <div className="p-3 rounded-lg bg-green-50 text-green-600 mr-4">
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Total Inflow</p>
-                  <h4 className="text-2xl font-bold text-gray-900 mt-1">{loading ? "..." : formatCurrency(ledgerStats.inflow)}</h4>
-                </div>
-              </div>
-              
-              {/* Ledger Card 2: Total Outflow */}
-              <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm flex items-center">
-                <div className="p-3 rounded-lg bg-red-50 text-red-600 mr-4">
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Total Outflow</p>
-                  <h4 className="text-2xl font-bold text-gray-900 mt-1">{loading ? "..." : formatCurrency(ledgerStats.outflow)}</h4>
-                </div>
-              </div>
-
-              {/* Ledger Card 3: Net Balance */}
-              <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm flex items-center">
-                <div className={`p-3 rounded-lg ${ledgerStats.net >= 0 ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'} mr-4`}>
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Net Balance</p>
-                  <h4 className={`text-2xl font-bold mt-1 ${ledgerStats.net >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
-                    {loading ? "..." : formatCurrency(ledgerStats.net)}
-                  </h4>
-                </div>
-              </div>
-
-              {/* Ledger Card 4: Expense Count */}
-              <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm flex items-center">
-                <div className="p-3 rounded-lg bg-amber-50 text-amber-600 mr-4">
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Recorded Expenses</p>
-                  <h4 className="text-2xl font-bold text-gray-900 mt-1">{loading ? "..." : ledgerStats.expensesCount}</h4>
-                </div>
-              </div>
-            </>
-          )}
-          
-        </div>
+      <div className="px-4 md:px-6 flex-shrink-0">
 
         {/* Search, Filters & Actions */}
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4">
@@ -656,6 +563,21 @@ const Payments = () => {
                 </div>
               </div>
             </div>
+          ) : activeTab === 'payments' && breakpoint === 'mobile' ? (
+            // Below 768px the seven-column table has no honest layout — shrunk,
+            // the columns are unreadable and the page scrolls sideways. Same
+            // data as stacked cards instead.
+            currentItems.length === 0 ? (
+              <div className="px-4 py-8">
+                <EmptyState
+                  image={receipt}
+                  title="No transactions yet"
+                  subtitle="Invoices and payments show up here as you start billing patients."
+                />
+              </div>
+            ) : (
+              <InvoiceCardList invoices={currentItems} onSelect={handleInvoiceSelect} />
+            )
           ) : activeTab === 'payments' ? (
             <table className="w-full">
               <thead className="bg-[#f8fafc] border-b border-gray-100 sticky top-0 z-10">
@@ -849,6 +771,16 @@ const Payments = () => {
           className="flex-shrink-0"
         />
       )}
+
+      {/* KPI detail drawer. Gets the page's invoice filters so it describes the
+          same population as the card that opened it; its own period control
+          drives the chart's x-axis. */}
+      <KpiDetailDrawer
+        card={selectedKpi}
+        filters={kpiFilters}
+        endpoint="/invoices/kpi-detail"
+        onClose={() => setSelectedKpi(null)}
+      />
 
       {/* Invoice Editor Panel Drawer */}
       {selectedInvoiceId && (
