@@ -3,6 +3,7 @@ import GearLoader from '../GearLoader';
 import EditUserTab from './EditUserTab';
 import PermissionsTab from './PermissionsTab';
 import WorkingHoursTab from './WorkingHoursTab';
+import { isClinical } from '../../constants/roles';
 
 const UserDetailsPanel = ({
   selectedUser,
@@ -85,7 +86,7 @@ const UserDetailsPanel = ({
             >
               Device Management
             </button>
-            {["doctor", "clinic_owner"].includes(selectedUser.role) && (
+            {isClinical(selectedUser.role) && (
               <button
                 onClick={() => setUserPanelTab("hours")}
                 className={`px-6 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${

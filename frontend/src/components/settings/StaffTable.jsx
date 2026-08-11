@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pencil } from 'lucide-react';
+import { Pencil, Clock } from 'lucide-react';
+import { isClinical } from '../../constants/roles';
 import { resolveUserAvatar } from '../../utils/avatar';
 import { accessSummary } from '../../constants/permissions';
 import { formatDate, formatRelative } from '../../utils/datetime';
@@ -10,6 +11,7 @@ const StaffTable = ({
   loadingUserDevices = false,
   onUserClick,
   onEditUser,
+  onEditHours,
   onToggleActive,
   currentUserId,
   getUserInitials = (name) => name?.split(' ').map(n => n[0]).join('').toUpperCase() || '??',
@@ -139,6 +141,20 @@ const StaffTable = ({
                       )}
                       {/* The row itself opens permissions, so editing name/role
                           needs its own affordance. */}
+                      {/* Working hours needs its own way in. Clicking the row
+                          goes to permissions, which refuses both the owner and
+                          you-yourself, so the owner could never reach their own
+                          hours. Hours are not permissions. */}
+                      {onEditHours && isClinical(u.role) && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onEditHours(u); }}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-[#29828a] hover:bg-[#29828a]/10 transition-colors"
+                          title="Working hours and time off"
+                          aria-label={`Working hours for ${u.name}`}
+                        >
+                          <Clock size={15} />
+                        </button>
+                      )}
                       {onEditUser && (
                         <button
                           onClick={(e) => { e.stopPropagation(); onEditUser(u); }}

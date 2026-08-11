@@ -18,6 +18,7 @@ from models import Appointment, DoctorAvailability, User
 from domains.scheduling.appointment_status import (CANCELLED, COMPLETED,
                                                    NO_SHOW, OPEN_STATUSES)
 from domains.scheduling.availability import to_minutes, working_blocks
+from core.roles import CLINICAL_ROLES
 
 router = APIRouter(prefix="/appointment-stats", tags=["appointment-stats"])
 
@@ -149,7 +150,7 @@ def utilisation(
     doctors = (
         db.query(User)
         .filter(User.clinic_id == cid,
-                User.role.in_(["doctor", "clinic_owner"]),
+                User.role.in_(CLINICAL_ROLES),
                 User.is_active == True)  # noqa: E712
         .all()
     )

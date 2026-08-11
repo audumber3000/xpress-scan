@@ -67,6 +67,12 @@ const DayGrid = ({
   // usable touch story and this has to work on an iPad.
   const [ghost, setGhost] = useState(null);      // { colIdx, startMin, endMin }
   const [resizing, setResizing] = useState(null); // { id, colIdx, startMin, endMin }
+  // The slot under the cursor, so hovering shows exactly where a click lands.
+  const [hoverSlot, setHoverSlot] = useState(null); // { colIdx, startMin }
+  // How far below the card's own top the pointer was when the drag began.
+  // Without this a drag drops the card's START at the cursor, so grabbing a
+  // 60 minute card in the middle and dropping it at 8:00 booked 8:30 to 9:30.
+  const grabOffsetMin = useRef(0);
 
   const visibleDoctors = useMemo(
     () => doctors.filter((d) => selectedDoctorIds.has(d.id)),
@@ -195,7 +201,9 @@ const DayGrid = ({
   }, [unavailableByColumn]);
 
   // ─── Pointer geometry ────────────────────────────────────────────────────
-  const pointToGrid = useCallback((clientX, clientY) => {
+  // offsetMin shifts the result back by however far into the card the pointer
+  // was, so a drag lands the card where the user aimed it.
+  const pointToGrid = useCallback((clientX, clientY, offsetMin = 0) => {
     const node = overlayRef.current;
     if (!node) return null;
     const rect = node.getBoundingClientRect();
@@ -203,12 +211,14 @@ const DayGrid = ({
       columns.length - 1,
       Math.floor(((clientX - rect.left) / rect.width) * columns.length)
     ));
-    const raw = openHour * 60 + ((clientY - rect.top) / HOUR_PX) * 60;
-    const clamped = Math.max(openHour * 60, Math.min(closeHour * 60, raw));
+    const raw = openHour * 60 + ((clientY - rect.top) / HOUR_PX) * 60 - offsetMin;
+    // Snap first, then clamp: clamping first can land on a value off the
+    // lattice at the very top or bottom of the grid.
+    const snapped = Math.round(raw / SNAP_MINUTES) * SNAP_MINUTES;
     return {
       colIdx,
       col: columns[colIdx],
-      minutes: Math.round(clamped / SNAP_MINUTES) * SNAP_MINUTES,
+      minutes: Math.max(openHour * 60, Math.min(closeHour * 60, snapped)),
     };
   }, [columns, openHour, closeHour]);
 
@@ -217,12 +227,20 @@ const DayGrid = ({
     if (!onReassign) return;
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/appointmentId", String(apt.id));
+
+    // Measure the grab point against the card the user actually took hold of,
+    // then convert it to minutes so the drop can put the card's top where they
+    // aimed rather than where their finger happened to be.
+    const card = e.currentTarget?.closest("[data-appointment-card]") || e.currentTarget;
+    const rect = card?.getBoundingClientRect?.();
+    grabOffsetMin.current = rect ? ((e.clientY - rect.top) / HOUR_PX) * 60 : 0;
+
     setDragOverColIdx(null);
   };
 
   const handleOverlayDragOver = (e) => {
     if (!onReassign) return;
-    const target = pointToGrid(e.clientX, e.clientY);
+    const target = pointToGrid(e.clientX, e.clientY, grabOffsetMin.current);
     if (!target) return;
     if (axis === "chair" || target.col.doctorId === null) {
       // The Unassigned column has no doctor to assign to, and the chair axis
@@ -245,8 +263,9 @@ const DayGrid = ({
     if (!onReassign) return;
     e.preventDefault();
     const id = parseInt(e.dataTransfer.getData("text/appointmentId"), 10);
-    const target = pointToGrid(e.clientX, e.clientY);
+    const target = pointToGrid(e.clientX, e.clientY, grabOffsetMin.current);
     setDragOverColIdx(null);
+    grabOffsetMin.current = 0;
     if (Number.isNaN(id) || !target || target.col.doctorId === null) return;
     onReassign(id, target.col.doctorId, hhmm(target.minutes));
   };
@@ -275,6 +294,16 @@ const DayGrid = ({
   };
 
   const handleOverlayPointerMove = (e) => {
+    if (!resizing && !ghost) {
+      const p = pointToGrid(e.clientX, e.clientY);
+      if (p) {
+        setHoverSlot((h) =>
+          h && h.colIdx === p.colIdx && h.startMin === p.minutes
+            ? h                      // same slot, skip the re-render
+            : { colIdx: p.colIdx, startMin: p.minutes }
+        );
+      }
+    }
     if (resizing) {
       const p = pointToGrid(e.clientX, e.clientY);
       if (!p) return;
@@ -410,7 +439,8 @@ const DayGrid = ({
             onPointerDown={handleOverlayPointerDown}
             onPointerMove={handleOverlayPointerMove}
             onPointerUp={handleOverlayPointerUp}
-            onPointerCancel={() => { setGhost(null); setResizing(null); }}
+            onPointerLeave={() => setHoverSlot(null)}
+            onPointerCancel={() => { setGhost(null); setResizing(null); setHoverSlot(null); }}
           >
             {/* Unavailable time, drawn as a hatch rather than a flat grey so it
                 reads as "not bookable" instead of "no data". */}
@@ -445,6 +475,37 @@ const DayGrid = ({
                   <div className="absolute -left-14 -top-2 text-[11px] font-semibold text-red-500">
                     {pad2(now.getHours())}:{pad2(now.getMinutes())}
                   </div>
+                </div>
+              );
+            })()}
+
+            {/* The 15 minute slot under the cursor. Shows the snapped target
+                and its time, so you know what a click will book before you
+                click it. Turns amber where the doctor is not working. */}
+            {hoverSlot && !ghost && !resizing && (() => {
+              const col = columns[hoverSlot.colIdx];
+              const end = hoverSlot.startMin + SNAP_MINUTES;
+              const free = isAvailableAt(col, hoverSlot.startMin, end);
+              return (
+                <div
+                  className={`absolute pointer-events-none rounded-md border transition-colors ${
+                    free
+                      ? "bg-[#2a276e]/[0.07] border-[#2a276e]/25"
+                      : "bg-amber-400/10 border-amber-400/40"
+                  }`}
+                  style={{
+                    left: `${hoverSlot.colIdx * colWidthPct + 0.4}%`,
+                    width: `${colWidthPct - 0.8}%`,
+                    top: `${yFor(hoverSlot.startMin)}px`,
+                    height: `${(SNAP_MINUTES * HOUR_PX) / 60}px`,
+                    zIndex: 5,
+                  }}
+                >
+                  <span className={`absolute left-1.5 top-0.5 text-[10px] font-bold ${
+                    free ? "text-[#2a276e]/70" : "text-amber-700"
+                  }`}>
+                    {hhmm(hoverSlot.startMin)}
+                  </span>
                 </div>
               );
             })()}

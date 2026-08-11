@@ -8,6 +8,7 @@ from models import User, Clinic
 from typing import Optional
 import jwt
 import os
+from core.roles import is_clinical, CLINICAL_ROLES
 
 def get_jwt_secret():
     """Get JWT secret from environment"""
@@ -134,9 +135,17 @@ require_receptionist = require_role("receptionist")
 
 # Role-based access (clinic owners and doctors can access most features)
 def require_doctor_or_owner():
-    """Allow clinic owners and doctors"""
+    """Allow anyone who treats patients.
+
+    Reads CLINICAL_ROLES rather than a literal pair, so adding an associate or a
+    visiting consultant does not silently lock them out of writing clinical
+    records while still showing them on the calendar.
+    """
     def role_checker(user: User = Depends(get_current_user)):
-        if user.role not in ["clinic_owner", "doctor"]:
-            raise HTTPException(status_code=403, detail="Requires doctor or clinic owner role")
+        if not is_clinical(user.role):
+            raise HTTPException(
+                status_code=403,
+                detail="Only clinical staff can do that",
+            )
         return user
     return role_checker

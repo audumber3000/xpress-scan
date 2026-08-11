@@ -25,7 +25,7 @@ import AppointmentCard from "./appointments/components/AppointmentCard";
 import MiniCalendar from "./appointments/components/MiniCalendar";
 import MonthGrid from "./appointments/components/MonthGrid";
 import DayGrid from "./appointments/components/DayGrid";
-import { getAppointmentColor } from "./appointments/utils/doctorColors";
+import { getAppointmentColor, registerDoctors } from "./appointments/utils/doctorColors";
 import BookingModal from "./appointments/components/BookingModal";
 import { computeDayLayout } from "./appointments/utils/layout";
 import { getCurrencySymbol } from "../utils/currency";
@@ -378,6 +378,10 @@ const Calendar = () => {
       return showUnassigned;
     });
   }, [appointments, selectedDoctorIds, showUnassigned, focusDoctorId]);
+
+  // Colour assignment is by position in this clinic's doctor list, so the list
+  // has to be registered before anything renders a card.
+  useEffect(() => { registerDoctors(doctors); }, [doctors]);
 
   const focusDoctor = useMemo(
     () => (focusDoctorId ? doctors.find(d => d.id === Number(focusDoctorId)) || null : null),

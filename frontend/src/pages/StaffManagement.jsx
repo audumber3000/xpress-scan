@@ -8,19 +8,16 @@ import { formatDate, formatRelative } from "../utils/datetime";
 import { canEditPermissions, permissionsLockReason } from "../constants/permissions";
 import { ChevronLeft, UserPlus } from 'lucide-react';
 
-// Display labels for the role filter, so the dropdown reads the way the table does.
-const ROLE_LABEL = {
-  clinic_owner: 'Clinic Owner',
-  doctor: 'Doctor',
-  dentist: 'Doctor',
-  receptionist: 'Receptionist',
-  assistant: 'Assistant',
-};
+
 import StaffTable from "../components/settings/StaffTable";
 import TeamTabs from "../components/team/TeamTabs";
+// Shared with the calendar and the staff panel — see constants/roles.js.
+// Two copies of the role list is one list that eventually goes stale.
+import { ROLE_LABEL } from "../constants/roles";
 import TableToolbar from "../components/common/TableToolbar";
 import FilterPanel from "../components/FilterPanel";
 import UserDetailsPanel from "../components/settings/UserDetailsPanel";
+import WorkingHoursDrawer from "../components/settings/WorkingHoursDrawer";
 import EditUserTab from "../components/settings/EditUserTab";
 import PermissionsTab from "../components/settings/PermissionsTab";
 import GearLoader from "../components/GearLoader";
@@ -43,6 +40,9 @@ const StaffManagement = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [showUserPanel, setShowUserPanel] = useState(false);
   const [userPanelTab, setUserPanelTab] = useState("accounts");
+  // Working hours has its own drawer — see WorkingHoursDrawer for why it does
+  // not go through UserDetailsPanel.
+  const [hoursFor, setHoursFor] = useState(null);
   
   const [savingEditUser, setSavingEditUser] = useState(false);
   const [savingPermissions, setSavingPermissions] = useState(false);
@@ -183,6 +183,11 @@ const StaffManagement = () => {
     navigate(`/admin/permissions?user=${clickedUser.id}`);
   };
 
+  // Working hours, straight from the row. Deliberately not behind the
+  // permissions gate: an owner setting their own consulting hours is not the
+  // same act as an owner editing their own permissions.
+  const handleEditHours = (clickedUser) => setHoursFor(clickedUser);
+
   // Editing name/role still needs a home, so it moved to a per-row icon.
   const handleEditUser = (clickedUser) => {
     setSelectedUser(clickedUser);
@@ -318,12 +323,19 @@ const StaffManagement = () => {
         </button>
       </TableToolbar>
 
+      <WorkingHoursDrawer
+        open={!!hoursFor}
+        staff={hoursFor}
+        onClose={() => setHoursFor(null)}
+      />
+
       <StaffTable
         users={filteredUsers}
         userDevices={userDevices}
         loadingUserDevices={loadingUserDevices}
         onUserClick={handleUserClick}
         onEditUser={handleEditUser}
+        onEditHours={handleEditHours}
         onToggleActive={handleToggleActive}
         currentUserId={user?.id}
       />

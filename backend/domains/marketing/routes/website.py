@@ -24,6 +24,7 @@ from domains.infrastructure.services.r2_storage import (
     StorageCategory, delete_file_from_r2, get_presigned_url, upload_bytes_to_r2,
 )
 from domains.marketing.website_renderer import render_site, slugify
+from core.roles import CLINICAL_ROLES
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,7 @@ def build_context(db: Session, clinic: Clinic) -> dict:
 
     dentists = (
         db.query(User)
-        .filter(User.clinic_id == cid, User.role.in_(["doctor", "clinic_owner"]),
+        .filter(User.clinic_id == cid, User.role.in_(CLINICAL_ROLES),
                 User.is_active == True)  # noqa: E712
         .all()
     )

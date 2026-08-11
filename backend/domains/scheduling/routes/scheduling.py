@@ -21,6 +21,7 @@ from domains.scheduling.appointment_status import (CANCELLED, OPEN_STATUSES,
 from domains.scheduling.availability import (SLOT_MINUTES, check_available,
                                              find_conflict, free_slots,
                                              to_hhmm, to_minutes, working_blocks)
+from core.roles import CLINICAL_ROLES
 
 router = APIRouter(prefix="/scheduling", tags=["scheduling"])
 
@@ -203,7 +204,7 @@ def day_shape(
     doctors = (
         db.query(User)
         .filter(User.clinic_id == current_user.clinic_id,
-                User.role.in_(["doctor", "clinic_owner"]),
+                User.role.in_(CLINICAL_ROLES),
                 User.is_active == True)  # noqa: E712
         .all()
     )

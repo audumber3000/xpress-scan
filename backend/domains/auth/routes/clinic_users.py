@@ -11,6 +11,7 @@ from domains.communication.services.email_service import EmailService
 import hashlib
 import logging
 import os
+from core.roles import assignable_by, ROLE_VALUES
 
 def hash_password(password: str) -> str:
     """Simple password hashing for offline mode"""
@@ -361,14 +362,4 @@ def set_staff_password(
 @router.get("/roles", response_model=List[dict])
 def get_available_roles(current_user = Depends(get_current_user)):
     """Get available roles based on current user's role"""
-    if current_user.role == "clinic_owner":
-        return [
-            {"value": "doctor", "label": "Doctor", "description": "Additional doctor for the clinic"},
-            {"value": "receptionist", "label": "Receptionist", "description": "Staff for patient intake and basic tasks"}
-        ]
-    elif current_user.role == "doctor":
-        return [
-            {"value": "receptionist", "label": "Receptionist", "description": "Staff for patient intake and basic tasks"}
-        ]
-    else:
-        return []
+    return assignable_by(current_user.role)

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Loader2, CalendarOff, Info } from 'lucide-react';
+import { Plus, Trash2, Loader2, CalendarOff, Info, Coffee, Copy } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { api } from '../../utils/api';
 
@@ -23,6 +23,14 @@ const DAYS = [
   { i: 5, short: 'Sat', long: 'Saturday' },
   { i: 6, short: 'Sun', long: 'Sunday' },
 ];
+
+const toMin = (t) => {
+  if (!t) return 0;
+  const [h, m] = String(t).split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
+const hhmm = (mins) =>
+  `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
 
 const timeCls =
   'h-9 px-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#29828a] focus:border-transparent outline-none';
@@ -79,6 +87,36 @@ const WorkingHoursTab = ({ doctorId, doctorName }) => {
       start_time: existing.length ? start : '09:00',
       end_time: `${String(Math.min(23, startH + (existing.length ? 4 : 9))).padStart(2, '0')}:00`,
     }]);
+  };
+
+  // A break is not a third kind of thing to store. It is the gap between two
+  // working blocks, so taking a lunch out of one shift splits it in two and the
+  // calendar shades the middle automatically. One concept, not two.
+  const addBreak = (weekday) => {
+    const rows = blocks.map((b, i) => ({ ...b, idx: i })).filter((b) => b.weekday === weekday);
+    if (!rows.length) return;
+    const longest = rows.reduce((a, b) =>
+      (toMin(b.end_time) - toMin(b.start_time)) > (toMin(a.end_time) - toMin(a.start_time)) ? b : a
+    );
+    const s = toMin(longest.start_time);
+    const e = toMin(longest.end_time);
+    if (e - s < 120) {
+      toast.error('That shift is too short to take a break out of');
+      return;
+    }
+    // Default to an hour in the middle, snapped to the half hour, which is what
+    // a lunch break almost always is.
+    const mid = Math.round((s + (e - s) / 2) / 30) * 30;
+    const bs = Math.max(s + 30, mid - 30);
+    const be = Math.min(e - 30, bs + 60);
+
+    const next = blocks
+      .filter((_, i) => i !== longest.idx)
+      .concat([
+        { weekday, start_time: longest.start_time, end_time: hhmm(bs) },
+        { weekday, start_time: hhmm(be), end_time: longest.end_time },
+      ]);
+    save(next);
   };
 
   const updateBlock = (idx, patch) => {
@@ -160,8 +198,16 @@ const WorkingHoursTab = ({ doctorId, doctorName }) => {
                 {rows.length === 0 && (
                   <span className="inline-block pt-2 text-xs text-gray-400">Not working</span>
                 )}
-                {rows.map((b) => (
-                  <div key={b.idx} className="flex items-center gap-2 flex-wrap">
+                {rows.map((b, ri) => (
+                  <React.Fragment key={b.idx}>
+                  {/* The gap left by the previous block, named for what it is. */}
+                  {ri > 0 && toMin(b.start_time) > toMin(rows[ri - 1].end_time) && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-gray-400 pl-1">
+                      <Coffee size={11} />
+                      Break {rows[ri - 1].end_time} to {b.start_time}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 flex-wrap">
                     <input type="time" step={900} value={b.start_time}
                            onChange={(e) => updateBlock(b.idx, { start_time: e.target.value })}
                            onBlur={() => save(blocks)} className={timeCls} />
@@ -174,16 +220,29 @@ const WorkingHoursTab = ({ doctorId, doctorName }) => {
                       <Trash2 size={14} />
                     </button>
                   </div>
+                  </React.Fragment>
                 ))}
               </div>
-              <button
-                onClick={() => addBlock(d.i)}
-                disabled={saving}
-                title={rows.length ? 'Add a second block for a split shift' : 'Add hours'}
-                className="mt-1 inline-flex items-center gap-1 px-2 h-8 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:border-[#29828a] hover:text-[#29828a] flex-shrink-0"
-              >
-                <Plus size={12} /> {rows.length ? 'Split' : 'Add'}
-              </button>
+              <div className="flex items-center gap-1 mt-1 flex-shrink-0">
+                {rows.length > 0 && (
+                  <button
+                    onClick={() => addBreak(d.i)}
+                    disabled={saving}
+                    title="Take a break out of the longest shift"
+                    className="inline-flex items-center gap-1 px-2 h-8 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:border-amber-400 hover:text-amber-700"
+                  >
+                    <Coffee size={12} /> Break
+                  </button>
+                )}
+                <button
+                  onClick={() => addBlock(d.i)}
+                  disabled={saving}
+                  title={rows.length ? 'Add another shift on this day' : 'Add hours'}
+                  className="inline-flex items-center gap-1 px-2 h-8 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:border-[#29828a] hover:text-[#29828a]"
+                >
+                  <Plus size={12} /> {rows.length ? 'Shift' : 'Add'}
+                </button>
+              </div>
             </div>
           );
         })}

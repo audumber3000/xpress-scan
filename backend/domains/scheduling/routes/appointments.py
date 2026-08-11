@@ -13,7 +13,7 @@ from domains.scheduling.appointment_status import (
     ALL_STATUSES, OPEN_STATUSES, TERMINAL_STATUSES, CANCELLED, NO_SHOW,
     COMPLETED, ARRIVED, CONFIRMED, SCHEDULED, normalize_status, is_terminal,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 import json
 import logging
 
@@ -91,7 +91,18 @@ class AppointmentOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     synced_at: Optional[datetime] = None
-    sync_status: str = "local"
+    # Optional, not `str = "local"`. A default only applies when the field is
+    # ABSENT; a stored NULL is still passed in and fails string validation, and
+    # because this is a response model that failure 500s the WHOLE list rather
+    # than the one bad row. A single appointment written without sync_status by
+    # an import, a migration or a mobile sync would black out the calendar for
+    # the entire clinic. Same failure mode as the patients list and a null phone.
+    sync_status: Optional[str] = "local"
+
+    @field_validator("sync_status", mode="before")
+    @classmethod
+    def _default_sync_status(cls, v):
+        return v or "local"
 
     class Config:
         from_attributes = True
