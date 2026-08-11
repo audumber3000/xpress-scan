@@ -2,6 +2,7 @@ import React from 'react';
 import GearLoader from '../GearLoader';
 import EditUserTab from './EditUserTab';
 import PermissionsTab from './PermissionsTab';
+import WorkingHoursTab from './WorkingHoursTab';
 
 const UserDetailsPanel = ({
   selectedUser,
@@ -84,6 +85,18 @@ const UserDetailsPanel = ({
             >
               Device Management
             </button>
+            {["doctor", "clinic_owner"].includes(selectedUser.role) && (
+              <button
+                onClick={() => setUserPanelTab("hours")}
+                className={`px-6 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
+                  userPanelTab === "hours"
+                    ? "border-[#2a276e] text-[#2a276e]"
+                    : "border-transparent text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                Working Hours
+              </button>
+            )}
             <button
               onClick={() => setUserPanelTab("activity")}
               className={`px-6 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
@@ -273,6 +286,12 @@ const UserDetailsPanel = ({
                 )}
               </div>
             </div>
+          )}
+
+          {/* When this person works, and when they are away. Drives the
+              shading on the calendar and the refusal on the server. */}
+          {userPanelTab === "hours" && (
+            <WorkingHoursTab doctorId={selectedUser.id} doctorName={selectedUser.name} />
           )}
 
           {/* Activity Tab */}

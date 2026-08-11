@@ -841,6 +841,62 @@ def start_visit(
     return {"case_paper_id": paper.id, "created": True, "patient_id": paper.patient_id}
 
 
+# Declared above GET /{appointment_id}. FastAPI matches in declaration order, so a
+# literal path sitting behind a parameter route is swallowed by it: this endpoint
+# was returning 422 "not a valid integer" for every patient search in the booking
+# form, because "search-patients" was being parsed as an appointment id.
+@router.get("/search-patients")
+async def search_patients_for_checkin(
+    q: str = Query("", description="Name or phone to search"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Search existing patients by name or phone for check-in autocomplete.
+    Returns top 5 matches with visit history summary.
+    """
+    q = q.strip()
+    clinic_id = current_user.clinic_id
+    print(f"DEBUG_SEARCH: q='{q}', clinic_id={clinic_id}")
+    query = db.query(Patient).filter(Patient.clinic_id == clinic_id)
+
+    if q:
+        query = query.filter(
+            (Patient.name.ilike(f"%{q}%")) | (Patient.phone.ilike(f"%{q}%"))
+        )
+
+    patients = query.limit(8).all()
+    print(f"DEBUG_SEARCH: found {len(patients)} results")
+    result = []
+    for p in patients:
+        # Count visits
+        visit_count = db.query(Appointment).filter(
+            Appointment.patient_id == p.id,
+            Appointment.clinic_id == clinic_id
+        ).count()
+
+        last_appt = db.query(Appointment).filter(
+            Appointment.patient_id == p.id,
+            Appointment.clinic_id == clinic_id
+        ).order_by(Appointment.appointment_date.desc()).first()
+
+        result.append({
+            "id": p.id,
+            "name": p.name,
+            "phone": p.phone,
+            "age": p.age,
+            "gender": p.gender,
+            "village": p.village,
+            "display_id": p.display_id,
+            "visit_count": visit_count,
+            "last_visit": last_appt.appointment_date.strftime("%Y-%m-%d") if last_appt else None,
+            "last_treatment": last_appt.treatment if last_appt else None,
+            "next_visit_number": visit_count + 1
+        })
+
+    return result
+
+
 @router.get("/{appointment_id}", response_model=AppointmentOut)
 async def get_appointment(
     appointment_id: int,
@@ -1147,58 +1203,6 @@ async def delete_appointment(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error deleting appointment: {str(e)}")
-
-
-@router.get("/search-patients")
-async def search_patients_for_checkin(
-    q: str = Query("", description="Name or phone to search"),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Search existing patients by name or phone for check-in autocomplete.
-    Returns top 5 matches with visit history summary.
-    """
-    q = q.strip()
-    clinic_id = current_user.clinic_id
-    print(f"DEBUG_SEARCH: q='{q}', clinic_id={clinic_id}")
-    query = db.query(Patient).filter(Patient.clinic_id == clinic_id)
-
-    if q:
-        query = query.filter(
-            (Patient.name.ilike(f"%{q}%")) | (Patient.phone.ilike(f"%{q}%"))
-        )
-
-    patients = query.limit(8).all()
-    print(f"DEBUG_SEARCH: found {len(patients)} results")
-    result = []
-    for p in patients:
-        # Count visits
-        visit_count = db.query(Appointment).filter(
-            Appointment.patient_id == p.id,
-            Appointment.clinic_id == clinic_id
-        ).count()
-
-        last_appt = db.query(Appointment).filter(
-            Appointment.patient_id == p.id,
-            Appointment.clinic_id == clinic_id
-        ).order_by(Appointment.appointment_date.desc()).first()
-
-        result.append({
-            "id": p.id,
-            "name": p.name,
-            "phone": p.phone,
-            "age": p.age,
-            "gender": p.gender,
-            "village": p.village,
-            "display_id": p.display_id,
-            "visit_count": visit_count,
-            "last_visit": last_appt.appointment_date.strftime("%Y-%m-%d") if last_appt else None,
-            "last_treatment": last_appt.treatment if last_appt else None,
-            "next_visit_number": visit_count + 1
-        })
-
-    return result
 
 
 @router.get("/patient-visits/{patient_id}")

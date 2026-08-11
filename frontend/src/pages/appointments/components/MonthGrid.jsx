@@ -37,7 +37,19 @@ const formatTime = (hhmm) => {
 
 const MAX_CHIPS = 3;
 
-const MonthGrid = ({ currentDate, appointments, onSelectDate, onSelectAppointment }) => {
+/**
+ * The month.
+ *
+ * `focusDoctor` switches this from "everyone, colour coded" to one dentist's
+ * month. Seven days multiplied by every doctor at once is unreadable at this
+ * size, so the doctor is a choice rather than a stack. In single-doctor mode
+ * the empty working days are called out, because a week that quietly has
+ * nothing in it is the thing worth seeing.
+ */
+const MonthGrid = ({
+  currentDate, appointments, onSelectDate, onSelectAppointment,
+  focusDoctor = null,
+}) => {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
@@ -60,6 +72,11 @@ const MonthGrid = ({ currentDate, appointments, onSelectDate, onSelectAppointmen
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+
+  const busiest = useMemo(
+    () => Math.max(1, ...Object.values(byDate).map((l) => l.length)),
+    [byDate]
+  );
 
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
@@ -102,9 +119,25 @@ const MonthGrid = ({ currentDate, appointments, onSelectDate, onSelectAppointmen
                   {date.getDate()}
                 </span>
                 {dayAppts.length > 0 && (
-                  <span className="text-[10px] text-gray-500">{dayAppts.length}</span>
+                  <span className={`text-[10px] font-semibold ${
+                    focusDoctor ? "text-[#2a276e]" : "text-gray-500"
+                  }`}>
+                    {dayAppts.length}
+                  </span>
                 )}
               </div>
+
+              {/* A load bar rather than another number. In one-doctor mode the
+                  question is "how full is this day", and a bar answers it
+                  across a whole month at a glance. */}
+              {focusDoctor && inMonth && (
+                <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
+                  <div
+                    className="h-full bg-[#2a276e]/70 rounded-full"
+                    style={{ width: `${Math.round((dayAppts.length / busiest) * 100)}%` }}
+                  />
+                </div>
+              )}
 
               <div className="flex-1 flex flex-col gap-0.5 overflow-hidden">
                 {dayAppts.slice(0, MAX_CHIPS).map((apt) => {

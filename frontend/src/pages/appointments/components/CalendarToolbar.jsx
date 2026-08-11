@@ -1,10 +1,10 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, ExternalLink, CalendarDays } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, ExternalLink, CalendarDays, Users, Armchair, HelpCircle } from "lucide-react";
 
 const CalendarToolbar = ({
   title,
-  viewMode,            // 'week' | 'today'
+  viewMode,            // 'month' | 'week' | 'today'
   onPrev,
   onNext,
   onToday,
@@ -13,6 +13,16 @@ const CalendarToolbar = ({
   publicBookingUrl,
   prevDisabled = false,
   nextDisabled = false,
+  // Doctor as a layout axis, not just a filter. The day view has always had
+  // one column per doctor; week and month only tinted the cards. focusDoctor
+  // is what gives those two an all-doctors and a one-doctor mode.
+  doctors = [],
+  focusDoctorId = "",
+  onSetFocusDoctor,
+  // Day view only: columns by person or by room.
+  axis = "doctor",
+  onSetAxis,
+  chairCount = 1,
 }) => {
   const iconBtn =
     "p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-gray-600";
@@ -76,6 +86,47 @@ const CalendarToolbar = ({
             Today
           </button>
         </div>
+
+        {/* Who am I looking at. Kept next to the view toggle because it
+            answers the same question the view does, and it persists across
+            month, week and day so switching keeps the same subject. */}
+        {doctors.length > 0 && (
+          <select
+            value={focusDoctorId}
+            onChange={(e) => onSetFocusDoctor?.(e.target.value)}
+            className="h-9 px-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 bg-white max-w-[11rem]"
+            aria-label="Which doctor to show"
+          >
+            <option value="">All doctors</option>
+            {doctors.map((d) => (
+              <option key={d.id} value={String(d.id)}>{d.name || d.email}</option>
+            ))}
+          </select>
+        )}
+
+        {/* Chairs are a different question from people: "which room is free"
+            rather than "who is busy". Day view only, where there are columns
+            to swap. */}
+        {viewMode === "today" && chairCount > 1 && (
+          <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
+            <button
+              onClick={() => onSetAxis?.("doctor")}
+              title="Columns by doctor"
+              className={`${viewBtnBase} ${axis === "doctor" ? "bg-white text-[#2a276e] shadow-sm" : "text-gray-600"}`}
+            >
+              <Users className="w-4 h-4" />
+              <span className="hidden lg:inline">By doctor</span>
+            </button>
+            <button
+              onClick={() => onSetAxis?.("chair")}
+              title="Columns by chair"
+              className={`${viewBtnBase} ${axis === "chair" ? "bg-white text-[#2a276e] shadow-sm" : "text-gray-600"}`}
+            >
+              <Armchair className="w-4 h-4" />
+              <span className="hidden lg:inline">By chair</span>
+            </button>
+          </div>
+        )}
 
         {publicBookingUrl && (
           <Link

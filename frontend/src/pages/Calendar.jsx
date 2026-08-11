@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { SkeletonBox } from "../components/Skeleton";
 import { api } from "../utils/api";
@@ -26,6 +26,7 @@ import MiniCalendar from "./appointments/components/MiniCalendar";
 import MonthGrid from "./appointments/components/MonthGrid";
 import DayGrid from "./appointments/components/DayGrid";
 import { getAppointmentColor } from "./appointments/utils/doctorColors";
+import BookingModal from "./appointments/components/BookingModal";
 import { computeDayLayout } from "./appointments/utils/layout";
 import { getCurrencySymbol } from "../utils/currency";
 import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
@@ -81,10 +82,26 @@ const Calendar = () => {
     doctor_id: '' // optional — empty means unassigned (public bookings default here)
   });
   const [doctors, setDoctors] = useState([]);
+
+  // ── The rebuild ───────────────────────────────────────────────────────────
+  // Seed for the booking modal opened from a click on the grid. Null means the
+  // modal is closed; the object carries the slot that was clicked.
+  const [bookingSeed, setBookingSeed] = useState(null);
+  // Working hours per doctor for the day on screen, so the grid can shade time
+  // nobody is available for. One request rather than one per doctor.
+  const [dayShape, setDayShape] = useState(null);
+  // Columns by person or by room, day view only.
+  const [axis, setAxis] = useState("doctor");
+  // Doctor as a layout axis in week and month, where there are no columns.
+  // Persisted so switching view keeps answering the same question.
+  const [focusDoctorId, setFocusDoctorId] = useState(
+    () => localStorage.getItem("mp_calendar_focus_doctor") || ""
+  );
+  // Past appointments nobody ever closed off.
+  const [needsOutcome, setNeedsOutcome] = useState({ count: 0, appointments: [] });
+  const [outcomeBusy, setOutcomeBusy] = useState(false);
+  const [cancelPrompt, setCancelPrompt] = useState(null);
   // Reject confirmation dialog state — replaces the native confirm() + prompt() flow.
-  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
-  const [rejectSubmitting, setRejectSubmitting] = useState(false);
   // Phase 1 filter state: which doctors are visible, and whether to show unassigned (public) bookings
   const [selectedDoctorIds, setSelectedDoctorIds] = useState(() => new Set());
   const [showUnassigned, setShowUnassigned] = useState(true);
@@ -352,11 +369,152 @@ const Calendar = () => {
 
   // Filtered appointments based on team-member panel selection.
   const visibleAppointments = useMemo(() => {
+    const focus = focusDoctorId ? Number(focusDoctorId) : null;
     return appointments.filter(a => {
+      // Focusing one doctor is a stronger statement than the team checkboxes,
+      // so it wins outright rather than intersecting with them.
+      if (focus) return a.doctor_id === focus;
       if (a.doctor_id) return selectedDoctorIds.has(a.doctor_id);
       return showUnassigned;
     });
-  }, [appointments, selectedDoctorIds, showUnassigned]);
+  }, [appointments, selectedDoctorIds, showUnassigned, focusDoctorId]);
+
+  const focusDoctor = useMemo(
+    () => (focusDoctorId ? doctors.find(d => d.id === Number(focusDoctorId)) || null : null),
+    [focusDoctorId, doctors]
+  );
+
+  // ── Working hours for the day on screen ───────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    const iso = currentDate.toISOString().split('T')[0];
+    api.get('/scheduling/day-shape', { params: { on: iso } })
+      .then(res => { if (!cancelled) setDayShape(res); })
+      .catch(() => { if (!cancelled) setDayShape(null); });
+    return () => { cancelled = true; };
+  }, [currentDate]);
+
+  // ── Appointments left open in the past ────────────────────────────────────
+  const loadNeedsOutcome = useCallback(async () => {
+    try {
+      setNeedsOutcome(await api.get('/appointments/needs-outcome'));
+    } catch {
+      setNeedsOutcome({ count: 0, appointments: [] });
+    }
+  }, []);
+
+  useEffect(() => { loadNeedsOutcome(); }, [loadNeedsOutcome]);
+
+  // Escape closes whatever is on top, innermost first. Every other drawer in
+  // the app already did this; the appointment panel did not, which left the
+  // keyboard with no way out of it.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      if (cancelPrompt) { setCancelPrompt(null); return; }
+      if (bookingSeed) { setBookingSeed(null); return; }
+      if (selectedAppointment) setSelectedAppointment(null);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [cancelPrompt, bookingSeed, selectedAppointment]);
+
+  useEffect(() => {
+    if (focusDoctorId) localStorage.setItem('mp_calendar_focus_doctor', focusDoctorId);
+    else localStorage.removeItem('mp_calendar_focus_doctor');
+  }, [focusDoctorId]);
+
+  // ── Resize: the card's bottom edge was dragged ────────────────────────────
+  const handleResize = async (appointmentId, newEndTime) => {
+    const apt = appointments.find(a => a.id === appointmentId);
+    if (!apt || newEndTime === apt.endTime) return;
+
+    const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+    const duration = toMin(newEndTime) - toMin(apt.startTime);
+    if (duration < 5) return;
+
+    const previous = apt;
+    setAppointments(prev => prev.map(a =>
+      a.id === appointmentId ? { ...a, endTime: newEndTime, duration } : a));
+
+    try {
+      await api.put(`/appointments/${appointmentId}`, {
+        end_time: newEndTime,
+        duration,
+        start_time: apt.startTime,
+        appointment_date: new Date(apt.date).toISOString().split('T')[0],
+      });
+      toast.success(`Now ${duration} minutes`);
+    } catch (err) {
+      // Revert. The server enforces availability and clashes, so a refusal
+      // here is a real answer rather than a glitch, and the card should snap
+      // back to what is actually stored.
+      setAppointments(prev => prev.map(a => (a.id === appointmentId ? previous : a)));
+      toast.error(err?.detail || err?.message || 'Could not change that length');
+    }
+  };
+
+  // ── A click or drag on empty grid ─────────────────────────────────────────
+  const handleCreateFromGrid = (seed) => {
+    if (seed.available === false) {
+      toast.info('That doctor is not working then. Pick another time, or set their hours in Staff.');
+      return;
+    }
+    setBookingSeed(seed);
+  };
+
+  const handleBookingSaved = async (result) => {
+    await fetchAppointments();
+    if (result?.kind === 'series') {
+      const made = result.created?.length || 0;
+      const missed = result.skipped || [];
+      toast.success(`${made} visit${made === 1 ? '' : 's'} booked`);
+      if (missed.length) {
+        toast.warn(
+          `${missed.length} skipped: ${missed.map(m => `${m.date} (${m.reason})`).join('; ')}`,
+          { autoClose: 9000 }
+        );
+      }
+    } else {
+      toast.success('Appointment booked');
+    }
+  };
+
+  // ── Outcomes ──────────────────────────────────────────────────────────────
+  const applyOutcome = async (appointmentId, status, cancelReason) => {
+    setOutcomeBusy(true);
+    try {
+      await api.post(`/appointments/${appointmentId}/outcome`, {
+        status, cancel_reason: cancelReason || null,
+      });
+      setAppointments(prev => prev.map(a => (a.id === appointmentId ? { ...a, status } : a)));
+      setSelectedAppointment(prev =>
+        prev && prev.id === appointmentId ? { ...prev, status } : prev);
+      loadNeedsOutcome();
+      toast.success({
+        completed: 'Marked as seen',
+        no_show: 'Marked as a no-show',
+        cancelled: 'Cancelled',
+      }[status] || 'Saved');
+    } catch (err) {
+      toast.error(err?.detail || err?.message || 'Could not record that');
+    } finally {
+      setOutcomeBusy(false);
+      setCancelPrompt(null);
+    }
+  };
+
+  // ── Booking becomes a visit ───────────────────────────────────────────────
+  const handleStartVisit = async (appointment) => {
+    try {
+      const res = await api.post(`/appointments/${appointment.id}/start-visit`);
+      setSelectedAppointment(null);
+      navigate(`/patient-profile/${res.patient_id}?tab=casepapers&casePaper=${res.case_paper_id}`);
+      toast.success(res.created ? 'Visit started' : 'Opening the visit already started');
+    } catch (err) {
+      toast.error(err?.detail || err?.message || 'Could not start the visit');
+    }
+  };
 
   // Counts used by the team-members panel (all appointments in current month window).
   const { countsByDoctorId, unassignedCount } = useMemo(() => {
@@ -1157,64 +1315,6 @@ const Calendar = () => {
     }
   };
 
-  // Handle appointment acceptance (NO auto-create patient file)
-  const handleAcceptAppointment = async () => {
-    try {
-      const response = await api.put(`/appointments/${selectedAppointment.id}`, {
-        status: 'accepted'
-      });
-      
-      // Update local state
-      setAppointments(prev => prev.map(apt => 
-        apt.id === selectedAppointment.id 
-          ? { ...apt, status: 'accepted' }
-          : apt
-      ));
-      
-      // Update selected appointment - patient_id stays null until file created manually
-      setSelectedAppointment({ 
-        ...selectedAppointment, 
-        status: 'accepted',
-        patientId: null  // No auto-create patient file
-      });
-      
-      toast.success('Appointment accepted — you can now create a patient file from the details panel.');
-    } catch (error) {
-      console.error('Error accepting appointment:', error);
-      toast.error('Failed to accept appointment. Please try again.');
-    }
-  };
-
-  // Handle appointment rejection
-  // Open the in-page reject dialog (replaces the native confirm + prompt flow).
-  const handleRejectAppointment = () => {
-    setRejectReason('');
-    setRejectDialogOpen(true);
-  };
-
-  // Actually submit the rejection. Called by the dialog's Reject button.
-  const submitRejection = async () => {
-    if (!selectedAppointment) return;
-    setRejectSubmitting(true);
-    try {
-      await api.put(`/appointments/${selectedAppointment.id}`, {
-        status: 'rejected',
-        rejection_reason: rejectReason.trim() || null,
-      });
-      setAppointments(prev => prev.map(apt =>
-        apt.id === selectedAppointment.id ? { ...apt, status: 'rejected' } : apt
-      ));
-      setSelectedAppointment({ ...selectedAppointment, status: 'rejected' });
-      setRejectDialogOpen(false);
-      toast.success('Appointment rejected');
-    } catch (error) {
-      console.error('Error rejecting appointment:', error);
-      toast.error('Failed to reject appointment. Please try again.');
-    } finally {
-      setRejectSubmitting(false);
-    }
-  };
-
   // Handle creating patient file - check for duplicates first
   const handleCreatePatientFile = async () => {
     try {
@@ -1498,6 +1598,12 @@ const Calendar = () => {
           }}
           onOpenCreate={() => setShowAddForm(true)}
           publicBookingUrl={getBookingUrl()}
+          doctors={doctors}
+          focusDoctorId={focusDoctorId}
+          onSetFocusDoctor={setFocusDoctorId}
+          axis={axis}
+          onSetAxis={setAxis}
+          chairCount={dayShape?.chairs || 1}
           prevDisabled={viewMode === 'today' && (() => {
             const today = new Date(); today.setHours(0,0,0,0);
             const current = new Date(currentDate); current.setHours(0,0,0,0);
@@ -1509,6 +1615,51 @@ const Calendar = () => {
             return Math.round((current - today) / (1000 * 60 * 60 * 24)) >= 1;
           })()}
         />
+
+      {/* Appointments the day walked away from.
+          Surfaced, never auto-marked: guessing a no-show on a clinic's behalf
+          would poison the exact number this is here to earn. */}
+      {needsOutcome.count > 0 && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start justify-between gap-3 flex-wrap">
+          <div className="flex items-start gap-2.5 min-w-0">
+            <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-amber-900">
+                {needsOutcome.count} past appointment{needsOutcome.count === 1 ? '' : 's'} still open
+              </p>
+              <p className="text-xs text-amber-800 mt-0.5">
+                Say whether each one happened and your no-show rate starts working.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {needsOutcome.appointments.slice(0, 3).map((a) => (
+              <div key={a.id} className="flex items-center gap-1.5 bg-white border border-amber-200 rounded-lg px-2 py-1">
+                <span className="text-xs font-medium text-gray-700 truncate max-w-[8rem]">
+                  {a.patient_name}
+                </span>
+                <button
+                  onClick={() => applyOutcome(a.id, 'completed')}
+                  disabled={outcomeBusy}
+                  title="They came"
+                  className="px-1.5 py-0.5 rounded text-[11px] font-bold text-green-700 hover:bg-green-50 disabled:opacity-50"
+                >
+                  Seen
+                </button>
+                <button
+                  onClick={() => applyOutcome(a.id, 'no_show')}
+                  disabled={outcomeBusy}
+                  title="They did not come"
+                  className="px-1.5 py-0.5 rounded text-[11px] font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+                >
+                  No show
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
 
         {/* Mobile-only toggle: filters/mini-calendar vs the schedule grid */}
         <button
@@ -1566,6 +1717,7 @@ const Calendar = () => {
             appointments={visibleAppointments}
             onSelectDate={(d) => { setCurrentDate(d); setViewMode('today'); }}
             onSelectAppointment={openAppointmentDetails}
+            focusDoctor={focusDoctor}
           />
         ) : viewMode === 'today' ? (
           /* Today's View — multi-resource day grid (one column per visible doctor) */
@@ -1580,6 +1732,11 @@ const Calendar = () => {
               clinicTimings={clinicTimings}
               onAppointmentClick={openAppointmentDetails}
               onReassign={handleReassign}
+              onResize={handleResize}
+              onCreate={handleCreateFromGrid}
+              dayShape={dayShape}
+              axis={axis}
+              chairCount={dayShape?.chairs || 1}
             />
           </div>
         ) : (
@@ -1697,6 +1854,51 @@ const Calendar = () => {
         )}
           </div>
         </div>
+
+      {/* Book from a click on the grid. The clicked slot is a starting
+          point, not a decision: time and length stay editable inside. */}
+      <BookingModal
+        open={!!bookingSeed}
+        initial={bookingSeed}
+        onClose={() => setBookingSeed(null)}
+        onSaved={handleBookingSaved}
+        doctors={doctors}
+        treatments={treatmentTypes}
+        chairCount={dayShape?.chairs || 1}
+      />
+
+      {/* Cancelling asks why. A cancellation with no reason is a number; one
+          with a reason is something a clinic can act on. */}
+      {cancelPrompt && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setCancelPrompt(null)} />
+          <div className="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl p-5">
+            <h3 className="text-base font-bold text-gray-900">Cancel this appointment</h3>
+            <p className="text-xs text-gray-500 mt-0.5 mb-3">A short reason helps you spot a pattern later.</p>
+            <input
+              autoFocus
+              value={cancelPrompt.reason}
+              onChange={(e) => setCancelPrompt(c => ({ ...c, reason: e.target.value }))}
+              onKeyDown={(e) => e.key === 'Enter' && applyOutcome(cancelPrompt.id, 'cancelled', cancelPrompt.reason)}
+              placeholder="Patient rang to rearrange"
+              className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#2a276e] outline-none"
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setCancelPrompt(null)}
+                      className="px-4 h-9 rounded-lg border border-gray-200 text-sm font-semibold text-gray-600">
+                Keep it
+              </button>
+              <button
+                onClick={() => applyOutcome(cancelPrompt.id, 'cancelled', cancelPrompt.reason)}
+                disabled={outcomeBusy}
+                className="px-4 h-9 rounded-lg bg-[#2a276e] text-white text-sm font-bold disabled:opacity-50"
+              >
+                Cancel appointment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Appointment Detail Modal */}
       {selectedAppointment && (
@@ -1824,28 +2026,54 @@ const Calendar = () => {
 
             </div>
             <div className="p-6 border-t border-gray-200 space-y-3">
-              {/* Accept/Reject buttons - only show for confirmed/pending appointments */}
-              {selectedAppointment.status === 'confirmed' && (
-                <div className="flex gap-3 mb-3">
-                  <button 
-                    onClick={handleAcceptAppointment}
-                    className="flex-1 bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-medium"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span>Accept Appointment</span>
-                  </button>
-                  <button 
-                    onClick={handleRejectAppointment}
-                    className="flex-1 bg-red-600 text-white py-3 rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2 font-medium"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    <span>Reject</span>
-                  </button>
+              {/* How it ended.
+                  This used to be Accept and Reject, neither of which said
+                  whether the patient turned up, so 165 of 167 appointments sat
+                  in the past with no outcome at all and a no-show rate could
+                  not be calculated. These three close an appointment properly. */}
+              {!['completed', 'no_show', 'cancelled'].includes(selectedAppointment.status) && (
+                <div className="mb-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                    How did it go?
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      onClick={() => applyOutcome(selectedAppointment.id, 'completed')}
+                      disabled={outcomeBusy}
+                      className="py-2.5 rounded-lg border border-green-200 bg-green-50 text-green-700 text-sm font-semibold hover:bg-green-100 transition-colors disabled:opacity-50"
+                    >
+                      Seen
+                    </button>
+                    <button
+                      onClick={() => applyOutcome(selectedAppointment.id, 'no_show')}
+                      disabled={outcomeBusy}
+                      className="py-2.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-sm font-semibold hover:bg-amber-100 transition-colors disabled:opacity-50"
+                    >
+                      No show
+                    </button>
+                    <button
+                      onClick={() => setCancelPrompt({ id: selectedAppointment.id, reason: '' })}
+                      disabled={outcomeBusy}
+                      className="py-2.5 rounded-lg border border-gray-200 bg-white text-gray-600 text-sm font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    >
+                      Cancelled
+                    </button>
+                  </div>
                 </div>
+              )}
+
+              {/* The booking becomes the visit, carrying the doctor and the
+                  treatment across. Without this the two records never met:
+                  case_papers.appointment_id was populated 0 times in 167. */}
+              {selectedAppointment.patientId &&
+               !['completed', 'no_show', 'cancelled'].includes(selectedAppointment.status) && (
+                <button
+                  onClick={() => handleStartVisit(selectedAppointment)}
+                  className="w-full mb-3 bg-[#29828a] text-white py-3 rounded-lg hover:bg-[#1f6b72] transition-colors flex items-center justify-center gap-2 font-semibold"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Start visit</span>
+                </button>
               )}
                {/* Patient File Actions - Show based on appointment status and patient_id */}
                <div className="mt-6">
@@ -2305,50 +2533,6 @@ const Calendar = () => {
       )}
 
       {/* Reject appointment dialog — replaces native confirm + prompt */}
-      {rejectDialogOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/30" onClick={() => !rejectSubmitting && setRejectDialogOpen(false)}></div>
-          <div className="relative bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden">
-            <div className="px-6 pt-7 pb-5 text-center">
-              <div className="mx-auto w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mb-4">
-                <AlertTriangle className="w-7 h-7 text-red-500" />
-              </div>
-              <h3 className="text-xl font-bold text-gray-900">Reject this appointment?</h3>
-              <p className="text-sm text-gray-500 mt-1">
-                The patient will be notified by email. You can include an optional reason below.
-              </p>
-            </div>
-
-            <div className="px-6 pb-2">
-              <textarea
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                placeholder="Reason (optional) — e.g. doctor unavailable, fully booked"
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#2a276e] focus:border-transparent resize-none"
-              />
-            </div>
-
-            <div className="px-6 py-5 mt-2 space-y-2">
-              <button
-                onClick={submitRejection}
-                disabled={rejectSubmitting}
-                className="w-full py-3 bg-red-500 text-white rounded-xl font-semibold hover:bg-red-600 transition-colors disabled:opacity-60"
-              >
-                {rejectSubmitting ? 'Rejecting…' : 'Reject appointment'}
-              </button>
-              <button
-                onClick={() => setRejectDialogOpen(false)}
-                disabled={rejectSubmitting}
-                className="w-full py-3 border border-gray-200 text-gray-600 rounded-xl font-semibold hover:bg-gray-50 transition-colors disabled:opacity-60"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Duplicate Patient Warning Modal — registration flow, same clean style */}
       {showDuplicateWarning && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
