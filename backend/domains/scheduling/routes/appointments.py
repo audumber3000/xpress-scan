@@ -8,6 +8,7 @@ from typing import List, Optional
 from core.posthog_client import track_event, EVENTS
 from core.auth_utils import get_current_user, require_doctor_or_owner
 from core.notification_dispatch import notify_event, fmt_appt_time
+from domains.scheduling.availability import check_available, find_conflict
 from domains.scheduling.appointment_status import (
     ALL_STATUSES, OPEN_STATUSES, TERMINAL_STATUSES, CANCELLED, NO_SHOW,
     COMPLETED, ARRIVED, CONFIRMED, SCHEDULED, normalize_status, is_terminal,
@@ -121,6 +122,27 @@ async def create_appointment(
             if max_visit and max_visit.visit_number:
                 visit_number = max_visit.visit_number + 1
         
+        # Availability and clashes are enforced HERE, not only in the UI.
+        # Greying out a slot on the grid is a hint; this is the rule. Mobile,
+        # the public booking page and a raw API call all land on this path, and
+        # none of them may put a patient in front of a dentist who is on leave.
+        _reason = check_available(
+            db, current_user.clinic_id, appointment.doctor_id,
+            appointment_datetime.date(), appointment.start_time, appointment.end_time,
+        )
+        if _reason:
+            raise HTTPException(status_code=409, detail=_reason)
+
+        _clash = find_conflict(
+            db, current_user.clinic_id, appointment.doctor_id,
+            appointment_datetime.date(), appointment.start_time, appointment.end_time,
+        )
+        if _clash:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Clashes with {_clash.patient_name} at {_clash.start_time} to {_clash.end_time}",
+            )
+
         # Create appointment
         db_appointment = Appointment(
             clinic_id=current_user.clinic_id,
@@ -217,6 +239,12 @@ async def create_appointment(
             synced_at=getattr(db_appointment, 'synced_at', None),
             sync_status=getattr(db_appointment, 'sync_status', 'local')
         )
+    except HTTPException:
+        # A deliberate 409 for a clash or a day off must reach the caller as a
+        # 409. Without this the blanket handler below re-wrapped it as a 500,
+        # which reads to the UI as "something broke" rather than "that slot is
+        # not free", and the front desk gets an error toast instead of a reason.
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error creating appointment: {str(e)}")
@@ -919,6 +947,31 @@ async def update_appointment(
             appointment.start_time = appointment_update.start_time
         if appointment_update.end_time:
             appointment.end_time = appointment_update.end_time
+
+        # Same rule on the way through an edit. Dragging a card on the grid and
+        # resizing it both arrive here, so this is what stops a drag landing
+        # somewhere the doctor is not working.
+        if any([appointment_update.appointment_date, appointment_update.start_time,
+                appointment_update.end_time, appointment_update.doctor_id is not None]):
+            _on = appointment.appointment_date.date()
+            _reason = check_available(
+                db, current_user.clinic_id, appointment.doctor_id,
+                _on, appointment.start_time, appointment.end_time,
+            )
+            if _reason:
+                db.rollback()
+                raise HTTPException(status_code=409, detail=_reason)
+            _clash = find_conflict(
+                db, current_user.clinic_id, appointment.doctor_id,
+                _on, appointment.start_time, appointment.end_time,
+                exclude_id=appointment.id,
+            )
+            if _clash:
+                db.rollback()
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Clashes with {_clash.patient_name} at {_clash.start_time} to {_clash.end_time}",
+                )
 
         # --- AUTO PATIENT CREATION LOGIC ---
         # Checking in someone who was booked without a patient file creates one.

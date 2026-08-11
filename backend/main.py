@@ -50,7 +50,7 @@ from domains.auth.routes import clinic_users, permissions, security
 from domains.clinic.routes import clinics, subscriptions
 from domains.finance.routes import payments_clean as payments, invoices, ledger, offers
 from domains.communication.routes import notifications, message_templates
-from domains.scheduling.routes import attendance, attendance_mobile, appointments
+from domains.scheduling.routes import attendance, attendance_mobile, appointments, scheduling, appointment_stats
 from domains.medical.routes import reports, xray, medications
 from domains.analytics.routes import dashboard, dashboard_reports
 from domains.infrastructure.routes import devices, sync, template_configs
@@ -181,6 +181,11 @@ async def lifespan(app: FastAPI):
                 "UPDATE appointments SET status = 'no_show'   WHERE status IN ('no-show', 'noshow')",
                 "UPDATE appointments SET status = 'scheduled' WHERE status IS NULL OR status NOT IN "
                 "('scheduled','confirmed','arrived','completed','no_show','cancelled')",
+                # How long a treatment actually occupies the chair. Backfilled
+                # to 30 rather than the old blanket 60, which treated a check-up
+                # and a root canal as the same length.
+                "ALTER TABLE treatment_types ADD COLUMN IF NOT EXISTS duration_minutes INTEGER DEFAULT 30",
+                "UPDATE treatment_types SET duration_minutes = 30 WHERE duration_minutes IS NULL",
             ):
                 conn.execute(text(_ddl))
 
@@ -582,6 +587,10 @@ app.include_router(message_templates.router, prefix="/api/v1/message-templates",
 app.include_router(attendance.router, prefix="/api/v1/attendance", tags=["attendance"])
 app.include_router(attendance_mobile.router, prefix="/api/v1/attendance-mobile", tags=["attendance_mobile"])
 app.include_router(appointments.router, prefix="/api/v1/appointments", tags=["appointments"])
+# Doctor hours, leave, free slots, series and the waitlist. Its own prefix
+# rather than /appointments, because none of it is an appointment.
+app.include_router(scheduling.router, prefix="/api/v1", tags=["scheduling"])
+app.include_router(appointment_stats.router, prefix="/api/v1", tags=["appointment-stats"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["reports"])
 app.include_router(xray.router, prefix="/api/v1/xray", tags=["xray"])
 app.include_router(medications.router, prefix="/api/v1")

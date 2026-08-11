@@ -277,6 +277,21 @@ run_migration "appt_status_noshow"    "UPDATE appointments SET status = 'no_show
 # actionable, never silently drop it out of every query.
 run_migration "appt_status_unknown"   "UPDATE appointments SET status = 'scheduled' WHERE status IS NULL OR status NOT IN ('scheduled','confirmed','arrived','completed','no_show','cancelled')"
 
+# ── Scheduling primitives ────────────────────────────────────────────────────
+# A treatment now knows how long it occupies the chair. 30 rather than the old
+# blanket 60, which treated a check-up and a root canal as the same length.
+run_migration "tt_duration"  "ALTER TABLE treatment_types ADD COLUMN IF NOT EXISTS duration_minutes INTEGER DEFAULT 30"
+run_migration "tt_duration_backfill" "UPDATE treatment_types SET duration_minutes = 30 WHERE duration_minutes IS NULL"
+
+# Clinic.timings says when the door is open, not who is behind it. Without
+# these the grid would book a dentist onto a day they are not in the building.
+run_migration "doctor_availability" "CREATE TABLE IF NOT EXISTS doctor_availability (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL REFERENCES clinics(id), doctor_id INTEGER NOT NULL REFERENCES users(id), weekday INTEGER NOT NULL, start_time VARCHAR NOT NULL, end_time VARCHAR NOT NULL, created_at TIMESTAMP DEFAULT NOW())"
+run_migration "doctor_availability_idx" "CREATE INDEX IF NOT EXISTS ix_doctor_availability_lookup ON doctor_availability (clinic_id, doctor_id, weekday)"
+run_migration "doctor_time_off" "CREATE TABLE IF NOT EXISTS doctor_time_off (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL REFERENCES clinics(id), doctor_id INTEGER NOT NULL REFERENCES users(id), start_date DATE NOT NULL, end_date DATE NOT NULL, start_time VARCHAR, end_time VARCHAR, reason VARCHAR, created_by INTEGER REFERENCES users(id), created_at TIMESTAMP DEFAULT NOW())"
+run_migration "doctor_time_off_idx" "CREATE INDEX IF NOT EXISTS ix_doctor_time_off_lookup ON doctor_time_off (clinic_id, doctor_id, start_date, end_date)"
+run_migration "appointment_waitlist" "CREATE TABLE IF NOT EXISTS appointment_waitlist (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL REFERENCES clinics(id), patient_id INTEGER REFERENCES patients(id), patient_name VARCHAR NOT NULL, patient_phone VARCHAR, doctor_id INTEGER REFERENCES users(id), treatment VARCHAR, duration INTEGER NOT NULL DEFAULT 30, preferred_from DATE, preferred_to DATE, note VARCHAR, status VARCHAR NOT NULL DEFAULT 'waiting', booked_appointment_id INTEGER REFERENCES appointments(id), created_by INTEGER REFERENCES users(id), created_at TIMESTAMP DEFAULT NOW())"
+run_migration "appointment_waitlist_idx" "CREATE INDEX IF NOT EXISTS ix_appointment_waitlist_clinic ON appointment_waitlist (clinic_id, status)"
+
 # ── Schema migration check (run against RDS) ──────────────────────────────────
 echo ""
 echo "▶ Running schema migration check against RDS..."

@@ -356,6 +356,10 @@ class TreatmentType(Base):
     clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
     name = Column(String, nullable=False)
     price = Column(Float, nullable=False)  # Price in INR (Indian Rupees)
+    # How long the chair is actually occupied. Without it every booking
+    # defaulted to 60 minutes whether it was a check-up or a root canal, and
+    # anyone planning a real day did the arithmetic in their head.
+    duration_minutes = Column(Integer, nullable=True, default=30)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
@@ -815,6 +819,82 @@ class UserDevice(Base):
     sync_status = Column(String, default='local')
     
     user = relationship("User")
+
+class DoctorAvailability(Base):
+    """When a dentist normally works, one row per weekday block.
+
+    Two rows for one weekday express a split shift (a morning list and an
+    evening list with a break between), which is how most practices actually
+    run. No row for a weekday means not working that day.
+
+    Clinic opening hours already existed on `Clinic.timings`, but they say when
+    the door is open, not who is behind it. Without this the grid would happily
+    book a dentist onto a day they are not in the building.
+    """
+    __tablename__ = 'doctor_availability'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    doctor_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    weekday = Column(Integer, nullable=False)          # 0 = Monday .. 6 = Sunday
+    start_time = Column(String, nullable=False)        # "09:00"
+    end_time = Column(String, nullable=False)          # "13:00"
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    doctor = relationship("User")
+
+
+class DoctorTimeOff(Base):
+    """Leave, a conference, a half day.
+
+    Stored as a date range with optional times so a single afternoon off does
+    not require blocking the whole day. Overrides availability rather than
+    editing it, so the normal working week survives a week of holiday.
+    """
+    __tablename__ = 'doctor_time_off'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    doctor_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    # Null on both means the whole day (or range of days) is off.
+    start_time = Column(String, nullable=True)
+    end_time = Column(String, nullable=True)
+    reason = Column(String, nullable=True)
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    doctor = relationship("User", foreign_keys=[doctor_id])
+
+
+class AppointmentWaitlist(Base):
+    """Patients who want an earlier slot than the one they were given.
+
+    When a cancellation frees a slot, nothing previously knew who wanted it,
+    so the gap simply went unused. A waitlist entry is a standing request, not
+    a booking: it holds no time and blocks nothing.
+    """
+    __tablename__ = 'appointment_waitlist'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    patient_id = Column(Integer, ForeignKey('patients.id'), nullable=True)
+    patient_name = Column(String, nullable=False)
+    patient_phone = Column(String, nullable=True)
+    doctor_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    treatment = Column(String, nullable=True)
+    duration = Column(Integer, nullable=False, default=30)
+    # The window they would accept. Null means anything.
+    preferred_from = Column(Date, nullable=True)
+    preferred_to = Column(Date, nullable=True)
+    note = Column(String, nullable=True)
+    status = Column(String, nullable=False, default='waiting')  # waiting | booked | dropped
+    # Set when a waitlist entry turns into a real booking, so the two stay tied.
+    booked_appointment_id = Column(Integer, ForeignKey('appointments.id'), nullable=True)
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    patient = relationship("Patient")
+    doctor = relationship("User", foreign_keys=[doctor_id])
+
 
 class Vendor(Base):
     __tablename__ = 'vendors'
