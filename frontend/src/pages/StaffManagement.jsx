@@ -50,7 +50,7 @@ const StaffManagement = () => {
   // Add User state
   const [showAddModal, setShowAddModal] = useState(false);
   const [addingUser, setAddingUser] = useState(false);
-  const [formData, setFormData] = useState({ name: "", email: "", username: "", role: "receptionist", password: "" });
+  const [formData, setFormData] = useState({ name: "", email: "", username: "", role: "receptionist", password: "", phone: "", fee_basis: "", fee_value: "" });
   
   // Role + status, applied together by the shared FilterPanel. Replaces the row
   // of pill buttons, which could only express one choice at a time.
@@ -147,7 +147,11 @@ const StaffManagement = () => {
     try {
       const userData = {
         name: formData.name,
-        role: formData.role
+        role: formData.role,
+        phone: (formData.phone || "").trim() || null,
+        // Blank basis means "not a paid consultant", which is most staff.
+        fee_basis: formData.fee_basis || null,
+        fee_value: formData.fee_basis ? Number(formData.fee_value) || 0 : null
       };
       if (email) userData.email = email;
       if (username) userData.username = username;
@@ -157,7 +161,7 @@ const StaffManagement = () => {
       await api.post("/clinic-users/", userData);
       toast.success("User added successfully");
       setShowAddModal(false);
-      setFormData({ name: "", email: "", username: "", role: "receptionist", password: "" });
+      setFormData({ name: "", email: "", username: "", role: "receptionist", password: "", phone: "", fee_basis: "", fee_value: "" });
       fetchUsers();
     } catch (error) {
       console.error("Error adding user:", error);
@@ -418,6 +422,67 @@ const StaffManagement = () => {
                     ))}
                   </select>
                 </div>
+
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Mobile <span className="text-gray-400 font-normal">(so we can send their login on WhatsApp)</span>
+                  </label>
+                  <input
+                    type="tel"
+                    name="phone"
+                    value={formData.phone}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#29828a]"
+                    placeholder="9876543210"
+                  />
+                </div>
+
+                {/* Set once here, applied to every case this person treats. The
+                    alternative, typing a fee on each case paper, is how the same
+                    doctor ends up on three different rates. */}
+                <div className="mb-4 rounded-lg border border-gray-200 p-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Consultant fee <span className="text-gray-400 font-normal">(optional)</span>
+                  </label>
+                  <p className="text-xs text-gray-500 mb-2.5">
+                    Leave off unless this person is paid per case. It is then applied
+                    automatically to every case they treat.
+                  </p>
+                  <div className="flex gap-2">
+                    <select
+                      name="fee_basis"
+                      value={formData.fee_basis}
+                      onChange={handleInputChange}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#29828a]"
+                    >
+                      <option value="">Not paid per case</option>
+                      <option value="fixed">Fixed amount per case</option>
+                      <option value="percentage">Share of what is collected</option>
+                    </select>
+                    {formData.fee_basis && (
+                      <div className="relative w-32 flex-shrink-0">
+                        <input
+                          type="number"
+                          name="fee_value"
+                          value={formData.fee_value}
+                          onChange={handleInputChange}
+                          placeholder={formData.fee_basis === 'percentage' ? '40' : '1500'}
+                          className="w-full px-3 py-2 pr-7 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#29828a]"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">
+                          {formData.fee_basis === 'percentage' ? '%' : '₹'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  {formData.fee_basis === 'percentage' && (
+                    <p className="text-[11px] text-gray-500 mt-2">
+                      Worked out on what the patient has actually paid, so you never owe a
+                      share of money you have not received.
+                    </p>
+                  )}
+                </div>
+
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Password (Optional)</label>
                   <input

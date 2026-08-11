@@ -5,7 +5,7 @@ import { api } from '../utils/api';
 import { toast } from 'react-toastify';
 import GearLoader from '../components/GearLoader';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ChevronLeft, Building2, IdCard, Receipt, MapPin, Clock, GitBranch, PlusCircle, Check } from 'lucide-react';
+import { ChevronLeft, Building2, IdCard, Receipt, MapPin, Clock, GitBranch, PlusCircle, Check, Images, Plus, Trash2, Loader2 } from 'lucide-react';
 
 /**
  * Clinic Profile — the details for one branch, split across tabs.
@@ -22,6 +22,7 @@ const TABS = [
   { id: 'taxation', label: 'Taxation', icon: Receipt },
   { id: 'location', label: 'Location', icon: MapPin },
   { id: 'timings',  label: 'Timings',  icon: Clock },
+  { id: 'photos',   label: 'Photos',   icon: Images },
   // Branches used to be its own Control Center section with a sidebar tree. A
   // branch is just another clinic record edited on this very screen, so it
   // belongs here as a tab rather than as a parallel destination.
@@ -52,6 +53,117 @@ const Panel = ({ title, description, children }) => (
     {children}
   </div>
 );
+
+/**
+ * Photos of the practice.
+ *
+ * These are clinic assets rather than website content, which is why they live in
+ * the clinic profile: the website reads them, and anything else we build later
+ * (a booking page, a shared card) can read the same set instead of asking for
+ * them again.
+ */
+const PhotosPanel = ({ editable }) => {
+  const [photos, setPhotos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setPhotos(await api.get('/marketing/website/photos') || []);
+    } catch {
+      setPhotos([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const upload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const photo = await api.post('/marketing/website/photos', fd);
+      setPhotos((p) => [...p, photo]);
+      toast.success('Photo added');
+    } catch (err) {
+      toast.error(err?.message || 'Could not add that photo');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const remove = async (id) => {
+    try {
+      await api.delete(`/marketing/website/photos/${id}`);
+      setPhotos((p) => p.filter((x) => x.id !== id));
+    } catch (err) {
+      toast.error(err?.message || 'Could not remove that photo');
+    }
+  };
+
+  return (
+    <Panel
+      title="Clinic photos"
+      description="The reception, the chair, the team. Used on your website and anywhere else patients see the practice."
+    >
+      {!editable && (
+        <p className="mb-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          Photos belong to the branch you are signed in to. Switch to this branch to change them.
+        </p>
+      )}
+
+      {loading ? (
+        <div className="py-10 grid place-items-center text-gray-400"><Loader2 size={18} className="animate-spin" /></div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {photos.map((photo, i) => (
+              <div key={photo.id} className="relative group aspect-[4/3] rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
+                <img src={photo.url} alt="" className="w-full h-full object-cover" />
+                {i === 0 && (
+                  <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/60 text-white text-[10px] font-bold">
+                    Main
+                  </span>
+                )}
+                {editable && (
+                  <button
+                    type="button"
+                    onClick={() => remove(photo.id)}
+                    aria-label="Remove photo"
+                    className="absolute top-1.5 right-1.5 w-7 h-7 rounded-md bg-white/90 text-gray-500 hover:text-red-600 grid place-items-center sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+            ))}
+
+            {editable && photos.length < 12 && (
+              <label className="aspect-[4/3] rounded-lg border-2 border-dashed border-gray-300 grid place-items-center text-gray-400 hover:border-[#29828a] hover:text-[#29828a] cursor-pointer transition-colors">
+                <span className="text-center">
+                  {uploading
+                    ? <Loader2 size={18} className="animate-spin mx-auto" />
+                    : <><Plus size={18} className="mx-auto" /><span className="block text-xs font-semibold mt-1">Add photo</span></>}
+                </span>
+                <input type="file" accept="image/*" onChange={upload} disabled={uploading} className="hidden" />
+              </label>
+            )}
+          </div>
+
+          <p className="text-xs text-gray-500 mt-3">
+            Up to 12 photos, under 8 MB each. The first one is used as the main image, so put your
+            best one first. Landscape shots work best.
+          </p>
+        </>
+      )}
+    </Panel>
+  );
+};
 
 const ClinicInfo = () => {
   const { setTitle } = useHeader();
@@ -252,6 +364,8 @@ const ClinicInfo = () => {
       </div>
 
       {/* Panels */}
+      {activeTab === 'photos' && <PhotosPanel editable={isActiveClinic} />}
+
       {activeTab === 'basic' && (
         <Panel title="Basic details" description="Identity and contact information for this branch">
           <div className="mb-6 p-4 rounded-lg border border-gray-200 bg-gray-50">
@@ -472,8 +586,10 @@ const ClinicInfo = () => {
         </Panel>
       )}
 
-      {/* Save — one button for every tab; they all edit the same clinic record. */}
-      {activeTab !== 'branches' && (
+      {/* Save — one button for the tabs that edit the clinic record. Branches and
+          Photos each save as you go, so a Save button there would only make the
+          user wonder what it was for. */}
+      {!['branches', 'photos'].includes(activeTab) && (
         <div className="flex justify-end mt-6">
           <button
             onClick={handleSaveClinicData}

@@ -620,7 +620,10 @@ class EmailService:
         staff_name: str,
         clinic_name: str,
         role: str,
-        inviter_name: Optional[str] = None
+        inviter_name: Optional[str] = None,
+        login_id: Optional[str] = None,
+        password: Optional[str] = None,
+        login_url: Optional[str] = None,
     ) -> dict:
         """
         Send email notification when staff is added to clinic
@@ -637,12 +640,39 @@ class EmailService:
         """
         inviter_text = f" by {inviter_name}" if inviter_name else ""
         
+        # Credentials are included at the clinic's request. They are sent once,
+        # at creation, and never re-sent — a "resend" would put the password
+        # into a second inbox for no benefit. Nothing logs the password.
+        creds_block = ""
+        if login_id:
+            pw_row = (
+                f"<p style='margin:4px 0'><strong>Password:</strong> "
+                f"<code style='background:#fff;padding:2px 6px;border-radius:4px'>{password}</code></p>"
+                if password else
+                "<p style='margin:4px 0'>Your password has been shared with you separately.</p>"
+            )
+            creds_block = f"""
+            <div class="highlight">
+                <p style='margin:4px 0'><strong>Login ID:</strong> {login_id}</p>
+                {pw_row}
+                <p style='margin:4px 0'><strong>Role:</strong> {role}</p>
+            </div>
+            <p>Please change your password once you have signed in.</p>
+            """
+
+        link_block = (
+            f'<p><a href="{login_url}" style="display:inline-block;padding:10px 18px;'
+            f'background:#2a276e;color:#fff;border-radius:8px;text-decoration:none">Sign in</a></p>'
+            if login_url else ""
+        )
+
         content = f"""
             <h2>Welcome to {clinic_name}!</h2>
             <p>Dear {staff_name},</p>
             <p>You have been added as a <strong>{role}</strong> to <strong>{clinic_name}</strong>{inviter_text}.</p>
-            <p>You can now access the clinic management system and start working with your team.</p>
-            <p>If you need any assistance getting started, please don't hesitate to reach out.</p>
+            {creds_block}
+            {link_block}
+            <p>If you need any help getting started, just reply to this email.</p>
             <p>Welcome to the team!</p>
         """
         

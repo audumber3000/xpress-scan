@@ -8,6 +8,7 @@ import Pagination from '../../components/Pagination';
 import FilterDropdown from '../../components/FilterDropdown';
 import LabKpiRow from '../../components/lab/LabKpiRow';
 import LabCaseList from '../../components/lab/LabCaseList';
+import HelpBulb from '../../components/common/HelpBulb';
 import KpiDetailDrawer from '../../components/common/KpiDetailDrawer';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 import { generatePatientPersona, generateInitialsAvatar } from '../../utils/avatar';
@@ -220,7 +221,8 @@ const LabHub = () => {
                             </button>
                         ))}
                     </div>
-                    <div className="pb-3">
+                    <div className="pb-3 flex items-center gap-2">
+                        <HelpBulb section="lab" />
                         {activeTab === 'orders' ? (
                             <button
                                 onClick={() => setIsOrderDrawerOpen(true)}

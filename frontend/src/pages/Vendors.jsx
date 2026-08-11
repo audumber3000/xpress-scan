@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import { useHeader } from "../contexts/HeaderContext";
 import { toast } from "react-toastify";
-import { Package, Pill, Building2, Activity, Edit2, Trash2, Search, Plus, Upload } from "lucide-react";
+import { Package, Pill, Building2, Activity, Wallet, Edit2, Trash2, Search, Plus, Upload } from "lucide-react";
 import InventoryAlerts from "../components/vendors/InventoryAlerts";
 import InventoryTable from "../components/vendors/InventoryTable";
 import MedicationTable from "../components/vendors/MedicationTable";
@@ -17,6 +17,8 @@ import Pagination from "../components/Pagination";
 import FilterDropdown from "../components/FilterDropdown";
 import InventoryKpiRow, { inventorySetupGap } from "../components/vendors/InventoryKpiRow";
 import StockCardList from "../components/vendors/StockCardList";
+import PayablesTable from "../components/vendors/PayablesTable";
+import HelpBulb from "../components/common/HelpBulb";
 import KpiDetailDrawer from "../components/common/KpiDetailDrawer";
 import { useBreakpoint } from "../utils/useBreakpoint";
 
@@ -186,11 +188,12 @@ const Vendors = () => {
     const TABS = [
         { id: 'stock', label: 'General Stock', icon: Package },
         { id: 'medications', label: 'Medications', icon: Pill },
+        { id: 'payables', label: 'Payables', icon: Wallet },
         { id: 'ledger', label: 'Activity', icon: Activity },
         { id: 'vendors', label: 'Vendors', icon: Building2 },
     ];
 
-    const showsFilters = activeTab !== 'ledger';
+    const showsFilters = activeTab !== 'ledger' && activeTab !== 'payables';
     const showsCategory = activeTab === 'stock' || activeTab === 'vendors';
     const showsStockStatus = activeTab === 'stock' || activeTab === 'medications';
     const showsAlerts = activeTab === 'stock' || activeTab === 'medications';
@@ -225,7 +228,7 @@ const Vendors = () => {
     return (
         <div className="p-8 max-w-[1600px] mx-auto min-h-screen bg-[#fafafa]">
             {/* Tabs */}
-            <div className="flex items-end border-b border-gray-200 mb-6">
+            <div className="flex items-end justify-between gap-3 border-b border-gray-200 mb-6">
                 <div className="flex gap-8 overflow-x-auto">
                     {TABS.map(tab => (
                         <button
@@ -240,6 +243,8 @@ const Vendors = () => {
                         </button>
                     ))}
                 </div>
+                {/* Rightmost in the tab strip, on every section. */}
+                <HelpBulb section="inventory" className="mb-2" />
             </div>
 
             {/* KPI cards. Shown on the two tabs that are about what's on the
@@ -364,6 +369,14 @@ const Vendors = () => {
                                     onDeleteItem={(id) => deleteItem('medication-stock', id, 'medication')}
                                 />
                             )
+                        )}
+                        {activeTab === 'payables' && (
+                            <div className="overflow-y-auto h-full pr-1">
+                                {/* Settling here writes an Expense, so the Activity
+                                    tab and the dashboard pick it up with no extra
+                                    wiring. fetchData refreshes the ledger totals. */}
+                                <PayablesTable onSettled={fetchData} />
+                            </div>
                         )}
                         {activeTab === 'ledger' && (
                             <InventoryLedger inventoryItems={inventory} onStockChanged={fetchData} />

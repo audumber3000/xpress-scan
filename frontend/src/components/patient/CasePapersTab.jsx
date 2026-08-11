@@ -12,6 +12,7 @@ import DocumentsNotesGrid from './DocumentsNotesGrid';
 import CasePaperActionBar from './CasePaperActionBar';
 import InvoiceEditor from '../payments/InvoiceEditor';
 import CasePaperInvoicesPanel from './CasePaperInvoicesPanel';
+import CaseCostsPanel from './CaseCostsPanel';
 import { toast } from 'react-toastify';
 import { api } from "../../utils/api";
 import { universalToFDI } from "../../utils/toothNumbering";
@@ -68,6 +69,7 @@ const CasePapersTab = ({
   const [invoiceEditId, setInvoiceEditId] = useState(null);
   // A case paper can carry several invoices — the list panel shows them all.
   const [invoiceListOpen, setInvoiceListOpen] = useState(false);
+  const [costsOpen, setCostsOpen] = useState(false);
   // Tracks if a finalized invoice already exists for this case paper
   const [existingCasePaperInvoiceId, setExistingCasePaperInvoiceId] = useState(null);
 
@@ -900,6 +902,7 @@ const CasePapersTab = ({
           }
           handleAutoSaveForDrawer(() => setInvoiceListOpen(true));
         }}
+        onCosts={() => handleAutoSaveForDrawer(() => setCostsOpen(true))}
       />
 
       <LabOrderDrawer 
@@ -976,6 +979,14 @@ const CasePapersTab = ({
           }}
       />
       
+      <CaseCostsPanel
+        open={costsOpen}
+        onClose={() => setCostsOpen(false)}
+        casePaperId={selectedCasePaper?.isNew ? null : selectedCasePaper?.id}
+        patientId={patientData?.id}
+        patientName={patientData?.name}
+      />
+
       <CasePaperInvoicesPanel
         open={invoiceListOpen}
         onClose={() => setInvoiceListOpen(false)}

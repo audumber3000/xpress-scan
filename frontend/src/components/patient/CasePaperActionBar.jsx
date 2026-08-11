@@ -1,5 +1,5 @@
 import React from 'react';
-import { Save, ClipboardList, Receipt } from 'lucide-react';
+import { Save, ClipboardList, Receipt, Wallet } from 'lucide-react';
 
 const CasePaperActionBar = ({
   form,
@@ -7,6 +7,7 @@ const CasePaperActionBar = ({
   onSave,
   onPrescription,
   onInvoice,
+  onCosts,
   hasExistingInvoice = false
 }) => {
   return (
@@ -56,6 +57,18 @@ const CasePaperActionBar = ({
         <Receipt size={18} />
         <span>{hasExistingInvoice ? 'View Invoice' : 'Invoice'}</span>
       </button>
+
+      {/* Sits beside Invoice on purpose: one is what the patient pays, the
+          other is what the case cost to deliver. */}
+      {onCosts && (
+        <button
+          onClick={onCosts}
+          className="flex items-center gap-2 px-6 py-3 font-semibold rounded-lg text-sm transition-all bg-white text-gray-700 border border-gray-200 hover:border-gray-300"
+        >
+          <Wallet size={18} />
+          <span>Costs</span>
+        </button>
+      )}
     </div>
   );
 };

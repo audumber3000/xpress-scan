@@ -213,6 +213,41 @@ run_migration "receipt_notification_pref" "INSERT INTO notification_preferences 
 # email-only. Existing rows stay disabled; this only widens the channel list.
 run_migration "lab_order_whatsapp" "UPDATE notification_preferences SET channels = '[\"whatsapp\", \"email\"]'::json WHERE event_type = 'lab_order_placed' AND channels::text = '[\"email\"]'"
 
+# ── Case costs: lab bills and consultant fees ────────────────────────────────
+# The cost side of a case. Never touches what a patient owes; settling one
+# writes an Expense, which is how lab bills finally reach the ledger.
+run_migration "case_costs" "CREATE TABLE IF NOT EXISTS case_costs (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL REFERENCES clinics(id), patient_id INTEGER NOT NULL REFERENCES patients(id), case_paper_id INTEGER REFERENCES case_papers(id), invoice_id INTEGER REFERENCES invoices(id), lab_order_id INTEGER REFERENCES lab_orders(id), vendor_id INTEGER REFERENCES vendors(id), doctor_user_id INTEGER REFERENCES users(id), kind VARCHAR NOT NULL DEFAULT 'lab', description VARCHAR, basis VARCHAR NOT NULL DEFAULT 'fixed', percentage DOUBLE PRECISION, amount DOUBLE PRECISION NOT NULL DEFAULT 0, status VARCHAR NOT NULL DEFAULT 'unpaid', paid_on DATE, expense_id INTEGER REFERENCES expenses(id), notes TEXT, created_by INTEGER REFERENCES users(id), created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())"
+run_migration "case_costs_clinic_idx" "CREATE INDEX IF NOT EXISTS ix_case_costs_clinic_id ON case_costs (clinic_id)"
+run_migration "case_costs_lab_order_idx" "CREATE INDEX IF NOT EXISTS ix_case_costs_lab_order_id ON case_costs (lab_order_id)"
+run_migration "case_costs_patient_idx" "CREATE INDEX IF NOT EXISTS ix_case_costs_patient_id ON case_costs (patient_id)"
+# These two arrived after the table did, so any DB that already has case_costs
+# needs them added rather than created. CREATE TABLE IF NOT EXISTS above is a
+# no-op on such a DB, which is exactly how a column goes missing.
+run_migration "case_costs_doctor_user_id" "ALTER TABLE case_costs ADD COLUMN IF NOT EXISTS doctor_user_id INTEGER REFERENCES users(id)"
+run_migration "case_costs_notes"          "ALTER TABLE case_costs ADD COLUMN IF NOT EXISTS notes TEXT"
+run_migration "case_costs_doctor_idx"     "CREATE INDEX IF NOT EXISTS ix_case_costs_doctor_user_id ON case_costs (doctor_user_id)"
+
+# Fee terms live on the person or vendor, set once, not typed per case. That is
+# what makes the per-consultant split trustworthy.
+run_migration "user_fee_basis"    "ALTER TABLE users ADD COLUMN IF NOT EXISTS fee_basis VARCHAR"
+run_migration "user_fee_value"    "ALTER TABLE users ADD COLUMN IF NOT EXISTS fee_value DOUBLE PRECISION"
+run_migration "vendor_fee_basis"  "ALTER TABLE vendors ADD COLUMN IF NOT EXISTS fee_basis VARCHAR"
+run_migration "vendor_fee_value"  "ALTER TABLE vendors ADD COLUMN IF NOT EXISTS fee_value DOUBLE PRECISION"
+run_migration "expense_paid_to_user" "ALTER TABLE expenses ADD COLUMN IF NOT EXISTS paid_to_user_id INTEGER REFERENCES users(id)"
+run_migration "patient_primary_doctor" "ALTER TABLE patients ADD COLUMN IF NOT EXISTS primary_doctor_id INTEGER REFERENCES users(id)"
+
+# ── Clinic website ───────────────────────────────────────────────────────────
+# website_enabled defaults FALSE so no existing clinic is published by a deploy.
+# Nothing is publicly reachable until a clinic switches it on itself.
+run_migration "clinic_photos" "CREATE TABLE IF NOT EXISTS clinic_photos (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL REFERENCES clinics(id), file_path VARCHAR NOT NULL, caption VARCHAR(120), sort_order INTEGER DEFAULT 0, uploaded_by INTEGER REFERENCES users(id), created_at TIMESTAMP DEFAULT NOW())"
+run_migration "clinic_photos_idx" "CREATE INDEX IF NOT EXISTS ix_clinic_photos_clinic_id ON clinic_photos (clinic_id)"
+run_migration "website_slug"         "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_slug VARCHAR(80)"
+run_migration "website_enabled"      "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_enabled BOOLEAN DEFAULT FALSE"
+run_migration "website_published_at" "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_published_at TIMESTAMP"
+run_migration "website_about"        "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_about TEXT"
+run_migration "website_show_stats"   "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_show_stats BOOLEAN DEFAULT TRUE"
+run_migration "website_slug_idx"     "CREATE UNIQUE INDEX IF NOT EXISTS ix_clinics_website_slug ON clinics (website_slug)"
+
 # ── Schema migration check (run against RDS) ──────────────────────────────────
 echo ""
 echo "▶ Running schema migration check against RDS..."

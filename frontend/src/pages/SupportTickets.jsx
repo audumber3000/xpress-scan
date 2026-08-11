@@ -12,6 +12,7 @@ import {
   Phone,
   PlayCircle,
   Send,
+  Star,
   Ticket,
   UserRoundCheck,
   X,
@@ -96,7 +97,173 @@ const SUPPORT_NAV = [
   { id: 'videos', icon: PlayCircle, label: 'Video Resources' },
   { id: 'tickets', icon: LifeBuoy, label: 'Support Tickets' },
   { id: 'features', icon: Lightbulb, label: 'Feature Requests' },
+  { id: 'rate', icon: Star, label: 'Rate Us' },
 ];
+
+/**
+ * Platform marks, drawn inline.
+ *
+ * Hotlinking brand assets is how the Cashfree logo ended up 403ing on the
+ * checkout page. These are self-contained, so the section cannot break because
+ * somebody else's CDN changed its mind.
+ */
+const MARKS = {
+  trustpilot: (
+    <svg viewBox="0 0 24 24" className="w-full h-full" aria-hidden="true">
+      <path fill="#00b67a" d="M12 1.6l3.2 6.9 7.3.8-5.4 5 1.5 7.4L12 18l-6.6 3.7 1.5-7.4-5.4-5 7.3-.8z" />
+    </svg>
+  ),
+  capterra: (
+    // Four brand-coloured bands fanning from one corner, which is what makes
+    // the Capterra mark recognisable at this size.
+    <svg viewBox="0 0 24 24" className="w-full h-full" aria-hidden="true">
+      <path fill="#ff9d28" d="M3 21L10.27 3.44A19 19 0 0 0 3 2Z" />
+      <path fill="#68c5ed" d="M3 21L16.44 7.56A19 19 0 0 0 10.27 3.44Z" />
+      <path fill="#044d80" d="M3 21L20.56 13.73A19 19 0 0 0 16.44 7.56Z" />
+      <path fill="#e54747" d="M3 21L22 21A19 19 0 0 0 20.56 13.73Z" />
+    </svg>
+  ),
+  play: (
+    <svg viewBox="0 0 24 24" className="w-full h-full" aria-hidden="true">
+      <path fill="#00a0ff" d="M3.6 1.3a1.9 1.9 0 00-.5 1.4v18.6c0 .6.2 1.1.5 1.4l.1.1 10.4-10.4v-.2L3.7 1.2z" />
+      <path fill="#ffbc00" d="M17.7 16.3l-3.5-3.5v-.3l3.5-3.5.1.1 4.1 2.4c1.2.7 1.2 1.8 0 2.4l-4.1 2.4z" />
+      <path fill="#00d562" d="M17.8 16.2l-3.6-3.6L3.6 23.1c.4.4 1.1.5 1.8.1l12.4-7z" />
+      <path fill="#ff3a44" d="M17.8 8.9L5.4.8C4.7.4 4 .5 3.6.9l10.6 10.5z" />
+    </svg>
+  ),
+  apple: (
+    <svg viewBox="0 0 24 24" className="w-full h-full" aria-hidden="true">
+      <path
+        fill="#111"
+        d="M16.4 12.7c0-2.2 1.8-3.3 1.9-3.4-1-1.5-2.6-1.7-3.2-1.7-1.4-.1-2.7.8-3.3.8-.7 0-1.7-.8-2.8-.8-1.5 0-2.8.8-3.5 2.1-1.5 2.6-.4 6.5 1.1 8.6.7 1 1.6 2.2 2.7 2.2 1.1 0 1.5-.7 2.8-.7 1.3 0 1.6.7 2.8.7 1.2 0 1.9-1 2.6-2.1.8-1.2 1.2-2.4 1.2-2.5-.1 0-2.3-.9-2.3-3.2zM14.2 6.2c.6-.7 1-1.7.9-2.7-.9 0-2 .6-2.6 1.3-.6.7-1.1 1.7-.9 2.7 1 .1 2-.5 2.6-1.3z"
+      />
+    </svg>
+  ),
+  microsoft: (
+    <svg viewBox="0 0 24 24" className="w-full h-full" aria-hidden="true">
+      <path fill="#f25022" d="M2 2h9.4v9.4H2z" />
+      <path fill="#7fba00" d="M12.6 2H22v9.4h-9.4z" />
+      <path fill="#00a4ef" d="M2 12.6h9.4V22H2z" />
+      <path fill="#ffb900" d="M12.6 12.6H22V22h-9.4z" />
+    </svg>
+  ),
+};
+
+/**
+ * Where a clinic can say what it thinks in public.
+ *
+ * Grouped by what the visit costs them: the review sites take a few minutes of
+ * writing, the app stores take a tap. Nobody is asked to do all five.
+ */
+const RATE_PLATFORMS = [
+  {
+    group: 'Review sites',
+    note: 'A few honest lines here is what other clinics read before they trust us.',
+    items: [
+      {
+        id: 'trustpilot',
+        name: 'Trustpilot',
+        blurb: 'The one most people check first. Open to everyone, no account needed to read it.',
+        url: 'https://ie.trustpilot.com/review/molarplus.com',
+      },
+      {
+        id: 'capterra',
+        name: 'Capterra',
+        blurb: 'Where practices compare clinic software side by side before they shortlist.',
+        url: 'https://reviews.capterra.com/products/new/10632a9c-f3f9-48a6-bee3-30b29f7dbb73/?lang=en',
+      },
+    ],
+  },
+  {
+    group: 'App stores',
+    note: 'If you use MolarPlus on a phone or the desktop app, a rating takes one tap.',
+    items: [
+      {
+        id: 'play',
+        name: 'Google Play',
+        blurb: 'For the Android app.',
+        url: 'https://play.google.com/store/apps/details?id=com.molarplus.app&hl=en_IE&pli=1',
+      },
+      {
+        id: 'apple',
+        name: 'App Store',
+        blurb: 'For iPhone and iPad.',
+        url: 'https://apps.apple.com/us/app/molarplus/id6765472713',
+      },
+      {
+        id: 'microsoft',
+        name: 'Microsoft Store',
+        blurb: 'For the Windows desktop app.',
+        url: 'https://apps.microsoft.com/detail/9n78rx7phv9k?hl=en-US&gl=IE',
+      },
+    ],
+  },
+];
+
+const RateUsPanel = ({ onOpenFeatures }) => (
+  <>
+    {/* The ask, said plainly. This is a favour, not a feature, so it reads like
+        one person talking to another rather than a product announcement. */}
+    <section className="rounded-2xl border border-[#2a276e]/15 bg-[#2a276e] p-6 md:p-8 text-white">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider">
+        <Star size={12} className="fill-current" />
+        A small favour
+      </span>
+      <h3 className="mt-4 text-xl md:text-2xl font-bold leading-snug max-w-2xl">
+        We are a small team, and almost everything MolarPlus does today started with
+        a clinic telling us what was missing.
+      </h3>
+      <p className="mt-3 text-sm md:text-[15px] leading-relaxed text-white/80 max-w-2xl">
+        We build late, we ship often, and we read every word you send us. If the app has
+        saved you time, saying so in public is the single biggest help you can give us.
+        It is how other clinics find us, and it is how we know which parts are worth
+        building on. If something still frustrates you, say that too. We would rather
+        hear it than not.
+      </p>
+      <button
+        onClick={onOpenFeatures}
+        className="mt-5 inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-bold text-[#2a276e] transition-colors hover:bg-white/90"
+      >
+        Tell us what to build next
+        <ArrowRight size={15} />
+      </button>
+    </section>
+
+    {RATE_PLATFORMS.map((section) => (
+      <section key={section.group} className="mt-6">
+        <h4 className="text-sm font-bold text-gray-900">{section.group}</h4>
+        <p className="text-sm text-gray-500 mt-0.5">{section.note}</p>
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {section.items.map((p) => (
+            <a
+              key={p.id}
+              href={p.url}
+              target="_blank"
+              rel="noreferrer"
+              className="group flex flex-col rounded-2xl border border-gray-200 bg-white p-5 transition-colors hover:border-[#2a276e]/40"
+            >
+              <div className="flex items-center gap-3">
+                <span className="w-9 h-9 flex-shrink-0">{MARKS[p.id]}</span>
+                <span className="text-[15px] font-bold text-gray-900">{p.name}</span>
+              </div>
+              <p className="mt-2.5 flex-1 text-sm leading-6 text-gray-500">{p.blurb}</p>
+              <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold text-[#2a276e]">
+                Leave a review
+                <ExternalLink size={14} className="transition-transform group-hover:translate-x-0.5" />
+              </span>
+            </a>
+          ))}
+        </div>
+      </section>
+    ))}
+
+    <p className="mt-6 text-sm text-gray-500">
+      Reviews are public and written by you, so we cannot edit or remove them. If something
+      is wrong, raise a ticket first and we will try to fix it before you write.
+    </p>
+  </>
+);
 
 /**
  * AccountManagerCard — the manager assigned to this clinic.
@@ -409,8 +576,12 @@ export default function SupportTickets() {
   return (
     // h-full, not min-h-full: this renders inside <main>, already below the header.
     <div className="flex h-full w-full bg-[#f8fafc] overflow-hidden">
-      {/* Left nav — flat list, no category headings */}
-      <div className={`${mobileShowContent ? 'hidden md:flex' : 'flex'} w-full md:w-72 bg-white border-r border-gray-200 flex-col h-full shrink-0 shadow-sm z-10`}>
+      {/* Left nav — flat list, no category headings.
+          Two panes only from lg. At 768 the app sidebar plus this 18rem nav left
+          the content about 224px wide, which squeezed every tab on the page into
+          a column two or three words across. Below lg the nav is the first
+          screen and picking an entry opens it full width. */}
+      <div className={`${mobileShowContent ? 'hidden lg:flex' : 'flex'} w-full lg:w-72 bg-white border-r border-gray-200 flex-col h-full shrink-0 shadow-sm z-10`}>
         <div className="p-6 border-b border-gray-100/80">
           <h2 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
             <LifeBuoy size={22} className="text-[#2a276e]" />
@@ -445,10 +616,10 @@ export default function SupportTickets() {
       </div>
 
       {/* Content pane */}
-      <div className={`${mobileShowContent ? 'flex' : 'hidden md:flex'} flex-1 flex-col h-full overflow-hidden`}>
+      <div className={`${mobileShowContent ? 'flex' : 'hidden lg:flex'} flex-1 flex-col h-full overflow-hidden`}>
         <button
           onClick={() => setMobileShowContent(false)}
-          className="md:hidden flex items-center gap-1.5 px-4 py-3 text-sm font-semibold text-[#2a276e] bg-white border-b border-gray-200 shrink-0"
+          className="lg:hidden flex items-center gap-1.5 px-4 py-3 text-sm font-semibold text-[#2a276e] bg-white border-b border-gray-200 shrink-0"
         >
           <ChevronDown size={18} className="rotate-90" />
           Support Center menu
@@ -466,6 +637,8 @@ export default function SupportTickets() {
         )}
 
         {activeTab === 'features' && <FeatureRequestsBoard />}
+
+        {activeTab === 'rate' && <RateUsPanel onOpenFeatures={() => go('features')} />}
 
         {activeTab === 'videos' && (
         <>

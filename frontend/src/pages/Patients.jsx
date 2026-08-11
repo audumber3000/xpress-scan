@@ -11,6 +11,7 @@ import Pagination from "../components/Pagination";
 import FilterPanel from "../components/FilterPanel";
 import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
 import ImportPatientsModal from "../components/patient/ImportPatientsModal";
+import HelpBulb from "../components/common/HelpBulb";
 import EmptyState from "../components/common/EmptyState";
 import { medicalCare } from "../assets/illustrations";
 import AgeOrDobField, { computeAgeFromDob } from "../components/patient/AgeOrDobField";
@@ -640,6 +641,7 @@ const Patients = () => {
           </button>
         </nav>
 
+        <div className="flex items-center">
         {/* Patient-base stat — steady clinic total, or "X of Y" while filtering. */}
         {activeTab !== 'birthdays' && activeTab !== 'today' && totalPatients > 0 && (
           <div className="mb-2 hidden sm:inline-flex items-center gap-2 rounded-full bg-[#2a276e]/[0.06] border border-[#2a276e]/10 px-3.5 py-1.5">
@@ -654,6 +656,8 @@ const Patients = () => {
             </span>
           </div>
         )}
+          <HelpBulb section="patients" className="mb-2 ml-2" />
+        </div>
       </div>
 
       {/* Search, Filters & Actions Area — the daily register carries its own

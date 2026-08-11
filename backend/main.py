@@ -63,7 +63,7 @@ from domains.inventory.routes import medications as medication_stock
 from domains.inventory.routes import transactions as inventory_transactions
 from domains.consent.routes import consents, consents_internal
 from domains.document.routes import documents
-from domains.clinical.routes import settings_router, case_papers_router, prescriptions_router, lab_orders_router, inventory_consumption_router
+from domains.clinical.routes import settings_router, case_papers_router, prescriptions_router, lab_orders_router, inventory_consumption_router, case_costs_router
 from domains.notification.routes import notification_admin, push_notifications
 from domains.notification.routes import wareach as wareach_routes
 from domains.activity.routes import activity_log
@@ -127,6 +127,51 @@ async def lifespan(app: FastAPI):
             ))
             conn.execute(text(
                 "UPDATE patients SET registered_on = created_at::date WHERE registered_on IS NULL"
+            ))
+
+            # Consultant fee terms (added 2026-08). Configured once per person
+            # in Staff settings or on the vendor, rather than typed on every
+            # case paper — typed-per-case is how one doctor ends up with three
+            # different rates and per-consultant reporting becomes impossible.
+            # NULL basis means "not a paid consultant", which is most staff.
+            for _tbl in ("users", "vendors"):
+                conn.execute(text(f"ALTER TABLE {_tbl} ADD COLUMN IF NOT EXISTS fee_basis VARCHAR"))
+                conn.execute(text(f"ALTER TABLE {_tbl} ADD COLUMN IF NOT EXISTS fee_value DOUBLE PRECISION"))
+
+            # Who an expense was paid TO when it was a person rather than a
+            # vendor. Without it the ledger can say "Consultant, Rs 2,400" but
+            # never which consultant, so no per-consultant split is possible.
+            conn.execute(text(
+                "ALTER TABLE expenses ADD COLUMN IF NOT EXISTS paid_to_user_id INTEGER REFERENCES users(id)"
+            ))
+
+            # The patient's usual dentist, used to pre-select the doctor on a
+            # new case paper so fees are attributed without manual entry.
+            conn.execute(text(
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS primary_doctor_id INTEGER REFERENCES users(id)"
+            ))
+
+            # case_costs gained these after the table already existed, so
+            # create_all will not add them: it only creates tables it cannot
+            # find. Without this, a DB that predates the columns raises
+            # UndefinedColumn on every consultant fee and on /by-consultant.
+            conn.execute(text(
+                "ALTER TABLE case_costs ADD COLUMN IF NOT EXISTS doctor_user_id INTEGER REFERENCES users(id)"
+            ))
+            conn.execute(text("ALTER TABLE case_costs ADD COLUMN IF NOT EXISTS notes TEXT"))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_case_costs_doctor_user_id ON case_costs (doctor_user_id)"
+            ))
+
+            # Public clinic website (added 2026-08). Nothing is published until
+            # website_enabled is switched on, so existing clinics stay private.
+            conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_slug VARCHAR(80)"))
+            conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_enabled BOOLEAN DEFAULT FALSE"))
+            conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_published_at TIMESTAMP"))
+            conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_about TEXT"))
+            conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_show_stats BOOLEAN DEFAULT TRUE"))
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_clinics_website_slug ON clinics (website_slug)"
             ))
             conn.execute(text(
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS dashboard_preferences JSONB"
@@ -559,6 +604,11 @@ app.include_router(case_papers_router, prefix="/api/v1/clinical", tags=["case-pa
 app.include_router(prescriptions_router, prefix="/api/v1/clinical", tags=["prescriptions"])
 app.include_router(lab_orders_router, prefix="/api/v1/clinical", tags=["lab-orders"])
 app.include_router(inventory_consumption_router, prefix="/api/v1/clinical", tags=["inventory-consumption"])
+app.include_router(case_costs_router, prefix="/api/v1/clinical", tags=["case-costs"])
+
+# Clinic website (Marketing). Editor + preview only; public serving is separate.
+from domains.marketing.routes import website_router
+app.include_router(website_router, prefix="/api/v1/marketing", tags=["website"])
 
 # On-request import (TEMPORARY / disposable — see domains/on_request_import)
 from domains.on_request_import.routes import invoice_sheet as on_request_import

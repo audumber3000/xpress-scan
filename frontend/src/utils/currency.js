@@ -78,11 +78,18 @@ export const formatCompactMoney = (value) => {
   return `${sign}${sym}${Math.round(abs)}`;
 };
 
-/** Full amount with thousands separators, for tooltips and narrative lines. */
+/**
+ * Full amount with thousands separators, for tooltips and narrative lines.
+ *
+ * The minus sits outside the symbol: `-₹2,221`, not `₹-2,221`. Only matters
+ * where an amount can go negative, which since case costs arrived includes the
+ * per-case margin.
+ */
 export const formatMoney = (value) => {
   const n = Number(value || 0);
   const locale = getCurrencyCode() === 'INR' ? 'en-IN' : 'en-US';
-  return `${getCurrencySymbol()}${Math.round(n).toLocaleString(locale)}`;
+  const sign = n < 0 ? '-' : '';
+  return `${sign}${getCurrencySymbol()}${Math.round(Math.abs(n)).toLocaleString(locale)}`;
 };
 
 /** Plain integer with separators. */

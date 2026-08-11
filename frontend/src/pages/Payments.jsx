@@ -21,6 +21,7 @@ import { formatDate, formatTime, clinicToday } from "../utils/datetime";
 import PaymentKpiRow from "../components/payments/PaymentKpiRow";
 import KpiDetailDrawer from "../components/common/KpiDetailDrawer";
 import InvoiceCardList from "../components/payments/InvoiceCardList";
+import HelpBulb from "../components/common/HelpBulb";
 import { useBreakpoint } from "../utils/useBreakpoint";
 
 const INVOICES_PER_PAGE = 10;
@@ -390,8 +391,8 @@ const Payments = () => {
     <div className="flex flex-col h-screen bg-gray-50/30">
       
       {/* Tabs */}
-      <div className="px-6 pt-4 border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
+      <div className="px-4 md:px-6 pt-4 border-b border-gray-200 flex items-end justify-between gap-3">
+        <nav className="-mb-px flex space-x-8 overflow-x-auto">
           <button
             onClick={() => setActiveTab('today')}
             className={`${
@@ -423,6 +424,7 @@ const Payments = () => {
             Ledger
           </button>
         </nav>
+        <HelpBulb section="payments" className="mb-2" />
       </div>
       {/* Summary cards + filters.
           Spacing is the dashboard's (pt-4 / gap-3 / mb-4) rather than the old

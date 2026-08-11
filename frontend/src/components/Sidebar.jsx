@@ -101,6 +101,10 @@ const mainNavItems = [
     ),
     submenu: [
       {
+        name: "Website",
+        path: "/marketing/website",
+      },
+      {
         name: "Google Reviews",
         path: "/marketing/reviews",
         icon: (

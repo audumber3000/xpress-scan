@@ -8,6 +8,7 @@ from database import get_db
 from models import LabOrder, User, Patient, Vendor, Clinic
 from schemas import LabOrderCreate, LabOrderUpdate, LabOrderOut
 from core.auth_utils import get_current_user
+from domains.clinical.routes.case_costs import sync_lab_order_cost
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
@@ -200,6 +201,11 @@ def create_lab_order(
     if order.add_to_billing:
         _sync_lab_order_billing(db, db_order, current_user.clinic_id, user_id=current_user.id, create_if_missing=True)
 
+    # What the lab charges US, tracked separately from what we charge the
+    # patient. Before this, a lab cost never left this module and so never
+    # reached the ledger.
+    sync_lab_order_cost(db, db_order, current_user.clinic_id, user_id=current_user.id)
+
     db.commit()
     db.refresh(db_order)
 
@@ -253,6 +259,8 @@ def update_lab_order(
             db, db_order, current_user.clinic_id, user_id=current_user.id,
             create_if_missing=bool(want_billing),
         )
+
+    sync_lab_order_cost(db, db_order, current_user.clinic_id, user_id=current_user.id)
 
     db.commit()
     db.refresh(db_order)

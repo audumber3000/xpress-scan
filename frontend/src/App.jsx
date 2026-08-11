@@ -53,6 +53,7 @@ import ConsentSign from "./pages/ConsentSign";
 import ConsentPreview from "./pages/ConsentPreview";
 import SelectClinic from "./pages/SelectClinic";
 import GoogleReviews from "./pages/marketing/GoogleReviews";
+import ClinicWebsite from "./pages/marketing/ClinicWebsite";
 import MarketingPosters from "./pages/marketing/MarketingPosters";
 import SupportTickets from "./pages/SupportTickets";
 import Checkout from "./pages/Checkout";
@@ -276,6 +277,7 @@ function AppContent() {
               <Route path="/mail/callback" element={<ProtectedRoute><MailCallback /></ProtectedRoute>} />
               <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
               <Route path="/marketing/reviews" element={<ProtectedRoute><GoogleReviews /></ProtectedRoute>} />
+              <Route path="/marketing/website" element={<ProtectedRoute><ClinicWebsite /></ProtectedRoute>} />
               <Route path="/marketing/posters" element={<ProtectedRoute><MarketingPosters /></ProtectedRoute>} />
               <Route path="/admin" element={<ProtectedRoute><AdminHub /></ProtectedRoute>}>
                 {/* Lands on the first item in the Control Center menu. Used to

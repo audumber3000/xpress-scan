@@ -42,6 +42,7 @@ DEFAULT_EVENT_TYPES = [
     "consent_form",
     "daily_summary",
     "lab_order_placed",
+    "staff_welcome",
 ]
 
 # Events hidden from the preferences UI (system-scheduled, not user-configurable)
@@ -60,6 +61,10 @@ _HIDDEN_EVENT_TYPES = {"daily_report"}
 # send entirely when the chosen channel has nothing to send to.
 _SEED_OVERRIDES = {
     "lab_order_placed": {"channels": ["whatsapp", "email"], "is_enabled": False},
+    # Goes to the new staff member on both channels, because whichever one
+    # the owner filled in is the one that reaches them. On by default: an
+    # account nobody is told about is an account nobody uses.
+    "staff_welcome": {"channels": ["whatsapp", "email"], "is_enabled": True},
 }
 
 def get_db():

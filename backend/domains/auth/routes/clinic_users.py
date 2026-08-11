@@ -9,10 +9,14 @@ from core.auth_utils import get_current_user
 from core.audit import record_audit, STAFF_UPDATED, STAFF_DEACTIVATED, PERMISSIONS_CHANGED
 from domains.communication.services.email_service import EmailService
 import hashlib
+import logging
+import os
 
 def hash_password(password: str) -> str:
     """Simple password hashing for offline mode"""
     return hashlib.sha256(password.encode()).hexdigest()
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -23,6 +27,11 @@ class ClinicUserIn(BaseModel):
     role: str = "receptionist"
     permissions: Optional[dict] = {}
     password: Optional[str] = None  # Password for desktop / mobile login
+    phone: Optional[str] = None     # so the welcome can also go out on WhatsApp
+    # What this person is paid per case, if anything. Set once here rather than
+    # typed on every case paper.
+    fee_basis: Optional[str] = None    # fixed | percentage | None
+    fee_value: Optional[float] = None
 
 class ClinicUserUpdate(BaseModel):
     name: Optional[str] = None
@@ -32,6 +41,9 @@ class ClinicUserUpdate(BaseModel):
     permissions: Optional[dict] = None
     is_active: Optional[bool] = None
     password: Optional[str] = None  # Password for desktop / mobile login
+    phone: Optional[str] = None
+    fee_basis: Optional[str] = None
+    fee_value: Optional[float] = None
 
 class SetPasswordRequest(BaseModel):
     password: str
@@ -145,28 +157,67 @@ def add_clinic_user(user_in: ClinicUserIn, db: Session = Depends(get_db), curren
         clinic_id=current_user.clinic_id,
         created_by=current_user.id,
         permissions=permissions,
-        password_hash=password_hash
+        password_hash=password_hash,
+        phone=(user_in.phone or "").strip() or None,
+        fee_basis=(user_in.fee_basis or None),
+        fee_value=user_in.fee_value,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
 
-    # Send invitation email only when an email address is on file
-    if email:
+    # ── Welcome the new member on every channel we have for them ───────────
+    #
+    # This used to send an email that said "you've been added" and nothing else:
+    # no login id, no password, no way in. The credentials go out here at the
+    # clinic's explicit request. They are sent once, at creation, and never
+    # re-sent, and the password is never written to a log.
+    #
+    # Neither send can fail the creation. The account exists either way, and an
+    # owner who sees a warning can hand the details over in person.
+    clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+    login_id = email or username
+    delivery = {"email": False, "whatsapp": False}
+
+    if email and clinic:
         try:
-            clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
-            if clinic:
-                email_service = EmailService()
-                email_service.send_staff_invitation_email(
-                    to_email=email,
-                    staff_name=user_in.name,
-                    clinic_name=clinic.name,
-                    role=user_in.role,
-                    inviter_name=current_user.name
-                )
-        except Exception as email_error:
-            # Log error but don't fail user creation
-            print(f"Failed to send staff invitation email: {email_error}")
+            EmailService().send_staff_invitation_email(
+                to_email=email,
+                staff_name=user_in.name,
+                clinic_name=clinic.name,
+                role=user_in.role,
+                inviter_name=current_user.name,
+                login_id=login_id,
+                password=user_in.password,
+                login_url=os.environ.get("APP_URL") or None,
+            )
+            delivery["email"] = True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("staff welcome email failed for user %s: %s", user.id, type(exc).__name__)
+
+    phone = (user_in.phone or "").strip()
+    if phone and clinic:
+        try:
+            from core.notification_dispatch import notify_event
+            notify_event(
+                "staff_welcome",
+                db=db,
+                clinic_id=current_user.clinic_id,
+                to_phone=phone,
+                to_email=email or "",
+                to_name=user_in.name,
+                template_data={
+                    "clinic_name": clinic.name or "",
+                    "staff_name": user_in.name or "",
+                    "role": user_in.role or "",
+                    "login_id": login_id or "",
+                    "password": user_in.password or "",
+                    "app_url": os.environ.get("APP_URL", ""),
+                },
+            )
+            delivery["whatsapp"] = True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("staff welcome whatsapp failed for user %s: %s", user.id, type(exc).__name__)
 
     return user
 

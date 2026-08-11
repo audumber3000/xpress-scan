@@ -104,6 +104,20 @@ class Clinic(Base):
     # Practice licence / registration — shown on the Clinic Profile "License" tab.
     license_number = Column(String(80), nullable=True)  # council / clinical establishment reg. no.
     license_authority = Column(String(120), nullable=True)  # issuing body
+
+    # ── Public website ──────────────────────────────────────────────────────
+    # The URL handle. clinic_code is CLN-A3X9K2B7FQ, fine as an identifier and
+    # useless in a URL a patient might read out, so the site gets its own slug
+    # derived from the name and editable by the clinic.
+    website_slug = Column(String(80), unique=True, nullable=True, index=True)
+    # Nothing is public until the clinic says so. A half-configured clinic
+    # should never discover it has been published.
+    website_enabled = Column(Boolean, default=False)
+    website_published_at = Column(DateTime, nullable=True)
+    website_about = Column(Text, nullable=True)        # optional longer intro
+    # A patient count on a public page is a number competitors can read, so it
+    # is banded ("500+ patients treated") and can be switched off entirely.
+    website_show_stats = Column(Boolean, default=True)
     license_expiry = Column(Date, nullable=True)
     # Assigned MolarPlus account manager, shown on Support Center. All nullable:
     # a clinic with no manager assigned shows an empty state, never a placeholder
@@ -131,6 +145,15 @@ class User(Base):
     last_name = Column(String, nullable=False)
     name = Column(String, nullable=False)  # Full name of the user (computed from first_name + last_name)
     role = Column(String, nullable=False, default='receptionist')  # clinic_owner, doctor, receptionist
+
+    # What this person is paid per case, set once in Staff settings rather than
+    # typed on each case paper. Typing it per case is how the same doctor ends
+    # up with three different rates and "who earns most" becomes unanswerable —
+    # the same failure the free-text lab work_type already shows.
+    # NULL basis = not a paid consultant (the owner-dentist, receptionists), and
+    # no cost row is created for their work.
+    fee_basis = Column(String, nullable=True)    # fixed | percentage | None
+    fee_value = Column(Float, nullable=True)     # rupees, or percent of collection
     permissions = Column(JSON, default=dict)
     dashboard_preferences = Column(JSON, nullable=True)
     is_active = Column(Boolean, default=True)
@@ -163,6 +186,10 @@ class Patient(Base):
     phone = Column(String, nullable=False)
     email = Column(String, nullable=True)
     referred_by = Column(String, nullable=True)
+    # Their usual dentist. Pre-selects the doctor on a new case paper so the
+    # consultant fee is attributed without anyone typing anything. A default
+    # only: whoever actually treated them on the day can override it.
+    primary_doctor_id = Column(Integer, ForeignKey('users.id'), nullable=True)
     treatment_type = Column(String, nullable=False)
     blood_group = Column(String, nullable=True)
     patient_history = Column(Text, nullable=True)
@@ -380,6 +407,11 @@ class Expense(Base):
     id = Column(Integer, primary_key=True, index=True)
     clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
     vendor_id = Column(Integer, ForeignKey('vendors.id'), nullable=True)
+    # Money paid to a member of staff rather than a vendor, which is how a
+    # consultant's fee reaches the ledger with a name on it. Without this the
+    # ledger could say "Consultant, Rs 2,400" but never which consultant, so a
+    # per-consultant split was impossible.
+    paid_to_user_id = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)
     amount = Column(Float, nullable=False)
     payment_method = Column(String, nullable=False)  # Cash, UPI, Card, Net Banking, etc.
     category = Column(String, nullable=False, default='General')  # E.g., Inventory, Salary, Rent, Utilities, Maintenance
@@ -780,6 +812,11 @@ class Vendor(Base):
     address = Column(String)
     gst_number = Column(String)
     category = Column(String, default='General')
+    # Visiting consultants are vendors with category='Consultant'. They are paid
+    # the same way a staff consultant is, they just have no login, so the fee
+    # terms live here too rather than forcing every payee to be a user.
+    fee_basis = Column(String, nullable=True)    # fixed | percentage | None
+    fee_value = Column(Float, nullable=True)
     last_order_date = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -952,6 +989,92 @@ class LabOrder(Base):
     patient = relationship("Patient")
     case_paper = relationship("CasePaper")
     vendor = relationship("Vendor")
+
+
+class ClinicPhoto(Base):
+    """A photo of the clinic, for the public website's gallery and hero.
+
+    The one piece of website content the app could not already supply: names,
+    hours, treatments, prices, reviews and dentists all exist elsewhere, but
+    nothing ever asked a clinic what the place looks like. Uploaded in Control
+    Center alongside the logo, stored in R2 under the branding category.
+    """
+    __tablename__ = 'clinic_photos'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    file_path = Column(String, nullable=False)    # R2 key
+    caption = Column(String(120), nullable=True)
+    # Lower sorts first. The first photo doubles as the website hero image.
+    sort_order = Column(Integer, default=0)
+    uploaded_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    clinic = relationship("Clinic")
+
+
+class CaseCost(Base):
+    """What a case cost the clinic: a lab bill, or a consultant's fee.
+
+    One model for both because they are the same shape — an amount owed to an
+    outside party for work on a specific patient. Before this, `LabOrder.cost`
+    was the only cost recorded anywhere and it never left the Lab module, so
+    lab bills never reached the ledger and a clinic's "money out" understated
+    reality by whatever it spent on lab work. Consultant fees had nowhere to
+    live at all.
+
+    This is strictly the COST side. `LabOrder.cost` is what the lab charges the
+    clinic; the invoice line item is what the clinic charges the patient. They
+    are different numbers, already linked by `LabOrder.invoice_line_item_id`
+    when the cost was passed on. Nothing here ever touches invoice totals, so a
+    cost can never change what a patient owes.
+
+    The payee is a `Vendor` for both kinds: labs already are vendors, and a
+    consultant is a vendor with `category='Consultant'`. That means settlement
+    can reuse `Expense.vendor_id` untouched, and a settled cost shows up in the
+    existing ledger with no changes to how the ledger is built.
+    """
+    __tablename__ = 'case_costs'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False, index=True)
+    case_paper_id = Column(Integer, ForeignKey('case_papers.id'), nullable=True)
+    # The bill this case produced, when there is one. Used to resolve a
+    # percentage fee against what the patient has actually paid.
+    invoice_id = Column(Integer, ForeignKey('invoices.id'), nullable=True)
+    # Set when this cost was derived from a lab order, so the two stay in step
+    # and a re-save updates rather than duplicates.
+    lab_order_id = Column(Integer, ForeignKey('lab_orders.id'), nullable=True, index=True)
+    vendor_id = Column(Integer, ForeignKey('vendors.id'), nullable=True)
+    # Exactly one of vendor_id / doctor_user_id identifies who is owed. Labs and
+    # visiting consultants are vendors; staff consultants are users.
+    doctor_user_id = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)
+
+    kind = Column(String, nullable=False, default='lab')      # lab | consultant | other
+    description = Column(String, nullable=True)
+
+    # 'fixed' is a rupee amount typed in. 'percentage' is a share of what the
+    # linked invoice has COLLECTED, resolved into `amount` when it is worked
+    # out — a clinic pays a consultant out of money it actually has, and part
+    # payment is normal, so billing-based shares would owe money on unpaid work.
+    basis = Column(String, nullable=False, default='fixed')   # fixed | percentage
+    percentage = Column(Float, nullable=True)
+    amount = Column(Float, nullable=False, default=0.0)
+
+    status = Column(String, nullable=False, default='unpaid')  # unpaid | paid
+    paid_on = Column(Date, nullable=True)
+    # The Expense written when this was settled. Deleting the cost reverses it.
+    expense_id = Column(Integer, ForeignKey('expenses.id'), nullable=True)
+
+    notes = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    clinic = relationship("Clinic")
+    patient = relationship("Patient")
+    case_paper = relationship("CasePaper")
+    vendor = relationship("Vendor")
+    lab_order = relationship("LabOrder")
 
 
 class MedicationStock(Base):

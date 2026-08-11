@@ -91,6 +91,30 @@ def get_case_paper(
         raise HTTPException(status_code=404, detail="Case paper not found")
     return paper
 
+def _sync_fee(db, paper, actor_id):
+    """Keep the treating doctor's fee in step with the case.
+
+    Imported lazily so this module does not depend on the case-costs domain at
+    import time; the fee is an add-on to the clinical record, not part of it.
+    """
+    try:
+        from domains.clinical.routes.case_costs import sync_consultant_fee
+        from models import Invoice
+        inv = (
+            db.query(Invoice)
+            .filter(Invoice.case_paper_id == paper.id)
+            .order_by(Invoice.created_at.desc())
+            .first()
+        )
+        sync_consultant_fee(
+            db, clinic_id=paper.clinic_id, patient_id=paper.patient_id,
+            case_paper_id=paper.id, invoice_id=inv.id if inv else None,
+            doctor_user_id=paper.dentist_id, actor_id=actor_id,
+        )
+    except Exception:  # noqa: BLE001 — never block a clinical save
+        pass
+
+
 @router.put("/{paper_id}", response_model=CasePaperOut)
 def update_case_paper(
     paper_id: int,
@@ -119,6 +143,11 @@ def update_case_paper(
         setattr(db_paper, key, value)
         
     db_paper.updated_at = datetime.utcnow()
+
+    # The treating doctor may have just been set or changed, so the fee owed
+    # for this case follows from their configured rate. Nobody types an amount.
+    _sync_fee(db, db_paper, current_user.id)
+
     db.commit()
     db.refresh(db_paper)
     return db_paper
