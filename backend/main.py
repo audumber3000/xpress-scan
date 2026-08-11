@@ -163,6 +163,27 @@ async def lifespan(app: FastAPI):
                 "CREATE INDEX IF NOT EXISTS ix_case_costs_doctor_user_id ON case_costs (doctor_user_id)"
             ))
 
+            # Appointments: an outcome, and the status rename that makes one
+            # possible. The old value is captured first so the rewrite below
+            # stays reversible.
+            for _ddl in (
+                "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS outcome_at TIMESTAMP",
+                "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS outcome_by INTEGER REFERENCES users(id)",
+                "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS cancel_reason VARCHAR",
+                "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS series_id VARCHAR",
+                "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS legacy_status VARCHAR",
+                "CREATE INDEX IF NOT EXISTS ix_appointments_series_id ON appointments (series_id)",
+                "CREATE INDEX IF NOT EXISTS ix_appointments_status ON appointments (status)",
+                "UPDATE appointments SET legacy_status = status WHERE legacy_status IS NULL",
+                "UPDATE appointments SET status = 'scheduled' WHERE status IN ('accepted', 'pending')",
+                "UPDATE appointments SET status = 'arrived'   WHERE status = 'checking'",
+                "UPDATE appointments SET status = 'cancelled' WHERE status IN ('rejected', 'canceled')",
+                "UPDATE appointments SET status = 'no_show'   WHERE status IN ('no-show', 'noshow')",
+                "UPDATE appointments SET status = 'scheduled' WHERE status IS NULL OR status NOT IN "
+                "('scheduled','confirmed','arrived','completed','no_show','cancelled')",
+            ):
+                conn.execute(text(_ddl))
+
             # Public clinic website (added 2026-08). Nothing is published until
             # website_enabled is switched on, so existing clinics stay private.
             conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_slug VARCHAR(80)"))

@@ -1,14 +1,22 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from database import SessionLocal
-from models import Appointment, Patient, User, Clinic
+from models import Appointment, Patient, User, Clinic, CasePaper
 from sqlalchemy import and_, or_, cast, Date
 from datetime import datetime, timedelta
 from typing import List, Optional
 from core.posthog_client import track_event, EVENTS
-from core.auth_utils import get_current_user
+from core.auth_utils import get_current_user, require_doctor_or_owner
 from core.notification_dispatch import notify_event, fmt_appt_time
+from domains.scheduling.appointment_status import (
+    ALL_STATUSES, OPEN_STATUSES, TERMINAL_STATUSES, CANCELLED, NO_SHOW,
+    COMPLETED, ARRIVED, CONFIRMED, SCHEDULED, normalize_status, is_terminal,
+)
 from pydantic import BaseModel
+import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -32,7 +40,7 @@ class AppointmentCreate(BaseModel):
     start_time: str  # HH:MM
     end_time: str  # HH:MM
     duration: int = 60
-    status: str = "confirmed"
+    status: str = SCHEDULED
     notes: Optional[str] = None
     chair_number: Optional[str] = None
     patient_age: Optional[int] = None
@@ -126,7 +134,7 @@ async def create_appointment(
             start_time=appointment.start_time,
             end_time=appointment.end_time,
             duration=appointment.duration,
-            status=appointment.status,
+            status=normalize_status(appointment.status),
             notes=appointment.notes,
             chair_number=appointment.chair_number,
             visit_number=visit_number,
@@ -609,6 +617,202 @@ async def get_appointments(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching appointments: {str(e)}")
 
+@router.get("/needs-outcome")
+def needs_outcome(
+    limit: int = Query(50, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Past appointments nobody ever closed off.
+
+    Declared above GET /{appointment_id} on purpose: FastAPI matches in
+    declaration order, so a literal path behind a parameter route would be
+    swallowed by it and 422 on the string.
+
+    These are deliberately surfaced rather than auto-marked. Guessing a no-show
+    on a clinic's behalf would poison the very number this whole change exists
+    to earn, so the clinic says what happened and we only make it one tap.
+    """
+    now = datetime.utcnow()
+    rows = (
+        db.query(Appointment)
+        .filter(
+            Appointment.clinic_id == current_user.clinic_id,
+            Appointment.status.in_(OPEN_STATUSES),
+            Appointment.appointment_date < now,
+        )
+        .order_by(Appointment.appointment_date.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "count": len(rows),
+        "appointments": [
+            {
+                "id": a.id,
+                "patient_name": a.patient_name,
+                "patient_id": a.patient_id,
+                "doctor_id": a.doctor_id,
+                "treatment": a.treatment,
+                "appointment_date": a.appointment_date.strftime("%Y-%m-%d"),
+                "start_time": a.start_time,
+                "status": normalize_status(a.status),
+            }
+            for a in rows
+        ],
+    }
+
+
+class OutcomePayload(BaseModel):
+    status: str                       # completed | no_show | cancelled
+    cancel_reason: Optional[str] = None
+
+
+@router.post("/{appointment_id}/outcome", response_model=AppointmentOut)
+def set_outcome(
+    appointment_id: int,
+    payload: OutcomePayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Record how an appointment ended.
+
+    Separate from the general update endpoint because an outcome is not just
+    another editable field: it stamps who decided and when, and it is the one
+    write that makes the no-show rate and utilisation figures possible.
+    """
+    status = normalize_status(payload.status)
+    if status not in TERMINAL_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"An outcome must be one of: {', '.join(TERMINAL_STATUSES)}",
+        )
+
+    appointment = db.query(Appointment).filter(
+        Appointment.id == appointment_id,
+        Appointment.clinic_id == current_user.clinic_id,
+    ).first()
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    appointment.status = status
+    appointment.outcome_at = datetime.utcnow()
+    appointment.outcome_by = current_user.id
+    appointment.cancel_reason = (
+        (payload.cancel_reason or "").strip() or None if status == CANCELLED else None
+    )
+    db.commit()
+    db.refresh(appointment)
+
+    doctor = db.query(User).filter(User.id == appointment.doctor_id).first() if appointment.doctor_id else None
+    return AppointmentOut(
+        id=appointment.id,
+        clinic_id=appointment.clinic_id,
+        patient_id=appointment.patient_id,
+        patient_name=appointment.patient_name,
+        patient_email=appointment.patient_email,
+        patient_phone=appointment.patient_phone,
+        doctor_id=appointment.doctor_id,
+        doctor_name=doctor.name if doctor else None,
+        treatment=appointment.treatment,
+        appointment_date=appointment.appointment_date.strftime("%Y-%m-%d"),
+        start_time=appointment.start_time,
+        end_time=appointment.end_time,
+        duration=appointment.duration,
+        status=appointment.status,
+        notes=appointment.notes,
+        chair_number=appointment.chair_number,
+        patient_age=appointment.patient_age,
+        patient_gender=appointment.patient_gender,
+        patient_village=appointment.patient_village,
+        patient_referred_by=appointment.patient_referred_by,
+        created_at=appointment.created_at,
+        updated_at=getattr(appointment, "updated_at", appointment.created_at),
+        synced_at=getattr(appointment, "synced_at", None),
+        sync_status=getattr(appointment, "sync_status", "local"),
+    )
+
+
+@router.post("/{appointment_id}/start-visit")
+def start_visit(
+    appointment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor_or_owner()),
+):
+    """Turn a booking into the visit it was for.
+
+    `case_papers.appointment_id` has been in the schema all along and was
+    populated exactly 0 times out of 167: staff booked a patient, the patient
+    arrived, and somebody hand-started an unrelated case paper, retyping the
+    doctor and the treatment. That is why filling in the calendar bought a
+    clinic nothing.
+
+    Idempotent. Calling twice returns the case paper already started rather
+    than opening a second clinical record for one visit.
+    """
+    appointment = db.query(Appointment).filter(
+        Appointment.id == appointment_id,
+        Appointment.clinic_id == current_user.clinic_id,
+    ).first()
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    existing = db.query(CasePaper).filter(
+        CasePaper.appointment_id == appointment.id,
+        CasePaper.clinic_id == current_user.clinic_id,
+    ).first()
+    if existing:
+        return {"case_paper_id": existing.id, "created": False,
+                "patient_id": existing.patient_id}
+
+    if not appointment.patient_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Add a patient file to this booking before starting the visit",
+        )
+
+    # Seeded, not decided. The treatment on the booking is why they came, so it
+    # belongs in the chief complaint as a starting point the dentist edits,
+    # rather than something they have to remember and retype.
+    seed = (appointment.treatment or "").strip()
+    paper = CasePaper(
+        clinic_id=current_user.clinic_id,
+        patient_id=appointment.patient_id,
+        appointment_id=appointment.id,
+        dentist_id=appointment.doctor_id or current_user.id,
+        date=datetime.utcnow(),
+        status="In Progress",
+        chief_complaint=json.dumps([seed]) if seed else None,
+    )
+    db.add(paper)
+
+    # Starting the visit means they are here, so the booking catches up if the
+    # front desk never marked them in.
+    if normalize_status(appointment.status) in (SCHEDULED, CONFIRMED):
+        appointment.status = ARRIVED
+
+    db.commit()
+    db.refresh(paper)
+
+    # The patient was in the clinic, so the day's register should say so. Same
+    # best-effort contract as create_case_paper: never block clinical work.
+    try:
+        from domains.patient.routes.daily_register import record_daily_visit
+        clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+        patient = db.query(Patient).filter(Patient.id == paper.patient_id).first()
+        if clinic and patient:
+            record_daily_visit(
+                db, clinic, patient, source="appointment",
+                doctor_id=paper.dentist_id, created_by=current_user.id,
+            )
+            db.commit()
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        logger.warning("daily register skipped for appointment %s: %s", appointment.id, exc)
+
+    return {"case_paper_id": paper.id, "created": True, "patient_id": paper.patient_id}
+
+
 @router.get("/{appointment_id}", response_model=AppointmentOut)
 async def get_appointment(
     appointment_id: int,
@@ -685,25 +889,40 @@ async def update_appointment(
             )
             appointment.appointment_date = appointment_datetime
         
+        # Read the old status BEFORE the generic setattr loop writes over it.
+        # This used to run afterwards, so old_status already held the new value,
+        # status_changed was never True, and no confirmation or check-in message
+        # was ever sent from this endpoint.
+        old_status = normalize_status(appointment.status)
+        requested_status = (
+            normalize_status(appointment_update.status)
+            if appointment_update.status else None
+        )
+        status_changed = bool(requested_status and requested_status != old_status)
+
         for key, value in update_data.items():
-            if key not in ['appointment_date', 'start_time'] and value is not None:
+            if key not in ['appointment_date', 'start_time', 'status'] and value is not None:
                 setattr(appointment, key, value)
-        
+
+        if requested_status:
+            appointment.status = requested_status
+            if is_terminal(requested_status):
+                appointment.outcome_at = datetime.utcnow()
+                appointment.outcome_by = current_user.id
+            else:
+                # Reopening clears the outcome, otherwise a mistakenly closed
+                # appointment keeps a stale "settled at" long after it reopened.
+                appointment.outcome_at = None
+                appointment.outcome_by = None
+
         if appointment_update.start_time:
             appointment.start_time = appointment_update.start_time
         if appointment_update.end_time:
             appointment.end_time = appointment_update.end_time
-        
-        # Track if status changed for email notifications
-        status_changed = False
-        old_status = appointment.status
-        if appointment_update.status and appointment_update.status != appointment.status:
-            status_changed = True
-            appointment.status = appointment_update.status
 
         # --- AUTO PATIENT CREATION LOGIC ---
-        # If status is or becomes 'checking' and there's no patient_id, create a patient file automatically
-        if appointment.status == 'checking' and (appointment.patient_id is None):
+        # Checking in someone who was booked without a patient file creates one.
+        if appointment.status == ARRIVED and (appointment.patient_id is None):
             try:
                 # Log to file for visibility
                 with open("/tmp/auto_patient.log", "a") as logf:
@@ -758,7 +977,7 @@ async def update_appointment(
         # the day's register. Idempotent per patient per day, so a walk-in the
         # front desk already added by hand isn't counted twice. Best-effort: a
         # failure here must never block the check-in itself.
-        if appointment.status == 'checking' and appointment.patient_id:
+        if appointment.status == ARRIVED and appointment.patient_id:
             try:
                 from domains.patient.routes.daily_register import record_daily_visit
                 reg_clinic = db.query(Clinic).filter(Clinic.id == appointment.clinic_id).first()
@@ -798,7 +1017,7 @@ async def update_appointment(
                 "doctor_name": doctor_name or "our team",
                 "clinic_phone": clinic.phone or "",
             }
-            if appointment.status in ("confirmed", "accepted"):
+            if appointment.status == CONFIRMED:
                 notify_event(
                     "appointment_confirmation",
                     db=db, clinic_id=current_user.clinic_id,
@@ -807,7 +1026,7 @@ async def update_appointment(
                     to_name=appointment.patient_name,
                     template_data=td,
                 )
-            elif appointment.status == "checking":
+            elif appointment.status == ARRIVED:
                 notify_event(
                     "checked_in",
                     db=db, clinic_id=current_user.clinic_id,

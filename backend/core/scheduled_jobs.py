@@ -16,6 +16,7 @@ from core.notification_dispatch import (
 )
 from core.nexus_notify import notify
 from core.phone import normalize_phone
+from domains.scheduling.appointment_status import OPEN_STATUSES
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,10 @@ async def appointment_reminder_scan_job() -> None:
             .join(Clinic, Clinic.id == Appointment.clinic_id)
             .filter(Appointment.appointment_date >= window_lo)
             .filter(Appointment.appointment_date < window_hi)
-            .filter(~Appointment.status.in_(["cancelled", "rejected", "no_show", "completed"]))
+            # Positive list, not a list of exclusions. An excluding filter
+            # silently starts reminding people again the moment a new terminal
+            # status is added and nobody remembers to add it here.
+            .filter(Appointment.status.in_(OPEN_STATUSES))
             .all()
         )
 

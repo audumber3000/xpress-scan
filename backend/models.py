@@ -441,7 +441,22 @@ class Appointment(Base):
     start_time = Column(String, nullable=False)  # e.g., "09:00"
     end_time = Column(String, nullable=False)  # e.g., "10:30"
     duration = Column(Integer, nullable=False, default=60)  # Duration in minutes
-    status = Column(String, default='confirmed')  # confirmed, completed, cancelled, no-show
+    # See domains/scheduling/appointment_status.py for the vocabulary. Do not
+    # invent values here: this comment used to claim four statuses that nothing
+    # could actually set, while production held four different ones.
+    status = Column(String, default='scheduled', index=True)
+
+    # How it ended, and who said so. Recorded only for a terminal status, which
+    # is what finally makes a no-show rate computable.
+    outcome_at = Column(DateTime, nullable=True)
+    outcome_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    cancel_reason = Column(String, nullable=True)
+
+    # Groups the visits of one course of treatment (a root canal is three).
+    # Moving or cancelling one must not disturb its siblings, so this is a
+    # loose grouping key rather than a parent row.
+    series_id = Column(String, nullable=True, index=True)
+
     notes = Column(Text, nullable=True)  # Additional notes
     chair_number = Column(String, nullable=True)  # Assigned chair number
     visit_number = Column(Integer, nullable=True)  # Visit number from treatment plan

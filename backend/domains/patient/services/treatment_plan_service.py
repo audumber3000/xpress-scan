@@ -5,6 +5,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 from sqlalchemy.orm import Session
 from models import Patient, Appointment, User
+from domains.scheduling.appointment_status import SCHEDULED
 
 
 class TreatmentPlanService:
@@ -217,7 +218,7 @@ class TreatmentPlanService:
             start_time=time_str,
             end_time=end_time,
             duration=duration,
-            status="accepted",  # Auto-accept appointments from treatment plans
+            status=SCHEDULED,  # Booked from a treatment plan; nobody has confirmed it yet
             notes=plan_data.get("notes", f"Treatment plan: {plan_data.get('procedure')}"),
             visit_number=plan_data.get("visit_number")  # Pass visit number from treatment plan
         )

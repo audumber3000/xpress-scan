@@ -9,6 +9,7 @@ from database import get_db
 from models import Patient, Report, Payment, User, TreatmentType, Appointment, Clinic, Invoice, LabOrder, InventoryItem, MedicationStock
 from core.auth_utils import get_current_user
 from core.clinic_time import clinic_today
+from domains.scheduling.appointment_status import ARRIVED
 
 router = APIRouter()
 
@@ -138,7 +139,7 @@ def get_dashboard_metrics(
     checking_count = db.query(func.count(Appointment.id)).filter(
         and_(
             Appointment.clinic_id == final_clinic_id,
-            Appointment.status == 'checking',
+            Appointment.status == ARRIVED,
             Appointment.appointment_date >= start_date,
             Appointment.appointment_date < end_date
         )
@@ -147,7 +148,7 @@ def get_dashboard_metrics(
     prev_checking = db.query(func.count(Appointment.id)).filter(
         and_(
             Appointment.clinic_id == final_clinic_id,
-            Appointment.status == 'checking',
+            Appointment.status == ARRIVED,
             Appointment.appointment_date >= prev_start,
             Appointment.appointment_date < prev_end
         )

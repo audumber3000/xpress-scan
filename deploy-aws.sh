@@ -248,6 +248,35 @@ run_migration "website_about"        "ALTER TABLE clinics ADD COLUMN IF NOT EXIS
 run_migration "website_show_stats"   "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_show_stats BOOLEAN DEFAULT TRUE"
 run_migration "website_slug_idx"     "CREATE UNIQUE INDEX IF NOT EXISTS ix_clinics_website_slug ON clinics (website_slug)"
 
+# ── Appointments: outcomes, series, and the status rename ────────────────────
+# Production held 'accepted', 'confirmed', 'checking' and 'rejected'. None of
+# them said whether the patient turned up, so the no-show rate was not merely
+# unreported, it was unrecordable. 165 of 167 appointments sat in the past with
+# no terminal state.
+run_migration "appt_outcome_at"    "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS outcome_at TIMESTAMP"
+run_migration "appt_outcome_by"    "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS outcome_by INTEGER REFERENCES users(id)"
+run_migration "appt_cancel_reason" "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS cancel_reason VARCHAR"
+run_migration "appt_series_id"     "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS series_id VARCHAR"
+run_migration "appt_series_idx"    "CREATE INDEX IF NOT EXISTS ix_appointments_series_id ON appointments (series_id)"
+run_migration "appt_status_idx"    "CREATE INDEX IF NOT EXISTS ix_appointments_status ON appointments (status)"
+
+# The old value is kept in its own column before anything is rewritten. This is
+# the one genuinely irreversible step in the deploy, so it stays walkable-back:
+# UPDATE appointments SET status = legacy_status WHERE legacy_status IS NOT NULL.
+run_migration "appt_legacy_status" "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS legacy_status VARCHAR"
+run_migration "appt_legacy_capture" "UPDATE appointments SET legacy_status = status WHERE legacy_status IS NULL"
+
+# Idempotent by construction: each UPDATE only matches the old value, so a
+# second run finds nothing left to change.
+run_migration "appt_status_accepted"  "UPDATE appointments SET status = 'scheduled' WHERE status IN ('accepted', 'pending')"
+run_migration "appt_status_checking"  "UPDATE appointments SET status = 'arrived'   WHERE status = 'checking'"
+run_migration "appt_status_rejected"  "UPDATE appointments SET status = 'cancelled' WHERE status IN ('rejected', 'canceled')"
+run_migration "appt_status_noshow"    "UPDATE appointments SET status = 'no_show'   WHERE status IN ('no-show', 'noshow')"
+# Anything we have never seen becomes 'scheduled' rather than staying unreadable:
+# an unrecognised status should leave the appointment on the calendar and
+# actionable, never silently drop it out of every query.
+run_migration "appt_status_unknown"   "UPDATE appointments SET status = 'scheduled' WHERE status IS NULL OR status NOT IN ('scheduled','confirmed','arrived','completed','no_show','cancelled')"
+
 # ── Schema migration check (run against RDS) ──────────────────────────────────
 echo ""
 echo "▶ Running schema migration check against RDS..."

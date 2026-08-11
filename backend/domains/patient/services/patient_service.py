@@ -9,6 +9,7 @@ from models import Patient, Clinic, TreatmentType, Invoice, InvoiceLineItem, App
 from sqlalchemy import func, cast, Integer
 from core.posthog_client import track_event, EVENTS
 from core.clinic_time import clinic_today
+from domains.scheduling.appointment_status import VISITED_STATUSES
 
 
 class PatientService(PatientServiceProtocol):
@@ -131,12 +132,17 @@ class PatientService(PatientServiceProtocol):
         db = self.patient_repo.db
         patient_ids = [p.id for p in patients]
 
+        # "Last seen" means the patient actually turned up, so this counts
+        # arrived and completed and nothing else. It used to list the pre-rename
+        # values ('checking', 'accepted') and also counted 'accepted', which was
+        # merely booked: a patient who never came still moved their last-visit
+        # date. VISITED_STATUSES keeps this honest and in step with the rename.
         appt_rows = db.query(
             Appointment.patient_id,
             func.max(Appointment.appointment_date).label('last_date'),
         ).filter(
             Appointment.patient_id.in_(patient_ids),
-            Appointment.status.in_(['checking', 'completed', 'accepted']),
+            Appointment.status.in_(VISITED_STATUSES),
         ).group_by(Appointment.patient_id).all()
         appt_map = {row.patient_id: row.last_date for row in appt_rows}
 
