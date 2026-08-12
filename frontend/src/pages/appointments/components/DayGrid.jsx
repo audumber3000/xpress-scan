@@ -488,7 +488,7 @@ const DayGrid = ({
               const free = isAvailableAt(col, hoverSlot.startMin, end);
               return (
                 <div
-                  className={`absolute pointer-events-none rounded-md border transition-colors ${
+                  className={`absolute pointer-events-none border transition-colors ${
                     free
                       ? "bg-[#2a276e]/[0.07] border-[#2a276e]/25"
                       : "bg-amber-400/10 border-amber-400/40"

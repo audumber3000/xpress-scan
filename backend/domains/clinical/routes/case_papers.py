@@ -17,10 +17,20 @@ def get_patient_case_papers(
     current_user: User = Depends(get_current_user)
 ):
     """Fetch all clinical case papers for a specific patient."""
-    return db.query(CasePaper).filter(
+    papers = db.query(CasePaper).filter(
         CasePaper.patient_id == patient_id,
         CasePaper.clinic_id == current_user.clinic_id
     ).order_by(CasePaper.date.desc()).all()
+
+    # Resolve the dentist's name onto each row. A bare dentist_id tells the case
+    # paper list nothing, so every card read "Not assigned" even when the visit
+    # plainly had a dentist. Set here rather than in the schema because FastAPI
+    # reads attributes straight off the ORM object and never calls the schema's
+    # own model_validate, so a classmethod override there is silently ignored.
+    for paper in papers:
+        paper.dentist_name = paper.dentist.name if paper.dentist else None
+
+    return papers
 
 @router.post("", response_model=CasePaperOut)
 def create_case_paper(

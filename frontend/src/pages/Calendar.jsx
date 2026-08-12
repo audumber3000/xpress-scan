@@ -17,7 +17,9 @@ import {
   FileText,
   AlertTriangle,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  UserPlus,
+  Save
 } from "lucide-react";
 import CalendarToolbar from "./appointments/components/CalendarToolbar";
 import TeamMembersPanel from "./appointments/components/TeamMembersPanel";
@@ -101,6 +103,11 @@ const Calendar = () => {
   const [needsOutcome, setNeedsOutcome] = useState({ count: 0, appointments: [] });
   const [outcomeBusy, setOutcomeBusy] = useState(false);
   const [cancelPrompt, setCancelPrompt] = useState(null);
+  // A patient booked from the calendar starts as name + phone only. The desk is
+  // the one moment someone is standing there to be asked the rest, so the panel
+  // asks then rather than leaving a half-filled file nobody goes back to.
+  const [details, setDetails] = useState(null);
+  const [detailsSaving, setDetailsSaving] = useState(false);
   // Reject confirmation dialog state — replaces the native confirm() + prompt() flow.
   // Phase 1 filter state: which doctors are visible, and whether to show unassigned (public) bookings
   const [selectedDoctorIds, setSelectedDoctorIds] = useState(() => new Set());
@@ -480,7 +487,9 @@ const Calendar = () => {
         );
       }
     } else {
-      toast.success('Appointment booked');
+      toast.success(result?.createdPatient
+        ? 'Booked, and a patient file was created'
+        : 'Appointment booked');
     }
   };
 
@@ -508,12 +517,58 @@ const Calendar = () => {
     }
   };
 
+  // Which of the useful-at-the-desk fields are still blank.
+  const missingDetails = useCallback(async (patientId) => {
+    if (!patientId) return null;
+    try {
+      const p = await api.get(`/patients/${patientId}`);
+      const gaps = [];
+      if (!p.age && !p.date_of_birth) gaps.push('age');
+      if (!p.gender) gaps.push('gender');
+      if (!p.village) gaps.push('city');
+      return gaps.length ? { patient: p, gaps } : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const saveDetails = async () => {
+    if (!details) return;
+    setDetailsSaving(true);
+    try {
+      await api.put(`/patients/${details.patient.id}`, {
+        age: details.age ? Number(details.age) : undefined,
+        gender: details.gender || undefined,
+        village: details.village || undefined,
+      });
+      toast.success('Details saved');
+      setDetails(null);
+    } catch (e) {
+      toast.error(e?.detail || e?.message || 'Could not save those details');
+    } finally {
+      setDetailsSaving(false);
+    }
+  };
+
   // ── Booking becomes a visit ───────────────────────────────────────────────
+  // Look for gaps as soon as the panel opens, so the prompt is already there
+  // when reception has the patient in front of them.
+  useEffect(() => {
+    if (!selectedAppointment?.patientId) { setDetails(null); return; }
+    let cancelled = false;
+    missingDetails(selectedAppointment.patientId).then((found) => {
+      if (!cancelled) {
+        setDetails(found ? { ...found, age: '', gender: '', village: '' } : null);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [selectedAppointment?.patientId, missingDetails]);
+
   const handleStartVisit = async (appointment) => {
     try {
       const res = await api.post(`/appointments/${appointment.id}/start-visit`);
       setSelectedAppointment(null);
-      navigate(`/patient-profile/${res.patient_id}?tab=casepapers&casePaper=${res.case_paper_id}`);
+      navigate(`/patient-profile/${res.patient_id}?tab=case-papers&casePaper=${res.case_paper_id}`);
       toast.success(res.created ? 'Visit started' : 'Opening the visit already started');
     } catch (err) {
       toast.error(err?.detail || err?.message || 'Could not start the visit');
@@ -2030,55 +2085,134 @@ const Calendar = () => {
 
             </div>
             <div className="p-6 border-t border-gray-200 space-y-3">
-              {/* How it ended.
-                  This used to be Accept and Reject, neither of which said
-                  whether the patient turned up, so 165 of 167 appointments sat
-                  in the past with no outcome at all and a no-show rate could
-                  not be calculated. These three close an appointment properly. */}
-              {!['completed', 'no_show', 'cancelled'].includes(selectedAppointment.status) && (
-                <div className="mb-3">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                    How did it go?
-                  </p>
-                  <div className="grid grid-cols-3 gap-2">
+              {/* The file was created from a name and a phone number, which is
+                  all a booking needs. This is the one moment the patient is
+                  standing at the desk, so ask for the rest now instead of
+                  leaving a thin record nobody returns to. Skippable: a queue at
+                  the desk beats a complete form. */}
+              {details && (
+                <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50/60 p-3">
+                  <div className="flex items-start justify-between gap-2 mb-2.5">
+                    <p className="text-xs font-bold text-blue-900">
+                      Ask {selectedAppointment.patientName?.split(' ')[0] || 'them'} for their {details.gaps.join(', ')}
+                    </p>
                     <button
-                      onClick={() => applyOutcome(selectedAppointment.id, 'completed')}
-                      disabled={outcomeBusy}
-                      className="py-2.5 rounded-lg border border-green-200 bg-green-50 text-green-700 text-sm font-semibold hover:bg-green-100 transition-colors disabled:opacity-50"
+                      onClick={() => setDetails(null)}
+                      className="text-[11px] font-semibold text-blue-700/70 hover:text-blue-900 flex-shrink-0"
                     >
-                      Seen
-                    </button>
-                    <button
-                      onClick={() => applyOutcome(selectedAppointment.id, 'no_show')}
-                      disabled={outcomeBusy}
-                      className="py-2.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-sm font-semibold hover:bg-amber-100 transition-colors disabled:opacity-50"
-                    >
-                      No show
-                    </button>
-                    <button
-                      onClick={() => setCancelPrompt({ id: selectedAppointment.id, reason: '' })}
-                      disabled={outcomeBusy}
-                      className="py-2.5 rounded-lg border border-gray-200 bg-white text-gray-600 text-sm font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50"
-                    >
-                      Cancelled
+                      Not now
                     </button>
                   </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <input
+                      value={details.age}
+                      onChange={(e) => setDetails((d) => ({ ...d, age: e.target.value.replace(/\D/g, '') }))}
+                      placeholder="Age" inputMode="numeric"
+                      className="h-9 px-2 border border-blue-200 rounded-lg text-sm bg-white outline-none focus:border-[#2a276e]"
+                    />
+                    <select
+                      value={details.gender}
+                      onChange={(e) => setDetails((d) => ({ ...d, gender: e.target.value }))}
+                      className="h-9 px-2 border border-blue-200 rounded-lg text-sm bg-white outline-none focus:border-[#2a276e]"
+                    >
+                      <option value="">Gender</option>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                    </select>
+                    <input
+                      value={details.village}
+                      onChange={(e) => setDetails((d) => ({ ...d, village: e.target.value }))}
+                      placeholder="City"
+                      className="h-9 px-2 border border-blue-200 rounded-lg text-sm bg-white outline-none focus:border-[#2a276e]"
+                    />
+                  </div>
+                  <button
+                    onClick={saveDetails}
+                    disabled={detailsSaving || (!details.age && !details.gender && !details.village)}
+                    className="mt-2 w-full h-9 rounded-lg bg-white border border-blue-300 text-xs font-bold text-blue-900 hover:bg-blue-50 disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
+                  >
+                    <Save size={13} /> Save to their file
+                  </button>
                 </div>
               )}
 
-              {/* The booking becomes the visit, carrying the doctor and the
-                  treatment across. Without this the two records never met:
-                  case_papers.appointment_id was populated 0 times in 167. */}
-              {selectedAppointment.patientId &&
-               !['completed', 'no_show', 'cancelled'].includes(selectedAppointment.status) && (
-                <button
-                  onClick={() => handleStartVisit(selectedAppointment)}
-                  className="w-full mb-3 bg-[#29828a] text-white py-3 rounded-lg hover:bg-[#1f6b72] transition-colors flex items-center justify-center gap-2 font-semibold"
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>Start visit</span>
-                </button>
+              {/* One decision at a time.
+                  This was five equal-weight buttons where two said the same
+                  thing: starting a visit already means the patient was seen, so
+                  offering "Seen" beside "Start visit" made the receptionist
+                  choose between two versions of yes. Now there is one primary
+                  action for what happens 90% of the time, and the exceptions
+                  sit underneath it in a quieter row. */}
+              {!['completed', 'no_show', 'cancelled'].includes(selectedAppointment.status) ? (
+                <div className="space-y-3">
+                  {selectedAppointment.patientId ? (
+                    <button
+                      onClick={() => handleStartVisit(selectedAppointment)}
+                      className="w-full bg-[#2a276e] hover:bg-[#1a1548] text-white py-3.5 rounded-lg transition-colors flex items-center justify-center gap-2 font-bold"
+                    >
+                      <FileText className="w-4 h-4" />
+                      <span>Start visit</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleCreatePatientFile}
+                      className="w-full bg-[#2a276e] hover:bg-[#1a1548] text-white py-3.5 rounded-lg transition-colors flex items-center justify-center gap-2 font-bold"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      <span>Create patient file</span>
+                    </button>
+                  )}
+
+                  {/* The exceptions. Deliberately text-weight, not filled: they
+                      are the rare path and should not compete with the button
+                      above for attention. */}
+                  <div className="flex items-center justify-center gap-1 text-sm">
+                    <button
+                      onClick={() => applyOutcome(selectedAppointment.id, 'completed')}
+                      disabled={outcomeBusy}
+                      title="They were seen, but no clinical record is needed"
+                      className="px-3 py-2 rounded-lg font-semibold text-gray-500 hover:text-green-700 hover:bg-green-50 transition-colors disabled:opacity-50"
+                    >
+                      Seen, no notes
+                    </button>
+                    <span className="text-gray-200">|</span>
+                    <button
+                      onClick={() => applyOutcome(selectedAppointment.id, 'no_show')}
+                      disabled={outcomeBusy}
+                      className="px-3 py-2 rounded-lg font-semibold text-gray-500 hover:text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-50"
+                    >
+                      No show
+                    </button>
+                    <span className="text-gray-200">|</span>
+                    <button
+                      onClick={() => setCancelPrompt({ id: selectedAppointment.id, reason: '' })}
+                      disabled={outcomeBusy}
+                      className="px-3 py-2 rounded-lg font-semibold text-gray-500 hover:text-red-700 hover:bg-red-50 transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Already closed. Say so, and offer the way back rather than
+                   leaving a dead panel. */
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5">
+                  <span className="text-sm text-gray-600">
+                    Marked <strong className="text-gray-900">
+                      {{ completed: 'seen', no_show: 'a no show', cancelled: 'cancelled' }[selectedAppointment.status]}
+                    </strong>
+                  </span>
+                  <button
+                    onClick={() => applyOutcome(selectedAppointment.id, 'confirmed')}
+                    disabled={outcomeBusy}
+                    className="text-xs font-bold text-[#2a276e] hover:underline disabled:opacity-50"
+                  >
+                    Reopen
+                  </button>
+                </div>
               )}
+
                {/* Patient File Actions - Show based on appointment status and patient_id */}
                <div className="mt-6">
                   {selectedAppointment.patientId ? (
@@ -2086,13 +2220,13 @@ const Calendar = () => {
                     <div className="space-y-3">
                       <button 
                         onClick={() => {
-                          navigate(`/patient-profile/${selectedAppointment.patientId}?tab=timeline`);
+                          navigate(`/patient-profile/${selectedAppointment.patientId}?tab=case-papers`);
                           setSelectedAppointment(null);
                         }}
-                        className="w-full bg-[#2a276e] text-white py-3 rounded-lg hover:bg-[#1a1548] transition-colors flex items-center justify-center gap-2 font-semibold shadow-lg"
+                        className="w-full py-2.5 rounded-lg border border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-800 transition-colors flex items-center justify-center gap-2 text-sm font-semibold"
                       >
                         <FileText className="w-4 h-4" />
-                        <span>View Patient File</span>
+                        <span>View patient file</span>
                         <ExternalLink className="w-4 h-4" />
                       </button>
                       

@@ -190,7 +190,12 @@ class Patient(Base):
     # consultant fee is attributed without anyone typing anything. A default
     # only: whoever actually treated them on the day can override it.
     primary_doctor_id = Column(Integer, ForeignKey('users.id'), nullable=True)
-    treatment_type = Column(String, nullable=False)
+    # Free-text "reason for visit", deliberately not a billable service.
+    # Was NOT NULL while PatientCreateDTO, the intake form and every importer
+    # all treat it as optional, so any caller that omitted it got a 500 rather
+    # than a validation error. The label is optional; the constraint was the
+    # anomaly.
+    treatment_type = Column(String, nullable=True)
     blood_group = Column(String, nullable=True)
     patient_history = Column(Text, nullable=True)
     display_id = Column(String, nullable=True, index=True)

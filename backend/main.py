@@ -185,6 +185,10 @@ async def lifespan(app: FastAPI):
                 # to 30 rather than the old blanket 60, which treated a check-up
                 # and a root canal as the same length.
                 "ALTER TABLE treatment_types ADD COLUMN IF NOT EXISTS duration_minutes INTEGER DEFAULT 30",
+                # patients.treatment_type is an optional reason-for-visit label
+                # everywhere except the database, where NOT NULL turned every
+                # omission into a 500.
+                "ALTER TABLE patients ALTER COLUMN treatment_type DROP NOT NULL",
                 "UPDATE treatment_types SET duration_minutes = 30 WHERE duration_minutes IS NULL",
             ):
                 conn.execute(text(_ddl))

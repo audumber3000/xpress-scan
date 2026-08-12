@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PatientTimeline from './PatientTimeline';
 import ToothRightDrawer from './ToothRightDrawer';
 import PrescriptionDrawer from './PrescriptionDrawer';
@@ -49,6 +49,10 @@ const CasePapersTab = ({
   const { registerBlocker, attemptNavigate } = useNavigationGuard();
   const currentUserName = getUserDisplayName(user); // logged-in dentist, used as fallback
   const [selectedCasePaper, setSelectedCasePaper] = useState(null);
+  // ?casePaper=<id> opens that paper directly. Guarded by a ref so it only
+  // fires on the first load: without it, closing the paper would immediately
+  // reopen it and there would be no way back to the list.
+  const autoOpened = useRef(false);
   const [activeChartTab, setActiveChartTab] = useState('dental_chart');
   const [isAddingLabOrder, setIsAddingLabOrder] = useState(false);
   const [editingTreatment, setEditingTreatment] = useState(null);
@@ -115,6 +119,39 @@ const CasePapersTab = ({
   const [medicationStock, setMedicationStock] = useState([]);
 
   const [visitPrescriptions, setVisitPrescriptions] = useState([]);
+
+  const openCasePaper = useCallback((paper) => {
+    const pills = (val) => {
+      if (Array.isArray(val)) return val;
+      if (typeof val === 'string' && val.trim().startsWith('[')) {
+        try { return JSON.parse(val); } catch { return [val]; }
+      }
+      return typeof val === 'string' && val.trim() ? [val] : [];
+    };
+    setSelectedCasePaper(paper);
+    setForm({
+      chief_complaint: pills(paper.chief_complaint),
+      medical_history: pills(paper.medical_history),
+      dental_history: pills(paper.dental_history),
+      allergies: pills(paper.allergies),
+      clinical_examination: paper.clinical_examination || '',
+      diagnosis: paper.diagnosis || '',
+      next_visit_recommendation: paper.next_visit_recommendation || 'Not specified',
+      notes: paper.notes || '',
+    });
+    setDirty(false);
+    onCasePaperStateChange?.(true);
+  }, [onCasePaperStateChange]);
+
+  useEffect(() => {
+    if (autoOpened.current || !caseHistory.length) return;
+    const wanted = new URLSearchParams(window.location.search).get('casePaper');
+    if (!wanted) return;
+    const paper = caseHistory.find((c) => String(c.id) === String(wanted));
+    if (!paper) return;
+    autoOpened.current = true;
+    openCasePaper(paper);
+  }, [caseHistory]);
 
   const selectedCasePaperIndex = caseHistory.findIndex(
     (paper) => paper.id?.toString() === selectedCasePaper?.id?.toString()

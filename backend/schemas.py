@@ -821,11 +821,21 @@ class CasePaperOut(CasePaperBase):
     clinic_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
+    # Who saw them, by name. dentist_id was already stored and returned, but a
+    # bare id tells the list nothing, so every card read "Not assigned" even
+    # when the visit plainly had a dentist. The name comes off the existing
+    # relationship rather than a second request per card.
+    dentist_name: Optional[str] = None
 
     @classmethod
     def model_validate(cls, obj, **kwargs):
         if hasattr(obj, '__dict__') or hasattr(obj, '_sa_instance_state'):
             data = {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
+
+            # dentist_name is set by the route, not derived here: FastAPI reads
+            # attributes directly off the ORM object for response_model, so this
+            # classmethod is not called on the serialisation path.
+            data['dentist_name'] = getattr(obj, 'dentist_name', None)
             
             # Legacy list-like fields
             for field in ('chief_complaint', 'medical_history', 'allergies', 'dental_history'):

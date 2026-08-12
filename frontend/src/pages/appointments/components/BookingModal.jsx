@@ -136,9 +136,34 @@ const BookingModal = ({
     if (!form.patient_name.trim()) { setError('Who is this appointment for?'); return; }
     setSaving(true);
     try {
+      // A booking with no patient file is a dead end: you cannot start the
+      // visit from it, bill it, or see it in their history. 39% of production
+      // bookings were in exactly that state. So an unmatched name creates the
+      // file here rather than leaving it dangling.
+      let patientId = form.patient_id;
+      if (!patientId) {
+        const phone = (form.patient_phone || '').replace(/[^\d+]/g, '');
+        if (phone.length < 10) {
+          setError('A phone number is needed to create the patient file');
+          setSaving(false);
+          return;
+        }
+        try {
+          const created = await api.post('/patients', {
+            name: form.patient_name.trim(),
+            phone,
+          });
+          patientId = created?.id || null;
+        } catch (e) {
+          // Booking still goes ahead without the file rather than losing the
+          // slot: a clash for the chair is worse than a patient record we can
+          // attach afterwards. The message says which happened.
+          console.warn('Could not create the patient file', e);
+        }
+      }
       if (series.on) {
         const res = await api.post('/scheduling/series', {
-          patient_id: form.patient_id || null,
+          patient_id: patientId || null,
           patient_name: form.patient_name,
           patient_phone: form.patient_phone || null,
           doctor_id: form.doctor_id ? Number(form.doctor_id) : null,
@@ -153,7 +178,7 @@ const BookingModal = ({
         onSaved?.({ kind: 'series', ...res });
       } else {
         const res = await api.post('/appointments', {
-          patient_id: form.patient_id || null,
+          patient_id: patientId || null,
           patient_name: form.patient_name,
           patient_phone: form.patient_phone || null,
           doctor_id: form.doctor_id ? Number(form.doctor_id) : null,
@@ -164,7 +189,7 @@ const BookingModal = ({
           end_time: endTime,
           duration: Number(form.duration),
         });
-        onSaved?.({ kind: 'one', appointment: res });
+        onSaved?.({ kind: 'one', appointment: res, createdPatient: !form.patient_id && !!patientId });
       }
       onClose();
     } catch (e) {
@@ -227,10 +252,23 @@ const BookingModal = ({
                 ))}
               </div>
             )}
-            {!form.patient_id && form.patient_name.trim() && (
-              <p className="text-[11px] text-gray-400 mt-1">
-                No file linked. A new patient will not be created, so link one later to see this in their history.
-              </p>
+            {!form.patient_id && form.patient_name.trim() && !searching && (
+              <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5">
+                <p className="text-xs font-semibold text-gray-800">
+                  New patient: a file will be created for {form.patient_name.trim()}
+                </p>
+                <p className="text-[11px] text-gray-500 mt-0.5 mb-2">
+                  Only a name and phone number are needed now. The rest can be filled in
+                  when they arrive.
+                </p>
+                <input
+                  value={form.patient_phone}
+                  onChange={(e) => set('patient_phone', e.target.value.replace(/[^\d+]/g, ''))}
+                  placeholder="Phone number"
+                  inputMode="tel"
+                  className={inputCls}
+                />
+              </div>
             )}
           </Field>
 

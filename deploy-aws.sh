@@ -283,6 +283,12 @@ run_migration "appt_status_unknown"   "UPDATE appointments SET status = 'schedul
 run_migration "tt_duration"  "ALTER TABLE treatment_types ADD COLUMN IF NOT EXISTS duration_minutes INTEGER DEFAULT 30"
 run_migration "tt_duration_backfill" "UPDATE treatment_types SET duration_minutes = 30 WHERE duration_minutes IS NULL"
 
+# patients.treatment_type is an optional reason-for-visit label in the DTO, the
+# intake form and every importer, but NOT NULL in the database, so any caller
+# that omitted it got a 500 instead of a validation error. Booking a new patient
+# from the calendar is the first flow that sends only a name and a phone.
+run_migration "patient_treatment_type_nullable" "ALTER TABLE patients ALTER COLUMN treatment_type DROP NOT NULL"
+
 # Clinic.timings says when the door is open, not who is behind it. Without
 # these the grid would book a dentist onto a day they are not in the building.
 run_migration "doctor_availability" "CREATE TABLE IF NOT EXISTS doctor_availability (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL REFERENCES clinics(id), doctor_id INTEGER NOT NULL REFERENCES users(id), weekday INTEGER NOT NULL, start_time VARCHAR NOT NULL, end_time VARCHAR NOT NULL, created_at TIMESTAMP DEFAULT NOW())"
