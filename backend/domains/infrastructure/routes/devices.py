@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from database import get_db
@@ -6,6 +6,7 @@ from models import UserDevice, User
 from schemas import UserOut
 from core.auth_utils import get_current_user
 from datetime import datetime
+from core.audit import record_audit, DEVICE_REMOVED, DEVICE_BLOCKED
 
 router = APIRouter()
 
@@ -170,6 +171,7 @@ def update_device(
 @router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_device(
     device_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -190,6 +192,12 @@ def delete_device(
     if not user or user.clinic_id != current_user.clinic_id:
         raise HTTPException(status_code=403, detail="You don't have permission to delete this device")
     
+    record_audit(
+        db, current_user, DEVICE_REMOVED,
+        f"Removed device {device.device_name or device.device_id or device.id}"
+        f" belonging to {user.name or user.email}",
+        request=request, entity_type='device', entity_id=device.id,
+    )
     db.delete(device)
     db.commit()
     return None

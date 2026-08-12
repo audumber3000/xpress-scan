@@ -30,6 +30,8 @@ from datetime import datetime as _dt
 from pydantic import BaseModel
 from domains.communication.services.email_service import EmailService
 from core.posthog_client import track_event, group_identify, EVENTS
+from core.audit import (record_audit, LOGIN_SUCCEEDED, LOGIN_FAILED,
+                        LOGIN_BLOCKED, PASSWORD_CHANGED)
 
 router = APIRouter()
 
@@ -279,6 +281,19 @@ async def login_user(
         user = auth_service.authenticate_user(login_data.email, login_data.password)
 
         if not user:
+            # Recorded against the clinic the email belongs to, when there is
+            # one, so an owner can see attempts on their own accounts. An
+            # address that matches nobody is not logged at all: it would let
+            # anyone write rows into an arbitrary clinic's audit trail.
+            attempted = db.query(User).filter(User.email == login_data.email).first()
+            if attempted:
+                record_audit(
+                    db, None, LOGIN_FAILED,
+                    f"Failed sign-in attempt for {login_data.email}",
+                    request=request, entity_type='user', entity_id=attempted.id,
+                    clinic_id=attempted.clinic_id, actor_name=attempted.name or login_data.email,
+                    commit=True,
+                )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials"
@@ -290,7 +305,19 @@ async def login_user(
             device = auth_service.register_device(user.id, device_info)
             blocked = auth_service.device_block_reason(device, device_info["device_type"])
             if blocked:
+                record_audit(
+                    db, user, LOGIN_BLOCKED,
+                    f"Sign-in blocked on {device_info.get('device_type') or 'a device'}: {blocked}",
+                    request=request, entity_type='user', entity_id=user.id, commit=True,
+                )
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=blocked)
+
+        record_audit(
+            db, user, LOGIN_SUCCEEDED,
+            f"Signed in from {(login_data.device or {}).get('type') if isinstance(login_data.device, dict) else 'the web app'}"
+            if login_data.device else "Signed in",
+            request=request, entity_type='user', entity_id=user.id, commit=True,
+        )
 
         token = auth_service.create_jwt_token(user.id)
         
@@ -353,6 +380,11 @@ async def oauth_login(
             device = auth_service.register_device(user.id, device_info)
             blocked = auth_service.device_block_reason(device, device_info["device_type"])
             if blocked:
+                record_audit(
+                    db, user, LOGIN_BLOCKED,
+                    f"Sign-in blocked on {device_info.get('device_type') or 'a device'}: {blocked}",
+                    request=request, entity_type='user', entity_id=user.id, commit=True,
+                )
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=blocked)
 
         # Load clinics for the user
@@ -366,6 +398,13 @@ async def oauth_login(
         user_dto = UserResponseDTO.from_orm(user)
         user_dto.clinics = [_enrich_clinic_dto(db, c) for c in user_clinics_list]
         
+        record_audit(
+            db, user, LOGIN_SUCCEEDED,
+            f"Signed in from {(login_data.device or {}).get('type') if isinstance(login_data.device, dict) else 'the web app'}"
+            if login_data.device else "Signed in",
+            request=request, entity_type='user', entity_id=user.id, commit=True,
+        )
+
         token = auth_service.create_jwt_token(user.id)
         clinic = _get_clinic_for_user(db, user)
 
@@ -442,7 +481,19 @@ async def oauth_code_login(
             device = auth_service.register_device(user.id, device_info)
             blocked = auth_service.device_block_reason(device, device_info["device_type"])
             if blocked:
+                record_audit(
+                    db, user, LOGIN_BLOCKED,
+                    f"Sign-in blocked on {device_info.get('device_type') or 'a device'}: {blocked}",
+                    request=request, entity_type='user', entity_id=user.id, commit=True,
+                )
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=blocked)
+        record_audit(
+            db, user, LOGIN_SUCCEEDED,
+            f"Signed in from {(login_data.device or {}).get('type') if isinstance(login_data.device, dict) else 'the web app'}"
+            if login_data.device else "Signed in",
+            request=request, entity_type='user', entity_id=user.id, commit=True,
+        )
+
         token = auth_service.create_jwt_token(user.id)
         
         # Load clinics for the user

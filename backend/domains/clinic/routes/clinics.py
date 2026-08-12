@@ -1,7 +1,7 @@
 """
 Clinic routes using clean architecture
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from core.dtos import (
@@ -19,6 +19,7 @@ from database import get_db
 from models import Clinic, User, user_clinics, generate_clinic_code, Subscription
 from sqlalchemy import select, func
 import datetime
+from core.audit import record_audit, CLINIC_UPDATED
 
 router = APIRouter()
 
@@ -445,7 +446,9 @@ async def update_my_clinic(
 async def update_clinic(
     clinic_id: int,
     clinic_data: ClinicUpdateDTO,
+    request: Request,
     clinic_service = Depends(get_clinic_service),
+    db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """
@@ -468,6 +471,15 @@ async def update_clinic(
             )
 
         clinic = clinic_service.update_clinic(clinic_id, update_data)
+
+        # Name the fields, not just "settings changed": the point of the entry
+        # is being able to tell later WHAT somebody altered.
+        record_audit(
+            db, current_user, CLINIC_UPDATED,
+            "Changed clinic settings: " + ", ".join(sorted(update_data.keys()))[:400],
+            request=request, entity_type='clinic', entity_id=clinic_id,
+        )
+        db.commit()
 
         if not clinic:
             raise HTTPException(

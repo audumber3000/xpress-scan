@@ -6,7 +6,8 @@ from typing import List, Optional
 from pydantic import BaseModel
 import datetime
 from core.auth_utils import get_current_user
-from core.audit import record_audit, STAFF_UPDATED, STAFF_DEACTIVATED, PERMISSIONS_CHANGED
+from core.audit import (record_audit, STAFF_CREATED, STAFF_UPDATED,
+                        STAFF_DEACTIVATED, PERMISSIONS_CHANGED)
 from domains.communication.services.email_service import EmailService
 import hashlib
 import logging
@@ -102,7 +103,7 @@ def get_clinic_users(db: Session = Depends(get_db), current_user = Depends(get_c
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("", response_model=ClinicUserOut, status_code=status.HTTP_201_CREATED)
-def add_clinic_user(user_in: ClinicUserIn, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def add_clinic_user(user_in: ClinicUserIn, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Add a new clinic user for current clinic"""
     # Check if user has permission to edit users
     if current_user.role != "clinic_owner":
@@ -164,6 +165,14 @@ def add_clinic_user(user_in: ClinicUserIn, db: Session = Depends(get_db), curren
         fee_value=user_in.fee_value,
     )
     db.add(user)
+    db.flush()
+    # Creating a login is how someone gains access to patient records, so it
+    # belongs in the log next to the permission changes that follow it.
+    record_audit(
+        db, current_user, STAFF_CREATED,
+        f"Added {user.name or user.email} as {user.role}",
+        request=request, entity_type='user', entity_id=user.id,
+    )
     db.commit()
     db.refresh(user)
 

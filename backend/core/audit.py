@@ -32,8 +32,23 @@ DEVICE_BLOCKED       = 'device.blocked'
 DEVICE_REMOVED       = 'device.removed'
 SECURITY_UPDATED     = 'security.updated'
 
+# Authentication. None of this was recorded, which for a clinical system is the
+# largest gap of all: an audit log that cannot answer "who signed in, from
+# where" or "was anyone trying passwords against this account" is not a
+# security log. Failed attempts matter as much as successful ones.
+LOGIN_SUCCEEDED      = 'auth.login'
+LOGIN_FAILED         = 'auth.login_failed'
+LOGIN_BLOCKED        = 'auth.login_blocked'
+LOGOUT               = 'auth.logout'
+PASSWORD_CHANGED     = 'auth.password_changed'
+
 # Shown in the UI's filter dropdown, in the order they appear there.
 ACTION_LABELS = {
+    LOGIN_SUCCEEDED:     'Signed in',
+    LOGIN_FAILED:        'Failed sign-in',
+    LOGIN_BLOCKED:       'Sign-in blocked',
+    LOGOUT:              'Signed out',
+    PASSWORD_CHANGED:    'Password changed',
     PATIENT_DELETED:     'Patient deleted',
     PATIENT_UPDATED:     'Patient edited',
     INVOICE_DELETED:     'Invoice deleted',
@@ -70,28 +85,62 @@ def _client_ip(request) -> str:
     return getattr(getattr(request, 'client', None), 'host', '') or ''
 
 
+def _user_agent(request) -> str | None:
+    """The client's User-Agent, or None.
+
+    Written out because the inline version was
+    `(request.headers.get('user-agent') if request else None or '')[:300]`,
+    which Python reads as `A if request else ('')`. With a request present but
+    no User-Agent header, A is None and None[:300] raises TypeError. The
+    except below then swallowed it and the ENTIRE audit row was silently
+    dropped, so any client that sends no User-Agent (the mobile app, an
+    integration, a script) left no trace at all.
+    """
+    if request is None:
+        return None
+    ua = request.headers.get('user-agent')
+    return ua[:300] if ua else None
+
+
 def record_audit(
     db, current_user, action: str, summary: str, *,
     request=None, entity_type: str = None, entity_id: int = None,
+    clinic_id: int = None, actor_name: str = None, commit: bool = False,
 ):
-    """Append one audit row. Flushes but does not commit — the caller's own
-    transaction decides whether the action and its log entry both stick."""
+    """Append one audit row.
+
+    Flushes but does not commit by default, so the caller's own transaction
+    decides whether the action and its log entry both stick.
+
+    `commit=True` is for events with no surrounding transaction to ride on: a
+    failed sign-in writes nothing else, so without committing here the row is
+    discarded when the request ends and the very attempt worth recording is
+    the one that vanishes.
+
+    `clinic_id` and `actor_name` are overrides for the same case: a failed
+    login has no authenticated user to read them from, and "someone tried to
+    sign in as X" is exactly what needs recording.
+    """
     try:
         from models import AuditLog
 
         db.add(AuditLog(
-            clinic_id=getattr(current_user, 'clinic_id', None),
+            clinic_id=clinic_id if clinic_id is not None else getattr(current_user, 'clinic_id', None),
             user_id=getattr(current_user, 'id', None),
-            actor_name=getattr(current_user, 'name', None),
+            actor_name=actor_name or getattr(current_user, 'name', None),
             actor_role=getattr(current_user, 'role', None),
             action=action,
             summary=summary[:500],
             entity_type=entity_type,
             entity_id=entity_id,
             ip_address=_client_ip(request)[:64] or None,
-            user_agent=(request.headers.get('user-agent') if request else None or '')[:300] or None,
+            user_agent=_user_agent(request),
         ))
         db.flush()
+        if commit:
+            db.commit()
     except Exception as exc:
-        # Never let bookkeeping break the operation being booked.
-        logger.warning(f"audit write failed for {action}: {exc}")
+        # Never let bookkeeping break the operation being booked. Logged at
+        # error, not warning: a missing audit row is a compliance gap, not
+        # noise, and it should be visible in Sentry rather than buried.
+        logger.error("audit write failed for %s: %s", action, exc, exc_info=True)

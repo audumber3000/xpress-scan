@@ -20,7 +20,7 @@ from models import AuditLog, Clinic, NotificationLog, OtpVerification, User
 from core.auth_utils import require_clinic_owner
 from core.phone import normalize_phone
 from core.nexus_notify import notify
-from core.audit import ACTION_LABELS
+from core.audit import ACTION_LABELS, record_audit, SECURITY_UPDATED
 from sqlalchemy import func, or_
 
 logger = logging.getLogger(__name__)
@@ -86,21 +86,35 @@ def get_security(db=Depends(get_db), current_user: User = Depends(require_clinic
 
 
 @router.put("", response_model=SecurityOut)
-def update_security(payload: SecurityUpdate, db=Depends(get_db), current_user: User = Depends(require_clinic_owner)):
+def update_security(payload: SecurityUpdate, request: Request, db=Depends(get_db), current_user: User = Depends(require_clinic_owner)):
     """Set the recovery phone/email. Changing a value clears its verified flag,
     so it must be re-verified."""
     c = _clinic(db, current_user)
     data = payload.model_dump(exclude_unset=True)
+    changed = []
     if "security_phone" in data:
         new = (data["security_phone"] or "").strip() or None
         if new != c.security_phone:
             c.security_phone = new
             c.security_phone_verified = False
+            changed.append("recovery phone")
     if "security_email" in data:
         new = (data["security_email"] or "").strip() or None
         if new != c.security_email:
             c.security_email = new
             c.security_email_verified = False
+            changed.append("recovery email")
+    # The recovery contact is how an account is taken back. Changing it is one
+    # of the few actions that can hand a clinic to someone else, so it belongs
+    # in the log even though nothing clinical moved. The new value is not
+    # recorded, only that it changed: the log is read by staff and should not
+    # itself leak the recovery address.
+    if changed:
+        record_audit(
+            db, current_user, SECURITY_UPDATED,
+            "Changed " + " and ".join(changed),
+            request=request, entity_type='clinic', entity_id=c.id,
+        )
     db.commit()
     db.refresh(c)
     return _serialize(c)
@@ -300,6 +314,22 @@ def _audit_query(db, clinic_id, action=None, user_id=None, search=None,
     return q
 
 
+def _available_actions(db, clinic_id):
+    """The action filters worth offering this clinic."""
+    present = [
+        a for (a,) in db.query(AuditLog.action)
+        .filter(AuditLog.clinic_id == clinic_id)
+        .distinct().all() if a
+    ]
+    # Ordered by the catalogue so the dropdown reads consistently, with
+    # anything unrecognised appended rather than dropped: an action we forgot
+    # to label still has to be filterable.
+    known = [a for a in ACTION_LABELS if a in present]
+    extra = sorted(a for a in present if a not in ACTION_LABELS)
+    return ([{"value": a, "label": ACTION_LABELS[a]} for a in known]
+            + [{"value": a, "label": a.replace('.', ' ').replace('_', ' ').capitalize()} for a in extra])
+
+
 def _serialise(row):
     return {
         "id": row.id,
@@ -340,7 +370,16 @@ def list_audit_log(
         "page": page,
         "per_page": per_page,
         "logs": [_serialise(r) for r in rows],
-        "actions": [{"value": k, "label": v} for k, v in ACTION_LABELS.items()],
+        # Derived from what this clinic has actually recorded, not from the
+        # full catalogue of constants. The static list offered filters for
+        # eight actions that were declared and never written, so an owner
+        # filtering by "Device blocked" saw an empty table and concluded
+        # nothing had happened, when in truth nothing was ever recorded. A
+        # filter that cannot return a row is worse than an absent one.
+        #
+        # Self-maintaining: a newly wired action appears here the first time
+        # it fires, with no list to remember to update.
+        "actions": _available_actions(db, current_user.clinic_id),
     }
 
 
