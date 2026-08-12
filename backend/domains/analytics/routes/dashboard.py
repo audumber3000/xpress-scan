@@ -6,7 +6,7 @@ from typing import Optional
 import csv
 import io
 from database import get_db
-from models import Patient, Report, Payment, User, TreatmentType, Appointment, Clinic, Invoice, LabOrder, InventoryItem, MedicationStock
+from models import Patient, Report, Payment, User, TreatmentType, Appointment, Clinic, Invoice, LabOrder, InventoryItem, MedicationStock, CasePaper
 from core.auth_utils import get_current_user
 from core.clinic_time import clinic_today
 from domains.scheduling.appointment_status import ARRIVED
@@ -796,6 +796,22 @@ def get_today_overview(
 
     DONE = {'completed'}
     OFF = {'cancelled', 'no-show', 'no_show'}
+
+    # Batched: a name lookup per appointment would be N queries for a panel
+    # that exists to be glanced at.
+    _doc_ids = {a.doctor_id for a in appts if a.doctor_id}
+    doctor_names = {
+        u.id: (u.name or u.email)
+        for u in db.query(User).filter(User.id.in_(_doc_ids)).all()
+    } if _doc_ids else {}
+
+    _appt_ids = [a.id for a in appts]
+    started_ids = {
+        row[0] for row in db.query(CasePaper.appointment_id).filter(
+            CasePaper.appointment_id.in_(_appt_ids)
+        ).all()
+    } if _appt_ids else set()
+
     appointments = []
     completed = 0
     remaining = 0
@@ -813,9 +829,20 @@ def get_today_overview(
             "id": a.id,
             "name": a.patient_name,
             "time": a.start_time,
+            "end_time": a.end_time,
+            "duration": a.duration,
             "status": status,
             "treatment": a.treatment,
             "patient_id": a.patient_id,
+            "phone": a.patient_phone,
+            "doctor_id": a.doctor_id,
+            # Resolved here rather than left as an id: the dashboard row is a
+            # glance, and "who is seeing them" is one of the four things worth
+            # knowing on it.
+            "doctor_name": doctor_names.get(a.doctor_id),
+            # Whether the visit has actually been started, so the row can offer
+            # the right next step instead of the same one for everybody.
+            "visit_started": a.id in started_ids,
         })
 
     # ── Outstanding dues: finalized invoices still carrying a balance ──

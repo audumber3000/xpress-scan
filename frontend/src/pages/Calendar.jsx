@@ -227,6 +227,25 @@ const Calendar = () => {
     navigate({ search: params.toString() }, { replace: true });
   }, [location.search, navigate]);
 
+  // Deep link: /calendar?appointment=<id> jumps to that appointment's day and
+  // opens it. The dashboard's Today list uses this, so a row there is a way in
+  // rather than a label. Waits for the list, since the id means nothing until
+  // the appointments have loaded.
+  useEffect(() => {
+    const wanted = new URLSearchParams(location.search).get('appointment');
+    if (!wanted || !appointments.length) return;
+    const appt = appointments.find((a) => String(a.id) === String(wanted));
+    if (!appt) return;
+    if (appt.date) {
+      setCurrentDate(new Date(appt.date));
+      setViewMode('today');
+    }
+    openAppointmentDetails(appt);
+    const params = new URLSearchParams(location.search);
+    params.delete('appointment');
+    navigate({ search: params.toString() }, { replace: true });
+  }, [location.search, appointments, navigate]);
+
   // Keep the selected-doctors set in sync when new doctors appear (add them selected by default).
   useEffect(() => {
     setSelectedDoctorIds(prev => {

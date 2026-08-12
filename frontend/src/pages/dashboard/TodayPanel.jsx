@@ -1,25 +1,49 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wallet, FlaskConical, UserX, CalendarClock, Package, CheckCircle2 } from 'lucide-react';
+import { Wallet, FlaskConical, UserX, CalendarClock, Package, CheckCircle2, ChevronRight, Stethoscope } from 'lucide-react';
 import { SkeletonBox } from '../../components/Skeleton';
 import MonthCalendar from './MonthCalendar';
 import { formatCompactMoney } from './format';
+import { generatePatientPersona, generateInitialsAvatar } from '../../utils/avatar';
 
+/**
+ * Words a receptionist would use, not the values the database stores.
+ *
+ * These also had to be updated: the map still keyed on 'checking' and
+ * 'accepted', which stopped existing when the statuses were renamed, so most
+ * rows fell through to the grey default and every state looked the same.
+ */
 const STATUS_STYLES = {
-  completed: 'bg-green-50 text-green-700',
-  confirmed: 'bg-[#f0f0fd] text-[#2a276e]',
-  checking: 'bg-[#9B8CFF]/20 text-[#2a276e]',
-  accepted: 'bg-[#f0f0fd] text-[#2a276e]',
-  'no-show': 'bg-red-50 text-red-600',
-  no_show: 'bg-red-50 text-red-600',
-  cancelled: 'bg-gray-100 text-gray-500',
+  scheduled: { label: 'Booked',   cls: 'bg-gray-100 text-gray-600' },
+  confirmed: { label: 'Confirmed', cls: 'bg-[#f0f0fd] text-[#2a276e]' },
+  arrived:   { label: 'Here now',  cls: 'bg-green-50 text-green-700 ring-1 ring-green-200' },
+  completed: { label: 'Seen',      cls: 'bg-emerald-50 text-emerald-700' },
+  no_show:   { label: 'No show',   cls: 'bg-amber-50 text-amber-700' },
+  'no-show': { label: 'No show',   cls: 'bg-amber-50 text-amber-700' },
+  cancelled: { label: 'Cancelled', cls: 'bg-gray-100 text-gray-400 line-through' },
 };
 
-const StatusBadge = ({ status }) => (
-  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full capitalize flex-shrink-0 ${STATUS_STYLES[status] || 'bg-gray-100 text-gray-600'}`}>
-    {String(status).replace('_', '-')}
-  </span>
-);
+const StatusBadge = ({ status }) => {
+  const s = STATUS_STYLES[status] || { label: String(status || '').replace('_', ' '), cls: 'bg-gray-100 text-gray-600' };
+  return (
+    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 whitespace-nowrap ${s.cls}`}>
+      {s.label}
+    </span>
+  );
+};
+
+const toMinutes = (t) => {
+  if (!t) return 0;
+  const [h, m] = String(t).split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
+
+const fmt = (t) => {
+  if (!t) return '';
+  const [h, m] = String(t).split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')} ${period}`;
+};
 
 /**
  * Needs-attention as a chip strip.
@@ -143,6 +167,19 @@ const TodayPanel = ({ data, loading }) => {
       : d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
   }, [selectedDate, month]);
 
+  // The first appointment still to happen. Anchored on the clock rather than
+  // just "the first open one", so a morning nobody closed out does not leave
+  // NEXT sitting on 9am all afternoon.
+  const nextUpId = useMemo(() => {
+    const now = new Date();
+    const mins = now.getHours() * 60 + now.getMinutes();
+    const open = appointments.filter(
+      (a) => !['completed', 'no_show', 'no-show', 'cancelled'].includes(a.status)
+    );
+    const upcoming = open.find((a) => toMinutes(a.time) + (a.duration || 30) >= mins);
+    return (upcoming || open[0])?.id ?? null;
+  }, [appointments]);
+
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-3.5 md:p-5 mb-4 md:mb-5">
       {loading ? (
@@ -185,20 +222,82 @@ const TodayPanel = ({ data, loading }) => {
                 // busy day scrolls instead of leaving a row sliced in half.
                 // Stacked on a phone there's no column to match, so it caps.
                 <div className="space-y-0 max-h-[15rem] md:max-h-none md:flex-1 md:min-h-0 overflow-y-auto pr-1 -mr-1">
-                  {appointments.map((a) => (
-                    <div key={a.id} className="flex items-center gap-2.5 py-2 border-b border-gray-50 last:border-0">
-                      <span className="text-[11px] font-bold text-[#2a276e] tabular-nums w-11 flex-shrink-0">
-                        {a.time || '—'}
-                      </span>
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-xs font-semibold text-gray-900 truncate">{a.name}</span>
-                        {a.treatment && (
-                          <span className="block text-[11px] text-gray-400 truncate">{a.treatment}</span>
+                  {appointments.map((a) => {
+                    const done = ['completed', 'no_show', 'no-show', 'cancelled'].includes(a.status);
+                    // Who is up next: the first appointment not yet dealt with
+                    // whose time has not long passed. A dashboard glance is
+                    // mostly asking this.
+                    const isNext = !done && a.id === nextUpId;
+                    return (
+                      <button
+                        key={a.id}
+                        onClick={() => navigate(`/calendar?appointment=${a.id}`)}
+                        title={`Open ${a.name}'s appointment`}
+                        className={`w-full text-left flex items-center gap-2.5 py-2 px-1.5 -mx-1.5 rounded-lg border-b border-gray-50 last:border-0 transition-colors hover:bg-gray-50 group ${
+                          done ? 'opacity-55' : ''
+                        }`}
+                      >
+                        {/* Time, and how long they are in for. Two lines that
+                            used to be one number with no sense of scale. */}
+                        <span className="w-12 flex-shrink-0 text-center">
+                          <span className={`block text-[11px] font-bold tabular-nums ${
+                            isNext ? 'text-[#2a276e]' : 'text-gray-700'
+                          }`}>
+                            {a.time || '—'}
+                          </span>
+                          {a.duration > 0 && (
+                            <span className="block text-[9px] text-gray-400 tabular-nums">
+                              {a.duration}m
+                            </span>
+                          )}
+                        </span>
+
+                        <img
+                          src={generatePatientPersona({ name: a.name }, 64)}
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = generateInitialsAvatar(a.name || 'Patient');
+                          }}
+                          alt=""
+                          className="w-7 h-7 rounded-full object-cover border border-gray-100 flex-shrink-0"
+                        />
+
+                        <span className="flex-1 min-w-0">
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-xs font-semibold text-gray-900 truncate">{a.name}</span>
+                            {isNext && (
+                              <span className="text-[9px] font-bold text-[#2a276e] bg-[#f0f0fd] px-1.5 py-0.5 rounded flex-shrink-0">
+                                NEXT
+                              </span>
+                            )}
+                          </span>
+                          {/* Treatment and doctor on one line. Either can be
+                              missing, so the separator only appears when both
+                              are actually there. */}
+                          <span className="block text-[11px] text-gray-400 truncate">
+                            {a.treatment}
+                            {a.treatment && a.doctor_name && ' · '}
+                            {a.doctor_name && (
+                              <span className="text-gray-500">{a.doctor_name}</span>
+                            )}
+                            {!a.treatment && !a.doctor_name && 'No doctor assigned'}
+                          </span>
+                        </span>
+
+                        {/* Started beats booked: once a visit is open, that is
+                            the more useful thing to know. */}
+                        {a.visit_started && !done ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#2a276e] text-white flex-shrink-0 inline-flex items-center gap-1 whitespace-nowrap">
+                            <Stethoscope size={10} /> In chair
+                          </span>
+                        ) : (
+                          <StatusBadge status={a.status} />
                         )}
-                      </span>
-                      <StatusBadge status={a.status} />
-                    </div>
-                  ))}
+
+                        <ChevronRight size={14} className="text-gray-300 group-hover:text-[#2a276e] flex-shrink-0 transition-colors" />
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
