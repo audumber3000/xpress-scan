@@ -28,7 +28,11 @@ const MIN_DURATION = 15;
 // it answers nothing. Four doctors on a tablet were getting 28px each. Past
 // this floor the grid scrolls sideways instead of dividing further: three
 // chairs you can read and scroll beats three chairs you cannot.
-const MIN_COL_PX = 132;
+// Per axis, because the columns carry different amounts. A doctor column holds
+// a full name and sometimes "No hours set"; a day column holds "MON 10". Using
+// the wider floor for days pushed Saturday off a 1440px screen, which is a
+// silly way to lose a day of the week.
+const MIN_COL_PX = { doctor: 132, chair: 132, day: 104 };
 const TIME_COL_PX = 64;
 
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -62,8 +66,12 @@ const DayGrid = ({
   onResize,
   onCreate,
   dayShape,                 // { slot_minutes, chairs, doctors: { id: { configured, blocks } } }
-  axis = "doctor",          // "doctor" | "chair"
+  axis = "doctor",          // "doctor" | "chair" | "day"
   chairCount = 1,
+  // Only for axis="day": the seven dates to draw as columns. Passing them in
+  // rather than deriving a week here keeps the caller in charge of which week
+  // is on screen.
+  days = null,
 }) => {
   const overlayRef = useRef(null);
   const scrollRef = useRef(null);
@@ -102,6 +110,21 @@ const DayGrid = ({
   const showUnassignedCol = showUnassigned && unassignedCount > 0;
 
   const columns = useMemo(() => {
+    if (axis === "day" && days?.length) {
+      // The week. Same grid, same cards, same interactions: the only thing
+      // that changes is what a column means, so dragging sideways moves an
+      // appointment to another DAY rather than to another dentist.
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      return days.map((d) => ({
+        key: `day-${d.toISOString().split("T")[0]}`,
+        date: d,
+        doctorId: null,
+        chair: null,
+        label: d.toLocaleDateString(undefined, { weekday: "short", day: "numeric" }),
+        isToday: d.toDateString() === today.toDateString(),
+        color: { dot: "bg-transparent", card: "", cardBorderLeft: "", isUnassigned: false },
+      }));
+    }
     if (axis === "chair") {
       // A four-chair practice wants to see rooms, not people. Same grid, same
       // cards, different question: "which chair is free" instead of "who is busy".
@@ -124,7 +147,7 @@ const DayGrid = ({
       list.push({ key: "unassigned", doctorId: null, chair: null, label: "Unassigned", color: UNASSIGNED_STYLE });
     }
     return list;
-  }, [axis, chairCount, visibleDoctors, showUnassignedCol]);
+  }, [axis, chairCount, visibleDoctors, showUnassignedCol, days]);
 
   // Time bounds. Clinic hours set the frame, but a booking that sits outside
   // them still has to be visible, otherwise an early appointment silently
@@ -160,21 +183,27 @@ const DayGrid = ({
   }, [openHour, closeHour, date]);
 
   const targetDateStr = date.toISOString().split("T")[0];
-  const dayAppointments = useMemo(
-    () => appointments.filter((a) => {
-      const d = a.date ? new Date(a.date).toISOString().split("T")[0] : null;
-      return d === targetDateStr;
-    }),
-    [appointments, targetDateStr]
-  );
+  const isoOf = (a) => (a.date ? new Date(a.date).toISOString().split("T")[0] : null);
+
+  // In week mode every column is a different day, so the grid is not filtered
+  // to one date up front the way it is for a single day.
+  const dayAppointments = useMemo(() => {
+    if (axis === "day") {
+      const wanted = new Set(columns.map((c) => c.date.toISOString().split("T")[0]));
+      return appointments.filter((a) => wanted.has(isoOf(a)));
+    }
+    return appointments.filter((a) => isoOf(a) === targetDateStr);
+  }, [appointments, targetDateStr, axis, columns]);
 
   const apptsByColumn = useMemo(() => {
     const map = {};
     columns.forEach((c) => (map[c.key] = []));
     dayAppointments.forEach((a) => {
-      const key = axis === "chair"
-        ? `chair-${a.chair_number || 1}`
-        : (a.doctor_id ? `doc-${a.doctor_id}` : "unassigned");
+      const key = axis === "day"
+        ? `day-${isoOf(a)}`
+        : axis === "chair"
+          ? `chair-${a.chair_number || 1}`
+          : (a.doctor_id ? `doc-${a.doctor_id}` : "unassigned");
       if (map[key]) map[key].push(a);
     });
     return map;
@@ -192,7 +221,10 @@ const DayGrid = ({
   // shading a whole column for a clinic that never filled this in would look
   // broken rather than informative.
   const unavailableByColumn = useMemo(() => {
-    if (!dayShape?.doctors || axis === "chair") return {};
+    // Shading needs a day-shape per date. Only one is fetched (for the day on
+    // screen), so week mode shows no shading rather than applying one day's
+    // hours to all seven, which would be confidently wrong.
+    if (!dayShape?.doctors || axis === "chair" || axis === "day") return {};
     const out = {};
     columns.forEach((col) => {
       if (!col.doctorId) return;
@@ -262,7 +294,9 @@ const DayGrid = ({
     if (!onReassign) return;
     const target = pointToGrid(e.clientX, e.clientY, grabOffsetMin.current);
     if (!target) return;
-    if (axis === "chair" || target.col.doctorId === null) {
+    // Week mode always accepts: a column is a date, and moving an appointment
+    // to another day is exactly what dragging sideways should do.
+    if (axis !== "day" && (axis === "chair" || target.col.doctorId === null)) {
       // The Unassigned column has no doctor to assign to, and the chair axis
       // moves rooms rather than people. Neither is a valid drop for this path.
       e.dataTransfer.dropEffect = "none";
@@ -286,7 +320,16 @@ const DayGrid = ({
     const target = pointToGrid(e.clientX, e.clientY, grabOffsetMin.current);
     setDragOverColIdx(null);
     grabOffsetMin.current = 0;
-    if (Number.isNaN(id) || !target || target.col.doctorId === null) return;
+    if (Number.isNaN(id) || !target) return;
+
+    if (axis === "day") {
+      // Keep whoever it was booked with; only the day and time move.
+      const appt = dayAppointments.find((a) => a.id === id);
+      onReassign(id, appt?.doctor_id ?? null, hhmm(target.minutes),
+                 target.col.date.toISOString().split("T")[0]);
+      return;
+    }
+    if (target.col.doctorId === null) return;
     onReassign(id, target.col.doctorId, hhmm(target.minutes));
   };
 
@@ -356,7 +399,7 @@ const DayGrid = ({
     // length the user dragged out.
     const duration = Math.max(SNAP_MINUTES, g.endMin - g.startMin);
     onCreate({
-      date: targetDateStr,
+      date: col?.date ? col.date.toISOString().split("T")[0] : targetDateStr,
       startTime: hhmm(g.startMin),
       endTime: hhmm(g.startMin + duration),
       duration,
@@ -382,8 +425,9 @@ const DayGrid = ({
   // Fit the columns if they can be read at that size, otherwise hold them at
   // the floor and let the grid scroll. Percentages stay the unit for card
   // positioning either way, so nothing downstream has to know which mode it is.
+  const minCol = MIN_COL_PX[axis] ?? 132;
   const availableForCols = Math.max(0, frameWidth - TIME_COL_PX);
-  const needed = columns.length * MIN_COL_PX;
+  const needed = columns.length * minCol;
   const scrolls = frameWidth > 0 && needed > availableForCols;
   const gridWidthPx = scrolls ? TIME_COL_PX + needed : null;
   const colWidthPct = 100 / columns.length;
@@ -394,7 +438,7 @@ const DayGrid = ({
       <div
         className="grid bg-gray-50 border-b border-gray-200 sticky top-0 z-20"
         style={{
-          gridTemplateColumns: `${TIME_COL_PX}px repeat(${columns.length}, ${scrolls ? `${MIN_COL_PX}px` : 'minmax(0, 1fr)'})`,
+          gridTemplateColumns: `${TIME_COL_PX}px repeat(${columns.length}, ${scrolls ? `${minCol}px` : 'minmax(0, 1fr)'})`,
           width: gridWidthPx ? `${gridWidthPx}px` : undefined,
         }}
       >
@@ -403,6 +447,32 @@ const DayGrid = ({
         </div>
         {columns.map((col) => {
           const info = col.doctorId ? dayShape?.doctors?.[String(col.doctorId)] : null;
+          const count = (apptsByColumn[col.key] || []).length;
+
+          if (col.date) {
+            // A day column reads as a date, with today marked, the way a week
+            // header should.
+            const [dow, dayNum] = [
+              col.date.toLocaleDateString(undefined, { weekday: "short" }),
+              col.date.getDate(),
+            ];
+            return (
+              <div key={col.key} className="px-2 py-2 text-center border-r border-gray-100">
+                <div className="text-[11px] font-semibold text-gray-500 uppercase">{dow}</div>
+                <div className={`text-base font-bold mx-auto ${
+                  col.isToday
+                    ? "text-white bg-[#2a276e] rounded-full w-7 h-7 flex items-center justify-center"
+                    : "text-gray-900"
+                }`}>
+                  {dayNum}
+                </div>
+                <div className="text-[10px] text-gray-400 mt-0.5 h-3">
+                  {count > 0 ? `${count} appt${count === 1 ? "" : "s"}` : ""}
+                </div>
+              </div>
+            );
+          }
+
           return (
             <div
               key={col.key}
@@ -430,7 +500,7 @@ const DayGrid = ({
         <div
           className="grid relative"
           style={{
-            gridTemplateColumns: `${TIME_COL_PX}px repeat(${columns.length}, ${scrolls ? `${MIN_COL_PX}px` : 'minmax(0, 1fr)'})`,
+            gridTemplateColumns: `${TIME_COL_PX}px repeat(${columns.length}, ${scrolls ? `${minCol}px` : 'minmax(0, 1fr)'})`,
             height: `${totalHeight}px`,
             width: gridWidthPx ? `${gridWidthPx}px` : undefined,
           }}
@@ -496,14 +566,24 @@ const DayGrid = ({
             {/* Now line */}
             {(() => {
               const now = new Date();
-              if (date.toDateString() !== now.toDateString()) return null;
+              const todayIdx = axis === "day"
+                ? columns.findIndex((c) => c.isToday)
+                : (date.toDateString() === now.toDateString() ? 0 : -1);
+              if (todayIdx < 0) return null;
               const minutes = now.getHours() * 60 + now.getMinutes();
               if (minutes < openHour * 60 || minutes > closeHour * 60) return null;
+              // In week mode the marker sits over today only, otherwise a red
+              // line across all seven days says nothing about any of them.
+              const span = axis === "day"
+                ? { left: `${todayIdx * colWidthPct}%`, width: `${colWidthPct}%` }
+                : { left: 0, right: 0 };
               return (
-                <div className="absolute left-0 right-0 h-0.5 bg-red-500 z-30 pointer-events-none"
-                     style={{ top: `${yFor(minutes)}px` }}>
+                <div className="absolute h-0.5 bg-red-500 z-30 pointer-events-none"
+                     style={{ ...span, top: `${yFor(minutes)}px` }}>
                   <div className="absolute -left-1 -top-1 w-2.5 h-2.5 bg-red-500 rounded-full" />
-                  <div className="absolute -left-14 -top-2 text-[11px] font-semibold text-red-500">
+                  <div className={`absolute -top-2 text-[11px] font-semibold text-red-500 ${
+                    axis === "day" ? "left-1.5" : "-left-14"
+                  }`}>
                     {pad2(now.getHours())}:{pad2(now.getMinutes())}
                   </div>
                 </div>

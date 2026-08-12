@@ -249,7 +249,7 @@ const Calendar = () => {
 
   // Drag-and-drop reassign — used by the Today/Day grid. Updates doctor and/or
   // start time. Optimistic local update + PUT, with revert on failure.
-  const handleReassign = async (appointmentId, newDoctorId, newStartTime) => {
+  const handleReassign = async (appointmentId, newDoctorId, newStartTime, newDateStr) => {
     const apt = appointments.find(a => a.id === appointmentId);
     if (!apt) return;
 
@@ -263,11 +263,13 @@ const Calendar = () => {
     const durationMins = toMinutes(apt.endTime) - toMinutes(apt.startTime);
     const newEndTime = fromMinutes(toMinutes(newStartTime) + durationMins);
 
-    const dateStr = new Date(apt.date).toISOString().split('T')[0];
+    // newDateStr is set when the drag crossed into another day column.
+    const dateStr = newDateStr || new Date(apt.date).toISOString().split('T')[0];
     const targetDoctorId = newDoctorId ? Number(newDoctorId) : null;
 
-    // No-op detection (same doctor, same time) — avoid a wasted PUT.
-    if (targetDoctorId === (apt.doctor_id || null) && newStartTime === apt.startTime) {
+    const sameDay = dateStr === new Date(apt.date).toISOString().split('T')[0];
+    // No-op detection (same doctor, same day, same time) — avoid a wasted PUT.
+    if (targetDoctorId === (apt.doctor_id || null) && newStartTime === apt.startTime && sameDay) {
       return;
     }
 
@@ -295,6 +297,9 @@ const Calendar = () => {
       doctor: targetDoctor?.name || apt.doctor,
       startTime: newStartTime,
       endTime: newEndTime,
+      // Carry the day too, or a card dragged across the week snaps back to its
+      // old column until the next refetch.
+      date: sameDay ? apt.date : dateStr,
     };
     setAppointments(prev => prev.map(a => (a.id === appointmentId ? updated : a)));
 
@@ -1875,117 +1880,29 @@ const Calendar = () => {
             />
           </div>
         ) : (
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
-            {/* Calendar Grid Container with Scroll */}
-            <div ref={weekScrollRef} className="max-h-[640px] overflow-y-auto relative">
-              <div className="grid grid-cols-8 min-h-[800px] relative">
-                {/* Time column header */}
-                <div className="p-3 text-center font-semibold text-gray-700 bg-gray-50 sticky top-0 z-20">
-                  {clientTimezone.offset}
-                </div>
-
-                {/* Day headers — weekday, date, and appointment count */}
-                {weekDates.map((date, index) => {
-                  const iso = date.toISOString().split('T')[0];
-                  const count = visibleCountsByDate[iso] || 0;
-                  const isToday = date.toDateString() === new Date().toDateString();
-                  return (
-                    <div key={index} className="p-3 text-center bg-gray-50 border-l border-gray-100 sticky top-0 z-20">
-                      <div className="text-sm font-medium text-gray-600">
-                        {date.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()}
-                      </div>
-                      <div className={`text-lg font-bold ${
-                        isToday
-                          ? 'text-white bg-[#2a276e] rounded-full w-8 h-8 flex items-center justify-center mx-auto'
-                          : 'text-gray-900'
-                      }`}>
-                        {date.getDate()}
-                      </div>
-                      {count > 0 && (
-                        <div className="text-[10px] text-gray-500 mt-0.5">
-                          {count} appt{count === 1 ? '' : 's'}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {/* Time slots — empty cells with half-hour divider for easier reading */}
-                {timeSlots.map((slot) => (
-                  <React.Fragment key={slot.time}>
-                    {/* Time label */}
-                    <div className="p-3 text-sm font-medium text-gray-600 bg-white border-t border-gray-100">
-                      {slot.displayTime}
-                    </div>
-
-                    {weekDates.map((date, dayIndex) => (
-                      <div
-                        key={`${slot.time}-${dayIndex}`}
-                        className="min-h-[80px] bg-white border-t border-l border-gray-100 relative"
-                      >
-                        {/* Half-hour divider — faint dashed line at the 30-minute mark */}
-                        <div className="absolute left-0 right-0 top-[40px] border-t border-dashed border-gray-100 pointer-events-none" />
-                      </div>
-                    ))}
-                  </React.Fragment>
-                ))}
-
-                {/* Appointments Overlay - positioned relative to the grid */}
-                <div className="absolute inset-0 pointer-events-none" style={{ top: '60px' }}>
-                  {/* Single "current time" indicator — one line spanning all 7 day columns */}
-                  {(() => {
-                    const todayIdx = weekDates.findIndex(d => d.toDateString() === new Date().toDateString());
-                    if (todayIdx === -1) return null;
-                    return (
-                      <div
-                        className="absolute h-0.5 bg-red-500 z-30"
-                        style={{ top: currentTimeIndicator.top, left: '12.5%', right: 0 }}
-                      >
-                        <div className="absolute -left-1 -top-1 w-2.5 h-2.5 bg-red-500 rounded-full" />
-                        <div className="absolute -left-12 -top-2 text-[11px] font-semibold text-red-500">
-                          {currentTimeIndicator.time}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {weekDates.map((date, dayIndex) => {
-                    const dayAppointments = getAppointmentsForDate(date);
-                    const dayLayout = computeDayLayout(dayAppointments);
-                    // Grid has 8 equal columns: 1 time col + 7 day cols, so each day is 12.5% of the grid width.
-                    // Inset a small margin inside the day column so cards don't touch the grid lines.
-                    const DAY_WIDTH = 12.5;
-                    const DAY_INSET = 0.5; // percent padding on each side
-                    const usableDayWidth = DAY_WIDTH - 2 * DAY_INSET;
-
-                    return dayAppointments.map((appointment) => {
-                      const posStyle = getAppointmentStyle(appointment);
-                      const { colIndex = 0, colCount = 1 } = dayLayout[appointment.id] || {};
-                      const subWidth = usableDayWidth / colCount;
-                      const leftPct = (dayIndex + 1) * DAY_WIDTH + DAY_INSET + colIndex * subWidth;
-
-                      return (
-                        <AppointmentCard
-                          key={appointment.id}
-                          appointment={appointment}
-                          variant="week"
-                          style={{
-                            left: `${leftPct}%`,
-                            top: posStyle.top,
-                            height: posStyle.height,
-                            width: `${subWidth}%`,
-                            minHeight: posStyle.minHeight,
-                            zIndex: posStyle.zIndex,
-                          }}
-                          onClick={() => openAppointmentDetails(appointment)}
-                        />
-                      );
-                    });
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
+          /* The week, on the same grid as the day.
+             It used to be a separate inline grid where cards could only be
+             clicked: no hover, no drag, no resize, no click-to-book. Rather
+             than build all of that a second time, DayGrid now accepts days as
+             its column axis, so the week inherits every interaction and there
+             is one grid to keep working instead of two. Dragging sideways here
+             moves an appointment to another day. */
+          <DayGrid
+            date={currentDate}
+            appointments={visibleAppointments}
+            doctors={doctors}
+            selectedDoctorIds={selectedDoctorIds}
+            showUnassigned={showUnassigned}
+            unassignedCount={unassignedCount}
+            clinicTimings={clinicTimings}
+            onAppointmentClick={openAppointmentDetails}
+            onReassign={handleReassign}
+            onResize={handleResize}
+            onCreate={handleCreateFromGrid}
+            dayShape={dayShape}
+            axis="day"
+            days={weekDates}
+          />
         )}
           </div>
         </div>
