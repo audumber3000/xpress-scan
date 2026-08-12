@@ -169,6 +169,8 @@ const Header = ({ onOpenMobileSidebar }) => {
       '/admin/attendance': 'Attendance',
       '/admin/staff': 'Staff Management',
       '/admin/treatments': 'Treatments & Pricing',
+      '/admin/prescription-sets': 'Prescription Sets',
+      '/expenses': 'Expenses',
       '/admin/permissions': 'Permissions',
       '/admin/clinic': 'Clinic Info',
       '/admin/templates': 'Message Templates',

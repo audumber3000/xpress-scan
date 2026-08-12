@@ -413,16 +413,11 @@ const Payments = () => {
           >
             All payments
           </button>
-          <button
-            onClick={() => setActiveTab('ledger')}
-            className={`${
-              activeTab === 'ledger'
-                ? 'border-[#2a276e] text-[#2a276e]'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
-          >
-            Ledger
-          </button>
+          {/* The Ledger tab moved to Expenses, where the payables that feed
+              it live. Money in and money out on one screen is how the two get
+              read as a single number. The tab's code is still reachable via
+              ?tab=ledger so an existing bookmark keeps working, and that path
+              now shows a pointer to the new home. */}
         </nav>
         <HelpBulb section="payments" className="mb-2" />
       </div>
@@ -764,6 +759,17 @@ const Payments = () => {
           className="flex-shrink-0"
         />
       )}
+      {activeTab === 'ledger' && (
+        <div className="mx-4 mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-xs text-blue-900">
+            The ledger now lives under <strong>Expenses</strong>, beside the payables that feed it.
+          </p>
+          <a href="/expenses" className="text-[11px] font-bold text-blue-900 hover:underline flex-shrink-0">
+            Go to Expenses
+          </a>
+        </div>
+      )}
+
       {activeTab === 'ledger' && (
         <Pagination
           page={ledgerPage}

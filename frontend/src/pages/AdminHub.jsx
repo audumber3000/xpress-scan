@@ -4,7 +4,7 @@ import SetupProgress from '../components/admin/SetupProgress';
 import { api } from '../utils/api';
 import { useHeader } from '../contexts/HeaderContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Building2, Users, FileText, ScrollText, Bell, CreditCard, Activity, ChevronDown, Stethoscope, Shield, Laptop, Plug, Tag } from 'lucide-react';
+import { Building2, Users, FileText, ScrollText, Bell, CreditCard, Activity, ChevronDown, Stethoscope, Shield, Laptop, Plug, Tag, Layers } from 'lucide-react';
 
 /**
  * Control Center navigation, grouped by category.
@@ -33,6 +33,10 @@ const NAV_GROUPS = [
     items: [
       { id: 'practice_settings', icon: Activity, label: 'Practice Settings', hasChildren: true, activePath: '/admin/practice-settings' },
       { id: 'treatments', icon: Stethoscope, label: 'Treatments & Pricing', path: '/admin/treatments' },
+      // Configuration, not stock. A set is set up once and linked to a
+      // treatment, which puts it here beside Treatments rather than in
+      // Inventory, where the question is what is on the shelf today.
+      { id: 'rx_sets', icon: Layers, label: 'Prescription Sets', path: '/admin/prescription-sets' },
       { id: 'offers', icon: Tag, label: 'Offers & Discounts', path: '/admin/offers' },
     ],
   },

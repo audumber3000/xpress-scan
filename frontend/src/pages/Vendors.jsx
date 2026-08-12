@@ -20,7 +20,6 @@ import StockCardList from "../components/vendors/StockCardList";
 import PayablesTable from "../components/vendors/PayablesTable";
 import HelpBulb from "../components/common/HelpBulb";
 import KpiDetailDrawer from "../components/common/KpiDetailDrawer";
-import MedicationGroupsTab from "../components/vendors/MedicationGroupsTab";
 import { useBreakpoint } from "../utils/useBreakpoint";
 
 const VENDORS_PAGE_SIZE = 10;
@@ -189,10 +188,7 @@ const Vendors = () => {
     const TABS = [
         { id: 'stock', label: 'General Stock', icon: Package },
         { id: 'medications', label: 'Medications', icon: Pill },
-        { id: 'rx-sets', label: 'Prescription Sets', icon: Layers },
-        { id: 'payables', label: 'Payables', icon: Wallet },
         { id: 'ledger', label: 'Activity', icon: Activity },
-        { id: 'vendors', label: 'Vendors', icon: Building2 },
     ];
 
     const showsFilters = activeTab !== 'ledger' && activeTab !== 'payables';
@@ -372,14 +368,6 @@ const Vendors = () => {
                                 />
                             )
                         )}
-                        {/* Prescription sets: configured here beside the medicines
-                            they are built from, applied on a case paper. */}
-                        {activeTab === 'rx-sets' && (
-                            <div className="p-4 md:p-6">
-                                <MedicationGroupsTab />
-                            </div>
-                        )}
-
                         {activeTab === 'payables' && (
                             <div className="overflow-y-auto h-full pr-1">
                                 {/* Settling here writes an Expense, so the Activity

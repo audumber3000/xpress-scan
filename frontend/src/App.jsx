@@ -45,7 +45,9 @@ import Devices from "./pages/admin/security/Devices";
 import AuditLog from "./pages/admin/security/AuditLog";
 import Security from "./pages/admin/security/Security";
 import Offers from "./pages/admin/Offers";
+import PrescriptionSets from "./pages/admin/PrescriptionSets";
 import Vendors from "./pages/Vendors";
+import Expenses from "./pages/Expenses";
 import ConsentForms from "./pages/ConsentForms";
 import Reports from "./pages/Reports";
 import AddClinic from "./pages/AddClinic";
@@ -287,6 +289,7 @@ function AppContent() {
                 <Route path="attendance" element={<Attendance />} />
                 <Route path="staff" element={<StaffManagement />} />
                 <Route path="treatments" element={<TreatmentsPricing />} />
+                <Route path="prescription-sets" element={<PrescriptionSets />} />
                 <Route path="permissions" element={<PermissionsManagement />} />
                 <Route path="clinic" element={<ClinicInfo />} />
                 <Route path="templates" element={<MessageTemplates />} />
@@ -308,6 +311,7 @@ function AppContent() {
               <Route path="/subscription" element={<Navigate to="/admin/subscription" replace />} />
               <Route path="/support-tickets" element={<ProtectedRoute><SupportTickets /></ProtectedRoute>} />
               <Route path="/vendors" element={<ProtectedRoute><Vendors /></ProtectedRoute>} />
+              <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
               <Route path="/consent-forms" element={<ProtectedRoute><ConsentForms /></ProtectedRoute>} />
               <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
               <Route path="/add-clinic" element={<ProtectedRoute><AddClinic /></ProtectedRoute>} />

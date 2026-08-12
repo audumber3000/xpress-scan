@@ -50,6 +50,20 @@ const mainNavItems = [
   },
 
   {
+    // Money out, directly under Payments (money in). Payables came from
+    // Inventory, where a lab bill was filed next to stock, and the ledger came
+    // from Payments, where outflow sat beside collections.
+    name: "Expenses",
+    path: "/expenses",
+    permissionKeys: ["vendors", "finance"],
+    icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-2M21 12H9m12 0l-3-3m3 3l-3 3" />
+      </svg>
+    ),
+  },
+
+  {
     name: "Inventory",
     path: "/vendors",
     permissionKeys: ["vendors", "inventory"],
