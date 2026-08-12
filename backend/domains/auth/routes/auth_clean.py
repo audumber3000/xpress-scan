@@ -20,6 +20,7 @@ from core.dtos import (
 )
 from core.dependencies import get_auth_service, get_user_service
 from core.auth_utils import require_role
+from core.auth_utils import get_current_user as _current_user_dep
 from core.nexus_notify import notify
 from database import get_db
 from sqlalchemy.orm import Session, joinedload
@@ -31,7 +32,7 @@ from pydantic import BaseModel
 from domains.communication.services.email_service import EmailService
 from core.posthog_client import track_event, group_identify, EVENTS
 from core.audit import (record_audit, LOGIN_SUCCEEDED, LOGIN_FAILED,
-                        LOGIN_BLOCKED, PASSWORD_CHANGED)
+                        LOGIN_BLOCKED, LOGOUT, PASSWORD_CHANGED)
 
 router = APIRouter()
 
@@ -892,13 +893,30 @@ async def change_password(
     summary="User logout",
     description="Log out the current user (client-side token cleanup)"
 )
-async def logout_user():
+async def logout_user(
+    request: Request,
+    db: Session = Depends(get_db),
+    # Aliased because this module has its own get_current_user route handler
+    # further up, which shadows the dependency and returns a dict rather than a
+    # User. The rest of the file does the same.
+    current_user: User = Depends(_current_user_dep),
+):
     """
     Log out the current user.
 
-    This endpoint primarily serves as a confirmation that logout
-    should be handled client-side by removing the JWT token.
+    The token is discarded client-side; this endpoint exists to record that it
+    happened. Signing out closes the window in which a session could be used,
+    so pairing it with the sign-in entry is what lets someone reconstruct how
+    long an account was actually active.
+
+    Authenticated now, where it previously took no user at all: without that
+    there was nobody to attribute the entry to.
     """
+    record_audit(
+        db, current_user, LOGOUT, "Signed out",
+        request=request, entity_type='user', entity_id=current_user.id,
+        commit=True,
+    )
     return SuccessResponseDTO(
         message="Logged out successfully"
     )

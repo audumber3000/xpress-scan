@@ -15,7 +15,8 @@ from database import SessionLocal
 from core.notification_dispatch import notify_event
 from core.posthog_client import track_event, EVENTS
 from core.audit import (
-    record_audit, INVOICE_DELETED, PAYMENT_DELETED, DISCOUNT_ADDED, DISCOUNT_REMOVED,
+    record_audit, INVOICE_DELETED, PAYMENT_DELETED, PAYMENT_ADDED,
+    DISCOUNT_ADDED, DISCOUNT_REMOVED,
 )
 
 def get_db():
@@ -1747,6 +1748,7 @@ async def get_invoice(
 async def add_invoice_payment(
     invoice_id: int,
     payload: InvoicePaymentCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1802,6 +1804,16 @@ async def add_invoice_payment(
     create_audit_log(db, invoice_id, current_user.id, 'payment_added', None,
                      {'amount': float(payload.amount), 'paid_on': str(paid_on),
                       'receipt_number': payment.receipt_number})
+    # Also to the clinic-wide log. The per-invoice trail above only answers
+    # questions you already know to ask of one invoice; money arriving is a
+    # clinic-level event and belongs where deletions and refunds already are.
+    record_audit(
+        db, current_user, PAYMENT_ADDED,
+        f"Recorded {float(payload.amount):,.0f} on {invoice.invoice_number}"
+        f" ({payload.method or 'method not stated'})"
+        + (f", back-dated to {paid_on.strftime('%d %b %Y')}" if paid_on < entered_on else ""),
+        request=request, entity_type='invoice', entity_id=invoice.id,
+    )
     db.commit()
     db.refresh(invoice)
     return enrich_invoice(db, invoice)

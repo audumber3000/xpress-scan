@@ -23,7 +23,7 @@ from core.dtos import (
 from core.dependencies import get_patient_service
 from core.auth_utils import get_current_user, require_patients_view, require_patients_edit, require_patients_delete
 from domains.activity.routes.activity_log import push_activity
-from core.audit import record_audit, PATIENT_DELETED
+from core.audit import record_audit, PATIENT_DELETED, PATIENT_UPDATED
 import logging
 
 logger = logging.getLogger(__name__)
@@ -618,6 +618,8 @@ async def get_patient(
 async def update_patient(
     patient_id: int,
     patient_data: PatientUpdateDTO,
+    request: Request,
+    db: Session = Depends(get_db),
     current_user = Depends(require_patients_edit),
     patient_service = Depends(get_patient_service)
 ):
@@ -650,6 +652,25 @@ async def update_patient(
             current_user.clinic_id
         )
         print(f"✅ [UPDATE PATIENT] Patient updated successfully")
+
+        # Only identity fields are logged, not every save.
+        #
+        # This endpoint also receives dental_chart, tooth_notes, treatment_plan
+        # and prescriptions, which change on almost every visit. Recording all
+        # of that would bury the deletions and money movements this log exists
+        # to surface, and the clinical edits are already captured on the case
+        # paper. What is worth a line here is somebody changing WHO a record is
+        # about: that is what a fraudulent edit alters, and it is invisible
+        # anywhere else.
+        _IDENTITY = {"name", "phone", "email", "date_of_birth", "age", "gender"}
+        _changed = sorted(_IDENTITY & set(update_data.keys()))
+        if _changed:
+            record_audit(
+                db, current_user, PATIENT_UPDATED,
+                f"Edited {', '.join(_changed)} for {getattr(patient, 'name', None) or f'patient #{patient_id}'}",
+                request=request, entity_type='patient', entity_id=patient_id,
+            )
+            db.commit()
 
         if not patient:
             raise HTTPException(

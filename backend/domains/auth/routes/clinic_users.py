@@ -7,7 +7,7 @@ from pydantic import BaseModel
 import datetime
 from core.auth_utils import get_current_user
 from core.audit import (record_audit, STAFF_CREATED, STAFF_UPDATED,
-                        STAFF_DEACTIVATED, PERMISSIONS_CHANGED)
+                        STAFF_DEACTIVATED, PERMISSIONS_CHANGED, PASSWORD_CHANGED)
 from domains.communication.services.email_service import EmailService
 import hashlib
 import logging
@@ -338,6 +338,7 @@ def update_clinic_user(user_id: int, user_update: ClinicUserUpdate, request: Req
 def set_staff_password(
     user_id: int, 
     password_request: SetPasswordRequest,
+    request: Request,
     db: Session = Depends(get_db), 
     current_user = Depends(get_current_user)
 ):
@@ -364,6 +365,16 @@ def set_staff_password(
     
     # Set password hash
     user.password_hash = hash_password(password_request.password)
+    # One person setting another's password is a handover of access. The
+    # password itself is obviously never recorded, only that it happened and
+    # who did it, which is the part that matters if an account is later
+    # disputed.
+    record_audit(
+        db, current_user, PASSWORD_CHANGED,
+        f"Set a new password for {user.name or user.email}"
+        + (" (their own)" if user.id == current_user.id else ""),
+        request=request, entity_type='user', entity_id=user.id,
+    )
     db.commit()
     
     return {"message": "Password set successfully"}

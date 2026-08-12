@@ -1,6 +1,6 @@
 import io
 import time
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Request
 from sqlalchemy.orm import Session, object_session
 from database import get_db
 from models import TemplateConfiguration, Clinic
@@ -12,6 +12,7 @@ from domains.infrastructure.services.r2_storage import (
     upload_bytes_to_r2,
 )
 from typing import List
+from core.audit import record_audit, TEMPLATE_UPDATED
 
 router = APIRouter()
 
@@ -63,6 +64,7 @@ def get_template_configs(
 @router.post("", response_model=TemplateConfigResponse)
 def upsert_template_config(
     config_in: TemplateConfigCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
@@ -92,6 +94,14 @@ def upsert_template_config(
         **config_in.dict()
     )
     db.add(new_config)
+    # What a patient's invoice, prescription and consent form look like is
+    # also what they carry as proof, so changing the letterhead is a config
+    # change worth a line rather than a silent edit.
+    record_audit(
+        db, current_user, TEMPLATE_UPDATED,
+        f"Changed the {config_in.category} document template",
+        request=request, entity_type='template', entity_id=None,
+    )
     db.commit()
     db.refresh(new_config)
     return new_config

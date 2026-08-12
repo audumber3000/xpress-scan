@@ -112,6 +112,7 @@ def get_device(
 def update_device(
     device_id: int,
     device_update: dict,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -157,6 +158,23 @@ def update_device(
     if "location" in device_update:
         device.location = device_update["location"]
     
+    # Recorded only when access was actually taken away. Renaming a device is
+    # housekeeping; cutting off a way in is a security event, and mixing the
+    # two would make the log noisier without making it more useful.
+    _now_blocked = (
+        device_update.get("is_active") is False
+        or any(v is False for v in (device_update.get("allowed_access") or {}).values())
+    )
+    if _now_blocked:
+        _which = [k for k, v in (device_update.get("allowed_access") or {}).items() if v is False]
+        record_audit(
+            db, current_user, DEVICE_BLOCKED,
+            f"Blocked {'all access on ' if device_update.get('is_active') is False else ', '.join(_which) + ' access on '}"
+            f"{device.device_name or device.device_id or f'device {device.id}'}"
+            f" belonging to {user.name or user.email}",
+            request=request, entity_type='device', entity_id=device.id,
+        )
+
     device.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(device)
