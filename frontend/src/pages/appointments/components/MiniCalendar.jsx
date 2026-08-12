@@ -1,5 +1,25 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+
+/**
+ * The month, small.
+ *
+ * It had four visual treatments competing in the same navy and purple family
+ * with nothing to tell them apart: a filled pill for the selected day, a ring
+ * for today, a purple pill for every day of the visible week, and a dot for
+ * "has appointments". Six purple pills read as six selected days, and the one
+ * thing worth knowing at a glance, which days are busy, was a 4px dot that
+ * disappeared the moment you selected that day.
+ *
+ * It now says three things and keeps them visually separate:
+ *   selected   solid navy fill
+ *   today      navy ring, and both together when they coincide
+ *   how busy   a dot that grows with the number booked, with the count in the
+ *              tooltip, and stays visible when the day is selected
+ *
+ * The week you are looking at is a plain grey band behind the row: context,
+ * not a selection.
+ */
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 
@@ -17,28 +37,43 @@ const startOfWeek = (d) => {
 
 const isSameWeek = (a, b) => sameDay(startOfWeek(a), startOfWeek(b));
 
-// Build a 6-row x 7-col grid of Date objects that covers the given month view.
 const buildMonthGrid = (year, month) => {
   const first = new Date(year, month, 1);
-  const startOffset = first.getDay();
-  const gridStart = new Date(year, month, 1 - startOffset);
-  const cells = [];
-  for (let i = 0; i < 42; i++) {
+  const gridStart = new Date(year, month, 1 - first.getDay());
+  return Array.from({ length: 42 }, (_, i) => {
     const d = new Date(gridStart);
     d.setDate(gridStart.getDate() + i);
-    cells.push(d);
-  }
-  return cells;
+    return d;
+  });
 };
 
-const MiniCalendar = ({ currentDate, onSelectDate, appointmentDates = new Set() }) => {
-  // Which month the mini-calendar is showing. Starts on current page's month
-  // but can be navigated independently with its own arrows.
+const monthKey = (d) => `${d.getFullYear()}-${d.getMonth()}`;
+
+const MiniCalendar = ({
+  currentDate,
+  onSelectDate,
+  // Either a Set of ISO dates (older callers) or a map of ISO -> count. The map
+  // is what lets the dot say how busy rather than merely whether.
+  appointmentDates = new Set(),
+  countsByDate = null,
+}) => {
   const [viewMonth, setViewMonth] = useState(() => {
     const d = new Date(currentDate);
     d.setDate(1);
     return d;
   });
+
+  // Follow the main calendar into another month.
+  //
+  // This was set once and never again, so navigating the main view to October
+  // left the mini-calendar sitting on August with no indication it had stopped
+  // tracking. Keyed on the month so the manual arrows still browse freely
+  // within one month without being yanked back.
+  useEffect(() => {
+    const d = new Date(currentDate);
+    d.setDate(1);
+    setViewMonth((prev) => (monthKey(prev) === monthKey(d) ? prev : d));
+  }, [currentDate]);
 
   const monthLabel = useMemo(
     () => viewMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
@@ -53,26 +88,32 @@ const MiniCalendar = ({ currentDate, onSelectDate, appointmentDates = new Set() 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const goPrev = () => {
+  const step = (delta) => {
     const d = new Date(viewMonth);
-    d.setMonth(d.getMonth() - 1);
+    d.setMonth(d.getMonth() + delta);
     setViewMonth(d);
   };
-  const goNext = () => {
-    const d = new Date(viewMonth);
-    d.setMonth(d.getMonth() + 1);
-    setViewMonth(d);
+
+  const countFor = (iso) => {
+    if (countsByDate) return countsByDate[iso] || 0;
+    return appointmentDates.has?.(iso) ? 1 : 0;
   };
+
+  // Three steps is all this size can carry: quiet, busy, very busy.
+  const dotSize = (n) => (n === 0 ? 0 : n <= 2 ? 3 : n <= 5 ? 4 : 5);
+
+  // The mini-calendar is browsing a month the main view is not on.
+  const offMonth = monthKey(viewMonth) !== monthKey(currentDate);
 
   return (
     <div className="px-3 py-3 border-b border-gray-100">
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-semibold text-gray-900">{monthLabel}</span>
         <div className="flex items-center gap-1">
-          <button onClick={goPrev} className="p-1 rounded hover:bg-gray-100 text-gray-600" aria-label="Previous month">
+          <button onClick={() => step(-1)} className="p-1 rounded hover:bg-gray-100 text-gray-600" aria-label="Previous month">
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <button onClick={goNext} className="p-1 rounded hover:bg-gray-100 text-gray-600" aria-label="Next month">
+          <button onClick={() => step(1)} className="p-1 rounded hover:bg-gray-100 text-gray-600" aria-label="Next month">
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
@@ -86,44 +127,75 @@ const MiniCalendar = ({ currentDate, onSelectDate, appointmentDates = new Set() 
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-0.5">
+      <div className="grid grid-cols-7 gap-y-0.5">
         {cells.map((date, i) => {
           const inMonth = date.getMonth() === viewMonth.getMonth();
           const isToday = sameDay(date, today);
           const isSelected = sameDay(date, currentDate);
-          const inCurrentWeek = !isSelected && isSameWeek(date, currentDate);
+          const inCurrentWeek = isSameWeek(date, currentDate);
           const iso = date.toISOString().split("T")[0];
-          const hasAppt = appointmentDates.has(iso);
+          const count = countFor(iso);
+          const size = dotSize(count);
 
-          let cls =
-            "relative h-7 w-7 mx-auto flex items-center justify-center text-[11px] rounded-full transition-colors cursor-pointer";
-          if (isSelected) {
-            cls += " bg-[#2a276e] text-white font-semibold";
-          } else if (isToday) {
-            cls += " ring-1 ring-[#2a276e] text-[#2a276e] font-semibold";
-          } else if (inCurrentWeek) {
-            cls += " bg-[#9B8CFF]/20 text-[#2a276e]";
-          } else if (inMonth) {
-            cls += " text-gray-700 hover:bg-gray-100";
-          } else {
-            cls += " text-gray-300 hover:bg-gray-50";
-          }
+          const dayOfWeek = date.getDay();
 
           return (
-            <button
+            <div
               key={i}
-              onClick={() => onSelectDate(new Date(date))}
-              className={cls}
-              type="button"
+              /* The week band sits behind the whole row and only rounds at its
+                 ends, so it reads as one continuous week rather than seven
+                 separate selections. */
+              className={`flex justify-center py-0.5 ${
+                inCurrentWeek ? "bg-gray-100" : ""
+              } ${inCurrentWeek && dayOfWeek === 0 ? "rounded-l-md" : ""} ${
+                inCurrentWeek && dayOfWeek === 6 ? "rounded-r-md" : ""
+              }`}
             >
-              {date.getDate()}
-              {hasAppt && !isSelected && (
-                <span className="absolute bottom-0.5 w-1 h-1 rounded-full bg-[#2a276e]/70"></span>
-              )}
-            </button>
+              <button
+                type="button"
+                onClick={() => onSelectDate(new Date(date))}
+                title={
+                  count
+                    ? `${date.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })} — ${count} appointment${count === 1 ? "" : "s"}`
+                    : date.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })
+                }
+                className={`relative h-7 w-7 flex items-center justify-center text-[11px] rounded-full transition-colors ${
+                  isSelected
+                    ? "bg-[#2a276e] text-white font-bold"
+                    : isToday
+                      ? "ring-1 ring-[#2a276e] text-[#2a276e] font-bold hover:bg-[#2a276e]/5"
+                      : inMonth
+                        ? "text-gray-700 hover:bg-gray-200"
+                        : "text-gray-300 hover:bg-gray-100"
+                }`}
+              >
+                {date.getDate()}
+                {/* Kept when the day is selected, inverted to white. Selecting a
+                    busy day used to hide the fact that it was busy. */}
+                {size > 0 && (
+                  <span
+                    className={`absolute bottom-0.5 rounded-full ${
+                      isSelected ? "bg-white" : "bg-[#2a276e]"
+                    }`}
+                    style={{ width: `${size}px`, height: `${size}px` }}
+                  />
+                )}
+              </button>
+            </div>
           );
         })}
       </div>
+
+      {/* Only shown once the two have actually diverged, so it is a way back
+          rather than permanent clutter. */}
+      {offMonth && (
+        <button
+          onClick={() => onSelectDate(new Date(currentDate))}
+          className="mt-2 w-full text-[11px] font-semibold text-[#2a276e] hover:underline"
+        >
+          Back to {currentDate.toLocaleDateString(undefined, { day: "numeric", month: "long" })}
+        </button>
+      )}
     </div>
   );
 };

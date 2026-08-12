@@ -1797,6 +1797,7 @@ const Calendar = () => {
               <MiniCalendar
                 currentDate={currentDate}
                 appointmentDates={appointmentDates}
+                countsByDate={visibleCountsByDate}
                 onSelectDate={(d) => {
                   setCurrentDate(d);
                   // Clicking a specific date from the mini calendar is best paired
