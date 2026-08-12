@@ -12,7 +12,10 @@ import PatientStatsChart from './dashboard/charts/PatientStatsChart';
 import DemographicsChart from './dashboard/charts/DemographicsChart';
 import RevenueChart from './dashboard/charts/RevenueChart';
 import AppointmentTrendsChart from './dashboard/charts/AppointmentTrendsChart';
-import MetricDetailDrawer from './dashboard/MetricDetailDrawer';
+// The same drawer Payments, Lab and Vendors use. The dashboard had its own,
+// which queried the legacy `payments` table (0 rows) for Revenue and
+// Outstanding, so those two opened empty while the card above read three lakh.
+import KpiDetailDrawer from '../components/common/KpiDetailDrawer';
 import AssistantPanel from './dashboard/AssistantPanel';
 import SupportMenu from './dashboard/SupportMenu';
 
@@ -26,7 +29,7 @@ const Dashboard = () => {
     metrics,
     patientStatsData, demographicsData, revenueData, appointmentData,
     loading, visibleWidgets,
-    selectedMetric, drawerData, drawerLoading, openMetric, closeMetric,
+    selectedMetric, openMetric, closeMetric,
     today, todayLoading,
   } = useDashboardData();
 
@@ -145,13 +148,13 @@ const Dashboard = () => {
         )}
       </div>
 
-      <MetricDetailDrawer
-        metric={selectedMetric}
-        data={drawerData}
-        loading={drawerLoading}
-        period={globalPeriod}
-        onClose={closeMetric}
-      />
+      {selectedMetric && (
+        <KpiDetailDrawer
+          card={selectedMetric}
+          endpoint="/dashboard/kpi-detail"
+          onClose={closeMetric}
+        />
+      )}
 
       <WelcomeChecklistModal open={showWelcome} onClose={() => setShowWelcome(false)} />
 

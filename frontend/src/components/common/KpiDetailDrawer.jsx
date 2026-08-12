@@ -45,6 +45,10 @@ const AGEING_COLORS = [NAVY, AMBER, AMBER, RED];
 const KpiDetailDrawer = ({ card, filters, endpoint = '/invoices/kpi-detail', rowLabel, onClose }) => {
   const [period, setPeriod] = useState('all');
   const [data, setData] = useState(null);
+  // Which bar was clicked. The rows already carry the bucket they belong to,
+  // so narrowing the list is local: clicking a bar should feel instant, and a
+  // round trip to re-filter data already on screen would not.
+  const [pickedBar, setPickedBar] = useState(null);
   const [loading, setLoading] = useState(false);
   const bp = useBreakpoint();
 
@@ -69,6 +73,9 @@ const KpiDetailDrawer = ({ card, filters, endpoint = '/invoices/kpi-detail', row
   // inherits the last card's window.
   useEffect(() => { setPeriod('all'); }, [metric]);
 
+  // A bar selected in one window means nothing in another.
+  useEffect(() => { setPickedBar(null); }, [metric, period]);
+
   // Escape closes, and the page behind shouldn't scroll while it's open.
   useEffect(() => {
     if (!card) return undefined;
@@ -85,7 +92,14 @@ const KpiDetailDrawer = ({ card, filters, endpoint = '/invoices/kpi-detail', row
   if (!card) return null;
 
   const series = data?.series || [];
-  const rows = data?.rows || [];
+  const allRows = data?.rows || [];
+  // Rows carry the bar they belong to. Falls back to showing everything when a
+  // backend has not filled `bucket` in, so an older endpoint degrades to the
+  // previous behaviour rather than an empty list.
+  const canFilter = allRows.some((r) => r.bucket);
+  const rows = pickedBar && canFilter
+    ? allRows.filter((r) => r.bucket === pickedBar)
+    : allRows;
   const stacked = (data?.keys || []).length > 1;
   // Whether the y-axis is currency. Declared by the card, because only the
   // card knows — 'count of open lab cases' and 'rupees owed' are both plain
@@ -166,7 +180,17 @@ const KpiDetailDrawer = ({ card, filters, endpoint = '/invoices/kpi-detail', row
               {series.length > 0 && (
                 <div className="mb-5">
                   <ResponsiveContainer width="100%" height={chartHeight}>
-                    <BarChart data={series} margin={{ left: 0, right: 8, top: 12, bottom: 0 }}>
+                    <BarChart
+                      data={series}
+                      margin={{ left: 0, right: 8, top: 12, bottom: 0 }}
+                      onClick={(e) => {
+                        if (!canFilter) return;
+                        const label = e?.activeLabel;
+                        if (!label) return;
+                        setPickedBar((prev) => (prev === label ? null : label));
+                      }}
+                      style={{ cursor: canFilter ? 'pointer' : 'default' }}
+                    >
                       <CartesianGrid strokeDasharray="3 3" stroke="#eef0f4" vertical={false} />
                       <XAxis dataKey="label" {...axisProps} interval="preserveStartEnd" />
                       <YAxis {...axisProps} width={money ? 52 : 30} tickFormatter={fmtValue} allowDecimals={false} />
@@ -183,17 +207,34 @@ const KpiDetailDrawer = ({ card, filters, endpoint = '/invoices/kpi-detail', row
                       />
                       {stacked ? (
                         <>
-                          <Bar dataKey="cash" stackId="a" fill={NAVY} barSize={22} />
-                          <Bar dataKey="digital" stackId="a" fill={LAV} barSize={22} radius={[3, 3, 0, 0]} />
+                          <Bar dataKey="cash" stackId="a" barSize={22}>
+                            {series.map((s, i) => (
+                              <Cell key={i} fill={NAVY}
+                                    fillOpacity={pickedBar && s.label !== pickedBar ? 0.28 : 1} />
+                            ))}
+                          </Bar>
+                          <Bar dataKey="digital" stackId="a" barSize={22} radius={[3, 3, 0, 0]}>
+                            {series.map((s, i) => (
+                              <Cell key={i} fill={LAV}
+                                    fillOpacity={pickedBar && s.label !== pickedBar ? 0.28 : 1} />
+                            ))}
+                          </Bar>
                         </>
                       ) : (
                         <Bar dataKey="total" barSize={26} radius={[3, 3, 0, 0]}>
-                          {series.map((_, i) => (
-                            <Cell
-                              key={i}
-                              fill={data.x_is_ageing ? AGEING_COLORS[i] || NAVY : NAVY}
-                            />
-                          ))}
+                          {series.map((s, i) => {
+                            const base = data.x_is_ageing ? AGEING_COLORS[i] || NAVY : NAVY;
+                            // Dim the others rather than recolouring the chosen
+                            // one, so the selection reads without introducing a
+                            // colour that means nothing on its own.
+                            return (
+                              <Cell
+                                key={i}
+                                fill={base}
+                                fillOpacity={pickedBar && s.label !== pickedBar ? 0.28 : 1}
+                              />
+                            );
+                          })}
                           {/* Ageing is nearly always one tall bar beside three
                               slivers — the whole point is the slivers, and at
                               2px tall they're unreadable without their value
@@ -209,9 +250,11 @@ const KpiDetailDrawer = ({ card, filters, endpoint = '/invoices/kpi-detail', row
                     </BarChart>
                   </ResponsiveContainer>
 
-                  {(data.x_label || stacked) && (
+                  {(data.x_label || stacked || canFilter) && (
                     <div className="flex items-center justify-between mt-1.5">
-                      <span className="text-[10px] text-gray-400">{data.x_label || ''}</span>
+                      <span className="text-[10px] text-gray-400">
+                        {data.x_label || (canFilter ? 'Tap a bar to filter the list below' : '')}
+                      </span>
                       {stacked && (
                         <span className="flex items-center gap-3">
                           <span className="flex items-center gap-1.5 text-[10px] text-gray-500">
@@ -224,6 +267,21 @@ const KpiDetailDrawer = ({ card, filters, endpoint = '/invoices/kpi-detail', row
                       )}
                     </div>
                   )}
+                </div>
+              )}
+
+              {pickedBar && (
+                <div className="flex items-center justify-between gap-2 mb-3 rounded-lg bg-[#f0f0fd] px-3 py-2">
+                  <span className="text-xs text-[#2a276e]">
+                    Showing <strong>{pickedBar}</strong> only
+                    <span className="text-[#2a276e]/60"> · {rows.length} of {allRows.length}</span>
+                  </span>
+                  <button
+                    onClick={() => setPickedBar(null)}
+                    className="text-[11px] font-bold text-[#2a276e] hover:underline flex-shrink-0"
+                  >
+                    Show all
+                  </button>
                 </div>
               )}
 

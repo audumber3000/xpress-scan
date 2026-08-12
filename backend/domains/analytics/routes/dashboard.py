@@ -6,7 +6,7 @@ from typing import Optional
 import csv
 import io
 from database import get_db
-from models import Patient, Report, Payment, User, TreatmentType, Appointment, Clinic, Invoice, LabOrder, InventoryItem, MedicationStock, CasePaper
+from models import Patient, Report, Payment, User, TreatmentType, Appointment, Clinic, Invoice, LabOrder, InventoryItem, MedicationStock, CasePaper, InvoicePayment
 from core.auth_utils import get_current_user
 from core.clinic_time import clinic_today
 from domains.scheduling.appointment_status import ARRIVED
@@ -212,45 +212,36 @@ def get_dashboard_metrics(
     dues_trend = calculate_trend(dues_amount, prev_dues_amount)
 
     # 4. Revenue (Sum of payments in this period)
-    revenue_payments = db.query(func.sum(Payment.amount)).filter(
-        and_(
-            Payment.clinic_id == final_clinic_id,
-            Payment.status == "success",
-            Payment.created_at >= start_date,
-            Payment.created_at < end_date
+    def _collected(frm, to) -> float:
+        """Money actually received in a window.
+
+        This was sum(Payment.amount) plus sum(Invoice.total) for invoices marked
+        fully paid, which was wrong three ways:
+
+          - the `payments` table has held 0 rows since part-payments arrived,
+            so the first half contributed nothing
+          - counting only fully-paid invoices dropped every part payment, which
+            on this clinic hid Rs 83,219 of real money
+          - it counted the invoice TOTAL rather than what was paid, so a
+            discounted invoice reported more than came in
+
+        invoice_payments is the one place a received rupee is recorded, and
+        paid_on is when it was received, unlike Invoice.updated_at which moves
+        revenue into a different period whenever an old invoice is edited.
+        """
+        return float(
+            db.query(func.coalesce(func.sum(InvoicePayment.amount), 0.0))
+            .filter(
+                InvoicePayment.clinic_id == final_clinic_id,
+                InvoicePayment.paid_on >= frm.date() if hasattr(frm, "date") else InvoicePayment.paid_on >= frm,
+                InvoicePayment.paid_on < to.date() if hasattr(to, "date") else InvoicePayment.paid_on < to,
+            )
+            .scalar() or 0
         )
-    ).scalar() or 0
+
+    revenue = _collected(start_date, end_date)
     
-    revenue_invoices = db.query(func.sum(Invoice.total)).filter(
-        and_(
-            Invoice.clinic_id == final_clinic_id,
-            Invoice.status.in_(["paid_verified", "paid_unverified"]),
-            Invoice.updated_at >= start_date,
-            Invoice.updated_at < end_date
-        )
-    ).scalar() or 0
-    
-    revenue = float(revenue_payments) + float(revenue_invoices)
-    
-    prev_revenue_payments = db.query(func.sum(Payment.amount)).filter(
-        and_(
-            Payment.clinic_id == final_clinic_id,
-            Payment.status == "success",
-            Payment.created_at >= prev_start,
-            Payment.created_at < prev_end
-        )
-    ).scalar() or 0
-    
-    prev_revenue_invoices = db.query(func.sum(Invoice.total)).filter(
-        and_(
-            Invoice.clinic_id == final_clinic_id,
-            Invoice.status.in_(["paid_verified", "paid_unverified"]),
-            Invoice.updated_at >= prev_start,
-            Invoice.updated_at < prev_end
-        )
-    ).scalar() or 0
-    
-    prev_revenue = float(prev_revenue_payments) + float(prev_revenue_invoices)
+    prev_revenue = _collected(prev_start, prev_end)
 
     revenue_trend = calculate_trend(revenue, prev_revenue)
 

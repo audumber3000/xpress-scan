@@ -52,7 +52,7 @@ from domains.finance.routes import payments_clean as payments, invoices, ledger,
 from domains.communication.routes import notifications, message_templates
 from domains.scheduling.routes import attendance, attendance_mobile, appointments, scheduling, appointment_stats
 from domains.medical.routes import reports, xray, medications
-from domains.analytics.routes import dashboard, dashboard_reports
+from domains.analytics.routes import dashboard, dashboard_reports, kpi_detail
 from domains.infrastructure.routes import devices, sync, template_configs
 from domains.infrastructure.services.template_service import TemplateService
 from domains.gmail.routes import gmail_routes
@@ -601,6 +601,9 @@ app.include_router(medications.router, prefix="/api/v1")
 app.include_router(template_configs.router, prefix="/api/v1/template-configs", tags=["template-configs"])
 
 app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["dashboard"])
+# Same envelope as the Payments drawer, so the dashboard uses the one
+# KpiDetailDrawer the rest of the app already uses.
+app.include_router(kpi_detail.router, prefix="/api/v1/dashboard", tags=["dashboard"])
 app.include_router(dashboard_reports.router, prefix="/api/v1/dashboard/reports", tags=["dashboard_reports"])
 app.include_router(devices.router, prefix="/api/v1/devices", tags=["devices"])
 app.include_router(sync.router, prefix="/api/v1/sync", tags=["sync"])

@@ -18,13 +18,6 @@ const DEFAULT_METRICS = [
 
 // Which detail endpoint backs each metric card's drawer.
 // `usesPeriod` endpoints get ?period=<globalPeriod> appended at fetch time.
-const METRIC_DETAIL_ENDPOINTS = {
-  patients:     { path: '/dashboard/patients/details', usesPeriod: true },
-  revenue:      { path: '/dashboard/revenue/details',  usesPeriod: true },
-  appointments: { path: '/dashboard/appointments/today', usesPeriod: true },
-  outstanding:  { path: '/dashboard/revenue/details',  usesPeriod: true },
-};
-
 const pct = (part, whole) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
 
 /**
@@ -142,8 +135,6 @@ export function useDashboardData() {
   const [visibleWidgets, setVisibleWidgets] = useState(DEFAULT_WIDGETS);
 
   const [selectedMetric, setSelectedMetric] = useState(null);
-  const [drawerData, setDrawerData] = useState([]);
-  const [drawerLoading, setDrawerLoading] = useState(false);
 
   const [today, setToday] = useState(null);
   const [todayLoading, setTodayLoading] = useState(true);
@@ -205,35 +196,20 @@ export function useDashboardData() {
     });
   }, []);
 
-  const openMetric = useCallback(async (metric) => {
-    setSelectedMetric(metric);
-    const cfg = METRIC_DETAIL_ENDPOINTS[metric.key];
-    if (!cfg) { setDrawerData([]); return; }
-    const url = cfg.usesPeriod ? `${cfg.path}?period=${globalPeriod}` : cfg.path;
-    setDrawerLoading(true);
-    try {
-      const data = await api.get(url);
-      // Most endpoints return an array; chairs/status returns an object — pass
-      // the raw payload through and let the drawer render the right view.
-      setDrawerData(data ?? []);
-    } catch {
-      setDrawerData([]);
-    } finally {
-      setDrawerLoading(false);
-    }
-  }, [globalPeriod]);
+  // The drawer fetches its own data now, from one endpoint that returns the
+  // same envelope as the Payments drawer. This used to map each card to a
+  // different ad-hoc endpoint, two of which pointed at the legacy `payments`
+  // table and returned nothing.
+  const openMetric = useCallback((metric) => setSelectedMetric(metric), []);
 
-  const closeMetric = useCallback(() => {
-    setSelectedMetric(null);
-    setDrawerData([]);
-  }, []);
+  const closeMetric = useCallback(() => setSelectedMetric(null), []);
 
   return {
     globalPeriod, setGlobalPeriod,
     clinicData, metrics,
     patientStatsData, demographicsData, revenueData, appointmentData,
     loading, visibleWidgets, toggleWidget, savePreferences,
-    selectedMetric, drawerData, drawerLoading, openMetric, closeMetric,
+    selectedMetric, openMetric, closeMetric,
     today, todayLoading,
   };
 }
