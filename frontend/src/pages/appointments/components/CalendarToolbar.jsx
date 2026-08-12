@@ -30,9 +30,9 @@ const CalendarToolbar = ({
     "px-2.5 py-1.5 rounded-md flex items-center gap-1.5 text-sm font-medium transition-colors";
 
   return (
-    <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
+    <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
       {/* Left cluster: Today / arrows / title */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 min-w-0">
         <button
           onClick={onToday}
           className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
@@ -45,11 +45,13 @@ const CalendarToolbar = ({
         <button onClick={onNext} disabled={nextDisabled} className={iconBtn} aria-label="Next">
           <ChevronRight className="w-5 h-5" />
         </button>
-        <div className="ml-2 text-xl font-bold text-gray-900">{title}</div>
+        <div className="ml-1 sm:ml-2 text-base sm:text-xl font-bold text-gray-900 truncate">{title}</div>
       </div>
 
-      {/* Right cluster: view toggle / booking / new */}
-      <div className="flex items-center gap-3">
+      {/* Right cluster: view toggle / booking / new.
+          Wraps rather than clipping. At 768 the Booking Link button used to run
+          off the edge of the screen. */}
+      <div className="flex items-center gap-2 flex-wrap justify-end min-w-0">
         {/* View mode segmented control */}
         <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
           <button
@@ -61,7 +63,7 @@ const CalendarToolbar = ({
             }`}
           >
             <CalendarDays className="w-4 h-4" />
-            Month
+            <span className="hidden sm:inline">Month</span>
           </button>
           <button
             onClick={() => onSetViewMode("week")}
@@ -72,7 +74,7 @@ const CalendarToolbar = ({
             }`}
           >
             <LayoutGrid className="w-4 h-4" />
-            Week
+            <span className="hidden sm:inline">Week</span>
           </button>
           <button
             onClick={() => onSetViewMode("today")}
@@ -83,7 +85,7 @@ const CalendarToolbar = ({
             }`}
           >
             <List className="w-4 h-4" />
-            Today
+            <span className="hidden sm:inline">Today</span>
           </button>
         </div>
 
@@ -94,7 +96,7 @@ const CalendarToolbar = ({
           <select
             value={focusDoctorId}
             onChange={(e) => onSetFocusDoctor?.(e.target.value)}
-            className="h-9 px-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 bg-white max-w-[11rem]"
+            className="h-9 px-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 bg-white w-full sm:w-auto sm:max-w-[11rem] order-last sm:order-none"
             aria-label="Which doctor to show"
           >
             <option value="">All doctors</option>
@@ -133,15 +135,16 @@ const CalendarToolbar = ({
             to={publicBookingUrl}
             target="_blank"
             className="px-3 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2 text-sm font-semibold"
+            title="Public booking link"
           >
             <ExternalLink className="w-4 h-4" />
-            Booking Link
+            <span className="hidden xl:inline">Booking Link</span>
           </Link>
         )}
 
         <button
           onClick={onOpenCreate}
-          className="bg-[#2a276e] text-white px-4 py-2 rounded-lg hover:bg-[#1a1548] transition-colors flex items-center gap-2 text-sm font-semibold shadow-sm"
+          className="bg-[#2a276e] text-white px-4 py-2 rounded-lg hover:bg-[#1a1548] transition-colors flex items-center gap-2 text-sm font-semibold"
         >
           <Plus className="w-4 h-4" />
           New

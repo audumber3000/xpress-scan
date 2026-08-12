@@ -29,6 +29,8 @@ import MonthGrid from "./appointments/components/MonthGrid";
 import DayGrid from "./appointments/components/DayGrid";
 import { getAppointmentColor, registerDoctors } from "./appointments/utils/doctorColors";
 import BookingModal from "./appointments/components/BookingModal";
+import DayAgenda from "./appointments/components/DayAgenda";
+import WeekDayStrip from "./appointments/components/WeekDayStrip";
 import { computeDayLayout } from "./appointments/utils/layout";
 import { getCurrencySymbol } from "../utils/currency";
 import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
@@ -103,6 +105,18 @@ const Calendar = () => {
   const [needsOutcome, setNeedsOutcome] = useState({ count: 0, appointments: [] });
   const [outcomeBusy, setOutcomeBusy] = useState(false);
   const [cancelPrompt, setCancelPrompt] = useState(null);
+  // Below this the grid stops being readable, so the phone gets a list instead
+  // of a squeezed grid. Matched in JS because it swaps the component, not just
+  // the styling: a CSS-hidden grid would still mount and measure.
+  const [isPhone, setIsPhone] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)');
+    const on = (e) => setIsPhone(e.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
   // A patient booked from the calendar starts as name + phone only. The desk is
   // the one moment someone is standing there to be asked the rest, so the panel
   // asks then rather than leaving a half-filled file nobody goes back to.
@@ -1754,7 +1768,7 @@ const Calendar = () => {
         {/* Mobile-only toggle: filters/mini-calendar vs the schedule grid */}
         <button
           onClick={() => setShowFilters(v => !v)}
-          className="md:hidden w-full flex items-center justify-between mb-3 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 shadow-sm"
+          className="lg:hidden w-full flex items-center justify-between mb-3 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700"
         >
           {showFilters ? '← Back to calendar' : 'Mini-calendar & team filters'}
           <svg className={`w-4 h-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -1764,7 +1778,7 @@ const Calendar = () => {
 
         {/* Two-column layout: team members rail + calendar content */}
         <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
-          <div className={`${showFilters ? '' : 'hidden'} md:block w-full md:w-auto md:shrink-0`}>
+          <div className={`${showFilters ? '' : 'hidden'} lg:block w-full lg:w-auto lg:shrink-0`}>
           <TeamMembersPanel
             doctors={doctors}
             countsByDoctorId={countsByDoctorId}
@@ -1810,8 +1824,17 @@ const Calendar = () => {
             focusDoctor={focusDoctor}
           />
         ) : viewMode === 'today' ? (
-          /* Today's View — multi-resource day grid (one column per visible doctor) */
+          /* One column per doctor from sm up. On a phone that maths gives each
+             doctor under 30px, so the same appointments are shown as a list. */
           <div>
+            {isPhone ? (
+              <DayAgenda
+                date={currentDate}
+                appointments={visibleAppointments}
+                onAppointmentClick={openAppointmentDetails}
+                onCreate={handleCreateFromGrid}
+              />
+            ) : (
             <DayGrid
               date={currentDate}
               appointments={visibleAppointments}
@@ -1827,6 +1850,28 @@ const Calendar = () => {
               dayShape={dayShape}
               axis={axis}
               chairCount={dayShape?.chairs || 1}
+            />
+            )}
+          </div>
+        ) : isPhone ? (
+          /* The week on a phone. Seven columns in 350px is 50px each, which
+             cannot hold a name, so the week stays visible as a strip of days
+             and one of them is shown properly underneath. */
+          <div>
+            <WeekDayStrip
+              dates={weekDates}
+              selected={currentDate}
+              countsByDate={visibleCountsByDate}
+              onSelect={setCurrentDate}
+            />
+            <div className="mb-2 text-xs font-bold text-gray-500 uppercase tracking-wider">
+              {currentDate.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+            </div>
+            <DayAgenda
+              date={currentDate}
+              appointments={visibleAppointments}
+              onAppointmentClick={openAppointmentDetails}
+              onCreate={handleCreateFromGrid}
             />
           </div>
         ) : (

@@ -24,6 +24,13 @@ const HOUR_PX = 120;            // 15 minutes = 30px, comfortably tappable
 const SNAP_MINUTES = 15;
 const MIN_DURATION = 15;
 
+// A column narrower than this shows a coloured sliver and a truncated name, so
+// it answers nothing. Four doctors on a tablet were getting 28px each. Past
+// this floor the grid scrolls sideways instead of dividing further: three
+// chairs you can read and scroll beats three chairs you cannot.
+const MIN_COL_PX = 132;
+const TIME_COL_PX = 64;
+
 const pad2 = (n) => String(n).padStart(2, "0");
 
 const formatHourLabel = (hour) => {
@@ -60,6 +67,19 @@ const DayGrid = ({
 }) => {
   const overlayRef = useRef(null);
   const scrollRef = useRef(null);
+  const frameRef = useRef(null);
+  // Measured, not guessed: the grid has to know its own width to decide
+  // between fitting the columns and scrolling them.
+  const [frameWidth, setFrameWidth] = useState(0);
+
+  useEffect(() => {
+    const node = frameRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(([entry]) => setFrameWidth(entry.contentRect.width));
+    ro.observe(node);
+    setFrameWidth(node.getBoundingClientRect().width);
+    return () => ro.disconnect();
+  }, []);
 
   const [dragOverColIdx, setDragOverColIdx] = useState(null);
   // A drag-out on empty grid, and a drag on a card's bottom edge. Both are
@@ -358,15 +378,25 @@ const DayGrid = ({
   }
 
   const totalHeight = (closeHour - openHour) * HOUR_PX;
-  const TIME_COL_PX = 64;
+
+  // Fit the columns if they can be read at that size, otherwise hold them at
+  // the floor and let the grid scroll. Percentages stay the unit for card
+  // positioning either way, so nothing downstream has to know which mode it is.
+  const availableForCols = Math.max(0, frameWidth - TIME_COL_PX);
+  const needed = columns.length * MIN_COL_PX;
+  const scrolls = frameWidth > 0 && needed > availableForCols;
+  const gridWidthPx = scrolls ? TIME_COL_PX + needed : null;
   const colWidthPct = 100 / columns.length;
   const yFor = (min) => ((min - openHour * 60) * HOUR_PX) / 60;
 
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+    <div ref={frameRef} className="border border-gray-200 rounded-lg bg-white overflow-x-auto overflow-y-hidden">
       <div
         className="grid bg-gray-50 border-b border-gray-200 sticky top-0 z-20"
-        style={{ gridTemplateColumns: `${TIME_COL_PX}px repeat(${columns.length}, minmax(0, 1fr))` }}
+        style={{
+          gridTemplateColumns: `${TIME_COL_PX}px repeat(${columns.length}, ${scrolls ? `${MIN_COL_PX}px` : 'minmax(0, 1fr)'})`,
+          width: gridWidthPx ? `${gridWidthPx}px` : undefined,
+        }}
       >
         <div className="px-2 py-2.5 text-[11px] font-semibold text-gray-500 text-center border-r border-gray-200">
           Time
@@ -400,8 +430,9 @@ const DayGrid = ({
         <div
           className="grid relative"
           style={{
-            gridTemplateColumns: `${TIME_COL_PX}px repeat(${columns.length}, minmax(0, 1fr))`,
+            gridTemplateColumns: `${TIME_COL_PX}px repeat(${columns.length}, ${scrolls ? `${MIN_COL_PX}px` : 'minmax(0, 1fr)'})`,
             height: `${totalHeight}px`,
+            width: gridWidthPx ? `${gridWidthPx}px` : undefined,
           }}
         >
           {/* The lattice. A labelled line on the hour, a firmer one at the half,
