@@ -296,6 +296,14 @@ run_migration "consent_clinic_backfill" "UPDATE patient_consents pc SET clinic_i
 run_migration "consent_clinic_idx" "CREATE INDEX IF NOT EXISTS ix_patient_consents_clinic ON patient_consents (clinic_id)"
 run_migration "consent_template_category" "ALTER TABLE consent_templates ADD COLUMN IF NOT EXISTS category VARCHAR"
 
+# Prescription sets. A doctor picks "Root canal, day 1" instead of retyping
+# the same three drugs, which is also what stops "Amoxicillin 500mq" style
+# typos accumulating in patient records.
+run_migration "medication_groups" "CREATE TABLE IF NOT EXISTS medication_groups (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL REFERENCES clinics(id), name VARCHAR NOT NULL, description VARCHAR, treatment_type_id INTEGER REFERENCES treatment_types(id), audience VARCHAR, is_active BOOLEAN DEFAULT TRUE, created_by INTEGER REFERENCES users(id), created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())"
+run_migration "medication_group_items" "CREATE TABLE IF NOT EXISTS medication_group_items (id SERIAL PRIMARY KEY, group_id INTEGER NOT NULL REFERENCES medication_groups(id) ON DELETE CASCADE, medication_stock_id INTEGER REFERENCES medication_stock(id), medicine_name VARCHAR NOT NULL, dosage VARCHAR, duration VARCHAR, quantity VARCHAR, notes VARCHAR, sort_order INTEGER DEFAULT 0)"
+run_migration "medication_groups_idx" "CREATE INDEX IF NOT EXISTS ix_medication_groups_clinic ON medication_groups (clinic_id)"
+run_migration "medication_group_items_idx" "CREATE INDEX IF NOT EXISTS ix_medication_group_items_group ON medication_group_items (group_id)"
+
 # Clinic.timings says when the door is open, not who is behind it. Without
 # these the grid would book a dentist onto a day they are not in the building.
 run_migration "doctor_availability" "CREATE TABLE IF NOT EXISTS doctor_availability (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL REFERENCES clinics(id), doctor_id INTEGER NOT NULL REFERENCES users(id), weekday INTEGER NOT NULL, start_time VARCHAR NOT NULL, end_time VARCHAR NOT NULL, created_at TIMESTAMP DEFAULT NOW())"

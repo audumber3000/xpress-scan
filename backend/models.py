@@ -1183,6 +1183,62 @@ class CaseCost(Base):
     lab_order = relationship("LabOrder")
 
 
+class MedicationGroup(Base):
+    """A named set of prescription lines, so a doctor picks once instead of
+    typing the same three drugs after every root canal.
+
+    The clinic's own data is the argument for this: across 18 prescriptions,
+    Paracetamol 650mg had been typed 10 times and Candid Mouth Paint 7, and one
+    entry read "Amoxicillin 500mq" — a typo baked into a patient's record, which
+    is what retyping the same drug every visit eventually produces.
+
+    A group holds LINES, not just drug names. The dosage, duration and quantity
+    are most of what gets retyped, so storing only names would leave the work
+    where it was.
+    """
+    __tablename__ = 'medication_groups'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    name = Column(String, nullable=False)              # "Root canal, day 1"
+    description = Column(String, nullable=True)
+    # Surfaces matching groups first in the picker. Optional: a clinic may have
+    # sets that belong to no single treatment.
+    treatment_type_id = Column(Integer, ForeignKey('treatment_types.id'), nullable=True)
+    # Adult and paediatric doses differ enough that one set cannot serve both.
+    # Kept as a plain label rather than an age rule, because a lot of patient
+    # records have no age and a rule with nothing to test would quietly hide
+    # every set.
+    audience = Column(String, nullable=True)           # adult | child | None
+    is_active = Column(Boolean, default=True)
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    items = relationship("MedicationGroupItem", back_populates="group",
+                         cascade="all, delete-orphan", order_by="MedicationGroupItem.sort_order")
+    treatment_type = relationship("TreatmentType")
+
+
+class MedicationGroupItem(Base):
+    """One line of a group: the drug plus how to take it."""
+    __tablename__ = 'medication_group_items'
+    id = Column(Integer, primary_key=True, index=True)
+    group_id = Column(Integer, ForeignKey('medication_groups.id'), nullable=False, index=True)
+    # Linked to stock when it matches something the clinic holds, which is what
+    # stops the spelling drifting. Free text stays allowed: clinics prescribe
+    # plenty they do not stock, and requiring a link would block the feature on
+    # a complete medicine list.
+    medication_stock_id = Column(Integer, ForeignKey('medication_stock.id'), nullable=True)
+    medicine_name = Column(String, nullable=False)
+    dosage = Column(String, nullable=True)             # "1-0-1"
+    duration = Column(String, nullable=True)           # "5 days"
+    quantity = Column(String, nullable=True)           # "10"
+    notes = Column(String, nullable=True)              # "After meals"
+    sort_order = Column(Integer, default=0)
+
+    group = relationship("MedicationGroup", back_populates="items")
+
+
 class MedicationStock(Base):
     """Medication inventory — physical stock of medicines, kept separate from
     general consumables (InventoryItem) and from the prescription Medication

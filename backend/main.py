@@ -61,6 +61,7 @@ from domains.vendor.routes import vendors
 from domains.inventory.routes import inventory
 from domains.inventory.routes import medications as medication_stock
 from domains.inventory.routes import transactions as inventory_transactions
+from domains.inventory.routes import medication_groups
 from domains.consent.routes import consents, consents_internal
 from domains.document.routes import documents
 from domains.clinical.routes import settings_router, case_papers_router, prescriptions_router, lab_orders_router, inventory_consumption_router, case_costs_router
@@ -196,6 +197,10 @@ async def lifespan(app: FastAPI):
                 "WHERE pc.patient_id = p.id AND pc.clinic_id IS NULL",
                 "CREATE INDEX IF NOT EXISTS ix_patient_consents_clinic ON patient_consents (clinic_id)",
                 "ALTER TABLE consent_templates ADD COLUMN IF NOT EXISTS category VARCHAR",
+                "CREATE TABLE IF NOT EXISTS medication_groups (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL REFERENCES clinics(id), name VARCHAR NOT NULL, description VARCHAR, treatment_type_id INTEGER REFERENCES treatment_types(id), audience VARCHAR, is_active BOOLEAN DEFAULT TRUE, created_by INTEGER REFERENCES users(id), created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())",
+                "CREATE TABLE IF NOT EXISTS medication_group_items (id SERIAL PRIMARY KEY, group_id INTEGER NOT NULL REFERENCES medication_groups(id) ON DELETE CASCADE, medication_stock_id INTEGER REFERENCES medication_stock(id), medicine_name VARCHAR NOT NULL, dosage VARCHAR, duration VARCHAR, quantity VARCHAR, notes VARCHAR, sort_order INTEGER DEFAULT 0)",
+                "CREATE INDEX IF NOT EXISTS ix_medication_groups_clinic ON medication_groups (clinic_id)",
+                "CREATE INDEX IF NOT EXISTS ix_medication_group_items_group ON medication_group_items (group_id)",
                 "UPDATE treatment_types SET duration_minutes = 30 WHERE duration_minutes IS NULL",
             ):
                 conn.execute(text(_ddl))
@@ -623,6 +628,14 @@ app.include_router(vendors.router, prefix="/api/v1/vendors", tags=["vendors"])
 # Ledger BEFORE the item router so /inventory/transactions isn't parsed as /inventory/{item_id}
 app.include_router(inventory_transactions.router, prefix="/api/v1", tags=["inventory-transactions"])
 app.include_router(inventory.router, prefix="/api/v1/inventory", tags=["inventory"])
+# Prescription sets: configured in Medications, applied on a case paper.
+#
+# Mounted at its own root rather than under /inventory, where inventory.router's
+# GET /{item_id} would swallow it: "medication-groups" is not an integer, so the
+# list endpoint 422'd. That trap has now caught three endpoints in this codebase
+# (inventory/summary, appointments/search-patients, appointments/needs-outcome).
+# Declaration order fixes it, a prefix that cannot collide prevents it.
+app.include_router(medication_groups.router, prefix="/api/v1", tags=["medication-groups"])
 app.include_router(medication_stock.router, prefix="/api/v1/medication-stock", tags=["medication-stock"])
 app.include_router(consents.router, prefix="/api/v1/consents", tags=["consents"])
 # Internal service-to-service routes (Nexus calls these). Auth via shared

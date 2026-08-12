@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle } from 'lucide-react';
+import { MessageCircle, Layers, Check, Loader2 } from 'lucide-react';
 import { api } from "../../utils/api";
+import { DOSAGE_OPTIONS, DURATION_OPTIONS, INSTRUCTION_SUGGESTIONS, withCurrent } from '../../constants/prescription';
 import { useAuth } from '../../contexts/AuthContext';
 import { isManualWhatsApp, openWhatsApp, downloadAuthedFile } from "../../utils/whatsapp";
 
@@ -21,6 +22,14 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
     const [filteredMeds, setFilteredMeds] = useState([]);
     const suggestionRef = useRef(null);
 
+    // Prescription sets, configured once in Medications. The picker applies
+    // them as editable lines; nothing is ever saved without the doctor
+    // reviewing it, because allergies, age and pregnancy change what is safe.
+    const [groups, setGroups] = useState([]);
+    const [groupsOpen, setGroupsOpen] = useState(false);
+    const [groupsLoading, setGroupsLoading] = useState(false);
+    const [appliedSet, setAppliedSet] = useState(null);
+
     useEffect(() => {
         if (isOpen) {
             setMode(initialData ? 'preview' : 'edit');
@@ -34,8 +43,49 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
             fetchMasterMedications();
             fetchMedStock();
             fetchDoctorSignature();
+            fetchGroups();
+            setAppliedSet(null);
+            setGroupsOpen(false);
         }
     }, [isOpen, initialData]);
+
+    const fetchGroups = async () => {
+        setGroupsLoading(true);
+        try {
+            // The treatment in hand only ORDERS the list, it does not filter it:
+            // hiding the general painkiller set the moment a treatment is chosen
+            // would remove it exactly when it is most likely wanted.
+            const params = patientData?.treatment_type_id
+                ? { treatment_type_id: patientData.treatment_type_id } : {};
+            setGroups(await api.get('/medication-groups', { params }) || []);
+        } catch {
+            setGroups([]);
+        } finally {
+            setGroupsLoading(false);
+        }
+    };
+
+    // Fills the form from a set. Appends to what is already typed rather than
+    // replacing it, so picking a set never silently discards a line the doctor
+    // has already written. Lines are copied, not referenced: editing the set
+    // later must not alter a prescription written today.
+    const applySet = (group) => {
+        const lines = (group.items || []).map((i) => ({
+            medicine_name: i.medicine_name || '',
+            dosage: i.dosage || '1-0-1',
+            duration: i.duration || '5 days',
+            quantity: i.quantity || '',
+            // `notes` prints beside the medicine name, `instructions` fills its
+            // own column. A set line carries one piece of guidance, so it goes
+            // to both rather than being arbitrarily assigned to one.
+            notes: i.notes || '',
+            instructions: i.notes || '',
+        }));
+        const typed = items.filter((i) => (i.medicine_name || '').trim());
+        setItems([...typed, ...lines]);
+        setAppliedSet(group.name);
+        setGroupsOpen(false);
+    };
 
     const fetchMasterMedications = async () => {
         try {
@@ -494,10 +544,69 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
                 <>
                 <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
                     <div className="space-y-3">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2">
                             <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Medications</h3>
-                            <span className="text-xs text-gray-400">{items.filter(i => i.medicine_name.trim()).length} added</span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-400">{items.filter(i => i.medicine_name.trim()).length} added</span>
+                                {groups.length > 0 && (
+                                    <div className="relative">
+                                        <button
+                                            type="button"
+                                            onClick={() => setGroupsOpen((v) => !v)}
+                                            className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg border border-gray-200 text-xs font-bold text-[#2a276e] hover:border-[#2a276e]/40 hover:bg-[#2a276e]/5 transition-colors"
+                                        >
+                                            <Layers size={13} /> Use a set
+                                        </button>
+
+                                        {groupsOpen && (
+                                            <>
+                                                <div className="fixed inset-0 z-10" onClick={() => setGroupsOpen(false)} />
+                                                <div className="absolute right-0 top-9 z-20 w-72 max-h-80 overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-lg py-1">
+                                                    <p className="px-3 py-2 text-[11px] text-gray-400 border-b border-gray-100">
+                                                        Fills the list below. Everything stays editable.
+                                                    </p>
+                                                    {groups.map((g) => (
+                                                        <button
+                                                            key={g.id}
+                                                            type="button"
+                                                            onClick={() => applySet(g)}
+                                                            className="w-full text-left px-3 py-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                                                        >
+                                                            <span className="flex items-center gap-1.5">
+                                                                <span className="text-xs font-bold text-gray-900">{g.name}</span>
+                                                                {g.treatment_name && (
+                                                                    <span className="text-[10px] font-semibold text-[#2a276e] bg-[#f0f0fd] px-1.5 py-0.5 rounded">
+                                                                        {g.treatment_name}
+                                                                    </span>
+                                                                )}
+                                                            </span>
+                                                            <span className="block text-[11px] text-gray-400 truncate mt-0.5">
+                                                                {(g.items || []).map((i) => i.medicine_name).join(', ')}
+                                                            </span>
+                                                        </button>
+                                                    ))}
+                                                    {groupsLoading && (
+                                                        <div className="px-3 py-3 text-center text-gray-400">
+                                                            <Loader2 size={14} className="animate-spin inline" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
+
+                        {appliedSet && (
+                            <div className="flex items-start gap-2 rounded-lg bg-[#f0f0fd] px-3 py-2">
+                                <Check size={13} className="text-[#2a276e] mt-0.5 flex-shrink-0" />
+                                <p className="text-[11px] text-[#2a276e]">
+                                    Added <strong>{appliedSet}</strong>. Check the doses against this
+                                    patient before saving.
+                                </p>
+                            </div>
+                        )}
 
                         <div className="space-y-2" ref={suggestionRef}>
                             {items.map((item, i) => (
@@ -527,18 +636,34 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
                                             </div>
                                             {/* Compact dosage / duration / instructions */}
                                             <div className="grid grid-cols-3 gap-2 mt-2">
-                                                <select value={item.dosage} onChange={e => updateItem(i, 'dosage', e.target.value)}
+                                                {/* withCurrent keeps whatever is already stored: a select
+                                                    can only show what is in its option list, so a value from
+                                                    an import or a prescription set would otherwise render as
+                                                    an empty box and be lost on the next save. */}
+                                                <select value={item.dosage || ''} onChange={e => updateItem(i, 'dosage', e.target.value)}
                                                     className="w-full bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2a276e]/10">
-                                                    {['1-0-1','1-1-1','0-0-1','1-0-0','0-1-0','1-1-0','SOS','STAT'].map(d => <option key={d} value={d}>{d}</option>)}
+                                                    {withCurrent(DOSAGE_OPTIONS, item.dosage).map(d => <option key={d} value={d}>{d}</option>)}
                                                 </select>
-                                                <select value={item.duration} onChange={e => updateItem(i, 'duration', e.target.value)}
+                                                <select value={item.duration || ''} onChange={e => updateItem(i, 'duration', e.target.value)}
                                                     className="w-full bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2a276e]/10">
-                                                    {['3 days','5 days','7 days','10 days','14 days','1 month','Ongoing'].map(d => <option key={d} value={d}>{d}</option>)}
+                                                    {withCurrent(DURATION_OPTIONS, item.duration).map(d => <option key={d} value={d}>{d}</option>)}
                                                 </select>
-                                                <select value={item.instructions || 'After Food'} onChange={e => updateItem(i, 'instructions', e.target.value)}
-                                                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2a276e]/10">
-                                                    {['After Food','Before Food','Empty Stomach','At Bedtime'].map(d => <option key={d} value={d}>{d}</option>)}
-                                                </select>
+                                                {/* Free text with shortcuts, not a fixed list. The four
+                                                    options this used to allow could not display a single one
+                                                    of the clinic's own instructions ("Rinse for 30 seconds
+                                                    twice a day", "Apply locally three times a day"), so
+                                                    reopening a prescription showed a blank box and saving
+                                                    would have erased what the doctor wrote. */}
+                                                <input
+                                                    value={item.instructions || ''}
+                                                    onChange={e => updateItem(i, 'instructions', e.target.value)}
+                                                    list="rx-instruction-suggestions"
+                                                    placeholder="After food"
+                                                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2a276e]/10"
+                                                />
+                                                <datalist id="rx-instruction-suggestions">
+                                                    {INSTRUCTION_SUGGESTIONS.map(d => <option key={d} value={d} />)}
+                                                </datalist>
                                             </div>
                                             {/* Dispense from stock — shown when this medicine is in Medication Stock */}
                                             {(() => {
