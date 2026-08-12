@@ -189,6 +189,13 @@ async def lifespan(app: FastAPI):
                 # everywhere except the database, where NOT NULL turned every
                 # omission into a 500.
                 "ALTER TABLE patients ALTER COLUMN treatment_type DROP NOT NULL",
+                # Consents could only be scoped by walking to their patient,
+                # which is how the list endpoint returned other clinics' rows.
+                "ALTER TABLE patient_consents ADD COLUMN IF NOT EXISTS clinic_id INTEGER REFERENCES clinics(id)",
+                "UPDATE patient_consents pc SET clinic_id = p.clinic_id FROM patients p "
+                "WHERE pc.patient_id = p.id AND pc.clinic_id IS NULL",
+                "CREATE INDEX IF NOT EXISTS ix_patient_consents_clinic ON patient_consents (clinic_id)",
+                "ALTER TABLE consent_templates ADD COLUMN IF NOT EXISTS category VARCHAR",
                 "UPDATE treatment_types SET duration_minutes = 30 WHERE duration_minutes IS NULL",
             ):
                 conn.execute(text(_ddl))

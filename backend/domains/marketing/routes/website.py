@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -130,6 +131,17 @@ def build_context(db: Session, clinic: Clinic) -> dict:
         "rating": float(link.current_rating) if link and link.current_rating else None,
         "review_count": link.total_review_count if link else 0,
         "stats": stats,
+        # Where this page will live, for canonical and structured data.
+        "site_url": f"https://app.molarplus.com/c/{clinic.website_slug or slugify(clinic.name or '')}",
+        # The public booking page the app already publishes. Without this the
+        # only way to act on the site was to compose a WhatsApp message.
+        "booking_url": f"https://app.molarplus.com/book/{clinic.id}",
+        # Stable, unsigned: an expiring URL in an og:image breaks every share
+        # a few hours after it is posted.
+        "og_image_url": (
+            f"https://api.molarplus.com/api/v1/marketing/website/og-image/"
+            f"{clinic.website_slug or slugify(clinic.name or '')}"
+        ),
     }
 
 
@@ -224,6 +236,37 @@ def update_settings(
 
     db.commit()
     return get_settings(db=db, current_user=current_user)
+
+
+@router.get("/og-image/{slug}")
+def og_image(slug: str, db: Session = Depends(get_db)):
+    """A stable share image for a clinic's site.
+
+    The Open Graph tag cannot point at a presigned R2 URL: those expire, so
+    every WhatsApp and Facebook share would render a broken image a few hours
+    after it was posted, which is precisely the failure the tag exists to
+    prevent. This URL never changes and redirects to a freshly signed one on
+    each request.
+
+    Public on purpose. It resolves a published clinic's first photo and
+    nothing else, which is already visible to anyone who opens the site.
+    """
+    clinic = db.query(Clinic).filter(
+        Clinic.website_slug == slug, Clinic.website_enabled == True  # noqa: E712
+    ).first()
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    photo = (
+        db.query(ClinicPhoto)
+        .filter(ClinicPhoto.clinic_id == clinic.id)
+        .order_by(ClinicPhoto.sort_order, ClinicPhoto.id)
+        .first()
+    )
+    target = get_presigned_url(photo.file_path) if photo else (clinic.logo_url or "")
+    if not target:
+        raise HTTPException(status_code=404, detail="No image")
+    return RedirectResponse(url=target, status_code=302)
 
 
 @router.get("/preview", response_class=Response)

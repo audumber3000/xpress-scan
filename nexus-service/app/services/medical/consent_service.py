@@ -16,24 +16,33 @@ redis_client = redis.from_url(REDIS_URL)
 
 from app.services.infrastructure.storage_service import StorageService
 
+# How long a signing link stays valid.
+#
+# This was 5 minutes. A consent link is sent to a patient over WhatsApp and asks
+# them to read a legal document and sign it; five minutes means it has usually
+# expired before they open the message. A day is long enough to be usable and
+# still short enough that a forwarded link does not stay live indefinitely, and
+# the link is single-use regardless.
+CONSENT_LINK_TTL = 24 * 60 * 60
+
+# The per-clinic index has to outlive the tokens it points at, or a link that is
+# still valid vanishes from the clinic's tracking list.
+CONSENT_INDEX_TTL = CONSENT_LINK_TTL + (60 * 60)
+
+
 class ConsentService:
     @staticmethod
     def generate_token(data: dict):
-        """
-        Generate a secure token for the signature link (valid for 5 mins).
-        """
+        """Create a single-use signing link, valid for CONSENT_LINK_TTL."""
         token = secrets.token_urlsafe(32)
         clinic_id = data.get('clinicId')
-        
-        # Store metadata in redis with 300 second expiration
-        redis_client.setex(f"consent_token:{token}", 300, json.dumps(data))
-        
-        # Index the token by clinic for tracking (SADD)
+
+        redis_client.setex(f"consent_token:{token}", CONSENT_LINK_TTL, json.dumps(data))
+
         if clinic_id:
             redis_client.sadd(f"clinic:{clinic_id}:consent_links", token)
-            # Expire the index set eventually (one hour for safety)
-            redis_client.expire(f"clinic:{clinic_id}:consent_links", 3600) 
-            
+            redis_client.expire(f"clinic:{clinic_id}:consent_links", CONSENT_INDEX_TTL)
+
         return token
 
     @staticmethod

@@ -470,6 +470,7 @@ class MedicationStockResponseDTO(MedicationStockBaseDTO):
 class ConsentTemplateBaseDTO(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     content: str = Field(..., min_length=1)
+    category: Optional[str] = None
 
 class ConsentTemplateCreateDTO(ConsentTemplateBaseDTO):
     pass
@@ -477,6 +478,7 @@ class ConsentTemplateCreateDTO(ConsentTemplateBaseDTO):
 class ConsentTemplateUpdateDTO(BaseModel):
     name: Optional[str] = None
     content: Optional[str] = None
+    category: Optional[str] = None
     is_active: Optional[bool] = None
 
 class ConsentTemplateResponseDTO(ConsentTemplateBaseDTO):

@@ -83,6 +83,69 @@ def _stars(n: float) -> str:
     return "★" * max(0, min(5, full)) + "☆" * (5 - max(0, min(5, full)))
 
 
+_DAY_SCHEMA = {"monday": "Monday", "tuesday": "Tuesday", "wednesday": "Wednesday",
+               "thursday": "Thursday", "friday": "Friday", "saturday": "Saturday",
+               "sunday": "Sunday"}
+
+
+def _opening_spec(timings: dict) -> list:
+    """Opening hours as schema.org expects them.
+
+    Closed days are omitted rather than emitted with null times: a day absent
+    from the spec already means closed, and inventing 00:00 to 00:00 reads as
+    open all night.
+    """
+    out = []
+    for key, label in _DAY_SCHEMA.items():
+        t = (timings or {}).get(key) or {}
+        if t.get("closed") or not t.get("open") or not t.get("close"):
+            continue
+        out.append({
+            "@type": "OpeningHoursSpecification",
+            "dayOfWeek": f"https://schema.org/{label}",
+            "opens": t["open"],
+            "closes": t["close"],
+        })
+    return out
+
+
+def _curate(items):
+    seen, out = set(), []
+    for t in items:
+        raw = (t.get("name") or "").strip()
+        # Normalised only for comparison, never for display: the clinic's
+        # own spelling is what patients will hear on the phone.
+        key = "".join(ch for ch in raw.lower() if ch.isalnum())
+        if not key or key in seen:
+            continue
+        # A one-word name like "General" tells a patient nothing, so it is
+        # kept only when nothing better is offered.
+        seen.add(key)
+        out.append(t)
+    vague = {"general", "consultation", "other", "misc"}
+    ranked = sorted(out, key=lambda t: ((t.get("name") or "").strip().lower() in vague,
+                                        -(t.get("price") or 0)))
+    return ranked[:12]
+
+
+def _looks_like_reg(v) -> str:
+    """Whether a registration number is worth publishing.
+
+    The footer was printing "Reg. asdfasdfas" verbatim from a setup field
+    somebody had typed into to get past validation. A registration number is a
+    trust signal only when it reads like one, so obvious placeholder text is
+    dropped rather than shown to patients.
+    """
+    v = (v or "").strip()
+    if len(v) < 4 or len(v) > 40:
+        return ""
+    low = v.lower()
+    if any(bad in low for bad in ("asdf", "qwer", "test", "abcd", "xxxx", "1234")):
+        return ""
+    # Needs at least one digit: real registration numbers carry one.
+    return v if any(ch.isdigit() for ch in v) else ""
+
+
 def _initials(name: str) -> str:
     parts = [p for p in re.split(r"\s+", (name or "").strip()) if p]
     return ("".join(p[0] for p in parts[:2]) or "?").upper()
@@ -104,7 +167,11 @@ def render_site(ctx: dict) -> str:
     logo = c.get("logo_url")
     about = e(c.get("website_about"))
 
-    treatments = ctx.get("treatments") or []
+    treatments = _curate(ctx.get("treatments") or [])
+    import json as _json
+
+    site_url = (ctx.get("site_url") or "").rstrip("/")
+    booking_url = ctx.get("booking_url") or ""
     reviews = ctx.get("reviews") or []
     dentists = ctx.get("dentists") or []
     photos = ctx.get("photos") or []
@@ -218,6 +285,24 @@ def render_site(ctx: dict) -> str:
           </div>
         </section>'''
 
+    # Photos past the hero were being uploaded and never shown anywhere. A
+    # clinic that took the trouble to add six pictures of its surgery should
+    # see them on its own website.
+    gallery_html = ""
+    if len(photos) > 1:
+        tiles = "".join(
+            f'<figure><img src="{e(ph["url"])}" alt="{e(ph.get("caption") or name)}" loading="lazy"></figure>'
+            for ph in photos[1:9]
+        )
+        gallery_html = f'''
+    <section class="sec alt" id="gallery">
+      <div class="wrap">
+        <p class="eyebrow">Have a look</p>
+        <h2>Inside the practice</h2>
+        <div class="gallery">{tiles}</div>
+      </div>
+    </section>'''
+
     stats_html = ""
     if c.get("website_show_stats") and stats:
         items = "".join(
@@ -225,7 +310,25 @@ def render_site(ctx: dict) -> str:
             for k, v in stats.items() if v
         )
         if items:
-            stats_html = f'<section class="sec stats"><div class="wrap"><ul>{items}</ul></div></section>'
+            stats_html = f'<ul class="statlist">{items}</ul>'
+
+    # A phone number and a WhatsApp button were the only ways to act. The app
+    # already publishes a booking page, so the site can send people straight
+    # to it rather than asking them to compose a message.
+    book_btn = (f'<a class="btn primary" href="{e(booking_url)}">Book an appointment</a>'
+                if booking_url else "")
+    book_band = f'''
+    <section class="sec book">
+      <div class="wrap">
+        {stats_html}
+        <h2>Ready when you are</h2>
+        <p class="sub">Book online, or send us a message and we will find you a time.</p>
+        <div class="row">
+          {book_btn}
+          {f'<a class="btn btn-wa" href="{wa}">Message on WhatsApp</a>' if wa else ''}
+        </div>
+      </div>
+    </section>''' if (booking_url or wa) else ""
 
     hours_html = "".join(
         f'<li{" class=\"closed\"" if h["closed"] else ""}><span>{e(h["days"])}</span><b>{e(h["hours"])}</b></li>'
@@ -233,16 +336,79 @@ def render_site(ctx: dict) -> str:
     )
     about_html = f'<p class="about">{about}</p>' if about else ""
 
+    # ── SEO ──────────────────────────────────────────────────────────────
+    #
+    # This page is rendered on the server specifically so it can be indexed,
+    # and it was shipping with none of what makes that work: no structured
+    # data, no share image, no canonical. For a clinic whose patients arrive
+    # from a Google search and share links over WhatsApp, the structured data
+    # is what puts it in the local pack and the image is what stops every
+    # share looking broken.
+    locality = c.get("locality") or ""
+    page_title = f"{name} · Dentist in {e(locality)}" if locality else f"{name} · Dental clinic"
+    meta_desc = (tagline or f"{name} is a dental clinic in {e(locality)}." if locality
+                 else tagline or f"{name}, a dental clinic.")
+    meta_desc = (meta_desc + " " + address).strip()[:300]
+
+    canonical_tag = f'<link rel="canonical" href="{e(site_url)}">' if site_url else ""
+
+    # Prefer the stable redirect over the presigned URL: a signed link in an
+    # og:image expires and the share breaks.
+    share_img = ctx.get("og_image_url") or (photos[0]["url"] if photos else (c.get("logo_url") or ""))
+    og_image_tag = (
+        f'<meta property="og:image" content="{e(share_img)}">'
+        f'<meta property="og:image:alt" content="{name}">'
+    ) if share_img else ""
+    twitter_card = "summary_large_image" if share_img else "summary"
+
+    # schema.org Dentist. Only fields we actually hold are emitted: an invented
+    # opening time or a fabricated rating is worse than an absent one, both for
+    # patients and because search engines penalise markup that does not match
+    # the page.
+    _ld = {
+        "@context": "https://schema.org",
+        "@type": "Dentist",
+        "name": c.get("name") or "",
+        "description": (tagline or "")[:300] or None,
+        "url": site_url or None,
+        "image": share_img or None,
+        "telephone": c.get("phone") or None,
+        "priceRange": "$$",
+    }
+    if c.get("address"):
+        _ld["address"] = {"@type": "PostalAddress", "streetAddress": c["address"],
+                          "addressLocality": locality or None, "addressCountry": "IN"}
+    if ctx.get("rating") and ctx.get("review_count"):
+        _ld["aggregateRating"] = {"@type": "AggregateRating",
+                                  "ratingValue": round(float(ctx["rating"]), 1),
+                                  "reviewCount": int(ctx["review_count"])}
+    _spec = _opening_spec(c.get("timings") or {})
+    if _spec:
+        _ld["openingHoursSpecification"] = _spec
+    if booking_url:
+        _ld["potentialAction"] = {"@type": "ReserveAction",
+                                  "target": {"@type": "EntryPoint", "urlTemplate": booking_url}}
+    _ld = {k: v for k, v in _ld.items() if v not in (None, "", [], {})}
+    json_ld = f'<script type="application/ld+json">{_json.dumps(_ld, ensure_ascii=False)}</script>'
+
     return f'''<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{name}{" · " + e(c.get("locality")) if c.get("locality") else ""}</title>
-<meta name="description" content="{tagline} {address}">
+<title>{page_title}</title>
+<meta name="description" content="{meta_desc}">
+<meta name="robots" content="index,follow">
+{canonical_tag}
 <meta property="og:title" content="{name}">
-<meta property="og:description" content="{tagline}">
+<meta property="og:description" content="{meta_desc}">
 <meta property="og:type" content="website">
+<meta property="og:locale" content="en_IN">
+{og_image_tag}
+<meta name="twitter:card" content="{twitter_card}">
+<meta name="twitter:title" content="{name}">
+<meta name="twitter:description" content="{meta_desc}">
+{json_ld}
 <style>
   :root{{ --accent:{accent}; --ink:#16162e; --muted:#6b6b85; --rule:#e8e8f0; --wash:#f7f7fb; }}
   *{{box-sizing:border-box}}
@@ -254,8 +420,20 @@ def render_site(ctx: dict) -> str:
   h1,h2{{letter-spacing:-.03em;margin:0 0 .5rem;text-wrap:balance}}
   h2{{font-size:1.65rem;font-weight:800}}
   .sub{{color:var(--muted);margin:0 0 1.5rem}}
-  .sec{{padding:3.5rem 0}}
+  .sec{{padding:2.75rem 0}}
+  .sec + .sec{{padding-top:2rem}}
   .sec.alt{{background:var(--wash)}}
+  .gallery{{display:grid;grid-template-columns:repeat(auto-fill,minmax(11rem,1fr));gap:.6rem}}
+  .gallery figure{{margin:0;border-radius:10px;overflow:hidden;aspect-ratio:4/3;background:var(--rule)}}
+  .gallery img{{width:100%;height:100%;object-fit:cover}}
+  .sec.book{{background:var(--accent);color:#fff;text-align:center}}
+  .sec.book h2{{color:#fff}}
+  .sec.book .sub{{color:rgba(255,255,255,.75)}}
+  .sec.book .row{{display:flex;gap:.6rem;justify-content:center;flex-wrap:wrap}}
+  .statlist{{list-style:none;display:flex;gap:2.5rem;justify-content:center;flex-wrap:wrap;margin:0 0 1.5rem;padding:0}}
+  .statlist strong{{display:block;font-size:1.7rem;font-weight:800;color:#fff}}
+  .statlist span{{font-size:.8rem;color:rgba(255,255,255,.7)}}
+  .sec.book .btn.primary{{background:#fff;color:var(--accent);font-weight:800}}
 
   header{{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--rule)}}
   header .wrap{{display:flex;align-items:center;justify-content:space-between;gap:1rem;height:4rem}}
@@ -364,10 +542,11 @@ def render_site(ctx: dict) -> str:
 </section>
 
 {treatments_html}
+{gallery_html}
 {reviews_html}
 {dentists_html}
 {gallery_html}
-{stats_html}
+{book_band}
 
 <section id="visit" class="sec visit">
   <div class="wrap">
@@ -395,7 +574,7 @@ def render_site(ctx: dict) -> str:
       <b>{name}</b><br>
       {address}<br>
       {f'{phone}<br>' if phone else ''}
-      {f'Reg. {e(c.get("license_number"))}' if c.get("license_number") else ''}
+      {f'Reg. {e(c.get("license_number"))}' if _looks_like_reg(c.get("license_number")) else ''}
     </div>
     <div>
       <b>Hours</b><br>

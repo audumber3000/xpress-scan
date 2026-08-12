@@ -948,6 +948,9 @@ class ConsentTemplate(Base):
     id = Column(Integer, primary_key=True, index=True)
     clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
     name = Column(String, nullable=False)
+    # What kind of consent this is. Groups the list so a clinic finds "the
+    # extraction one" by shape instead of reading every name.
+    category = Column(String, nullable=True)
     content = Column(Text, nullable=False)  # HTML or Markdown with variables
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -958,6 +961,9 @@ class ConsentTemplate(Base):
 class PatientConsent(Base):
     __tablename__ = 'patient_consents'
     id = Column(Integer, primary_key=True, index=True)
+    # Without this a consent could only be scoped by walking to its patient,
+    # which is how the list endpoint ended up returning other clinics' records.
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=True, index=True)
     patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False)
     template_id = Column(Integer, ForeignKey('consent_templates.id'), nullable=False)
     signed_content = Column(Text)  # Final content when signed

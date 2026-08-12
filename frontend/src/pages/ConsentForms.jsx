@@ -5,10 +5,12 @@ import { useAuth } from "../contexts/AuthContext";
 import { toast } from "react-toastify";
 import Card from "../components/Card";
 import axios from "axios";
-import { Layout, Share2, CheckCircle, Clock, XCircle, Printer, ExternalLink, Search, Eye, Download } from 'lucide-react';
+import { Layout, Share2, CheckCircle, Clock, XCircle, Printer, ExternalLink, Search, Eye, Download, FileCheck, BookOpen } from 'lucide-react';
 import ConsentRecentLinks from "../components/consents/ConsentRecentLinks";
 import Pagination from "../components/Pagination";
 import FilterDropdown from "../components/FilterDropdown";
+import StarterLibrary from '../components/consents/StarterLibrary';
+import SignedConsents from '../components/consents/SignedConsents';
 import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
 import EmptyState from "../components/common/EmptyState";
 import { noData } from "../assets/illustrations";
@@ -21,6 +23,7 @@ const ConsentForms = () => {
     const [templates, setTemplates] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('templates');
+    const [showLibrary, setShowLibrary] = useState(false);
     const [showModal, setShowModal] = useState(false);
     const [editingTemplate, setEditingTemplate] = useState(null);
     const [formData, setFormData] = useState({
@@ -252,8 +255,9 @@ const ConsentForms = () => {
                 <div className="flex justify-between items-end border-b border-gray-200 mb-6">
                     <div className="flex gap-10">
                         {[
-                            { id: 'templates', label: 'Form Templates', icon: Layout },
-                            { id: 'links', label: 'Link History', icon: Share2 }
+                            { id: 'templates', label: 'Forms', icon: Layout },
+                            { id: 'signed', label: 'Signed', icon: FileCheck },
+                            { id: 'links', label: 'Sent links', icon: Share2 }
                         ].map(tab => (
                             <button
                                 key={tab.id}
@@ -288,7 +292,16 @@ const ConsentForms = () => {
                                 Export
                             </button>
                         )}
-                        {activeTab !== 'links' && (
+                        {activeTab === 'templates' && (
+                            <button
+                                onClick={() => setShowLibrary(true)}
+                                className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-semibold hover:border-[#2a276e] hover:text-[#2a276e] flex items-center gap-2 transition-colors"
+                            >
+                                <BookOpen className="w-4 h-4" />
+                                Ready-made forms
+                            </button>
+                        )}
+                        {activeTab !== 'links' && activeTab !== 'signed' && (
                             <button
                                 onClick={() => { setEditingTemplate(null); setShowModal(true); }}
                                 className="bg-[#2a276e] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#1a1548] transition-colors shadow-sm flex items-center gap-2"
@@ -302,8 +315,10 @@ const ConsentForms = () => {
                     </div>
                 </div>
 
-                {/* Search & Filters toolbar */}
-                <div className="flex items-center gap-3 mb-4">
+                {/* Search & Filters toolbar. Hidden on Signed, which carries
+                    its own search: a filter bar that does nothing is worse
+                    than no filter bar. */}
+                <div className={`items-center gap-3 mb-4 ${activeTab === 'signed' ? 'hidden' : 'flex'}`}>
                     <div className="w-full max-w-sm relative">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                             <Search className="h-4 w-4 text-gray-400" />
@@ -337,6 +352,8 @@ const ConsentForms = () => {
                     <div className="flex justify-center items-center h-64">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2a276e]"></div>
                     </div>
+                ) : activeTab === 'signed' ? (
+                    <SignedConsents />
                 ) : activeTab === 'links' ? (
                     /* Sent Links tab — full history of consent links with Status + Print PDF */
                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col flex-1 min-h-0">
@@ -737,7 +754,13 @@ const ConsentForms = () => {
 
             {/* Template Add/Edit Drawer */}
             <div className={`fixed inset-0 z-50 flex justify-end ${showModal ? 'visible' : 'invisible'}`}>
-                <div
+                <StarterLibrary
+                open={showLibrary}
+                onClose={() => setShowLibrary(false)}
+                onAdopted={fetchTemplates}
+            />
+
+            <div
                     className={`fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ${showModal ? 'opacity-100' : 'opacity-0'}`}
                     onClick={() => setShowModal(false)}
                 />

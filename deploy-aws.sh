@@ -289,6 +289,13 @@ run_migration "tt_duration_backfill" "UPDATE treatment_types SET duration_minute
 # from the calendar is the first flow that sends only a name and a phone.
 run_migration "patient_treatment_type_nullable" "ALTER TABLE patients ALTER COLUMN treatment_type DROP NOT NULL"
 
+# Signed consents carried no clinic_id, so they could only be scoped by walking
+# to their patient. The list endpoint did not, and answered for any clinic.
+run_migration "consent_clinic_id" "ALTER TABLE patient_consents ADD COLUMN IF NOT EXISTS clinic_id INTEGER REFERENCES clinics(id)"
+run_migration "consent_clinic_backfill" "UPDATE patient_consents pc SET clinic_id = p.clinic_id FROM patients p WHERE pc.patient_id = p.id AND pc.clinic_id IS NULL"
+run_migration "consent_clinic_idx" "CREATE INDEX IF NOT EXISTS ix_patient_consents_clinic ON patient_consents (clinic_id)"
+run_migration "consent_template_category" "ALTER TABLE consent_templates ADD COLUMN IF NOT EXISTS category VARCHAR"
+
 # Clinic.timings says when the door is open, not who is behind it. Without
 # these the grid would book a dentist onto a day they are not in the building.
 run_migration "doctor_availability" "CREATE TABLE IF NOT EXISTS doctor_availability (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL REFERENCES clinics(id), doctor_id INTEGER NOT NULL REFERENCES users(id), weekday INTEGER NOT NULL, start_time VARCHAR NOT NULL, end_time VARCHAR NOT NULL, created_at TIMESTAMP DEFAULT NOW())"
