@@ -463,6 +463,13 @@ def lab_kpi_detail(
             )
 
         rows = []
+        def _late_band(o):
+            """The same banding the series uses, so a row lands under its bar."""
+            if not o.due_date or o.due_date >= now:
+                return bands[0][0]
+            late = (now - o.due_date).days
+            return bands[1][0] if late <= 7 else bands[2][0] if late <= 30 else bands[3][0]
+
         for o in sorted(open_orders, key=lambda x: (x.due_date or now)):
             late = (now - o.due_date).days if o.due_date and o.due_date < now else 0
             rows.append({
@@ -472,6 +479,7 @@ def lab_kpi_detail(
                             + (f" · {late}d late" if late else " · on time"),
                 "amount": round(float(o.cost or 0), 2),
                 "amount_is_money": True,
+                "bucket": _late_band(o),
             })
         return {"metric": metric, "period": period, "series": series, "keys": ["total"],
                 "narrative": narrative, "rows": rows, "is_money": False,
@@ -563,11 +571,16 @@ def lab_kpi_detail(
 
         rows = []
         for o in sorted(billable, key=lambda x: (x.invoice_line_item_id is not None, -float(x.cost or 0))):
+            _when = getattr(o, "created_at", None) or getattr(o, "order_date", None)
+            _month = next(
+                (lbl for lbl, lo, hi in bounds if _when and lo <= _when < hi), None
+            ) if _when else None
             rows.append({
                 "id": o.id,
                 "title": f"{o.work_type or 'Lab work'} · {patient_name(o)}",
                 "subtitle": vendor_name(o) + (" · not billed" if o.invoice_line_item_id is None else " · billed"),
                 "amount": round(float(o.cost or 0), 2),
+                "bucket": _month,
                 "amount_is_money": True,
                 "stalled": o.invoice_line_item_id is None,
             })
@@ -609,6 +622,8 @@ def lab_kpi_detail(
             rows.append({
                 "id": name,
                 "title": name,
+                # The x-axis is the vendor, so a row is its own bar.
+                "bucket": name,
                 "subtitle": f"{v['cases']} {'case' if v['cases'] == 1 else 'cases'}"
                             + (f" · {med}d median" if med is not None else " · no completed cases"),
                 "amount": round(v["cost"], 2),

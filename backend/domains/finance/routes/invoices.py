@@ -938,6 +938,7 @@ async def invoice_kpi_detail(
             InvoicePayment.clinic_id == cid,
             InvoicePayment.invoice_id.in_(ids_q),
         ).order_by(desc(InvoicePayment.paid_on), desc(InvoicePayment.id)).limit(50).all():
+            _i = _bucket_of(buckets, p.paid_on)
             rows.append({
                 "id": p.id,
                 "invoice_id": inv.id,
@@ -945,6 +946,10 @@ async def invoice_kpi_detail(
                 "subtitle": f"{inv.invoice_number} · {p.method or 'Unrecorded'}",
                 "amount": round(float(p.amount or 0), 2),
                 "date": p.paid_on.isoformat() if p.paid_on else None,
+                # Which bar this row sits under, so clicking one can narrow the
+                # list without another request. Must match the series label
+                # exactly or the filter silently matches nothing.
+                "bucket": series[_i]["label"] if _i is not None and _i < len(series) else None,
             })
 
         return {"metric": metric, "period": period, "series": series,
@@ -989,12 +994,17 @@ async def invoice_kpi_detail(
         ).order_by(func.coalesce(Invoice.finalized_at, Invoice.created_at).asc()).limit(50).all():
             when = inv.finalized_at or inv.created_at
             age = int((now - when).days) if when else 0
+            _band = next(
+                (lbl for lbl, lo, hi in bands if age >= lo and (hi is None or age < hi)),
+                bands[-1][0],
+            )
             rows.append({
                 "id": inv.id,
                 "invoice_id": inv.id,
                 "title": pat.name if pat else "Unknown patient",
                 "subtitle": f"{inv.invoice_number} · {age} days old",
                 "amount": round(float(inv.due_amount or 0), 2),
+                "bucket": _band,
                 "date": when.date().isoformat() if when else None,
             })
 
@@ -1047,6 +1057,9 @@ async def invoice_kpi_detail(
             rows.append({
                 "id": inv.id,
                 "invoice_id": inv.id,
+                # The x-axis here is how many instalments an invoice has taken,
+                # so a bar groups every plan of that length.
+                "bucket": f"{n}",
                 "title": pat.name if pat else "Unknown patient",
                 "subtitle": (f"{inv.invoice_number} · {n} paid so far"
                              + (f" · last {(now - lp_dt).days}d ago" if lp_dt else "")),

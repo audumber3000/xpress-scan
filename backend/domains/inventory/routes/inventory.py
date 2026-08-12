@@ -223,12 +223,17 @@ async def inventory_kpi_detail(
                 if unpriced else "All of them are priced, so stock value is available."
             )
 
+        _med_ids = {id(m) for m in meds}
         rows = [{
             "id": f"i{i.id}",
             "title": i.name,
             "subtitle": f"{getattr(i, 'category', None) or 'Medication'}"
                         + (f" · {i.batch_number}" if getattr(i, 'batch_number', None) else ""),
             "display": f"{float(i.quantity or 0):g} {unit_of(i)}",
+            # Must be derived exactly as the series above is, or the filter
+            # matches nothing: medications are one bar called "Medications",
+            # and a consumable with no category falls under "Uncategorised".
+            "bucket": 'Medications' if id(i) in _med_ids else (i.category or 'Uncategorised'),
         } for i in sorted(everything, key=lambda x: -(x.quantity or 0))]
 
         return {"metric": metric, "period": period, "series": series, "keys": ["total"],
@@ -278,12 +283,18 @@ async def inventory_kpi_detail(
                 flags.append("expired")
             elif i.expiry_date and i.expiry_date <= soon:
                 flags.append(f"expires {i.expiry_date.isoformat()}")
+            _expired = bool(i.expiry_date and i.expiry_date < today)
+            _expiring = bool(i.expiry_date and not _expired and i.expiry_date <= soon)
             rows.append({
                 "id": f"a{i.id}",
                 "title": i.name,
                 "subtitle": " · ".join(flags) or "flagged",
                 "display": f"{float(i.quantity or 0):g} {unit_of(i)}",
-                "stalled": bool(i.expiry_date and i.expiry_date < today),
+                "stalled": _expired,
+                # An item can be low AND expiring, so this names the strongest
+                # reason rather than picking arbitrarily: expired beats
+                # expiring beats low, which is the order to act in.
+                "bucket": "Expired" if _expired else "Expiring" if _expiring else "Low stock",
             })
 
         return {"metric": metric, "period": period, "series": series, "keys": ["total"],
