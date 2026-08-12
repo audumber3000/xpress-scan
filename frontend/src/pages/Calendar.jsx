@@ -435,6 +435,17 @@ const Calendar = () => {
     else localStorage.removeItem('mp_calendar_focus_doctor');
   }, [focusDoctorId]);
 
+  // A focus doctor that is not in this clinic's list empties the whole calendar
+  // while the dropdown still reads "All doctors", because a <select> with no
+  // matching <option> shows blank. The filter was on, invisibly, and every view
+  // looked broken. Clear it once the real list is known.
+  useEffect(() => {
+    if (!focusDoctorId || !doctors.length) return;
+    if (!doctors.some((d) => String(d.id) === String(focusDoctorId))) {
+      setFocusDoctorId('');
+    }
+  }, [doctors, focusDoctorId]);
+
   // ── Resize: the card's bottom edge was dragged ────────────────────────────
   const handleResize = async (appointmentId, newEndTime) => {
     const apt = appointments.find(a => a.id === appointmentId);
@@ -1674,6 +1685,26 @@ const Calendar = () => {
             return Math.round((current - today) / (1000 * 60 * 60 * 24)) >= 1;
           })()}
         />
+
+      {/* A filter is on and it is hiding everything. An empty grid looks
+          identical to a broken one, so say which it is and offer the way out. */}
+      {appointments.length > 0 && visibleAppointments.length === 0 && (
+        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-sm text-blue-900">
+            <strong>{appointments.length}</strong> appointment{appointments.length === 1 ? ' is' : 's are'} hidden by the filters on this page.
+          </p>
+          <button
+            onClick={() => {
+              setFocusDoctorId('');
+              setSelectedDoctorIds(new Set(doctors.map((d) => d.id)));
+              setShowUnassigned(true);
+            }}
+            className="px-3 py-1.5 rounded-lg bg-white border border-blue-300 text-xs font-bold text-blue-900 hover:bg-blue-100"
+          >
+            Show everyone
+          </button>
+        </div>
+      )}
 
       {/* Appointments the day walked away from.
           Surfaced, never auto-marked: guessing a no-show on a clinic's behalf
