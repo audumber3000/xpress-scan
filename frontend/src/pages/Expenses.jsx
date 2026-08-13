@@ -10,6 +10,9 @@ import Pagination from "../components/Pagination";
 import EmptyState from "../components/common/EmptyState";
 import HelpBulb from "../components/common/HelpBulb";
 import ExpenseKpiRow from "../components/expenses/ExpenseKpiRow";
+import KpiDetailDrawer from "../components/common/KpiDetailDrawer";
+import { buildExpenseKpiDetail } from "./expenses/kpiDetail";
+import { CATEGORY_GROUPS } from "../constants/expenseCategories";
 import { PayablesRows, PayablesCardList, PAYABLE_COLUMNS } from "../components/expenses/PayablesTable";
 import { LedgerRows, LedgerCardList, LEDGER_COLUMNS } from "../components/expenses/LedgerTable";
 import { VendorRows, VendorCardList, VENDOR_COLUMNS } from "../components/expenses/VendorsTable";
@@ -54,7 +57,8 @@ const TABS = [
 
 const EMPTY_FILTERS = {
   dateFrom: '', dateTo: '', preset: '',
-  kind: '', payableStatus: '', ledgerType: '', vendorCategory: '', vendorStatus: '',
+  kind: '', payableStatus: '', ledgerType: '', ledgerCategory: '',
+  vendorCategory: '', vendorStatus: '',
 };
 
 const PAYABLE_FILTERS = [
@@ -114,6 +118,11 @@ const Expenses = () => {
   const [expenseId, setExpenseId] = useState(null);
   const [invoiceId, setInvoiceId] = useState(null);
   const [showExport, setShowExport] = useState(false);
+  // Which card is open behind the drawer, and the window its chart is drawn
+  // over. The window is the drawer's own — the page's date filter says which
+  // records exist, this says how the chart's x-axis is cut.
+  const [selectedKpi, setSelectedKpi] = useState(null);
+  const [kpiPeriod, setKpiPeriod] = useState('all');
 
   // ?tab=ledger lands on the ledger — the Payments page still points old
   // bookmarks here, and its banner links to exactly that.
@@ -165,14 +174,20 @@ const Expenses = () => {
     setLoading(true);
     setError('');
     try {
-      const [list, summary] = await Promise.all([
+      // The payables come along rather than just their summary, because the
+      // "Owed to vendors" card opens into the individual bills behind each
+      // balance — a total with no rows under it is a dead end.
+      const [list, costs] = await Promise.all([
         api.get('/vendors'),
-        api.get('/clinical/case-costs/summary').catch(() => null),
+        api.get('/clinical/case-costs').catch(() => null),
       ]);
       setVendors(list || []);
+
+      const items = costs?.items || [];
+      setPayables(items);
       const owed = {};
-      (summary?.by_vendor || []).forEach((v) => {
-        if (v.vendor_id) owed[v.vendor_id] = v.amount;
+      items.filter((c) => c.status === 'unpaid' && c.vendor_id).forEach((c) => {
+        owed[c.vendor_id] = (owed[c.vendor_id] || 0) + (Number(c.amount) || 0);
       });
       setVendorOwed(owed);
     } catch (e) {
@@ -242,16 +257,43 @@ const Expenses = () => {
 
   const ledgerRows = useMemo(() => ledgerItems.filter((item) => {
     if (filterValue.ledgerType && item.type !== filterValue.ledgerType) return false;
+    if (filterValue.ledgerCategory && item.category !== filterValue.ledgerCategory) return false;
     return matchesSearch([item.entity_name, item.description, item.category, item.payment_method]);
-  }), [ledgerItems, filterValue.ledgerType, matchesSearch]);
+  }), [ledgerItems, filterValue.ledgerType, filterValue.ledgerCategory, matchesSearch]);
+
+  // Built from the categories actually present rather than the whole chart of
+  // accounts: a clinic that has never paid for security should not have to
+  // scroll past it. Grouped in the same order the expense form offers them.
+  const ledgerFilters = useMemo(() => {
+    const present = new Set(ledgerItems.filter((r) => r.type === 'expense').map((r) => r.category).filter(Boolean));
+    const ordered = [
+      ...CATEGORY_GROUPS.flatMap((g) => g.categories).filter((c) => present.has(c)),
+      ...[...present].filter((c) => !CATEGORY_GROUPS.some((g) => g.categories.includes(c))).sort(),
+    ];
+    return [
+      {
+        key: 'ledgerType',
+        label: 'Direction',
+        options: [
+          { value: 'expense', label: 'Money out' },
+          { value: 'invoice', label: 'Money in' },
+        ],
+      },
+      { key: 'ledgerCategory', label: 'Category', options: ordered },
+    ];
+  }, [ledgerItems]);
+
+  // What the cards and their drawers describe: the window, narrowed by search
+  // and by category, but NOT by the in/out toggle. Switching to "Money out"
+  // must not make the net position look like it changed, whereas narrowing to
+  // Rent is a question about rent and the cards should answer it.
+  const ledgerScope = useMemo(() => ledgerItems.filter((item) => {
+    if (filterValue.ledgerCategory && item.category !== filterValue.ledgerCategory) return false;
+    return matchesSearch([item.entity_name, item.description, item.category, item.payment_method]);
+  }), [ledgerItems, filterValue.ledgerCategory, matchesSearch]);
 
   const ledgerStats = useMemo(() => {
-    // Totals cover the whole date window regardless of the in/out toggle, so
-    // switching to "Expenses (Out)" narrows the list without making the net
-    // position look like it changed. Search does narrow them — a search is a
-    // question about a subset, and the cards should answer it.
-    const scoped = ledgerItems.filter((item) =>
-      matchesSearch([item.entity_name, item.description, item.category, item.payment_method]));
+    const scoped = ledgerScope;
 
     let inflow = 0, outflow = 0, expensesCount = 0;
     const byCategory = {};
@@ -271,7 +313,7 @@ const Expenses = () => {
       .sort((a, b) => b.amount - a.amount);
 
     return { inflow, outflow, expensesCount, categories, topCategory: categories[0]?.category || null };
-  }, [ledgerItems, matchesSearch]);
+  }, [ledgerScope]);
 
   // ── Vendors: window, rows, figures ─────────────────────────────────────────
 
@@ -319,6 +361,24 @@ const Expenses = () => {
       owedCount: owedValues.filter((n) => Number(n) > 0).length,
     };
   }, [vendors, vendorCategories, vendorOwed]);
+
+  // ── The card breakdowns ────────────────────────────────────────────────────
+
+  const kpiDetail = useMemo(() => (
+    selectedKpi
+      ? buildExpenseKpiDetail({
+        metric: selectedKpi.key,
+        period: kpiPeriod,
+        // Payables and vendors go in whole; the ledger goes in as the window
+        // the page filters produced. Both are then cut again by the drawer's
+        // own period, so the drawer can never show a record the page hid.
+        payables: payableWindow,
+        ledgerItems: ledgerScope,
+        vendors,
+        vendorOwed,
+      })
+      : undefined
+  ), [selectedKpi, kpiPeriod, payableWindow, ledgerScope, vendors, vendorOwed]);
 
   // ── The rows the table actually paints ─────────────────────────────────────
 
@@ -430,6 +490,7 @@ const Expenses = () => {
           payables={payableStats}
           ledger={ledgerStats}
           vendors={vendorStats}
+          onSelect={setSelectedKpi}
         />
 
         {/* Settling is the one action on this page that writes somewhere else,
@@ -477,7 +538,7 @@ const Expenses = () => {
               dateEnabled={activeTab !== 'vendors'}
               filters={activeTab === 'payables' ? PAYABLE_FILTERS
                 : activeTab === 'vendors' ? vendorFilters
-                  : null}
+                  : ledgerFilters}
             />
           </div>
 
@@ -647,6 +708,16 @@ const Expenses = () => {
       )}
 
       <ExportModal open={showExport} onClose={() => setShowExport(false)} mode="ledger" />
+
+      {/* The card's breakdown. Built here rather than fetched: the page already
+          holds every row the cards were computed from, so a round trip would
+          only add a way for the drawer and the card above it to disagree. */}
+      <KpiDetailDrawer
+        card={selectedKpi}
+        data={kpiDetail}
+        onPeriodChange={setKpiPeriod}
+        onClose={() => setSelectedKpi(null)}
+      />
     </div>
   );
 };

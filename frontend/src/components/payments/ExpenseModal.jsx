@@ -3,13 +3,14 @@ import { api } from '../../utils/api';
 import { toast } from 'react-toastify';
 import { getCurrencySymbol } from '../../utils/currency';
 import GearLoader from '../GearLoader';
+import { groupedOptions } from '../../constants/expenseCategories';
 
 const ExpenseModal = ({ expenseId, onClose, onSave }) => {
   const [vendors, setVendors] = useState([]);
   const [formData, setFormData] = useState({
     amount: '',
     vendor_id: '',
-    category: 'Inventory',
+    category: 'Dental materials',
     payment_method: 'UPI',
     notes: '',
     date: new Date().toISOString().split('T')[0]
@@ -30,7 +31,7 @@ const ExpenseModal = ({ expenseId, onClose, onSave }) => {
       setFormData({
         amount: '',
         vendor_id: '',
-        category: 'Inventory',
+        category: 'Dental materials',
         payment_method: 'UPI',
         notes: '',
         date: new Date().toISOString().split('T')[0]
@@ -226,13 +227,15 @@ const ExpenseModal = ({ expenseId, onClose, onSave }) => {
                       onChange={handleChange}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
                     >
-                      <option value="Inventory">Inventory / Supplies</option>
-                      <option value="Salary">Salary</option>
-                      <option value="Rent">Rent</option>
-                      <option value="Utilities">Utilities</option>
-                      <option value="Maintenance">Maintenance</option>
-                      <option value="Marketing">Marketing</option>
-                      <option value="Other">Other</option>
+                      {/* Grouped, and the value already on the record is
+                          forced in even when it predates this list — a select
+                          that cannot show "Utilities" would render blank and
+                          then silently refile the expense on save. */}
+                      {groupedOptions(formData.category).map((g) => (
+                        <optgroup key={g.label} label={g.label}>
+                          {g.options.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </optgroup>
+                      ))}
                     </select>
                   </div>
                   <div>
