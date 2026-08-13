@@ -40,7 +40,7 @@ _REAL_LETTERHEAD_FIELDS = (
 )
 
 
-def preview_clinic(clinic) -> SimpleNamespace:
+def preview_clinic(clinic, doctor_name: str | None = None) -> SimpleNamespace:
     """The real clinic's letterhead, with sample values only where it is blank
     for presentational fields. Anything the checkboxes govern is taken verbatim
     so the preview cannot promise something the PDF won't print."""
@@ -52,6 +52,13 @@ def preview_clinic(clinic) -> SimpleNamespace:
     out.name = getattr(clinic, "name", None) or "Your Clinic"
     out.primary_color = getattr(clinic, "primary_color", None)
     out.logo_url = getattr(clinic, "logo_url", None)
+    # The name on the signature line. There is no clinics.doctor_name column —
+    # a real PDF takes this from the doctor on the appointment — so the caller
+    # resolves an actual user and passes it in. Blank rather than the fixture
+    # when nobody resolves: an empty signature line is what the PDF would
+    # genuinely print, and "Dr. R. Sharma" was the preview claiming a doctor
+    # the clinic does not have.
+    out.doctor_name = (doctor_name or "").strip()
     return out
 
 

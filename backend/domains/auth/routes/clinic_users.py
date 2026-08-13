@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import User, Clinic
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import datetime
+from datetime import date
 from core.auth_utils import get_current_user
 from core.audit import (record_audit, STAFF_CREATED, STAFF_UPDATED,
                         STAFF_DEACTIVATED, PERMISSIONS_CHANGED, PASSWORD_CHANGED)
@@ -46,6 +47,14 @@ class ClinicUserUpdate(BaseModel):
     phone: Optional[str] = None
     fee_basis: Optional[str] = None
     fee_value: Optional[float] = None
+    # Everything below is optional detail, filled in from the staff member's
+    # own profile rather than asked for while adding them. Somebody hiring a
+    # receptionist on a Tuesday morning should not be blocked on knowing their
+    # pay day.
+    avatar_url: Optional[str] = None
+    salary_amount: Optional[float] = None
+    salary_day: Optional[int] = Field(None, ge=1, le=31)
+    joined_on: Optional[date] = None
 
 class SetPasswordRequest(BaseModel):
     password: str
@@ -61,6 +70,12 @@ class ClinicUserOut(BaseModel):
     created_at: datetime.datetime
     permissions: Optional[dict] = {}
     has_password: Optional[bool] = False  # Whether user has a password set
+    phone: Optional[str] = None
+    fee_basis: Optional[str] = None
+    fee_value: Optional[float] = None
+    salary_amount: Optional[float] = None
+    salary_day: Optional[int] = None
+    joined_on: Optional[date] = None
     # The person's own profile photo. Without it every staff list falls back to
     # a generated cartoon, so uploading a picture appeared to do nothing outside
     # the profile page itself.
@@ -68,6 +83,38 @@ class ClinicUserOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+def _serialize_user(user: User) -> ClinicUserOut:
+    """One shape for a staff member, used by every handler that returns one.
+
+    `has_password` is derived, not stored, so returning the ORM object directly
+    lets Pydantic fall back to the field default of False. The list endpoint
+    always built this by hand; update and create returned `user` raw, which meant
+    saving a password answered "has_password: false" to the screen that had just
+    set it — the UI then showed "No password yet" for somebody who could log in
+    perfectly well.
+    """
+    return ClinicUserOut(
+        id=user.id,
+        email=user.email,
+        username=user.username,
+        name=user.name,
+        role=user.role,
+        clinic_id=user.clinic_id,
+        is_active=user.is_active,
+        created_at=user.created_at,
+        permissions=user.permissions or {},
+        has_password=bool(user.password_hash),
+        avatar_url=user.avatar_url,
+        phone=user.phone,
+        fee_basis=user.fee_basis,
+        fee_value=user.fee_value,
+        salary_amount=user.salary_amount,
+        salary_day=user.salary_day,
+        joined_on=user.joined_on,
+    )
+
 
 @router.get("", response_model=List[ClinicUserOut])
 def get_clinic_users(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
@@ -83,24 +130,12 @@ def get_clinic_users(db: Session = Depends(get_db), current_user = Depends(get_c
         users = db.query(User).filter(
             User.clinic_id == current_user.clinic_id
         ).all()
-        return [
-            ClinicUserOut(
-                id=user.id,
-                email=user.email,
-                username=user.username,
-                name=user.name,
-                role=user.role,
-                clinic_id=user.clinic_id,
-                is_active=user.is_active,
-                created_at=user.created_at,
-                permissions=user.permissions or {},
-                has_password=bool(user.password_hash),
-                avatar_url=user.avatar_url
-            ) for user in users
-        ]
+        return [_serialize_user(u) for u in users]
     except Exception as e:
-
-        raise HTTPException(status_code=500, detail=str(e))
+        # str(e) here was a SQLAlchemy exception on its way to a dentist's
+        # screen. The reason belongs in the log, not in the response.
+        logger.error("Failed to list clinic users: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not load your staff list.")
 
 @router.post("", response_model=ClinicUserOut, status_code=status.HTTP_201_CREATED)
 def add_clinic_user(user_in: ClinicUserIn, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
@@ -229,29 +264,105 @@ def add_clinic_user(user_in: ClinicUserIn, request: Request, db: Session = Depen
         except Exception as exc:  # noqa: BLE001
             logger.warning("staff welcome whatsapp failed for user %s: %s", user.id, type(exc).__name__)
 
-    return user
+    # Same reason as the update handler: has_password is derived, so returning
+    # the ORM row would tell a freshly-created user they have no password even
+    # when one was supplied at creation.
+    return _serialize_user(user)
+
+# Every table that would be orphaned or would block a hard delete. Forty-three
+# columns reference users.id and twelve of them are NOT NULL, so removing a
+# staff member who has done anything at all either raises a ForeignKeyViolation
+# or quietly severs history somebody will later need. user_devices.user_id is
+# the one that bites first: it is NOT NULL and every user gets a row the moment
+# they sign in, so before this guard existed, deleting essentially any real
+# staff member returned a bare 500.
+_HISTORY_CHECKS = (
+    ('UserDevice',  'user_id',    'has signed in'),
+    ('Attendance',  'user_id',    'has attendance recorded'),
+    ('Appointment', 'doctor_id',  'is on appointments'),
+    ('Invoice',     'created_by', 'has raised invoices'),
+    ('AuditLog',    'user_id',    'appears in the audit log'),
+)
+
+
+def _history_reason(db, user_id: int):
+    """The first reason this person cannot simply be erased, or None."""
+    import models
+    for model_name, column, phrase in _HISTORY_CHECKS:
+        model = getattr(models, model_name, None)
+        if model is None:
+            continue
+        try:
+            if db.query(model).filter(getattr(model, column) == user_id).first():
+                return phrase
+        except Exception:
+            # A check that cannot run must not be read as "no history".
+            return 'has records in this clinic'
+    return None
+
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_clinic_user(user_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    """Delete clinic user - scoped by clinic"""
-    # Check if user has permission to delete users
+def delete_clinic_user(user_id: int, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    """Remove a staff member who was added by mistake.
+
+    Deliberately narrow. Deleting somebody who has actually worked here is not a
+    tidy-up, it is the destruction of the record of who saw which patient and
+    who took which payment — and the audit log exists precisely so that cannot
+    happen quietly. Anyone with history is refused and pointed at Deactivate,
+    which is what the UI offers anyway and what the rest of this app means by
+    "remove a person".
+    """
     if current_user.role != "clinic_owner":
         permissions = current_user.permissions or {}
         users_permissions = permissions.get("users", {})
         if not users_permissions.get("delete", False):
             raise HTTPException(status_code=403, detail="You don't have permission to delete users")
-    
+
     user = db.query(User).filter(
         User.id == user_id,
         User.clinic_id == current_user.clinic_id
     ).first()
-    
+
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
+    # Deleting yourself leaves nobody holding the account you were just using.
+    if user.id == current_user.id:
+        raise HTTPException(
+            status_code=400,
+            detail="You can't remove your own account. Ask another owner to do it.",
+        )
+
+    # The same protection the deactivate path has always had. Without it, a
+    # staff member with users.delete could remove the owner and leave the clinic
+    # with nobody able to administer it.
+    if user.role == 'clinic_owner':
+        raise HTTPException(
+            status_code=400,
+            detail="The clinic owner can't be removed. Transfer ownership first.",
+        )
+
+    reason = _history_reason(db, user.id)
+    if reason:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"{user.name} {reason}, so their record has to stay for your history to make sense. "
+                f"Deactivate them instead — they lose access immediately and nothing is lost."
+            ),
+        )
+
+    label = f"{user.name} ({user.email or user.username or f'#{user.id}'})"
     db.delete(user)
+    # Removing a person is exactly the kind of thing the log exists for, and it
+    # was the one staff action that went unrecorded.
+    record_audit(db, current_user, STAFF_DEACTIVATED,
+                 f"Removed {label} from the clinic",
+                 request=request, entity_type='user', entity_id=user_id)
     db.commit()
-    return {"message": "User deleted"}
+    # 204 means no body. The old handler returned a JSON message with it, which
+    # is a contradiction some clients treat as a malformed response.
+    return None
 
 @router.put("/{user_id}", response_model=ClinicUserOut)
 def update_clinic_user(user_id: int, user_update: ClinicUserUpdate, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
@@ -325,6 +436,14 @@ def update_clinic_user(user_id: int, user_update: ClinicUserUpdate, request: Req
         record_audit(db, current_user, STAFF_DEACTIVATED if not user_update.is_active else STAFF_UPDATED,
                      f"{'Deactivated' if not user_update.is_active else 'Reactivated'} {user.name}",
                      request=request, entity_type='user', entity_id=user.id)
+    # Optional profile detail. Written straight through: none of it gates
+    # anything, and an empty string means "clear it" rather than "skip it".
+    for _f in ("phone", "avatar_url", "fee_basis", "fee_value",
+               "salary_amount", "salary_day", "joined_on"):
+        _v = getattr(user_update, _f, None)
+        if _v is not None:
+            setattr(user, _f, _v if _v != "" else None)
+
     if user_update.password is not None:
         if len(user_update.password) < 8:
             raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
@@ -332,7 +451,7 @@ def update_clinic_user(user_id: int, user_update: ClinicUserUpdate, request: Req
     
     db.commit()
     db.refresh(user)
-    return user
+    return _serialize_user(user)
 
 @router.post("/{user_id}/set-password")
 def set_staff_password(
@@ -383,3 +502,104 @@ def set_staff_password(
 def get_available_roles(current_user = Depends(get_current_user)):
     """Get available roles based on current user's role"""
     return assignable_by(current_user.role)
+
+
+# ── Salary due ───────────────────────────────────────────────────────────────
+
+class SalaryDue(BaseModel):
+    user_id: int
+    name: str
+    role: str
+    avatar_url: Optional[str] = None
+    amount: float
+    due_on: date
+    status: str            # 'paid' | 'due' | 'upcoming'
+    expense_id: Optional[int] = None
+
+
+@router.get("/salaries/due", response_model=List[SalaryDue])
+def salaries_due(
+    month: Optional[str] = None,   # YYYY-MM, defaults to the clinic's current month
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """What the clinic owes its staff this month.
+
+    Derived, never stored. A salary row is not a debt the moment somebody is
+    hired — it is a standing arrangement, and materialising twelve rows a year
+    per employee would leave the clinic reconciling records nobody created on
+    purpose. So this is computed on read from the salary on each staff member,
+    and a month counts as settled when an Expense exists against that person in
+    it. That reuses the ledger the clinic already keeps rather than inventing a
+    second place where money is recorded.
+
+    Only staff with a salary recorded appear. Somebody paid per case, or paid
+    in cash off the books, is simply absent rather than shown as owing zero.
+    """
+    from models import Expense
+    from core.clinic_time import clinic_today
+    from calendar import monthrange
+
+    clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+    # The clinic's own day, not the server's: a clinic in IST should not see a
+    # salary flip to "due" because a machine in another timezone rolled over.
+    today = clinic_today(clinic) if clinic else datetime.date.today()
+
+    if month:
+        try:
+            year, mon = (int(x) for x in month.split("-")[:2])
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Month must look like 2026-08.")
+    else:
+        year, mon = today.year, today.month
+
+    start = datetime.date(year, mon, 1)
+    last_day = monthrange(year, mon)[1]
+    end = datetime.date(year, mon, last_day)
+
+    staff = db.query(User).filter(
+        User.clinic_id == current_user.clinic_id,
+        User.is_active == True,          # noqa: E712
+        User.salary_amount.isnot(None),
+        User.salary_amount > 0,
+    ).all()
+
+    # One query for the month rather than one per person.
+    paid_rows = db.query(Expense).filter(
+        Expense.clinic_id == current_user.clinic_id,
+        Expense.paid_to_user_id.isnot(None),
+        Expense.date >= datetime.datetime.combine(start, datetime.time.min),
+        Expense.date <= datetime.datetime.combine(end, datetime.time.max),
+    ).all()
+    paid_by_user = {e.paid_to_user_id: e for e in paid_rows}
+
+    out = []
+    for u in staff:
+        # A pay day of 31 in a 30-day month falls on the last day rather than
+        # silently vanishing.
+        day = min(int(u.salary_day or 1), last_day)
+        due_on = datetime.date(year, mon, day)
+
+        # Nobody is owed for a month they had not started.
+        if u.joined_on and u.joined_on > end:
+            continue
+
+        expense = paid_by_user.get(u.id)
+        if expense:
+            status = "paid"
+        elif due_on <= today:
+            status = "due"
+        else:
+            status = "upcoming"
+
+        out.append(SalaryDue(
+            user_id=u.id, name=u.name, role=u.role, avatar_url=u.avatar_url,
+            amount=float(u.salary_amount or 0), due_on=due_on,
+            status=status, expense_id=expense.id if expense else None,
+        ))
+
+    # Overdue first, then by pay day: the ones somebody has to act on today sit
+    # at the top rather than in date order among those that are already settled.
+    order = {"due": 0, "upcoming": 1, "paid": 2}
+    out.sort(key=lambda r: (order.get(r.status, 3), r.due_on))
+    return out

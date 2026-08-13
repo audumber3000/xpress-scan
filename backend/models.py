@@ -78,6 +78,25 @@ class Clinic(Base):
     security_email = Column(String, nullable=True)
     security_phone_verified = Column(Boolean, default=False)
     security_email_verified = Column(Boolean, default=False)
+    # Master password — the six digits that stand between a staff member and a
+    # delete nothing can undo (a patient, a paid bill, a recorded payment).
+    # NULL means the clinic is still on the factory default (123456); that is
+    # what the "change this" nudge in Control Center keys off, and it means
+    # every clinic that predates this column keeps working without a backfill.
+    master_password_hash = Column(String, nullable=True)
+    master_password_updated_at = Column(DateTime, nullable=True)
+    # Six digits is a million guesses, which is nothing to a script. Failures
+    # are counted and the code locks for a while, so grinding it is not on.
+    master_password_attempts = Column(Integer, default=0)
+    master_password_locked_until = Column(DateTime, nullable=True)
+    # Where the practice physically is, and how far from it a staff member may
+    # stand and still be "at work". Both null on an unconfigured clinic, and the
+    # geofence deliberately lets everybody through in that case: a clinic that
+    # has never set its pin should not have its receptionist locked out of
+    # clocking in.
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    geofence_radius_m = Column(Integer, default=150)
     number_of_chairs = Column(Integer, default=1)  # Number of dental chairs
     timings = Column(JSON, default=lambda: {
         'monday': {'open': '08:00', 'close': '20:00', 'closed': False},
@@ -152,8 +171,19 @@ class User(Base):
     # the same failure the free-text lab work_type already shows.
     # NULL basis = not a paid consultant (the owner-dentist, receptionists), and
     # no cost row is created for their work.
+    # What a clinician earns per case: a flat fee or a share of what they bill.
+    # Distinct from salary below — a visiting consultant may have a fee and no
+    # salary, an in-house doctor may have both.
     fee_basis = Column(String, nullable=True)    # fixed | percentage | None
     fee_value = Column(Float, nullable=True)     # rupees, or percent of collection
+    # Recurring pay. `salary_day` is the day of the month it is handed over, so
+    # the clinic can be told what is due without anybody keeping a mental
+    # calendar. Both null for staff who are not on a salary at all, which is the
+    # honest default rather than zero — nothing is owed to somebody whose pay
+    # has never been recorded.
+    salary_amount = Column(Float, nullable=True)
+    salary_day = Column(Integer, nullable=True)   # 1-31
+    joined_on = Column(Date, nullable=True)       # no salary is due before this
     permissions = Column(JSON, default=dict)
     dashboard_preferences = Column(JSON, nullable=True)
     is_active = Column(Boolean, default=True)
@@ -703,12 +733,17 @@ class Offer(Base):
 class OtpVerification(Base):
     """Short-lived OTP challenge for verifying a clinic's security phone/email.
     Codes are stored hashed with a short expiry and an attempt cap; the send
-    endpoint keeps only one active (unconsumed) row per (clinic, channel, target)."""
+    endpoint keeps only one active (unconsumed) row per (clinic, channel, target,
+    purpose)."""
     __tablename__ = 'otp_verifications'
     id = Column(Integer, primary_key=True, index=True)
     clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
     channel = Column(String, nullable=False)      # 'whatsapp' | 'email'
     target = Column(String, nullable=False)        # the phone or email being verified
+    # What the code unlocks. Part of the key a send invalidates on, so verifying
+    # the recovery phone and changing the master password can be in flight at
+    # the same time without one silently consuming the other's code.
+    purpose = Column(String, nullable=False, default='contact_verification')
     code_hash = Column(String, nullable=False)
     expires_at = Column(DateTime, nullable=False)
     attempts = Column(Integer, default=0)
@@ -772,6 +807,27 @@ class Attendance(Base):
     user = relationship("User", foreign_keys=[user_id])
     marker = relationship("User", foreign_keys=[marked_by])
 
+    # Where the person was standing when they clocked in and out.
+    #
+    # These are read and written by domains/scheduling/routes/attendance_mobile.py,
+    # which has referenced them since it was written — the columns were never
+    # added, so every call to /attendance-mobile/clock-in returned a 500 with an
+    # empty body. The feature existed on paper only.
+    #
+    # `accuracy` is the device's own error estimate in metres and is stored
+    # alongside the fix, because a coordinate without it cannot be judged: 40m
+    # from the clinic means nothing if the reading is +/- 100m.
+    clock_in_latitude = Column(Float, nullable=True)
+    clock_in_longitude = Column(Float, nullable=True)
+    clock_in_accuracy = Column(Float, nullable=True)
+    clock_in_address = Column(String, nullable=True)
+    clock_in_distance_m = Column(Float, nullable=True)   # from the clinic pin, when set
+    clock_out_latitude = Column(Float, nullable=True)
+    clock_out_longitude = Column(Float, nullable=True)
+    clock_out_accuracy = Column(Float, nullable=True)
+    clock_out_address = Column(String, nullable=True)
+    clock_out_distance_m = Column(Float, nullable=True)
+
 class XrayImage(Base):
     __tablename__ = 'xray_images'
     id = Column(Integer, primary_key=True, index=True)
@@ -812,6 +868,13 @@ class UserDevice(Base):
     user_agent = Column(Text, nullable=True)  # Full user agent string
     ip_address = Column(String, nullable=True)  # IP address
     location = Column(String, nullable=True)  # Location (city, country)
+    # A precise fix, captured once at enrolment and refreshed on later sign-ins.
+    # Kept beside `location` rather than replacing it: the string stays readable
+    # when no GPS was available, and a device that never granted the permission
+    # still shows the city its IP suggests.
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    location_accuracy = Column(Float, nullable=True)
     is_active = Column(Boolean, default=True)  # Device is currently active
     is_online = Column(Boolean, default=False)  # Device is currently online
     last_seen = Column(DateTime, nullable=True)  # Last activity timestamp
@@ -1567,3 +1630,28 @@ class PushToken(Base):
 
     user = relationship("User")
     clinic = relationship("Clinic")
+
+
+class AppVersion(Base):
+    """The floor and the ceiling for each mobile platform.
+
+    One row per platform, edited in place. It lives in the database rather than
+    in the source so the floor can be raised the moment a bad build is found —
+    a psql UPDATE, effective on every app's next launch, with no backend deploy
+    and no app-store release. That speed is the entire point: by the time a
+    forced update matters, waiting on a deploy pipeline is already too slow.
+
+    `min_supported` is a hard stop; `latest` is a nudge. Both are semver
+    strings compared numerically, never as text, so 3.9.0 sorts below 3.10.0.
+    """
+    __tablename__ = 'app_versions'
+    id = Column(Integer, primary_key=True, index=True)
+    platform = Column(String, nullable=False, unique=True, index=True)  # 'ios' | 'android'
+    # Below this, the app refuses to run and shows a modal that cannot be closed.
+    min_supported = Column(String, nullable=False, default='0.0.0')
+    # The newest build in the store. Below it, a dismissible nudge.
+    latest = Column(String, nullable=False, default='0.0.0')
+    # Optional sentence shown in the modal, e.g. why this update matters.
+    message = Column(String, nullable=True)
+    store_url = Column(String, nullable=True)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)

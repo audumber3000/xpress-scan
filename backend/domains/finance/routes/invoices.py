@@ -27,6 +27,7 @@ def get_db():
         db.close()
 from models import Invoice, InvoiceLineItem, InvoiceAuditLog, InvoiceDiscount, InvoicePayment, Patient, User, Clinic, Appointment
 from core.auth_utils import get_current_user
+from core.master_password import require_master_token
 from core.clinic_time import clinic_today, clinic_day_bounds_utc, clinic_now, clinic_tzinfo
 from zoneinfo import ZoneInfo
 from schemas import (
@@ -1832,7 +1833,12 @@ async def delete_invoice_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Remove an installment; paid/due/status recompute from the remaining rows."""
+    """Remove an installment; paid/due/status recompute from the remaining rows.
+
+    Money that has been receipted does not come off the books on a stray click,
+    so this asks for the clinic's master password every time.
+    """
+    require_master_token(request, current_user)
     from models import InvoicePayment
     _ensure_invoice_columns(db)
     invoice = db.query(Invoice).filter(
@@ -2584,26 +2590,36 @@ async def delete_invoice(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Delete an entire invoice completely"""
+    """Delete an entire invoice completely.
+
+    A bill with money against it used to be undeletable, full stop. It is now
+    deletable with the clinic's master password — the same door, still locked,
+    but openable when a clinic genuinely has to undo a bill raised on the wrong
+    patient. An unpaid or draft invoice needs no password: nothing has moved.
+    """
     try:
         _ensure_invoice_columns(db)
         invoice = db.query(Invoice).filter(
             Invoice.id == invoice_id,
             Invoice.clinic_id == current_user.clinic_id
         ).first()
-        
+
         if not invoice:
             raise HTTPException(status_code=404, detail="Invoice not found")
-        
-        if invoice.status in ('paid_verified', 'paid_unverified', 'partially_paid'):
-            raise HTTPException(status_code=400, detail="Paid invoices cannot be deleted")
+
+        carries_money = (
+            invoice.status in ('paid_verified', 'paid_unverified', 'partially_paid')
+            or float(invoice.paid_amount or 0) > 0
+        )
+        if carries_money:
+            require_master_token(request, current_user)
 
         # Stock-ledger rows (used/dispensed items) reference the invoice's line
         # items. Deleting the invoice cascades its line items, so unlink those
         # references first or the FK blocks the delete. The stock movements stay
         # in the ledger — the items were physically used; they're just no longer
         # billed to this (now removed) invoice.
-        from models import InventoryTransaction, LabOrder
+        from models import CaseCost, InventoryTransaction, LabOrder
         line_item_ids = [li.id for li in invoice.line_items]
         if line_item_ids:
             db.query(InventoryTransaction).filter(
@@ -2614,10 +2630,24 @@ async def delete_invoice(
             ).update({LabOrder.invoice_line_item_id: None}, synchronize_session=False)
             db.flush()
 
+        # What the clinic owes a lab or consultant for this case survives the
+        # bill: the work was done and the debt is real whether or not the
+        # patient was ever charged for it. Only the link is dropped. (A
+        # percentage-based cost has already been resolved into an amount by the
+        # time it matters, so it does not need the invoice to stay solvent.)
+        db.query(CaseCost).filter(CaseCost.invoice_id == invoice_id).update(
+            {CaseCost.invoice_id: None}, synchronize_session=False
+        )
+        db.flush()
+
         # Capture the identity before the row goes; afterwards it's just an id.
         _num, _total = invoice.invoice_number, float(invoice.total or 0)
-        record_audit(db, current_user, INVOICE_DELETED,
-                     f"Deleted invoice {_num} ({_total:,.2f})",
+        _paid = float(invoice.paid_amount or 0)
+        _detail = f"Deleted invoice {_num} ({_total:,.2f})"
+        if _paid > 0:
+            # The money is the part somebody will come asking about.
+            _detail += f". {_paid:,.2f} already collected against it was written off"
+        record_audit(db, current_user, INVOICE_DELETED, _detail,
                      request=request, entity_type='invoice', entity_id=invoice_id)
         db.delete(invoice)
         db.commit()

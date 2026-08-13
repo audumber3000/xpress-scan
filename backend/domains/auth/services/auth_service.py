@@ -130,6 +130,13 @@ class AuthService(AuthServiceProtocol):
             existing_device.last_seen = datetime.utcnow()
             existing_device.ip_address = device_info.get("ip_address")
             existing_device.location = device_info.get("location")
+            # A precise fix, only when the client actually had one. Guarded with
+            # `is not None` rather than a truthiness check: latitude 0.0 is a
+            # real place (the Gulf of Guinea), and `if lat:` would silently drop it.
+            if device_info.get("latitude") is not None:
+                existing_device.latitude = device_info.get("latitude")
+                existing_device.longitude = device_info.get("longitude")
+                existing_device.location_accuracy = device_info.get("accuracy")
             existing_device.user_agent = device_info.get("user_agent")
             existing_device.device_os = device_info.get("device_os")
             existing_device.updated_at = datetime.utcnow()
@@ -148,6 +155,9 @@ class AuthService(AuthServiceProtocol):
                 user_agent=device_info.get("user_agent"),
                 ip_address=device_info.get("ip_address"),
                 location=device_info.get("location"),
+                latitude=device_info.get("latitude"),
+                longitude=device_info.get("longitude"),
+                location_accuracy=device_info.get("accuracy"),
                 is_active=True,
                 is_online=True,
                 last_seen=datetime.utcnow(),
@@ -160,12 +170,25 @@ class AuthService(AuthServiceProtocol):
             self.db.refresh(new_device)
             return new_device
 
-    def create_jwt_token(self, user_id: int) -> str:
-        """Create JWT token for user"""
+    def create_jwt_token(self, user_id: int, device_id: int = None) -> str:
+        """Create JWT token for user.
+
+        `device_id` is stamped in so the session can be revoked later. Without
+        it, blocking a device only took effect at the next sign-in — and since
+        these tokens last thirty days, "blocked" meant somebody who had left
+        could keep working from that laptop for a month. The device is now
+        re-checked on every request (see core.auth_utils.get_current_user).
+
+        Tokens issued before this change simply carry no `did` and keep working
+        as they did; they cannot be device-revoked, but they still die with
+        is_active and with their own expiry.
+        """
         payload = {
             "user_id": user_id,
             "exp": datetime.utcnow() + timedelta(days=30)  # 30 days — powers one-click "last used" re-login
         }
+        if device_id is not None:
+            payload["did"] = device_id
         return jwt.encode(payload, self.jwt_secret, algorithm=self.jwt_algorithm)
 
     def update_password(self, user_id: int, current_password: str, new_password: str) -> bool:

@@ -244,6 +244,55 @@ async def lifespan(app: FastAPI):
             conn.execute(text(
                 "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS default_medications_seeded BOOLEAN DEFAULT FALSE"
             ))
+
+            # ── Added 2026-08-13 ────────────────────────────────────────────
+            # Master password, geofenced attendance, device location, staff pay.
+            #
+            # These are repeated from deploy-aws.sh on purpose. The GitHub
+            # Actions deploy rsyncs `backend/` only and then runs the server's
+            # OWN copy of deploy-aws.sh, so migrations added to the repo's copy
+            # never reach prod. Without the lines below, this release would ship
+            # models whose columns do not exist in RDS — and because SQLAlchemy
+            # names every mapped column in its SELECT, a missing users.salary_amount
+            # takes down login and everything behind it, not just the new screens.
+            #
+            # All nullable and additive, so re-running them is free and no
+            # existing row needs backfilling.
+            for _ddl in (
+                # Clinic master password: gates deleting patients, paid bills and
+                # recorded payments. NULL hash means "still on the default".
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS master_password_hash VARCHAR",
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS master_password_updated_at TIMESTAMP",
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS master_password_attempts INTEGER DEFAULT 0",
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS master_password_locked_until TIMESTAMP",
+                # Where the clinic is, and how close staff must be to clock in.
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION",
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION",
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS geofence_radius_m INTEGER",
+                # Where each clock-in/out actually happened.
+                "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_in_latitude DOUBLE PRECISION",
+                "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_in_longitude DOUBLE PRECISION",
+                "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_in_accuracy DOUBLE PRECISION",
+                "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_in_distance_m DOUBLE PRECISION",
+                "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_in_address VARCHAR",
+                "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_out_latitude DOUBLE PRECISION",
+                "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_out_longitude DOUBLE PRECISION",
+                "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_out_accuracy DOUBLE PRECISION",
+                "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_out_distance_m DOUBLE PRECISION",
+                "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_out_address VARCHAR",
+                # Where a device enrolled, so an owner can see who signed in from where.
+                "ALTER TABLE user_devices ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION",
+                "ALTER TABLE user_devices ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION",
+                "ALTER TABLE user_devices ADD COLUMN IF NOT EXISTS location_accuracy DOUBLE PRECISION",
+                # Optional employment details; feed the Payables view.
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS salary_amount DOUBLE PRECISION",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS salary_day INTEGER",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS joined_on DATE",
+                # OTPs are now issued for more than one purpose (sign-in, and
+                # changing the master password), so each row records which.
+                "ALTER TABLE otp_verifications ADD COLUMN IF NOT EXISTS purpose VARCHAR DEFAULT 'login'",
+            ):
+                conn.execute(text(_ddl))
             # Manual WhatsApp: clinic sends patient messages from its own number.
             conn.execute(text(
                 "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS manual_whatsapp BOOLEAN DEFAULT FALSE"
@@ -673,6 +722,11 @@ app.include_router(on_request_import.router, prefix="/api/v1", tags=["on-request
 
 # Search Domain — unified command-palette search across the domains above
 app.include_router(global_search.router, prefix="/api/v1/search", tags=["search"])
+
+# Mobile version gate. Unauthenticated on purpose: a build old enough to be
+# forced off may already be unable to sign in.
+from domains.infrastructure.routes import app_version
+app.include_router(app_version.router, prefix="/api/v1/app", tags=["app"])
 
 @app.get("/")
 def root():

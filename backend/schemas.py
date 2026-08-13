@@ -504,6 +504,19 @@ class AttendanceOut(AttendanceBase):
     sync_status: str = "local"
     user_name: Optional[str] = None
     user_role: Optional[str] = None
+    # Where the shift was started and ended. `distance_m` is the number an owner
+    # actually reads — "412 m away" says something a raw coordinate pair does
+    # not — and is null when the clinic has never dropped its pin.
+    clock_in_latitude: Optional[float] = None
+    clock_in_longitude: Optional[float] = None
+    clock_in_accuracy: Optional[float] = None
+    clock_in_address: Optional[str] = None
+    clock_in_distance_m: Optional[float] = None
+    clock_out_latitude: Optional[float] = None
+    clock_out_longitude: Optional[float] = None
+    clock_out_accuracy: Optional[float] = None
+    clock_out_address: Optional[str] = None
+    clock_out_distance_m: Optional[float] = None
     
     class Config:
         from_attributes = True

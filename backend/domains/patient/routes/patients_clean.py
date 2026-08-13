@@ -24,6 +24,7 @@ from core.dependencies import get_patient_service
 from core.auth_utils import get_current_user, require_patients_view, require_patients_edit, require_patients_delete
 from domains.activity.routes.activity_log import push_activity
 from core.audit import record_audit, PATIENT_DELETED, PATIENT_UPDATED
+from core.master_password import require_master_token
 import logging
 
 logger = logging.getLogger(__name__)
@@ -698,7 +699,7 @@ async def update_patient(
     "/{patient_id}",
     response_model=SuccessResponseDTO,
     summary="Delete patient",
-    description="Delete a patient record (only if no payments or reports exist)"
+    description="Delete a patient record and everything attached to it. Requires the clinic's master password."
 )
 async def delete_patient(
     patient_id: int,
@@ -710,19 +711,31 @@ async def delete_patient(
     """
     Delete a patient.
 
-    This operation will fail if the patient has existing payments or reports.
+    Gated on the clinic's master password (an `X-Master-Token` from
+    `/security/master-password/verify`), which is also what unlocks removing a
+    patient who has paid or has reports on file — refused outright before this.
     The patient must belong to the current user's clinic.
     """
+    require_master_token(request, current_user)
     try:
         # Name it before it's gone — afterwards the log could only say "patient 41".
         victim = patient_service.get_patient(patient_id, current_user.clinic_id)
         label = f"{victim.name} (#{patient_id})" if victim else f"#{patient_id}"
+        # Read while the rows still exist. This is the only record that will
+        # survive of what the clinic gave up, so it is worth a query.
+        footprint = patient_service.financial_footprint(patient_id, current_user.clinic_id)
 
-        success = patient_service.delete_patient(patient_id, current_user.clinic_id)
+        success = patient_service.delete_patient(patient_id, current_user.clinic_id, force=True)
 
         if success:
+            detail = "and all their records"
+            if footprint["payments"]:
+                detail = (
+                    f"along with {footprint['invoices']} invoice(s) and "
+                    f"{footprint['payments']} payment(s) totalling {footprint['collected']:,.2f}"
+                )
             record_audit(db, current_user, PATIENT_DELETED,
-                         f"Deleted patient {label} and all their records",
+                         f"Deleted patient {label} {detail}",
                          request=request, entity_type='patient', entity_id=patient_id)
             db.commit()
 

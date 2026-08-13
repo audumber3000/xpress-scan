@@ -200,8 +200,26 @@ class UserBaseDTO(BaseModel):
     email: Optional[str] = Field(None)
     username: Optional[str] = Field(None)
     first_name: str = Field(..., min_length=1, max_length=50)
-    last_name: str = Field(..., min_length=1, max_length=50)
-    role: str = Field(..., pattern="^(clinic_owner|doctor|receptionist)$")
+    # Optional, because plenty of people have one name. Staff creation splits a
+    # full name on the first space and leaves this empty for a single word, so a
+    # required last_name meant somebody called "Priya" could be created happily
+    # and then got a 500 on every sign-in — the DTO rejected the very row that
+    # had just been written.
+    last_name: str = Field("", max_length=50)
+    # Validated against the real catalogue instead of a hardcoded three. The old
+    # pattern predated in_house_doctor, associate, consultant and assistant, so
+    # staff in any of those four roles could be created, appeared in the list,
+    # and then failed to sign in with a 500 from this line.
+    role: str = Field(...)
+
+    @field_validator("role")
+    @classmethod
+    def _known_role(cls, v: str) -> str:
+        from core.roles import ROLES
+        allowed = {r["value"] for r in ROLES}
+        if v not in allowed:
+            raise ValueError(f"Unknown role. Expected one of: {', '.join(sorted(allowed))}")
+        return v
 
 
 class UserCreateDTO(UserBaseDTO):

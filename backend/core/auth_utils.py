@@ -4,7 +4,7 @@ Authentication utilities for clean architecture
 from fastapi import HTTPException, Depends, Request
 from sqlalchemy.orm import Session
 from database import get_db
-from models import User, Clinic
+from models import User, Clinic, UserDevice
 from typing import Optional
 import jwt
 import os
@@ -37,14 +37,44 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Optiona
         if not user or not user.is_active:
             raise HTTPException(status_code=401, detail="User not found or inactive")
 
+        # The device this token was minted for, re-checked on every request.
+        #
+        # Deactivating a person has always been instant, because is_active is
+        # read here on each call. Blocking a DEVICE was not: it was only
+        # consulted during login, so an already-open session on a blocked
+        # laptop kept working until the token expired — up to thirty days.
+        # For the case this feature exists for, a staff member who has left
+        # and still has the app open, that is the whole window that matters.
+        #
+        # A missing device row is deliberately not a rejection: "Remove" is
+        # documented as forgetting a device so it re-enrols, not as revoking
+        # it. Only an explicit block ends the session.
+        device_id = payload.get("did")
+        if device_id is not None:
+            device = db.query(UserDevice).filter(UserDevice.id == device_id).first()
+            if device is not None and not device.is_active:
+                raise HTTPException(
+                    status_code=401,
+                    detail="This device has been blocked. Please contact your clinic owner.",
+                )
+
         return user
 
+    except HTTPException:
+        # Every rejection above is already written for a human to read. Without
+        # this, the catch-all below swallowed them and re-raised str(e), and
+        # Starlette's HTTPException.__str__ is "{status_code}: {detail}" — so a
+        # blocked device was told "401: This device has been blocked", with the
+        # status code sitting in the middle of the sentence.
+        raise
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=str(e))
+    except Exception:
+        # Deliberately not str(e). Whatever broke here is ours, and its text is
+        # for the logs, not for the person holding the phone.
+        raise HTTPException(status_code=401, detail="Your session could not be verified. Please sign in again.")
 
 
 def check_permission(required_permission: str, resource: str = None):

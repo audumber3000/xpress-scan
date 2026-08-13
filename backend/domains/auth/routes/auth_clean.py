@@ -2,6 +2,7 @@
 Auth routes using clean architecture
 """
 import os
+import jwt
 import requests
 from fastapi import APIRouter, HTTPException, status, Request, Depends
 from typing import Optional
@@ -19,13 +20,13 @@ from core.dtos import (
     UpdateProfileDTO,
 )
 from core.dependencies import get_auth_service, get_user_service
-from core.auth_utils import require_role
+from core.auth_utils import require_role, get_jwt_secret
 from core.auth_utils import get_current_user as _current_user_dep
 from core.nexus_notify import notify
 from database import get_db
 from sqlalchemy.orm import Session, joinedload
 from domains.notification.services.platform_notification_service import PlatformNotificationService
-from models import Clinic, User, Subscription, user_clinics
+from models import Clinic, User, Subscription, UserDevice, user_clinics
 from sqlalchemy import or_
 from datetime import datetime as _dt
 from pydantic import BaseModel
@@ -35,6 +36,59 @@ from core.audit import (record_audit, LOGIN_SUCCEEDED, LOGIN_FAILED,
                         LOGIN_BLOCKED, LOGOUT, PASSWORD_CHANGED)
 
 router = APIRouter()
+
+def _signed_in_from(payload) -> str:
+    """The audit line for a successful sign-in.
+
+    Extracted because the OAuth handlers carried a copy of this expression that
+    still referred to `login_data`, the parameter name from the password login
+    above them. Python only resolves a name when the line runs, so it stayed
+    invisible until somebody actually signed in with Google and got
+    "OAuth login failed: name 'login_data' is not defined" — after being
+    authenticated successfully.
+
+    `device` may be a DTO or a plain dict depending on the caller, so it is read
+    defensively rather than assuming either.
+    """
+    device = getattr(payload, 'device', None)
+    if not device:
+        return "Signed in"
+    kind = device.get('type') if isinstance(device, dict) else getattr(device, 'type', None)
+    return f"Signed in from {kind or 'the web app'}"
+
+
+
+
+def _signed_out_reason(db: Session, token: str) -> str:
+    """Why this token was refused, said the way a person would say it.
+
+    `validate_token` collapses several different situations into None: an
+    expired token, a forged one, and — most commonly in practice — a completely
+    valid token belonging to somebody the owner has just deactivated. The old
+    single answer, "Invalid or expired token", was wrong for that last case and
+    is the string the signed-out screen puts in front of them, so a deactivated
+    receptionist was told to try a password that could never work.
+
+    Never leaks a decode error outward: anything unexpected falls back to the
+    neutral sign-in-again message.
+    """
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=["HS256"],
+                             options={"verify_exp": False})
+    except Exception:
+        return "Please sign in again."
+
+    user = db.query(User).filter(User.id == payload.get("user_id")).first()
+    if user and not user.is_active:
+        return "Your account is no longer active at this clinic. Please contact your clinic owner."
+
+    device_id = payload.get("did")
+    if device_id is not None:
+        device = db.query(UserDevice).filter(UserDevice.id == device_id).first()
+        if device is not None and not device.is_active:
+            return "This device has been blocked. Please contact your clinic owner."
+
+    return "Your session has ended. Please sign in again."
 
 
 def _enrich_clinic_dto(db: Session, clinic: Clinic) -> ClinicResponseDTO:
@@ -128,6 +182,9 @@ async def register_user(
     Creates a user with the specified role and default permissions.
     """
     try:
+        # Bound here so the token can record which device it belongs to, even
+        # on the paths that never register one.
+        device = None
         # Public self-signup always creates a clinic owner. Staff (doctors,
         # receptionists) are added by the owner via /clinic-users; letting
         # someone self-register as a non-owner leaves them with no clinic and
@@ -135,7 +192,7 @@ async def register_user(
         registration_data = user_data.dict()
         registration_data["role"] = "clinic_owner"
         user = auth_service.create_user(registration_data)
-        token = auth_service.create_jwt_token(user.id)
+        token = auth_service.create_jwt_token(user.id, device.id if device else None)
 
         notify(
             "molarplus_app_welcome", channel="email",
@@ -279,6 +336,9 @@ async def login_user(
     Returns JWT token, user information, and clinic details (if onboarded) on success.
     """
     try:
+        # Bound here so the token can record which device it belongs to, even
+        # on the paths that never register one.
+        device = None
         user = auth_service.authenticate_user(login_data.email, login_data.password)
 
         if not user:
@@ -315,12 +375,11 @@ async def login_user(
 
         record_audit(
             db, user, LOGIN_SUCCEEDED,
-            f"Signed in from {(login_data.device or {}).get('type') if isinstance(login_data.device, dict) else 'the web app'}"
-            if login_data.device else "Signed in",
+            _signed_in_from(login_data),
             request=request, entity_type='user', entity_id=user.id, commit=True,
         )
 
-        token = auth_service.create_jwt_token(user.id)
+        token = auth_service.create_jwt_token(user.id, device.id if device else None)
         
         # Load clinics for the user
         user_clinics_list = (
@@ -370,6 +429,9 @@ async def oauth_login(
     Returns user and clinic details (if onboarded) on success.
     """
     try:
+        # Bound here so the token can record which device it belongs to, even
+        # on the paths that never register one.
+        device = None
         user = auth_service.handle_oauth_login(
             oauth_data.id_token,
             oauth_data.device,
@@ -401,12 +463,11 @@ async def oauth_login(
         
         record_audit(
             db, user, LOGIN_SUCCEEDED,
-            f"Signed in from {(login_data.device or {}).get('type') if isinstance(login_data.device, dict) else 'the web app'}"
-            if login_data.device else "Signed in",
+            _signed_in_from(oauth_data),
             request=request, entity_type='user', entity_id=user.id, commit=True,
         )
 
-        token = auth_service.create_jwt_token(user.id)
+        token = auth_service.create_jwt_token(user.id, device.id if device else None)
         clinic = _get_clinic_for_user(db, user)
 
         return AuthResponseDTO(
@@ -452,6 +513,9 @@ async def oauth_code_login(
             detail="Google OAuth not configured (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET)"
         )
     try:
+        # Bound here so the token can record which device it belongs to, even
+        # on the paths that never register one.
+        device = None
         resp = requests.post(
             "https://oauth2.googleapis.com/token",
             data={
@@ -490,12 +554,11 @@ async def oauth_code_login(
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=blocked)
         record_audit(
             db, user, LOGIN_SUCCEEDED,
-            f"Signed in from {(login_data.device or {}).get('type') if isinstance(login_data.device, dict) else 'the web app'}"
-            if login_data.device else "Signed in",
+            _signed_in_from(oauth_data),
             request=request, entity_type='user', entity_id=user.id, commit=True,
         )
 
-        token = auth_service.create_jwt_token(user.id)
+        token = auth_service.create_jwt_token(user.id, device.id if device else None)
         
         # Load clinics for the user
         user_clinics_list = (
@@ -566,9 +629,13 @@ async def get_current_user(
         user = auth_service.validate_token(token)
 
         if not user:
+            # validate_token collapses "bad token" and "perfectly good token,
+            # deactivated person" into the same None. This message is what the
+            # signed-out screen shows, so answering "invalid token" sends a
+            # deactivated nurse off to re-type a password that cannot work.
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token"
+                detail=_signed_out_reason(db, token),
             )
 
         # Re-load user with clinic in this session so clinic is always available when user has clinic_id
@@ -581,9 +648,30 @@ async def get_current_user(
         if not user_with_clinic:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token"
+                detail="Your account is no longer active at this clinic. Please contact your clinic owner."
             )
         user = user_with_clinic
+
+        # This endpoint decodes the token itself rather than going through
+        # get_current_user, so the device check there does not cover it. It is
+        # the call the app makes on launch to decide whether it is still signed
+        # in — so without this, a blocked device booted straight into the app
+        # and only discovered it was locked out on the first screen that loaded
+        # data. Same rule as get_current_user: a missing device row is fine
+        # ("Remove" means re-enrol), only an explicit block ends the session.
+        try:
+            device_id = jwt.decode(
+                token, get_jwt_secret(), algorithms=["HS256"]
+            ).get("did")
+        except Exception:
+            device_id = None
+        if device_id is not None:
+            device = db.query(UserDevice).filter(UserDevice.id == device_id).first()
+            if device is not None and not device.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="This device has been blocked. Please contact your clinic owner.",
+                )
 
         user_dto = UserResponseDTO.from_orm(user)
         
@@ -831,6 +919,7 @@ async def update_avatar(
 async def change_password(
     password_data: ChangePasswordRequestDTO,
     request: Request,
+    db: Session = Depends(get_db),
     auth_service = Depends(get_auth_service)
 ):
     """
@@ -851,9 +940,13 @@ async def change_password(
         user = auth_service.validate_token(token)
 
         if not user:
+            # validate_token collapses "bad token" and "perfectly good token,
+            # deactivated person" into the same None. This message is what the
+            # signed-out screen shows, so answering "invalid token" sends a
+            # deactivated nurse off to re-type a password that cannot work.
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token"
+                detail=_signed_out_reason(db, token),
             )
 
         # Change password
@@ -949,9 +1042,13 @@ async def complete_onboarding(
         user = auth_service.validate_token(token)
 
         if not user:
+            # validate_token collapses "bad token" and "perfectly good token,
+            # deactivated person" into the same None. This message is what the
+            # signed-out screen shows, so answering "invalid token" sends a
+            # deactivated nurse off to re-type a password that cannot work.
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token"
+                detail=_signed_out_reason(db, token),
             )
 
         data = await request.json()
@@ -1052,6 +1149,7 @@ async def complete_onboarding(
 )
 async def refresh_token(
     request: Request,
+    db: Session = Depends(get_db),
     auth_service = Depends(get_auth_service)
 ):
     """
@@ -1060,6 +1158,9 @@ async def refresh_token(
     Generates a new token with updated expiration time.
     """
     try:
+        # Bound here so the token can record which device it belongs to, even
+        # on the paths that never register one.
+        device = None
         # Get current user from token
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
@@ -1072,13 +1173,17 @@ async def refresh_token(
         user = auth_service.validate_token(token)
 
         if not user:
+            # validate_token collapses "bad token" and "perfectly good token,
+            # deactivated person" into the same None. This message is what the
+            # signed-out screen shows, so answering "invalid token" sends a
+            # deactivated nurse off to re-type a password that cannot work.
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token"
+                detail=_signed_out_reason(db, token),
             )
 
         # Generate new token
-        new_token = auth_service.create_jwt_token(user.id)
+        new_token = auth_service.create_jwt_token(user.id, device.id if device else None)
 
         return {
             "message": "Token refreshed successfully",

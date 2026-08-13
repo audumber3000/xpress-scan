@@ -213,6 +213,59 @@ run_migration "receipt_notification_pref" "INSERT INTO notification_preferences 
 # email-only. Existing rows stay disabled; this only widens the channel list.
 run_migration "lab_order_whatsapp" "UPDATE notification_preferences SET channels = '[\"whatsapp\", \"email\"]'::json WHERE event_type = 'lab_order_placed' AND channels::text = '[\"email\"]'"
 
+# Master password — the six digits asked for before a delete nothing can undo
+# (a patient, a paid bill, a receipted payment). Deliberately NOT backfilled:
+# a NULL hash means "still on the factory default 123456", which is what the
+# nudge in Control Center → Verification keys off. Every existing clinic keeps
+# working on day one and gets told to pick its own.
+run_migration "clinic_master_password"        "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS master_password_hash VARCHAR"
+run_migration "clinic_master_password_at"     "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS master_password_updated_at TIMESTAMP"
+run_migration "clinic_master_password_tries"  "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS master_password_attempts INTEGER DEFAULT 0"
+run_migration "clinic_master_password_lock"   "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS master_password_locked_until TIMESTAMP"
+# What an OTP is good for. Existing rows are all contact verifications; the
+# column separates those from the codes that authorise a master password change,
+# so a send for one no longer invalidates an outstanding code for the other.
+run_migration "otp_purpose"                   "ALTER TABLE otp_verifications ADD COLUMN IF NOT EXISTS purpose VARCHAR NOT NULL DEFAULT 'contact_verification'"
+
+# Mobile version gate. One row per platform, edited in place: raising the floor
+# is a psql UPDATE that takes effect on every app's next launch, with no backend
+# deploy and no store release. Seeded deliberately LOW so that shipping this
+# does not force-update anybody on day one.
+run_migration "app_versions" "CREATE TABLE IF NOT EXISTS app_versions (id SERIAL PRIMARY KEY, platform VARCHAR NOT NULL UNIQUE, min_supported VARCHAR NOT NULL DEFAULT '0.0.0', latest VARCHAR NOT NULL DEFAULT '0.0.0', message VARCHAR, store_url VARCHAR, updated_at TIMESTAMP DEFAULT NOW())"
+run_migration "app_versions_seed" "INSERT INTO app_versions (platform, min_supported, latest) VALUES ('ios', '3.15.0', '3.17.0'), ('android', '3.15.0', '3.17.0') ON CONFLICT (platform) DO NOTHING"
+
+# Location capture. The attendance geofence has existed in
+# domains/scheduling/routes/attendance_mobile.py since it was written, reading
+# clinic.latitude and writing attendance.clock_in_* — none of which existed, so
+# every call to /attendance-mobile/clock-in returned a 500 with an empty body.
+# These columns are what make that endpoint work for the first time.
+run_migration "clinic_geo_lat"     "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION"
+run_migration "clinic_geo_lng"     "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION"
+run_migration "clinic_geo_radius"  "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS geofence_radius_m INTEGER DEFAULT 150"
+run_migration "att_in_lat"    "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_in_latitude DOUBLE PRECISION"
+run_migration "att_in_lng"    "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_in_longitude DOUBLE PRECISION"
+run_migration "att_in_acc"    "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_in_accuracy DOUBLE PRECISION"
+run_migration "att_in_addr"   "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_in_address VARCHAR"
+run_migration "att_in_dist"   "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_in_distance_m DOUBLE PRECISION"
+run_migration "att_out_lat"   "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_out_latitude DOUBLE PRECISION"
+run_migration "att_out_lng"   "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_out_longitude DOUBLE PRECISION"
+run_migration "att_out_acc"   "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_out_accuracy DOUBLE PRECISION"
+run_migration "att_out_addr"  "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_out_address VARCHAR"
+run_migration "att_out_dist"  "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_out_distance_m DOUBLE PRECISION"
+# A precise fix beside the coarse IP guess already in user_devices.location.
+run_migration "device_geo_lat" "ALTER TABLE user_devices ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION"
+run_migration "device_geo_lng" "ALTER TABLE user_devices ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION"
+run_migration "device_geo_acc" "ALTER TABLE user_devices ADD COLUMN IF NOT EXISTS location_accuracy DOUBLE PRECISION"
+
+# Optional staff detail, filled in from the person's own profile rather than
+# asked for while adding them. salary_day is the day of the month pay is handed
+# over, which is what lets Payables say what is owed without anybody keeping a
+# mental calendar. All nullable: "no salary recorded" is a real answer and is
+# not the same as zero.
+run_migration "user_salary_amount" "ALTER TABLE users ADD COLUMN IF NOT EXISTS salary_amount DOUBLE PRECISION"
+run_migration "user_salary_day"    "ALTER TABLE users ADD COLUMN IF NOT EXISTS salary_day INTEGER"
+run_migration "user_joined_on"     "ALTER TABLE users ADD COLUMN IF NOT EXISTS joined_on DATE"
+
 # ── Case costs: lab bills and consultant fees ────────────────────────────────
 # The cost side of a case. Never touches what a patient owes; settling one
 # writes an Expense, which is how lab bills finally reach the ledger.
@@ -318,7 +371,7 @@ echo ""
 echo "▶ Running schema migration check against RDS..."
 
 declare -A REQUIRED_COLS=(
-  ["clinics"]="id clinic_code name address phone email gst_number specialization subscription_plan status razorpay_customer_id cashfree_customer_id logo_url invoice_template primary_color number_of_chairs timings created_at updated_at synced_at sync_status referred_by_code clinic_label parent_clinic_id country currency_code currency_symbol timezone tax_label tax_id license_number license_authority license_expiry account_manager_name account_manager_role account_manager_email account_manager_phone"
+  ["clinics"]="id clinic_code name address phone email gst_number specialization subscription_plan status razorpay_customer_id cashfree_customer_id logo_url invoice_template primary_color number_of_chairs timings created_at updated_at synced_at sync_status referred_by_code clinic_label parent_clinic_id country currency_code currency_symbol timezone tax_label tax_id license_number license_authority license_expiry account_manager_name account_manager_role account_manager_email account_manager_phone master_password_hash master_password_updated_at master_password_attempts master_password_locked_until"
   ["users"]="id email name first_name last_name role is_active permissions created_at updated_at email_report_unsubscribed"
   ["user_clinics"]="user_id clinic_id role is_active created_at"
   ["patients"]="id clinic_id name phone date_of_birth registered_on created_at updated_at"

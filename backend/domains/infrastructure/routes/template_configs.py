@@ -3,7 +3,7 @@ import time
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Request
 from sqlalchemy.orm import Session, object_session
 from database import get_db
-from models import TemplateConfiguration, Clinic
+from models import TemplateConfiguration, Clinic, User
 from core.auth_utils import get_current_user
 from core.dtos import TemplateConfigResponse, TemplateConfigCreate, TemplateConfigUpdate
 from domains.infrastructure.services.r2_storage import (
@@ -144,6 +144,36 @@ def list_variants(category: str, current_user = Depends(get_current_user)):
     raise HTTPException(status_code=400, detail="unknown category")
 
 
+def _preview_doctor_name(db: Session, current_user) -> str:
+    """Whose name to print on the sample document's signature line.
+
+    A real PDF names the doctor from the appointment it belongs to, and the
+    preview has no appointment, so it has to pick somebody. The person looking
+    at the screen is the best guess when they are clinical: they are previewing
+    their own letterhead. Otherwise the clinic owner, who in a single-dentist
+    practice is the doctor. Empty when neither, which is what the PDF really
+    prints for a clinic with no doctor on it.
+
+    Returned verbatim, with no "Dr." bolted on, because the production path
+    (`doctor_name = doc.name`) does not add one either.
+    """
+    from core.roles import is_clinical
+
+    if is_clinical(getattr(current_user, "role", None)):
+        return (getattr(current_user, "name", None) or "").strip()
+
+    owner = (
+        db.query(User)
+        .filter(
+            User.clinic_id == current_user.clinic_id,
+            User.role == "clinic_owner",
+            User.is_active == True,  # noqa: E712 — SQLAlchemy column comparison
+        )
+        .first()
+    )
+    return ((getattr(owner, "name", None) if owner else "") or "").strip()
+
+
 @router.post("/preview")
 def preview_template(
     payload: dict,
@@ -192,9 +222,11 @@ def preview_template(
     config = config_from_payload(payload)
     # The real clinic's letterhead — the visibility toggles govern these very
     # fields, so a fixture here would let the preview show a licence number or
-    # tagline the clinic has never filled in.
+    # tagline the clinic has never filled in. Same reasoning for the doctor on
+    # the signature line, which used to be a hardcoded "Dr. R. Sharma".
     clinic = preview_clinic(
-        db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+        db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first(),
+        doctor_name=_preview_doctor_name(db, current_user),
     )
 
     if category == "invoice":

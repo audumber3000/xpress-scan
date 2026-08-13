@@ -43,9 +43,13 @@ def verify_refresh_token(token: str) -> dict:
             raise jwt.InvalidTokenError("Not a refresh token")
         return payload
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Refresh token expired")
-    except jwt.InvalidTokenError as e:
-        raise HTTPException(status_code=401, detail=f"Invalid refresh token: {str(e)}")
+        raise HTTPException(status_code=401, detail="Your session has ended. Please sign in again.")
+    except jwt.InvalidTokenError:
+        # Deliberately not str(e). PyJWT's text is written for whoever is
+        # debugging the token — "Not enough segments", "Signature verification
+        # failed" — and a 401 detail is not a log line here: it is piped
+        # straight into the signed-out modal on the phone.
+        raise HTTPException(status_code=401, detail="Your session has ended. Please sign in again.")
 
 def hash_password(password: str) -> str:
     """Simple password hashing for offline mode"""
@@ -131,6 +135,11 @@ def register_or_update_device(db: Session, user_id: int, device_info: dict) -> U
         existing_device.is_online = True
         existing_device.last_seen = datetime.utcnow()
         existing_device.location = device_info.get("location")
+        # `is not None`, not truthiness: latitude 0.0 is a real place.
+        if device_info.get("latitude") is not None:
+            existing_device.latitude = device_info.get("latitude")
+            existing_device.longitude = device_info.get("longitude")
+            existing_device.location_accuracy = device_info.get("accuracy")
         existing_device.user_agent = device_info.get("user_agent")
         existing_device.device_os = device_info.get("device_os")
         existing_device.updated_at = datetime.utcnow()
@@ -149,6 +158,9 @@ def register_or_update_device(db: Session, user_id: int, device_info: dict) -> U
             user_agent=device_info.get("user_agent"),
             ip_address=None,  # Mobile doesn't provide IP
             location=device_info.get("location"),
+        latitude=device_info.get("latitude"),
+        longitude=device_info.get("longitude"),
+        location_accuracy=device_info.get("accuracy"),
             is_active=True,
             is_online=True,
             last_seen=datetime.utcnow(),
@@ -353,8 +365,10 @@ async def refresh_mobile_token(request: Request, db: Session = Depends(get_db)):
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Invalid refresh token: {str(e)}")
+    except Exception:
+        # Same reason as _decode_refresh_token above: whatever broke belongs in
+        # the logs, not in the sentence the user reads on the signed-out screen.
+        raise HTTPException(status_code=401, detail="Your session has ended. Please sign in again.")
 
 @router.get("/me")
 async def get_mobile_user_info(request: Request, db: Session = Depends(get_db)):

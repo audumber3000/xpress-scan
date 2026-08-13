@@ -31,6 +31,7 @@ TEMPLATE_UPDATED     = 'template.updated'
 DEVICE_BLOCKED       = 'device.blocked'
 DEVICE_REMOVED       = 'device.removed'
 SECURITY_UPDATED     = 'security.updated'
+MASTER_PASSWORD_SET  = 'security.master_password'
 
 # Authentication. None of this was recorded, which for a clinical system is the
 # largest gap of all: an audit log that cannot answer "who signed in, from
@@ -65,6 +66,7 @@ ACTION_LABELS = {
     DEVICE_BLOCKED:      'Device blocked',
     DEVICE_REMOVED:      'Device removed',
     SECURITY_UPDATED:    'Recovery contact changed',
+    MASTER_PASSWORD_SET: 'Master password changed',
 }
 
 

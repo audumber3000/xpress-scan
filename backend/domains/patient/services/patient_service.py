@@ -190,55 +190,146 @@ class PatientService(PatientServiceProtocol):
 
         return self.patient_repo.update(patient_id, updates)
 
-    def delete_patient(self, patient_id: int, clinic_id: int) -> bool:
-        """Delete patient with business validations"""
+    def financial_footprint(self, patient_id: int, clinic_id: int) -> dict:
+        """What would be destroyed along with this patient, in money terms.
+
+        Read before the delete so the confirmation and the audit line can name
+        the weight of it — "and 3 payments totalling 12,400" reads very
+        differently from "and all their records".
+        """
+        from models import Invoice, InvoicePayment, Payment
+        from sqlalchemy import func
+
+        db = self.patient_repo.db
+        invoice_ids = [r[0] for r in db.query(Invoice.id).filter(
+            Invoice.patient_id == patient_id, Invoice.clinic_id == clinic_id
+        ).all()]
+
+        count, total = 0, 0.0
+        if invoice_ids:
+            row = db.query(
+                func.count(InvoicePayment.id), func.coalesce(func.sum(InvoicePayment.amount), 0.0)
+            ).filter(InvoicePayment.invoice_id.in_(invoice_ids)).one()
+            count, total = int(row[0] or 0), float(row[1] or 0)
+
+        legacy = db.query(
+            func.count(Payment.id), func.coalesce(func.sum(Payment.amount), 0.0)
+        ).filter(Payment.patient_id == patient_id).one()
+
+        return {
+            "invoices": len(invoice_ids),
+            "payments": count + int(legacy[0] or 0),
+            "collected": round(total + float(legacy[1] or 0), 2),
+        }
+
+    def delete_patient(self, patient_id: int, clinic_id: int, force: bool = False) -> bool:
+        """Delete a patient and everything hanging off them.
+
+        `force` is granted by the clinic's master password, and only by that.
+        Without it the old refusals stand: a patient who has paid the clinic, or
+        who has a report on file, is not something a mistaken click should be
+        able to erase. With it, the delete goes all the way through — a clinic
+        that has confirmed at the master-password prompt has said, deliberately,
+        that this record should not exist, and leaving half of it behind (an
+        orphaned receipt, a bill for a patient who is gone) would be worse than
+        either answer.
+        """
         # Check if patient exists and belongs to clinic
         patient = self.get_patient(patient_id, clinic_id)
         if not patient:
             return False
 
-        # Check if patient has payments (prevent deletion if they do)
-        payments = self.payment_repo.get_by_patient_id(patient_id)
-        if payments:
-            raise ValueError("Cannot delete patient with existing payments. Consider deactivating instead.")
+        if not force:
+            # Check if patient has payments (prevent deletion if they do)
+            payments = self.payment_repo.get_by_patient_id(patient_id)
+            if payments:
+                raise ValueError("Cannot delete patient with existing payments. Consider deactivating instead.")
 
-        # Check if patient has reports (prevent deletion if they do)
-        if hasattr(patient, 'reports') and patient.reports:
-            raise ValueError("Cannot delete patient with existing reports.")
+            # Check if patient has reports (prevent deletion if they do)
+            if hasattr(patient, 'reports') and patient.reports:
+                raise ValueError("Cannot delete patient with existing reports.")
 
         # Delete related records to prevent foreign key constraint violations.
         #
         # Order matters — children must go before their parents:
-        #   invoice_line_items / invoice_audit_logs → invoices → appointments
+        #   invoice_payments / discounts / line_items / audit_logs → invoices
+        #   case_costs → lab_orders and case_papers and invoices
         #   lab_orders / prescriptions / patient_documents → case_papers
-        #   x-ray_images / case_papers / invoices / prescriptions → appointments
+        #   x-rays / case_papers / invoices / prescriptions / waitlist → appointments
         # so appointments (referenced by almost everything) are deleted LAST.
-        # (Previously invoices/x-rays/lab-orders were neither guarded nor deleted,
-        # so deleting a patient who had an invoice raised
-        # ForeignKeyViolation "invoices_patient_id_fkey"; and appointments were
-        # deleted before x-rays/case-papers that reference them.)
-        #
-        # Payments and reports remain guarded above (deletion is blocked when they
-        # exist) — we never silently drop real financial/clinical history.
         try:
             from models import (
-                Appointment, Prescription, CasePaper, PatientDocument, PatientConsent,
-                Invoice, InvoiceLineItem, InvoiceAuditLog, XrayImage, LabOrder,
+                Appointment, AppointmentWaitlist, CaseCost, CasePaper, DailyVisit,
+                InventoryTransaction, Invoice, InvoiceAuditLog, InvoiceDiscount,
+                InvoiceLineItem, InvoicePayment, LabOrder, PatientConsent,
+                PatientDocument, Payment, Prescription, Report, XrayImage,
             )
             db = self.patient_repo.db
 
+            # Stock movements are unlinked, not deleted. The material was
+            # physically consumed; erasing the movement would silently change
+            # what the shelf is supposed to hold. Both FKs are nullable, which
+            # is what delete_invoice already relies on.
             invoice_ids = [row[0] for row in db.query(Invoice.id).filter(Invoice.patient_id == patient_id).all()]
+            line_item_ids = []
             if invoice_ids:
+                line_item_ids = [
+                    row[0] for row in db.query(InvoiceLineItem.id)
+                    .filter(InvoiceLineItem.invoice_id.in_(invoice_ids)).all()
+                ]
+            if line_item_ids:
+                db.query(InventoryTransaction).filter(
+                    InventoryTransaction.invoice_line_item_id.in_(line_item_ids)
+                ).update({InventoryTransaction.invoice_line_item_id: None}, synchronize_session=False)
+                db.query(LabOrder).filter(
+                    LabOrder.invoice_line_item_id.in_(line_item_ids)
+                ).update({LabOrder.invoice_line_item_id: None}, synchronize_session=False)
+            db.query(InventoryTransaction).filter(
+                InventoryTransaction.patient_id == patient_id
+            ).update({
+                InventoryTransaction.patient_id: None,
+                InventoryTransaction.case_paper_id: None,
+            }, synchronize_session=False)
+            db.flush()
+
+            # What the clinic owes a lab or a consultant for this case goes with
+            # the case. Any Expense already written to settle one is left alone:
+            # that money genuinely left the clinic's account, and the ledger
+            # should not change because a patient record was removed.
+            db.query(CaseCost).filter(CaseCost.patient_id == patient_id).delete(synchronize_session=False)
+            db.query(LabOrder).filter(LabOrder.patient_id == patient_id).delete(synchronize_session=False)
+            db.flush()
+
+            if invoice_ids:
+                db.query(InvoicePayment).filter(InvoicePayment.invoice_id.in_(invoice_ids)).delete(synchronize_session=False)
+                db.query(InvoiceDiscount).filter(InvoiceDiscount.invoice_id.in_(invoice_ids)).delete(synchronize_session=False)
                 db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id.in_(invoice_ids)).delete(synchronize_session=False)
                 db.query(InvoiceAuditLog).filter(InvoiceAuditLog.invoice_id.in_(invoice_ids)).delete(synchronize_session=False)
+                db.flush()
             db.query(Invoice).filter(Invoice.patient_id == patient_id).delete(synchronize_session=False)
 
-            db.query(LabOrder).filter(LabOrder.patient_id == patient_id).delete(synchronize_session=False)
+            db.query(Payment).filter(Payment.patient_id == patient_id).delete(synchronize_session=False)
+            db.query(Report).filter(Report.patient_id == patient_id).delete(synchronize_session=False)
             db.query(Prescription).filter(Prescription.patient_id == patient_id).delete(synchronize_session=False)
             db.query(PatientDocument).filter(PatientDocument.patient_id == patient_id).delete(synchronize_session=False)
             db.query(XrayImage).filter(XrayImage.patient_id == patient_id).delete(synchronize_session=False)
             db.query(PatientConsent).filter(PatientConsent.patient_id == patient_id).delete(synchronize_session=False)
+            db.query(DailyVisit).filter(DailyVisit.patient_id == patient_id).delete(synchronize_session=False)
             db.query(CasePaper).filter(CasePaper.patient_id == patient_id).delete(synchronize_session=False)
+            db.flush()
+
+            db.query(AppointmentWaitlist).filter(AppointmentWaitlist.patient_id == patient_id).delete(synchronize_session=False)
+            # Somebody else's waitlist entry can point at an appointment of this
+            # patient (that is how a released slot gets booked). Unlink rather
+            # than delete — that person is still waiting.
+            appointment_ids = [
+                row[0] for row in db.query(Appointment.id).filter(Appointment.patient_id == patient_id).all()
+            ]
+            if appointment_ids:
+                db.query(AppointmentWaitlist).filter(
+                    AppointmentWaitlist.booked_appointment_id.in_(appointment_ids)
+                ).update({AppointmentWaitlist.booked_appointment_id: None}, synchronize_session=False)
+                db.flush()
             db.query(Appointment).filter(Appointment.patient_id == patient_id).delete(synchronize_session=False)
             db.flush()
         except Exception as e:
