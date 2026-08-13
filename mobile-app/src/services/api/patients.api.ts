@@ -354,28 +354,31 @@ export class PatientsApiService extends BaseApiService {
     }
   }
 
-  async deletePatient(patientId: string): Promise<void> {
-    try {
-      console.log('🗑️ [API] Deleting patient:', patientId);
+  /**
+   * Delete a patient and everything on their file.
+   *
+   * `masterToken` comes from MasterPasswordSheet and is required — the backend
+   * refuses this call outright without it. It is also what lifts the old
+   * refusals: a patient who has paid the clinic, or who has a report on file,
+   * used to be undeletable at any price and now goes through when somebody has
+   * confirmed at the prompt.
+   */
+  async deletePatient(patientId: string, masterToken: string): Promise<void> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/patients/${patientId}`, {
+      method: 'DELETE',
+      headers: { ...(headers as Record<string, string>), 'X-Master-Token': masterToken },
+    });
 
-      const headers = await this.getAuthHeaders();
-      const response = await this.fetchWithTimeout(`${this.baseURL}/patients/${patientId}`, {
-        method: 'DELETE',
-        headers: headers,
-      });
-
-      console.log('📡 [API] Delete patient response status:', response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ [API] Delete patient error response:', errorText);
-        throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
-      }
-
-      console.log('✅ [API] Patient deleted successfully');
-    } catch (error: any) {
-      console.error('❌ [API] Error deleting patient:', error);
-      throw error;
+    if (!response.ok) {
+      // The server's own sentence, not the raw body. Dumping `body: {...}` into
+      // a toast is how a dentist ends up reading a stack trace.
+      let detail = 'Could not delete this patient.';
+      try {
+        const d = (await response.json())?.detail;
+        if (typeof d === 'string' && d.trim()) detail = d;
+      } catch { /* non-JSON body */ }
+      throw new Error(detail);
     }
   }
 

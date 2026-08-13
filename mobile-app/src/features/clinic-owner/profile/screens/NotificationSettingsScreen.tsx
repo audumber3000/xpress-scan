@@ -10,7 +10,7 @@ import {
 } from 'lucide-react-native';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
 import { showAlert } from '../../../../shared/components/alertService';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import { checkNotificationPermissions } from '../../../../services/notifications/permissions';
 import { adminColors } from '../../../../shared/constants/adminColors';
 import { colors } from '../../../../shared/constants/colors';
@@ -64,14 +64,14 @@ export const NotificationSettingsScreen: React.FC<Props> = ({ navigation }) => {
         try {
           const res = await notificationsApi.verifyTopup(orderID);
           if (res.success) {
-            toast.success('Wallet topped up!');
+            notify.done('Wallet topped up!');
             const w = await notificationsApi.getWallet();
             setWallet(w);
           } else {
-            toast.error('Payment not confirmed yet. If debited, it reflects within 24h.');
+            notify.problem('Payment not confirmed yet. If debited, it reflects within 24h.');
           }
         } catch {
-          toast.error('Could not verify payment. Please refresh.');
+          notify.problem('Could not verify payment. Please refresh.');
         } finally {
           setToppingUp(false);
         }
@@ -79,7 +79,7 @@ export const NotificationSettingsScreen: React.FC<Props> = ({ navigation }) => {
       onError: (err: any) => {
         setToppingUp(false);
         const msg = err?.message || 'Payment failed';
-        if (msg !== 'Payment cancelled') toast.error(msg);
+        if (msg !== 'Payment cancelled') notify.problem(msg);
       },
     });
     return () => { try { CFPaymentGatewayService.removeCallback(); } catch {} };
@@ -141,7 +141,7 @@ export const NotificationSettingsScreen: React.FC<Props> = ({ navigation }) => {
 
   // ── Wallet top-up (Cashfree) ─────────────────────────────
   const handleTopUp = async (amount: number) => {
-    if (amount < 100) { toast.error('Minimum top-up is 100'); return; }
+    if (amount < 100) { notify.problem('Minimum top-up is 100'); return; }
     setToppingUp(true);
     try {
       let CFSession: any, CFEnvironment: any, CFPaymentGatewayService: any;
@@ -150,7 +150,7 @@ export const NotificationSettingsScreen: React.FC<Props> = ({ navigation }) => {
         ({ CFSession, CFEnvironment } = require('cashfree-pg-api-contract'));
       } catch {
         setToppingUp(false);
-        toast.error('Payments need the latest app build. Please update the app.');
+        notify.problem('Payments need the latest app build. Please update the app.');
         return;
       }
       const res = await notificationsApi.topupWallet(amount);
@@ -159,7 +159,7 @@ export const NotificationSettingsScreen: React.FC<Props> = ({ navigation }) => {
       CFPaymentGatewayService.doWebPayment(session);
     } catch (e: any) {
       setToppingUp(false);
-      toast.error(e?.message || 'Failed to start payment.');
+      notify.problem(e?.message || 'Failed to start payment.');
     }
   };
 
@@ -170,10 +170,10 @@ export const NotificationSettingsScreen: React.FC<Props> = ({ navigation }) => {
     const ok = await notificationsApi.setManualWhatsApp(value);
     if (ok) {
       await refreshBackendUser();
-      toast.success(value ? 'Own-number WhatsApp turned on' : 'Turned off');
+      notify.done(value ? 'Own-number WhatsApp turned on' : 'Turned off');
     } else {
       setManualOn(!value);
-      toast.error('Could not update the setting');
+      notify.problem('Could not update the setting');
     }
     setSavingManual(false);
   };

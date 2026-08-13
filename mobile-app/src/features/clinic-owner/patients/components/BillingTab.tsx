@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
   ActivityIndicator, Modal, RefreshControl, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import {
   Plus, Eye, FileText, Receipt, ChevronRight,
   X, Check, Trash2,
@@ -85,13 +85,13 @@ export const BillingTab: React.FC<BillingTabProps> = ({ patientId, patientPhone 
           `invoice_${invoiceId}.pdf`,
           { phone: patientPhone, message: `Hello, here is your invoice from ${clinicName}. Thank you!` },
         );
-        if (result === 'unavailable') toast.error('Add the patient’s phone number to share on WhatsApp.');
+        if (result === 'unavailable') notify.problem('Add the patient’s phone number to share on WhatsApp.');
       } else {
         await patientsApiService.sendInvoiceWhatsApp(invoiceId);
-        toast.success('Invoice sent via WhatsApp.');
+        notify.done('Invoice sent via WhatsApp.');
       }
     } catch (e: any) {
-      toast.error(e.message || 'Failed to send invoice.');
+      notify.problem(e.message || 'Failed to send invoice.');
     } finally {
       setSendingWA(null);
     }
@@ -100,7 +100,7 @@ export const BillingTab: React.FC<BillingTabProps> = ({ patientId, patientPhone 
   const handleCreate = async () => {
     const validItems = lineItems.filter(li => li.description.trim() && li.unit_price.trim());
     if (validItems.length === 0) {
-      toast.error('Add at least one line item with description and price.');
+      notify.problem('Add at least one line item with description and price.');
       return;
     }
     setCreating(true);
@@ -115,13 +115,13 @@ export const BillingTab: React.FC<BillingTabProps> = ({ patientId, patientPhone 
         notes: invoiceNotes,
         status: 'draft',
       });
-      toast.success('Invoice created successfully.');
+      notify.done('Invoice created successfully.');
       setShowCreate(false);
       setLineItems([{ description: '', quantity: '1', unit_price: '' }]);
       setInvoiceNotes('');
       fetchInvoices();
     } catch (e: any) {
-      toast.error(e.message || 'Failed to create invoice.');
+      notify.problem(e.message || 'Failed to create invoice.');
     } finally {
       setCreating(false);
     }

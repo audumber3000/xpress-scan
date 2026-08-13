@@ -12,6 +12,8 @@ import { PatientInfoView } from '../components/PatientInfoView';
 import { FilesView } from '../components/FilesView';
 import { EditPatientModal } from '../components/EditPatientModal';
 import { toast } from '../../../../shared/components/toastService';
+import { MasterPasswordSheet } from '../../../../shared/components/MasterPasswordSheet';
+import { useAuth } from '../../../../app/AuthContext';
 
 import { Phone, Pencil, Trash2 } from 'lucide-react-native';
 import { WhatsAppIcon } from '../../../../shared/components/icons/WhatsAppIcon';
@@ -37,6 +39,11 @@ const TABS: { id: TabType; name: string }[] = [
 
 export const PatientDetailsScreen: React.FC<PatientDetailsScreenProps> = ({ navigation, route }) => {
   const { patientId, initialTab } = route.params;
+  const { backendUser } = useAuth();
+  // Deleting a patient takes their case papers, bills and receipted payments
+  // with them, so the confirmation IS the master password prompt. There is no
+  // plain "are you sure" in front of it any more.
+  const [askMasterPassword, setAskMasterPassword] = useState(false);
   const [patient, setPatient] = useState<Patient | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,28 +88,19 @@ export const PatientDetailsScreen: React.FC<PatientDetailsScreenProps> = ({ navi
 
   const handleDelete = () => {
     if (!patient) return;
-    showAlert(
-      'Delete patient?',
-      `This permanently removes ${patient.name} and their records. This can't be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setDeleting(true);
-              await patientsApiService.deletePatient(patientId);
-              toast.success('Patient deleted');
-              navigation.goBack();
-            } catch (err: any) {
-              setDeleting(false);
-              toast.error(err?.message?.includes('body:') ? 'Could not delete this patient.' : (err?.message || 'Delete failed'));
-            }
-          },
-        },
-      ],
-    );
+    setAskMasterPassword(true);
+  };
+
+  const confirmDelete = async (masterToken: string) => {
+    setDeleting(true);
+    try {
+      await patientsApiService.deletePatient(patientId, masterToken);
+      setAskMasterPassword(false);
+      navigation.goBack();   // the list refreshes behind; nothing to announce
+    } catch (err: any) {
+      setDeleting(false);
+      throw err;   // shown inside the sheet, which stays open
+    }
   };
 
   if (loading) {
@@ -196,6 +194,16 @@ export const PatientDetailsScreen: React.FC<PatientDetailsScreenProps> = ({ navi
           setPatient((prev) => (prev ? { ...prev, ...updated } : prev));
           loadPatientData();
         }}
+      />
+
+      <MasterPasswordSheet
+        visible={askMasterPassword}
+        title="Delete this patient?"
+        message={`${patient?.name ?? 'This patient'} and everything on their file goes with them: case papers, x-rays, prescriptions, bills and any payments already recorded. This cannot be undone.`}
+        confirmLabel="Delete patient"
+        isOwner={backendUser?.role === 'clinic_owner'}
+        onCancel={() => { setAskMasterPassword(false); setDeleting(false); }}
+        onConfirm={confirmDelete}
       />
     </SafeAreaView>
   );

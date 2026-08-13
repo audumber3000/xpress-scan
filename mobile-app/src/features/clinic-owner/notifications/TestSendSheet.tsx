@@ -6,7 +6,7 @@ import {
 import { X, Send, Loader as Loader2 } from 'lucide-react-native';
 import { colors } from '../../../shared/constants/colors';
 import { getCurrencySymbol } from '../../../shared/utils/currency';
-import { toast } from '../../../shared/components/toastService';
+import { notify } from '../../../shared/utils/notify';
 import { CHANNELS, CHANNEL_META, EVENT_LABELS, EVENT_AUDIENCE, getChannelCost, previewRender, ChannelKey } from './constants';
 import { notificationsApi } from './notifications.api';
 
@@ -47,15 +47,15 @@ export const TestSendSheet: React.FC<Props> = ({ visible, eventType, defaultChan
   const canSend = !sending && !!recipient && walletBalance >= cost && channel !== 'sms';
 
   const handleSend = async () => {
-    if (!recipient) { toast.error('Enter a recipient'); return; }
+    if (!recipient) { notify.problem('Enter a recipient'); return; }
     setSending(true);
     try {
       const res = await notificationsApi.templateTestSend(eventType, channel, recipient);
-      toast.success(`Sent! ${cur}${(res.cost ?? 0).toFixed(2)} deducted.`);
+      notify.done(`Sent! ${cur}${(res.cost ?? 0).toFixed(2)} deducted.`);
       onSent(res.new_balance ?? walletBalance);
       onClose();
     } catch (e: any) {
-      toast.error(e?.message || 'Send failed');
+      notify.problem(e?.message || 'Send failed');
     } finally {
       setSending(false);
     }

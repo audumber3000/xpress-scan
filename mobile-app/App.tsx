@@ -3,6 +3,7 @@ import React from 'react';
 import { AuthProvider } from './src/app/AuthContext';
 import { AlertProvider } from './src/app/AlertProvider';
 import { ToastProvider } from './src/app/ToastProvider';
+import { UpdateGate } from './src/app/UpdateGate';
 import { AppNavigator } from './src/app/AppNavigator';
 import { ErrorBoundary } from './src/shared/components/ErrorBoundary';
 import { ClinicSwitcherSheet } from './src/shared/components/ClinicSwitcherSheet';
@@ -56,7 +57,12 @@ export default function App() {
           <AuthProvider>
             <AlertProvider>
               <ToastProvider>
-                <AppContent />
+                {/* Outside the navigator on purpose: a build we have decided is
+                    unsafe must not be usable on any screen, including login,
+                    which is often what breaks first on an old client. */}
+                <UpdateGate>
+                  <AppContent />
+                </UpdateGate>
               </ToastProvider>
             </AlertProvider>
           </AuthProvider>

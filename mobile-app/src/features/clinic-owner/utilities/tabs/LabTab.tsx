@@ -5,7 +5,7 @@ import {
   ActivityIndicator, Modal, TextInput,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import { showAlert } from '../../../../shared/components/alertService';
 import { useFocusEffect } from '@react-navigation/native';
 import { Plus, X, Check, Search, Calendar as CalendarIcon, User, Layers, Clock } from 'lucide-react-native';
@@ -87,7 +87,7 @@ export const LabTab = forwardRef<UtilityTabHandle>((_props, ref) => {
     { text: 'Delete', style: 'destructive', onPress: async () => {
       await utilitiesApiService.deleteLabOrder(id);
       setOrders(p => p.filter(o => o.id !== id));
-      toast.success('Lab order deleted');
+      notify.done('Lab order deleted');
     }},
   ]);
 
@@ -100,11 +100,11 @@ export const LabTab = forwardRef<UtilityTabHandle>((_props, ref) => {
   };
 
   const handleCreate = async () => {
-    if (!form.work_type?.trim()) { toast.warning('Work type is required'); return; }
-    if (!selectedPatient) { toast.warning('Please select a patient'); return; }
-    if (!selectedCasePaper) { toast.warning('Please select a visit (case paper)'); return; }
-    if (!selectedVendor) { toast.warning('Please select a vendor (Lab)'); return; }
-    if (!form.due_date) { toast.warning('Please select a due date'); return; }
+    if (!form.work_type?.trim()) { notify.reverted('Work type is required'); return; }
+    if (!selectedPatient) { notify.reverted('Please select a patient'); return; }
+    if (!selectedCasePaper) { notify.reverted('Please select a visit (case paper)'); return; }
+    if (!selectedVendor) { notify.reverted('Please select a vendor (Lab)'); return; }
+    if (!form.due_date) { notify.reverted('Please select a due date'); return; }
 
     setSaving(true);
     const finalForm: LabOrderCreate = {
@@ -120,9 +120,9 @@ export const LabTab = forwardRef<UtilityTabHandle>((_props, ref) => {
       setOrders(p => [created, ...p]);
       setShowCreate(false);
       resetForm();
-      toast.success('Lab order created');
+      notify.done('Lab order created');
     } else {
-      toast.error('Failed to create lab order.');
+      notify.problem('Failed to create lab order.');
     }
   };
 
@@ -142,9 +142,9 @@ export const LabTab = forwardRef<UtilityTabHandle>((_props, ref) => {
     if (updated) {
       setOrders(p => p.map(o => o.id === editOrder.id ? updated : o));
       setEditOrder(null);
-      toast.success('Lab order updated');
+      notify.done('Lab order updated');
     } else {
-      toast.error('Failed to update lab order.');
+      notify.problem('Failed to update lab order.');
     }
   };
 

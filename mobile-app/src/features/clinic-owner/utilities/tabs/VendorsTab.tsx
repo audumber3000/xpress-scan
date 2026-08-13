@@ -7,7 +7,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { X, Phone } from 'lucide-react-native';
 import type { UtilityTabHandle } from '../utilityTab';
 import { colors } from '../../../../shared/constants/colors';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import { utilitiesApiService, Vendor } from '../../../../services/api/utilities.api';
 import { styles } from './sharedStyles';
 import { getInitials } from './helpers';
@@ -26,7 +26,7 @@ export const VendorsTab = forwardRef<UtilityTabHandle>((_props, ref) => {
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   const submit = async () => {
-    if (!form.name.trim()) { toast.warning('Enter a vendor name'); return; }
+    if (!form.name.trim()) { notify.reverted('Enter a vendor name'); return; }
     setSaving(true);
     try {
       const created = await utilitiesApiService.createVendor({
@@ -37,8 +37,8 @@ export const VendorsTab = forwardRef<UtilityTabHandle>((_props, ref) => {
         email: form.email.trim() || undefined,
         gst_number: form.gst_number.trim() || undefined,
       });
-      if (created) { setItems(p => [created, ...p]); toast.success('Vendor added'); setShowCreate(false); setForm({ name: '', category: '', contact_name: '', phone: '', email: '', gst_number: '' }); }
-    } catch (e: any) { toast.error(e?.message || 'Could not add vendor'); }
+      if (created) { setItems(p => [created, ...p]); notify.done('Vendor added'); setShowCreate(false); setForm({ name: '', category: '', contact_name: '', phone: '', email: '', gst_number: '' }); }
+    } catch (e: any) { notify.problem(e?.message || 'Could not add vendor'); }
     finally { setSaving(false); }
   };
 

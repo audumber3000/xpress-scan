@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { getFixIfAlreadyAllowed } from '../../shared/utils/location';
 import { BaseApiService } from './base.api';
 import { setCurrencySymbol } from '../../shared/utils/currency';
 
@@ -207,6 +208,11 @@ export class AuthApiService extends BaseApiService {
             device_name: 'Mobile App',
             device_type: 'mobile',
             device_platform: Platform.OS === 'ios' ? 'iOS' : 'Android',
+            // Only if the permission is already granted from clocking in. Signing
+            // in is the wrong moment to interrupt somebody with a location
+            // dialog to fill a column on an admin screen, and an app that
+            // prompts at every opportunity teaches people to tap Deny.
+            ...(await getFixIfAlreadyAllowed(4000) ?? {}),
           },
         }),
       });
@@ -246,6 +252,11 @@ export class AuthApiService extends BaseApiService {
             device_name: 'Mobile App',
             device_type: 'mobile',
             device_platform: Platform.OS === 'ios' ? 'iOS' : 'Android',
+            // Only if the permission is already granted from clocking in. Signing
+            // in is the wrong moment to interrupt somebody with a location
+            // dialog to fill a column on an admin screen, and an app that
+            // prompts at every opportunity teaches people to tap Deny.
+            ...(await getFixIfAlreadyAllowed(4000) ?? {}),
           },
         }),
       });

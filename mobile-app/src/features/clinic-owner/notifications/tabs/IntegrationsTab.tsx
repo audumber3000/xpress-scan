@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Switch, ActivityIndicator, Im
 import { Smartphone, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
 import { showAlert } from '../../../../shared/components/alertService';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import { notificationsApi, WareachStatus } from '../notifications.api';
 
 interface Props {
@@ -49,7 +49,7 @@ export const IntegrationsTab: React.FC<Props> = ({ manualOn, savingManual, onTog
         if (s && s !== 'connecting') {
           setStatus(s as WareachStatus['status']);
           setPhone(stRes?.phone_number || null);
-          if (s === 'connected') { setQr(null); toast.success('WhatsApp connected!'); }
+          if (s === 'connected') { setQr(null); notify.done('WhatsApp connected!'); }
         }
       } catch { /* keep polling */ }
     }, 4000);
@@ -63,7 +63,7 @@ export const IntegrationsTab: React.FC<Props> = ({ manualOn, savingManual, onTog
       setStatus((res.status as WareachStatus['status']) || 'connecting');
       if (res.qr) setQr(res.qr);
     } catch (e: any) {
-      toast.error(e?.message || 'Could not start the connection. Please try again.');
+      notify.problem(e?.message || 'Could not start the connection. Please try again.');
     } finally {
       setBusy(false);
     }
@@ -81,9 +81,9 @@ export const IntegrationsTab: React.FC<Props> = ({ manualOn, savingManual, onTog
             try {
               await notificationsApi.wareachDisconnect();
               setStatus('disconnected'); setPhone(null); setQr(null);
-              toast.success('WhatsApp disconnected.');
+              notify.done('WhatsApp disconnected.');
             } catch {
-              toast.error('Could not disconnect. Please try again.');
+              notify.problem('Could not disconnect. Please try again.');
             } finally { setBusy(false); }
           },
         },

@@ -13,7 +13,7 @@ import {
   Dimensions,
   Image
 } from 'react-native';
-import { toast } from '../../shared/components/toastService';
+import { notify } from '../../shared/utils/notify';
 import { X, Plus, Check, MapPin, Building } from 'lucide-react-native';
 import { useAuth } from '../../app/AuthContext';
 import { ClinicInfo } from '../../services/api/auth.api';
@@ -101,19 +101,19 @@ export const ClinicSwitcherSheet: React.FC<ClinicSwitcherSheetProps> = ({
 
   const handleAddBranch = async () => {
     if (!newClinicName.trim()) {
-      toast.error('Branch name is required');
+      notify.problem('Branch name is required');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      toast.success('Branch added successfully');
+      notify.done('Branch added successfully');
       setIsAdding(false);
       setNewClinicName('');
       setNewClinicAddress('');
       await refreshBackendUser();
     } catch (error) {
-      toast.error('Failed to add branch');
+      notify.problem('Failed to add branch');
     } finally {
       setIsSubmitting(false);
     }

@@ -12,7 +12,7 @@ import { PatientAvatar } from '../../../../shared/components/PatientAvatar';
 import { GearLoader } from '../../../../shared/components/GearLoader';
 import { EmptyState } from '../../../../shared/components/EmptyState';
 import { showAlert } from '../../../../shared/components/alertService';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import {
   dailyRegisterApiService, DailyRegisterResponse, DailyVisit, DuplicateMatch,
 } from '../../../../services/api/dailyRegister.api';
@@ -48,7 +48,7 @@ export const TodayPatientsView: React.FC<Props> = ({ navigation, onRegisterNew, 
       const res = await dailyRegisterApiService.getRegister(date);
       setData(res);
     } catch (e: any) {
-      toast.error(e?.message || "Couldn't load the register");
+      notify.problem(e?.message || "Couldn't load the register");
       setData(null);
     } finally {
       setLoading(false);
@@ -83,10 +83,9 @@ export const TodayPatientsView: React.FC<Props> = ({ navigation, onRegisterNew, 
       try {
         setRemovingId(entry.id);
         await dailyRegisterApiService.removeEntry(entry.id);
-        toast.success('Removed from the register');
         load();
       } catch (e: any) {
-        toast.error(e?.message || "Couldn't remove the entry");
+        notify.problem(e?.message || "Couldn't remove the entry");
       } finally {
         setRemovingId(null);
       }
@@ -107,7 +106,7 @@ export const TodayPatientsView: React.FC<Props> = ({ navigation, onRegisterNew, 
       setExporting(true);
       await exportDaySheet(dailyRegisterApiService.exportUrl(date, format), `daily-register_${date}.${format}`, format);
     } catch (e: any) {
-      toast.error(e?.message || 'Export failed');
+      notify.problem(e?.message || 'Export failed');
     } finally {
       setExporting(false);
     }
@@ -308,14 +307,14 @@ const RegisterPatientModal: React.FC<{
   }, [visible]);
 
   const check = async () => {
-    if (!name.trim() && !phone.trim()) { toast.error('Enter a name or phone to look them up'); return; }
+    if (!name.trim() && !phone.trim()) { notify.problem('Enter a name or phone to look them up'); return; }
     try {
       setBusy(true);
       const found = await dailyRegisterApiService.checkDuplicates(name.trim(), phone.trim());
       if (found.length === 0) onRegisterNew(name.trim(), phone.trim());
       else setMatches(found);
     } catch (e: any) {
-      toast.error(e?.message || "Couldn't check existing patients");
+      notify.problem(e?.message || "Couldn't check existing patients");
     } finally {
       setBusy(false);
     }
@@ -325,10 +324,10 @@ const RegisterPatientModal: React.FC<{
     try {
       setBusy(true);
       await dailyRegisterApiService.addEntry({ patient_id: p.id, reason: reason.trim() || null, visit_date: date });
-      toast.success(`${p.name} added to the register`);
+      notify.done(`${p.name} added to the register`);
       onRegisteredExisting();
     } catch (e: any) {
-      toast.error(e?.message || "Couldn't add this patient");
+      notify.problem(e?.message || "Couldn't add this patient");
     } finally {
       setBusy(false);
     }

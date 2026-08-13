@@ -14,7 +14,7 @@ import {
   Platform,
   Switch,
 } from 'react-native';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import {
   ChevronLeft,
   ChevronRight,
@@ -128,7 +128,7 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
       setInvoice(data);
     } catch (error: any) {
       console.error('Error fetching invoice details:', error);
-      toast.error('Failed to load invoice: ' + (error.message || 'Unknown error'));
+      notify.problem('Failed to load invoice: ' + (error.message || 'Unknown error'));
     } finally {
       setLoading(false);
     }
@@ -147,14 +147,14 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
           `invoice_${invoice.id}.pdf`,
           { phone: invoice.patient_phone, message: `Hello, here is your invoice from ${clinicName}. Thank you!` },
         );
-        if (result === 'unavailable') toast.error('Patient phone number is required to share on WhatsApp');
+        if (result === 'unavailable') notify.problem('Patient phone number is required to share on WhatsApp');
       } else {
         await transactionsApiService.sendInvoiceViaWhatsApp(invoice.id);
-        toast.success('Invoice sent via WhatsApp');
+        notify.done('Invoice sent via WhatsApp');
       }
     } catch (error: any) {
       const msg = (error?.message || '').toLowerCase();
-      toast.error(msg.includes('phone') ? 'Patient phone number is required to send via WhatsApp' : (error?.message || 'Failed to send invoice'));
+      notify.problem(msg.includes('phone') ? 'Patient phone number is required to send via WhatsApp' : (error?.message || 'Failed to send invoice'));
     } finally {
       setBusy(false);
     }
@@ -163,7 +163,7 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
   const handleFinaliseAndSend = async () => {
     if (!invoice?.id || busy) return;
     if (!invoice.line_items?.length) {
-      toast.error('Add at least one service before finalising');
+      notify.problem('Add at least one service before finalising');
       setShowAdd(true);
       return;
     }
@@ -178,17 +178,16 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
             `invoice_${invoice.id}.pdf`,
             { phone: invoice.patient_phone, message: `Hello, here is your invoice from ${clinicName}. Thank you!` },
           );
-          toast.success('Invoice finalised');
         } else {
           await transactionsApiService.sendInvoiceViaWhatsApp(invoice.id);
-          toast.success('Finalised and sent via WhatsApp');
+          notify.done('Finalised and sent via WhatsApp');
         }
       } catch {
-        toast.success('Invoice finalised'); // finalised, but send may need a phone number
+        notify.done('Invoice finalised'); // finalised, but send may need a phone number
       }
       await fetchInvoiceDetails();
     } catch (error: any) {
-      toast.error(error?.message || 'Failed to finalise invoice');
+      notify.problem(error?.message || 'Failed to finalise invoice');
     } finally {
       setBusy(false);
     }
@@ -199,9 +198,9 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
       const updated = await transactionsApiService.markInvoicePaid(invoice.id, payload);
       setShowPay(false);
       await fetchInvoiceDetails();
-      toast.success(updated?.status === 'partially_paid' ? 'Partial payment recorded' : 'Payment recorded — invoice paid');
+      notify.done(updated?.status === 'partially_paid' ? 'Partial payment recorded' : 'Payment recorded — invoice paid');
     } catch (e: any) {
-      toast.error(e?.message || 'Failed to record payment');
+      notify.problem(e?.message || 'Failed to record payment');
     }
   };
 
@@ -210,7 +209,7 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
     const updated = await transactionsApiService.addPostIssueDiscount(invoice.id, payload);
     setShowDiscount(false);
     await fetchInvoiceDetails();
-    toast.success('Discount applied');
+    notify.done('Discount applied');
     return updated;
   };
 
@@ -222,9 +221,9 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
           try {
             await transactionsApiService.removePostIssueDiscount(invoice.id, discountId);
             await fetchInvoiceDetails();
-            toast.success('Discount removed');
+            notify.done('Discount removed');
           } catch (e: any) {
-            toast.error(e?.message || 'Failed to remove discount');
+            notify.problem(e?.message || 'Failed to remove discount');
           }
         },
       },
@@ -281,7 +280,7 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
           <TouchableOpacity style={styles.iconBtn} onPress={handleShare} disabled={busy}>
             <Share2 size={19} color="#111827" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => toast.info('Coming soon: PDF export')}>
+          <TouchableOpacity style={styles.iconBtn} onPress={() => notify.done('Coming soon: PDF export')}>
             <Download size={19} color="#111827" />
           </TouchableOpacity>
         </View>
@@ -525,9 +524,8 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
             await transactionsApiService.addLineItem(invoice.id, item);
             setShowAdd(false);
             await fetchInvoiceDetails();
-            toast.success('Item added');
           } catch (e: any) {
-            toast.error(e?.message || 'Failed to add item');
+            notify.problem(e?.message || 'Failed to add item');
           }
         }}
       />
@@ -537,7 +535,7 @@ export const InvoiceDetailsScreen: React.FC<InvoiceDetailsScreenProps> = ({ rout
         canShare={!isDraft}
         onClose={() => setShowMore(false)}
         onShare={() => { setShowMore(false); handleShare(); }}
-        onDownload={() => { setShowMore(false); toast.info('Coming soon: PDF export'); }}
+        onDownload={() => { setShowMore(false); notify.done('Coming soon: PDF export'); }}
       />
 
       <MarkAsPaidModal
@@ -733,11 +731,11 @@ const MarkAsPaidModal = ({
 
   const submit = async () => {
     if (partial && (parsed <= 0 || parsed >= due)) {
-      toast.error(`Partial amount must be between ${sym}1 and ${money(due)}`);
+      notify.problem(`Partial amount must be between ${sym}1 and ${money(due)}`);
       return;
     }
     if (!dateValid) {
-      toast.error('Enter a valid payment date (YYYY-MM-DD), not in the future');
+      notify.problem('Enter a valid payment date (YYYY-MM-DD), not in the future');
       return;
     }
     setSaving(true);

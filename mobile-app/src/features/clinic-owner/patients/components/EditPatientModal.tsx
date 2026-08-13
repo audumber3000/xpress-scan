@@ -6,7 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import { patientsApiService, Patient } from '../../../../services/api/patients.api';
 
 interface Props {
@@ -67,11 +67,10 @@ export const EditPatientModal: React.FC<Props> = ({ visible, patient, onClose, o
       };
       if (village.trim()) payload.village = village.trim();
       const updated = await patientsApiService.updatePatient(patient.id, payload);
-      toast.success('Patient updated');
       onSaved(updated);
       onClose();
     } catch (err: any) {
-      toast.error(err?.message?.includes('body:') ? 'Could not save. Check the details and try again.' : (err?.message || 'Update failed'));
+      notify.problem(err?.message?.includes('body:') ? 'Could not save. Check the details and try again.' : (err?.message || 'Update failed'));
     } finally {
       setSaving(false);
     }

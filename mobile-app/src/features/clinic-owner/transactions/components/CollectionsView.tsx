@@ -8,7 +8,7 @@ import { componentRadius } from '../../../../shared/constants/theme';
 import { PatientAvatar } from '../../../../shared/components/PatientAvatar';
 import { GearLoader } from '../../../../shared/components/GearLoader';
 import { showAlert } from '../../../../shared/components/alertService';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import { transactionsApiService, CollectionsResponse, CollectionEntry } from '../../../../services/api/transactions.api';
 import { getCurrencySymbol } from '../../../../shared/utils/currency';
 import { todayISO, shiftISO, formatDisplayDate, formatTime } from '../../../../shared/utils/datetime';
@@ -40,7 +40,7 @@ export const CollectionsView: React.FC<Props> = ({ onOpenInvoice }) => {
       const res = await transactionsApiService.getCollections(date);
       setData(res);
     } catch (e: any) {
-      toast.error(e?.message || "Couldn't load collections");
+      notify.problem(e?.message || "Couldn't load collections");
       setData(null);
     } finally {
       setLoading(false);
@@ -63,7 +63,7 @@ export const CollectionsView: React.FC<Props> = ({ onOpenInvoice }) => {
       setExporting(true);
       await exportDaySheet(transactionsApiService.collectionsExportUrl(date, format), `collections_${date}.${format}`, format);
     } catch (e: any) {
-      toast.error(e?.message || 'Export failed');
+      notify.problem(e?.message || 'Export failed');
     } finally {
       setExporting(false);
     }

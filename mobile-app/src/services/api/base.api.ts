@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiBaseUrl } from '../../config/api.config';
+import { notifySessionExpired } from './session';
 
 const FETCH_TIMEOUT_MS = 8000;
 
@@ -69,6 +70,29 @@ export class BaseApiService {
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
       const response = await fetch(url, { ...options, signal: controller.signal });
+
+      // A session revoked while the app is open: the owner deactivated this
+      // person or blocked this device, and the backend refuses from the next
+      // request onward. Announce it once, centrally, so every screen does not
+      // have to recognise a 401 for itself — and so the user lands back on the
+      // sign-in screen instead of watching everything quietly fail.
+      //
+      // Only for requests that carried a token. A 401 from signing in with the
+      // wrong password is an answer, not an expiry.
+      if (response.status === 401) {
+        const sentAuth = !!(options.headers as Record<string, string> | undefined)?.['Authorization'];
+        if (sentAuth) {
+          let reason = 'Your session has ended. Please sign in again.';
+          try {
+            const body = await response.clone().json();
+            if (typeof body?.detail === 'string' && body.detail.trim()) reason = body.detail;
+          } catch {
+            /* non-JSON body — the default sentence is fine */
+          }
+          notifySessionExpired(reason);
+        }
+      }
+
       return response;
     } catch (err: any) {
       if (err.name === 'AbortError') {

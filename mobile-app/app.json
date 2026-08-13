@@ -20,7 +20,8 @@
       "usesAppleSignIn": true,
       "infoPlist": {
         "CFBundleDisplayName": "MolarPlus",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "MolarPlus records where you clock in and out so your clinic can confirm attendance at the practice. Location is read only when you tap, never in the background."
       }
     },
     "android": {
@@ -31,7 +32,11 @@
       "edgeToEdgeEnabled": true,
       "package": "com.molarplus.app",
       "versionCode": 4,
-      "label": "MolarPlus"
+      "label": "MolarPlus",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
     "plugins": [
       [
@@ -55,7 +60,14 @@
           "cameraPermission": "MolarPlus needs camera access to photograph handwritten patient registers."
         }
       ],
-      "./plugins/withFirebaseModularHeaders"
+      "./plugins/withFirebaseModularHeaders",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "MolarPlus records where you clock in and out so your clinic can confirm attendance at the practice.",
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ]
     ],
     "web": {
       "favicon": "./assets/favicon.png"

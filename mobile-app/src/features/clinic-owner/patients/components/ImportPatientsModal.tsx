@@ -17,7 +17,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { colors } from '../../../../shared/constants/colors';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import { patientsApiService } from '../../../../services/api/patients.api';
 
 interface ImportPatientsModalProps {
@@ -148,7 +148,7 @@ export const ImportPatientsModal: React.FC<ImportPatientsModalProps> = ({
       const content = await FileSystem.readAsStringAsync(asset.uri);
       const matrix = parseCsv(content);
       if (matrix.length < 2) {
-        toast.error('No rows found. Make sure the file has a header row and at least one patient.');
+        notify.problem('No rows found. Make sure the file has a header row and at least one patient.');
         setParsing(false);
         return;
       }
@@ -166,7 +166,7 @@ export const ImportPatientsModal: React.FC<ImportPatientsModalProps> = ({
       setParsing(false);
     } catch (err) {
       console.error('CSV pick/parse error:', err);
-      toast.error('Could not read that file.');
+      notify.problem('Could not read that file.');
       setParsing(false);
     }
   };
@@ -183,7 +183,7 @@ export const ImportPatientsModal: React.FC<ImportPatientsModalProps> = ({
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
-        toast.error('Photo access is needed to scan a register.');
+        notify.problem('Photo access is needed to scan a register.');
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -216,7 +216,7 @@ export const ImportPatientsModal: React.FC<ImportPatientsModalProps> = ({
       }));
 
       if (!extracted.length) {
-        toast.error(
+        notify.problem(
           res.errors?.length
             ? "We couldn't read those photos. Make sure they're clear, well-lit, and show the register text."
             : 'No patient rows found. Try clearer, well-lit photos of the register.',
@@ -226,13 +226,13 @@ export const ImportPatientsModal: React.FC<ImportPatientsModalProps> = ({
       setManualRows(extracted);
       setMode('manual');
       const flagged = (res.rows || []).filter((r: any) => r.confidence === 'low' || r.issues).length;
-      toast.success(
+      notify.done(
         `Found ${extracted.length} patient${extracted.length === 1 ? '' : 's'}` +
           (flagged ? ` — ${flagged} need a quick check.` : '. Review before importing.'),
       );
     } catch (err: any) {
       console.error('Scan register error:', err);
-      toast.error(err?.message || 'Could not read the register photos.');
+      notify.problem(err?.message || 'Could not read the register photos.');
     } finally {
       setScanning(false);
     }
@@ -284,9 +284,9 @@ export const ImportPatientsModal: React.FC<ImportPatientsModalProps> = ({
     try {
       const res = await patientsApiService.importPatients(payload);
       if (res.imported_count > 0) {
-        toast.success(res.message || `Imported ${res.imported_count} patients`);
+        notify.done(res.message || `Imported ${res.imported_count} patients`);
       } else {
-        toast.error(res.errors?.[0] || 'No patients were imported. Please check the rows.');
+        notify.problem(res.errors?.[0] || 'No patients were imported. Please check the rows.');
       }
       if (res.imported_count > 0) {
         reset();
@@ -295,7 +295,7 @@ export const ImportPatientsModal: React.FC<ImportPatientsModalProps> = ({
       }
     } catch (err: any) {
       console.error('Import error:', err);
-      toast.error('Import failed. Please try again.');
+      notify.problem('Import failed. Please try again.');
     } finally {
       setImporting(false);
     }

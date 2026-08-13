@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
   StatusBar, Alert, ActivityIndicator, Modal, Switch,
 } from 'react-native';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -188,7 +188,7 @@ export const TeamScreen: React.FC<TeamScreenProps> = ({ navigation, route }) => 
       setMarkModal(null);
       loadAttendance();
     } catch (e) {
-      toast.error('Failed to mark attendance');
+      notify.problem('Failed to mark attendance');
     } finally {
       setMarkSaving(false);
     }
@@ -204,12 +204,12 @@ export const TeamScreen: React.FC<TeamScreenProps> = ({ navigation, route }) => 
         setStaff(updated);
         setSelectedMember({ ...selectedMember, role: newRole });
         setRoleModal(false);
-        toast.success(`Role changed to ${newRole}`);
+        notify.done(`Role changed to ${newRole}`);
       } else {
-        toast.error('Failed to update role');
+        notify.problem('Failed to update role');
       }
     } catch (e) {
-      toast.error('Unexpected error');
+      notify.problem('Unexpected error');
     } finally {
       setRoleSaving(false);
     }

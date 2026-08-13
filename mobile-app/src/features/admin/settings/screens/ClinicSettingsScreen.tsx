@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ClinicLocationCard } from '../components/ClinicLocationCard';
 import { Camera, Mail, Phone, MapPin, ChevronRight, Monitor, Smartphone, Building2, Briefcase, Info, Clock, IndianRupee } from 'lucide-react-native';
 import { adminColors } from '../../../../shared/constants/adminColors';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
@@ -81,6 +82,13 @@ export const ClinicSettingsScreen: React.FC<ClinicSettingsScreenProps> = ({ navi
           </View>
           <Text style={styles.clinicNameMain}>{clinic?.name || 'Clinic Name'}</Text>
           <Text style={styles.clinicEmailSub}>{clinic?.email || 'No email set'}</Text>
+        </View>
+
+        {/* Where the clinic physically is — the centre of the attendance
+            geofence. Sits high on the screen because until it is set, clocking
+            in is unrestricted and nobody knows. */}
+        <View style={{ paddingHorizontal: 16, marginTop: 16 }}>
+          <ClinicLocationCard />
         </View>
 
         {/* Vital Information */}

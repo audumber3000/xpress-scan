@@ -11,7 +11,7 @@ import {
   Linking,
   Dimensions
 } from 'react-native';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import { 
   ChevronLeft, 
   Calendar, 
@@ -50,7 +50,7 @@ export const ExpenseDetailsScreen: React.FC<ExpenseDetailsScreenProps> = ({ rout
       setExpense(data);
     } catch (error: any) {
       console.error('Error fetching expense details:', error);
-      toast.error('Failed to load expense details: ' + (error.message || 'Unknown error'));
+      notify.problem('Failed to load expense details: ' + (error.message || 'Unknown error'));
     } finally {
       setLoading(false);
     }

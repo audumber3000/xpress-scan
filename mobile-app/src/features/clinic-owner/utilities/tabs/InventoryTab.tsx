@@ -5,7 +5,7 @@ import {
   ActivityIndicator, Modal, TextInput,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import { showAlert } from '../../../../shared/components/alertService';
 import { useFocusEffect } from '@react-navigation/native';
 import { Plus, X, AlertTriangle } from 'lucide-react-native';
@@ -56,14 +56,14 @@ export const InventoryTab = forwardRef<UtilityTabHandle>((_props, ref) => {
     { text: 'Delete', style: 'destructive', onPress: async () => {
       await utilitiesApiService.deleteInventoryItem(id);
       setItems(p => p.filter(i => i.id !== id));
-      toast.success('Item deleted');
+      notify.done('Item deleted');
     }},
   ]);
 
   const handleRestock = async () => {
     if (!actionItem) return;
     const add = parseFloat(restockQty) || 0;
-    if (add <= 0) { toast.warning('Enter a quantity greater than 0'); return; }
+    if (add <= 0) { notify.reverted('Enter a quantity greater than 0'); return; }
     setSaving(true);
     const updated = await utilitiesApiService.updateInventoryItem(actionItem.id, { quantity: actionItem.quantity + add });
     setSaving(false);
@@ -71,12 +71,11 @@ export const InventoryTab = forwardRef<UtilityTabHandle>((_props, ref) => {
       setItems(p => p.map(i => i.id === actionItem.id ? updated : i));
       setActionItem(updated);
       setRestockQty('');
-      toast.success('Stock updated');
     }
   };
 
   const handleCreate = async () => {
-    if (!form.name?.trim()) { toast.warning('Item name is required'); return; }
+    if (!form.name?.trim()) { notify.reverted('Item name is required'); return; }
     setSaving(true);
     const created = await utilitiesApiService.createInventoryItem(form as InventoryItemCreate);
     setSaving(false);
@@ -84,9 +83,9 @@ export const InventoryTab = forwardRef<UtilityTabHandle>((_props, ref) => {
       setItems(p => [created, ...p]);
       setShowCreate(false);
       setForm({ name: '', category: '', unit: '', quantity: 0, min_stock_level: 0, price_per_unit: 0 });
-      toast.success('Inventory item created');
+      notify.done('Inventory item created');
     } else {
-      toast.error('Failed to create item.');
+      notify.problem('Failed to create item.');
     }
   };
 
@@ -98,9 +97,9 @@ export const InventoryTab = forwardRef<UtilityTabHandle>((_props, ref) => {
     if (updated) {
       setItems(p => p.map(i => i.id === editItem.id ? updated : i));
       setEditItem(null);
-      toast.success('Inventory item updated');
+      notify.done('Inventory item updated');
     } else {
-      toast.error('Failed to update item.');
+      notify.problem('Failed to update item.');
     }
   };
 

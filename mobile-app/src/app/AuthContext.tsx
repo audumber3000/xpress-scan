@@ -2,6 +2,8 @@ import { createContext, FC, PropsWithChildren, useCallback, useContext, useEffec
 import { User, onAuthStateChanged } from "firebase/auth"
 import { auth } from "../config/firebase"
 import { signInWithEmail, signOutUser } from "../services/auth/authService"
+import { registerSessionExpiredHandler, unregisterSessionExpiredHandler } from "../services/api/session"
+import { SessionEndedModal } from "../shared/components/SessionEndedModal"
 import { authApiService, type BackendUser } from "../services/api/auth.api"
 import { showAlert } from "../shared/components/alertService"
 import { usePostHog } from 'posthog-react-native'
@@ -33,6 +35,8 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
   const posthog = usePostHog()
   const [user, setUser] = useState<User | null>(null)
   const [backendUser, setBackendUser] = useState<BackendUser | null>(null)
+  // Set only when the clinic ended the session, never on a normal sign-out.
+  const [sessionEnded, setSessionEnded] = useState<string | null>(null)
   const [authEmail, setAuthEmail] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [isClinicSwitcherVisible, setIsClinicSwitcherVisible] = useState(false)
@@ -129,6 +133,20 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
     return () => unsubscribe()
   }, [syncBackendUser])
 
+  // Signed out by the clinic, not by the user: an owner deactivated them or
+  // blocked this device. The backend already refuses every request; this is
+  // what actually returns them to the sign-in screen.
+  useEffect(() => {
+    registerSessionExpiredHandler(async (reason) => {
+      // A modal, not a toast. Being signed out mid-shift is the end of the
+      // session, not a notice that can fade before it has been read.
+      setSessionEnded(reason)
+      try { await signOutUser() } catch { /* already gone */ }
+      setBackendUser(null)
+    })
+    return () => unregisterSessionExpiredHandler()
+  }, [])
+
   const logout = useCallback(async () => {
     await signOutUser()
     await authApiService.clearTokens()
@@ -222,7 +240,18 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
     setAppleFullName,
   }
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      <SessionEndedModal
+        visible={!!sessionEnded}
+        reason={sessionEnded}
+        // Dismissing only reveals the sign-in screen the sign-out already put
+        // them on. There is nothing else useful for this button to do.
+        onSignIn={() => setSessionEnded(null)}
+      />
+    </AuthContext.Provider>
+  )
 }
 
 export const useAuth = () => {

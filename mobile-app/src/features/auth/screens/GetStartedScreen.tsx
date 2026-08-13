@@ -11,7 +11,7 @@ import {
   ScrollView,
   Image
 } from 'react-native';
-import { toast } from '../../../shared/components/toastService';
+import { notify } from '../../../shared/utils/notify';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   ChevronRight,
@@ -36,9 +36,9 @@ export const GetStartedScreen: React.FC<GetStartedScreenProps> = ({ navigation }
   const handleGoogleRegister = async () => {
     try {
       const { user, error } = await signInWithGoogle('clinic_owner');
-      if (error) toast.error(error || 'Registration failed');
+      if (error) notify.problem(error || 'Registration failed');
     } catch (err: any) {
-      toast.error(err.message);
+      notify.problem(err.message);
     }
   };
 
@@ -46,14 +46,14 @@ export const GetStartedScreen: React.FC<GetStartedScreenProps> = ({ navigation }
     try {
       const { user, appleFullName, error } = await signInWithApple('clinic_owner');
       if (error) {
-        if (error !== 'Sign in was cancelled') toast.error(error);
+        if (error !== 'Sign in was cancelled') notify.problem(error);
         return;
       }
       // Persist Apple's first-time-only name into context so SignupScreen
       // can pre-fill it without re-prompting (App Store guideline 4).
       if (appleFullName) setAppleFullName(appleFullName);
     } catch (err: any) {
-      toast.error(err.message);
+      notify.problem(err.message);
     }
   };
 

@@ -6,7 +6,7 @@ import {
 import Svg, { Rect } from 'react-native-svg';
 import * as DocumentPicker from 'expo-document-picker';
 import { WebView } from 'react-native-webview';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronLeft, Save, Check, Maximize2, X } from 'lucide-react-native';
@@ -251,16 +251,16 @@ export const TemplatesScreen: React.FC<TemplatesScreenProps> = ({ navigation }) 
       });
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
-      if (asset.size && asset.size > 5 * 1024 * 1024) { toast.error('Logo must be under 5 MB'); return; }
+      if (asset.size && asset.size > 5 * 1024 * 1024) { notify.problem('Logo must be under 5 MB'); return; }
       setUploadingLogo(true);
       const res = await adminApiService.uploadTemplateLogo(activeTab, {
         uri: asset.uri, name: asset.name || 'logo', type: asset.mimeType || 'image/png',
       });
-      if (res?.logo_url) { updateField('logo_url', res.logo_url); toast.success('Logo uploaded — remember to save'); }
-      else toast.error('Upload failed. Try a different image.');
+      if (res?.logo_url) { updateField('logo_url', res.logo_url); notify.done('Logo uploaded — remember to save'); }
+      else notify.problem('Upload failed. Try a different image.');
     } catch (e) {
       console.error('[Templates] Logo pick error:', e);
-      toast.error('Could not upload logo');
+      notify.problem('Could not upload logo');
     } finally {
       setUploadingLogo(false);
     }
@@ -276,8 +276,8 @@ export const TemplatesScreen: React.FC<TemplatesScreenProps> = ({ navigation }) 
       ...(activeTab === 'invoice' ? { gst_number: cfg.gst_number } : {}),
     });
     setSaving(false);
-    if (ok) toast.success(`${TABS.find(t => t.id === activeTab)?.label} template saved!`);
-    else toast.error('Failed to save. Try again.');
+    if (ok) notify.done(`${TABS.find(t => t.id === activeTab)?.label} template saved!`);
+    else notify.problem('Failed to save. Try again.');
   };
 
   const toggleField = (key: string) => {

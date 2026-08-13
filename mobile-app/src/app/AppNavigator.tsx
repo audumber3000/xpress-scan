@@ -43,6 +43,8 @@ import { ConnectivityBanner } from '../shared/components/ConnectivityBanner';
 import { PracticeSettingsScreen } from '../features/admin/practice-settings/screens/PracticeSettingsScreen';
 import { TemplatesScreen } from '../features/admin/templates/screens/TemplatesScreen';
 import { AuditLogScreen } from '../features/admin/security/screens/AuditLogScreen';
+import { VerificationScreen } from '../features/admin/security/screens/VerificationScreen';
+import { ClockInScreen } from '../features/admin/attendance/screens/ClockInScreen';
 import { TeamScreen } from '../features/admin/team/screens/TeamScreen';
 import { GoogleReviewsScreen } from '../features/clinic-owner/marketing/screens/GoogleReviewsScreen';
 import { TabletWebAppScreen } from '../features/tablet/screens/TabletWebAppScreen';
@@ -79,6 +81,8 @@ export type RootStackParamList = {
   PracticeSettings: { category: string; backendKey: string; label: string };
   Templates: undefined;
   AuditLog: undefined;
+  Verification: undefined;
+  ClockIn: undefined;
   Team: { initialTab?: 'staff' | 'attendance' | 'permissions' } | undefined;
   Patients: undefined;
   Appointments: undefined;
@@ -212,6 +216,8 @@ export const AppNavigator = () => {
                 <Stack.Screen name="PracticeSettings" component={PracticeSettingsScreen} />
                 <Stack.Screen name="Templates" component={TemplatesScreen} />
                 <Stack.Screen name="AuditLog" component={AuditLogScreen} />
+                <Stack.Screen name="Verification" component={VerificationScreen} />
+                <Stack.Screen name="ClockIn" component={ClockInScreen} />
                 <Stack.Screen name="Team" component={TeamScreen} />
                 <Stack.Screen name="Profile" component={ProfileScreen} />
                 <Stack.Screen name="GoogleReviews" component={GoogleReviewsScreen} />

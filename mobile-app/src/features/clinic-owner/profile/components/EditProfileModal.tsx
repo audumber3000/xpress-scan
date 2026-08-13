@@ -6,7 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import { authApiService, BackendUser } from '../../../../services/api/auth.api';
 
 interface Props {
@@ -59,11 +59,10 @@ export const EditProfileModal: React.FC<Props> = ({ visible, user, onClose, onSa
         last_name: lastName.trim(),
         phone: phone.trim(),
       });
-      toast.success('Profile updated');
       onSaved();
       onClose();
     } catch (err: any) {
-      toast.error(err?.message?.includes('HTTP') ? 'Could not save. Please try again.' : (err?.message || 'Update failed'));
+      notify.problem(err?.message?.includes('HTTP') ? 'Could not save. Please try again.' : (err?.message || 'Update failed'));
     } finally {
       setSaving(false);
     }

@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import { FileText, Image as ImageIcon, Plus, File, ExternalLink } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
 import { patientsApiService, XrayFile } from '../../../../services/api/patients.api';
@@ -83,14 +83,14 @@ export const FilesView: React.FC<FilesViewProps> = ({ patientId }) => {
 
   const openUrl = async (url?: string) => {
     if (!url || !isHttp(url)) {
-      toast.error('File is not available to open.');
+      notify.problem('File is not available to open.');
       return;
     }
     try {
       await WebBrowser.openBrowserAsync(url);
     } catch (error) {
       console.error('Error opening file:', error);
-      toast.error('Could not open file.');
+      notify.problem('Could not open file.');
     }
   };
 
@@ -120,12 +120,12 @@ export const FilesView: React.FC<FilesViewProps> = ({ patientId }) => {
           setUploadProgress(fraction);
           setUploadPhase(fraction >= 1 ? 'processing' : 'uploading');
         });
-        toast.success('File uploaded successfully');
+        notify.done('File uploaded successfully');
         loadFiles();
       }
     } catch (error) {
       console.error('Error picking document:', error);
-      toast.error('Failed to pick or upload document');
+      notify.problem('Failed to pick or upload document');
     } finally {
       setUploading(false);
       setUploadProgress(0);

@@ -15,7 +15,7 @@ import {
   Alert,
   Image
 } from 'react-native';
-import { toast } from '../../../shared/components/toastService';
+import { notify } from '../../../shared/utils/notify';
 
 import {
   ChevronRight,
@@ -83,11 +83,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
             );
           }
         } else {
-          toast.error(error || 'Login failed');
+          notify.problem(error || 'Login failed');
         }
       }
     } catch (err: any) {
-      toast.error(err.message || 'An error occurred');
+      notify.problem(err.message || 'An error occurred');
     } finally {
       setIsLoading(false);
     }
@@ -115,7 +115,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
             );
           }
         } else {
-          toast.error(error);
+          notify.problem(error);
         }
         return;
       }
@@ -123,7 +123,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       // Apple ID. For login (existing user) it'll be null — that's expected.
       if (appleFullName) setAppleFullName(appleFullName);
     } catch (err: any) {
-      toast.error(err.message || 'An error occurred');
+      notify.problem(err.message || 'An error occurred');
     } finally {
       setIsLoading(false);
     }
@@ -131,7 +131,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
 
   const handleEmailLogin = async () => {
     if (!email || !password) {
-      toast.warning('Please enter your email or username and password');
+      notify.reverted('Please enter your email or username and password');
       return;
     }
 
@@ -153,11 +153,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
             );
           }
         } else {
-          toast.error(error || 'Login failed');
+          notify.problem(error || 'Login failed');
         }
       }
     } catch (err: any) {
-      toast.error(err.message || 'An error occurred');
+      notify.problem(err.message || 'An error occurred');
     } finally {
       setIsLoading(false);
     }
@@ -199,12 +199,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     try {
       const { error } = await resetPassword(resetEmail.trim());
       if (error) {
-        toast.error(error);
+        notify.problem(error);
       } else {
         setResetSent(true);
       }
     } catch (err: any) {
-      toast.error(err.message || 'Could not send reset email.');
+      notify.problem(err.message || 'Could not send reset email.');
     } finally {
       setIsLoading(false);
     }

@@ -7,7 +7,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { X } from 'lucide-react-native';
 import type { UtilityTabHandle } from '../utilityTab';
 import { colors } from '../../../../shared/constants/colors';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import { showAlert } from '../../../../shared/components/alertService';
 import { utilitiesApiService, MedicationStock } from '../../../../services/api/utilities.api';
 import { getCurrencySymbol } from '../../../../shared/utils/currency';
@@ -36,12 +36,11 @@ export const MedicationTab = forwardRef<UtilityTabHandle>((_props, ref) => {
     { text: 'Delete', style: 'destructive', onPress: async () => {
       await utilitiesApiService.deleteMedicationStock(id);
       setItems(p => p.filter(i => i.id !== id));
-      toast.success('Medicine removed');
     }},
   ]);
 
   const submit = async () => {
-    if (!form.name.trim()) { toast.warning('Enter a medicine name'); return; }
+    if (!form.name.trim()) { notify.reverted('Enter a medicine name'); return; }
     setSaving(true);
     try {
       const created = await utilitiesApiService.createMedicationStock({
@@ -53,8 +52,8 @@ export const MedicationTab = forwardRef<UtilityTabHandle>((_props, ref) => {
         min_stock_level: parseFloat(form.min_stock_level) || 0,
         price_per_unit: parseFloat(form.price_per_unit) || 0,
       });
-      if (created) { setItems(p => [created, ...p]); toast.success('Medicine added'); setShowCreate(false); setForm({ name: '', strength: '', form: '', quantity: '', unit: '', min_stock_level: '', price_per_unit: '' }); }
-    } catch (e: any) { toast.error(e?.message || 'Could not add medicine'); }
+      if (created) { setItems(p => [created, ...p]); notify.done('Medicine added'); setShowCreate(false); setForm({ name: '', strength: '', form: '', quantity: '', unit: '', min_stock_level: '', price_per_unit: '' }); }
+    } catch (e: any) { notify.problem(e?.message || 'Could not add medicine'); }
     finally { setSaving(false); }
   };
 

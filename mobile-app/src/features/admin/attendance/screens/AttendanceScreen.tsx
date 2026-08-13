@@ -5,6 +5,8 @@ import { ChevronLeft, Calendar, MoreVertical, X, UserCircle2, Clock, CheckCircle
 import { adminColors } from '../../../../shared/constants/adminColors';
 import { adminApiService } from '../../../../services/api/admin.api';
 import { GearLoader } from '../../../../shared/components/GearLoader';
+import { ClinicLocationCard } from '../../settings/components/ClinicLocationCard';
+import { useAuth } from '../../../../app/AuthContext';
 import { format, startOfWeek, addWeeks, subWeeks } from 'date-fns';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -14,6 +16,7 @@ interface AttendanceScreenProps {
 }
 
 export const AttendanceScreen: React.FC<AttendanceScreenProps> = ({ navigation }) => {
+  const { backendUser } = useAuth();
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
@@ -92,6 +95,16 @@ export const AttendanceScreen: React.FC<AttendanceScreenProps> = ({ navigation }
         </View>
       ) : (
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {/* The geofence lives here as well as in Clinic settings. An owner
+              wondering how attendance is policed looks at Attendance, not at
+              the clinic's name and address — this is the screen the question
+              gets asked on. Owner-only, since the PUT is owner-gated anyway. */}
+          {backendUser?.role === 'clinic_owner' && (
+            <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
+              <ClinicLocationCard />
+            </View>
+          )}
+
           {/* Stats Bar */}
           <View style={styles.statsBar}>
             <View style={[styles.statItem, { backgroundColor: 'rgba(59, 130, 246, 0.1)' }]}>

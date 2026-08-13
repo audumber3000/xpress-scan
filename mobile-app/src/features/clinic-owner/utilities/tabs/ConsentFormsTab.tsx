@@ -5,7 +5,7 @@ import {
   ActivityIndicator, Modal, TextInput,
   KeyboardAvoidingView, Platform, StyleSheet, Share, Linking,
 } from 'react-native';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import { showAlert } from '../../../../shared/components/alertService';
 import { useFocusEffect } from '@react-navigation/native';
 import { Plus, X, Send, Link } from 'lucide-react-native';
@@ -79,7 +79,7 @@ export const ConsentFormsTab = forwardRef<UtilityTabHandle>((_props, ref) => {
 
   const handleCreate = async () => {
     if (!form.name.trim() || !form.content.trim()) {
-      toast.warning('Name and content are required');
+      notify.reverted('Name and content are required');
       return;
     }
     setSaving(true);
@@ -89,9 +89,9 @@ export const ConsentFormsTab = forwardRef<UtilityTabHandle>((_props, ref) => {
       setTemplates(p => [created, ...p]);
       setShowCreate(false);
       setForm({ name: '', content: '' });
-      toast.success('Consent template created');
+      notify.done('Consent template created');
     } else {
-      toast.error('Failed to create consent template.');
+      notify.problem('Failed to create consent template.');
     }
   };
 
@@ -103,15 +103,15 @@ export const ConsentFormsTab = forwardRef<UtilityTabHandle>((_props, ref) => {
     if (updated) {
       setTemplates(p => p.map(t => t.id === editTemplate.id ? updated : t));
       setEditTemplate(null);
-      toast.success('Consent template updated');
+      notify.done('Consent template updated');
     } else {
-      toast.error('Failed to update template.');
+      notify.problem('Failed to update template.');
     }
   };
 
   const handleGenerateLink = async (patient: Patient) => {
     if (!sendTemplate || !backendUser?.clinic?.id) {
-      toast.error('Clinic information not available.');
+      notify.problem('Clinic information not available.');
       return;
     }
     setGenerating(true);
@@ -127,9 +127,9 @@ export const ConsentFormsTab = forwardRef<UtilityTabHandle>((_props, ref) => {
     setGenerating(false);
     if (result) {
       setGeneratedLink(`${WEB_BASE_URL}${result.signUrl}`);
-      toast.success('Consent link generated');
+      notify.done('Consent link generated');
     } else {
-      toast.error('Failed to generate link. Please try again.');
+      notify.problem('Failed to generate link. Please try again.');
     }
   };
 
@@ -146,7 +146,7 @@ export const ConsentFormsTab = forwardRef<UtilityTabHandle>((_props, ref) => {
     if (canOpen) {
       await Linking.openURL(url);
     } else {
-      toast.warning('Please install WhatsApp to use this option.');
+      notify.reverted('Please install WhatsApp to use this option.');
     }
   };
 

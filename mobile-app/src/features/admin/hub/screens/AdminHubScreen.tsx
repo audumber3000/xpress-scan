@@ -11,8 +11,7 @@ import {
   MapPin, CheckCircle2, Building2, Users, Settings2, FileText, Bell,
   ChevronRight, ChevronDown, Plus,
   ClipboardList, Stethoscope, Leaf, TestTube, Activity, Pill, DollarSign,
-  CalendarClock, Shield, CreditCard, ScrollText,
-} from 'lucide-react-native';
+  CalendarClock, Shield, CreditCard, ScrollText, ShieldCheck, LogIn } from 'lucide-react-native';
 import { adminColors } from '../../../../shared/constants/adminColors';
 import { colors } from '../../../../shared/constants/colors';
 import { componentRadius } from '../../../../shared/constants/theme';
@@ -20,7 +19,7 @@ import { adminApiService, ClinicInfo } from '../../../../services/api/admin.api'
 import { SetupProgressRing, SetupStatus } from '../components/SetupProgressRing';
 import { SupportCard } from '../components/SupportCard';
 import { GearLoader } from '../../../../shared/components/GearLoader';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import { useAuth } from '../../../../app/AuthContext';
 import { IS_PURCHASE_UI_ENABLED } from '../../../../shared/constants/platform';
 
@@ -102,7 +101,7 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
       if (IS_PURCHASE_UI_ENABLED) {
         navigation.navigate('Purchase');
       } else {
-        toast.info('Running multiple branches is a premium upgrade. Manage your plan from your clinic account on the website.');
+        notify.done('Running multiple branches is a premium upgrade. Manage your plan from your clinic account on the website.');
       }
       return;
     }
@@ -123,7 +122,7 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
       if (result) { setAddBranchVisible(false); loadData(); }
     } catch (e: any) {
       // Backend enforces the multi-branch gate too (403 for free plans).
-      toast.error(e?.response?.data?.detail || 'Could not add branch. Adding more branches requires an upgrade.');
+      notify.problem(e?.response?.data?.detail || 'Could not add branch. Adding more branches requires an upgrade.');
     } finally {
       setAddingBranch(false);
     }
@@ -134,10 +133,10 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
     setSwitchingId(b.id);
     try {
       await switchBranch(String(b.id));
-      toast.success(`Switched to ${b.name}`);
+      notify.done(`Switched to ${b.name}`);
       loadData();
     } catch {
-      toast.error('Failed to switch branch');
+      notify.problem('Failed to switch branch');
     } finally {
       setSwitchingId(null);
     }
@@ -284,6 +283,11 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
             title="Attendance" subtitle="Daily staff check-in & leave"
             onPress={() => navigation.navigate('Attendance')}
           />
+          <ConfigRow
+            icon={LogIn} iconBg="#D1FAE5" iconColor="#059669"
+            title="My shift" subtitle="Clock in and out from the clinic"
+            onPress={() => navigation.navigate('ClockIn')}
+          />
           <View style={styles.rowDivider} />
           <ConfigRow
             icon={Shield} iconBg="#E8F4F9" iconColor="#5DADE2"
@@ -362,6 +366,14 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
           <>
             <Text style={styles.sectionLabel}>SECURITY</Text>
             <View style={styles.card}>
+              {/* First in the section on purpose: the master password lives here,
+                  and a clinic still on 123456 needs to meet this before it needs
+                  the audit log. */}
+              <ConfigRow
+                icon={ShieldCheck} iconBg="#D1FAE5" iconColor="#059669"
+                title="Verification" subtitle="Recovery contact & master password"
+                onPress={() => navigation.navigate('Verification')}
+              />
               <ConfigRow
                 icon={ScrollText} iconBg="#FEE2E2" iconColor="#EF4444"
                 title="Audit log" subtitle="Who deleted or changed what"

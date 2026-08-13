@@ -6,7 +6,7 @@ import { Plus, Users, UploadCloud, Gift, CalendarClock } from 'lucide-react-nati
 import { patientsApiService, Patient } from '../../../../services/api/patients.api';
 import { dailyRegisterApiService } from '../../../../services/api/dailyRegister.api';
 import { TodayPatientsView } from '../components/TodayPatientsView';
-import { toast } from '../../../../shared/components/toastService';
+import { notify } from '../../../../shared/utils/notify';
 import { useAuth } from '../../../../app/AuthContext';
 import { SearchBar } from '../components/SearchBar';
 import { FilterTabs } from '../components/FilterTabs';
@@ -307,9 +307,9 @@ export const PatientsScreen: React.FC<PatientsScreenProps> = ({ navigation, rout
             try {
               await dailyRegisterApiService.addEntry({ patient_id: Number(created.id) });
               setRegisterRefreshKey((k) => k + 1);
-              toast.success(`${created.name || registerAfterAdd.name} added to today's register`);
+              notify.done(`${created.name || registerAfterAdd.name} added to today's register`);
             } catch (e: any) {
-              toast.error("Patient saved, but couldn't add to today's register");
+              notify.problem("Patient saved, but couldn't add to today's register");
             }
           }
           setRegisterAfterAdd(null);
