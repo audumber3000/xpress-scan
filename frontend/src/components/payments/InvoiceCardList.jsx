@@ -57,7 +57,10 @@ const InvoiceCardList = ({ invoices, onSelect }) => {
               </div>
               <p className="text-[11px] text-gray-400 truncate">
                 {invoice.invoice_number}
-                {invoice.created_at ? ` · ${formatRelative(invoice.created_at)}` : ''}
+                {/* .relative, not the whole object — formatRelative returns
+                    { relative, exact }, and interpolating it printed a literal
+                    "[object Object]" beside every invoice number on phones. */}
+                {invoice.created_at ? ` · ${formatRelative(invoice.created_at).relative}` : ''}
               </p>
             </div>
 

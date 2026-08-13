@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from "react";
 import FormDrawer, { Field, TextInput, SelectInput } from "../FormDrawer";
 
-const CATEGORIES = ["General", "Equipment", "Consumables", "Lab Services", "Pharmacy"];
+// Consultant is on this list because a visiting doctor is a vendor row like any
+// other — it is what lets a fee on a case paper be owed to somebody, settled,
+// and counted in the ledger without a second payee model.
+const CATEGORIES = ["General", "Equipment", "Consumables", "Lab Services", "Pharmacy", "Consultant"];
 
 const blank = {
   name: "", category: "General", contact_name: "", email: "", phone: "", address: "", gst_number: "",
