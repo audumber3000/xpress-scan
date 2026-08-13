@@ -26,6 +26,13 @@ const GREEN = '#16a34a';
 // of that chart. Every other chart is single-hue unless the data says otherwise.
 const AGEING_COLORS = [NAVY, AMBER, AMBER, RED];
 
+// A little air above the tallest column. Without it recharts puts dataMax flush
+// against the top of the plot area and the biggest bar reads as clipped.
+const HEADROOM = [
+  (min) => (min < 0 ? Math.floor(min * 1.12) : 0),
+  (max) => Math.ceil(max * 1.08),
+];
+
 /**
  * The right drawer behind a KPI card, on any screen.
  *
@@ -116,7 +123,15 @@ const KpiDetailDrawer = ({
   // previous behaviour rather than an empty list.
   const canFilter = allRows.some((r) => r.bucket);
   const rows = picked && canFilter ? allRows.filter((r) => r.bucket === picked) : allRows;
-  const stacked = (data?.keys || []).length > 1;
+  // A payload can name its own series — `bars: [{ key, label, color }]` — which
+  // is what lets one chart carry four expense groups or five payment modes.
+  // `keys` is the older cash/digital shape and is still honoured, so the
+  // endpoints that predate this keep working untouched.
+  const bars = data?.bars
+    || ((data?.keys || []).length > 1
+      ? [{ key: 'cash', label: 'Cash', color: NAVY }, { key: 'digital', label: 'Digital', color: LAV }]
+      : null);
+  const stacked = (bars?.length || 0) > 1;
   // Whether the y-axis is currency. Declared by the card, because only the card
   // knows — 'count of open lab cases' and 'rupees owed' are both plain numbers
   // to this component. The payload may override per response.
@@ -134,9 +149,22 @@ const KpiDetailDrawer = ({
   const fmtValue = (v) => (money ? formatCompactMoney(v) : formatCount(v));
   const fmtFull = (v) => (money ? formatMoney(v) : formatCount(v));
 
+  // White, not black. The dark tooltip was legible against a chart and nothing
+  // else — over a pale grid it read as a hole punched in the drawer, and the
+  // muted secondary text inside it fell below contrast entirely.
   const tooltipStyle = {
-    contentStyle: { borderRadius: 8, border: 'none', background: '#111', color: '#fff', fontSize: 11 },
-    cursor: { fill: '#eef0f4' },
+    contentStyle: {
+      borderRadius: 10,
+      border: '1px solid #e5e7eb',
+      background: '#fff',
+      color: '#111827',
+      fontSize: 11,
+      boxShadow: '0 8px 24px rgba(17, 24, 39, 0.12)',
+      padding: '8px 10px',
+    },
+    labelStyle: { color: '#6b7280', fontSize: 10, fontWeight: 700, marginBottom: 2 },
+    itemStyle: { color: '#111827', fontSize: 11, fontWeight: 600, padding: 0 },
+    cursor: { fill: 'rgba(42, 39, 110, 0.06)' },
   };
 
   const select = (label) => {
@@ -188,48 +216,147 @@ const KpiDetailDrawer = ({
     </ResponsiveContainer>
   );
 
-  /** A trend. Filled, because the area under a spend line is the spend. */
-  const TrendArea = () => (
-    <ResponsiveContainer width="100%" height={chartHeight}>
-      <AreaChart
+  /**
+   * A trend over time. Filled, because the area under a collections line is the
+   * money collected. Stacks when the payload names more than one series, so a
+   * cash/digital split reads as one total with its composition inside it.
+   */
+  const TrendArea = () => {
+    const strokeOf = (i) => bars?.[i]?.color || (data?.tone === 'bad' ? RED : NAVY);
+    return (
+      <ResponsiveContainer width="100%" height={chartHeight}>
+        <AreaChart
+          data={series}
+          margin={{ left: 0, right: 8, top: 12, bottom: 0 }}
+          onClick={(e) => select(e?.activeLabel)}
+          style={{ cursor: canFilter ? 'pointer' : 'default' }}
+        >
+          <defs>
+            {(bars || [{ key: 'total' }]).map((b, i) => (
+              <linearGradient key={b.key} id={`kpiArea_${b.key}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={strokeOf(i)} stopOpacity={stacked ? 0.55 : 0.28} />
+                <stop offset="100%" stopColor={strokeOf(i)} stopOpacity={stacked ? 0.25 : 0.02} />
+              </linearGradient>
+            ))}
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="#eef0f4" vertical={false} />
+          <XAxis dataKey="label" {...axisProps} interval="preserveStartEnd" />
+          <YAxis {...axisProps} width={money ? 52 : 30} tickFormatter={fmtValue} allowDecimals={false} />
+          <Tooltip
+            {...tooltipStyle}
+            cursor={{ stroke: '#c9c3f5' }}
+            formatter={(v, n) => [fmtFull(v), bars?.find((b) => b.key === n)?.label || 'Total']}
+          />
+          {data?.average > 0 && !stacked && (
+            <ReferenceLine
+              y={data.average}
+              stroke="#9ca3af"
+              strokeDasharray="4 4"
+              label={{
+                value: `avg ${fmtValue(data.average)}`,
+                position: 'insideTopRight',
+                fontSize: 9,
+                fill: '#9ca3af',
+              }}
+            />
+          )}
+          {(bars || [{ key: 'total' }]).map((b, i) => (
+            <Area
+              key={b.key}
+              type="monotone"
+              dataKey={b.key}
+              stackId={stacked ? 'a' : undefined}
+              stroke={strokeOf(i)}
+              strokeWidth={2}
+              fill={`url(#kpiArea_${b.key})`}
+              dot={stacked ? false : { r: 2.5, strokeWidth: 0, fill: strokeOf(i) }}
+              activeDot={{ r: 4 }}
+            />
+          ))}
+        </AreaChart>
+      </ResponsiveContainer>
+    );
+  };
+
+  /**
+   * Two or more measures side by side per period — the shape a P&L is read in.
+   *
+   * Revenue next to profit, month by month, is the one view that answers "is
+   * this business working" without arithmetic. A single line of net would hide
+   * whether a bad month was weak income or heavy spending.
+   *
+   * A bar may recolour per period (`negativeKey`), so a loss month shows red
+   * without needing a second series that is empty most of the time.
+   */
+  const GroupedBars = () => (
+    <ResponsiveContainer width="100%" height={chartHeight + 10}>
+      <BarChart
         data={series}
-        margin={{ left: 0, right: 8, top: 12, bottom: 0 }}
+        margin={{ left: 0, right: 8, top: 16, bottom: 0 }}
+        barGap={3}
         onClick={(e) => select(e?.activeLabel)}
         style={{ cursor: canFilter ? 'pointer' : 'default' }}
       >
-        <defs>
-          <linearGradient id="kpiArea" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={data?.tone === 'bad' ? RED : NAVY} stopOpacity={0.28} />
-            <stop offset="100%" stopColor={data?.tone === 'bad' ? RED : NAVY} stopOpacity={0.02} />
-          </linearGradient>
-        </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#eef0f4" vertical={false} />
-        <XAxis dataKey="label" {...axisProps} interval="preserveStartEnd" />
-        <YAxis {...axisProps} width={money ? 52 : 30} tickFormatter={fmtValue} allowDecimals={false} />
-        <Tooltip {...tooltipStyle} cursor={{ stroke: '#c9c3f5' }} formatter={(v) => [fmtFull(v), 'Total']} />
-        {data?.average > 0 && (
-          <ReferenceLine
-            y={data.average}
-            stroke="#9ca3af"
-            strokeDasharray="4 4"
-            label={{
-              value: `avg ${fmtValue(data.average)}`,
-              position: 'insideTopRight',
-              fontSize: 9,
-              fill: '#9ca3af',
-            }}
-          />
-        )}
-        <Area
-          type="monotone"
-          dataKey="total"
-          stroke={data?.tone === 'bad' ? RED : NAVY}
-          strokeWidth={2}
-          fill="url(#kpiArea)"
-          dot={{ r: 2.5, strokeWidth: 0, fill: data?.tone === 'bad' ? RED : NAVY }}
-          activeDot={{ r: 4 }}
+        <XAxis dataKey="label" {...axisProps} interval={0} />
+        <YAxis {...axisProps} width={money ? 52 : 30} tickFormatter={fmtValue} domain={HEADROOM} />
+        <Tooltip
+          {...tooltipStyle}
+          formatter={(v, n) => [fmtFull(v), bars?.find((b) => b.key === n)?.label || n]}
         />
-      </AreaChart>
+        <ReferenceLine y={0} stroke="#9ca3af" />
+        {(bars || []).map((b) => (
+          <Bar key={b.key} dataKey={b.key} barSize={18} radius={[3, 3, 0, 0]}>
+            {series.map((s, i) => (
+              <Cell
+                key={i}
+                fill={b.negativeKey && Number(s[b.key]) < 0 ? RED : b.color}
+                fillOpacity={dim(s.label)}
+              />
+            ))}
+          </Bar>
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+
+  /**
+   * One column per period, cut into its parts.
+   *
+   * This is what a trend line could not do: the height says how much went out
+   * and the segments say what it went out on, so a month that doubled because
+   * of one equipment purchase is distinguishable at a glance from one that
+   * doubled across the board.
+   */
+  const StackedBars = () => (
+    <ResponsiveContainer width="100%" height={chartHeight + 10}>
+      <BarChart
+        data={series}
+        margin={{ left: 0, right: 8, top: 16, bottom: 0 }}
+        onClick={(e) => select(e?.activeLabel)}
+        style={{ cursor: canFilter ? 'pointer' : 'default' }}
+      >
+        <CartesianGrid strokeDasharray="3 3" stroke="#eef0f4" vertical={false} />
+        <XAxis dataKey="label" {...axisProps} interval={0} />
+        <YAxis {...axisProps} width={money ? 52 : 30} tickFormatter={fmtValue} domain={HEADROOM} />
+        <Tooltip
+          {...tooltipStyle}
+          formatter={(v, n) => (Number(v) > 0
+            ? [fmtFull(v), bars?.find((b) => b.key === n)?.label || n]
+            : null)}
+        />
+        {(bars || []).map((b, i) => (
+          <Bar
+            key={b.key}
+            dataKey={b.key}
+            stackId="a"
+            barSize={30}
+            radius={i === (bars.length - 1) ? [3, 3, 0, 0] : undefined}
+          >
+            {series.map((s, j) => <Cell key={j} fill={b.color} fillOpacity={dim(s.label)} />)}
+          </Bar>
+        ))}
+      </BarChart>
     </ResponsiveContainer>
   );
 
@@ -367,18 +494,21 @@ const KpiDetailDrawer = ({
           {...tooltipStyle}
           formatter={(value, name) => [
             fmtFull(value),
-            name === 'cash' ? 'Cash' : name === 'digital' ? 'Digital' : 'Total',
+            bars?.find((b) => b.key === name)?.label || 'Total',
           ]}
         />
         {stacked ? (
-          <>
-            <Bar dataKey="cash" stackId="a" barSize={22}>
-              {series.map((s, i) => <Cell key={i} fill={NAVY} fillOpacity={dim(s.label)} />)}
+          bars.map((b, i) => (
+            <Bar
+              key={b.key}
+              dataKey={b.key}
+              stackId="a"
+              barSize={22}
+              radius={i === bars.length - 1 ? [3, 3, 0, 0] : undefined}
+            >
+              {series.map((s, j) => <Cell key={j} fill={b.color} fillOpacity={dim(s.label)} />)}
             </Bar>
-            <Bar dataKey="digital" stackId="a" barSize={22} radius={[3, 3, 0, 0]}>
-              {series.map((s, i) => <Cell key={i} fill={LAV} fillOpacity={dim(s.label)} />)}
-            </Bar>
-          </>
+          ))
         ) : (
           <Bar dataKey="total" barSize={26} radius={[3, 3, 0, 0]}>
             {series.map((s, i) => (
@@ -406,12 +536,20 @@ const KpiDetailDrawer = ({
     </ResponsiveContainer>
   );
 
+  // What the reader is actually tapping, so the hint under an area chart does
+  // not tell them to tap a bar.
+  const TAPPABLE = {
+    donut: 'slice', area: 'point', line: 'point', stacked: 'column', grouped: 'period',
+  };
+
   const CHARTS = {
     hbar: HorizontalBars,
     area: TrendArea,
     line: TrendArea,
     donut: Donut,
     waterfall: Waterfall,
+    grouped: GroupedBars,
+    stacked: StackedBars,
     bar: VerticalBars,
   };
   const Chart = CHARTS[chart] || VerticalBars;
@@ -516,18 +654,16 @@ const KpiDetailDrawer = ({
                     <div className="flex items-center justify-between mt-1.5 gap-3">
                       <span className="text-[10px] text-gray-400">
                         {data.x_label
-                          || (canFilter
-                            ? `Tap a ${chart === 'donut' ? 'slice' : 'bar'} to filter the list below`
-                            : '')}
+                          || (canFilter ? `Tap a ${TAPPABLE[chart] || 'bar'} to filter the list below` : '')}
                       </span>
                       {stacked && (
-                        <span className="flex items-center gap-3 flex-shrink-0">
-                          <span className="flex items-center gap-1.5 text-[10px] text-gray-500">
-                            <i className="w-2 h-2 rounded-full" style={{ background: NAVY }} /> Cash
-                          </span>
-                          <span className="flex items-center gap-1.5 text-[10px] text-gray-500">
-                            <i className="w-2 h-2 rounded-full" style={{ background: LAV }} /> Digital
-                          </span>
+                        <span className="flex items-center gap-x-3 gap-y-1 flex-wrap justify-end flex-shrink-0">
+                          {bars.map((b) => (
+                            <span key={b.key} className="flex items-center gap-1.5 text-[10px] text-gray-500">
+                              <i className="w-2 h-2 rounded-full" style={{ background: b.color }} />
+                              {b.label}
+                            </span>
+                          ))}
                         </span>
                       )}
                     </div>

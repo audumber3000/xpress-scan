@@ -1,6 +1,6 @@
 import { formatMoney, formatCompactMoney, formatCount } from '../../utils/currency';
 import { clinicDateKey, clinicToday, formatDate } from '../../utils/datetime';
-import { colorOf, groupOf, CHART_COLORS } from '../../constants/expenseCategories';
+import { colorOf, groupOf, CATEGORY_GROUPS, CHART_COLORS } from '../../constants/expenseCategories';
 
 /**
  * What each Expenses KPI card opens into.
@@ -32,6 +32,29 @@ const plural = (n, one, many) => (n === 1 ? one : many);
 const daysBetween = (fromKey, toKey) =>
   Math.round((new Date(`${toKey}T00:00:00`) - new Date(`${fromKey}T00:00:00`)) / 86400000);
 
+/**
+ * The windows a clinic reads its money in.
+ *
+ * Not the drawer's default set. "Today" on a profit-and-loss chart is a single
+ * column with one day of rent in it and no salary, which is not a small sample
+ * of the truth, it is a different and misleading number. Costs land monthly, so
+ * the shortest window worth offering is a month.
+ */
+export const FINANCIAL_PERIODS = [
+  { value: 'month', label: 'This month' },
+  { value: '3months', label: 'Last 3 months' },
+  { value: '6months', label: 'Last 6 months' },
+  { value: 'year', label: 'This year' },
+  { value: 'all', label: 'All time' },
+];
+
+const monthsBack = (n) => {
+  const today = clinicToday();
+  const d = new Date(`${today.slice(0, 7)}-01T00:00:00`);
+  d.setMonth(d.getMonth() - (n - 1));
+  return { from: d.toISOString().slice(0, 10), to: today, days: n * 30 };
+};
+
 /** The clinic-calendar window a period button selects. */
 function windowFor(period) {
   const today = clinicToday();
@@ -41,7 +64,10 @@ function windowFor(period) {
     d.setDate(d.getDate() - 6);
     return { from: d.toISOString().slice(0, 10), to: today, days: 7 };
   }
-  if (period === 'month') return { from: `${today.slice(0, 7)}-01`, to: today, days: null };
+  if (period === 'month') return { from: `${today.slice(0, 7)}-01`, to: today, days: 30 };
+  if (period === '3months') return monthsBack(3);
+  if (period === '6months') return monthsBack(6);
+  if (period === 'year') return { from: `${today.slice(0, 4)}-01-01`, to: today, days: 365 };
   return { from: null, to: today, days: null };
 }
 
@@ -81,18 +107,37 @@ function bucketByTime(rows, dateOf) {
   };
 }
 
-/** Ordered time series with empty buckets kept, so a quiet week reads as quiet. */
-function timeSeries(rows, dateOf) {
+/**
+ * Ordered time series.
+ *
+ * `splitBy` turns each period into its parts — a function from a row to the
+ * series key it belongs to. Without it every column is one number, which is the
+ * whole reason a spend trend could not answer "on what".
+ */
+function timeSeries(rows, dateOf, splitBy = null) {
   const b = bucketByTime(rows, dateOf);
-  const totals = new Map();
+  const periods = new Map();
   rows.forEach((r) => {
     const k = b.of(r);
     if (!k) return;
-    totals.set(k, (totals.get(k) || 0) + (Number(r.amount) || 0));
+    const bucket = periods.get(k) || { key: k, label: b.format(k), total: 0 };
+    const amt = Number(r.amount) || 0;
+    bucket.total += amt;
+    if (splitBy) {
+      const part = splitBy(r);
+      bucket[part] = (bucket[part] || 0) + amt;
+    }
+    periods.set(k, bucket);
   });
-  const series = [...totals.entries()]
-    .sort((a, b2) => a[0].localeCompare(b2[0]))
-    .map(([k, total]) => ({ key: k, label: b.format(k), total: Math.round(total) }));
+  const series = [...periods.values()]
+    .sort((a, b2) => a.key.localeCompare(b2.key))
+    .map((p) => {
+      const out = { ...p, total: Math.round(p.total) };
+      Object.keys(out).forEach((k) => {
+        if (k !== 'key' && k !== 'label') out[k] = Math.round(out[k]);
+      });
+      return out;
+    });
   return { series, bucketOf: (r) => b.format(b.of(r)), axisLabel: b.label };
 }
 
@@ -161,6 +206,7 @@ function owedDetail(payables) {
   const stale = series[2].total + series[3].total;
 
   return {
+    periods: FINANCIAL_PERIODS,
     chart: 'bar',
     x_is_ageing: true,
     is_money: true,
@@ -203,6 +249,7 @@ function kindTrendDetail(payables, kind, noun) {
   const rising = prev > 0 && last > prev * 1.15;
 
   return {
+    periods: FINANCIAL_PERIODS,
     chart: 'area',
     is_money: true,
     average,
@@ -253,6 +300,7 @@ function payeeDetail(payables) {
   const concentration = pct(top?.total || 0, total);
 
   return {
+    periods: FINANCIAL_PERIODS,
     chart: 'donut',
     is_money: true,
     donut_label: 'Owed',
@@ -283,36 +331,78 @@ function payeeDetail(payables) {
 
 // ── Ledger ───────────────────────────────────────────────────────────────────
 
-/** Money in or money out, as a trend, with the period average drawn on it. */
+/**
+ * Money out, or money in, as columns cut into their parts.
+ *
+ * This was a trend line, and a trend line cannot answer the only question the
+ * card raises: not "is spending rising" but "on what". A stacked column does
+ * both — the height is the period's total, the segments are where it went — so
+ * a month that doubled because of one equipment purchase looks nothing like a
+ * month that doubled across the board.
+ *
+ * Money out splits by cost group, money in by how the money arrived, because
+ * those are the two compositions a clinic can actually act on.
+ */
 function flowDetail(items, direction) {
   const out = direction === 'out';
   const rows = items.filter((r) => (out ? r.type === 'expense' : r.type !== 'expense'));
-  const { series, bucketOf, axisLabel } = timeSeries(rows, (r) => r.date);
+
+  // Segments come from what is actually present, largest first, so the biggest
+  // chunk is the bottom of every column and the eye can compare across periods
+  // from a common baseline.
+  const totalsByPart = new Map();
+  const partOf = (r) => (out ? groupOf(r.category).label : (r.payment_method || 'Unrecorded'));
+  rows.forEach((r) => {
+    const k = partOf(r);
+    totalsByPart.set(k, (totalsByPart.get(k) || 0) + (Number(r.amount) || 0));
+  });
+  const parts = [...totalsByPart.entries()].sort((a, b) => b[1] - a[1]);
+
+  const colorFor = (label, i) => {
+    if (!out) return CHART_COLORS[i % CHART_COLORS.length];
+    const g = CATEGORY_GROUPS.find((x) => x.label === label);
+    return g ? g.color : CHART_COLORS[i % CHART_COLORS.length];
+  };
+  const bars = parts.map(([label], i) => ({ key: label, label, color: colorFor(label, i) }));
+
+  const { series, bucketOf, axisLabel } = timeSeries(rows, (r) => r.date, partOf);
   const total = sum(rows);
   const average = series.length ? Math.round(total / series.length) : 0;
   const biggest = [...rows].sort((a, b) => (b.amount || 0) - (a.amount || 0))[0];
+  const top = parts[0];
+  const topShare = pct(top?.[1] || 0, total);
   const last = series[series.length - 1]?.total || 0;
   const prev = series[series.length - 2]?.total || 0;
   const worseningOut = out && prev > 0 && last > prev * 1.2;
   const fallingIn = !out && prev > 0 && last < prev * 0.8;
 
+  const narrative = rows.length === 0
+    ? (out ? 'Nothing has gone out in this window.' : 'Nothing has come in in this window.')
+    : out
+      ? `${formatMoney(total)} went out, and ${topShare}% of it is ${top[0].toLowerCase()} at ${formatMoney(top[1])}. ${
+        worseningOut
+          ? `Spending rose to ${formatMoney(last)} in the latest period from ${formatMoney(prev)}, a ${pct(last - prev, prev)}% jump — the tallest segment in that column is where it came from.`
+          : `The tallest segment in any column tells you what moved that period; the largest single entry was ${formatMoney(biggest?.amount || 0)}.`
+      }`
+      : `${formatMoney(total)} came in, ${topShare}% of it as ${top[0].toLowerCase()}. ${
+        fallingIn
+          ? `Collections fell to ${formatMoney(last)} from ${formatMoney(prev)}, down ${pct(prev - last, prev)}%. Costs rarely fall as fast as income does, so this is the number to watch.`
+          : `Cash is the part that has to be counted and banked by hand, so its share is worth knowing before it becomes a reconciliation problem.`
+      }`;
+
   return {
-    chart: 'area',
+    chart: 'stacked',
     is_money: true,
+    periods: FINANCIAL_PERIODS,
+    bars,
     average,
     tone: worseningOut || fallingIn ? 'bad' : undefined,
-    x_label: `${axisLabel} · tap a point to filter the list below`,
-    narrative: rows.length === 0
-      ? out ? 'Nothing has gone out in this window.' : 'Nothing has come in in this window.'
-      : worseningOut
-        ? `Spending rose to ${formatMoney(last)} in the latest period from ${formatMoney(prev)}, a ${pct(last - prev, prev)}% jump. The list below is sorted biggest first, and the answer is usually in the top three.`
-        : fallingIn
-          ? `Collections fell to ${formatMoney(last)} from ${formatMoney(prev)}, down ${pct(prev - last, prev)}%. Costs rarely fall as fast as income does, so this is the number to watch.`
-          : `${formatMoney(total)} across ${formatCount(rows.length)} ${plural(rows.length, 'entry', 'entries')}, averaging ${formatMoney(average)} a period. The largest single one was ${formatMoney(biggest?.amount || 0)}.`,
+    x_label: `${axisLabel} · tap a column to filter the list below`,
+    narrative,
     insights: [
       { label: 'Total', value: formatCompactMoney(total), tone: out ? 'bad' : 'good' },
-      { label: 'Per period', value: formatCompactMoney(average) },
-      { label: 'Largest', value: formatCompactMoney(biggest?.amount || 0) },
+      { label: out ? 'Biggest group' : 'Biggest mode', value: top?.[0] || '—' },
+      { label: 'Its share', value: total > 0 ? `${topShare}%` : '—', tone: topShare > 50 ? 'warn' : undefined },
     ],
     series,
     row_label: out ? 'Every expense' : 'Every payment received',
@@ -334,12 +424,16 @@ function flowDetail(items, direction) {
 }
 
 /**
- * The Net card: money in, every cost taking a bite, and what is left standing.
+ * The Net card: revenue against profit, period by period.
  *
- * This is the drawer that has to answer "am I making money, and if not, where
- * is it going" — so it is the one chart in the app that is worth a waterfall.
- * Three numbers cannot show a cost eating into income; a bar that starts where
- * the last one ended can.
+ * This is how a P&L is read, and it was a waterfall — one snapshot of where a
+ * single lump went, with no way to see whether last month was better than this
+ * one. Two bars per period answers both questions at once: how much came in,
+ * and how much of it survived. A loss period turns its profit bar red, so the
+ * months that hurt are visible without reading a single number.
+ *
+ * The composition of the spending is still one tap away, in the rows below and
+ * in Where it went.
  */
 function netDetail(items) {
   const income = sum(items.filter((r) => r.type !== 'expense'));
@@ -347,47 +441,27 @@ function netDetail(items) {
   const spend = sum(expenses);
   const net = income - spend;
 
-  // Costs are stacked by group, not by category: a waterfall with sixteen steps
-  // is a barcode. The group each category belongs to is what a clinic actually
-  // budgets by anyway — people, premises, clinical, business.
+  const { series: buckets, bucketOf } = timeSeries(items, (r) => r.date, (r) => (r.type === 'expense' ? 'spent' : 'revenue'));
+  const series = buckets.map((b) => ({
+    label: b.label,
+    revenue: Math.round(b.revenue || 0),
+    profit: Math.round((b.revenue || 0) - (b.spent || 0)),
+    spent: Math.round(b.spent || 0),
+  }));
+
+  const lossPeriods = series.filter((b) => b.profit < 0);
+
+  // Grouped for the rows, because "where it goes" is still the follow-up
+  // question and the four groups are what a clinic budgets by.
   const byGroup = new Map();
   expenses.forEach((r) => {
     const g = groupOf(r.category);
-    const e = byGroup.get(g.id) || { label: g.label, short: g.short, total: 0, color: g.color, count: 0 };
+    const e = byGroup.get(g.id) || { label: g.label, total: 0, color: g.color, count: 0 };
     e.total += Number(r.amount) || 0;
     e.count += 1;
     byGroup.set(g.id, e);
   });
   const groups = [...byGroup.values()].sort((a, b) => b.total - a.total);
-
-  // Each step is a floating range [bottom, top], not a bar on a pedestal.
-  // The pedestal version had to clamp at zero, so a clinic already past
-  // break-even saw its last two costs sitting flat on the floor instead of
-  // marching down through it — which is exactly the moment the chart matters.
-  const series = [{
-    label: 'Collected', short: 'Collected', range: [0, Math.round(income)],
-    total: Math.round(income), kind: 'in',
-  }];
-  let running = income;
-  groups.forEach((g) => {
-    const from = running;
-    running -= g.total;
-    series.push({
-      label: g.label,
-      short: g.short,
-      range: [Math.round(running), Math.round(from)],
-      total: Math.round(g.total),
-      kind: 'out',
-    });
-  });
-  series.push({
-    label: 'Left over',
-    short: 'Left over',
-    range: net < 0 ? [Math.round(net), 0] : [0, Math.round(net)],
-    total: Math.round(Math.abs(net)),
-    kind: 'net',
-    negative: net < 0,
-  });
 
   const margin = pct(net, income);
   const costRatio = pct(spend, income);
@@ -399,18 +473,27 @@ function netDetail(items) {
     : breakEven ? 'break-even'
       : net > 0 ? 'profit' : 'loss';
 
+  const lossLine = lossPeriods.length > 0 && lossPeriods.length < series.length
+    ? ` ${formatCount(lossPeriods.length)} of ${formatCount(series.length)} periods finished under water, the worst being ${lossPeriods.sort((a, b) => a.profit - b.profit)[0].label}.`
+    : '';
+
   const narrative = {
     nothing: 'No money has moved in this window, so there is nothing to weigh up yet.',
-    'break-even': `You are breaking even. ${formatMoney(income)} came in and ${formatMoney(spend)} went out, leaving ${formatMoney(Math.abs(net))} either way. At this margin a single quiet month or one equipment repair puts you under, so the thing to move is ${top ? top.label.toLowerCase() : 'your largest cost'}, currently ${topShare}% of everything you spend.`,
-    profit: `You are in profit. Of every ₹100 you collect, ₹${costRatio} goes back out and ₹${100 - costRatio} stays. ${top ? `Your largest cost is ${top.label.toLowerCase()} at ${formatMoney(top.total)}, ${topShare}% of all spending — that is the line worth negotiating first, because a 10% cut there is worth more than a 10% cut anywhere else.` : ''}`,
-    loss: `You are running at a loss of ${formatMoney(Math.abs(net))} in this window: ${formatMoney(spend)} went out against ${formatMoney(income)} collected. ${top ? `${top.label} is ${topShare}% of the outflow at ${formatMoney(top.total)} — start there.` : ''} Check the collections side too, because unbilled work and uncollected dues show up here as a loss that is really a billing problem.`,
+    'break-even': `You are breaking even. ${formatMoney(income)} came in and ${formatMoney(spend)} went out, leaving ${formatMoney(Math.abs(net))} either way. At this margin a single quiet month or one equipment repair puts you under, so the thing to move is ${top ? top.label.toLowerCase() : 'your largest cost'}, currently ${topShare}% of everything you spend.${lossLine}`,
+    profit: `You are in profit. Of every ₹100 you collect, ₹${costRatio} goes back out and ₹${100 - costRatio} stays.${top ? ` Your largest cost is ${top.label.toLowerCase()} at ${formatMoney(top.total)}, ${topShare}% of all spending — a 10% cut there is worth more than a 10% cut anywhere else.` : ''}${lossLine}`,
+    loss: `You are running at a loss of ${formatMoney(Math.abs(net))} in this window: ${formatMoney(spend)} went out against ${formatMoney(income)} collected.${top ? ` ${top.label} is ${topShare}% of the outflow at ${formatMoney(top.total)} — start there.` : ''}${lossLine} Check the collections side too, because unbilled work and uncollected dues show up here as a loss that is really a billing problem.`,
   }[verdict];
 
   return {
-    chart: 'waterfall',
+    chart: 'grouped',
     is_money: true,
+    periods: FINANCIAL_PERIODS,
+    bars: [
+      { key: 'revenue', label: 'Revenue', color: '#2a276e' },
+      { key: 'profit', label: 'Profit / loss', color: '#16a34a', negativeKey: true },
+    ],
     tone: verdict === 'loss' ? 'bad' : verdict === 'break-even' ? 'warn' : verdict === 'profit' ? 'good' : undefined,
-    x_label: 'Each step is a cost coming off what you collected',
+    x_label: 'Revenue against what survived it, period by period',
     narrative,
     insights: [
       {
@@ -430,10 +513,9 @@ function netDetail(items) {
       },
     ],
     series,
-    row_label: 'Where it goes',
+    row_label: 'Where the money goes',
     rows: groups.map((g) => ({
       id: g.label,
-      bucket: g.label,
       color: g.color,
       title: g.label,
       subtitle: `${formatCount(g.count)} ${plural(g.count, 'entry', 'entries')} · ${pct(g.total, spend)}% of everything you spend`,
@@ -491,6 +573,7 @@ function categoryDetail(items, previousItems) {
   }
 
   return {
+    periods: FINANCIAL_PERIODS,
     chart: 'donut',
     is_money: true,
     donut_label: 'Spent',

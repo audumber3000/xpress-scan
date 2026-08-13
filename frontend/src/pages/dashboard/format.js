@@ -73,12 +73,18 @@ export const calculateYAxisDomain = (data, dataKeys, paddingPercent = 0.15) => {
   return [niceMin, niceMax];
 };
 
-// Shared dark tooltip style used across charts.
+// Shared tooltip style used across charts.
+//
+// White, not the near-black it used to be. On a pale card with a pale grid, a
+// black box reads as a hole punched through the page rather than a label
+// attached to a point, and the secondary text inside it sat at #fff on #111 for
+// the value and a muted grey for the series name, which fell below contrast.
 export const tooltipStyle = {
-  borderRadius: 12,
-  border: 'none',
-  background: '#111',
-  color: '#fff',
+  borderRadius: 10,
+  border: '1px solid #e5e7eb',
+  background: '#fff',
+  color: '#111827',
   fontSize: 12,
-  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+  boxShadow: '0 8px 24px rgba(17, 24, 39, 0.12)',
+  padding: '8px 10px',
 };

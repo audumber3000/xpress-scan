@@ -953,7 +953,12 @@ async def invoice_kpi_detail(
                 "bucket": series[_i]["label"] if _i is not None and _i < len(series) else None,
             })
 
+        # A filled trend, not columns. Collections are a continuous flow and
+        # the question here is the shape of it — which weeks carried the month,
+        # where it dipped. The cash/digital split stacks inside the area, so the
+        # composition is still readable without a second chart.
         return {"metric": metric, "period": period, "series": series,
+                "chart": "area",
                 "keys": ["cash", "digital"], "narrative": narrative, "rows": rows,
                 "is_money": True, "row_label": "Recent payments"}
 
