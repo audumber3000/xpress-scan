@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
-import { toast } from 'react-toastify';
-import { api } from '../utils/api';
+import { notify } from '../utils/notify';
+import { api, getFriendlyErrorMessage } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 import { saveLastLogin } from '../utils/lastLogin';
 import LoadingButton from '../components/LoadingButton';
@@ -74,17 +74,17 @@ const Signup = () => {
         navigate("/dashboard");
       }
     } catch (error) {
-      const errorMessage = error.response?.data?.detail || error.message || "Network error. Please try again.";
+      const errorMessage = getFriendlyErrorMessage(error, "Network error. Please try again.");
       setError(errorMessage);
       
       if (errorMessage.includes('email-already-in-use')) {
-        toast.error(
+        notify.problem(
           <div>
             This email is already registered. <Link to="/login" className="underline font-bold">Try logging in with Google</Link>
           </div>
         );
       } else {
-        toast.error(errorMessage);
+        notify.problem(errorMessage);
       }
     }
     
@@ -141,7 +141,7 @@ const Signup = () => {
         sessionStorage.removeItem('referred_by_code');
         saveLastLogin({ provider: 'google', email: result.user.email, name: result.user.displayName });
 
-        toast.success('Signup successful!');
+        notify.done('Signup successful!');
 
         const redirectPath = !data.user.clinic_id ? '/onboarding' : '/dashboard';
         navigate(redirectPath, { replace: true });
@@ -151,9 +151,9 @@ const Signup = () => {
 
     } catch (error) {
       console.error('🔵 [SIGNUP] Google signup error:', error);
-      const errorMessage = error.message || 'Google signup failed. Please try again.';
+      const errorMessage = getFriendlyErrorMessage(error, 'Google signup failed. Please try again.');
       setError(errorMessage);
-      toast.error(errorMessage);
+      notify.problem(errorMessage);
     } finally {
       setLoading(false);
     }

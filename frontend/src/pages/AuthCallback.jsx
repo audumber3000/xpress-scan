@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-toastify';
+import { notify } from '../utils/notify';
 import GearLoader from '../components/GearLoader';
 import { auth } from '../firebaseClient';
-import { api } from '../utils/api';
+import { api, getFriendlyErrorMessage } from '../utils/api';
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -198,7 +198,7 @@ const AuthCallback = () => {
           localStorage.setItem('user', JSON.stringify(userWithClinic));
           setToken(desktopToken);
           setUser(userWithClinic);
-          toast.success('Authentication successful!');
+          notify.done('Authentication successful!');
 
           await new Promise(resolve => setTimeout(resolve, 200));
 
@@ -293,7 +293,7 @@ const AuthCallback = () => {
             setUser(userWithClinic);
             console.log('✅ [AUTH CALLBACK] AuthContext updated');
             
-            toast.success('Authentication successful!');
+            notify.done('Authentication successful!');
             
             // Small delay to ensure context is updated before navigation
             await new Promise(resolve => setTimeout(resolve, 200));
@@ -309,7 +309,7 @@ const AuthCallback = () => {
             console.error('❌ [AUTH CALLBACK] Backend error:', backendError);
             console.error('❌ [AUTH CALLBACK] Error message:', backendError.message);
             console.error('❌ [AUTH CALLBACK] Error stack:', backendError.stack);
-            const errorMessage = backendError.message || 'Failed to authenticate with backend';
+            const errorMessage = getFriendlyErrorMessage(backendError, 'We could not finish signing you in. Please try again.');
             setError(`Backend error: ${errorMessage}`);
             setLoading(false);
             clearTimeout(timeout);
@@ -341,7 +341,7 @@ const AuthCallback = () => {
               setToken(data.token);
               setUser(userWithClinic);
 
-              toast.success('Authentication successful!');
+              notify.done('Authentication successful!');
               
               // Small delay to ensure context is updated
               await new Promise(resolve => setTimeout(resolve, 200));
@@ -356,7 +356,7 @@ const AuthCallback = () => {
               return;
             } catch (e) {
               console.error('❌ [AUTH CALLBACK] Error with existing user:', e);
-              toast.error(`Authentication error: ${e.message || 'Please try again.'}`);
+              notify.problem(`Authentication error: ${e, 'Please try again.'}`);
             }
           }
           
@@ -365,7 +365,7 @@ const AuthCallback = () => {
           setLoading(false);
           const errorMsg = 'No authentication result found. Please try logging in again.';
           setError(errorMsg);
-          toast.error(errorMsg);
+          notify.problem(errorMsg);
           setTimeout(() => {
             navigate('/login', { replace: true });
           }, 2000);
@@ -374,9 +374,9 @@ const AuthCallback = () => {
         console.error('❌ [AUTH CALLBACK] Exception:', e);
         clearTimeout(timeout);
         setLoading(false);
-        const errorMsg = `Authentication error: ${e.message || 'Please try logging in again.'}`;
+        const errorMsg = `Authentication error: ${e, 'Please try logging in again.'}`;
         setError(errorMsg);
-        toast.error(errorMsg);
+        notify.problem(errorMsg);
         setTimeout(() => {
           navigate('/login', { replace: true });
         }, 3000);

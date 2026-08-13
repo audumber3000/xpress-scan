@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { toast } from "react-toastify";
+import { notify } from '../utils/notify';
 import { api, getFriendlyErrorMessage } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
 import { getCurrencySymbol } from "../utils/currency";
@@ -178,7 +178,7 @@ const PatientIntake = () => {
           ? Object.values(errors)[0]
           : `Please fix these fields: ${Object.values(errors).join(" ")}`;
       setError(summary);
-      toast.error(summary);
+      notify.problem(summary);
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
@@ -209,7 +209,7 @@ const PatientIntake = () => {
       await api.post("/patients/", patientPayload);
 
       // 3. Show success and redirect
-      toast.success(`${formData.name} has been added 🎉`);
+      notify.done(`${formData.name} has been added 🎉`);
       navigate("/patients");
 
     } catch (error) {
@@ -220,7 +220,7 @@ const PatientIntake = () => {
         "We couldn't save this patient. Please check the details and try again."
       );
       setError(message);
-      toast.error(message);
+      notify.problem(message);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setLoading(false);

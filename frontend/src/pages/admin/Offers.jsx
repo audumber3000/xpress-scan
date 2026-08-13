@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Tag, Plus, Pencil, Trash2, Loader2, X, Percent, BadgeIndianRupee, Calendar,
 } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 import { api } from '../../utils/api';
 import { getCurrencySymbol } from '../../utils/currency';
 
@@ -58,7 +58,7 @@ const Offers = () => {
       const data = await api.get('/offers');
       setOffers(Array.isArray(data) ? data : []);
     } catch (e) {
-      toast.error('Could not load offers');
+      notify.problem('Could not load offers');
       setOffers([]);
     } finally {
       setLoading(false);
@@ -84,12 +84,12 @@ const Offers = () => {
   };
 
   const save = async () => {
-    if (!form.name.trim()) { toast.error('Give the offer a name'); return; }
+    if (!form.name.trim()) { notify.problem('Give the offer a name'); return; }
     const value = Number(form.value);
-    if (!(value >= 0)) { toast.error('Enter a valid discount value'); return; }
-    if (form.discount_type === 'percentage' && value > 100) { toast.error("A percentage can't exceed 100%"); return; }
+    if (!(value >= 0)) { notify.problem('Enter a valid discount value'); return; }
+    if (form.discount_type === 'percentage' && value > 100) { notify.problem("A percentage can't exceed 100%"); return; }
     if (form.valid_from && form.valid_to && form.valid_to < form.valid_from) {
-      toast.error("'Valid to' can't be before 'valid from'"); return;
+      notify.problem("'Valid to' can't be before 'valid from'"); return;
     }
     const payload = {
       name: form.name.trim(),
@@ -105,11 +105,11 @@ const Offers = () => {
     try {
       if (editing) await api.put(`/offers/${editing.id}`, payload);
       else await api.post('/offers', payload);
-      toast.success(editing ? 'Offer updated' : 'Offer created');
+      notify.done(editing ? 'Offer updated' : 'Offer created');
       setShowForm(false);
       load();
     } catch (e) {
-      toast.error(e?.response?.data?.detail || e?.message || 'Could not save the offer');
+      notify.problem(e, 'Could not save the offer');
     } finally {
       setSaving(false);
     }
@@ -120,7 +120,7 @@ const Offers = () => {
       await api.put(`/offers/${o.id}`, { is_active: !o.is_active });
       setOffers((prev) => prev.map((x) => (x.id === o.id ? { ...x, is_active: !o.is_active } : x)));
     } catch (e) {
-      toast.error('Could not update the offer');
+      notify.problem('Could not update the offer');
     }
   };
 
@@ -129,9 +129,9 @@ const Offers = () => {
     try {
       await api.delete(`/offers/${o.id}`);
       setOffers((prev) => prev.filter((x) => x.id !== o.id));
-      toast.success('Offer deleted');
+      notify.done('Offer deleted');
     } catch (e) {
-      toast.error('Could not delete the offer');
+      notify.problem('Could not delete the offer');
     }
   };
 

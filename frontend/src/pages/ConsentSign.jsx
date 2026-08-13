@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import SignatureCanvas from "react-signature-canvas";
 import axios from "axios";
-import { toast } from "react-toastify";
+import { notify } from '../utils/notify';
 
 const ConsentSign = () => {
     const { token } = useParams();
@@ -64,11 +64,11 @@ const ConsentSign = () => {
 
     const handleSubmit = async () => {
         if (!agreed) {
-            toast.warn("Please agree to the terms before signing");
+            notify.problem("Please agree to the terms before signing");
             return;
         }
         if (sigPad.current.isEmpty()) {
-            toast.warn("Please provide your signature");
+            notify.problem("Please provide your signature");
             return;
         }
 
@@ -80,7 +80,7 @@ const ConsentSign = () => {
                 signature
             });
 
-            toast.success("Consent form submitted successfully!");
+            notify.done("Consent form submitted successfully!");
             setTokenData(null); // Clear form
             setError("Thank you! Your consent has been recorded. You can close this window.");
         } catch (err) {
@@ -92,7 +92,7 @@ const ConsentSign = () => {
                 err.response?.data?.error ||
                 err.message ||
                 "Unknown Error";
-            toast.error(`Error: ${errorText} (To: ${NEXUS_API_URL})`, { autoClose: 10000 });
+            notify.problem(`Error: ${errorText} (To: ${NEXUS_API_URL})`);
         } finally {
             setSubmitting(false);
         }

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useHeader } from '../contexts/HeaderContext';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../utils/api';
-import { toast } from 'react-toastify';
+import { notify } from '../utils/notify';
 import { ChevronLeft } from 'lucide-react';
 import GearLoader from '../components/GearLoader';
 import Pagination from '../components/Pagination';
@@ -45,7 +45,7 @@ const ReferringDoctors = () => {
       setReferringDoctors(data);
     } catch (error) {
       console.error('Error fetching referring doctors:', error);
-      toast.error('Failed to load referring doctors');
+      notify.problem('Failed to load referring doctors');
     } finally {
       setLoading(false);
     }
@@ -56,13 +56,12 @@ const ReferringDoctors = () => {
     try {
       setSaving(true);
       await api.post('/referring-doctors', formData);
-      toast.success('Referring doctor added successfully');
       setShowAddModal(false);
       setFormData({ name: '', hospital: '' });
       fetchReferringDoctors();
     } catch (error) {
       console.error('Error adding doctor:', error);
-      toast.error('Failed to add referring doctor');
+      notify.problem('Failed to add referring doctor');
     } finally {
       setSaving(false);
     }
@@ -73,14 +72,13 @@ const ReferringDoctors = () => {
     try {
       setSaving(true);
       await api.put(`/referring-doctors/${editingDoctor.id}`, formData);
-      toast.success('Referring doctor updated successfully');
       setShowEditModal(false);
       setEditingDoctor(null);
       setFormData({ name: '', hospital: '' });
       fetchReferringDoctors();
     } catch (error) {
       console.error('Error updating doctor:', error);
-      toast.error('Failed to update referring doctor');
+      notify.problem('Failed to update referring doctor');
     } finally {
       setSaving(false);
     }
@@ -91,11 +89,10 @@ const ReferringDoctors = () => {
     
     try {
       await api.delete(`/referring-doctors/${id}`);
-      toast.success('Referring doctor deleted successfully');
       fetchReferringDoctors();
     } catch (error) {
       console.error('Error deleting doctor:', error);
-      toast.error('Failed to delete referring doctor');
+      notify.problem('Failed to delete referring doctor');
     }
   };
 

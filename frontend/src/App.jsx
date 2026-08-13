@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavig
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { HeaderProvider } from "./contexts/HeaderContext";
 import { NavigationGuardProvider } from "./contexts/NavigationGuardContext";
-import { ToastContainer } from 'react-toastify';
+import { ToastContainer, Slide } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 // Pages
@@ -16,7 +16,6 @@ import Patients from "./pages/Patients";
 import PatientIntake from "./pages/PatientIntake";
 import Payments from "./pages/Payments";
 import DoctorProfile from "./pages/DoctorProfile";
-import Settings from "./pages/Settings";
 import ClinicOnboarding from "./pages/ClinicOnboarding";
 import AuthCallback from "./pages/AuthCallback";
 import DesktopAuthStart from "./pages/DesktopAuthStart";
@@ -25,6 +24,7 @@ import Mail from "./pages/Mail";
 import MailCallback from "./pages/MailCallback";
 import LabHub from "./pages/lab/LabHub";
 import Attendance from "./pages/Attendance";
+import ClinicLocation from "./pages/ClinicLocation";
 import Calendar from "./pages/Calendar";
 import BookingPage from "./pages/BookingPage";
 import PatientProfile from "./pages/PatientProfile";
@@ -41,11 +41,10 @@ import Notifications from "./pages/admin/Notifications";
 import PracticeSettings from "./pages/admin/PracticeSettings";
 import TemplatesEditor from "./pages/admin/TemplatesEditor";
 import Integrations from "./pages/admin/integrations";
-import Devices from "./pages/admin/security/Devices";
-import AuditLog from "./pages/admin/security/AuditLog";
+import Activity from "./pages/admin/security/Activity";
 import Security from "./pages/admin/security/Security";
 import Offers from "./pages/admin/Offers";
-import PrescriptionSets from "./pages/admin/PrescriptionSets";
+import Medications from "./pages/admin/Medications";
 import Vendors from "./pages/Vendors";
 import Expenses from "./pages/Expenses";
 import ConsentForms from "./pages/ConsentForms";
@@ -186,7 +185,7 @@ function AppContent() {
     });
     
     // Automatically collapse main sidebar on Settings/Admin pages
-    if (location.pathname === '/user-management' || location.pathname.startsWith('/admin')) {
+    if (location.pathname.startsWith('/admin')) {
       setIsSidebarCollapsed(true);
     }
 
@@ -287,9 +286,13 @@ function AppContent() {
                     opened a page with nothing highlighted in the sidebar. */}
                 <Route index element={<Navigate to="clinic" replace />} />
                 <Route path="attendance" element={<Attendance />} />
+                <Route path="clinic-location" element={<ClinicLocation />} />
                 <Route path="staff" element={<StaffManagement />} />
                 <Route path="treatments" element={<TreatmentsPricing />} />
-                <Route path="prescription-sets" element={<PrescriptionSets />} />
+                <Route path="medications" element={<Medications />} />
+                {/* Retired menu item, live route: existing links and bookmarks
+                    land on the Prescription Sets tab of Medications. */}
+                <Route path="prescription-sets" element={<Medications />} />
                 <Route path="permissions" element={<PermissionsManagement />} />
                 <Route path="clinic" element={<ClinicInfo />} />
                 <Route path="templates" element={<MessageTemplates />} />
@@ -303,8 +306,11 @@ function AppContent() {
                 <Route path="integrations/:tab" element={<Integrations />} />
                 <Route path="security" element={<Navigate to="verification" replace />} />
                 <Route path="security/verification" element={<Security />} />
-                <Route path="security/devices" element={<Devices />} />
-                <Route path="security/audit-log" element={<AuditLog />} />
+                <Route path="security/activity" element={<Activity />} />
+                {/* Retired menu items, live routes: each opens Access &
+                    Activity on the tab it used to be its own page. */}
+                <Route path="security/devices" element={<Activity />} />
+                <Route path="security/audit-log" element={<Activity />} />
                 <Route path="offers" element={<Offers />} />
                 <Route path="subscription" element={<Subscription />} />
               </Route>
@@ -315,7 +321,6 @@ function AppContent() {
               <Route path="/consent-forms" element={<ProtectedRoute><ConsentForms /></ProtectedRoute>} />
               <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
               <Route path="/add-clinic" element={<ProtectedRoute><AddClinic /></ProtectedRoute>} />
-              <Route path="/user-management" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
               <Route path="/doctor-profile" element={<ProtectedRoute><DoctorProfile /></ProtectedRoute>} />
               <Route path="/loading-test" element={<LoadingTest />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
@@ -330,16 +335,34 @@ function AppContent() {
     <>
       <ConnectivityBanner />
       {renderContent()}
+      {/* Feedback of last resort. See the rule in utils/notify.js: most of what
+          used to land here now shows at the control that caused it.
+
+          Moved off top-right, where it sat on top of the support, notifications,
+          clinic-switcher and profile controls — covering the header is why
+          people were closing these by hand. Top-centre clears the header
+          (offset in index.css) and belongs to nothing else.
+
+          Timing is set per call in notify.js rather than here, so a failure can
+          linger longer than a confirmation. */}
       <ToastContainer
-        position="top-right"
-        autoClose={8000}
-        hideProgressBar={false}
+        position="top-center"
         newestOnTop
         closeOnClick
         rtl={false}
         pauseOnFocusLoss
-        draggable
         pauseOnHover
+        draggable={false}
+        // The progress bar is most of what read as dated, and it counts down a
+        // deadline nobody is racing.
+        hideProgressBar
+        // A burst cannot march down the screen. Combined with the toastId
+        // dedupe in notify.js, a failing bulk action shows one message.
+        limit={3}
+        transition={Slide}
+        icon={false}
+        className="mp-toast-container"
+        toastClassName="mp-toast-shell"
       />
     </>
   );

@@ -9,7 +9,7 @@ import { TOOTH_NAMES } from './dentalConstants';
 import AnatomyIcon from './AnatomyIcons';
 import ClinicalAutocomplete from './ClinicalAutocomplete';
 import { api } from '../../utils/api';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 
 // Honest status options — the label, the stored value, and the chart symbol all agree.
 const TOOTH_STATUSES = [
@@ -94,7 +94,7 @@ const ToothRightDrawer = ({
         if (savePrice && !priceFromCatalog && treatment.trim() && fee > 0) {
             try {
                 await api.post('/treatment-types', { name: treatment.trim(), price: fee });
-                toast.success(`Saved "${treatment.trim()}" to your price list`);
+                notify.done(`Saved "${treatment.trim()}" to your price list`);
             } catch {
                 // non-fatal — still add the procedure to this case
             }

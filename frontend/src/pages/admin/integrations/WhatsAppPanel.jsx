@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { ExternalLink, CheckCircle2, AlertTriangle, Smartphone, Loader2, RefreshCw } from 'lucide-react';
-import { toast } from 'react-toastify';
-import { api } from '../../../utils/api';
+import { notify } from '../../../utils/notify';
+import { api, getFriendlyErrorMessage } from '../../../utils/api';
 import { useAuth } from '../../../contexts/AuthContext';
 
 const WAREACH_PORTAL = 'http://116.203.142.56:3000/';
@@ -29,9 +29,9 @@ const WhatsAppPanel = () => {
       setSavingManual(true);
       await api.put('/clinics/me', { manual_whatsapp: val });
       await refreshUser?.();
-      toast.success(val ? 'Manual WhatsApp turned on' : 'Manual WhatsApp turned off');
+      notify.done(val ? 'Manual WhatsApp turned on' : 'Manual WhatsApp turned off');
     } catch (e) {
-      toast.error('Could not update the setting');
+      notify.problem('Could not update the setting');
     } finally {
       setSavingManual(false);
     }
@@ -77,7 +77,7 @@ const WhatsAppPanel = () => {
         if (s && s !== 'connecting') {
           setStatus(s);
           setPhoneNumber(statusRes?.phone_number || null);
-          if (s === 'connected') { setQr(null); toast.success('WhatsApp connected!'); }
+          if (s === 'connected') { setQr(null); notify.done('WhatsApp connected!'); }
         }
       } catch (e) { /* keep polling */ }
     }, 4000);
@@ -91,8 +91,8 @@ const WhatsAppPanel = () => {
       setStatus(res.status || 'connecting');
       if (res.qr) setQr(res.qr);
     } catch (e) {
-      const detail = e.response?.data?.detail || 'Could not start the connection. Please try again.';
-      toast.error(detail);
+      const detail = getFriendlyErrorMessage(e, 'Could not start the connection. Please try again.');
+      notify.problem(detail);
     } finally {
       setBusy(false);
     }
@@ -106,9 +106,9 @@ const WhatsAppPanel = () => {
       setStatus('disconnected');
       setPhoneNumber(null);
       setQr(null);
-      toast.success('WhatsApp disconnected.');
+      notify.done('WhatsApp disconnected.');
     } catch (e) {
-      toast.error('Could not disconnect. Please try again.');
+      notify.problem('Could not disconnect. Please try again.');
     } finally {
       setBusy(false);
     }

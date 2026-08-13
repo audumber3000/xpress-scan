@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 import { getCurrencySymbol } from '../../utils/currency';
 
 const CreateInvoiceModal = ({ isOpen, onClose, patientId, appointments = [], onSuccess }) => {
@@ -19,7 +19,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, patientId, appointments = [], onS
 
     const handleRemoveLineItem = (index) => {
         if (lineItems.length === 1) {
-            toast.warn("At least one line item is required");
+            notify.problem("At least one line item is required");
             return;
         }
         setLineItems(lineItems.filter((_, i) => i !== index));
@@ -40,7 +40,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, patientId, appointments = [], onS
         
         // Validation
         if (lineItems.some(item => !item.description || item.unit_price <= 0)) {
-            toast.error("Please fill in all line item descriptions and valid prices");
+            notify.problem("Please fill in all line item descriptions and valid prices");
             return;
         }
 
@@ -69,12 +69,11 @@ const CreateInvoiceModal = ({ isOpen, onClose, patientId, appointments = [], onS
             // The user said "this billing will be reflected in payments".
             // In this system, marking as paid creates a payment or updates status.
             
-            toast.success("Billing created successfully!");
             if (onSuccess) onSuccess();
             onClose();
         } catch (error) {
             console.error("Failed to create billing:", error);
-            toast.error(error.message || "Failed to create billing");
+            notify.problem(error, "Failed to create billing");
         } finally {
             setLoading(false);
         }

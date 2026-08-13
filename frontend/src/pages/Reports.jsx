@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { toast } from 'react-toastify';
+import { notify } from '../utils/notify';
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import GearLoader from "../components/GearLoader";
 import { useAuth } from "../contexts/AuthContext";
@@ -309,11 +309,11 @@ const ReportDrawer = ({ report, onClose, onGenerated }) => {
       // Redirect triggers here
       onGenerated?.();
       onClose();
-      toast.info("Report generation started...");
+      notify.done("Report generation started...");
     } catch (err) {
       console.error(err);
       setIsGenerating(false);
-      toast.error(getPermissionAwareErrorMessage(
+      notify.problem(getPermissionAwareErrorMessage(
         err,
         "Failed to start report generation",
         "You don't have permission to generate reports."
@@ -582,7 +582,7 @@ const GeneratedReportsTab = ({ refreshKey }) => {
                               window.URL.revokeObjectURL(url);
                             } catch (err) {
                               console.error("Download failed", err);
-                              toast.error(getPermissionAwareErrorMessage(
+                              notify.problem(getPermissionAwareErrorMessage(
                                 err,
                                 "Failed to download report",
                                 "You don't have permission to download reports."

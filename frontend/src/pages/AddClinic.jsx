@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../utils/api";
+import { api, getFriendlyErrorMessage } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
-import { toast } from "react-toastify";
+import { notify } from '../utils/notify';
 import FeatureLock from "../components/FeatureLock";
 import { detectCountry, flagEmoji } from "../utils/detectCountry";
 
@@ -66,7 +66,7 @@ const AddClinic = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.name.trim()) {
-      toast.error("Clinic name is required");
+      notify.problem("Clinic name is required");
       return;
     }
     setSaving(true);
@@ -79,13 +79,13 @@ const AddClinic = () => {
         currency_symbol: selectedCountry?.currency_symbol,
         tax_label: taxLabel,
       });
-      toast.success(`"${form.name}" branch created successfully!`);
+      notify.done(`"${form.name}" branch created successfully!`);
       // Refresh auth context so the user sees the new clinic in the switcher
       if (refreshUser) await refreshUser();
       navigate("/dashboard");
     } catch (err) {
-      const msg = err?.response?.data?.detail || err?.message || "Failed to create clinic";
-      toast.error(msg);
+      const msg = getFriendlyErrorMessage(err, "Failed to create clinic");
+      notify.problem(msg);
     } finally {
       setSaving(false);
     }

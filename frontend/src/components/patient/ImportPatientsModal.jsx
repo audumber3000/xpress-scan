@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import Papa from "papaparse";
 import { X, UploadCloud, Download, CheckCircle2, AlertCircle, FileSpreadsheet, Table2, Plus, Trash2, ImagePlus, Sparkles, Loader2, Circle, ScanLine, Sun, Images, ListChecks, Languages } from "lucide-react";
-import { toast } from "react-toastify";
+import { notify } from '../../utils/notify';
 import { api, getFriendlyErrorMessage } from "../../utils/api";
 import { isValidPhone } from "../../utils/validators";
 import { computeAgeFromDob } from "./AgeOrDobField";
@@ -130,7 +130,10 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
     setImporting(false);
     setMode(null);
     setActiveTab('standard');
-    setShowPaymentsImporter(false);
+    // Named for the state that actually exists. This said setShowPaymentsImporter,
+    // left behind when the sheet importer was renamed from Payments to Invoice,
+    // so every close threw a ReferenceError before it reached onClose().
+    setShowInvoiceImporter(false);
     setManualRows([emptyManualRow(), emptyManualRow(), emptyManualRow()]);
     setScanning(false);
     setScanStep(0);
@@ -205,12 +208,12 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
         setRows(parsed);
         setParsing(false);
         if (parsed.length === 0) {
-          toast.error("No rows found in that file. Make sure it has a header row and at least one patient.");
+          notify.problem("No rows found in that file. Make sure it has a header row and at least one patient.");
         }
       },
       error: (err) => {
         setParsing(false);
-        toast.error(`Couldn't read that file: ${err.message}`);
+        notify.problem(`Couldn't read that file: ${err.message}`);
       },
     });
   };
@@ -254,7 +257,7 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
         return row;
       });
       if (!mapped.length) {
-        toast.error(
+        notify.problem(
           res.errors?.length
             ? "We couldn't read those photos. Make sure they're clear, well-lit, and show the register text."
             : "No patient rows found. Try clearer, well-lit photos of the register."
@@ -264,12 +267,12 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
       setManualRows(mapped);
       setMode("manual");
       const flagged = extractedRows.filter((r) => r.confidence === "low" || r.issues).length;
-      toast.success(
+      notify.done(
         `Found ${mapped.length} patient${mapped.length === 1 ? "" : "s"}` +
           (flagged ? ` — ${flagged} need a quick check.` : ". Review before importing.")
       );
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err, "Could not read the register photos."));
+      notify.problem(getFriendlyErrorMessage(err, "Could not read the register photos."));
     } finally {
       setScanning(false);
     }
@@ -284,15 +287,15 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
     setImporting(true);
     try {
       const res = await api.post("/patients/import", { patients });
-      toast.success(res.message || `Imported ${res.imported_count} patients`);
+      notify.done(res.message || `Imported ${res.imported_count} patients`);
       if (res.errors && res.errors.length > 0) {
-        toast.warning(`${res.errors.length} row(s) couldn't be saved. ${res.errors[0]}`);
+        notify.problem(`${res.errors.length} row(s) couldn't be saved. ${res.errors[0]}`);
       }
       reset();
       onImported?.();
       onClose();
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err, "Import failed. Please try again."));
+      notify.problem(getFriendlyErrorMessage(err, "Import failed. Please try again."));
     } finally {
       setImporting(false);
     }

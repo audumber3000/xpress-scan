@@ -2,13 +2,18 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ShieldCheck, Smartphone, Mail, CheckCircle2, AlertCircle, Loader2, X, Pencil,
 } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { notify } from '../../../utils/notify';
 import { api } from '../../../utils/api';
+import MasterPasswordCard from './MasterPasswordCard';
 
 /**
  * Security — the clinic's recovery contact: a phone and an email, each verified
  * by OTP (WhatsApp code for the phone, email code for the email). These are the
  * contacts we'll use for account recovery and sensitive actions.
+ *
+ * Below them sits the master password, which is what those verified contacts
+ * are for in practice: changing it needs a code on the recovery phone, and it
+ * is what the app asks for before a delete nothing can undo.
  */
 
 const CHANNELS = {
@@ -35,7 +40,7 @@ const Security = () => {
     try {
       setData(await api.get('/security'));
     } catch (e) {
-      toast.error('Could not load security settings');
+      notify.problem('Could not load security settings');
     } finally {
       setLoading(false);
     }
@@ -54,9 +59,8 @@ const Security = () => {
       const updated = await api.put('/security', { [CHANNELS[channel].field]: draft.trim() });
       setData(updated);
       setEditing(null);
-      toast.success('Saved');
     } catch (e) {
-      toast.error(e?.response?.data?.detail || 'Could not save');
+      notify.problem(e, 'Could not save');
     } finally {
       setSaving(false);
     }
@@ -68,24 +72,24 @@ const Security = () => {
       await api.post('/security/otp/send', { channel });
       setOtp({ channel });
       setCode('');
-      toast.success(channel === 'whatsapp' ? 'Code sent on WhatsApp' : 'Code sent to your email');
+      notify.done(channel === 'whatsapp' ? 'Code sent on WhatsApp' : 'Code sent to your email');
     } catch (e) {
-      toast.error(e?.response?.data?.detail || 'Could not send the code');
+      notify.problem(e, 'Could not send the code');
     } finally {
       setSending(null);
     }
   };
 
   const verifyCode = async () => {
-    if (!code.trim()) { toast.error('Enter the code'); return; }
+    if (!code.trim()) { notify.problem('Enter the code'); return; }
     setVerifying(true);
     try {
       await api.post('/security/otp/verify', { channel: otp.channel, code: code.trim() });
-      toast.success('Verified');
+      notify.done('Verified');
       setOtp(null);
       load();
     } catch (e) {
-      toast.error(e?.response?.data?.detail || 'Could not verify the code');
+      notify.problem(e, 'Could not verify the code');
     } finally {
       setVerifying(false);
     }
@@ -163,6 +167,13 @@ const Security = () => {
             </div>
           );
         })}
+
+        {/* The six digits that gate destructive deletes. Changing them is
+            verified against the phone above, so it lives directly under it. */}
+        <MasterPasswordCard
+          securityPhone={data?.security_phone}
+          onPhoneVerified={load}
+        />
       </div>
 
       {/* OTP entry modal */}

@@ -1,3 +1,4 @@
+import { getFriendlyErrorMessage } from '../../utils/api';
 import React, { useState } from "react";
 import { Trash2, TicketPercent } from "lucide-react";
 import { getCurrencySymbol } from "../../utils/currency";
@@ -69,7 +70,7 @@ const InvoiceDiscounts = ({ invoice, onAdd, onRemove }) => {
       await onAdd({ value: Number(value), discount_type: type, reason: reason.trim() });
       reset();
     } catch (err) {
-      setError(err?.response?.data?.detail || err?.message || "Could not apply this discount.");
+      setError(getFriendlyErrorMessage(err, "Could not apply this discount."));
     } finally {
       setSaving(false);
     }

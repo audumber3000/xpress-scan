@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, FileSpreadsheet, FileText } from "lucide-react";
-import { toast } from "react-toastify";
+import { notify } from '../../utils/notify';
 import { clinicToday, formatDate } from "../../utils/datetime";
 
 /**
@@ -61,10 +61,10 @@ const DayExportModal = ({
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      toast.success("Export ready");
+      notify.done("Export ready");
       onClose();
     } catch (e) {
-      toast.error(e?.message || "Could not export. Please try again.");
+      notify.problem(e?.message || "Could not export. Please try again.");
     } finally {
       setExporting(false);
     }

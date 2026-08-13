@@ -1,3 +1,4 @@
+import { getFriendlyErrorMessage } from '../../utils/api';
 import React, { useState, useEffect } from "react";
 import FormDrawer, { Field, TextInput, SelectInput } from "../FormDrawer";
 
@@ -39,7 +40,7 @@ const DailyRegisterEditDrawer = ({ open, entry, onClose, onSave, doctors = [] })
         notes: form.notes.trim() || null,
       });
     } catch (err) {
-      setError(err?.response?.data?.detail || "Couldn't save those changes.");
+      setError(getFriendlyErrorMessage(err, "Couldn't save those changes."));
     } finally {
       setBusy(false);
     }

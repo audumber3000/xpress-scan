@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { auth } from '../firebaseClient';
-import { api } from '../utils/api';
+import { api, getFriendlyErrorMessage } from '../utils/api';
 import { getDeviceInfo } from '../utils/googleRedirectAuth';
 import { getRedirectResult, GoogleAuthProvider, signInWithRedirect } from 'firebase/auth';
 
@@ -52,7 +52,7 @@ const DesktopAuthStart = () => {
         window.location.href = deepLink.toString();
       } catch (err) {
         sessionStorage.removeItem(PENDING_KEY);
-        setError(err.response?.data?.detail || err.message || 'Google sign-in failed. Please try again.');
+        setError(getFriendlyErrorMessage(err, 'Google sign-in failed. Please try again.'));
       }
     };
 

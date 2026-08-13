@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import SessionEndedModal from '../components/common/SessionEndedModal';
 import { api } from '../utils/api';
 import posthog from 'posthog-js';
 
@@ -36,6 +37,8 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
+  // Set only when the clinic ended the session, never on a normal sign-out.
+  const [sessionEnded, setSessionEnded] = useState(null);
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -80,6 +83,23 @@ export const AuthProvider = ({ children }) => {
     };
 
     getInitialSession();
+  }, []);
+
+  // A session revoked while the app is open — the owner blocked this device or
+  // deactivated this person, and the backend answered 401 on the next request.
+  // Signing out here is what actually moves them to the login screen; clearing
+  // localStorage alone left the app rendering a dashboard nobody could use.
+  useEffect(() => {
+    const onExpired = (e) => {
+      setUser(null);
+      setToken(null);
+      // A modal rather than a toast. Being signed out mid-shift is not a
+      // passing notice that can scroll away before it is read — it is the end
+      // of the session, and the screen should say so and stay saying it.
+      setSessionEnded(e?.detail?.reason || 'Your access to this clinic has changed.');
+    };
+    window.addEventListener('auth:expired', onExpired);
+    return () => window.removeEventListener('auth:expired', onExpired);
   }, []);
 
   // Re-fetch fresh permissions whenever the user returns to this tab.
@@ -210,6 +230,14 @@ export const AuthProvider = ({ children }) => {
   return (
     <AuthContext.Provider value={value}>
       {children}
+      {sessionEnded && (
+        <SessionEndedModal
+          reason={sessionEnded}
+          // Dismissing only puts them on the login screen the sign-out already
+          // moved them to. There is nothing else this button can usefully do.
+          onSignIn={() => setSessionEnded(null)}
+        />
+      )}
     </AuthContext.Provider>
   );
 };

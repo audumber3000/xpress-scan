@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FileText } from 'lucide-react';
 import { api } from "../../utils/api";
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 import { openWhatsApp } from "../../utils/whatsapp";
 
 /**
@@ -97,18 +97,17 @@ const PatientPrescriptions = ({ patientId, patientPhone, visits = [], hideHeader
 
     const handleSaveOnly = async () => {
         const validItems = items.filter(i => i.medicine_name.trim());
-        if (!validItems.length) { toast.error('Add at least one medicine'); return; }
+        if (!validItems.length) { notify.problem('Add at least one medicine'); return; }
         setIsGenerating(true);
         try {
             const url = selectedAppointmentId
                 ? `/reports/${patientId}/prescriptions/save?appointment_id=${selectedAppointmentId}`
                 : `/reports/${patientId}/prescriptions/save`;
             await api.post(url, { items: validItems, notes: generalNotes });
-            toast.success('Prescription saved!');
             resetNewForm();
             fetchPrescriptions();
         } catch (err) {
-            toast.error(err.message || 'Failed to save prescription');
+            notify.problem(err.message || 'Failed to save prescription');
         } finally {
             setIsGenerating(false);
         }
@@ -116,19 +115,18 @@ const PatientPrescriptions = ({ patientId, patientPhone, visits = [], hideHeader
 
     const handleSaveAndGenerate = async () => {
         const validItems = items.filter(i => i.medicine_name.trim());
-        if (!validItems.length) { toast.error('Add at least one medicine'); return; }
+        if (!validItems.length) { notify.problem('Add at least one medicine'); return; }
         setIsGenerating(true);
         try {
             const url = selectedAppointmentId
                 ? `/reports/${patientId}/prescriptions/generate-pdf?appointment_id=${selectedAppointmentId}`
                 : `/reports/${patientId}/prescriptions/generate-pdf`;
             const response = await api.post(url, { items: validItems, notes: generalNotes });
-            toast.success('Prescription PDF generated!');
             if (window.confirm('View PDF?')) window.open(response.pdf_url, '_blank');
             resetNewForm();
             fetchPrescriptions();
         } catch (err) {
-            toast.error(err.message || 'Failed to generate prescription');
+            notify.problem(err.message || 'Failed to generate prescription');
         } finally {
             setIsGenerating(false);
         }
@@ -147,11 +145,10 @@ const PatientPrescriptions = ({ patientId, patientPhone, visits = [], hideHeader
         setEditSaving(true);
         try {
             await api.put(`/reports/prescriptions/${selectedRx.id}`, { items: editItems, notes: editNotes });
-            toast.success('Prescription updated!');
             closeDrawer();
             fetchPrescriptions();
         } catch (err) {
-            toast.error(err.message || 'Failed to update');
+            notify.problem(err.message || 'Failed to update');
         } finally { setEditSaving(false); }
     };
 
@@ -164,12 +161,11 @@ const PatientPrescriptions = ({ patientId, patientPhone, visits = [], hideHeader
                 ? `/reports/${patientId}/prescriptions/generate-pdf?appointment_id=${selectedRx.appointment_id}`
                 : `/reports/${patientId}/prescriptions/generate-pdf`;
             const res = await api.post(url, { items: editItems, notes: editNotes });
-            toast.success('PDF generated!');
             window.open(res.pdf_url, '_blank');
             closeDrawer();
             fetchPrescriptions();
         } catch (err) {
-            toast.error(err.message || 'Failed to generate PDF');
+            notify.problem(err.message || 'Failed to generate PDF');
         } finally { setEditSaving(false); }
     };
 
@@ -177,17 +173,16 @@ const PatientPrescriptions = ({ patientId, patientPhone, visits = [], hideHeader
         if (!window.confirm('Delete this prescription? This cannot be undone.')) return;
         try {
             await api.delete(`/reports/prescriptions/${selectedRx.id}`);
-            toast.success('Prescription deleted');
             closeDrawer();
             fetchPrescriptions();
         } catch (err) {
-            toast.error(err.message || 'Failed to delete');
+            notify.problem(err.message || 'Failed to delete');
         }
     };
 
     const handleDrawerWhatsApp = () => {
-        if (!patientPhone) { toast.error('Patient phone number not available'); return; }
-        if (!selectedRx?.pdf_url) { toast.error('Generate a PDF first to share via WhatsApp'); return; }
+        if (!patientPhone) { notify.problem('Patient phone number not available'); return; }
+        if (!selectedRx?.pdf_url) { notify.problem('Generate a PDF first to share via WhatsApp'); return; }
         const msg = `Hello, here is your prescription: ${selectedRx.pdf_url}`;
         // Shared helper: native WhatsApp app on desktop, one reused tab on web.
         openWhatsApp(patientPhone, msg);

@@ -3,7 +3,7 @@ import {
   Globe, Monitor, Smartphone, Loader2, Check, AlertCircle, ExternalLink,
   Copy, Image as ImageIcon, Trash2, Plus, Eye, EyeOff, X,
 } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 import { api } from '../../utils/api';
 
 /**
@@ -142,11 +142,11 @@ const ClinicWebsite = () => {
       const s = await api.put('/marketing/website/settings', body);
       setSettings(s);
       savedColor.current = s.primary_color;
-      if (!silent) toast.success('Saved');
+      if (!silent) notify.done('Saved');
       loadPreview();
       return s;
     } catch (e) {
-      toast.error(e?.message || 'Could not save that');
+      notify.problem(e, 'Could not save that');
       return null;
     } finally {
       setSaving(false);
@@ -161,11 +161,11 @@ const ClinicWebsite = () => {
       fd.append('file', file);
       const photo = await api.post('/marketing/website/photos', fd);
       setPhotos((p) => [...p, photo]);
-      toast.success('Photo added');
+      notify.done('Photo added');
       loadPreview();
       loadAll();
     } catch (e) {
-      toast.error(e?.message || 'Could not add that photo');
+      notify.problem(e, 'Could not add that photo');
     } finally {
       setUploading(false);
     }
@@ -178,7 +178,7 @@ const ClinicWebsite = () => {
       loadPreview();
       loadAll();
     } catch (e) {
-      toast.error(e?.message || 'Could not remove that photo');
+      notify.problem(e, 'Could not remove that photo');
     }
   };
 
@@ -219,7 +219,7 @@ const ClinicWebsite = () => {
           </button>
           {settings.enabled && (
             <button
-              onClick={() => { navigator.clipboard?.writeText(publicUrl); toast.success('Link copied'); }}
+              onClick={() => { navigator.clipboard?.writeText(publicUrl); notify.done('Link copied'); }}
               className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:border-gray-300"
             >
               <Copy size={13} /> Copy link

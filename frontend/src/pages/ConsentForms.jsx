@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import { useHeader } from "../contexts/HeaderContext";
 import { useAuth } from "../contexts/AuthContext";
-import { toast } from "react-toastify";
+import { notify } from '../utils/notify';
 import Card from "../components/Card";
 import axios from "axios";
 import { Layout, Share2, CheckCircle, Clock, XCircle, Printer, ExternalLink, Search, Eye, Download, FileCheck, BookOpen } from 'lucide-react';
@@ -76,7 +76,7 @@ const ConsentForms = () => {
             const data = await api.get("/consents/templates");
             setTemplates(data);
         } catch (error) {
-            toast.error(getPermissionAwareErrorMessage(
+            notify.problem(getPermissionAwareErrorMessage(
                 error,
                 "Failed to fetch consent templates",
                 "You don't have permission to view consent templates."
@@ -166,7 +166,7 @@ const ConsentForms = () => {
         // dialog, which lets the user "Save as PDF" via the native print sheet.
         const w = window.open(`${window.location.origin}/consent/sign/${token}?print=1`, '_blank');
         if (!w) {
-            toast.error("Pop-up blocked — please allow pop-ups to print the consent.");
+            notify.problem("Pop-up blocked — please allow pop-ups to print the consent.");
         }
     };
 
@@ -176,7 +176,7 @@ const ConsentForms = () => {
         setSending(true);
         try {
             if (!user) {
-                toast.error("User session not found");
+                notify.problem("User session not found");
                 return;
             }
             
@@ -194,9 +194,9 @@ const ConsentForms = () => {
             setGeneratedToken(res.data.token);
             setSelectedPatient(patient);
             setLinksRefreshKey(k => k + 1); // Trigger sidebar refresh
-            toast.success("Link generated successfully");
+            notify.done("Link generated successfully");
         } catch (error) {
-            toast.error(error.response?.data?.error || "Failed to generate link");
+            notify.problem(error.response?.data?.error || "Failed to generate link");
         } finally {
             setSending(false);
         }
@@ -213,9 +213,9 @@ const ConsentForms = () => {
             });
 
             setMessageSent(true);
-            toast.success(`Consent link sent to ${selectedPatient.name} via WhatsApp`);
+            notify.done(`Consent link sent to ${selectedPatient.name} via WhatsApp`);
         } catch (error) {
-            toast.error(error.response?.data?.detail || error.response?.data?.error || "Failed to send WhatsApp message");
+            notify.problem(error, "Could not send that WhatsApp message");
         } finally {
             setSending(false);
         }
@@ -226,17 +226,15 @@ const ConsentForms = () => {
         try {
             if (editingTemplate) {
                 await api.put(`/consents/templates/${editingTemplate.id}`, formData);
-                toast.success("Template updated successfully");
             } else {
                 await api.post("/consents/templates", { ...formData });
-                toast.success("Template created successfully");
             }
             setShowModal(false);
             setEditingTemplate(null);
             setFormData({ name: "", content: "", is_active: true });
             fetchTemplates();
         } catch (error) {
-            toast.error(getPermissionAwareErrorMessage(
+            notify.problem(getPermissionAwareErrorMessage(
                 error,
                 "Failed to save template",
                 "You don't have permission to manage consent templates."
@@ -649,7 +647,7 @@ const ConsentForms = () => {
                                             <button 
                                                 onClick={() => {
                                                     navigator.clipboard.writeText(generatedLink);
-                                                    toast.success("Link copied to clipboard!");
+                                                    notify.done("Link copied to clipboard!");
                                                 }}
                                                 className="bg-[#2a276e] text-white p-2.5 rounded-lg hover:bg-[#1a1548] transition-colors"
                                                 title="Copy Link"

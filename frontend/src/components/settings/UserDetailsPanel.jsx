@@ -1,361 +1,150 @@
 import React from 'react';
-import GearLoader from '../GearLoader';
-import EditUserTab from './EditUserTab';
-import PermissionsTab from './PermissionsTab';
-import WorkingHoursTab from './WorkingHoursTab';
-import { isClinical } from '../../constants/roles';
+import { X, User, Pencil, ShieldCheck } from 'lucide-react';
+import { getInitials } from '../../utils/avatar';
+import { resolveUserAvatar } from '../../utils/avatar';
 
-const UserDetailsPanel = ({
-  selectedUser,
-  userPanelTab,
-  setUserPanelTab,
-  onClose,
-  userDevices,
-  loadingUserDevices,
-  getUserInitials,
-  formatDate,
-  formatLastSeen,
-  getDeviceIcon,
-  hasPermission,
-  user,
-  onSetPassword,
-  onEditUser,
-  onManagePermissions,
-  onDeleteUser,
-  formData,
-  setFormData,
-  availableRoles,
-  handleInputChange,
-  handleSaveEditUser,
-  availablePermissions,
-  defaultPermissions,
-  handleSavePermissions,
-  savingEditUser,
-  savingPermissions
-}) => {
-  if (!selectedUser) return null;
+/**
+ * The staff detail drawer: who this person is, and the tabs for changing it.
+ *
+ * A composition shell on purpose. It owns the drawer, the header and the tab
+ * strip; the panes themselves arrive as children, so Staff decides what an
+ * "Edit" tab means without this file having to know about roles, permissions
+ * or which handler saves them.
+ *
+ * ─── Why this file was rewritten ────────────────────────────────────────────
+ *
+ * It used to take a dozen individual props — selectedUser, userPanelTab,
+ * setUserPanelTab, onSetPassword, onEditUser, onManagePermissions, formData,
+ * handleInputChange and the rest — and render every pane itself. Only the
+ * orphaned Settings screen at /user-management ever called it that way.
+ *
+ * The live Staff screen calls it as a composition: `user`, `activeTab`,
+ * `onTabChange` and children. With the old contract, `selectedUser` was
+ * therefore always undefined, the very first line was `if (!selectedUser)
+ * return null`, and **clicking a staff member in Staff opened nothing at all**.
+ * Edit, permissions and password were unreachable in the shipping UI.
+ *
+ * The composition shape is the better of the two and the one already in use, so
+ * this now matches it rather than the caller being bent back.
+ *
+ * Props:
+ *   user         the staff member. Nothing renders without one.
+ *   activeTab    'accounts' | 'edit' | 'permissions'
+ *   onTabChange  (tabId) => void
+ *   onClose      backdrop / ✕
+ *   children     the active pane, chosen by the caller
+ */
+
+const TABS = [
+  { id: 'accounts',    label: 'Overview',    icon: User },
+  { id: 'edit',        label: 'Edit',        icon: Pencil },
+  { id: 'permissions', label: 'Permissions', icon: ShieldCheck },
+];
+
+const Row = ({ label, children }) => (
+  <div className="flex items-start justify-between gap-4 py-3 border-b border-gray-100 last:border-0">
+    <span className="text-sm text-gray-500 shrink-0">{label}</span>
+    <span className="text-sm font-medium text-gray-900 text-right min-w-0 break-words">{children}</span>
+  </div>
+);
+
+const UserDetailsPanel = ({ user, activeTab = 'accounts', onTabChange, onClose, children }) => {
+  if (!user) return null;
+
+  const isOwner = user.role === 'clinic_owner';
+  // The owner's permissions are fixed and the backend refuses to edit them, so
+  // offering the tab would be a promise the server breaks.
+  const tabs = TABS.filter((t) => !(t.id === 'permissions' && isOwner));
 
   return (
     <div className="fixed inset-0 z-50">
-      <div 
-        className="absolute inset-0 backdrop-blur-sm bg-black/20" 
-        onClick={onClose}
-      ></div>
+      <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={onClose} />
+
       <div className="absolute right-0 top-0 h-full w-full max-w-2xl bg-white shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
-        {/* Panel Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white">
-          <div className="flex items-center gap-4">
-            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#2a276e] to-[#9B8CFF] flex items-center justify-center text-white font-semibold text-lg">
-              {getUserInitials(selectedUser.name)}
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">{selectedUser.name}</h3>
-              <p className="text-sm text-gray-500">{selectedUser.email}</p>
+        <div className="flex items-start justify-between gap-4 p-6 border-b border-gray-100">
+          <div className="flex items-center gap-4 min-w-0">
+            <img
+              src={resolveUserAvatar(user, 96)}
+              alt=""
+              className="h-12 w-12 rounded-full bg-gray-100 object-cover shrink-0"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+            <div className="min-w-0">
+              <h3 className="text-lg font-semibold text-gray-900 truncate">
+                {user.name || getInitials(user.name)}
+              </h3>
+              <p className="text-sm text-gray-500 truncate">
+                {user.email || user.username || 'No sign-in details'}
+              </p>
             </div>
           </div>
-          <button 
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition"
-          >
-            <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition shrink-0">
+            <X size={20} className="text-gray-500" />
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="border-b border-gray-200 bg-white">
-          <div className="flex overflow-x-auto">
-            <button
-              onClick={() => setUserPanelTab("accounts")}
-              className={`px-6 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
-                userPanelTab === "accounts"
-                  ? "border-[#2a276e] text-[#2a276e]"
-                  : "border-transparent text-gray-600 hover:text-gray-900"
-              }`}
-            >
-              Accounts
-            </button>
-            <button
-              onClick={() => setUserPanelTab("devices")}
-              className={`px-6 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
-                userPanelTab === "devices"
-                  ? "border-[#2a276e] text-[#2a276e]"
-                  : "border-transparent text-gray-600 hover:text-gray-900"
-              }`}
-            >
-              Device Management
-            </button>
-            {isClinical(selectedUser.role) && (
+        <div className="px-6 border-b border-gray-200">
+          <div className="flex gap-1 -mb-px">
+            {tabs.map(({ id, label, icon: Icon }) => (
               <button
-                onClick={() => setUserPanelTab("hours")}
-                className={`px-6 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
-                  userPanelTab === "hours"
-                    ? "border-[#2a276e] text-[#2a276e]"
-                    : "border-transparent text-gray-600 hover:text-gray-900"
+                key={id}
+                onClick={() => onTabChange?.(id)}
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors rounded-t-lg ${
+                  activeTab === id
+                    ? 'border-[#29828a] text-[#29828a] bg-white'
+                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50'
                 }`}
               >
-                Working Hours
+                <Icon size={14} />
+                {label}
               </button>
-            )}
-            <button
-              onClick={() => setUserPanelTab("activity")}
-              className={`px-6 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
-                userPanelTab === "activity"
-                  ? "border-[#2a276e] text-[#2a276e]"
-                  : "border-transparent text-gray-600 hover:text-gray-900"
-              }`}
-            >
-              Activity
-            </button>
-            {hasPermission("users:edit") && (
-              <>
-                <button
-                  onClick={() => onEditUser(selectedUser)}
-                  className={`px-6 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
-                    userPanelTab === "edit"
-                      ? "border-[#2a276e] text-[#2a276e]"
-                      : "border-transparent text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  Edit User
-                </button>
-                <button
-                  onClick={() => onManagePermissions(selectedUser)}
-                  className={`px-6 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
-                    userPanelTab === "permissions"
-                      ? "border-[#2a276e] text-[#2a276e]"
-                      : "border-transparent text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  Permissions
-                </button>
-              </>
-            )}
+            ))}
           </div>
         </div>
 
-        {/* Panel Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          {/* Accounts Tab */}
-          {userPanelTab === "accounts" && (
-            <div className="space-y-6">
-              <div>
-                <h4 className="text-md font-semibold text-gray-900 mb-4">Account Information</h4>
-                <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Name</span>
-                    <span className="text-sm font-medium text-gray-900">{selectedUser.name}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Email</span>
-                    <span className="text-sm font-medium text-gray-900">{selectedUser.email}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Role</span>
-                    <span className="text-sm font-medium text-gray-900 capitalize">{selectedUser.role}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Date Added</span>
-                    <span className="text-sm font-medium text-gray-900">{formatDate(selectedUser.created_at)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-md font-semibold text-gray-900 mb-4">Desktop Login Credentials</h4>
-                <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                  <div>
-                    <label className="text-xs font-medium text-gray-700 mb-1 block">Username (Email)</label>
-                    <div className="p-2 bg-white border border-gray-300 rounded font-mono text-sm text-gray-900">
-                      {selectedUser.email}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-700 mb-1 block">Password Status</label>
-                    <div className="flex items-center justify-between">
-                      {selectedUser.has_password ? (
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          ✓ Password Set
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                          ✗ Password Not Set
-                        </span>
-                      )}
-                      {hasPermission("users:edit") && (
-                        <button
-                          onClick={() => onSetPassword(selectedUser)}
-                          className="text-sm text-[#2a276e] hover:text-[#1a1548] font-medium"
-                        >
-                          {selectedUser.has_password ? "Reset Password" : "Set Password"}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {hasPermission("users:edit") && (
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => onEditUser(selectedUser)}
-                    className="flex-1 px-4 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition font-medium"
-                  >
-                    Edit User
-                  </button>
-                  <button
-                    onClick={() => onManagePermissions(selectedUser)}
-                    className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium"
-                  >
-                    Manage Permissions
-                  </button>
-                  {hasPermission("users:delete") && selectedUser.id !== user?.id && (
-                    <button
-                      onClick={() => {
-                        if (window.confirm(`Are you sure you want to delete ${selectedUser.name}?`)) {
-                          onDeleteUser(selectedUser.id);
-                          onClose();
-                        }
-                      }}
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-medium"
-                    >
-                      Delete
-                    </button>
-                  )}
-                </div>
+          {activeTab === 'accounts' ? (
+            <div className="bg-white border border-gray-200 rounded-xl px-5">
+              <Row label="Name">{user.name || '—'}</Row>
+              <Row label="Email">{user.email || '—'}</Row>
+              {user.username && <Row label="Username">{user.username}</Row>}
+              <Row label="Role">
+                {(user.role || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || '—'}
+              </Row>
+              <Row label="Status">
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                  user.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {user.is_active ? 'Active' : 'Deactivated'}
+                </span>
+              </Row>
+              {user.phone && <Row label="Phone">{user.phone}</Row>}
+              {user.joined_on && <Row label="Joined">{new Date(user.joined_on).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</Row>}
+              {user.salary_amount != null && (
+                <Row label="Salary">
+                  ₹{Number(user.salary_amount).toLocaleString('en-IN')}
+                  {user.salary_day ? <span className="text-gray-400 font-normal"> · paid on the {user.salary_day}</span> : null}
+                </Row>
               )}
+              {user.fee_basis && (
+                <Row label="Case fee">
+                  {user.fee_basis === 'percentage'
+                    ? `${user.fee_value ?? 0}% of what they bill`
+                    : `₹${Number(user.fee_value ?? 0).toLocaleString('en-IN')} per case`}
+                </Row>
+              )}
+              <Row label="Can sign in">
+                {/* has_password is the honest question. A staff member with no
+                    password cannot get in, however active the row says they are. */}
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                  user.has_password ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                }`}>
+                  {user.has_password ? 'Password set' : 'No password yet'}
+                </span>
+              </Row>
             </div>
-          )}
-
-          {/* Device Management Tab */}
-          {userPanelTab === "devices" && (
-            <div className="space-y-4">
-              <div>
-                <h4 className="text-md font-semibold text-gray-900 mb-4">User Devices</h4>
-                {loadingUserDevices[selectedUser.id] ? (
-                  <div className="text-center py-8">
-                    <GearLoader size="w-8 h-8" className="mx-auto" />
-                    <p className="mt-2 text-sm text-gray-600">Loading devices...</p>
-                  </div>
-                ) : (userDevices[selectedUser.id] || []).length === 0 ? (
-                  <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
-                    <p className="text-sm text-gray-500">No devices found.</p>
-                    <p className="text-xs text-gray-400 mt-1">Devices will appear here when this user logs in.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {(userDevices[selectedUser.id] || []).map((device) => (
-                      <div key={device.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-start gap-3 flex-1">
-                            <span className="text-3xl">{getDeviceIcon(device.device_type, device.device_platform)}</span>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="text-sm font-medium text-gray-900">{device.device_name}</span>
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                                  device.is_online 
-                                    ? 'bg-green-100 text-green-800' 
-                                    : 'bg-gray-100 text-gray-800'
-                                }`}>
-                                  <span className={`w-1.5 h-1.5 mr-1 rounded-full ${
-                                    device.is_online ? 'bg-green-400' : 'bg-gray-400'
-                                  }`}></span>
-                                  {device.is_online ? 'Online' : 'Offline'}
-                                </span>
-                              </div>
-                              <div className="text-xs text-gray-600 space-y-1">
-                                <div><span className="font-medium">Platform:</span> {device.device_platform} {device.device_os}</div>
-                                {device.device_serial && (
-                                  <div><span className="font-medium">Serial:</span> <span className="font-mono">{device.device_serial}</span></div>
-                                )}
-                                <div><span className="font-medium">Type:</span> {device.device_type === 'desktop' && '🖥️ Desktop'} {device.device_type === 'mobile' && '📱 Mobile'} {device.device_type === 'web' && '🌐 Web'}</div>
-                                <div><span className="font-medium">Last seen:</span> {formatLastSeen(device.last_seen)}</div>
-                                {device.location && (
-                                  <div><span className="font-medium">Location:</span> {device.location}</div>
-                                )}
-                                {device.ip_address && (
-                                  <div><span className="font-medium">IP Address:</span> {device.ip_address}</div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* When this person works, and when they are away. Drives the
-              shading on the calendar and the refusal on the server. */}
-          {userPanelTab === "hours" && (
-            <WorkingHoursTab doctorId={selectedUser.id} doctorName={selectedUser.name} />
-          )}
-
-          {/* Activity Tab */}
-          {userPanelTab === "activity" && (
-            <div className="space-y-4">
-              <div>
-                <h4 className="text-md font-semibold text-gray-900 mb-4">User Activity</h4>
-                <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Account Created</span>
-                    <span className="text-sm font-medium text-gray-900">{formatDate(selectedUser.created_at)}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Last Active</span>
-                    <span className="text-sm font-medium text-gray-900">
-                      {(() => {
-                        const devices = userDevices[selectedUser.id] || [];
-                        const lastActive = devices.length > 0 
-                          ? devices.sort((a, b) => new Date(b.last_seen || 0) - new Date(a.last_seen || 0))[0]
-                          : null;
-                        return lastActive ? formatDate(lastActive.last_seen) : "Never";
-                      })()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Total Devices</span>
-                    <span className="text-sm font-medium text-gray-900">{(userDevices[selectedUser.id] || []).length}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Active Devices</span>
-                    <span className="text-sm font-medium text-gray-900">
-                      {(userDevices[selectedUser.id] || []).filter(d => d.is_online).length}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Edit User Tab */}
-          {userPanelTab === "edit" && (
-            <EditUserTab
-              selectedUser={selectedUser}
-              formData={formData}
-              setFormData={setFormData}
-              availableRoles={availableRoles}
-              handleInputChange={handleInputChange}
-              onSave={handleSaveEditUser}
-              onCancel={() => setUserPanelTab("accounts")}
-              saving={savingEditUser}
-            />
-          )}
-
-          {/* Permissions Tab */}
-          {userPanelTab === "permissions" && (
-            <PermissionsTab
-              selectedUser={selectedUser}
-              availablePermissions={availablePermissions}
-              defaultPermissions={defaultPermissions}
-              onSave={handleSavePermissions}
-              onCancel={() => setUserPanelTab("accounts")}
-              saving={savingPermissions}
-            />
+          ) : (
+            children
           )}
         </div>
       </div>
@@ -364,4 +153,3 @@ const UserDetailsPanel = ({
 };
 
 export default UserDetailsPanel;
-

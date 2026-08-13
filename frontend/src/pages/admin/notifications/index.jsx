@@ -3,7 +3,7 @@ import {
   MessageSquare, BarChart2, FileText,
   RefreshCw, Send, Loader2, X,
 } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { notify } from '../../../utils/notify';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { load as loadCashfree } from '@cashfreepayments/cashfree-js';
 import { api } from '../../../utils/api';
@@ -89,13 +89,13 @@ const Notifications = () => {
       api.get(`/notification-admin/wallet/verify?order_id=${orderId}`)
         .then(res => {
           if (res.success) {
-            toast.success(`🎉 Wallet top-up successful! ${getCurrencySymbol()}${res.balance?.toFixed(2)} is your new balance.`);
+            notify.done(`🎉 Wallet top-up successful! ${getCurrencySymbol()}${res.balance?.toFixed(2)} is your new balance.`);
             api.get('/notification-admin/wallet').then(w => setWallet(w)).catch(() => {});
           } else {
-            toast.error(`Payment not confirmed yet. Status: ${res.status || 'unknown'}`);
+            notify.problem(`Payment not confirmed yet. Status: ${res.status || 'unknown'}`);
           }
         })
-        .catch(() => toast.error('Could not verify payment. Please refresh.'));
+        .catch(() => notify.problem('Could not verify payment. Please refresh.'));
     }
   }, [location.search]); // eslint-disable-line
 
@@ -112,7 +112,7 @@ const Notifications = () => {
 
   const handleTemplateSend = async () => {
     const { pref, selectedChannel, recipient } = testDrawer;
-    if (!recipient) { toast.error('Enter a recipient'); return; }
+    if (!recipient) { notify.problem('Enter a recipient'); return; }
     setTestDrawer(d => ({ ...d, sending: true }));
     try {
       const res = await api.post('/notification-admin/test/template-send', {
@@ -120,11 +120,11 @@ const Notifications = () => {
         channel: selectedChannel,
         recipient,
       });
-      toast.success(`✅ Sent! ${getCurrencySymbol()}${res.cost?.toFixed(2)} deducted. New balance: ${getCurrencySymbol()}${res.new_balance?.toFixed(2)}`);
+      notify.done(`✅ Sent! ${getCurrencySymbol()}${res.cost?.toFixed(2)} deducted. New balance: ${getCurrencySymbol()}${res.new_balance?.toFixed(2)}`);
       setWallet(w => ({ ...w, balance: res.new_balance }));
       setTestDrawer(d => ({ ...d, open: false }));
     } catch (err) {
-      toast.error(err?.detail || err?.message || 'Send failed');
+      notify.problem(err, 'Send failed');
     } finally {
       setTestDrawer(d => ({ ...d, sending: false }));
     }
@@ -134,9 +134,9 @@ const Notifications = () => {
     setSavingPrefs(true);
     try {
       await api.put('/notification-admin/preferences', { preferences });
-      toast.success('Notification preferences saved');
+      notify.done('Notification preferences saved');
     } catch {
-      toast.error('Failed to save preferences');
+      notify.problem('Failed to save preferences');
     } finally {
       setSavingPrefs(false);
     }
@@ -156,7 +156,7 @@ const Notifications = () => {
   };
 
   const handleWalletTopup = async () => {
-    if (topUpAmount < 100) { toast.error(`Minimum top-up is ${getCurrencySymbol()}100`); return; }
+    if (topUpAmount < 100) { notify.problem(`Minimum top-up is ${getCurrencySymbol()}100`); return; }
     setToppingUp(true);
     try {
       const sessionData = await api.post('/notification-admin/wallet/topup', { amount: topUpAmount });
@@ -165,7 +165,7 @@ const Notifications = () => {
       const cashfree = await loadCashfree({ mode: isProd ? 'production' : 'sandbox' });
       await cashfree.checkout({ paymentSessionId: sessionData.payment_session_id, redirectTarget: '_self' });
     } catch (err) {
-      toast.error(err.message || 'Failed to initiate payment');
+      notify.problem(err, 'Failed to initiate payment');
       setToppingUp(false);
     }
   };

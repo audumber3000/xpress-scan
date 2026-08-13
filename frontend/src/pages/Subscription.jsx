@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-toastify';
+import { notify } from '../utils/notify';
 import { api } from '../utils/api';
 import { useHeader } from '../contexts/HeaderContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -117,7 +117,7 @@ const Subscription = () => {
       setLoading(true);
       const res = await api.get(`/subscriptions/verify-status?order_id=${orderId}`);
       if (res.success) {
-        toast.success('Payment successful! Your Professional Plan is now active.');
+        notify.done('Payment successful! Your Professional Plan is now active.');
         window.history.replaceState({}, document.title, window.location.pathname);
       }
       await fetchSubscription();
@@ -162,7 +162,7 @@ const Subscription = () => {
         daysRemaining: res?.trial_days_remaining ?? 7,
       });
     } catch (err) {
-      toast.error(err?.detail || err?.message || 'Could not start your trial. Please try again.');
+      notify.problem(err, 'Could not start your trial. Please try again.');
     } finally {
       setStartingTrial(false);
     }

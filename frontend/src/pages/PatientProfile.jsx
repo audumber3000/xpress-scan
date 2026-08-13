@@ -16,7 +16,7 @@ import {
 import { SkeletonBox, SkeletonCards } from "../components/Skeleton";
 import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
-import { toast } from 'react-toastify';
+import { notify } from '../utils/notify';
 import { patientService, appointmentService, paymentService } from '../services/patientService';
 
 const PatientProfile = () => {
@@ -116,7 +116,7 @@ const PatientProfile = () => {
           setLoading(false);
         } catch (error) {
           console.error('Error fetching patient data:', error);
-          toast.error(getPermissionAwareErrorMessage(
+          notify.problem(getPermissionAwareErrorMessage(
             error,
             'Failed to load patient data.',
             "You don't have permission to view this patient profile."
@@ -238,10 +238,9 @@ const PatientProfile = () => {
       // for every planned procedure, flooding the calendar on patient/case-paper save.)
 
       console.log('✅ All data saved successfully');
-      toast.success("Clinical records updated successfully.");
     } catch (error) {
       console.error("❌ Error saving patient data:", error);
-      toast.error(getPermissionAwareErrorMessage(
+      notify.problem(getPermissionAwareErrorMessage(
         error,
         "Failed to update clinical records.",
         "You don't have permission to update clinical records."
@@ -627,7 +626,7 @@ const PatientProfile = () => {
                 };
                 setTreatmentPlan(prev => [...prev, newPlanItem]);
                 handleToothSelect(null);
-                toast.success(`Treatment added to plan`);
+                notify.done(`Treatment added to plan`);
             }}
         />
       )}

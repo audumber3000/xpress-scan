@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { toast } from 'react-toastify';
+import { notify } from '../utils/notify';
 import { useNavigate } from 'react-router-dom';
 import { useHeader } from "../contexts/HeaderContext";
 import { useAuth } from "../contexts/AuthContext";
@@ -20,6 +20,8 @@ import UserDetailsPanel from "../components/settings/UserDetailsPanel";
 import WorkingHoursDrawer from "../components/settings/WorkingHoursDrawer";
 import EditUserTab from "../components/settings/EditUserTab";
 import PermissionsTab from "../components/settings/PermissionsTab";
+import AddStaffDrawer from "../components/settings/AddStaffDrawer";
+import ConfirmDialog from "../components/common/ConfirmDialog";
 import GearLoader from "../components/GearLoader";
 
 const StaffManagement = () => {
@@ -50,11 +52,17 @@ const StaffManagement = () => {
   // Add User state
   const [showAddModal, setShowAddModal] = useState(false);
   const [addingUser, setAddingUser] = useState(false);
-  const [formData, setFormData] = useState({ name: "", email: "", username: "", role: "receptionist", password: "", phone: "", fee_basis: "", fee_value: "" });
+  const [deactivateTarget, setDeactivateTarget] = useState(null);
   
   // Role + status, applied together by the shared FilterPanel. Replaces the row
   // of pill buttons, which could only express one choice at a time.
-  const [staffFilters, setStaffFilters] = useState({ role: '', status: '' });
+  // Defaults to Active on purpose. Staff who have left cannot be deleted —
+  // their name is attached to appointments, payments and audit rows that have
+  // to keep making sense — so if they also stayed in this list forever, the
+  // only way to tidy up would be a delete the system has to refuse. Hiding
+  // them by default is what makes deactivating feel like an answer instead of
+  // a half-measure.
+  const [staffFilters, setStaffFilters] = useState({ role: '', status: 'Active' });
 
   useEffect(() => {
     setTitle(
@@ -111,7 +119,7 @@ const StaffManagement = () => {
       setUsers(data);
     } catch (error) {
       console.error("Error fetching users:", error);
-      toast.error(getPermissionAwareErrorMessage(
+      notify.problem(getPermissionAwareErrorMessage(
         error,
         "Failed to load users",
         "You don't have permission to view staff users."
@@ -130,54 +138,21 @@ const StaffManagement = () => {
     }
   };
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleAddUser = async (e) => {
-    e.preventDefault();
-    const email = (formData.email || "").trim();
-    const username = (formData.username || "").trim();
-    if (!email && !username) {
-      toast.error("Please provide either an email or a username");
-      return;
-    }
+  const handleAddUser = async (payload) => {
     setAddingUser(true);
     try {
-      const userData = {
-        name: formData.name,
-        role: formData.role,
-        phone: (formData.phone || "").trim() || null,
-        // Blank basis means "not a paid consultant", which is most staff.
-        fee_basis: formData.fee_basis || null,
-        fee_value: formData.fee_basis ? Number(formData.fee_value) || 0 : null
-      };
-      if (email) userData.email = email;
-      if (username) userData.username = username;
-      if (formData.password && formData.password.trim()) {
-        userData.password = formData.password;
-      }
-      await api.post("/clinic-users/", userData);
-      toast.success("User added successfully");
-      setShowAddModal(false);
-      setFormData({ name: "", email: "", username: "", role: "receptionist", password: "", phone: "", fee_basis: "", fee_value: "" });
-      fetchUsers();
-    } catch (error) {
-      console.error("Error adding user:", error);
-      toast.error(error.message || "Error adding user");
+      await api.post("/clinic-users", payload);
+      await fetchUsers();
     } finally {
       setAddingUser(false);
     }
   };
 
-  // Clicking a staff member goes to their permissions rather than squeezing the
-  // table into a side panel — permissions is what this list is mostly used for.
   const handleUserClick = (clickedUser) => {
     // Sending someone to a permissions screen they can't act on is a dead end;
     // say why here instead.
     if (!canEditPermissions(user, clickedUser)) {
-      toast.info(permissionsLockReason(user, clickedUser));
+      notify.done(permissionsLockReason(user, clickedUser));
       return;
     }
     navigate(`/admin/permissions?user=${clickedUser.id}`);
@@ -211,70 +186,88 @@ const StaffManagement = () => {
     return true;
   });
 
+  const inactiveCount = users.filter((u) => !u.is_active).length;
+  const hidingInactive = staffFilters.status === 'Active' && inactiveCount > 0;
+
   const handleClosePanel = () => {
     setShowUserPanel(false);
     setSelectedUser(null);
   };
 
-  const handleToggleActive = async (targetUser) => {
+  /**
+   * Deactivating takes effect on their very next request, not at their next
+   * sign-in: get_current_user re-reads is_active from the database on every
+   * call, so somebody with the app open loses it within seconds.
+   *
+   * That immediacy is why this asks first. Reactivating does not — restoring
+   * access is not the direction that needs a second thought.
+   */
+  const handleToggleActive = (targetUser) => {
     if (targetUser.role === 'clinic_owner') {
-      toast.error('Cannot deactivate the clinic owner');
+      notify.problem('The clinic owner cannot be deactivated.');
       return;
     }
+    if (targetUser.is_active) setDeactivateTarget(targetUser);
+    else applyActiveState(targetUser, true);
+  };
+
+  const applyActiveState = async (targetUser, nextState) => {
+    setDeactivateTarget(null);
     try {
-      const newState = !targetUser.is_active;
-      await api.put(`/clinic-users/${targetUser.id}`, { is_active: newState });
-      toast.success(`${targetUser.name} marked as ${newState ? 'active' : 'inactive'}`);
-      fetchUsers();
+      await api.put(`/clinic-users/${targetUser.id}`, { is_active: nextState });
+      await fetchUsers();
     } catch (err) {
-      toast.error(getPermissionAwareErrorMessage(
+      notify.problem(getPermissionAwareErrorMessage(
         err,
-        'Failed to update status',
-        "You don't have permission to update user status."
+        'Could not change their status.',
+        "You don't have permission to change who can sign in."
       ));
     }
   };
 
   const handleSaveEditUser = async (userId, updateData) => {
+    setSavingEditUser(true);
     try {
-      setSavingEditUser(true);
-      await api.put(`/clinic-users/${userId}`, updateData);
-      toast.success("User updated successfully");
+      // The PUT already answers with the whole updated staff member, so the
+      // panel refreshes from that. It used to re-fetch GET /clinic-users/{id},
+      // an endpoint that has never existed — so a save that worked perfectly
+      // was followed by a 405 and the words "Failed to update user".
+      const updated = await api.put(`/clinic-users/${userId}`, updateData);
       await fetchUsers();
-      if (selectedUser && selectedUser.id === userId) {
-        const updatedUser = await api.get(`/clinic-users/${userId}`);
-        setSelectedUser(updatedUser);
-      }
+      if (selectedUser?.id === userId && updated) setSelectedUser(updated);
     } catch (error) {
       console.error("Error updating user:", error);
-      toast.error(getPermissionAwareErrorMessage(
-        error,
-        "Failed to update user",
-        "You don't have permission to update this user."
-      ));
+      // Rethrown so the reason lands on the form that caused it, next to the
+      // field the user has to change, rather than as a toast over the drawer.
+      throw error;
     } finally {
       setSavingEditUser(false);
     }
   };
 
-  const handleSavePermissions = async (userId, permissions) => {
+  /**
+   * `payload` is { role, permissions } — the tab saves both together, because
+   * picking "Doctor" and then leaving without touching a checkbox should still
+   * change what that person can do.
+   *
+   * It used to take the permissions map as the second argument and wrap it as
+   * `{ permissions }`, which with the tab's actual payload sent
+   * `{ permissions: { role, permissions } }` — the role buried a level down and
+   * the real permissions never applied.
+   */
+  const handleSavePermissions = async (userId, payload) => {
     const target = users.find(u => String(u.id) === String(userId));
     if (!canEditPermissions(user, target)) {
-      toast.error(permissionsLockReason(user, target) || 'These permissions cannot be changed.');
-      return;
+      throw new Error(permissionsLockReason(user, target) || 'These permissions cannot be changed.');
     }
+    setSavingPermissions(true);
     try {
-      setSavingPermissions(true);
-      await api.put(`/clinic-users/${userId}`, { permissions });
-      toast.success("User permissions updated successfully");
+      const updated = await api.put(`/clinic-users/${userId}`, payload);
       await fetchUsers();
+      if (selectedUser?.id === userId && updated) setSelectedUser(updated);
     } catch (error) {
       console.error("Error updating permissions:", error);
-      toast.error(getPermissionAwareErrorMessage(
-        error,
-        "Failed to update permissions",
-        "You don't have permission to update user permissions."
-      ));
+      throw error;   // shown on the form that caused it
     } finally {
       setSavingPermissions(false);
     }
@@ -329,6 +322,23 @@ const StaffManagement = () => {
         onClose={() => setHoursFor(null)}
       />
 
+      {/* Where the people who have left went. Without this line, defaulting to
+          Active looks like the list silently lost somebody. */}
+      {hidingInactive && (
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5 mb-3 rounded-lg bg-gray-50 border border-gray-200">
+          <p className="text-sm text-gray-500">
+            {inactiveCount} {inactiveCount === 1 ? 'person has' : 'people have'} been deactivated and
+            {inactiveCount === 1 ? ' is' : ' are'} hidden. Their records stay in your history.
+          </p>
+          <button
+            onClick={() => setStaffFilters((f) => ({ ...f, status: '' }))}
+            className="text-sm font-semibold text-[#29828a] hover:text-[#216b71] whitespace-nowrap"
+          >
+            Show them
+          </button>
+        </div>
+      )}
+
       <StaffTable
         users={filteredUsers}
         userDevices={userDevices}
@@ -361,182 +371,37 @@ const StaffManagement = () => {
                 user={selectedUser}
                 onSave={handleSavePermissions}
                 isSaving={savingPermissions}
+                availableRoles={availableRoles}
               />
             )}
           </UserDetailsPanel>
         )}
 
-      {/* Add User Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={() => setShowAddModal(false)}></div>
-          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h3 className="text-xl font-semibold text-gray-900">Add User</h3>
-              <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-gray-100 rounded-full transition">
-                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              <form id="add-user-form" onSubmit={handleAddUser}>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#29828a]"
-                    required
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email <span className="text-gray-400 font-normal">(required for owners; optional for staff)</span>
-                  </label>
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#29828a]"
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Username <span className="text-gray-400 font-normal">(optional — staff can log in with username instead of email)</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="username"
-                    value={formData.username}
-                    onChange={handleInputChange}
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#29828a]"
-                    placeholder="e.g. reception1"
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
-                  <select
-                    name="role"
-                    value={formData.role}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#29828a]"
-                  >
-                    {availableRoles.map((role) => (
-                      <option key={role.value || role} value={role.value || role}>
-                        {role.label || role}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+      <ConfirmDialog
+        open={!!deactivateTarget}
+        onClose={() => setDeactivateTarget(null)}
+        tone="danger"
+        title={`Deactivate ${deactivateTarget?.name || 'this person'}?`}
+        message={
+          <>
+            They lose access <span className="font-semibold text-gray-700">straight away</span>, even
+            if they have the app open right now. Everything they have already done stays in your
+            records, and you can switch them back on at any time.
+          </>
+        }
+        actions={[{
+          label: 'Deactivate',
+          variant: 'danger',
+          onClick: () => applyActiveState(deactivateTarget, false),
+        }]}
+      />
 
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Mobile <span className="text-gray-400 font-normal">(so we can send their login on WhatsApp)</span>
-                  </label>
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#29828a]"
-                    placeholder="9876543210"
-                  />
-                </div>
-
-                {/* Set once here, applied to every case this person treats. The
-                    alternative, typing a fee on each case paper, is how the same
-                    doctor ends up on three different rates. */}
-                <div className="mb-4 rounded-lg border border-gray-200 p-3">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Consultant fee <span className="text-gray-400 font-normal">(optional)</span>
-                  </label>
-                  <p className="text-xs text-gray-500 mb-2.5">
-                    Leave off unless this person is paid per case. It is then applied
-                    automatically to every case they treat.
-                  </p>
-                  <div className="flex gap-2">
-                    <select
-                      name="fee_basis"
-                      value={formData.fee_basis}
-                      onChange={handleInputChange}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#29828a]"
-                    >
-                      <option value="">Not paid per case</option>
-                      <option value="fixed">Fixed amount per case</option>
-                      <option value="percentage">Share of what is collected</option>
-                    </select>
-                    {formData.fee_basis && (
-                      <div className="relative w-32 flex-shrink-0">
-                        <input
-                          type="number"
-                          name="fee_value"
-                          value={formData.fee_value}
-                          onChange={handleInputChange}
-                          placeholder={formData.fee_basis === 'percentage' ? '40' : '1500'}
-                          className="w-full px-3 py-2 pr-7 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#29828a]"
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">
-                          {formData.fee_basis === 'percentage' ? '%' : '₹'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  {formData.fee_basis === 'percentage' && (
-                    <p className="text-[11px] text-gray-500 mt-2">
-                      Worked out on what the patient has actually paid, so you never owe a
-                      share of money you have not received.
-                    </p>
-                  )}
-                </div>
-
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Password (Optional)</label>
-                  <input
-                    type="password"
-                    name="password"
-                    value={formData.password}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#29828a]"
-                    placeholder="Leave empty for auto-generated password"
-                  />
-                </div>
-              </form>
-            </div>
-            <div className="p-6 border-t border-gray-200">
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  form="add-user-form"
-                  disabled={addingUser}
-                  className="px-6 py-2 bg-[#29828a] text-white rounded-lg hover:bg-[#216b71] transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {addingUser ? (
-                    <>
-                      <GearLoader size="w-4 h-4" className="text-white" />
-                      <span>Adding...</span>
-                    </>
-                  ) : (
-                    "Add User"
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <AddStaffDrawer
+        open={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        availableRoles={availableRoles}
+        onCreate={handleAddUser}
+      />
       </>
     </TeamTabs>
   );

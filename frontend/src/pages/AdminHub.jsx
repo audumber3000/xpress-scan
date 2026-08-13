@@ -4,7 +4,7 @@ import SetupProgress from '../components/admin/SetupProgress';
 import { api } from '../utils/api';
 import { useHeader } from '../contexts/HeaderContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Building2, Users, FileText, ScrollText, Bell, CreditCard, Activity, ChevronDown, Stethoscope, Shield, Laptop, Plug, Tag, Layers } from 'lucide-react';
+import { Building2, Users, FileText, Bell, CreditCard, Activity, ChevronDown, Stethoscope, Shield, Laptop, Plug, Tag, Pill } from 'lucide-react';
 
 /**
  * Control Center navigation, grouped by category.
@@ -12,11 +12,17 @@ import { Building2, Users, FileText, ScrollText, Bell, CreditCard, Activity, Che
  * Single source of truth for the menu. A null title renders the group ungrouped
  * at the top.
  *
- * Two /admin child routes are deliberately NOT listed and are reachable only by
- * direct URL: `templates` (Message Templates) and `doctors` (Referring Doctors),
- * both retired from the menu as unused. Referring Doctors in particular was a
- * dead CRUD screen — nothing read the table, and patients record "referred by"
- * as free text. Their routes are left in place so existing links don't 404.
+ * Several /admin child routes are deliberately NOT listed and are reachable
+ * only by direct URL:
+ *   - `templates` (Message Templates) and `doctors` (Referring Doctors), both
+ *     retired from the menu as unused. Referring Doctors in particular was a
+ *     dead CRUD screen — nothing read the table, and patients record
+ *     "referred by" as free text.
+ *   - `prescription-sets`, now a tab of Medications.
+ *   - `security/devices` and `security/audit-log`, now tabs of Access &
+ *     Activity.
+ *   - `permissions`, now edited on the staff member themselves in Staff.
+ * Their routes are all left in place so existing links don't 404.
  */
 const NAV_GROUPS = [
   {
@@ -33,11 +39,16 @@ const NAV_GROUPS = [
     items: [
       { id: 'practice_settings', icon: Activity, label: 'Practice Settings', hasChildren: true, activePath: '/admin/practice-settings' },
       { id: 'treatments', icon: Stethoscope, label: 'Treatments & Pricing', path: '/admin/treatments' },
-      // Configuration, not stock. A set is set up once and linked to a
-      // treatment, which puts it here beside Treatments rather than in
-      // Inventory, where the question is what is on the shelf today.
-      { id: 'rx_sets', icon: Layers, label: 'Prescription Sets', path: '/admin/prescription-sets' },
       { id: 'offers', icon: Tag, label: 'Offers & Discounts', path: '/admin/offers' },
+    ],
+  },
+  {
+    // Its own section, not a tab of Treatments. Both screens here answer "what
+    // do we prescribe"; Treatments & Pricing answers "what do we charge", which
+    // is a different job done by different people.
+    title: 'Medication',
+    items: [
+      { id: 'medications', icon: Pill, label: 'Medications', path: '/admin/medications' },
     ],
   },
   {
@@ -51,8 +62,10 @@ const NAV_GROUPS = [
     title: 'Security',
     items: [
       { id: 'security_contact', icon: Shield, label: 'Verification', path: '/admin/security/verification' },
-      { id: 'security_devices', icon: Laptop, label: 'Devices', path: '/admin/security/devices' },
-      { id: 'security_audit', icon: ScrollText, label: 'Audit Log', path: '/admin/security/audit-log' },
+      // Devices and Audit Log were two menu items and are now two tabs of one:
+      // "who can get in" and "what they did" are read together, and splitting
+      // them meant leaving the screen halfway through looking something up.
+      { id: 'security_activity', icon: Laptop, label: 'Access & Activity', path: '/admin/security/activity' },
     ],
   },
   {

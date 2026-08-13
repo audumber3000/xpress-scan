@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 import { getCurrencySymbol } from '../../utils/currency';
 import { openWhatsApp } from '../../utils/whatsapp';
 
@@ -33,7 +33,7 @@ const GenerateInvoiceDrawer = ({ isOpen, onClose, patientId, draftItems = [], on
     const handleSubmit = async () => {
         const validItems = lineItems.filter(item => item.description.trim() && parseFloat(item.unit_price) > 0);
         if (validItems.length === 0) {
-            toast.error("Please add at least one valid line item");
+            notify.problem("Please add at least one valid line item");
             return;
         }
 
@@ -47,7 +47,7 @@ const GenerateInvoiceDrawer = ({ isOpen, onClose, patientId, draftItems = [], on
             for (const item of validItems) {
                 await api.post(`/invoices/${invoice.id}/line-items`, { ...item });
             }
-            toast.success("Invoice generated successfully!");
+            notify.done("Invoice generated successfully!");
             if (sendWhatsApp && patientPhone) {
                 const total = calculateTotal();
                 const msg = `Hello! A new invoice has been generated for your recent visit. Total: ${getCurrencySymbol()}${total.toLocaleString('en-US')}. Thank you!`;
@@ -57,7 +57,7 @@ const GenerateInvoiceDrawer = ({ isOpen, onClose, patientId, draftItems = [], on
             if (onSuccess) onSuccess();
             onClose();
         } catch (error) {
-            toast.error(error.message || "Failed to generate invoice");
+            notify.problem(error, "Failed to generate invoice");
         } finally {
             setLoading(false);
         }

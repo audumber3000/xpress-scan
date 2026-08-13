@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { api } from "../../utils/api";
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 import { getCurrencySymbol } from '../../utils/currency';
 import { Eye, MessageCircle } from 'lucide-react';
 import InvoiceEditor from '../payments/InvoiceEditor';
@@ -40,15 +40,14 @@ const PatientBilling = ({
             // Manual mode (desktop): download the PDF + open WhatsApp from own number.
             if (isManualWhatsApp(user)) {
                 const opened = await shareInvoiceManually(inv, user);
-                if (opened) toast.success('Invoice PDF downloaded — attach it in the WhatsApp chat');
-                else toast.error('Patient phone number is required');
+                if (opened) notify.done('Invoice PDF downloaded — attach it in the WhatsApp chat');
+                else notify.problem('Patient phone number is required');
             } else {
                 await api.post(`/invoices/${inv.id}/send-whatsapp`);
-                toast.success("Invoice sent successfully via WhatsApp");
             }
         } catch (error) {
             console.error("WhatsApp error:", error);
-            toast.error(error.response?.data?.detail || "Failed to send invoice via WhatsApp");
+            notify.problem(error, "Failed to send invoice via WhatsApp");
         } finally {
             setSendingWhatsApp(null);
         }

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useHeader } from '../contexts/HeaderContext';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../utils/api';
-import { toast } from 'react-toastify';
+import { notify } from '../utils/notify';
 import GearLoader from '../components/GearLoader';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ChevronLeft, Building2, IdCard, Receipt, MapPin, Clock, GitBranch, PlusCircle, Check, Images, Plus, Trash2, Loader2 } from 'lucide-react';
@@ -89,9 +89,9 @@ const PhotosPanel = ({ editable }) => {
       fd.append('file', file);
       const photo = await api.post('/marketing/website/photos', fd);
       setPhotos((p) => [...p, photo]);
-      toast.success('Photo added');
+      notify.done('Photo added');
     } catch (err) {
-      toast.error(err?.message || 'Could not add that photo');
+      notify.problem(err, 'Could not add that photo');
     } finally {
       setUploading(false);
     }
@@ -102,7 +102,7 @@ const PhotosPanel = ({ editable }) => {
       await api.delete(`/marketing/website/photos/${id}`);
       setPhotos((p) => p.filter((x) => x.id !== id));
     } catch (err) {
-      toast.error(err?.message || 'Could not remove that photo');
+      notify.problem(err, 'Could not remove that photo');
     }
   };
 
@@ -243,7 +243,7 @@ const ClinicInfo = () => {
       });
     } catch (error) {
       console.error('Error fetching clinic data:', error);
-      toast.error('Failed to load clinic data');
+      notify.problem('Failed to load clinic data');
     } finally {
       setLoadingClinicData(false);
     }
@@ -255,11 +255,11 @@ const ClinicInfo = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!["image/png", "image/jpeg", "image/jpg", "image/webp"].includes(file.type)) {
-      toast.error('Please upload PNG/JPG/WEBP image');
+      notify.problem('Please upload PNG/JPG/WEBP image');
       return;
     }
     if (file.size > 1024 * 1024) {
-      toast.error('Logo must be under 1MB');
+      notify.problem('Logo must be under 1MB');
       return;
     }
 
@@ -268,11 +268,11 @@ const ClinicInfo = () => {
     reader.onload = (ev) => {
       setClinicData((prev) => ({ ...prev, logo_url: ev.target?.result }));
       setLogoUploading(false);
-      toast.success('Logo selected. Click Save Changes to apply.');
+      notify.done('Logo selected. Click Save Changes to apply.');
     };
     reader.onerror = () => {
       setLogoUploading(false);
-      toast.error('Failed to read logo file');
+      notify.problem('Failed to read logo file');
     };
     reader.readAsDataURL(file);
   };
@@ -283,10 +283,9 @@ const ClinicInfo = () => {
       // An empty date must go as null — "" isn't a valid date for the DTO.
       const payload = { ...clinicData, license_expiry: clinicData.license_expiry || null };
       await api.put(isActiveClinic ? '/clinics/me' : `/clinics/${targetClinicId}`, payload);
-      toast.success('Clinic information updated successfully');
     } catch (error) {
       console.error('Error saving clinic data:', error);
-      toast.error('Failed to save clinic data');
+      notify.problem('Failed to save clinic data');
     } finally {
       setSavingClinicData(false);
     }

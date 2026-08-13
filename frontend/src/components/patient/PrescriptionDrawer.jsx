@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, Layers, Check, Loader2 } from 'lucide-react';
-import { api } from "../../utils/api";
+import { api, getFriendlyErrorMessage } from "../../utils/api";
 import { DOSAGE_OPTIONS, DURATION_OPTIONS, INSTRUCTION_SUGGESTIONS, withCurrent } from '../../constants/prescription';
 import { useAuth } from '../../contexts/AuthContext';
 import { isManualWhatsApp, openWhatsApp, downloadAuthedFile } from "../../utils/whatsapp";
@@ -384,7 +384,7 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
             }
         } catch (error) {
             console.error("WhatsApp error:", error);
-            alert(error.detail || error.message || "Failed to share prescription via WhatsApp.");
+            alert(getFriendlyErrorMessage(error, "Failed to share prescription via WhatsApp."));
         } finally {
             setIsLoading(false);
         }

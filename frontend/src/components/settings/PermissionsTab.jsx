@@ -1,222 +1,165 @@
-import React, { useState, useEffect } from 'react';
-import GearLoader from '../GearLoader';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Loader2, Check } from 'lucide-react';
+import { MODULES, presetFor, permissionsLockReason } from '../../constants/permissions';
+import InlineFeedback from '../common/InlineFeedback';
+import { useAuth } from '../../contexts/AuthContext';
 
-const PermissionsTab = ({
-  selectedUser,
-  availablePermissions,
-  defaultPermissions,
-  onSave,
-  onCancel,
-  saving
-}) => {
-  const [permissions, setPermissions] = useState(selectedUser?.permissions || {});
-  const [selectedRole, setSelectedRole] = useState("");
-  const [customMode, setCustomMode] = useState(false);
+/**
+ * What one staff member can reach, module by module.
+ *
+ * Self-contained, like EditUserTab. It used to take `availablePermissions` and
+ * `defaultPermissions` from the old Settings screen and call
+ * `availablePermissions.reduce(...)` on its first render — Staff passes neither,
+ * so opening this tab threw before it drew anything. It now reads the same
+ * MODULES catalogue the full Permissions screen uses, which also means the two
+ * can no longer drift apart.
+ *
+ * Role and permissions are saved together: picking "Doctor" and then leaving
+ * without touching a checkbox should still change what they can do.
+ *
+ * Props:
+ *   user      the staff member
+ *   onSave    (userId, { role, permissions }) => Promise
+ *   isSaving  disables the button
+ */
+
+const PermissionsTab = ({ user, onSave, isSaving = false, availableRoles = [] }) => {
+  const { user: me } = useAuth();
+  const [perms, setPerms] = useState({});
+  const [role, setRole] = useState('receptionist');
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (selectedUser) {
-      setPermissions(selectedUser.permissions || {});
-      setSelectedRole(selectedUser.role || "receptionist");
-    }
-  }, [selectedUser]);
+    setPerms(user?.permissions || {});
+    setRole(user?.role || 'receptionist');
+    setError('');
+  }, [user?.id]);
 
-  const handleCheckbox = (section, permission) => {
-    setPermissions(prev => ({
+  // The backend refuses these outright; showing an editable grid that cannot be
+  // saved would be a worse experience than saying why up front.
+  const locked = useMemo(() => permissionsLockReason?.(me, user) || null, [me, user]);
+
+  const toggle = (moduleKey, action) => {
+    setPerms((prev) => ({
       ...prev,
-      [section]: {
-        ...prev[section],
-        [permission]: !prev[section]?.[permission]
-      }
+      [moduleKey]: { ...prev[moduleKey], [action]: !prev[moduleKey]?.[action] },
     }));
+    setError('');
   };
 
-  const handleRoleChange = (role) => {
-    setSelectedRole(role);
-    setPermissions(defaultPermissions[role] || {});
-    setCustomMode(false);
+  const applyPreset = (nextRole) => {
+    setRole(nextRole);
+    setPerms(presetFor(nextRole));
+    setError('');
   };
 
-  const handlePresetChange = (preset) => {
-    switch (preset) {
-      case "receptionist":
-        setPermissions(defaultPermissions.receptionist);
-        setSelectedRole("receptionist");
-        break;
-      case "doctor":
-        setPermissions(defaultPermissions.doctor);
-        setSelectedRole("doctor");
-        break;
-      case "clinic_owner":
-        setPermissions(defaultPermissions.clinic_owner);
-        setSelectedRole("clinic_owner");
-        break;
-      case "custom":
-        setCustomMode(true);
-        break;
+  const submit = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      await onSave(user.id, { role, permissions: perms });
+    } catch (err) {
+      setError(err?.detail || err?.message || 'Could not save those permissions.');
     }
   };
 
-  const handleSave = async (e) => {
-    e.preventDefault();
-    await onSave(selectedUser.id, { role: selectedRole, permissions });
-  };
+  if (!user) return null;
 
-  // Get all unique permissions across all sections
-  const allPermissions = availablePermissions.reduce((acc, section) => {
-    section.permissions.forEach(perm => {
-      if (!acc.includes(perm)) acc.push(perm);
-    });
-    return acc;
-  }, []);
+  if (locked) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
+        <p className="text-sm text-gray-500">{locked}</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <form onSubmit={submit} className="space-y-5">
       <div>
-        <h4 className="text-md font-semibold text-gray-900 mb-4">Manage Permissions</h4>
-        <p className="text-sm text-gray-600 mb-4">
-          Configure what actions this user can perform in the system.
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">Start from a role</label>
+        <select
+          value={role}
+          onChange={(e) => applyPreset(e.target.value)}
+          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-[#29828a]"
+        >
+          {/* The real catalogue from /clinic-users/roles — hardcoding three
+              options here hid Associate, Consultant and In-house doctor, which
+              the backend has supported all along. */}
+          {availableRoles.map((r) => (
+            <option key={r.value || r} value={r.value || r}>{r.label || r}</option>
+          ))}
+        </select>
+        <p className="text-xs text-gray-400 mt-1">
+          Picking a role fills the boxes below with its usual access. Adjust anything from there.
         </p>
+      </div>
 
-        {/* Role Presets */}
-        <div className="mb-6">
-          <h5 className="text-sm font-medium text-gray-700 mb-3">Quick Presets</h5>
-          <div className="flex gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={() => handlePresetChange("receptionist")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                selectedRole === "receptionist" && !customMode
-                  ? "bg-[#2a276e] text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Receptionist
-            </button>
-            <button
-              type="button"
-              onClick={() => handlePresetChange("doctor")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                selectedRole === "doctor" && !customMode
-                  ? "bg-[#2a276e] text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Doctor
-            </button>
-            <button
-              type="button"
-              onClick={() => handlePresetChange("clinic_owner")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                selectedRole === "clinic_owner" && !customMode
-                  ? "bg-[#2a276e] text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Clinic Owner
-            </button>
-            <button
-              type="button"
-              onClick={() => handlePresetChange("custom")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                customMode
-                  ? "bg-[#2a276e] text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Custom
-            </button>
-          </div>
-        </div>
-
-        {/* Permissions Matrix Table */}
-        <div className="mb-6">
-          <h5 className="text-md font-medium mb-3 text-gray-900">Permissions Matrix</h5>
-          <div className="overflow-x-auto bg-white border border-gray-200 rounded-lg">
-            <table className="w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-r border-gray-200">
-                    Section
+      <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-[#f8fafc]">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Module
+                </th>
+                {['read', 'write', 'edit', 'delete'].map((a) => (
+                  <th key={a} className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    {a}
                   </th>
-                  {allPermissions.map(permission => (
-                    <th key={permission} className="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      {permission.charAt(0).toUpperCase() + permission.slice(1)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {availablePermissions.map(section => (
-                  <tr key={section.key} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-gray-200">
-                      {section.label}
-                    </td>
-                    {allPermissions.map(permission => {
-                      const hasPermission = section.permissions.includes(permission);
-                      const isChecked = !!permissions[section.key]?.[permission];
-                      return (
-                        <td key={permission} className="px-4 py-3 whitespace-nowrap text-center">
-                          {hasPermission ? (
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => handleCheckbox(section.key, permission)}
-                              className="accent-[#2a276e] w-5 h-5 cursor-pointer"
-                              disabled={!customMode && selectedRole !== "clinic_owner" && selectedUser?.role !== "clinic_owner"}
-                            />
-                          ) : (
-                            <span className="text-gray-300">-</span>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {MODULES.map((m) => (
+                <tr key={m.key} className="hover:bg-gray-50/60">
+                  <td className="px-4 py-2.5 text-sm font-medium text-gray-900 whitespace-nowrap">
+                    {m.label}
+                  </td>
+                  {['read', 'write', 'edit', 'delete'].map((a) => {
+                    // A module without an action gets a dash, not a dead
+                    // checkbox: "Dashboard → delete" is not a thing that exists.
+                    const supported = m.actions.includes(a);
+                    const on = !!perms[m.key]?.[a];
+                    return (
+                      <td key={a} className="px-3 py-2.5 text-center">
+                        {supported ? (
+                          <button
+                            type="button"
+                            onClick={() => toggle(m.key, a)}
+                            aria-label={`${m.label} ${a}`}
+                            aria-pressed={on}
+                            className={`w-6 h-6 rounded-md border inline-flex items-center justify-center transition-colors ${
+                              on ? 'bg-[#29828a] border-[#29828a] text-white'
+                                 : 'bg-white border-gray-300 hover:border-gray-400'
+                            }`}
+                          >
+                            {on && <Check size={14} strokeWidth={3} />}
+                          </button>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-
-        {/* Permission Descriptions */}
-        <div className="mb-6 text-sm text-gray-600 bg-gray-50 rounded-lg p-4 border border-gray-200">
-          <h6 className="font-medium text-gray-900 mb-2">Permission Types:</h6>
-          <ul className="space-y-1 list-disc list-inside">
-            <li><strong>View:</strong> Can see and access the section</li>
-            <li><strong>Edit:</strong> Can modify and update records</li>
-            <li><strong>Delete:</strong> Can remove records (where applicable)</li>
-          </ul>
-        </div>
-
-        <form id="permissions-form" onSubmit={handleSave}></form>
       </div>
-      
-      <div className="flex gap-3 pt-4 border-t border-gray-200">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          form="permissions-form"
-          disabled={saving}
-          className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
-        >
-          {saving ? (
-            <>
-              <GearLoader size="w-4 h-4" className="text-white" />
-              <span>Saving...</span>
-            </>
-          ) : (
-            "Save Permissions"
-          )}
-        </button>
-      </div>
-    </div>
+
+      {error && <InlineFeedback tone="error">{error}</InlineFeedback>}
+
+      <button
+        type="submit"
+        disabled={isSaving}
+        className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#29828a] hover:bg-[#216b71] disabled:bg-gray-300 text-white text-sm font-semibold rounded-lg transition-colors"
+      >
+        {isSaving && <Loader2 size={15} className="animate-spin" />}
+        {isSaving ? 'Saving…' : 'Save permissions'}
+      </button>
+    </form>
   );
 };
 
 export default PermissionsTab;
-

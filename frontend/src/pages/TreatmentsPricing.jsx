@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { toast } from 'react-toastify';
+import { notify } from '../utils/notify';
 import { useNavigate } from 'react-router-dom';
 import { useHeader } from "../contexts/HeaderContext";
 import { useAuth } from "../contexts/AuthContext";
@@ -12,6 +12,7 @@ import BulkImportModal from "../components/settings/BulkImportModal";
 import TableToolbar from "../components/common/TableToolbar";
 import FilterPanel from "../components/FilterPanel";
 import EmptyState from "../components/common/EmptyState";
+import PageShell from "../components/common/PageShell";
 import { noData } from "../assets/illustrations";
 
 /* ── GST Info Popover (reusable) ─────────────────────────────────────────── */
@@ -105,12 +106,26 @@ const IMPORT_COLUMNS = {
   ],
 };
 
-const TreatmentsPricing = () => {
+/**
+ * Treatments & Pricing, and the medication catalogue.
+ *
+ * One component, two lists: they are the same screen (search, category filter,
+ * grouped table, drawer, bulk import) over different rows, and keeping them
+ * together is what stops the two drifting apart.
+ *
+ * `mode` picks which list. They used to be two tabs here; medications now live
+ * under Control Center → Medications beside Prescription Sets, because "what
+ * drug do we stock" is a different question from "what do we charge", and the
+ * two medication screens belong next to each other. `embedded` is set by that
+ * page: it supplies the heading, the tab bar and the scroll container, so this
+ * renders only the list.
+ */
+const TreatmentsPricing = ({ mode = 'services', embedded = false }) => {
   const { setTitle } = useHeader();
   const { user } = useAuth(); // eslint-disable-line no-unused-vars
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState('services'); // 'services' | 'medications'
+  const activeTab = mode; // 'services' | 'medications'
 
   const [treatmentTypes, setTreatmentTypes] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('All Services');
@@ -133,18 +148,22 @@ const TreatmentsPricing = () => {
   const endpoint = isServices ? '/treatment-types' : '/medications';
 
   useEffect(() => {
-    setTitle(
-      <div className="flex items-center gap-2">
-        <button onClick={() => navigate('/admin')} className="flex items-center gap-1 text-gray-600 hover:text-gray-900 transition">
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">Control Center</span>
-        </button>
-      </div>
-    );
+    // Embedded, the host page owns the header — setting it from here too would
+    // have the two fight over it on every tab switch.
+    if (!embedded) {
+      setTitle(
+        <div className="flex items-center gap-2">
+          <button onClick={() => navigate('/admin')} className="flex items-center gap-1 text-gray-600 hover:text-gray-900 transition">
+            <ChevronLeft className="w-5 h-5" />
+            <span className="text-sm font-medium">Control Center</span>
+          </button>
+        </div>
+      );
+    }
     fetchData();
     setSelectedIds(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setTitle, navigate, activeTab]);
+  }, [setTitle, navigate, activeTab, embedded]);
 
   const fetchData = () => { isServices ? fetchTreatmentTypes() : fetchMedications(); };
 
@@ -153,7 +172,7 @@ const TreatmentsPricing = () => {
       setLoading(true);
       setTreatmentTypes(await api.get("/treatment-types"));
     } catch (error) {
-      toast.error(getPermissionAwareErrorMessage(error, "Failed to load treatment types", "You don't have permission to view treatment services."));
+      notify.problem(getPermissionAwareErrorMessage(error, "Failed to load treatment types", "You don't have permission to view treatment services."));
     } finally { setLoading(false); }
   };
 
@@ -162,7 +181,7 @@ const TreatmentsPricing = () => {
       setLoading(true);
       setMedications(await api.get("/medications"));
     } catch (error) {
-      toast.error(getPermissionAwareErrorMessage(error, "Failed to load medications", "You don't have permission to view medications."));
+      notify.problem(getPermissionAwareErrorMessage(error, "Failed to load medications", "You don't have permission to view medications."));
     } finally { setLoading(false); }
   };
 
@@ -172,11 +191,11 @@ const TreatmentsPricing = () => {
     try {
       if (drawer.item) await api.put(`${endpoint}/${drawer.item.id}`, payload);
       else await api.post(endpoint, payload);
-      toast.success(drawer.item ? "Updated successfully" : "Added successfully");
+      notify.done(drawer.item ? "Updated successfully" : "Added successfully");
       setDrawer({ open: false, item: null });
       fetchData();
     } catch (error) {
-      toast.error(error.response?.data?.detail || `Failed to save ${isServices ? 'treatment' : 'medication'}`);
+      notify.problem(error, `Failed to save ${isServices ? 'treatment' : 'medication'}`);
     } finally { setSaving(false); }
   };
 
@@ -188,12 +207,12 @@ const TreatmentsPricing = () => {
         ? rows.map(r => ({ name: r.name, price: parseFloat(r.price) || 0 }))
         : rows.map(r => ({ name: r.name, category: r.category || 'General', dosage: r.dosage || '', duration: r.duration || '', quantity: String(r.quantity || ''), notes: r.notes || '' }));
       const res = await api.post(`${endpoint}/bulk`, { items });
-      toast.success(`Imported ${res.created_count} ${isServices ? 'treatment(s)' : 'medication(s)'}`);
-      if (res.errors?.length) toast.warning(`${res.errors.length} row(s) skipped. ${res.errors[0].message}`);
+      notify.done(`Imported ${res.created_count} ${isServices ? 'treatment(s)' : 'medication(s)'}`);
+      if (res.errors?.length) notify.problem(`${res.errors.length} row(s) skipped. ${res.errors[0].message}`);
       setShowImport(false);
       fetchData();
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Import failed");
+      notify.problem(error, "Import failed");
     } finally { setImporting(false); }
   };
 
@@ -232,10 +251,9 @@ const TreatmentsPricing = () => {
     if (!window.confirm(`Delete this ${isServices ? 'treatment' : 'medication'}?`)) return;
     try {
       await api.delete(`${endpoint}/${item.id}`);
-      toast.success("Deleted");
       fetchData();
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Failed to delete");
+      notify.problem(error, "Failed to delete");
     }
   };
 
@@ -261,41 +279,20 @@ const TreatmentsPricing = () => {
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#f8fafc] overflow-y-auto custom-scrollbar p-6 lg:p-8 pb-10">
-      {/* Header + tabs, laid out like the Notifications section. */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between gap-4 mb-5">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">Treatment &amp; Pricing</h2>
-            <p className="text-sm text-gray-500 mt-0.5">
-              What you offer and what it costs. These feed the picker when you bill a patient.
-            </p>
-          </div>
-          {isServices && <GSTInfoPopover />}
-        </div>
-
-        <div className="border-b border-gray-200">
-          <div className="flex gap-1 -mb-px">
-            {[
-              { id: 'services',    label: 'Treatments', icon: Stethoscope },
-              { id: 'medications', label: 'Medications', icon: Pill },
-            ].map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                onClick={() => setActiveTab(id)}
-                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors rounded-t-lg ${
-                  activeTab === id
-                    ? 'border-[#29828a] text-[#29828a] bg-white'
-                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50'
-                }`}
-              >
-                <Icon size={14} />
-                {label}
-              </button>
-            ))}
+    <PageShell embedded={embedded}>
+      {!embedded && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Treatment &amp; Pricing</h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                What you offer and what it costs. These feed the picker when you bill a patient.
+              </p>
+            </div>
+            <GSTInfoPopover />
           </div>
         </div>
-      </div>
+      )}
 
       {/* Search left, actions right — the same bar as Patients and Staff. The
           category list moved in here as a filter: it was a second row of tabs
@@ -445,7 +442,7 @@ const TreatmentsPricing = () => {
         onClose={() => setShowImport(false)}
         onImport={runImport}
       />
-    </div>
+    </PageShell>
   );
 };
 

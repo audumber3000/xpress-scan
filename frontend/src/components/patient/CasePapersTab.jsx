@@ -13,7 +13,7 @@ import CasePaperActionBar from './CasePaperActionBar';
 import InvoiceEditor from '../payments/InvoiceEditor';
 import CasePaperInvoicesPanel from './CasePaperInvoicesPanel';
 import CaseCostsPanel from './CaseCostsPanel';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 import { api } from "../../utils/api";
 import { universalToFDI } from "../../utils/toothNumbering";
 import { Clock, ChevronLeft, Activity } from 'lucide-react';
@@ -272,7 +272,7 @@ const CasePapersTab = ({
     if (typeof onSaveClinicalRecords === 'function') {
       onSaveClinicalRecords({ dental_chart: sessionTeethData, treatment_plan: sessionTreatmentPlan, tooth_notes: sessionToothNotes }).catch(() => {});
     }
-    toast.success('Case paper saved automatically');
+    notify.done('Case paper saved automatically');
     return saved.id;
   };
 
@@ -282,7 +282,7 @@ const CasePapersTab = ({
       openCallback();
     } catch (err) {
       console.error('Failed to auto-save case paper:', err);
-      toast.error('Error saving case paper. Please save manually first.');
+      notify.problem('Error saving case paper. Please save manually first.');
     }
   };
 
@@ -330,10 +330,10 @@ const CasePapersTab = ({
       });
       // Refresh the record list AND both stock lists (counts just changed).
       await Promise.all([fetchInventoryConsumption(casePaperId), fetchInventoryItems(), fetchMedicationStock()]);
-      toast.success(addToBilling ? 'Recorded and added to bill' : 'Recorded (not billed)');
+      notify.done(addToBilling ? 'Recorded and added to bill' : 'Recorded (not billed)');
     } catch (err) {
       console.error('Failed to record inventory:', err);
-      toast.error(err?.message || 'Failed to record');
+      notify.problem(err?.message || 'Failed to record');
     }
   };
 
@@ -342,10 +342,10 @@ const CasePapersTab = ({
     try {
       await api.delete(`/clinical/inventory-consumption/${consumptionId}`, { params: { mode } });
       await Promise.all([fetchInventoryConsumption(), fetchInventoryItems(), fetchMedicationStock()]);
-      toast.success(mode === 'billing_only' ? 'Removed from bill' : 'Removed — stock restored');
+      notify.done(mode === 'billing_only' ? 'Removed from bill' : 'Removed — stock restored');
     } catch (err) {
       console.error('Failed to remove inventory record:', err);
-      toast.error('Failed to remove');
+      notify.problem('Failed to remove');
     }
   };
 
@@ -354,10 +354,9 @@ const CasePapersTab = ({
     try {
       await api.post(`/clinical/inventory-consumption/${consumptionId}/bill`);
       await fetchInventoryConsumption();
-      toast.success('Added to bill');
     } catch (err) {
       console.error('Failed to bill inventory record:', err);
-      toast.error(err?.message || 'Failed to add to bill');
+      notify.problem(err?.message || 'Failed to add to bill');
     }
   };
 
@@ -397,7 +396,7 @@ const CasePapersTab = ({
           setCaseHistory(response);
       } catch (err) {
           console.error("Failed to fetch case papers:", err);
-          toast.error("Failed to load clinical history");
+          notify.problem("Failed to load clinical history");
       } finally {
           setLoading(false);
       }
@@ -423,11 +422,10 @@ const CasePapersTab = ({
 
     try {
       await api.delete(`/clinical/case-papers/${paper.id}`);
-      toast.success('Case paper deleted');
       fetchCasePapers();
     } catch (err) {
       console.error('Failed to delete case paper:', err);
-      toast.error(err?.message || 'Failed to delete case paper');
+      notify.problem(err?.message || 'Failed to delete case paper');
     }
   };
 
@@ -494,10 +492,8 @@ const CasePapersTab = ({
 
           if (selectedCasePaper?.isNew) {
               await api.post('/clinical/case-papers', payload);
-              toast.success("Case Paper saved with fresh clinical state!");
           } else {
               await api.put(`/clinical/case-papers/${selectedCasePaper.id}`, payload);
-              toast.success("Case Paper updated successfully!");
           }
           
           // Sync global clinical data (treatment plans, dental chart, etc.)
@@ -525,7 +521,7 @@ const CasePapersTab = ({
           onCasePaperStateChange?.(false);
       } catch (err) {
           console.error("Failed to save case paper:", err);
-          toast.error("Error saving clinical records");
+          notify.problem("Error saving clinical records");
           throw err; // let the navigation guard keep the work if the save failed
       }
   };
@@ -565,7 +561,7 @@ const CasePapersTab = ({
       unit_price: unitPrice,
     });
     fetchExistingCasePaperInvoice();
-    toast.info(
+    notify.done(
       unitPrice > 0
         ? `"${item.procedure}" billed to draft ${res.invoice_number || ''}`.trim()
         : `"${item.procedure}" added, set its fee in the invoice`
@@ -659,7 +655,7 @@ const CasePapersTab = ({
       nextPlan = await syncProcedureBilling(updatedPlan);
     } catch (err) {
       console.error('Procedure billing sync failed:', err);
-      toast.error('Could not update the bill for that procedure');
+      notify.problem('Could not update the bill for that procedure');
     }
     setSessionTreatmentPlan(nextPlan);
 
@@ -676,7 +672,6 @@ const CasePapersTab = ({
           newPlan = sessionTreatmentPlan.map(item => 
               item.id === editingTreatment.id ? { ...item, ...treatmentDetails } : item
           );
-          toast.success("Procedure updated");
       } else {
           // Create new item
           newPlan = [...sessionTreatmentPlan, {
@@ -685,7 +680,6 @@ const CasePapersTab = ({
               time: '10:00',
               ...treatmentDetails
           }];
-          toast.success("Procedure added");
       }
       onUpdatePlan(newPlan);
       setEditingTreatment(null);
@@ -693,7 +687,7 @@ const CasePapersTab = ({
 
   const handleSendLabOrder = () => {
       if (!labOrderForm.workType) {
-          toast.error("Please specify Work Type");
+          notify.problem("Please specify Work Type");
           return;
       }
       
@@ -706,7 +700,6 @@ const CasePapersTab = ({
       
       setDraftCharges(prev => [...prev, labFee]);
       setIsAddingLabOrder(false);
-      toast.success("Lab Order Sent & Added to Billing Draft");
       
       // Reset form
       setLabOrderForm({
@@ -933,7 +926,7 @@ const CasePapersTab = ({
             return s !== 'completed' && s !== 'cancelled';
           });
           if (pending.length > 0) {
-            toast.warn(
+            notify.problem(
               `${pending.length} treatment${pending.length > 1 ? 's are' : ' is'} still pending — mark ${pending.length > 1 ? 'them' : 'it'} complete to add to billing.`
             );
           }
@@ -968,7 +961,7 @@ const CasePapersTab = ({
           onSave={async (data) => {
               try {
                   if (selectedCasePaper?.isNew) {
-                      toast.error("Please save case paper first");
+                      notify.problem("Please save case paper first");
                       return;
                   }
                   const { dispenses = [], ...rxData } = data;
@@ -984,14 +977,12 @@ const CasePapersTab = ({
                           ...rxData,
                           patient_id: patientData.id,
                       });
-                      toast.success("Prescription updated");
                   } else {
                       await api.post('/clinical/prescriptions', {
                           ...rxData,
                           patient_id: patientData.id,
                           case_paper_id: selectedCasePaper?.id?.toString().startsWith('new-') ? null : selectedCasePaper?.id
                       });
-                      toast.success("Prescription saved");
                   }
                   await fetchVisitPrescriptions();
                   // Deduct any medicines the doctor chose to dispense from stock.
@@ -1000,7 +991,7 @@ const CasePapersTab = ({
                   }
               } catch (err) {
                   console.error("Prescription save error:", err);
-                  toast.error("Failed to save prescription");
+                  notify.problem("Failed to save prescription");
               }
           }}
       />
@@ -1011,7 +1002,7 @@ const CasePapersTab = ({
           patientId={patientData?.id}
           casePaperId={selectedCasePaper?.isNew ? null : selectedCasePaper?.id}
           onUpload={(data) => {
-              toast.success(`${data.files.length} document(s) uploaded successfully!`);
+              notify.done(`${data.files.length} document(s) uploaded successfully!`);
               fetchPatientDocuments();
           }}
       />

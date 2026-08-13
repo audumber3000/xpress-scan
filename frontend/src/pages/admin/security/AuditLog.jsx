@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ScrollText, RefreshCw, Download, Loader2, Monitor, Smartphone, Globe,
 } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { notify } from '../../../utils/notify';
 import { api } from '../../../utils/api';
 import { formatDateTime } from '../../../utils/datetime';
 import { downloadAuthedFile } from '../../../utils/whatsapp';
@@ -10,6 +10,7 @@ import { resolveUserAvatar } from '../../../utils/avatar';
 import TableToolbar from '../../../components/common/TableToolbar';
 import Pagination from '../../../components/Pagination';
 import EmptyState from '../../../components/common/EmptyState';
+import PageShell from '../../../components/common/PageShell';
 import { noData } from '../../../assets/illustrations';
 
 const PER_PAGE = 25;
@@ -21,6 +22,10 @@ const PER_PAGE = 25;
  * somebody can tidy up afterwards isn't evidence of anything. Only actions that
  * destroy or move something are recorded; logging every page view would bury
  * the one row that matters.
+ *
+ * Rendered as the Audit Log tab of Access & Activity. `embedded` drops the page
+ * chrome (scroll container, heading, Refresh) because the host supplies it;
+ * `reloadKey` is how that host's Refresh button reaches in here.
  */
 
 // Colour by how much the action can cost you, not by which module it came from.
@@ -42,7 +47,7 @@ const deviceOf = (ua = '') => {
   return { Icon: Globe, label: '—' };
 };
 
-const AuditLog = () => {
+const AuditLog = ({ embedded = false, reloadKey = 0 }) => {
   const [logs, setLogs] = useState([]);
   const [total, setTotal] = useState(0);
   const [actions, setActions] = useState([]);
@@ -80,14 +85,14 @@ const AuditLog = () => {
       setTotal(Number(data?.total) || 0);
       if (data?.actions?.length) setActions(data.actions);
     } catch (e) {
-      toast.error('Could not load the audit log');
+      notify.problem('Could not load the audit log');
       setLogs([]);
     } finally {
       setLoading(false);
     }
   }, [page, params]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, reloadKey]);
   // Any filter change starts over at page one, or you land on an empty page.
   useEffect(() => { setPage(1); }, [debounced, action, dateFrom, dateTo]);
 
@@ -100,9 +105,9 @@ const AuditLog = () => {
         `/security/audit-log/export${qs ? `?${qs}` : ''}`,
         `audit-log${span}.csv`
       );
-      toast.success('Audit log exported');
+      notify.done('Audit log exported');
     } catch (e) {
-      toast.error('Could not export the audit log');
+      notify.problem('Could not export the audit log');
     } finally {
       setExporting(false);
     }
@@ -111,25 +116,27 @@ const AuditLog = () => {
   const dateCls = 'px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#29828a]/20 focus:border-[#29828a]';
 
   return (
-    <div className="flex flex-col h-full bg-[#f8fafc] overflow-y-auto custom-scrollbar p-6 lg:p-8 pb-10">
-      <div className="mb-6">
-        <div className="flex items-center justify-between gap-4 mb-5">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <ScrollText size={20} className="text-[#29828a]" /> Audit Log
-            </h2>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Deletions, money changes and settings changes — who did it, when, and from where.
-            </p>
+    <PageShell embedded={embedded}>
+      {!embedded && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between gap-4 mb-5">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <ScrollText size={20} className="text-[#29828a]" /> Audit Log
+              </h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Deletions, money changes and settings changes — who did it, when, and from where.
+              </p>
+            </div>
+            <button
+              onClick={load}
+              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shrink-0"
+            >
+              <RefreshCw size={14} /> Refresh
+            </button>
           </div>
-          <button
-            onClick={load}
-            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shrink-0"
-          >
-            <RefreshCw size={14} /> Refresh
-          </button>
         </div>
-      </div>
+      )}
 
       <TableToolbar
         search={search}
@@ -227,7 +234,7 @@ const AuditLog = () => {
         </div>
         <Pagination page={page} pageSize={PER_PAGE} totalItems={total} onPageChange={setPage} />
       </div>
-    </div>
+    </PageShell>
   );
 };
 

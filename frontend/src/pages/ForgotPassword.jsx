@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { toast } from 'react-toastify';
+import { notify } from '../utils/notify';
 import { api } from '../utils/api';
 import ValidatedInput from '../components/forms/ValidatedInput';
 import { isValidEmail } from '../utils/validators';
@@ -41,7 +41,7 @@ const ForgotPassword = () => {
       await api.post('/auth/forgot-password', { email: email.trim() });
       setSent(true);
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Something went wrong. Please try again.');
+      notify.problem(error, 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }

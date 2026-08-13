@@ -187,6 +187,55 @@
   animation: scale-in 0.15s ease-out;
 }
 
+/* Support card: Rohit's message growing out of his avatar.
+   The transform-origin is the bubble's top-left, which is the squared-off
+   corner sitting right beside his face, so it reads as the message emerging
+   from him rather than a panel fading in over the card. The slight overshoot
+   in the middle keyframe is what makes it feel sent rather than rendered. */
+@keyframes bubble-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) translate(-6px, -4px);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.03) translate(0, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translate(0, 0);
+  }
+}
+
+.animate-bubble-pop {
+  transform-origin: top left;
+  /* Starts invisible so the delay below is a pause, not a flash of the
+     finished bubble sitting there before it animates. */
+  opacity: 0;
+  animation: bubble-pop 0.32s cubic-bezier(0.34, 1.4, 0.5, 1) 0.12s forwards;
+}
+
+/* His face lands first, so there is someone for the message to come from. */
+@keyframes avatar-pop {
+  from { opacity: 0; transform: scale(0.6); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.animate-avatar-pop {
+  opacity: 0;
+  animation: avatar-pop 0.22s cubic-bezier(0.34, 1.4, 0.5, 1) forwards;
+}
+
+/* Nobody needs a bubble springing at them if they have asked the OS for less
+   movement. The content still appears, it just stops performing. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-bubble-pop,
+  .animate-avatar-pop {
+    opacity: 1;
+    animation: none;
+  }
+}
+
 /* Shine Animation */
 @keyframes shine {
   0% { left: -100%; }
@@ -238,4 +287,119 @@
   );
   transform: skewX(-20deg);
   animation: shine 4s infinite;
+}
+
+/* ─── Toasts ───────────────────────────────────────────────────────────────
+   The feedback of last resort. Everything about the stock react-toastify look
+   is replaced here: the coloured full-bleed background, the progress bar and
+   the drop shadow are what made these read as a decade old.
+
+   What is left is the same card language as the rest of the app — white,
+   1px border, generous radius — with the tier carried by a small tinted icon
+   rather than by shouting the whole surface in red or green.
+
+   Tier classes (mp-toast--sent / done / reverted / problem) come from
+   utils/notify.js, which is the only module allowed to raise one. */
+
+.mp-toast-container {
+  /* Clears the sticky h-14 (56px) header with room to breathe, so a toast
+     never covers the clinic switcher or the header icons. */
+  top: 4.5rem;
+  width: auto;
+  max-width: min(28rem, calc(100vw - 2rem));
+  padding: 0;
+}
+
+.mp-toast-shell {
+  padding: 0;
+  margin-bottom: 0.625rem;
+  min-height: 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0.75rem;
+}
+
+/* Toastify wraps the body in its own flex row; we own the layout instead. */
+.mp-toast-shell .Toastify__toast-body {
+  padding: 0;
+  margin: 0;
+  align-items: stretch;
+}
+
+.mp-toast {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.8125rem 0.9375rem 0.8125rem 1.125rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  /* It floats over the page, so unlike a card in the flow it keeps its lift.
+     Soft and low, not the library's hard drop. */
+  box-shadow: 0 6px 20px -6px rgb(15 23 42 / 0.18);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: #334155;
+}
+
+/* The colour rail. A full flood of green or red on a message that appears
+   unbidden over your work is shouting; a 4px edge is the same information at
+   conversational volume, and it reads instantly at a glance across a desk. */
+.mp-toast::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #94a3b8;
+}
+
+.mp-toast--sent::before,
+.mp-toast--done::before     { background: #10b981; }
+.mp-toast--reverted::before { background: #f59e0b; }
+.mp-toast--problem::before  { background: #dc2626; }
+
+/* The row inside: the tinted icon disc, then the words. */
+.mp-toast-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  width: 100%;
+}
+.mp-toast-text { min-width: 0; padding-top: 0.1875rem; }
+
+/* A failure earns a faint wash as well as the rail, because it is the only one
+   that might still need acting on when the eye comes back to it. */
+.mp-toast--problem { border-color: #fecaca; background: #fffbfb; }
+
+.mp-toast-shell .Toastify__close-button {
+  align-self: flex-start;
+  margin-top: 0.75rem;
+  margin-right: 0.625rem;
+  color: #94a3b8;
+  opacity: 1;
+}
+.mp-toast-shell .Toastify__close-button:hover { color: #475569; }
+
+@media (max-width: 640px) {
+  .mp-toast-container {
+    top: 4rem;
+    left: 1rem;
+    right: 1rem;
+    transform: none;
+    max-width: none;
+  }
+}
+
+/* Sliding a message in from off-screen is motion the reader did not ask for.
+   The toast still appears and still says the same thing. */
+@media (prefers-reduced-motion: reduce) {
+  .mp-toast-shell {
+    animation: none !important;
+    transition: none !important;
+  }
 }

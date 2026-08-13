@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { api, getPermissionAwareErrorMessage, getFriendlyErrorMessage } from "../utils/api";
-import { toast } from 'react-toastify';
 import { FaEye, FaEdit, FaTrash, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import { Search, Plus, User, Users, Folder, X, Edit2, Trash2, UploadCloud, UserPlus, CheckCircle2, Download } from "lucide-react";
 import { isValidPhone } from "../utils/validators";
@@ -13,6 +12,10 @@ import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar"
 import ImportPatientsModal from "../components/patient/ImportPatientsModal";
 import HelpBulb from "../components/common/HelpBulb";
 import EmptyState from "../components/common/EmptyState";
+import SectionError from "../components/common/SectionError";
+import InlineFeedback from "../components/common/InlineFeedback";
+import { notify } from "../utils/notify";
+import MasterPasswordModal from "../components/common/MasterPasswordModal";
 import { medicalCare } from "../assets/illustrations";
 import AgeOrDobField, { computeAgeFromDob } from "../components/patient/AgeOrDobField";
 import { clinicToday, formatDateTime, formatRelative } from "../utils/datetime";
@@ -102,10 +105,10 @@ const Patients = () => {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      toast.success('Patients exported');
+      notify.done('Patients exported');
     } catch (e) {
       console.error('Export error:', e);
-      toast.error('Failed to export patients');
+      notify.problem(e, 'Could not export the patient list');
     } finally {
       setExporting(false);
     }
@@ -134,6 +137,11 @@ const Patients = () => {
   const [ageMode, setAgeMode] = useState("age");
   const [editLoading, setEditLoading] = useState(false);
   const [editErrors, setEditErrors] = useState({}); // { fieldName: message } for inline validation
+  // The list failed to load. A state, not an event: it stays in the table's
+  // own space with a Retry until the data arrives (tier 3, utils/notify.js).
+  const [loadError, setLoadError] = useState('');
+  // Why the drawer could not save. Sits above its own Save button.
+  const [saveError, setSaveError] = useState('');
   const [casePaperPrompt, setCasePaperPrompt] = useState(null); // { id, name } of a just-created patient
   const [deleteLoading, setDeleteLoading] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null); // patient pending delete-confirm
@@ -226,6 +234,7 @@ const Patients = () => {
         api.get("/patients/count", { params: filters }),
       ]);
       if (reqId !== patientsRequestIdRef.current) return;  // superseded
+      setLoadError('');   // a good answer clears whatever the last bad one said
       setPatients(Array.isArray(list) ? list : []);
       const count = Number(countRes?.total) || 0;
       setTotalCount(count);
@@ -237,9 +246,9 @@ const Patients = () => {
     } catch (e) {
       if (reqId !== patientsRequestIdRef.current) return;
       console.error("Error fetching patients:", e);
-      toast.error(getPermissionAwareErrorMessage(
+      setLoadError(getPermissionAwareErrorMessage(
         e,
-        "Failed to load patients",
+        "Something went wrong loading your patients.",
         "You don't have permission to view patients."
       ));
       setPatients([]);
@@ -436,13 +445,11 @@ const Patients = () => {
   const handleSavePatient = async () => {
     // Validate on the frontend first so the user sees exactly which field is missing.
     const errors = validatePatientForm();
+    setSaveError('');
     if (Object.keys(errors).length > 0) {
       setEditErrors(errors);
-      const summary =
-        Object.keys(errors).length === 1
-          ? Object.values(errors)[0]
-          : `Please fix these fields: ${Object.values(errors).join(" ")}`;
-      toast.error(summary);
+      // No toast: every bad field is already outlined in red with its reason
+      // underneath it, which is where the fix has to happen anyway.
       return;
     }
     setEditErrors({});
@@ -464,12 +471,10 @@ const Patients = () => {
       setEditLoading(true);
       if (drawerMode === 'edit') {
         await api.put(`/patients/${editingPatient.id}`, buildPayload());
-        toast.success("Patient updated successfully");
         setEditDrawerOpen(false);
       } else {
         const payload = buildPayload();
         const created = await api.post(`/patients/`, payload);
-        toast.success("Patient created successfully");
         setEditDrawerOpen(false);
 
         // Came from the daily register: put them straight into today's list, so
@@ -478,10 +483,10 @@ const Patients = () => {
           try {
             await api.post('/daily-register', { patient_id: created.id });
             setRegisterRefreshKey(k => k + 1);
-            toast.success(`${created.name || editFormData.name} added to today's register`);
+            notify.done(`${created.name || editFormData.name} added to today's register`);
           } catch (regError) {
             console.error("Error adding the new patient to the register:", regError);
-            toast.error("Patient saved, but we couldn't add them to today's register.");
+            notify.problem("Patient saved, but we couldn't add them to today's register.");
           }
         }
         setAddToRegisterAfterCreate(false);
@@ -497,7 +502,7 @@ const Patients = () => {
     } catch (e) {
       console.error("Error saving patient:", e);
       // Surface the real reason (duplicate phone, etc.) instead of a generic message.
-      toast.error(getFriendlyErrorMessage(e, "We couldn't save this patient. Please check the details and try again."));
+      setSaveError(getFriendlyErrorMessage(e, "We couldn't save this patient. Please check the details and try again."));
     } finally {
       setEditLoading(false);
     }
@@ -506,20 +511,25 @@ const Patients = () => {
   // Open the confirm modal (single, on-brand — replaces the native window.confirm).
   const handleDeletePatient = (patient) => setDeleteTarget(patient);
 
-  const confirmDeletePatient = async () => {
+  // Deleting a patient takes their case papers, bills and receipted payments
+  // with them, so the confirmation IS the master password prompt — there is no
+  // plain "are you sure" step in front of it. The token comes from the modal,
+  // which has already checked the code before we get here.
+  const confirmDeletePatient = async (masterToken) => {
     if (!deleteTarget) return;
     const patient = deleteTarget;
     setDeleteLoading(patient.id);
     try {
-      await api.delete(`/patients/${patient.id}`);
-      toast.success("Patient deleted successfully");
+      await api.delete(`/patients/${patient.id}`, {
+        headers: { 'X-Master-Token': masterToken },
+      });
       setDeleteTarget(null);
       fetchPatients();
     } catch (error) {
       console.error("Error deleting patient:", error);
-      // Surface the backend's reason when it has one (e.g. "Cannot delete patient
-      // with existing payments") instead of a generic message.
-      toast.error(error?.response?.data?.detail || error?.message || "Error deleting patient");
+      // Rethrown so the reason lands inside the prompt that is still open,
+      // rather than as a toast behind it.
+      throw error;
     } finally {
       setDeleteLoading(null);
     }
@@ -726,7 +736,16 @@ const Patients = () => {
       <div className="flex-1 overflow-hidden px-6 pb-6">
         <div className="h-full bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
 
-          {loading ? (
+          {loadError ? (
+            <div className="flex-1 overflow-auto p-6">
+              <SectionError
+                title="Couldn't load your patients"
+                detail={loadError}
+                onRetry={() => { setLoadError(''); fetchPatients(); }}
+                retrying={loading}
+              />
+            </div>
+          ) : loading ? (
             <div className="flex-1 overflow-auto">
               <table className="w-full divide-y divide-gray-200">
                 <thead className="bg-[#f8fafc] sticky top-0 z-10">
@@ -1142,6 +1161,7 @@ const Patients = () => {
             </div>
 
             <div className="p-6 border-t border-gray-100 mt-auto">
+              {saveError && <InlineFeedback tone="error" className="mb-3">{saveError}</InlineFeedback>}
               <div className="flex gap-3">
                 <button
                   type="button"
@@ -1209,47 +1229,21 @@ const Patients = () => {
         onImported={fetchPatients}
       />
 
-      {/* Delete patient — single on-brand confirm (soft backdrop, matches the app's dialogs). */}
-      {deleteTarget && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
-          onClick={() => deleteLoading !== deleteTarget.id && setDeleteTarget(null)}
-        >
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
-                <Trash2 size={18} className="text-red-600" />
-              </div>
-              <div className="min-w-0">
-                <h3 className="text-lg font-semibold text-gray-900">Delete patient?</h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  Are you sure you want to delete <span className="font-semibold">{deleteTarget.name}</span>?
-                  This will remove their records and <span className="font-semibold">cannot be undone</span>.
-                </p>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 mt-6">
-              <button
-                type="button"
-                onClick={() => setDeleteTarget(null)}
-                disabled={deleteLoading === deleteTarget.id}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmDeletePatient}
-                disabled={deleteLoading === deleteTarget.id}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
-              >
-                {deleteLoading === deleteTarget.id && <GearLoader size="w-4 h-4" />}
-                {deleteLoading === deleteTarget.id ? 'Deleting…' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Delete patient — gated on the clinic's master password. */}
+      <MasterPasswordModal
+        open={!!deleteTarget}
+        title="Delete this patient?"
+        message={
+          <>
+            <span className="font-semibold text-gray-700">{deleteTarget?.name}</span> and everything on
+            their file goes with them: case papers, x-rays, prescriptions, bills and any payments already
+            recorded. This <span className="font-semibold">cannot be undone</span>.
+          </>
+        }
+        confirmLabel="Delete patient"
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDeletePatient}
+      />
     </div>
   );
 };

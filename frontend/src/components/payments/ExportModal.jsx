@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, Download, FileSpreadsheet } from "lucide-react";
-import { toast } from "react-toastify";
+import { notify } from '../../utils/notify';
 import { clinicToday, getClinicTimezone } from "../../utils/datetime";
 
 /*
@@ -84,7 +84,7 @@ const ExportModal = ({ open, onClose, mode = "payments" }) => {
 
   const handleExport = async () => {
     if (dateFrom && dateTo && dateFrom > dateTo) {
-      toast.error("The 'from' date can't be after the 'to' date.");
+      notify.problem("The 'from' date can't be after the 'to' date.");
       return;
     }
     setExporting(true);
@@ -102,7 +102,7 @@ const ExportModal = ({ open, onClose, mode = "payments" }) => {
 
       const blob = await res.blob();
       if (blob.size <= 120) {
-        toast.info("Nothing to export for those filters.");
+        notify.done("Nothing to export for those filters.");
         return;
       }
       const url = window.URL.createObjectURL(blob);
@@ -113,10 +113,10 @@ const ExportModal = ({ open, onClose, mode = "payments" }) => {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      toast.success("Export ready");
+      notify.done("Export ready");
       onClose();
     } catch (e) {
-      toast.error(e?.message || "Could not export. Please try again.");
+      notify.problem(e?.message || "Could not export. Please try again.");
     } finally {
       setExporting(false);
     }

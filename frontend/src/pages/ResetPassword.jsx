@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { toast } from 'react-toastify';
+import { notify } from '../utils/notify';
 import { api } from '../utils/api';
 import ValidatedInput from '../components/forms/ValidatedInput';
 import { isValidPassword } from '../utils/validators';
@@ -25,10 +25,10 @@ const ResetPassword = () => {
     setLoading(true);
     try {
       await api.post('/auth/reset-password', { token, new_password: password });
-      toast.success('Password reset! Please sign in with your new password.');
+      notify.done('Password reset! Please sign in with your new password.');
       navigate('/login', { replace: true });
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'This reset link is invalid or has expired. Please request a new one.');
+      notify.problem(error, 'This reset link is invalid or has expired. Please request a new one.');
     } finally {
       setLoading(false);
     }

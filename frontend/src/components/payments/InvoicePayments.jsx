@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { Download, AlertTriangle } from 'lucide-react';
+import { Download, AlertTriangle, Trash2 } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa6';
-import { toast } from 'react-toastify';
 import { getCurrencySymbol } from '../../utils/currency';
 import { formatDate, formatTime } from '../../utils/datetime';
 import { downloadAuthedFile, isManualWhatsApp, shareReceiptManually } from '../../utils/whatsapp';
 import { api } from '../../utils/api';
+import { notify } from '../../utils/notify';
 import { useAuth } from '../../contexts/AuthContext';
 import EmptyState from '../common/EmptyState';
+import MasterPasswordModal from '../common/MasterPasswordModal';
 import { receipt as receiptArt } from '../../assets/illustrations';
 
 const money = (n) => `${getCurrencySymbol()}${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
@@ -25,13 +26,20 @@ const fmtDate = (s) => formatDate(s);
  * gets the full drawer width, so those become columns instead of a run-on
  * subtitle.
  *
- * Read-only: recording a payment happens through Mark as Paid in the drawer
- * footer, which already handles the partial case. Two ways to take money would
- * be two code paths to keep agreeing with each other.
+ * Recording a payment happens through Mark as Paid in the drawer footer, which
+ * already handles the partial case. Two ways to take money would be two code
+ * paths to keep agreeing with each other. Removing one, on the other hand,
+ * belongs here beside the row it removes, behind the clinic's master password:
+ * an entry that was receipted and possibly WhatsApped to the patient is not
+ * something a stray click should be able to erase.
+ *
+ * `onChanged` receives the recalculated invoice, since deleting an installment
+ * moves paid, due and status.
  */
-const InvoicePayments = ({ invoice }) => {
+const InvoicePayments = ({ invoice, onChanged }) => {
   const [receiptFor, setReceiptFor] = useState(null);
   const [sharingFor, setSharingFor] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const { user } = useAuth();
 
   const payments = invoice?.payments || [];
@@ -50,7 +58,7 @@ const InvoicePayments = ({ invoice }) => {
         `receipt_${payment.receipt_number || payment.id}.pdf`
       );
     } catch (e) {
-      toast.error('Could not open the receipt');
+      notify.problem(e, 'Could not open that receipt');
     } finally {
       setReceiptFor(null);
     }
@@ -64,7 +72,7 @@ const InvoicePayments = ({ invoice }) => {
   // button promises "send", so doing something else instead was a lie.
   const shareReceipt = async (payment) => {
     if (!invoice?.patient_phone) {
-      toast.error('Patient phone number is required');
+      notify.problem('This patient has no phone number on file');
       return;
     }
 
@@ -72,11 +80,11 @@ const InvoicePayments = ({ invoice }) => {
       setSharingFor(payment.id);
       try {
         const opened = await shareReceiptManually(invoice, payment, user);
-        if (opened) toast.success('Receipt downloaded — attach it in the WhatsApp chat that opened');
-        else toast.error('Could not open WhatsApp — check the patient phone number');
+        if (opened) notify.sent('Receipt downloaded. Attach it in the WhatsApp chat that just opened');
+        else notify.problem('Could not open WhatsApp. Check the patient phone number');
       } catch (error) {
         console.error('Manual WhatsApp failed:', error);
-        toast.error('Failed to prepare the WhatsApp message');
+        notify.problem(error, 'Could not prepare the WhatsApp message');
       } finally {
         setSharingFor(null);
       }
@@ -87,15 +95,29 @@ const InvoicePayments = ({ invoice }) => {
     try {
       const response = await api.post(`/invoices/${invoice.id}/payments/${payment.id}/send-whatsapp`);
       if (response.success) {
-        toast.success(`Receipt sent successfully to ${invoice.patient_phone}`);
+        notify.sent(`Receipt sent to ${invoice.patient_phone}`);
       } else {
-        toast.error(response.message || 'Failed to send receipt via WhatsApp');
+        notify.problem(response.message || 'Could not send the receipt on WhatsApp');
       }
     } catch (error) {
       console.error('Error sending receipt via WhatsApp:', error);
-      toast.error(error.response?.data?.detail || error.message || 'Failed to send receipt via WhatsApp');
+      notify.problem(error, 'Could not send the receipt on WhatsApp');
     } finally {
       setSharingFor(null);
+    }
+  };
+
+  const deletePayment = async (masterToken) => {
+    const p = deleteTarget;
+    try {
+      const updated = await api.delete(`/invoices/${invoice.id}/payments/${p.id}`, {
+        headers: { 'X-Master-Token': masterToken },
+      });
+      setDeleteTarget(null);
+      onChanged?.(updated);
+    } catch (error) {
+      console.error('Error removing payment:', error);
+      throw error;  // shown inside the prompt, which stays open
     }
   };
 
@@ -211,6 +233,13 @@ const InvoicePayments = ({ invoice }) => {
                           ? <span className="block w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
                           : <Download size={16} />}
                       </button>
+                      <button
+                        onClick={() => setDeleteTarget(p)}
+                        title="Remove this payment (needs the master password)"
+                        className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -220,6 +249,20 @@ const InvoicePayments = ({ invoice }) => {
         </div>
       </div>
 
+      <MasterPasswordModal
+        open={!!deleteTarget}
+        title="Remove this payment?"
+        message={
+          <>
+            {money(deleteTarget?.amount)} received on {fmtDate(deleteTarget?.paid_on || deleteTarget?.created_at)}
+            {deleteTarget?.receipt_number ? <> under receipt <span className="font-semibold text-gray-700">{deleteTarget.receipt_number}</span></> : null}.
+            The bill's paid and due amounts move back, and any receipt already sent to the patient will no longer match your books.
+          </>
+        }
+        confirmLabel="Remove payment"
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={deletePayment}
+      />
     </div>
   );
 };

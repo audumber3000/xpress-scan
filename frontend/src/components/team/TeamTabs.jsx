@@ -1,10 +1,14 @@
 import React from 'react';
-import { Users, ShieldCheck, CalendarCheck } from 'lucide-react';
+import { Users, CalendarCheck, MapPin } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 /**
- * The shared header for the three team screens — Staff, Permissions and
- * Attendance. They are one section viewed three ways, so the title, the tab bar
+ * The shared header for the team screens — Staff, Attendance and Location.
+ *
+ * Permissions used to be a fourth tab. It is now edited on the staff member
+ * themselves (Staff → open somebody → Permissions), which is where the question
+ * is actually asked, so a whole screen for it was a second answer to the same
+ * thing. Its route stays live for existing links. They are one section viewed several ways, so the title, the tab bar
  * and the page chrome belong in one place rather than being re-typed (and
  * quietly drifting apart) in each file.
  *
@@ -14,21 +18,21 @@ import { useNavigate } from 'react-router-dom';
  * inside a second card just adds a frame around a frame.
  *
  * Props:
- *   active    'staff' | 'permissions' | 'attendance'
+ *   active    'staff' | 'attendance' | 'location'
  *   action    optional node rendered at the top right (e.g. a Refresh button)
  *   children  the page body
  */
 
 const TABS = [
   { id: 'staff',       label: 'Staff',       icon: Users,         path: '/admin/staff' },
-  { id: 'permissions', label: 'Permissions', icon: ShieldCheck,   path: '/admin/permissions' },
   { id: 'attendance',  label: 'Attendance',  icon: CalendarCheck, path: '/admin/attendance' },
+  { id: 'location',    label: 'Location',    icon: MapPin,        path: '/admin/clinic-location' },
 ];
 
 const SUBTITLE = {
   staff:       'Everyone who can sign in to this clinic, and what they can reach.',
-  permissions: 'Choose which modules each person can see and change.',
   attendance:  'Who was in, and when, across the week.',
+  location:    'Where the clinic is, and how close staff must be to clock in.',
 };
 
 const TeamTabs = ({ active, action, children }) => {

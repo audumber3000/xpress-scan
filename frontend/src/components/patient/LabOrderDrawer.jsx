@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Beaker, Calendar, Search, Trash2, Plus, Info, User } from 'lucide-react';
 import { api } from '../../utils/api';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 import { getCurrencySymbol } from '../../utils/currency';
 
 const LabOrderDrawer = ({ isOpen, onClose, patientId, casePaperId, onSave, order = null }) => {
@@ -74,7 +74,7 @@ const LabOrderDrawer = ({ isOpen, onClose, patientId, casePaperId, onSave, order
             setVendors(response);
         } catch (err) {
             console.error("Failed to fetch lab vendors:", err);
-            toast.error("Could not load lab vendors");
+            notify.problem("Could not load lab vendors");
         }
     };
 
@@ -104,7 +104,7 @@ const LabOrderDrawer = ({ isOpen, onClose, patientId, casePaperId, onSave, order
         e.preventDefault();
         const resolvedPatientId = patientId || selectedPatientId;
         if (!resolvedPatientId) {
-            toast.error("Please select a patient");
+            notify.problem("Please select a patient");
             return;
         }
         setLoading(true);
@@ -120,16 +120,16 @@ const LabOrderDrawer = ({ isOpen, onClose, patientId, casePaperId, onSave, order
 
             if (order) {
                 await api.put(`/clinical/lab-orders/${order.id}`, payload);
-                toast.success("Lab order updated");
+                notify.done("Lab order updated");
             } else {
                 await api.post('/clinical/lab-orders/', payload);
-                toast.success("Lab order created");
+                notify.done("Lab order created");
             }
             onSave();
             onClose();
         } catch (err) {
             console.error("Failed to save lab order:", err);
-            toast.error("Failed to save lab order");
+            notify.problem("Failed to save lab order");
         } finally {
             setLoading(false);
         }

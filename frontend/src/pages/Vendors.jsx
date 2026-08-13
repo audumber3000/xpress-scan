@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import { useHeader } from "../contexts/HeaderContext";
-import { toast } from "react-toastify";
+import { notify } from '../utils/notify';
 import { Package, Pill, Building2, Activity, Wallet, Layers, Edit2, Trash2, Search, Plus, Upload } from "lucide-react";
 import InventoryAlerts from "../components/vendors/InventoryAlerts";
 import InventoryTable from "../components/vendors/InventoryTable";
@@ -70,7 +70,7 @@ const Vendors = () => {
             setInventory(inventoryData || []);
             setMedications(medsData || []);
         } catch (error) {
-            toast.error(getPermissionAwareErrorMessage(error, "Failed to load inventory", "You don't have permission to view this module."));
+            notify.problem(getPermissionAwareErrorMessage(error, "Failed to load inventory", "You don't have permission to view this module."));
         } finally {
             setLoading(false);
         }
@@ -116,11 +116,10 @@ const Vendors = () => {
         try {
             if (stockDrawer.item) await api.put(`/inventory/${stockDrawer.item.id}`, payload);
             else await api.post("/inventory", payload);
-            toast.success(stockDrawer.item ? "Item updated" : "Item added");
             setStockDrawer({ open: false, item: null });
             fetchData();
         } catch (error) {
-            toast.error(getPermissionAwareErrorMessage(error, "Failed to save item", "You don't have permission to manage inventory."));
+            notify.problem(getPermissionAwareErrorMessage(error, "Failed to save item", "You don't have permission to manage inventory."));
         } finally { setSaving(false); }
     };
 
@@ -129,11 +128,10 @@ const Vendors = () => {
         try {
             if (medDrawer.item) await api.put(`/medication-stock/${medDrawer.item.id}`, payload);
             else await api.post("/medication-stock", payload);
-            toast.success(medDrawer.item ? "Medication updated" : "Medication added");
             setMedDrawer({ open: false, item: null });
             fetchData();
         } catch (error) {
-            toast.error(getPermissionAwareErrorMessage(error, "Failed to save medication", "You don't have permission to manage inventory."));
+            notify.problem(getPermissionAwareErrorMessage(error, "Failed to save medication", "You don't have permission to manage inventory."));
         } finally { setSaving(false); }
     };
 
@@ -142,21 +140,19 @@ const Vendors = () => {
         try {
             if (vendorDrawer.vendor) await api.put(`/vendors/${vendorDrawer.vendor.id}`, payload);
             else await api.post("/vendors", payload);
-            toast.success(vendorDrawer.vendor ? "Vendor updated" : "Vendor added");
             setVendorDrawer({ open: false, vendor: null });
             fetchData();
         } catch (error) {
-            toast.error(getPermissionAwareErrorMessage(error, "Failed to save vendor", "You don't have permission to manage vendors."));
+            notify.problem(getPermissionAwareErrorMessage(error, "Failed to save vendor", "You don't have permission to manage vendors."));
         } finally { setSaving(false); }
     };
 
     const restock = async (endpoint, itemId, newQty) => {
         try {
             await api.put(`/${endpoint}/${itemId}`, { quantity: newQty });
-            toast.success("Stock updated");
             fetchData();
         } catch (error) {
-            toast.error(getPermissionAwareErrorMessage(error, "Failed to update stock", "You don't have permission to edit inventory."));
+            notify.problem(getPermissionAwareErrorMessage(error, "Failed to update stock", "You don't have permission to edit inventory."));
         }
     };
 
@@ -164,10 +160,9 @@ const Vendors = () => {
         if (!window.confirm(`Delete this ${label}?`)) return;
         try {
             await api.delete(`/${endpoint}/${itemId}`);
-            toast.success("Deleted");
             fetchData();
         } catch (error) {
-            toast.error(getPermissionAwareErrorMessage(error, "Failed to delete", "You don't have permission to delete."));
+            notify.problem(getPermissionAwareErrorMessage(error, "Failed to delete", "You don't have permission to delete."));
         }
     };
 

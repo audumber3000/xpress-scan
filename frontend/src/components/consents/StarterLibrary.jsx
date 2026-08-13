@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, Loader2, BookOpen, AlertTriangle } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 import { api } from '../../utils/api';
 
 /**
@@ -52,11 +52,11 @@ const StarterLibrary = ({ open, onClose, onAdopted }) => {
     try {
       const res = await api.post('/consents/templates/adopt', { names: [...picked] });
       const n = res.created?.length || 0;
-      toast.success(n ? `${n} form${n === 1 ? '' : 's'} added` : 'Those were already in your list');
+      notify.done(n ? `${n} form${n === 1 ? '' : 's'} added` : 'Those were already in your list');
       onAdopted?.();
       onClose();
     } catch (e) {
-      toast.error(e?.detail || e?.message || 'Could not add those');
+      notify.problem(e, 'Could not add those');
     } finally {
       setSaving(false);
     }

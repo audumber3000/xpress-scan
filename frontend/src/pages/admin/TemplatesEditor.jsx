@@ -4,7 +4,7 @@ import {
   ArrowLeft, Save, FileText, Stethoscope, ClipboardCheck, X, Eye,
   ChevronDown, ChevronUp, Loader2, Check, LayoutTemplate, ExternalLink,
 } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 import { api } from '../../utils/api';
 
 const TABS = [
@@ -126,7 +126,7 @@ const TemplatesEditor = () => {
       setConfigs(next);
     } catch (e) {
       console.error('[TemplatesEditor] load error', e);
-      toast.error('Could not load template settings');
+      notify.problem('Could not load template settings');
     } finally {
       setLoading(false);
     }
@@ -210,10 +210,10 @@ const TemplatesEditor = () => {
       // field never actually saved. GST is edited in Clinic Details; this
       // screen only decides whether it prints.
       setLastSavedAt(new Date());
-      toast.success(`${TABS.find(t => t.id === activeTab).label} template saved`);
+      notify.done(`${TABS.find(t => t.id === activeTab).label} template saved`);
     } catch (err) {
       console.error('[TemplatesEditor] save error', err);
-      toast.error(err?.detail || 'Save failed');
+      notify.problem(err, 'Save failed');
     } finally {
       setSaving(false);
     }

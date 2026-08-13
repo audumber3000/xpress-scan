@@ -74,3 +74,70 @@ export const permissionsLockReason = (actor, target) => {
   }
   return null;
 };
+
+
+/**
+ * What each role can reach out of the box.
+ *
+ * Lives here beside MODULES rather than inside a screen, because two places now
+ * apply presets — the full Permissions screen and the per-staff Permissions tab
+ * — and a preset that means one thing in one and something else in the other is
+ * worse than having no preset. clinic_owner is derived from MODULES so a new
+ * module cannot be accidentally withheld from the owner.
+ */
+export const ROLE_PRESETS = {
+  clinic_owner: Object.fromEntries(MODULES.map(m => [m.key, Object.fromEntries(m.actions.map(a => [a, true]))]) ),
+  doctor: {
+    dashboard:    { read: true },
+    appointments: { read: true, write: false, edit: true, delete: false },
+    patients:     { read: true, write: false, edit: true, delete: false },
+    finance:      { read: true, write: false, edit: false, delete: false },
+    inbox:        { read: true, write: true },
+    reports:      { read: true },
+    marketing:    { read: true, write: false, edit: false },
+    lab:          { read: true, write: true, edit: true, delete: false },
+    staff:        { read: false, write: false, edit: false, delete: false },
+    settings:     { read: false, write: false, edit: false },
+    consent:      { read: true, write: true, edit: true, delete: false },
+  },
+  receptionist: {
+    dashboard:    { read: true },
+    appointments: { read: true, write: true, edit: true, delete: false },
+    patients:     { read: true, write: true, edit: true, delete: false },
+    finance:      { read: true, write: true, edit: false, delete: false },
+    inbox:        { read: true, write: true },
+    reports:      { read: false },
+    marketing:    { read: false, write: false, edit: false },
+    lab:          { read: true, write: false, edit: false, delete: false },
+    staff:        { read: false, write: false, edit: false, delete: false },
+    settings:     { read: false, write: false, edit: false },
+    consent:      { read: true, write: true, edit: false, delete: false },
+  },
+  assistant: {
+    dashboard:    { read: true },
+    appointments: { read: true, write: true, edit: true, delete: false },
+    patients:     { read: true, write: true, edit: true, delete: false },
+    finance:      { read: false, write: false, edit: false, delete: false },
+    inventory:    { read: true, write: true, edit: true, delete: false },
+    vendors:      { read: true, write: false, edit: false, delete: false },
+    inbox:        { read: true, write: true },
+    reports:      { read: false },
+    marketing:    { read: false, write: false, edit: false },
+    lab:          { read: true, write: true, edit: true, delete: false },
+    staff:        { read: false, write: false, edit: false, delete: false },
+    settings:     { read: false, write: false, edit: false },
+    consent:      { read: true, write: true, edit: false, delete: false },
+  },
+};
+
+// The other clinical roles work identically day to day — what separates an
+// associate from an in-house doctor is how they are paid, not what they may
+// click — so they share the dentist preset rather than each carrying a
+// near-identical copy that will quietly drift. Mirrors
+// backend/domains/auth/role_presets.py, which does the same thing.
+['in_house_doctor', 'associate', 'consultant'].forEach((role) => {
+  if (!ROLE_PRESETS[role]) ROLE_PRESETS[role] = ROLE_PRESETS.doctor;
+});
+
+/** The least access of any preset — the safe direction for an unknown role. */
+export const presetFor = (role) => ROLE_PRESETS[role] || ROLE_PRESETS.receptionist;

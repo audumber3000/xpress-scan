@@ -12,7 +12,7 @@ import TableToolbar from "../components/common/TableToolbar";
 import { startOfWeek, endOfWeek, addWeeks, subWeeks, format, eachDayOfInterval } from "date-fns";
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { notify } from '../utils/notify';
 
 const Attendance = () => {
   const { setTitle } = useHeader();
@@ -133,11 +133,11 @@ const Attendance = () => {
         status,
         reason: reason || null,
       });
-      toast.success('Attendance marked');
+      notify.done('Attendance marked');
       setMarkDrawer({ open: false, employee: null, date: null });
       fetchAttendanceData();
     } catch (err) {
-      toast.error('Failed to mark attendance');
+      notify.problem('Failed to mark attendance');
     } finally {
       setSavingMark(false);
     }

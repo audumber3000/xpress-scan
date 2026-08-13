@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { toast } from "react-toastify";
+import { notify } from '../../utils/notify';
 import { api } from "../../utils/api";
 import InvoiceLineItemForm from "./InvoiceLineItemForm";
 import { getCurrencySymbol } from "../../utils/currency";
@@ -177,13 +177,13 @@ const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdat
         offer_id: Number(offerId),
         subtotal: Number(invoice?.subtotal || 0),
       });
-      if (!res?.valid) { toast.error(res?.reason || "This offer can't be applied to this bill."); return; }
+      if (!res?.valid) { notify.problem(res?.reason || "This offer can't be applied to this bill."); return; }
       setLocalDiscount(res.discount);
       setLocalDiscountType(res.discount_type);
       onUpdateInvoice({ discount: res.discount, discount_type: res.discount_type, applied_offer_id: Number(offerId) });
-      toast.success('Offer applied');
+      notify.done('Offer applied');
     } catch (e) {
-      toast.error('Could not apply the offer');
+      notify.problem('Could not apply the offer');
     }
   };
 

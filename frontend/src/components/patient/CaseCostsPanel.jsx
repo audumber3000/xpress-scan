@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Plus, Trash2, FlaskConical, Stethoscope, Wallet, RefreshCw } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 import { api } from '../../utils/api';
 import { formatMoney, getCurrencySymbol } from '../../utils/currency';
 
@@ -50,7 +50,7 @@ const CaseCostsPanel = ({ open, onClose, casePaperId, patientId, patientName }) 
 
   const addFee = async () => {
     if (!form?.amount && !form?.percentage) {
-      toast.error('Enter an amount or a percentage');
+      notify.problem('Enter an amount or a percentage');
       return;
     }
     setSaving(true);
@@ -65,11 +65,11 @@ const CaseCostsPanel = ({ open, onClose, casePaperId, patientId, patientName }) 
         percentage: form.basis === 'percentage' ? Number(form.percentage) : null,
         amount: form.basis === 'fixed' ? Number(form.amount) : 0,
       });
-      toast.success('Consultant fee recorded');
+      notify.done('Consultant fee recorded');
       setForm(null);
       load();
     } catch (e) {
-      toast.error(e?.message || 'Could not save that');
+      notify.problem(e, 'Could not save that');
     } finally {
       setSaving(false);
     }
@@ -80,7 +80,7 @@ const CaseCostsPanel = ({ open, onClose, casePaperId, patientId, patientName }) 
       await api.delete(`/clinical/case-costs/${id}`);
       load();
     } catch (e) {
-      toast.error(e?.message || 'Could not remove that');
+      notify.problem(e, 'Could not remove that');
     }
   };
 

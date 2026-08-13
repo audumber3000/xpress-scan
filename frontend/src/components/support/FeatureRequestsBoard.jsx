@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { ChevronUp, Plus, Lightbulb, X, Pencil, Trash2 } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 import { api, getFriendlyErrorMessage } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import ValidatedInput from '../forms/ValidatedInput';
@@ -50,11 +50,11 @@ const SubmitModal = ({ existing, onClose, onSaved }) => {
       const saved = isEdit
         ? await api.put(`/feature-requests/${existing.id}`, payload)
         : await api.post('/feature-requests', payload);
-      toast.success(isEdit ? 'Feature request updated.' : 'Feature request submitted. Thank you!');
+      notify.done(isEdit ? 'Feature request updated.' : 'Feature request submitted. Thank you!');
       onSaved(saved, isEdit);
       onClose();
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err, 'Could not save your request. Please try again.'));
+      notify.problem(getFriendlyErrorMessage(err, 'Could not save your request. Please try again.'));
     } finally {
       setSubmitting(false);
     }
@@ -204,7 +204,7 @@ const FeatureRequestsBoard = () => {
       );
     } catch (err) {
       setRequests((prev) => prev.map((r) => (r.id === req.id ? req : r)));
-      toast.error('Could not register your vote. Please try again.');
+      notify.problem('Could not register your vote. Please try again.');
     }
   };
 
@@ -213,9 +213,9 @@ const FeatureRequestsBoard = () => {
     try {
       await api.delete(`/feature-requests/${req.id}`);
       setRequests((prev) => prev.filter((r) => r.id !== req.id));
-      toast.success('Feature request deleted.');
+      notify.done('Feature request deleted.');
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err, 'Could not delete this request. Please try again.'));
+      notify.problem(getFriendlyErrorMessage(err, 'Could not delete this request. Please try again.'));
     }
   };
 

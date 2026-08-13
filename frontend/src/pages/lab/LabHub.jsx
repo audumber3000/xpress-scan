@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useHeader } from '../../contexts/HeaderContext';
 import { api, getPermissionAwareErrorMessage } from '../../utils/api';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 import LabOrderDrawer from '../../components/patient/LabOrderDrawer';
 import Pagination from '../../components/Pagination';
 import FilterDropdown from '../../components/FilterDropdown';
@@ -81,7 +81,7 @@ const LabHub = () => {
             }
         } catch (err) {
             console.error("Failed to fetch lab data:", err);
-            toast.error(getPermissionAwareErrorMessage(
+            notify.problem(getPermissionAwareErrorMessage(
                 err,
                 "Failed to load data",
                 "You don't have permission to view this module."
@@ -95,13 +95,12 @@ const LabHub = () => {
         e.preventDefault();
         try {
             await api.post('/vendors', vendorForm);
-            toast.success("Lab vendor added successfully");
             setIsVendorDrawerOpen(false);
             setVendorForm({ name: '', phone: '', email: '', address: '', category: 'lab', is_active: true });
             fetchData();
         } catch (err) {
             console.error("Failed to add vendor:", err);
-            toast.error(getPermissionAwareErrorMessage(
+            notify.problem(getPermissionAwareErrorMessage(
                 err,
                 "Failed to add vendor",
                 "You don't have permission to add lab vendors."
@@ -125,10 +124,10 @@ const LabHub = () => {
         try {
             await api.put(`/clinical/lab-orders/${orderId}`, { status: newStatus });
             setOrders(prev => prev.map(o => (o.id === orderId ? { ...o, status: newStatus } : o)));
-            toast.success(`Status updated to "${newStatus}"`);
+            notify.done(`Status updated to "${newStatus}"`);
         } catch (err) {
             console.error("Failed to update status:", err);
-            toast.error(getPermissionAwareErrorMessage(
+            notify.problem(getPermissionAwareErrorMessage(
                 err,
                 "Failed to update order status",
                 "You don't have permission to update lab orders."

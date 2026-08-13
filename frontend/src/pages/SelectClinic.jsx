@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { toast } from "react-toastify";
+import { notify } from '../utils/notify';
 import GearLoader from "../components/GearLoader";
 
 const SelectClinic = () => {
@@ -16,11 +16,11 @@ const SelectClinic = () => {
     setIsSwitching(true);
     try {
       await switchClinic(clinicId);
-      toast.success("Clinic selected successfully!");
+      notify.done("Clinic selected successfully!");
       navigate("/dashboard");
     } catch (error) {
       console.error("Failed to switch clinic:", error);
-      toast.error("Failed to select clinic. Please try again.");
+      notify.problem("Failed to select clinic. Please try again.");
     } finally {
       setIsSwitching(false);
     }

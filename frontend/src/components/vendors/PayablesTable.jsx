@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { FlaskConical, Stethoscope, Check, Undo2, Wallet, RefreshCw } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 import { api } from '../../utils/api';
 import { formatMoney, formatCount } from '../../utils/currency';
 import { formatDate } from '../../utils/datetime';
@@ -46,11 +46,11 @@ const PayablesTable = ({ onSettled }) => {
     setBusyId(row.id);
     try {
       await api.post(`/clinical/case-costs/${row.id}/settle`, { payment_method: 'Cash' });
-      toast.success(`Paid ${formatMoney(row.amount)} to ${row.vendor_name || 'vendor'}`);
+      notify.done(`Paid ${formatMoney(row.amount)} to ${row.vendor_name || 'vendor'}`);
       await load();
       onSettled?.();
     } catch (e) {
-      toast.error(e?.message || 'Could not record that payment');
+      notify.problem(e, 'Could not record that payment');
     } finally {
       setBusyId(null);
     }
@@ -60,11 +60,11 @@ const PayablesTable = ({ onSettled }) => {
     setBusyId(row.id);
     try {
       await api.post(`/clinical/case-costs/${row.id}/unsettle`);
-      toast.info('Payment undone, and its expense removed from Activity');
+      notify.done('Payment undone, and its expense removed from Activity');
       await load();
       onSettled?.();
     } catch (e) {
-      toast.error(e?.message || 'Could not undo that');
+      notify.problem(e, 'Could not undo that');
     } finally {
       setBusyId(null);
     }

@@ -3,11 +3,12 @@ import {
   Globe, ShieldOff, ShieldCheck, Trash2, RefreshCw, Loader2, Search, AlertTriangle,
 } from 'lucide-react';
 import { FaApple, FaWindows, FaAndroid, FaLinux } from 'react-icons/fa6';
-import { toast } from 'react-toastify';
+import { notify } from '../../../utils/notify';
 import { api } from '../../../utils/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import { formatDateTime } from '../../../utils/datetime';
 import EmptyState from '../../../components/common/EmptyState';
+import PageShell from '../../../components/common/PageShell';
 import { noData } from '../../../assets/illustrations';
 
 /**
@@ -23,6 +24,10 @@ import { noData } from '../../../assets/illustrations';
  * Both take effect at the NEXT sign-in — tokens are not device-bound, so a
  * session that is already open keeps working until its token expires. The UI
  * says so rather than implying an instant kick.
+ *
+ * Rendered as the Devices tab of Access & Activity. `embedded` drops the page
+ * chrome (scroll container, heading, Refresh) because the host supplies it;
+ * `reloadKey` is how that host's Refresh button reaches in here.
  */
 
 /**
@@ -43,7 +48,7 @@ const platformMark = (platform) =>
     Icon: Globe, label: 'Unknown', cls: 'bg-gray-100 text-gray-400',
   };
 
-const Devices = () => {
+const Devices = ({ embedded = false, reloadKey = 0 }) => {
   const { user } = useAuth();
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -57,14 +62,14 @@ const Devices = () => {
       const data = await api.get('/devices');
       setDevices(Array.isArray(data) ? data : []);
     } catch (e) {
-      toast.error('Could not load devices');
+      notify.problem('Could not load devices');
       setDevices([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, reloadKey]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -89,10 +94,10 @@ const Devices = () => {
     setBusyId(device.id);
     try {
       await api.put(`/devices/${device.id}`, body);
-      toast.success(successMsg);
+      notify.done(successMsg);
       await load();
     } catch (e) {
-      toast.error(e?.response?.data?.detail || e?.detail || 'Could not update this device');
+      notify.problem(e, 'Could not update this device');
     } finally {
       setBusyId(null);
     }
@@ -117,31 +122,33 @@ const Devices = () => {
     setBusyId(device.id);
     try {
       await api.delete(`/devices/${device.id}`);
-      toast.success('Device removed');
+      notify.done('Device removed');
       await load();
     } catch (e) {
-      toast.error(e?.response?.data?.detail || 'Could not remove this device');
+      notify.problem(e, 'Could not remove this device');
     } finally {
       setBusyId(null);
     }
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#f8fafc] overflow-y-auto custom-scrollbar p-6 lg:p-8 pb-10">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">Devices</h2>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Every device your team has signed in from. Block one to stop it being used.
-          </p>
+    <PageShell embedded={embedded}>
+      {!embedded && (
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Devices</h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Every device your team has signed in from. Block one to stop it being used.
+            </p>
+          </div>
+          <button
+            onClick={load}
+            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shrink-0"
+          >
+            <RefreshCw size={14} /> Refresh
+          </button>
         </div>
-        <button
-          onClick={load}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shrink-0"
-        >
-          <RefreshCw size={14} /> Refresh
-        </button>
-      </div>
+      )}
 
       <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 mb-5 flex items-start gap-2.5 max-w-3xl">
         <AlertTriangle size={16} className="text-blue-500 mt-0.5 shrink-0" />
@@ -301,7 +308,7 @@ const Devices = () => {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 };
 

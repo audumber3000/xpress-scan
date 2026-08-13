@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Download, Loader2, ChevronDown } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 
 const greeting = () => {
   const h = new Date().getHours();
@@ -54,7 +54,7 @@ const DashboardHeader = ({ ownerName, period, onPeriodChange }) => {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (e) {
-      toast.error(e?.message || 'Could not export. Please try again.');
+      notify.problem(e, 'Could not export. Please try again.');
     } finally {
       setExporting(false);
     }

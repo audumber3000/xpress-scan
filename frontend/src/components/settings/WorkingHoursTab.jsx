@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Loader2, CalendarOff, Info, Coffee, Copy } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 import { api } from '../../utils/api';
 
 /**
@@ -67,9 +67,9 @@ const WorkingHoursTab = ({ doctorId, doctorName }) => {
       });
       setBlocks(res.blocks || []);
       setConfigured(res.configured);
-      toast.success('Hours saved');
+      notify.done('Hours saved');
     } catch (e) {
-      toast.error(e?.detail || e?.message || 'Could not save those hours');
+      notify.problem(e, 'Could not save those hours');
       load();
     } finally {
       setSaving(false);
@@ -101,7 +101,7 @@ const WorkingHoursTab = ({ doctorId, doctorName }) => {
     const s = toMin(longest.start_time);
     const e = toMin(longest.end_time);
     if (e - s < 120) {
-      toast.error('That shift is too short to take a break out of');
+      notify.problem('That shift is too short to take a break out of');
       return;
     }
     // Default to an hour in the middle, snapped to the half hour, which is what
@@ -127,7 +127,7 @@ const WorkingHoursTab = ({ doctorId, doctorName }) => {
   const removeBlock = (idx) => save(blocks.filter((_, i) => i !== idx));
 
   const addTimeOff = async () => {
-    if (!newOff.start_date) { toast.error('Pick a first day'); return; }
+    if (!newOff.start_date) { notify.problem('Pick a first day'); return; }
     try {
       const res = await api.post('/scheduling/time-off', {
         doctor_id: doctorId,
@@ -142,15 +142,13 @@ const WorkingHoursTab = ({ doctorId, doctorName }) => {
         // Existing bookings are never moved or cancelled automatically. That is
         // the clinic's call, and a silent mass-cancel would be far worse than
         // a list of people to ring.
-        toast.warn(
-          `${hit.length} appointment${hit.length === 1 ? '' : 's'} already booked in that time. Nothing was cancelled, so ring those patients.`,
-          { autoClose: 9000 }
-        );
+        notify.problem(
+          `${hit.length} appointment${hit.length === 1 ? '' : 's'} already booked in that time. Nothing was cancelled, so ring those patients.`);
       } else {
-        toast.success('Time off saved');
+        notify.done('Time off saved');
       }
     } catch (e) {
-      toast.error(e?.detail || e?.message || 'Could not save that');
+      notify.problem(e, 'Could not save that');
     }
   };
 
@@ -159,7 +157,7 @@ const WorkingHoursTab = ({ doctorId, doctorName }) => {
       await api.delete(`/scheduling/time-off/${id}`);
       load();
     } catch (e) {
-      toast.error(e?.message || 'Could not remove that');
+      notify.problem(e, 'Could not remove that');
     }
   };
 

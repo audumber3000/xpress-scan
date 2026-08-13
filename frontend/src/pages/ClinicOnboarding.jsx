@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from '../contexts/AuthContext';
-import { toast } from 'react-toastify';
+import { notify } from '../utils/notify';
 import { api } from '../utils/api';
 import { detectCountry, detectCountryAsync, flagEmoji } from '../utils/detectCountry';
 import ValidatedInput from '../components/forms/ValidatedInput';
@@ -169,7 +169,7 @@ const ClinicOnboarding = () => {
       track(EVENTS.ONBOARDING_COMPLETED, { clinic_id: result.user?.clinic_id });
       navigate("/dashboard");
     } catch (error) {
-      toast.error(error.response?.data?.detail || error.message || "Onboarding failed.");
+      notify.problem(error, "Onboarding failed.");
     } finally {
       setLoading(false);
     }

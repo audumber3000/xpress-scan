@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Loader2, Layers, Sparkles, GripVertical, X } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 import { api } from '../../utils/api';
 import { DOSAGE_OPTIONS, DURATION_OPTIONS, INSTRUCTION_SUGGESTIONS, withCurrent } from '../../constants/prescription';
 
@@ -46,12 +46,12 @@ const MedicationGroupsTab = () => {
     setSaving(true);
     try {
       const res = await api.post('/medication-groups/install-starters');
-      toast.success(res.created?.length
+      notify.done(res.created?.length
         ? `Added ${res.created.length} sets to start from`
         : 'You already have all of them');
       load();
     } catch (e) {
-      toast.error(e?.detail || e?.message || 'Could not add those');
+      notify.problem(e, 'Could not add those');
     } finally {
       setSaving(false);
     }
@@ -63,9 +63,9 @@ const MedicationGroupsTab = () => {
   });
 
   const save = async () => {
-    if (!editing.name.trim()) { toast.error('Give the set a name'); return; }
+    if (!editing.name.trim()) { notify.problem('Give the set a name'); return; }
     const items = editing.items.filter((i) => (i.medicine_name || '').trim());
-    if (!items.length) { toast.error('A set needs at least one medicine'); return; }
+    if (!items.length) { notify.problem('A set needs at least one medicine'); return; }
 
     setSaving(true);
     try {
@@ -79,11 +79,10 @@ const MedicationGroupsTab = () => {
       };
       if (editing.id) await api.put(`/medication-groups/${editing.id}`, body);
       else await api.post('/medication-groups', body);
-      toast.success('Saved');
       setEditing(null);
       load();
     } catch (e) {
-      toast.error(e?.detail || e?.message || 'Could not save that set');
+      notify.problem(e, 'Could not save that set');
     } finally {
       setSaving(false);
     }
@@ -95,7 +94,7 @@ const MedicationGroupsTab = () => {
       await api.delete(`/medication-groups/${g.id}`);
       load();
     } catch (e) {
-      toast.error(e?.message || 'Could not remove that');
+      notify.problem(e, 'Could not remove that');
     }
   };
 

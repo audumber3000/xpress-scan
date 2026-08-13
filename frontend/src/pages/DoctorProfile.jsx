@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import GearLoader from "../components/GearLoader";
 import { api } from "../utils/api";
-import { toast } from 'react-toastify';
+import { notify } from '../utils/notify';
 import { BadgeCheck } from "lucide-react";
 import { generateAvatarUrl } from "../utils/avatar";
 
@@ -77,7 +77,7 @@ const DoctorProfile = () => {
   // ── Personal info ──────────────────────────────────────────────────────────
   const handleSaveProfile = async () => {
     if (!form.first_name.trim() || !form.last_name.trim()) {
-      toast.error("First and last name are required");
+      notify.problem("First and last name are required");
       return;
     }
     setSavingProfile(true);
@@ -87,11 +87,10 @@ const DoctorProfile = () => {
         last_name: form.last_name.trim(),
         phone: form.phone.trim() || null,
       });
-      toast.success("Profile updated");
       await fetchUserAndClinicData();
       refreshUser?.();
     } catch (e) {
-      toast.error(e?.message || "Failed to update profile");
+      notify.problem(e?.message || "Failed to update profile");
     } finally {
       setSavingProfile(false);
     }
@@ -102,11 +101,11 @@ const DoctorProfile = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
-      toast.error('Only PNG or JPG images are allowed');
+      notify.problem('Only PNG or JPG images are allowed');
       return;
     }
     if (file.size > 3 * 1024 * 1024) {
-      toast.error('Image must be under 3MB');
+      notify.problem('Image must be under 3MB');
       return;
     }
     const reader = new FileReader();
@@ -117,10 +116,9 @@ const DoctorProfile = () => {
       try {
         const res = await api.patch('/auth/me/avatar', { avatar_url: base64 });
         setAvatarPreview(res.avatar_url);
-        toast.success('Photo updated');
         refreshUser?.();
       } catch {
-        toast.error('Failed to update photo');
+        notify.problem('Failed to update photo');
       } finally {
         setAvatarUploading(false);
       }
@@ -133,10 +131,9 @@ const DoctorProfile = () => {
     try {
       await api.patch('/auth/me/avatar', { avatar_url: null });
       setAvatarPreview(null);
-      toast.success('Photo removed');
       refreshUser?.();
     } catch {
-      toast.error('Failed to remove photo');
+      notify.problem('Failed to remove photo');
     } finally {
       setAvatarUploading(false);
     }
@@ -147,11 +144,11 @@ const DoctorProfile = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
-      toast.error('Only PNG or JPG images are allowed');
+      notify.problem('Only PNG or JPG images are allowed');
       return;
     }
     if (file.size > 512 * 1024) {
-      toast.error('Signature image must be under 512KB');
+      notify.problem('Signature image must be under 512KB');
       return;
     }
     const reader = new FileReader();
@@ -161,9 +158,8 @@ const DoctorProfile = () => {
       setSignatureUploading(true);
       try {
         await api.patch('/auth/me/signature', { signature_url: base64 });
-        toast.success('Signature saved successfully');
       } catch {
-        toast.error('Failed to save signature');
+        notify.problem('Failed to save signature');
       } finally {
         setSignatureUploading(false);
       }
@@ -176,9 +172,8 @@ const DoctorProfile = () => {
     try {
       await api.patch('/auth/me/signature', { signature_url: null });
       setSignaturePreview(null);
-      toast.success('Signature removed');
     } catch {
-      toast.error('Failed to remove signature');
+      notify.problem('Failed to remove signature');
     } finally {
       setSignatureUploading(false);
     }
@@ -187,15 +182,15 @@ const DoctorProfile = () => {
   // ── Change password ────────────────────────────────────────────────────────
   const handleChangePassword = async () => {
     if (!pwForm.current_password || !pwForm.new_password) {
-      toast.error("Please fill in all password fields");
+      notify.problem("Please fill in all password fields");
       return;
     }
     if (pwForm.new_password.length < 8) {
-      toast.error("New password must be at least 8 characters");
+      notify.problem("New password must be at least 8 characters");
       return;
     }
     if (pwForm.new_password !== pwForm.confirm) {
-      toast.error("New passwords do not match");
+      notify.problem("New passwords do not match");
       return;
     }
     setChangingPw(true);
@@ -204,10 +199,10 @@ const DoctorProfile = () => {
         current_password: pwForm.current_password,
         new_password: pwForm.new_password,
       });
-      toast.success("Password changed successfully");
+      notify.done("Password changed successfully");
       setPwForm({ current_password: "", new_password: "", confirm: "" });
     } catch (e) {
-      toast.error(e?.message || "Failed to change password");
+      notify.problem(e?.message || "Failed to change password");
     } finally {
       setChangingPw(false);
     }

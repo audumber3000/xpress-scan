@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useHeader } from '../contexts/HeaderContext';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../utils/api';
-import { toast } from 'react-toastify';
+import { notify } from '../utils/notify';
 import { ChevronLeft } from 'lucide-react';
 import GearLoader from '../components/GearLoader';
 
@@ -45,7 +45,7 @@ const MessageTemplates = () => {
       setMessageTemplates(data);
     } catch (error) {
       console.error('Error fetching templates:', error);
-      toast.error('Failed to load templates');
+      notify.problem('Failed to load templates');
     } finally {
       setLoadingTemplates(false);
     }
@@ -69,11 +69,9 @@ const MessageTemplates = () => {
       if (editingTemplate) {
         // Update existing template
         await api.put(`/message-templates/${editingTemplate.id}`, templateFormData);
-        toast.success('Template updated successfully');
       } else {
         // Create new template
         await api.post('/message-templates', templateFormData);
-        toast.success('Template created successfully');
       }
       setShowEditModal(false);
       setEditingTemplate(null);
@@ -81,7 +79,7 @@ const MessageTemplates = () => {
       fetchMessageTemplates();
     } catch (error) {
       console.error('Error saving template:', error);
-      toast.error(editingTemplate ? 'Failed to update template' : 'Failed to create template');
+      notify.problem(editingTemplate ? 'Failed to update template' : 'Failed to create template');
     } finally {
       setSavingTemplate(false);
     }

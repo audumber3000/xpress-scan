@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import Papa from "papaparse";
 import { X, UploadCloud, Download, CheckCircle2, AlertCircle, AlertTriangle } from "lucide-react";
-import { toast } from "react-toastify";
+import { notify } from '../../../utils/notify';
 import { api } from "../../../utils/api";
 import { getCurrencySymbol } from "../../../utils/currency";
 
@@ -114,12 +114,12 @@ const InvoiceSheetImporter = ({ onClose, onDone }) => {
       complete: ({ data }) => {
         const parsed = data.map(toRow).filter((r) => r.patient_name || r.total > 0);
         if (!parsed.length) {
-          toast.error("No usable rows found. Check the column names against the template.");
+          notify.problem("No usable rows found. Check the column names against the template.");
           return;
         }
         setRows(parsed);
       },
-      error: () => toast.error("Could not read that file"),
+      error: () => notify.problem("Could not read that file"),
     });
   };
 
@@ -149,19 +149,19 @@ const InvoiceSheetImporter = ({ onClose, onDone }) => {
       // Same shape as the Standard tab: one success toast, warnings for anything
       // that needs following up, then reset and close. An in-modal result screen
       // would be the only place in this flow that behaves differently.
-      toast.success(
+      notify.done(
         `Imported ${res.invoices_created} invoices for ${res.patients_created} patients`
       );
       if (res.skipped > 0) {
-        toast.info(`${res.skipped} rows were already imported earlier and were skipped.`);
+        notify.done(`${res.skipped} rows were already imported earlier and were skipped.`);
       }
       if (res.patients_created > 0) {
-        toast.warning(
+        notify.problem(
           `${res.patients_created} patients were saved with the placeholder number 0000000000. Add real numbers before sending reminders.`
         );
       }
       if (res.errors?.length > 0) {
-        toast.warning(`${res.errors.length} rows could not be saved. ${res.errors[0].message}`);
+        notify.problem(`${res.errors.length} rows could not be saved. ${res.errors[0].message}`);
       }
 
       setRows([]);
@@ -169,7 +169,7 @@ const InvoiceSheetImporter = ({ onClose, onDone }) => {
       onDone?.();
       onClose();
     } catch (e) {
-      toast.error(e?.message || "Import failed. Please try again.");
+      notify.problem(e?.message || "Import failed. Please try again.");
     } finally {
       setBusy(false);
     }

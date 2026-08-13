@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 import { getCurrencySymbol } from '../../utils/currency';
 import GearLoader from '../GearLoader';
 import { groupedOptions } from '../../constants/expenseCategories';
@@ -67,7 +67,7 @@ const ExpenseModal = ({ expenseId, onClose, onSave }) => {
       }
     } catch (error) {
       console.error("Error fetching expense:", error);
-      toast.error("Failed to load expense details");
+      notify.problem("Failed to load expense details");
       onClose();
     } finally {
       setLoading(false);
@@ -88,7 +88,7 @@ const ExpenseModal = ({ expenseId, onClose, onSave }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.amount || isNaN(formData.amount)) {
-      toast.error("Please enter a valid amount");
+      notify.problem("Please enter a valid amount");
       return;
     }
 
@@ -118,20 +118,20 @@ const ExpenseModal = ({ expenseId, onClose, onSave }) => {
           const fileData = new FormData();
           fileData.append('file', billFile);
           await api.post(`/ledger/expenses/${expenseResultId}/bill`, fileData);
-          toast.success(`Expense ${isCreating ? 'recorded' : 'updated'} and bill uploaded!`);
+          notify.done(`Expense ${isCreating ? 'recorded' : 'updated'} and bill uploaded!`);
         } catch (uploadError) {
           console.error("Error uploading bill:", uploadError);
-          toast.warning(`Expense ${isCreating ? 'recorded' : 'updated'}, but failed to upload bill (R2 missing)`);
+          notify.problem(`Expense ${isCreating ? 'recorded' : 'updated'}, but failed to upload bill (R2 missing)`);
         }
       } else {
-        toast.success(`Expense ${isCreating ? 'recorded' : 'updated'} successfully!`);
+        notify.done(`Expense ${isCreating ? 'recorded' : 'updated'} successfully!`);
       }
 
       onSave();
       onClose();
     } catch (error) {
       console.error("Error saving expense:", error);
-      toast.error("Failed to save expense details");
+      notify.problem("Failed to save expense details");
     } finally {
       setSaving(false);
     }
@@ -142,12 +142,11 @@ const ExpenseModal = ({ expenseId, onClose, onSave }) => {
     try {
       setDeleting(true);
       await api.delete(`/ledger/expenses/${expenseId}`);
-      toast.success("Expense deleted successfully");
       onSave();
       onClose();
     } catch (error) {
       console.error("Delete error:", error);
-      toast.error("Failed to delete expense");
+      notify.problem("Failed to delete expense");
     } finally {
       setDeleting(false);
     }

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Trash2 } from "lucide-react";
-import { api } from "../../utils/api";
-import { toast } from "react-toastify";
+import { api, getFriendlyErrorMessage } from "../../utils/api";
+import { notify } from "../../utils/notify";
+import InlineFeedback from "../common/InlineFeedback";
 import { getCurrencySymbol } from "../../utils/currency";
 import { useAuth } from "../../contexts/AuthContext";
 import { isManualWhatsApp, shareInvoiceManually } from "../../utils/whatsapp";
@@ -14,6 +15,7 @@ import InvoiceDiscounts from "./InvoiceDiscounts";
 import InvoiceActions from "./InvoiceActions";
 import MarkAsPaidModal from "./MarkAsPaidModal";
 import ConfirmDialog from "../common/ConfirmDialog";
+import MasterPasswordModal from "../common/MasterPasswordModal";
 import { generatePatientPersona, generateInitialsAvatar } from "../../utils/avatar";
 
 const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
@@ -44,6 +46,12 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
   const [visits, setVisits] = useState([]);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState("");
   const [isSearching, setIsSearching] = useState(false);
+  // Why the last action did not work, shown above the footer buttons that
+  // triggered it. Tier 2 of the feedback rule (utils/notify.js): the user is
+  // inside this drawer, so the reason belongs inside it too, not in a card
+  // over the page behind. Cleared on the next attempt.
+  const [actionError, setActionError] = useState('');
+  const fail = (error, fallback) => setActionError(getFriendlyErrorMessage(error, fallback));
 
   const currentInvoiceId = invoice?.id || invoiceId;
   const creationStartedRef = useRef(false);
@@ -108,12 +116,9 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
           notes: prefill.notes || "",
           lineItems: prefill.lineItems || []
         })
-          .then(() => {
-            toast.success("Draft invoice created");
-          })
           .catch((error) => {
             console.error("Error creating prefilled draft invoice:", error);
-            toast.error("Failed to create draft invoice");
+            notify.problem(error, "Could not start that invoice");
             onClose();
           })
           .finally(() => {
@@ -165,13 +170,13 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
 
   const handleFinalize = async () => {
     try {
+      setActionError("");
       setFinalizing(true);
       const updated = await api.post(`/invoices/${currentInvoiceId}/finalize`);
       setInvoice(updated);
-      toast.success("Final invoice generated — ready to send or mark as paid");
     } catch (error) {
       console.error("Error finalizing invoice:", error);
-      toast.error(error?.response?.data?.detail || "Failed to finalize invoice");
+      fail(error, "Could not generate the final invoice");
     } finally {
       setFinalizing(false);
     }
@@ -186,8 +191,9 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
         setSelectedAppointmentId(data[0].id.toString());
       }
     } catch (error) {
+      // Silent on purpose. This only fills the "link a visit" dropdown, which is
+      // optional — an empty list is a usable state, not a failure to report.
       console.error("Error fetching patient visits:", error);
-      toast.error("Failed to load patient visits");
     }
   };
 
@@ -204,10 +210,11 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
 
   const handleCreateNewInvoice = async () => {
     if (!selectedPatientId) {
-      toast.error("Please select a patient");
+      setActionError("Choose a patient first.");
       return;
     }
     try {
+      setActionError("");
       setSaving(true);
       
       await createDraftInvoice({
@@ -217,10 +224,9 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
         lineItems: []
       });
 
-      toast.success("Draft invoice created");
     } catch (error) {
       console.error("Error creating invoice:", error);
-      toast.error("Failed to create draft invoice");
+      fail(error, "Could not create the draft invoice");
     } finally {
       setSaving(false);
     }
@@ -233,7 +239,7 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
       setInvoice(data);
     } catch (error) {
       console.error("Error fetching invoice:", error);
-      toast.error("Failed to load invoice");
+      notify.problem(error, "Could not open that invoice");
       onClose();
     } finally {
       setLoading(false);
@@ -242,13 +248,13 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
 
   const handleAddLineItem = async (lineItemData) => {
     try {
+      setActionError("");
       setSaving(true);
       const updated = await api.post(`/invoices/${currentInvoiceId}/line-items`, lineItemData);
       setInvoice(updated);
-      toast.success("Line item added successfully");
     } catch (error) {
       console.error("Error adding line item:", error);
-      toast.error("Failed to add line item");
+      fail(error, "Could not add that item");
     } finally {
       setSaving(false);
     }
@@ -265,7 +271,6 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
     try {
       const updated = await api.post(`/invoices/${currentInvoiceId}/discounts`, payload);
       setInvoice(updated);
-      toast.success("Discount applied");
       if (onSave) onSave();
     } catch (error) {
       console.error("Error applying discount:", error);
@@ -277,23 +282,22 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
     try {
       const updated = await api.delete(`/invoices/${currentInvoiceId}/discounts/${discountId}`);
       setInvoice(updated);
-      toast.success("Discount removed");
       if (onSave) onSave();
     } catch (error) {
       console.error("Error removing discount:", error);
-      toast.error(error?.response?.data?.detail || "Failed to remove discount");
+      fail(error, "Could not remove that discount");
     }
   };
 
   const handleEditLineItem = async (lineItemId, lineItemData) => {
     try {
+      setActionError("");
       setSaving(true);
       const updated = await api.put(`/invoices/${currentInvoiceId}/line-items/${lineItemId}`, lineItemData);
       setInvoice(updated);
-      toast.success("Line item updated successfully");
     } catch (error) {
       console.error("Error updating line item:", error);
-      toast.error("Failed to update line item");
+      fail(error, "Could not update that item");
     } finally {
       setSaving(false);
     }
@@ -313,6 +317,7 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
 
   const performDeleteLineItem = async (lineItemId, restock) => {
     try {
+      setActionError("");
       setSaving(true);
       const updated = await api.delete(
         `/invoices/${currentInvoiceId}/line-items/${lineItemId}`,
@@ -320,16 +325,16 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
       );
       setDeleteLinePrompt(null);
       if (updated?.deleted) {
-        toast.success("Invoice deleted — no items remaining");
+        notify.done("That was the last item, so the invoice went too");
         if (onSave) onSave();
         onClose();
         return;
       }
       setInvoice(updated);
-      toast.success(restock ? "Removed and stock restored" : "Line item deleted");
+      if (restock) notify.done("Removed, and the stock went back on the shelf");
     } catch (error) {
       console.error("Error deleting line item:", error);
-      toast.error("Failed to delete line item");
+      fail(error, "Could not delete that item");
     } finally {
       setSaving(false);
     }
@@ -337,19 +342,16 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
 
   const handleMarkAsPaid = async (paymentData) => {
     try {
+      setActionError("");
       setSaving(true);
       const updated = await api.post(`/invoices/${currentInvoiceId}/mark-as-paid`, paymentData);
       setInvoice(updated);
-      if (updated.status === 'partially_paid') {
-        const due = Number(updated.due_amount || 0);
-        toast.success(`Partial payment recorded. ${getCurrencySymbol()}${due.toLocaleString('en-US', { minimumFractionDigits: 2 })} still due.`);
-      } else {
-        toast.success("Invoice marked as paid successfully");
-        if (onSave) onSave();
-      }
+      // No message either way: Paid and Balance due are recalculated on screen
+      // the moment this returns, which says it better than a toast could.
+      if (updated.status !== 'partially_paid' && onSave) onSave();
     } catch (error) {
       console.error("Error marking invoice as paid:", error);
-      toast.error("Failed to mark invoice as paid");
+      fail(error, "Could not record that payment");
       throw error;
     } finally {
       setSaving(false);
@@ -358,13 +360,13 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
 
   const handleUpdateInvoiceStats = async (updateData) => {
     try {
+      setActionError("");
       setSaving(true);
       const updated = await api.put(`/invoices/${currentInvoiceId}`, updateData);
       setInvoice(updated);
-      toast.success("Invoice updated successfully");
     } catch (error) {
       console.error("Error updating invoice:", error);
-      toast.error("Failed to update invoice");
+      fail(error, "Could not save those changes");
     } finally {
       setSaving(false);
     }
@@ -372,6 +374,7 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
 
   const handleDownloadPDF = async () => {
     try {
+      setActionError("");
       setDownloadingPDF(true);
       const baseURL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
       const apiPath = '/api/v1';
@@ -394,27 +397,32 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      toast.success("PDF downloaded successfully");
     } catch (error) {
       console.error("Error downloading PDF:", error);
-      toast.error("Failed to download PDF");
+      fail(error, "Could not build the PDF");
     } finally {
       setDownloadingPDF(false);
     }
   };
 
-  const handleDeleteInvoice = async () => {
+  // `masterToken` is present only for a bill that has money against it — the
+  // master password prompt supplies it. Unpaid bills pass undefined and the
+  // header is simply omitted.
+  const handleDeleteInvoice = async (masterToken) => {
     try {
+      setActionError("");
       setDeleting(true);
-      await api.delete(`/invoices/${currentInvoiceId}`);
-      toast.success("Invoice deleted successfully");
+      await api.delete(
+        `/invoices/${currentInvoiceId}`,
+        masterToken ? { headers: { 'X-Master-Token': masterToken } } : {}
+      );
       setShowDeleteConfirm(false);
       if (onSave) onSave();
       onClose();
     } catch (error) {
       console.error("Delete error:", error);
-      // Surface the backend's reason (e.g. a paid invoice can't be deleted).
-      toast.error(error?.response?.data?.detail || error?.message || "Failed to delete invoice");
+      if (masterToken) throw error;  // shown inside the prompt that is still open
+      fail(error, "Could not delete this invoice");
     } finally {
       setDeleting(false);
     }
@@ -422,7 +430,7 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
 
   const handleSendWhatsApp = async () => {
     if (!invoice?.patient_phone) {
-      toast.error("Patient phone number is required");
+      setActionError("This patient has no phone number on file.");
       return;
     }
 
@@ -430,13 +438,14 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
     // prefilled message, so the clinic sends it from their own number.
     if (isManualWhatsApp(user)) {
       try {
-        setSendingWhatsApp(true);
+        setActionError("");
+      setSendingWhatsApp(true);
         const opened = await shareInvoiceManually(invoice, user);
-        if (opened) toast.success('Invoice PDF downloaded — attach it in the WhatsApp chat that opened');
-        else toast.error('Could not open WhatsApp — check the patient phone number');
+        if (opened) notify.sent('Invoice downloaded. Attach it in the WhatsApp chat that just opened');
+        else setActionError("Could not open WhatsApp. Check the patient phone number.");
       } catch (error) {
         console.error('Manual WhatsApp failed:', error);
-        toast.error('Failed to prepare the WhatsApp message');
+        fail(error, "Could not prepare the WhatsApp message");
       } finally {
         setSendingWhatsApp(false);
       }
@@ -445,29 +454,32 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
 
     // Automated mode: backend sends via the MolarPlus/Nexus number.
     try {
+      setActionError("");
       setSendingWhatsApp(true);
       const response = await api.post(`/invoices/${currentInvoiceId}/send-whatsapp`);
 
       if (response.success) {
-        toast.success(`Invoice sent successfully to ${invoice.patient_phone}`);
+        notify.sent(`Invoice sent to ${invoice.patient_phone}`);
       } else {
-        toast.error(response.message || "Failed to send invoice via WhatsApp");
+        setActionError(response.message || "Could not send the invoice on WhatsApp");
       }
     } catch (error) {
       console.error("Error sending invoice via WhatsApp:", error);
-      const errorMessage = error.response?.data?.detail || error.message || "Failed to send invoice via WhatsApp";
-      toast.error(errorMessage);
+      fail(error, "Could not send the invoice on WhatsApp");
     } finally {
       setSendingWhatsApp(false);
     }
   };
 
   const canEdit = invoice?.status === 'draft';
-  // An invoice can be deleted only while it carries no money: no payments and a
-  // non-paid status. Paid / partially-paid invoices are kept (the backend also
-  // refuses to delete them). Managing money on those happens per-payment instead.
+  // Any invoice can be deleted now. One that carries money is the case a clinic
+  // used to be stuck with, so it asks for the master password instead of
+  // refusing outright; one that carries none has nothing to protect and deletes
+  // on a plain confirm.
   const PAID_STATUSES = ['partially_paid', 'paid_verified', 'paid_unverified'];
-  const canDelete = !!invoice && !PAID_STATUSES.includes(invoice.status) && Number(invoice.paid_amount || 0) === 0;
+  const canDelete = !!invoice;
+  const carriesMoney = !!invoice
+    && (PAID_STATUSES.includes(invoice.status) || Number(invoice.paid_amount || 0) > 0);
   const isLoadingDrawer = loading || autoCreatingFromPrefill;
 
   // The server already returned exactly this page, searched across the whole
@@ -630,7 +642,7 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
                 </button>
               </div>
             ) : drawerTab === 'payments' ? (
-              <InvoicePayments invoice={invoice} />
+              <InvoicePayments invoice={invoice} onChanged={setInvoice} />
             ) : (
               <>
                 <InvoiceHeader invoice={invoice} />
@@ -670,6 +682,11 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
           {/* Footer */}
           {!isCreating && invoice && (
             <div className="p-6 border-t border-gray-200 bg-gray-50">
+              {/* Sits directly above the buttons that caused it, so the reason
+                  and the retry are the same glance. */}
+              {actionError && (
+                <InlineFeedback tone="error" className="mb-3">{actionError}</InlineFeedback>
+              )}
               <InvoiceActions
                 invoice={invoice}
                 onFinalize={handleFinalize}
@@ -716,8 +733,29 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
         ]}
       />
 
+      {/* Delete a bill with money against it: the master password is the confirm.
+          Writing off collected cash is not something a plain "are you sure"
+          should be able to do. */}
+      <MasterPasswordModal
+        open={showDeleteConfirm && carriesMoney}
+        title="Delete this paid bill?"
+        message={
+          <>
+            Invoice <span className="font-semibold text-gray-700">{invoice?.invoice_number || `#${currentInvoiceId}`}</span> has{" "}
+            <span className="font-semibold text-gray-700">
+              {getCurrencySymbol()}{Number(invoice?.paid_amount || 0).toLocaleString('en-IN')}
+            </span>{" "}
+            collected against it. Deleting the bill removes those payments and their receipts from your books.
+            This <span className="font-semibold">cannot be undone</span>.
+          </>
+        }
+        confirmLabel="Delete bill"
+        onCancel={() => setShowDeleteConfirm(false)}
+        onConfirm={handleDeleteInvoice}
+      />
+
       {/* Delete invoice — on-brand confirm (soft backdrop, matches the app's dialogs). */}
-      {showDeleteConfirm && (
+      {showDeleteConfirm && !carriesMoney && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
           onClick={() => !deleting && setShowDeleteConfirm(false)}
@@ -768,7 +806,7 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
               </button>
               <button
                 type="button"
-                onClick={handleDeleteInvoice}
+                onClick={() => handleDeleteInvoice()}
                 disabled={deleting}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
               >

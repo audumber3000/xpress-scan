@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../../utils/api';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
+import ConfirmDialog from '../../components/common/ConfirmDialog';
 import {
   Smile, Meh, Frown, Search, MapPin,
   RefreshCw, Link2, Link2Off, Star, TrendingUp, Users, Award
@@ -184,48 +185,41 @@ const GoogleReviews = () => {
     setLinking(true);
     try {
       const res = await api.post(`/google-places/link?place_id=${encodeURIComponent(selectedPlace.place_id)}`);
-      toast.success(`Linked to "${res.place_name}" — ${res.new_reviews} review(s) synced`);
+      notify.done(`Linked to "${res.place_name}" — ${res.new_reviews} review(s) synced`);
       setPlaceInfo({ ...res, linked: true });
       setState('LINKED');
       setQuery('');
       setSelectedPlace(null);
       fetchReviews();
     } catch (e) {
-      toast.error(e?.response?.data?.detail || 'Failed to link place');
+      notify.problem(e, 'Failed to link place');
     } finally {
       setLinking(false);
     }
   };
 
   // ── Unlink ────────────────────────────────────────────────────────
-  const handleUnlink = async () => {
-    toast.info(
-      <div className="flex flex-col gap-2">
-        <span className="font-semibold text-sm">Unlink clinic from Google Places?</span>
-        <span className="text-xs text-gray-600">Accumulated reviews will be kept.</span>
-        <div className="flex gap-2 mt-1">
-          <button
-            className="px-3 py-1 bg-red-600 text-white text-xs font-bold rounded hover:bg-red-700 transition"
-            onClick={async () => {
-              toast.dismiss('unlink-confirm');
-              await api.delete('/google-places/unlink');
-              setPlaceInfo(null);
-              setReviews([]);
-              setSummary(null);
-              setCompetitors([]);
-              setState('NOT_LINKED');
-              toast.success('Unlinked successfully');
-            }}
-          >Yes, Unlink</button>
-          <button
-            className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-bold rounded hover:bg-gray-200 transition"
-            onClick={() => toast.dismiss('unlink-confirm')}
-          >Cancel</button>
-        </div>
-      </div>,
-      { toastId: 'unlink-confirm', autoClose: false, closeOnClick: false }
-    );
+  // This was a toast with buttons inside it: a confirmation that could time
+  // out, be dragged away, or be dismissed by clicking anywhere. A question that
+  // deletes something has to wait for an answer, which is what ConfirmDialog is
+  // for and what the rest of the app already uses.
+  const [confirmUnlink, setConfirmUnlink] = useState(false);
+
+  const doUnlink = async () => {
+    setConfirmUnlink(false);
+    try {
+      await api.delete('/google-places/unlink');
+      setPlaceInfo(null);
+      setReviews([]);
+      setSummary(null);
+      setCompetitors([]);
+      setState('NOT_LINKED');
+    } catch (e) {
+      notify.problem(e, 'Could not unlink this clinic from Google');
+    }
   };
+
+  const handleUnlink = () => setConfirmUnlink(true);
 
 
   // ── Fetch reviews ─────────────────────────────────────────────────
@@ -236,7 +230,7 @@ const GoogleReviews = () => {
       setReviews(res.reviews || []);
       setSummary(res.summary);
     } catch {
-      toast.error('Failed to load reviews');
+      notify.problem('Failed to load reviews');
     } finally {
       setLoadingReviews(false);
     }
@@ -247,14 +241,14 @@ const GoogleReviews = () => {
     setSyncing(true);
     try {
       const res = await api.post('/google-places/sync');
-      toast.success(res.new_reviews > 0
+      notify.done(res.new_reviews > 0
         ? `${res.new_reviews} new review(s) discovered!`
         : 'Already up to date');
       const statusRes = await api.get('/google-places/status');
       setPlaceInfo(statusRes);
       fetchReviews();
     } catch (e) {
-      toast.error(e?.response?.data?.detail || 'Sync failed');
+      notify.problem(e, 'Sync failed');
     } finally {
       setSyncing(false);
     }
@@ -268,7 +262,7 @@ const GoogleReviews = () => {
       setCompetitors(res.competitors || []);
       setCompSyncedAt(res.synced_at);
     } catch (e) {
-      toast.error(e?.response?.data?.detail || 'Failed to load competitors');
+      notify.problem(e, 'Failed to load competitors');
     } finally {
       setLoadingComp(false);
     }
@@ -805,6 +799,16 @@ const GoogleReviews = () => {
           </div>
         </div>
       )}
+
+      {/* Waits for an answer, unlike the toast this replaced. */}
+      <ConfirmDialog
+        open={confirmUnlink}
+        onClose={() => setConfirmUnlink(false)}
+        tone="danger"
+        title="Unlink this clinic from Google?"
+        message="The reviews already collected are kept. You can link the place again later."
+        actions={[{ label: 'Unlink', variant: 'danger', onClick: doUnlink }]}
+      />
     </div>
   );
 };

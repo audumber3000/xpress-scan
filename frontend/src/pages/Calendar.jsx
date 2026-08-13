@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { SkeletonBox } from "../components/Skeleton";
-import { api } from "../utils/api";
+import { api, getFriendlyErrorMessage } from "../utils/api";
+import { notify } from "../utils/notify";
 import { useAuth } from "../contexts/AuthContext";
-import { toast } from "react-toastify";
 import {
   ChevronLeft,
   ChevronRight,
@@ -296,7 +296,7 @@ const Calendar = () => {
     const conflict = checkTimeConflict(dateStr, newStartTime, newEndTime, targetDoctorId, appointmentId);
     if (conflict.hasConflict) {
       const c = conflict.conflictingAppointment;
-      toast.error(
+      notify.problem(
         <div>
           <div className="font-semibold">Cannot move here</div>
           <div className="text-sm mt-1">
@@ -342,8 +342,7 @@ const Calendar = () => {
       } : a)));
     } catch (error) {
       console.error('Failed to reassign appointment:', error);
-      const msg = error.response?.data?.detail || error.message || 'Unknown error';
-      toast.error(`Failed to update appointment: ${msg}`);
+      notify.reverted(getFriendlyErrorMessage(error, 'Could not move that appointment, so it went back'));
       // Revert the optimistic change.
       setAppointments(prev => prev.map(a => (a.id === appointmentId ? previous : a)));
     }
@@ -504,20 +503,19 @@ const Calendar = () => {
         start_time: apt.startTime,
         appointment_date: new Date(apt.date).toISOString().split('T')[0],
       });
-      toast.success(`Now ${duration} minutes`);
     } catch (err) {
       // Revert. The server enforces availability and clashes, so a refusal
       // here is a real answer rather than a glitch, and the card should snap
       // back to what is actually stored.
       setAppointments(prev => prev.map(a => (a.id === appointmentId ? previous : a)));
-      toast.error(err?.detail || err?.message || 'Could not change that length');
+      notify.reverted(getFriendlyErrorMessage(err, 'Could not change that length, so it went back'));
     }
   };
 
   // ── A click or drag on empty grid ─────────────────────────────────────────
   const handleCreateFromGrid = (seed) => {
     if (seed.available === false) {
-      toast.info('That doctor is not working then. Pick another time, or set their hours in Staff.');
+      notify.reverted('That doctor is not working then. Pick another time, or set their hours in Staff.');
       return;
     }
     setBookingSeed(seed);
@@ -528,17 +526,17 @@ const Calendar = () => {
     if (result?.kind === 'series') {
       const made = result.created?.length || 0;
       const missed = result.skipped || [];
-      toast.success(`${made} visit${made === 1 ? '' : 's'} booked`);
+      notify.done(`${made} visit${made === 1 ? '' : 's'} booked`);
       if (missed.length) {
-        toast.warn(
-          `${missed.length} skipped: ${missed.map(m => `${m.date} (${m.reason})`).join('; ')}`,
-          { autoClose: 9000 }
+        notify.problem(
+          `${missed.length} skipped: ${missed.map(m => `${m.date} (${m.reason})`).join('; ')}`
         );
       }
     } else {
-      toast.success(result?.createdPatient
-        ? 'Booked, and a patient file was created'
-        : 'Appointment booked');
+      // The booking itself lands on the calendar behind this. Only the extra
+      // consequence — a new patient file — is worth saying, because that
+      // happened somewhere the user is not looking.
+      if (result?.createdPatient) notify.done('Booked, and a patient file was created');
     }
   };
 
@@ -553,13 +551,9 @@ const Calendar = () => {
       setSelectedAppointment(prev =>
         prev && prev.id === appointmentId ? { ...prev, status } : prev);
       loadNeedsOutcome();
-      toast.success({
-        completed: 'Marked as seen',
-        no_show: 'Marked as a no-show',
-        cancelled: 'Cancelled',
-      }[status] || 'Saved');
+      // The card's own status chip changes as this returns.
     } catch (err) {
-      toast.error(err?.detail || err?.message || 'Could not record that');
+      notify.problem(err, 'Could not record that outcome');
     } finally {
       setOutcomeBusy(false);
       setCancelPrompt(null);
@@ -590,10 +584,9 @@ const Calendar = () => {
         gender: details.gender || undefined,
         village: details.village || undefined,
       });
-      toast.success('Details saved');
       setDetails(null);
     } catch (e) {
-      toast.error(e?.detail || e?.message || 'Could not save those details');
+      notify.problem(e, 'Could not save those details');
     } finally {
       setDetailsSaving(false);
     }
@@ -618,9 +611,9 @@ const Calendar = () => {
       const res = await api.post(`/appointments/${appointment.id}/start-visit`);
       setSelectedAppointment(null);
       navigate(`/patient-profile/${res.patient_id}?tab=case-papers&casePaper=${res.case_paper_id}`);
-      toast.success(res.created ? 'Visit started' : 'Opening the visit already started');
+      if (!res.created) notify.done('That visit was already started, so this opens it');
     } catch (err) {
-      toast.error(err?.detail || err?.message || 'Could not start the visit');
+      notify.problem(err, 'Could not start the visit');
     }
   };
 
@@ -968,7 +961,7 @@ const Calendar = () => {
     if (name === 'time' && value && newAppointment.date) {
       const timeValidation = isTimeWithinOperatingHours(newAppointment.date, value);
       if (!timeValidation.valid) {
-        toast.warning(`Outside clinic hours — ${timeValidation.message}`);
+        notify.problem(`Outside clinic hours — ${timeValidation.message}`);
         return;
       }
 
@@ -985,7 +978,7 @@ const Calendar = () => {
       const conflict = checkTimeConflict(newAppointment.date, startTime, endTime, newAppointment.doctor_id || null);
       if (conflict.hasConflict) {
         const c = conflict.conflictingAppointment;
-        toast.warning(
+        notify.problem(
           <div>
             <div className="font-semibold">Time conflict</div>
             <div className="text-sm mt-1">{c.patientName} is booked {c.startTime}–{c.endTime}.</div>
@@ -1176,16 +1169,16 @@ const Calendar = () => {
       appointmentTime = findNextAvailableSlot(newAppointment.date, durationHours);
 
       if (!appointmentTime) {
-        toast.error('No available time slots for this date. Please choose another date.');
+        notify.problem('No available time slots for this date. Please choose another date.');
         return;
       }
-      // Auto-assigning silently — user knows what they asked for; surface the chosen slot via info toast.
-      toast.info(`Auto-assigned to next available slot: ${appointmentTime}`);
+      // The chosen slot is written straight into the time field below, so the
+      // user can see what it picked without being told.
     } else {
       // Validate selected time is within operating hours
       const timeValidation = isTimeWithinOperatingHours(newAppointment.date, appointmentTime);
       if (!timeValidation.valid) {
-        toast.error(`Invalid time — ${timeValidation.message}`);
+        notify.problem(`Invalid time — ${timeValidation.message}`);
         return;
       }
     }
@@ -1205,7 +1198,7 @@ const Calendar = () => {
       const conflict = checkTimeConflict(newAppointment.date, startTime, endTime, newAppointment.doctor_id || null);
       if (conflict.hasConflict) {
         const c = conflict.conflictingAppointment;
-        toast.error(
+        notify.problem(
           <div>
             <div className="font-semibold">Time slot conflict</div>
             <div className="text-sm mt-1">
@@ -1220,7 +1213,7 @@ const Calendar = () => {
       const clinicId = clinicData?.id || user?.clinic_id;
       
       if (!clinicId) {
-        toast.error('Clinic info not available. Please refresh and try again.');
+        notify.problem('Clinic info not available. Please refresh and try again.');
         return;
       }
       
@@ -1277,11 +1270,10 @@ const Calendar = () => {
       });
     setShowAddForm(false);
     
-    toast.success('Appointment created');
   } catch (error) {
     console.error('Error creating appointment:', error);
-    const errorMessage = error.response?.data?.detail || error.message || 'Unknown error';
-    toast.error(`Failed to create appointment: ${errorMessage}`);
+    
+    notify.problem(error, 'Could not create that appointment');
   }
 };
 
@@ -1358,7 +1350,7 @@ const Calendar = () => {
       await handleFinalizeCheckIn();
     } catch (error) {
       console.error('❌ Error during duplicate check:', error);
-      toast.error('Failed to verify patient records. Please try again.');
+      notify.problem('Failed to verify patient records. Please try again.');
       setIsCheckingDuplicates(false);
     }
   };
@@ -1413,11 +1405,11 @@ const Calendar = () => {
       setShowCheckInModal(false);
       setShowDuplicateModal(false);
       setCheckingInAppointment(null);
-      toast.success(existingPatientId ? 'Patient linked and checked in' : 'Checked in — new patient file created');
+      if (!existingPatientId) notify.done('Checked in, and a new patient file was created');
       
     } catch (error) {
       console.error('❌ Error during check-in:', error);
-      toast.error(`Failed to check in: ${error.response?.data?.detail || error.message}`);
+      notify.problem(error, 'Could not check that patient in');
     } finally {
       setIsCheckingDuplicates(false);
     }
@@ -1451,7 +1443,7 @@ const Calendar = () => {
       console.error('❌ Error checking duplicates:', error);
       console.error('Error response:', error.response?.data);
       console.error('Error status:', error.response?.status);
-      toast.error(`Failed to check for duplicate patients: ${error.response?.data?.detail || error.message}`);
+      notify.problem(error, 'Could not check for an existing patient file');
     }
   };
 
@@ -1565,7 +1557,6 @@ const Calendar = () => {
       }
       
       // Show success message
-      toast.success('Patient registered successfully');
       
       // Close the patient registration form
       setShowPatientForm(false);
@@ -1590,7 +1581,7 @@ const Calendar = () => {
       
       // Show more detailed error message
       const errorMessage = error.message || 'Unknown error';
-      toast.error(`Failed to register patient: ${errorMessage}`);
+      notify.problem(`Failed to register patient: ${errorMessage}`);
     }
   };
 
@@ -1629,7 +1620,7 @@ const Calendar = () => {
       setShowPatientForm(true);
     } catch (error) {
       console.error('Error creating new patient:', error);
-      toast.error('Failed to create new patient. Please try again.');
+      notify.problem('Failed to create new patient. Please try again.');
     }
   };
 
@@ -1654,10 +1645,9 @@ const Calendar = () => {
       });
       
       setShowDuplicateWarning(false);
-      toast.success('Appointment linked to existing patient');
     } catch (error) {
       console.error('Error linking to existing patient:', error);
-      toast.error('Failed to link appointment. Please try again.');
+      notify.problem('Failed to link appointment. Please try again.');
     }
   };
 

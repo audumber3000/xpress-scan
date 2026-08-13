@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Search, Plus, Edit2, Trash2, ArrowLeft } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 import { api } from '../../utils/api';
 import { getCurrencySymbol } from '../../utils/currency';
 
@@ -100,7 +100,7 @@ const PracticeSettings = () => {
       setData(response);
     } catch (err) {
       console.error("Failed to fetch settings:", err);
-      toast.error('Failed to load settings data');
+      notify.problem('Failed to load settings data');
     }
   };
 
@@ -115,16 +115,16 @@ const PracticeSettings = () => {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!formData.name.trim()) return toast.error('Name is required');
+    if (!formData.name.trim()) return notify.problem('Name is required');
 
     try {
       if (category === 'procedures') {
         if (editingItem) {
           await api.put(`/treatment-types/${editingItem.id}/`, formData);
-          toast.success('Procedure updated');
+          notify.done('Procedure updated');
         } else {
           await api.post('/treatment-types/', formData);
-          toast.success('Procedure added');
+          notify.done('Procedure added');
         }
       } else {
         // Clinical Settings API
@@ -133,19 +133,17 @@ const PracticeSettings = () => {
             ...formData,
             category: backendCategory
           });
-          toast.success('Updated successfully');
         } else {
           await api.post('/clinical/settings/', {
             ...formData,
             category: backendCategory
           });
-          toast.success('Added to clinical defaults');
         }
       }
       fetchData();
       setShowModal(false);
     } catch (err) {
-      toast.error('Failed to save changes');
+      notify.problem('Failed to save changes');
     }
   };
 
@@ -158,9 +156,8 @@ const PracticeSettings = () => {
           await api.delete(`/clinical/settings/${id}/`);
         }
         fetchData();
-        toast.success('Deleted successfully');
       } catch (err) {
-        toast.error('Failed to delete item');
+        notify.problem('Failed to delete item');
       }
     }
   };

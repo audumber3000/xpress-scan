@@ -3,7 +3,7 @@ import { generatePatientPersona, generateInitialsAvatar } from "../../utils/avat
 import { api } from "../../utils/api";
 import { getCurrencySymbol } from "../../utils/currency";
 import { formatRelative, clinicDateKey, clinicToday } from "../../utils/datetime";
-import { toast } from "react-toastify";
+import { notify } from '../../utils/notify';
 import WorkDoneCell from "./WorkDoneCell";
 import { useAuth } from "../../contexts/AuthContext";
 import { isManualWhatsApp, shareInvoiceManually } from "../../utils/whatsapp";
@@ -19,14 +19,13 @@ const InvoiceItem = memo(({ invoice, onSelect }) => {
         // Manual mode (desktop): download the PDF + open WhatsApp from own number.
         if (isManualWhatsApp(user)) {
             const opened = await shareInvoiceManually(invoice, user);
-            if (opened) toast.success('Invoice PDF downloaded — attach it in the WhatsApp chat');
-            else toast.error('Patient phone number is required');
+            if (opened) notify.done('Invoice PDF downloaded — attach it in the WhatsApp chat');
+            else notify.problem('Patient phone number is required');
         } else {
             await api.post(`/invoices/${invoice.id}/send-whatsapp`);
-            toast.success("Invoice sent successfully via WhatsApp");
         }
     } catch (err) {
-        toast.error(err.response?.data?.detail || "Failed to send invoice via WhatsApp");
+        notify.problem(err, "Could not send the invoice on WhatsApp");
     } finally {
         setIsSendingWA(false);
     }

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { toast } from 'react-toastify';
-import { api } from '../utils/api';
+import { notify } from '../utils/notify';
+import { api, getFriendlyErrorMessage } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 import { saveLastLogin, clearLastLoginToken } from '../utils/lastLogin';
 import LoadingButton from '../components/LoadingButton';
@@ -107,7 +107,7 @@ const Login = () => {
       setUser(userWithClinic);
 
       saveLastLogin({ provider: 'email', email, name: data.user?.name, token: data.token });
-      toast.success('Login successful!');
+      notify.done('Login successful!');
 
       await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -118,17 +118,17 @@ const Login = () => {
           : '/dashboard';
       navigate(redirectPath, { replace: true });
     } catch (error) {
-      const errorMessage = error.response?.data?.detail || error.message || "Network error. Please try again.";
+      const errorMessage = getFriendlyErrorMessage(error, "Network error. Please try again.");
       setError(errorMessage);
       
       if (errorMessage.includes('User does not exist')) {
-        toast.error(
+        notify.problem(
           <div>
             User does not exist. <Link to="/signup" className="underline font-bold">Register here</Link>
           </div>
         );
       } else {
-        toast.error(errorMessage);
+        notify.problem(errorMessage);
       }
       setLoading(false);
     }
@@ -249,7 +249,7 @@ const Login = () => {
         console.log('🔵 [LOGIN] AuthContext updated');
 
         saveLastLogin({ provider: 'google', email: result.user.email, name: result.user.displayName, token: data.token });
-        toast.success('Login successful!');
+        notify.done('Login successful!');
 
         // Small delay to ensure context is updated before navigation
         await new Promise(resolve => setTimeout(resolve, 200));
@@ -268,17 +268,17 @@ const Login = () => {
 
     } catch (error) {
       console.error('🔵 [LOGIN] Google login error:', error);
-      const errorMessage = error.response?.data?.detail || error.message || 'Google login failed. Please try again.';
+      const errorMessage = getFriendlyErrorMessage(error, 'Google login failed. Please try again.');
       setError(errorMessage);
       
       if (errorMessage.includes('User does not exist')) {
-        toast.error(
+        notify.problem(
           <div>
             User does not exist. <Link to="/signup" className="underline font-bold">Register here</Link>
           </div>
         );
       } else {
-        toast.error(errorMessage);
+        notify.problem(errorMessage);
       }
       setLoading(false);
     }
@@ -325,7 +325,7 @@ const Login = () => {
                   localStorage.setItem('user', JSON.stringify(me));
                   setToken(entry.token);
                   setUser(me);
-                  toast.success('Welcome back!');
+                  notify.done('Welcome back!');
                   const redirectPath = !me.clinic_id
                     ? '/onboarding'
                     : (me.role === 'clinic_owner' && me.clinics?.length > 1)

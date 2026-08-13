@@ -1,5 +1,6 @@
+import { getFriendlyErrorMessage } from './api';
 import { getRedirectResult, onAuthStateChanged } from 'firebase/auth';
-import { toast } from 'react-toastify';
+import { notify } from '../utils/notify';
 import { auth } from '../firebaseClient';
 import { api } from './api';
 import { saveLastLogin } from './lastLogin';
@@ -129,7 +130,7 @@ export const completeGoogleRedirectAuth = async ({
       name: firebaseUser.displayName,
     });
 
-    toast.success(successMessage);
+    notify.done(successMessage);
 
     await new Promise((resolve) => setTimeout(resolve, 200));
 
@@ -143,9 +144,9 @@ export const completeGoogleRedirectAuth = async ({
     return true;
   } catch (error) {
     clearGoogleRedirectPending();
-    const errorMessage = error.response?.data?.detail || error.message || 'Google login failed. Please try again.';
+    const errorMessage = getFriendlyErrorMessage(error, 'Google login failed. Please try again.');
     setError?.(errorMessage);
-    toast.error(errorMessage);
+    notify.problem(errorMessage);
     return true;
   } finally {
     setLoading?.(false);

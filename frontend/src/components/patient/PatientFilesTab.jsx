@@ -1,6 +1,6 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { api, getFriendlyErrorMessage } from '../../utils/api';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 import EmptyState from '../common/EmptyState';
 import { noData } from '../../assets/illustrations';
 
@@ -217,7 +217,7 @@ const PatientFilesTab = ({ patientId, variant = 'all' }) => {
             setConsents(signedConsents || []);
         } catch (error) {
             console.error('Error fetching patient files:', error);
-            toast.error('Failed to load patient files.');
+            notify.problem('Failed to load patient files.');
         } finally {
             setLoading(false);
         }
@@ -237,7 +237,7 @@ const PatientFilesTab = ({ patientId, variant = 'all' }) => {
         const oversized = all.filter((f) => f.size > limit);
         const valid = all.filter((f) => f.size <= limit);
         if (oversized.length) {
-            toast.error(
+            notify.problem(
                 oversized.length === 1
                     ? `"${oversized[0].name}" is larger than ${MAX_FILE_MB} MB and was skipped.`
                     : `${oversized.length} files exceed ${MAX_FILE_MB} MB and were skipped.`
@@ -275,10 +275,10 @@ const PatientFilesTab = ({ patientId, variant = 'all' }) => {
         setUploading(false);
         setProgress(null);
 
-        if (succeeded) toast.success(`${succeeded} file${succeeded > 1 ? 's' : ''} uploaded.`);
+        if (succeeded) notify.done(`${succeeded} file${succeeded > 1 ? 's' : ''} uploaded.`);
         if (failed.length) {
             // For a single failure, surface the real reason from the server.
-            toast.error(
+            notify.problem(
                 valid.length === 1
                     ? getFriendlyErrorMessage(lastError, 'Failed to upload file.')
                     : `Failed to upload ${failed.length} of ${valid.length} files.`
@@ -301,11 +301,11 @@ const PatientFilesTab = ({ patientId, variant = 'all' }) => {
         }
         try {
             await api.delete(endpoint);
-            toast.success('File deleted.');
+            notify.done('File deleted.');
             fetchFiles();
         } catch (error) {
             console.error('Error deleting file:', error);
-            toast.error(getFriendlyErrorMessage(error, 'Failed to delete file.'));
+            notify.problem(getFriendlyErrorMessage(error, 'Failed to delete file.'));
         } finally {
             setPendingDelete(null);
         }

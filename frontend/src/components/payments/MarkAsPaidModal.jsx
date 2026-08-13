@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { X, Wallet } from "lucide-react";
-import { toast } from "react-toastify";
+import { notify } from '../../utils/notify';
 import { getCurrencySymbol } from "../../utils/currency";
 import { clinicToday, formatDate } from "../../utils/datetime";
 import GearLoader from "../GearLoader";
@@ -46,16 +46,16 @@ const MarkAsPaidModal = ({ invoice, onClose, onConfirm }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!paymentMode) {
-      toast.error("Please select a payment mode");
+      notify.problem("Please select a payment mode");
       return;
     }
     if (isPartial) {
       if (!parsedAmount || parsedAmount <= 0) {
-        toast.error("Enter a valid part payment amount");
+        notify.problem("Enter a valid part payment amount");
         return;
       }
       if (parsedAmount >= dueAmount) {
-        toast.error(`A part payment must be less than the balance of ${money(dueAmount)}`);
+        notify.problem(`A part payment must be less than the balance of ${money(dueAmount)}`);
         return;
       }
     }

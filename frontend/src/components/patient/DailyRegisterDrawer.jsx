@@ -1,3 +1,4 @@
+import { getFriendlyErrorMessage } from '../../utils/api';
 import React, { useState, useEffect } from "react";
 import FormDrawer, { Field, TextInput, SelectInput } from "../FormDrawer";
 import PatientMatchModal from "./PatientMatchModal";
@@ -55,7 +56,7 @@ const DailyRegisterDrawer = ({ open, onClose, onLookup, onPickExisting, onCreate
       setMatches(list);
       setShowMatches(true);
     } catch (err) {
-      setError(err?.response?.data?.detail || "Couldn't check existing patients. Please try again.");
+      setError(getFriendlyErrorMessage(err, "Couldn't check existing patients. Please try again."));
     } finally {
       setBusy(false);
     }
@@ -71,7 +72,7 @@ const DailyRegisterDrawer = ({ open, onClose, onLookup, onPickExisting, onCreate
       setShowMatches(false);
     } catch (err) {
       setShowMatches(false);
-      setError(err?.response?.data?.detail || "Couldn't add this patient to the register.");
+      setError(getFriendlyErrorMessage(err, "Couldn't add this patient to the register."));
     } finally {
       setBusy(false);
     }

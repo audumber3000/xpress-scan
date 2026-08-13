@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { api } from '../../utils/api';
-import { toast } from 'react-toastify';
+import { notify } from '../../utils/notify';
 
 const ScanUploadDrawer = ({ isOpen, onClose, onUpload, patientId, casePaperId }) => {
     const [selectedFiles, setSelectedFiles] = useState([]);
@@ -40,7 +40,7 @@ const ScanUploadDrawer = ({ isOpen, onClose, onUpload, patientId, casePaperId })
             onClose();
         } catch (error) {
             console.error('Upload error:', error);
-            toast.error('Failed to upload files');
+            notify.problem('Failed to upload files');
         } finally {
             setIsUploading(false);
         }

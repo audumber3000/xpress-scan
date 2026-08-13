@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import Papa from "papaparse";
 import { X, UploadCloud, Download, CheckCircle2, AlertCircle, Plus, Trash2, Table2, FileSpreadsheet } from "lucide-react";
-import { toast } from "react-toastify";
+import { notify } from '../../utils/notify';
 
 /*
  * Generic bulk-add modal with two ways in: upload a CSV, or type rows manually
@@ -49,9 +49,9 @@ const BulkImportModal = ({ open, onClose, onImport, title, columns, importing })
         }).filter((r) => Object.values(r).some((v) => v));
         setRows(parsed);
         setMode("csv");
-        if (parsed.length === 0) toast.error("No rows found. Check the file has a header row.");
+        if (parsed.length === 0) notify.problem("No rows found. Check the file has a header row.");
       },
-      error: (err) => { toast.error(`Couldn't read that file: ${err.message}`); },
+      error: (err) => { notify.problem(`Couldn't read that file: ${err.message}`); },
     });
   };
 

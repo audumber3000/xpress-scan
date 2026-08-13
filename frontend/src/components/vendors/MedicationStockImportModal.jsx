@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import Papa from "papaparse";
 import { X, Pill, Table2, UploadCloud, Download, CheckCircle2, AlertCircle, Plus, Trash2 } from "lucide-react";
-import { toast } from "react-toastify";
+import { notify } from '../../utils/notify';
 import { api } from "../../utils/api";
 
 /*
@@ -38,11 +38,11 @@ const MedicationStockImportModal = ({ open, onClose, onImported, vendors = [] })
     try {
       const meds = await api.get("/medications");
       const seeded = (meds || []).map((m) => ({ ...emptyRow(), name: m.name }));
-      if (seeded.length === 0) { toast.info("No medications in Control Center yet."); return; }
+      if (seeded.length === 0) { notify.done("No medications in Control Center yet."); return; }
       setRows(seeded);
       setMode("catalog");
     } catch {
-      toast.error("Could not load your medication list.");
+      notify.problem("Could not load your medication list.");
     } finally { setLoadingCatalog(false); }
   };
 
@@ -70,11 +70,11 @@ const MedicationStockImportModal = ({ open, onClose, onImported, vendors = [] })
           }
           return r;
         }).filter((r) => r.name);
-        if (parsed.length === 0) { toast.error("No rows found. Check the file has a header row."); return; }
+        if (parsed.length === 0) { notify.problem("No rows found. Check the file has a header row."); return; }
         setRows(parsed);
         setMode("csv");
       },
-      error: (err) => toast.error(`Couldn't read that file: ${err.message}`),
+      error: (err) => notify.problem(`Couldn't read that file: ${err.message}`),
     });
   };
   const setCell = (i, k, v) => setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, [k]: v } : r)));
@@ -101,12 +101,11 @@ const MedicationStockImportModal = ({ open, onClose, onImported, vendors = [] })
         vendor_id: r.vendor_id ? parseInt(r.vendor_id) : null,
       }));
       const res = await api.post("/medication-stock/bulk", { items });
-      toast.success(`Added ${res.created_count} medication(s) to stock`);
-      if (res.errors?.length) toast.warning(`${res.errors.length} skipped. ${res.errors[0].message}`);
+      if (res.errors?.length) notify.problem(`${res.errors.length} skipped. ${res.errors[0].message}`);
       onImported?.();
       close();
     } catch (e) {
-      toast.error(e?.message || "Import failed");
+      notify.problem(e?.message || "Import failed");
     } finally { setImporting(false); }
   };
 

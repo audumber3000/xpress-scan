@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { toast } from 'react-toastify';
+import { notify } from '../utils/notify';
 import { api } from '../utils/api';
 import { track, EVENTS } from '../analytics/track';
 import { ChevronLeft, ShieldCheck, Lock, Tag, CheckCircle2, ArrowRight, X } from 'lucide-react';
@@ -64,13 +64,13 @@ const Checkout = () => {
       });
       if (resp.is_valid) {
         setDiscountInfo(resp);
-        toast.success(resp.message);
+        notify.done(resp.message);
       } else {
         setDiscountInfo(null);
-        toast.error(resp.message);
+        notify.problem(resp.message);
       }
     } catch {
-      toast.error('Coupon validation failed');
+      notify.problem('Coupon validation failed');
     } finally {
       setIsValidating(false);
     }
@@ -86,7 +86,7 @@ const Checkout = () => {
     try {
       await cashfreeService.initiateCheckout(checkoutPlanName, discountInfo ? couponCode : null);
     } catch (error) {
-      toast.error(error.message || 'Failed to initiate checkout');
+      notify.problem(error, 'Failed to initiate checkout');
     } finally {
       setLoading(false);
     }

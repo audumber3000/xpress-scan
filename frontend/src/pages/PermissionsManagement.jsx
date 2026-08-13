@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { toast } from 'react-toastify';
+import { notify } from '../utils/notify';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useHeader } from "../contexts/HeaderContext";
 import { useAuth } from "../contexts/AuthContext";
@@ -11,42 +11,14 @@ import { resolveUserAvatar } from "../utils/avatar";
 import TeamTabs from "../components/team/TeamTabs";
 import TableToolbar from "../components/common/TableToolbar";
 import FilterPanel from "../components/FilterPanel";
-import { MODULES, canEditPermissions, permissionsLockReason } from "../constants/permissions";
+import { MODULES, ROLE_PRESETS, canEditPermissions, permissionsLockReason } from "../constants/permissions";
 
 const USERS_PER_PAGE = 10;
 
 
 const ALL_ACTIONS = ['read', 'write', 'edit', 'delete'];
 
-const ROLE_PRESETS = {
-  clinic_owner: Object.fromEntries(MODULES.map(m => [m.key, Object.fromEntries(m.actions.map(a => [a, true]))]) ),
-  doctor: {
-    dashboard:    { read: true },
-    appointments: { read: true, write: false, edit: true, delete: false },
-    patients:     { read: true, write: false, edit: true, delete: false },
-    finance:      { read: true, write: false, edit: false, delete: false },
-    inbox:        { read: true, write: true },
-    reports:      { read: true },
-    marketing:    { read: true, write: false, edit: false },
-    lab:          { read: true, write: true, edit: true, delete: false },
-    staff:        { read: false, write: false, edit: false, delete: false },
-    settings:     { read: false, write: false, edit: false },
-    consent:      { read: true, write: true, edit: true, delete: false },
-  },
-  receptionist: {
-    dashboard:    { read: true },
-    appointments: { read: true, write: true, edit: true, delete: false },
-    patients:     { read: true, write: true, edit: true, delete: false },
-    finance:      { read: true, write: true, edit: false, delete: false },
-    inbox:        { read: true, write: true },
-    reports:      { read: false },
-    marketing:    { read: false, write: false, edit: false },
-    lab:          { read: true, write: false, edit: false, delete: false },
-    staff:        { read: false, write: false, edit: false, delete: false },
-    settings:     { read: false, write: false, edit: false },
-    consent:      { read: true, write: true, edit: false, delete: false },
-  },
-};
+
 
 const ROLE_COLORS = {
   clinic_owner: 'bg-[#E0F2F2] text-[#1F6B72]',
@@ -106,7 +78,7 @@ const PermissionsManagement = () => {
       const data = await api.get("/clinic-users");
       setUsers(data);
     } catch (err) {
-      toast.error(getPermissionAwareErrorMessage(
+      notify.problem(getPermissionAwareErrorMessage(
         err,
         "Failed to load users",
         "You don't have permission to view staff users."
@@ -142,7 +114,7 @@ const PermissionsManagement = () => {
     if (!target) return; // still loading — retry when users arrive
     // A hand-typed or stale link must not open an editor a click wouldn't.
     if (!canEditPermissions(user, target)) {
-      toast.error(permissionsLockReason(user, target));
+      notify.problem(permissionsLockReason(user, target));
       params.delete('user');
       navigate({ search: params.toString() }, { replace: true });
       return;
@@ -182,18 +154,18 @@ const PermissionsManagement = () => {
 
   const handleSave = async () => {
     if (!canEditPermissions(user, drawerUser)) {
-      toast.error(permissionsLockReason(user, drawerUser));
+      notify.problem(permissionsLockReason(user, drawerUser));
       return;
     }
     if (!drawerUser) return;
     try {
       setSaving(true);
       await api.put(`/clinic-users/${drawerUser.id}`, { permissions });
-      toast.success("Permissions updated");
+      notify.done("Permissions updated");
       setDrawerUser(null);
       fetchUsers();
     } catch (err) {
-      toast.error(getPermissionAwareErrorMessage(
+      notify.problem(getPermissionAwareErrorMessage(
         err,
         "Failed to save permissions",
         "You don't have permission to update user permissions."
@@ -216,7 +188,7 @@ const PermissionsManagement = () => {
   const initials = (name) => name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?';
 
   return (
-    <TeamTabs active="permissions">
+    <TeamTabs active="staff">
       <TableToolbar
         search={searchQuery}
         onSearchChange={setSearchQuery}

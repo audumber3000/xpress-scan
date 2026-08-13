@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { toast } from "react-toastify";
+import { notify } from '../../utils/notify';
 import { Search, Trash2, FileText, Receipt, Pencil, Download } from "lucide-react";
 import { api, getFriendlyErrorMessage } from "../../utils/api";
 import { clinicToday, formatDate, formatTime } from "../../utils/datetime";
@@ -53,7 +53,7 @@ const DailyRegisterTab = ({ onRegisterNew, refreshKey = 0 }) => {
       setData(res || { kpis: { total: 0, new: 0, repeat: 0 }, entries: [] });
     } catch (e) {
       console.error("Error loading the daily register:", e);
-      toast.error(getFriendlyErrorMessage(e, "Couldn't load today's register."));
+      notify.problem(getFriendlyErrorMessage(e, "Couldn't load today's register."));
       setData({ kpis: { total: 0, new: 0, repeat: 0 }, entries: [] });
     } finally {
       setLoading(false);
@@ -103,7 +103,7 @@ const DailyRegisterTab = ({ onRegisterNew, refreshKey = 0 }) => {
       doctor_id,
       visit_date: date,
     });
-    toast.success(`${patient.name} added to the register`);
+    notify.done(`${patient.name} added to the register`);
     setDrawerOpen(false);
     fetchRegister();
   };
@@ -121,7 +121,7 @@ const DailyRegisterTab = ({ onRegisterNew, refreshKey = 0 }) => {
 
   const saveEntry = async (entryId, patch) => {
     await api.put(`/daily-register/${entryId}`, patch);
-    toast.success("Entry updated");
+    notify.done("Entry updated");
     setEditingEntry(null);
     fetchRegister();
   };
@@ -154,13 +154,12 @@ const DailyRegisterTab = ({ onRegisterNew, refreshKey = 0 }) => {
     try {
       setRemovingId(entry.id);
       await api.delete(`/daily-register/${entry.id}`);
-      toast.success("Removed from the register");
       setRemoveTarget(null);
       fetchRegister();
     } catch (e) {
       console.error("Error removing the register entry:", e);
       // The server's reason is specific (names the amount collected), so show it.
-      toast.error(getFriendlyErrorMessage(e, "Couldn't remove this entry."));
+      notify.problem(getFriendlyErrorMessage(e, "Couldn't remove this entry."));
       setRemoveTarget(null);
     } finally {
       setRemovingId(null);

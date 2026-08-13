@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { X, Clock, AlertTriangle, Check, Loader2, Search, Repeat } from 'lucide-react';
-import { api } from '../../../utils/api';
+import { api, getFriendlyErrorMessage } from '../../../utils/api';
 
 /**
  * Book an appointment, opened prefilled from a click on the grid.
@@ -193,7 +193,7 @@ const BookingModal = ({
       }
       onClose();
     } catch (e) {
-      setError(e?.detail || e?.message || 'Could not save that booking');
+      setError(getFriendlyErrorMessage(e, 'Could not save that booking'));
     } finally {
       setSaving(false);
     }

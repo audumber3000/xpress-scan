@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { toast } from "react-toastify";
+import { notify } from '../utils/notify';
 import { SkeletonBox, SkeletonTableRows } from "../components/Skeleton";
 import { api } from "../utils/api";
 import { formatMoney } from "../utils/currency";
@@ -401,10 +401,10 @@ const Expenses = () => {
     setBusyId(row.id);
     try {
       await api.post(`/clinical/case-costs/${row.id}/settle`, { payment_method: 'Cash' });
-      toast.success(`Paid ${formatMoney(row.amount)} to ${row.payee_name || 'vendor'}`);
+      notify.done(`Paid ${formatMoney(row.amount)} to ${row.payee_name || 'vendor'}`);
       await loadPayables();
     } catch (e) {
-      toast.error(e?.message || 'Could not record that payment');
+      notify.problem(e?.message || 'Could not record that payment');
     } finally {
       setBusyId(null);
     }
@@ -414,10 +414,10 @@ const Expenses = () => {
     setBusyId(row.id);
     try {
       await api.post(`/clinical/case-costs/${row.id}/unsettle`);
-      toast.info('Payment undone, and its expense removed from the ledger');
+      notify.done('Payment undone, and its expense removed from the ledger');
       await loadPayables();
     } catch (e) {
-      toast.error(e?.message || 'Could not undo that');
+      notify.problem(e?.message || 'Could not undo that');
     } finally {
       setBusyId(null);
     }
@@ -429,15 +429,14 @@ const Expenses = () => {
     try {
       if (vendorDrawer.vendor) {
         await api.put(`/vendors/${vendorDrawer.vendor.id}`, form);
-        toast.success(`${form.name} updated`);
       } else {
         await api.post('/vendors', form);
-        toast.success(`${form.name} added`);
+        notify.done(`${form.name} added`);
       }
       setVendorDrawer({ open: false, vendor: null });
       await loadVendors();
     } catch (e) {
-      toast.error(e?.message || 'Could not save that vendor');
+      notify.problem(e?.message || 'Could not save that vendor');
     } finally {
       setSavingVendor(false);
     }
