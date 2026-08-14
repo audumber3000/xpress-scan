@@ -275,6 +275,72 @@ Same EAS API quirk as iOS — the submissions field on a build object is unrelia
 
 `submit.production.android.track: "production"` uploads the .aab onto the production track but does **not** publish it. Google holds it as a draft release for you to review. To go live, open Play Console → Test and release → Production → drag the rollout slider to 100% and click Save → Send for review. This is intentional Google behavior, not an EAS bug.
 
+### 11. `write EPIPE` mid-upload is not a network problem — the archive is the monorepo.
+
+Symptom, on both platforms (2026-08-14):
+
+```
+Your project archive is 424 MB.
+✖ Uploading to EAS Build (388 MB / 424 MB)
+Failed to upload the project tarball to EAS Build
+Reason: request to https://storage.googleapis.com/... failed, reason: write EPIPE
+```
+
+It looks like a dropped connection, and retrying just burns build numbers — the
+failed attempts still increment `versionCode`/`buildNumber` server-side, because
+version source is remote. (Android went 16 → 17 → 18 → 19 across two failures.)
+
+The cause: **EAS builds its upload archive from the git repository root**, not
+from `mobile-app/`. So every upload carried `desktop/` (3 GB), `backend/`
+(1.3 GB), `frontend/` (763 MB) and `dental-labs/` (388 MB). The app itself tars
+to about **2 MB**.
+
+`mobile-app/.easignore` was correct the whole time — it simply was not the file
+governing an archive rooted a level above it. Fix is the repo-root
+**`/.easignore`** (committed), which excludes the sibling projects. After it, the
+same build uploaded and queued immediately.
+
+> Keep `mobile-app/ios/` **out** of both ignore files — see Gotcha #12 and the
+> bare-build note. Only `ios/Pods/` and `ios/build/` are excluded; the build
+> server restores them.
+
+To sanity-check the archive size before a build:
+```bash
+cd mobile-app && tar czf /tmp/t.tgz --exclude=node_modules --exclude=ios/Pods --exclude=ios/build . && ls -lh /tmp/t.tgz
+```
+Expect single-digit MB. Anything in the hundreds means an ignore file is not applying.
+
+### 12. Adding a native module? iOS is a BARE build — `prebuild` + `pod install` or it ships broken.
+
+`app.json` plugins and `Info.plist` entries are applied **during prebuild**. iOS
+here ships bare (`ios/` is uploaded and used as-is, no prebuild on the server),
+so installing a native module with npm alone is not enough — the pod never
+reaches the native project and the app **compiles fine and then crashes at
+runtime** on first use.
+
+Hit on 3.18.0 with `expo-location`: it was in `node_modules` at 19.0.8, but
+`ios/Podfile.lock` had **zero** `ExpoLocation` entries and `Info.plist` had no
+`NSLocationWhenInUseUsageDescription`. That build would have shipped a clock-in
+screen that died the moment anyone opened it.
+
+```bash
+cd mobile-app
+npx expo prebuild --platform ios      # NOT --clean: keeps Podfile.lock, keeps Hermes pinned
+cd ios && pod install
+```
+
+Then verify all three before building:
+```bash
+grep -c ExpoLocation ios/Podfile.lock              # or whatever module you added — must be > 0
+grep -c "hermes-engine/Pre-built" ios/Podfile.lock # must be > 0, else Gotcha in the memory note
+grep -c modular_headers ios/Podfile                # Firebase plugin still applied
+```
+
+A *permission* (location, camera, mic) is only an Info.plist string plus an
+Android manifest entry — it is **not** an iOS capability, so it does not need the
+`EXPO_ASC_*` provisioning dance from Gotcha #1. Capabilities are entitlements:
+Push, Sign in with Apple, HealthKit, App Groups.
+
 ---
 
 ## Standard release checklist
