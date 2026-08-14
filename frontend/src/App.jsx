@@ -104,7 +104,7 @@ function MobileAppBanner() {
               Android
             </a>
             <a
-              href="https://apps.apple.com/app/molarplus/id0000000000"
+              href="https://apps.apple.com/app/molarplus/id6765472713"
               target="_blank"
               rel="noopener noreferrer"
               className="text-[11px] font-semibold text-amber-700 underline underline-offset-2"

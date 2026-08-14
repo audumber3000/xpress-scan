@@ -24,7 +24,7 @@ router = APIRouter()
 # Where a user is sent to update. Overridable per row in the DB; these are the
 # fallbacks so a fresh install still has somewhere to go.
 DEFAULT_STORE_URLS = {
-    "ios": "https://apps.apple.com/app/molarplus/id0000000000",
+    "ios": "https://apps.apple.com/app/molarplus/id6765472713",
     "android": "https://play.google.com/store/apps/details?id=com.molarplus.app",
 }
 
