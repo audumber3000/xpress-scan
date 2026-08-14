@@ -1,6 +1,7 @@
 """
 Patient service with business logic
 """
+import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from core.interfaces import PatientServiceProtocol, PatientRepositoryProtocol, ClinicRepositoryProtocol, PaymentRepositoryProtocol
@@ -10,6 +11,8 @@ from sqlalchemy import func, cast, Integer
 from core.posthog_client import track_event, EVENTS
 from core.clinic_time import clinic_today
 from domains.scheduling.appointment_status import VISITED_STATUSES
+
+logger = logging.getLogger(__name__)
 
 
 class PatientService(PatientServiceProtocol):
@@ -315,6 +318,24 @@ class PatientService(PatientServiceProtocol):
             db.query(XrayImage).filter(XrayImage.patient_id == patient_id).delete(synchronize_session=False)
             db.query(PatientConsent).filter(PatientConsent.patient_id == patient_id).delete(synchronize_session=False)
             db.query(DailyVisit).filter(DailyVisit.patient_id == patient_id).delete(synchronize_session=False)
+
+            # Everything deleted above was filtered to THIS patient, which is
+            # right — but rows belonging to OTHER patients can still point at
+            # this patient's case papers, and those survive the sweep and hold
+            # the foreign key. Unlink them by id, not by patient, before the
+            # parent rows go.
+            case_paper_ids = [
+                row[0] for row in db.query(CasePaper.id).filter(CasePaper.patient_id == patient_id).all()
+            ]
+            if case_paper_ids:
+                db.query(Invoice).filter(
+                    Invoice.case_paper_id.in_(case_paper_ids)
+                ).update({Invoice.case_paper_id: None}, synchronize_session=False)
+                db.query(InventoryTransaction).filter(
+                    InventoryTransaction.case_paper_id.in_(case_paper_ids)
+                ).update({InventoryTransaction.case_paper_id: None}, synchronize_session=False)
+                db.flush()
+
             db.query(CasePaper).filter(CasePaper.patient_id == patient_id).delete(synchronize_session=False)
             db.flush()
 
@@ -329,12 +350,34 @@ class PatientService(PatientServiceProtocol):
                 db.query(AppointmentWaitlist).filter(
                     AppointmentWaitlist.booked_appointment_id.in_(appointment_ids)
                 ).update({AppointmentWaitlist.booked_appointment_id: None}, synchronize_session=False)
+
+                # Same blind spot, and this is the one that actually bit: an
+                # invoice belonging to a DIFFERENT patient pointing at this
+                # patient's appointment. It survived the delete above (filtered
+                # by patient_id) and then blocked the appointment delete with
+                # "invoices_appointment_id_fkey ... Key (id)=(4) is still
+                # referenced", which the caller reported only as "Associated
+                # records could not be safely removed".
+                #
+                # Those rows are the old case-paper linkage: appointment_id was
+                # overloaded to hold a case_paper id, so it collides with a real
+                # appointment belonging to somebody else. case_paper_id already
+                # carries the correct link, which is why clearing this loses
+                # nothing — it removes a pointer that was never an appointment.
+                db.query(Invoice).filter(
+                    Invoice.appointment_id.in_(appointment_ids)
+                ).update({Invoice.appointment_id: None}, synchronize_session=False)
                 db.flush()
             db.query(Appointment).filter(Appointment.patient_id == patient_id).delete(synchronize_session=False)
             db.flush()
-        except Exception as e:
+        except Exception:
             db.rollback()
-            print(f"Warning: Failed to delete related patient records: {e}")
+            # Full traceback, not print(e). The message the caller sees is
+            # deliberately plain, so the log is the only place the actual
+            # constraint name survives — and a bare `print` of the exception
+            # cost a live debugging session working out which table held the
+            # key. logger.exception keeps the stack and the SQL.
+            logger.exception("Patient %s: cascade delete failed", patient_id)
             raise ValueError("Cannot delete patient: Associated records could not be safely removed.")
 
         return self.patient_repo.delete(patient_id)
