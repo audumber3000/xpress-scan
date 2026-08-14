@@ -1,0 +1,42 @@
+# Repo-root ignore for EAS Build uploads.
+#
+# mobile-app/ sits inside this monorepo, and EAS builds its upload archive from
+# the repository root rather than from the app folder. Without this file that
+# archive came out at 424 MB — the app is ~2 MB, the rest was desktop/ (3 GB),
+# backend/ (1.3 GB), frontend/ (763 MB) and dental-labs/ (388 MB) along for the
+# ride. Both production builds then died mid-upload with `write EPIPE`, at
+# 388/424 MB and 173/234 MB, which reads like a network fault and is really
+# just an archive far too large to push reliably.
+#
+# Nothing here is needed to build the mobile app.
+backend/
+frontend/
+desktop/
+desktop-app/
+dental-labs/
+docs/
+support-tool/
+scripts/
+.github/
+.agents/
+*.sh
+*.md
+
+# Dependencies and build output are restored/regenerated on the build server.
+node_modules/
+**/node_modules/
+mobile-app/ios/Pods/
+mobile-app/ios/build/
+mobile-app/android/build/
+mobile-app/android/app/build/
+
+# NOTE: mobile-app/ios/ itself must NOT be ignored. iOS ships as a bare build,
+# so EAS uses the checked-in native project and its Podfile.lock (which pins
+# hermes-engine/Pre-built). Excluding it forces a CNG prebuild with no lockfile,
+# Hermes falls back to building from source, and INSTALL_PODS fails — three
+# failed builds went that way before.
+
+*.log
+.DS_Store
+.vscode/
+.idea/
