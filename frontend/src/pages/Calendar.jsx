@@ -1,66 +1,77 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { SkeletonBox } from "../components/Skeleton";
-import { api, getFriendlyErrorMessage } from "../utils/api";
+import { api } from "../utils/api";
 import { notify } from "../utils/notify";
-import { useAuth } from "../contexts/AuthContext";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  Clock,
-  User,
-  Phone,
-  Mail,
-  ExternalLink,
-  X,
-  FileText,
-  AlertTriangle,
-  AlertCircle,
-  CheckCircle,
-  UserPlus,
-  Save
-} from "lucide-react";
+import { AlertCircle, ChevronLeft } from "lucide-react";
 import CalendarToolbar from "./appointments/components/CalendarToolbar";
 import TeamMembersPanel from "./appointments/components/TeamMembersPanel";
-import AppointmentCard from "./appointments/components/AppointmentCard";
 import MiniCalendar from "./appointments/components/MiniCalendar";
 import MonthGrid from "./appointments/components/MonthGrid";
 import DayGrid from "./appointments/components/DayGrid";
-import { getAppointmentColor, registerDoctors } from "./appointments/utils/doctorColors";
+import { registerDoctors } from "./appointments/utils/doctorColors";
+import { useHeader } from "../contexts/HeaderContext";
 import BookingModal from "./appointments/components/BookingModal";
+import PatientRegistrationModal from "./appointments/components/PatientRegistrationModal";
+import DuplicatePatientWarning from "./appointments/components/DuplicatePatientWarning";
+import AppointmentPopover from "./appointments/components/AppointmentPopover";
+import CalendarBanners from "./appointments/components/CalendarBanners";
+import CancelReasonDialog from "./appointments/components/CancelReasonDialog";
 import DayAgenda from "./appointments/components/DayAgenda";
 import WeekDayStrip from "./appointments/components/WeekDayStrip";
-import { computeDayLayout } from "./appointments/utils/layout";
-import { getCurrencySymbol } from "../utils/currency";
-import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
+import TodayRail from "./appointments/components/TodayRail";
+import useCalendarNavigation, { formatWeekRange, getRelativeDateLabel, dateKey } from "./appointments/hooks/useCalendarNavigation";
+import useClinicSchedule from "./appointments/hooks/useClinicSchedule";
+import useAppointments from "./appointments/hooks/useAppointments.jsx";
+import { toCalendarShape } from "./appointments/utils/appointmentShape";
 
 const Calendar = () => {
-  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const {
+    currentDate, setCurrentDate,
+    viewMode, setViewMode,
+    weekDates, goToPrevious, goToNext, goToToday,
+  } = useCalendarNavigation('week');
+  const {
+    clinicData, clinicTimings, treatmentTypes, doctors, dayShape,
+    selectedDoctorIds, setSelectedDoctorIds,
+  } = useClinicSchedule(currentDate);
+  // Declared before useAppointments, which takes both setters: a dependency
+  // passed into a hook call is evaluated during render, so a `const` declared
+  // further down would still be in its temporal dead zone and throw.
   const [selectedAppointment, setSelectedAppointment] = useState(null);
-  const [appointments, setAppointments] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [clinicData, setClinicData] = useState(null);
-  const [clinicTimings, setClinicTimings] = useState({
-    monday: { open: '08:00', close: '20:00', closed: false },
-    tuesday: { open: '08:00', close: '20:00', closed: false },
-    wednesday: { open: '08:00', close: '20:00', closed: false },
-    thursday: { open: '08:00', close: '20:00', closed: false },
-    friday: { open: '08:00', close: '20:00', closed: false },
-    saturday: { open: '08:00', close: '20:00', closed: false },
-    sunday: { open: '08:00', close: '20:00', closed: true }
-  });
+  // Which card the panel is pointing at. Null for a deep link, which has no
+  // card on screen to anchor to.
+  const [anchorId, setAnchorId] = useState(null);
+  const [cancelPrompt, setCancelPrompt] = useState(null);
+  const {
+    appointments, setAppointments, loading,
+    needsOutcome, loadNeedsOutcome, outcomeBusy,
+    fetchAppointments, handleReassign, handleResize, applyOutcome, checkIn, setOpenStatus,
+  } = useAppointments(currentDate, doctors, { setSelectedAppointment, setCancelPrompt });
   const [showPatientForm, setShowPatientForm] = useState(false);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
   const [duplicatePatients, setDuplicatePatients] = useState([]);
-  const [viewMode, setViewMode] = useState('week'); // 'week' or 'today'
   // Mobile only: show the mini-calendar + team filters rail (hidden by default so
   // the schedule grid gets the full width). Ignored on desktop (md+).
   const [showFilters, setShowFilters] = useState(false);
+  // The day list beside the grid, and the grid's own density. Both persist:
+  // they are a working preference, not a per-visit decision.
+  const [showDayRail, setShowDayRail] = useState(
+    () => localStorage.getItem('mp_calendar_day_rail') !== '0'
+  );
+  // The mini-calendar and team filters. Same treatment as the day list: a rail
+  // you can fold away when the grid needs the width.
+  // Which list the right rail is showing: the day, or the past appointments
+  // nobody closed off.
+  const [railTab, setRailTab] = useState('day');
+  const [showSidePanel, setShowSidePanel] = useState(
+    () => localStorage.getItem('mp_calendar_side_panel') !== '0'
+  );
+  // Filters the loaded list by name or phone, so finding someone on the day
+  // does not mean leaving for global search.
+  const [query, setQuery] = useState('');
   const [patientFormData, setPatientFormData] = useState({
     name: '',
     age: '',
@@ -72,28 +83,11 @@ const Calendar = () => {
     notes: '',
     payment_type: 'Cash'
   });
-  const [treatmentTypes, setTreatmentTypes] = useState([]);
-  const [newAppointment, setNewAppointment] = useState({
-    patientName: '',
-    patientEmail: '',
-    patientPhone: '',
-    patientAge: '',
-    chair_number: '1',
-    time: '',
-    duration: '1',
-    date: new Date().toISOString().split('T')[0], // Today's date as default
-    status: 'confirmed',
-    doctor_id: '' // optional — empty means unassigned (public bookings default here)
-  });
-  const [doctors, setDoctors] = useState([]);
 
   // ── The rebuild ───────────────────────────────────────────────────────────
   // Seed for the booking modal opened from a click on the grid. Null means the
   // modal is closed; the object carries the slot that was clicked.
   const [bookingSeed, setBookingSeed] = useState(null);
-  // Working hours per doctor for the day on screen, so the grid can shade time
-  // nobody is available for. One request rather than one per doctor.
-  const [dayShape, setDayShape] = useState(null);
   // Columns by person or by room, day view only.
   const [axis, setAxis] = useState("doctor");
   // Doctor as a layout axis in week and month, where there are no columns.
@@ -101,10 +95,6 @@ const Calendar = () => {
   const [focusDoctorId, setFocusDoctorId] = useState(
     () => localStorage.getItem("mp_calendar_focus_doctor") || ""
   );
-  // Past appointments nobody ever closed off.
-  const [needsOutcome, setNeedsOutcome] = useState({ count: 0, appointments: [] });
-  const [outcomeBusy, setOutcomeBusy] = useState(false);
-  const [cancelPrompt, setCancelPrompt] = useState(null);
   // Below this the grid stops being readable, so the phone gets a list instead
   // of a squeezed grid. Matched in JS because it swaps the component, not just
   // the styling: a CSS-hidden grid would still mount and measure.
@@ -122,110 +112,103 @@ const Calendar = () => {
   // asks then rather than leaving a half-filled file nobody goes back to.
   const [details, setDetails] = useState(null);
   const [detailsSaving, setDetailsSaving] = useState(false);
+
+  /**
+   * Fold the nav away while an appointment is open.
+   *
+   * The grid gets 256px of width back at the moment the popover needs somewhere
+   * to sit, so a card near the right edge has room beside it instead of being
+   * flipped to the left. Restored only if this screen was what collapsed it: a
+   * user who already works with a collapsed sidebar should not find it expanded
+   * afterwards.
+   *
+   * The columns widen over the sidebar's 300ms transition, which moves the card
+   * the popover points at. useAnchoredPosition watches the anchor with a
+   * ResizeObserver for exactly this reason.
+   */
+  const { sidebarCollapsed, setSidebarCollapsed } = useHeader();
+  const collapsedForPanel = useRef(false);
+  const panelWasOpen = useRef(false);
+  useEffect(() => {
+    const open = !!selectedAppointment;
+    // Keyed on the open/close transition, not on the current state. Reacting to
+    // `sidebarCollapsed` as well would re-collapse the nav the instant a user
+    // expanded it by hand while the drawer was still up, which is a fight the
+    // user should win.
+    if (open && !panelWasOpen.current) {
+      if (!sidebarCollapsed) {
+        collapsedForPanel.current = true;
+        setSidebarCollapsed(true);
+      }
+    } else if (!open && panelWasOpen.current && collapsedForPanel.current) {
+      collapsedForPanel.current = false;
+      setSidebarCollapsed(false);
+    }
+    panelWasOpen.current = open;
+    // sidebarCollapsed is read, never depended on, for the reason above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAppointment, setSidebarCollapsed]);
   // Reject confirmation dialog state — replaces the native confirm() + prompt() flow.
   // Phase 1 filter state: which doctors are visible, and whether to show unassigned (public) bookings
-  const [selectedDoctorIds, setSelectedDoctorIds] = useState(() => new Set());
   const [showUnassigned, setShowUnassigned] = useState(true);
-  const [showCheckInModal, setShowCheckInModal] = useState(false);
-  const [checkingInAppointment, setCheckingInAppointment] = useState(null);
-  const [checkInFormData, setCheckInFormData] = useState({
-    doctor_id: '',
-    chair_number: '',
-    notes: '',
-    patient_age: '',
-    patient_gender: 'Male',
-    patient_village: '',
-    patient_referred_by: 'Direct'
-  });
-  const [patientSearch, setPatientSearch] = useState('');
-  const [patientResults, setPatientResults] = useState([]);
-  const [searchingPatient, setSearchingPatient] = useState(false);
-  const [selectedMatch, setSelectedMatch] = useState(null);
-  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
-  const [duplicateMatches, setDuplicateMatches] = useState([]);
-  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
 
-  // Fetch appointments from API
-  const fetchAppointments = async () => {
-    try {
-      setLoading(true);
-      // Get date range for current month
-      const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-      const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
-      
-      const dateFrom = firstDay.toISOString().split('T')[0];
-      const dateTo = lastDay.toISOString().split('T')[0];
-      
-      const response = await api.get('/appointments', {
-        params: { date_from: dateFrom, date_to: dateTo }
-      });
-      
-      // Transform API response to match calendar format
-      const transformedAppointments = response.map(apt => {
-        return {
-          id: apt.id,
-          patientId: apt.patient_id || null,
-          patientName: apt.patient_name,
-          patientEmail: apt.patient_email || '',
-          patientPhone: apt.patient_phone || '',
-          patientAvatar: apt.patient_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
-          treatment: apt.treatment,
-          doctor_id: apt.doctor_id || null, // preserved for per-doctor coloring + filtering
-          doctor: apt.doctor_name || 'Unassigned',
-          startTime: apt.start_time,
-          endTime: apt.end_time,
-          date: apt.appointment_date,
-          status: apt.status,
-          notes: apt.notes || '',
-          chair_number: apt.chair_number || '',
-          patientAge: apt.patient_age || '',
-          patientGender: apt.patient_gender || '',
-          patientVillage: apt.patient_village || '',
-          patientReferredBy: apt.patient_referred_by || '',
-          visitNumber: apt.visit_number || null
-        };
-      });
-      
-      console.log('✅ Fetched appointments from API:', response.length);
-      console.log('📊 Transformed appointments:', transformedAppointments);
-      setAppointments(transformedAppointments);
-    } catch (error) {
-      console.error('Error fetching appointments:', error);
-      setAppointments([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    localStorage.setItem('mp_calendar_day_rail', showDayRail ? '1' : '0');
+  }, [showDayRail]);
+  useEffect(() => {
+    localStorage.setItem('mp_calendar_side_panel', showSidePanel ? '1' : '0');
+  }, [showSidePanel]);
 
-  const fetchDoctors = async () => {
-    try {
-      const response = await api.get('/clinic-users');
-      // Filter for roles that can treat patients
-      const filteredDoctors = response.filter(u =>
-        u.role === 'doctor' || u.role === 'clinic_owner'
-      );
-      setDoctors(filteredDoctors);
-      // Default the visibility filter to "all doctors on" the first time we learn about them.
-      // Only initialize if the set is empty so we don't override user toggles on refetch.
-      setSelectedDoctorIds(prev => {
-        if (prev.size > 0) return prev;
-        return new Set(filteredDoctors.map(d => d.id));
-      });
-    } catch (error) {
-      console.error('Error fetching doctors:', error);
-    }
-  };
+
+  /**
+   * A starting point for "New" when the click carried no slot with it.
+   *
+   * The toolbar button and the ?new=1 deep link used to open a second, older
+   * booking form. That one asked for an email, had no treatment field, checked
+   * nothing against the server and created no patient file, which is the exact
+   * gap BookingModal was written to close. Both entry points now open the same
+   * modal, so there is one set of booking rules instead of two.
+   *
+   * The time here is only a starting point; everything stays editable inside.
+   * Built from local date parts rather than toISOString, which would resolve
+   * the day in UTC and hand back yesterday for late-evening bookings.
+   *
+   * Declared above the deep-link effect on purpose: the effect lists it as a
+   * dependency, and a dependency array is evaluated during render, so a `const`
+   * defined further down would still be in its temporal dead zone and throw.
+   */
+  const seedForNewBooking = useCallback(() => {
+    const now = new Date();
+    const viewingToday = currentDate.toDateString() === now.toDateString();
+    // Next half hour when the user is looking at today, otherwise mid-morning.
+    // Clamped to the end of the day: rounding up from 23:45 lands on 1440,
+    // which wrapped to "00:00" and seeded a time twenty-three hours in the past
+    // on the same date.
+    const startMinutes = viewingToday
+      ? Math.min(Math.ceil((now.getHours() * 60 + now.getMinutes()) / 30) * 30, 23 * 60 + 30)
+      : 10 * 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    return {
+      date: `${currentDate.getFullYear()}-${pad(currentDate.getMonth() + 1)}-${pad(currentDate.getDate())}`,
+      startTime: `${pad(Math.floor(startMinutes / 60) % 24)}:${pad(startMinutes % 60)}`,
+      duration: 30,
+      doctorId: focusDoctorId || null,
+      chairNumber: null,
+      available: true,
+    };
+  }, [currentDate, focusDoctorId]);
 
   // Deep link: /calendar?new=1 opens the booking form — the entry point the
   // "Add appointment" shortcut uses. The param is stripped straight away so a
-  // refresh or back-navigation doesn't reopen the form.
+  // refresh or back-navigation doesn't reopen the form, which also means a
+  // re-run from a changed seed is a no-op rather than a second modal.
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get('new') !== '1') return;
-    setShowAddForm(true);
+    setBookingSeed(seedForNewBooking());
     params.delete('new');
     navigate({ search: params.toString() }, { replace: true });
-  }, [location.search, navigate]);
+  }, [location.search, navigate, seedForNewBooking]);
 
   // Deep link: /calendar?appointment=<id> jumps to that appointment's day and
   // opens it. The dashboard's Today list uses this, so a row there is a way in
@@ -244,19 +227,14 @@ const Calendar = () => {
     const params = new URLSearchParams(location.search);
     params.delete('appointment');
     navigate({ search: params.toString() }, { replace: true });
-  }, [location.search, appointments, navigate]);
+    // The two setters come from useCalendarNavigation and are stable useState
+    // setters, so listing them changes nothing at runtime; listed anyway so the
+    // dependency array stays honest.
+  }, [location.search, appointments, navigate, setCurrentDate, setViewMode]);
 
-  // Keep the selected-doctors set in sync when new doctors appear (add them selected by default).
-  useEffect(() => {
-    setSelectedDoctorIds(prev => {
-      const next = new Set(prev);
-      let changed = false;
-      doctors.forEach(d => {
-        if (!next.has(d.id) && prev.size === 0) { next.add(d.id); changed = true; }
-      });
-      return changed ? next : prev;
-    });
-  }, [doctors]);
+  // The effect that used to sit here defaulted every doctor to selected once
+  // they loaded. useClinicSchedule does that inside fetchDoctors now, at the
+  // one moment it can know the answer, so this was doing the work twice.
 
   const toggleDoctorFilter = (doctorId) => {
     setSelectedDoctorIds(prev => {
@@ -268,115 +246,27 @@ const Calendar = () => {
 
   // Drag-and-drop reassign — used by the Today/Day grid. Updates doctor and/or
   // start time. Optimistic local update + PUT, with revert on failure.
-  const handleReassign = async (appointmentId, newDoctorId, newStartTime, newDateStr) => {
-    const apt = appointments.find(a => a.id === appointmentId);
-    if (!apt) return;
-
-    // Compute new end time by preserving the original duration.
-    const toMinutes = (t) => {
-      const [h, m] = t.split(':').map(Number);
-      return h * 60 + m;
-    };
-    const fromMinutes = (mins) =>
-      `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
-    const durationMins = toMinutes(apt.endTime) - toMinutes(apt.startTime);
-    const newEndTime = fromMinutes(toMinutes(newStartTime) + durationMins);
-
-    // newDateStr is set when the drag crossed into another day column.
-    const dateStr = newDateStr || new Date(apt.date).toISOString().split('T')[0];
-    const targetDoctorId = newDoctorId ? Number(newDoctorId) : null;
-
-    const sameDay = dateStr === new Date(apt.date).toISOString().split('T')[0];
-    // No-op detection (same doctor, same day, same time) — avoid a wasted PUT.
-    if (targetDoctorId === (apt.doctor_id || null) && newStartTime === apt.startTime && sameDay) {
-      return;
-    }
-
-    // Per-doctor conflict check on the destination.
-    const conflict = checkTimeConflict(dateStr, newStartTime, newEndTime, targetDoctorId, appointmentId);
-    if (conflict.hasConflict) {
-      const c = conflict.conflictingAppointment;
-      notify.problem(
-        <div>
-          <div className="font-semibold">Cannot move here</div>
-          <div className="text-sm mt-1">
-            Overlaps with {c.patientName} ({c.doctor}) at {c.startTime}–{c.endTime}.
-          </div>
-        </div>
-      );
-      return;
-    }
-
-    // Optimistic update so the UI feels instant.
-    const targetDoctor = doctors.find(d => d.id === targetDoctorId);
-    const previous = apt;
-    const updated = {
-      ...apt,
-      doctor_id: targetDoctorId,
-      doctor: targetDoctor?.name || apt.doctor,
-      startTime: newStartTime,
-      endTime: newEndTime,
-      // Carry the day too, or a card dragged across the week snaps back to its
-      // old column until the next refetch.
-      date: sameDay ? apt.date : dateStr,
-    };
-    setAppointments(prev => prev.map(a => (a.id === appointmentId ? updated : a)));
-
-    try {
-      const payload = {
-        doctor_id: targetDoctorId,
-        appointment_date: dateStr,
-        start_time: newStartTime,
-        end_time: newEndTime,
-        duration: durationMins,
-      };
-      const response = await api.put(`/appointments/${appointmentId}`, payload);
-      // Reconcile with the server's authoritative response (doctor name, etc.).
-      setAppointments(prev => prev.map(a => (a.id === appointmentId ? {
-        ...a,
-        doctor_id: response.doctor_id || null,
-        doctor: response.doctor_name || 'Unassigned',
-        startTime: response.start_time,
-        endTime: response.end_time,
-        date: response.appointment_date,
-      } : a)));
-    } catch (error) {
-      console.error('Failed to reassign appointment:', error);
-      notify.reverted(getFriendlyErrorMessage(error, 'Could not move that appointment, so it went back'));
-      // Revert the optimistic change.
-      setAppointments(prev => prev.map(a => (a.id === appointmentId ? previous : a)));
-    }
-  };
 
   // Shared click handler — fetches fresh appointment data then opens the detail drawer.
-  const openAppointmentDetails = async (apt) => {
+  /**
+   * Open the panel on an appointment, beside the card that was clicked.
+   *
+   * Shows the card's own data first and merges the fetched record when it
+   * lands. It used to await the request before rendering anything, which for a
+   * panel meant to feel attached to the click is the whole difference: the card
+   * already carries everything above the fold.
+   */
+  const openAppointmentDetails = async (apt, clickedAnchorId = null) => {
+    setAnchorId(clickedAnchorId);
+    setSelectedAppointment(apt);
     try {
-      const fullAppointment = await api.get(`/appointments/${apt.id}`);
-      setSelectedAppointment({
-        id: fullAppointment.id,
-        patientId: fullAppointment.patient_id || null,
-        patientName: fullAppointment.patient_name,
-        patientEmail: fullAppointment.patient_email || '',
-        patientPhone: fullAppointment.patient_phone || '',
-        patientAvatar: fullAppointment.patient_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
-        treatment: fullAppointment.treatment,
-        doctor_id: fullAppointment.doctor_id || null,
-        doctor: fullAppointment.doctor_name || 'Unassigned',
-        startTime: fullAppointment.start_time,
-        endTime: fullAppointment.end_time,
-        date: fullAppointment.appointment_date,
-        status: fullAppointment.status,
-        notes: fullAppointment.notes || '',
-        chair_number: fullAppointment.chair_number || '',
-        patientAge: fullAppointment.patient_age || '',
-        patientGender: fullAppointment.patient_gender || '',
-        patientVillage: fullAppointment.patient_village || '',
-        patientReferredBy: fullAppointment.patient_referred_by || '',
-        visitNumber: fullAppointment.visit_number || null,
-      });
+      const full = toCalendarShape(await api.get(`/appointments/${apt.id}`));
+      // Guard against a slower response for an appointment the user has since
+      // moved away from.
+      setSelectedAppointment((prev) => (prev && prev.id === full.id ? full : prev));
     } catch (error) {
+      // Keep what the card gave us rather than blanking the panel.
       console.error('Error fetching appointment details:', error);
-      setSelectedAppointment(apt);
     }
   };
 
@@ -406,22 +296,24 @@ const Calendar = () => {
 
   useEffect(() => {
     fetchAppointments();
-    fetchClinicData();
-    fetchTreatmentTypes();
-    fetchDoctors();
-  }, [currentDate]);
+  }, [fetchAppointments]);
 
   // Filtered appointments based on team-member panel selection.
+  const q = query.trim().toLowerCase();
   const visibleAppointments = useMemo(() => {
     const focus = focusDoctorId ? Number(focusDoctorId) : null;
     return appointments.filter(a => {
       // Focusing one doctor is a stronger statement than the team checkboxes,
       // so it wins outright rather than intersecting with them.
-      if (focus) return a.doctor_id === focus;
-      if (a.doctor_id) return selectedDoctorIds.has(a.doctor_id);
-      return showUnassigned;
+      if (focus) { if (a.doctor_id !== focus) return false; }
+      else if (a.doctor_id) { if (!selectedDoctorIds.has(a.doctor_id)) return false; }
+      else if (!showUnassigned) return false;
+      // Name or phone, over the list already loaded. Finding someone on the
+      // day should not mean leaving the calendar for global search.
+      if (!q) return true;
+      return `${a.patientName || ''} ${a.patientPhone || ''}`.toLowerCase().includes(q);
     });
-  }, [appointments, selectedDoctorIds, showUnassigned, focusDoctorId]);
+  }, [appointments, selectedDoctorIds, showUnassigned, focusDoctorId, q]);
 
   // Colour assignment is by position in this clinic's doctor list, so the list
   // has to be registered before anything renders a card.
@@ -432,24 +324,7 @@ const Calendar = () => {
     [focusDoctorId, doctors]
   );
 
-  // ── Working hours for the day on screen ───────────────────────────────────
-  useEffect(() => {
-    let cancelled = false;
-    const iso = currentDate.toISOString().split('T')[0];
-    api.get('/scheduling/day-shape', { params: { on: iso } })
-      .then(res => { if (!cancelled) setDayShape(res); })
-      .catch(() => { if (!cancelled) setDayShape(null); });
-    return () => { cancelled = true; };
-  }, [currentDate]);
-
   // ── Appointments left open in the past ────────────────────────────────────
-  const loadNeedsOutcome = useCallback(async () => {
-    try {
-      setNeedsOutcome(await api.get('/appointments/needs-outcome'));
-    } catch {
-      setNeedsOutcome({ count: 0, appointments: [] });
-    }
-  }, []);
 
   useEffect(() => { loadNeedsOutcome(); }, [loadNeedsOutcome]);
 
@@ -484,33 +359,6 @@ const Calendar = () => {
   }, [doctors, focusDoctorId]);
 
   // ── Resize: the card's bottom edge was dragged ────────────────────────────
-  const handleResize = async (appointmentId, newEndTime) => {
-    const apt = appointments.find(a => a.id === appointmentId);
-    if (!apt || newEndTime === apt.endTime) return;
-
-    const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-    const duration = toMin(newEndTime) - toMin(apt.startTime);
-    if (duration < 5) return;
-
-    const previous = apt;
-    setAppointments(prev => prev.map(a =>
-      a.id === appointmentId ? { ...a, endTime: newEndTime, duration } : a));
-
-    try {
-      await api.put(`/appointments/${appointmentId}`, {
-        end_time: newEndTime,
-        duration,
-        start_time: apt.startTime,
-        appointment_date: new Date(apt.date).toISOString().split('T')[0],
-      });
-    } catch (err) {
-      // Revert. The server enforces availability and clashes, so a refusal
-      // here is a real answer rather than a glitch, and the card should snap
-      // back to what is actually stored.
-      setAppointments(prev => prev.map(a => (a.id === appointmentId ? previous : a)));
-      notify.reverted(getFriendlyErrorMessage(err, 'Could not change that length, so it went back'));
-    }
-  };
 
   // ── A click or drag on empty grid ─────────────────────────────────────────
   const handleCreateFromGrid = (seed) => {
@@ -522,6 +370,19 @@ const Calendar = () => {
   };
 
   const handleBookingSaved = async (result) => {
+    // Follow the appointment if it moved off the days on screen.
+    //
+    // The fetch window is the visible month padded by a week, so an
+    // appointment rescheduled into another month would simply stop being
+    // drawn. Nothing had gone wrong, but it reads exactly like a delete, so
+    // the calendar goes to where the appointment now is.
+    const savedDate = result?.appointment?.appointment_date;
+    if (savedDate) {
+      const target = new Date(`${savedDate}T00:00:00`);
+      if (!Number.isNaN(target.getTime()) && dateKey(target) !== dateKey(currentDate)) {
+        setCurrentDate(target);
+      }
+    }
     await fetchAppointments();
     if (result?.kind === 'series') {
       const made = result.created?.length || 0;
@@ -541,24 +402,22 @@ const Calendar = () => {
   };
 
   // ── Outcomes ──────────────────────────────────────────────────────────────
-  const applyOutcome = async (appointmentId, status, cancelReason) => {
-    setOutcomeBusy(true);
-    try {
-      await api.post(`/appointments/${appointmentId}/outcome`, {
-        status, cancel_reason: cancelReason || null,
-      });
-      setAppointments(prev => prev.map(a => (a.id === appointmentId ? { ...a, status } : a)));
-      setSelectedAppointment(prev =>
-        prev && prev.id === appointmentId ? { ...prev, status } : prev);
-      loadNeedsOutcome();
-      // The card's own status chip changes as this returns.
-    } catch (err) {
-      notify.problem(err, 'Could not record that outcome');
-    } finally {
-      setOutcomeBusy(false);
-      setCancelPrompt(null);
-    }
-  };
+
+  /**
+   * They walked in. Record it, in one tap.
+   *
+   * Check-in used to sit behind a modal that asked for age, gender and village
+   * first, and that modal was gated on `status === 'accepted'` — a value the
+   * status migration removed. So it never opened, and there was no working way
+   * to mark anyone `arrived` short of "Start visit", which also creates a case
+   * paper nobody asked for.
+   *
+   * Arrival is a fact, not a form. Record it immediately; the "ask them for
+   * their details" block further up the drawer already collects the rest, at a
+   * moment when the desk is not holding a queue.
+   *
+   * Goes through the general PUT because /outcome only accepts terminal states.
+   */
 
   // Which of the useful-at-the-desk fields are still blank.
   const missingDetails = useCallback(async (patientId) => {
@@ -638,34 +497,9 @@ const Calendar = () => {
     return set;
   }, [visibleAppointments]);
 
-  // Scroll-into-view on week mount: when the user opens the week (or switches
-  // to it), bring the current hour roughly into the middle of the viewport.
-  const weekScrollRef = useRef(null);
-  useEffect(() => {
-    if (viewMode !== 'week' || !weekScrollRef.current) return;
-    const HOUR_PX = 80;
-    const OPEN_HOUR = 8; // matches getWeekViewTimeSlots
-    const now = new Date();
-    const minutes = now.getHours() * 60 + now.getMinutes();
-    const y = Math.max(0, ((minutes - OPEN_HOUR * 60) * HOUR_PX) / 60 - 200);
-    weekScrollRef.current.scrollTop = y;
-  }, [viewMode]);
 
   // Format the current week as a human-friendly range, handling cross-month
   // and cross-year cases ("Apr 28 – May 4, 2026" / "Dec 29, 2025 – Jan 4, 2026").
-  const formatWeekRange = (dates) => {
-    if (!dates || dates.length === 0) return '';
-    const start = dates[0];
-    const end = dates[dates.length - 1];
-    const sm = start.toLocaleDateString('en-US', { month: 'short' });
-    const em = end.toLocaleDateString('en-US', { month: 'short' });
-    const sy = start.getFullYear();
-    const ey = end.getFullYear();
-    if (sy !== ey) return `${sm} ${start.getDate()}, ${sy} – ${em} ${end.getDate()}, ${ey}`;
-    if (sm === em) return `${sm} ${start.getDate()} – ${end.getDate()}, ${sy}`;
-    return `${sm} ${start.getDate()} – ${em} ${end.getDate()}, ${sy}`;
-  };
-
   // Per-date counts for the week-view day-header badges.
   const visibleCountsByDate = useMemo(() => {
     const map = {};
@@ -677,772 +511,65 @@ const Calendar = () => {
     return map;
   }, [visibleAppointments]);
 
-  // Get relative date label (Today, Yesterday, Tomorrow)
-  const getRelativeDateLabel = (date) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const targetDate = new Date(date);
-    targetDate.setHours(0, 0, 0, 0);
-    
-    const diffTime = targetDate - today;
-    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 0) return 'Today';
-    if (diffDays === -1) return 'Yesterday';
-    if (diffDays === 1) return 'Tomorrow';
-    
-    // If not within the 3-day range, return formatted date
-    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-  };
-
-  // Navigation functions
-  const goToPrevious = () => {
-    if (viewMode === 'today') {
-      // In today's view, only allow navigating to yesterday
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const current = new Date(currentDate);
-      current.setHours(0, 0, 0, 0);
-      const diffDays = Math.round((current - today) / (1000 * 60 * 60 * 24));
-
-      if (diffDays > -1) {
-        // Can go back to yesterday
-        const newDate = new Date(currentDate);
-        newDate.setDate(newDate.getDate() - 1);
-        setCurrentDate(newDate);
-      }
-    } else if (viewMode === 'month') {
-      // Month view: go back 1 month
-      const newDate = new Date(currentDate);
-      newDate.setMonth(newDate.getMonth() - 1);
-      setCurrentDate(newDate);
-    } else {
-      // Week view: go back 7 days
-      const newDate = new Date(currentDate);
-      newDate.setDate(newDate.getDate() - 7);
-      setCurrentDate(newDate);
-    }
-  };
-
-  const goToNext = () => {
-    if (viewMode === 'today') {
-      // In today's view, only allow navigating to tomorrow
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const current = new Date(currentDate);
-      current.setHours(0, 0, 0, 0);
-      const diffDays = Math.round((current - today) / (1000 * 60 * 60 * 24));
-
-      if (diffDays < 1) {
-        // Can go forward to tomorrow
-        const newDate = new Date(currentDate);
-        newDate.setDate(newDate.getDate() + 1);
-        setCurrentDate(newDate);
-      }
-    } else if (viewMode === 'month') {
-      const newDate = new Date(currentDate);
-      newDate.setMonth(newDate.getMonth() + 1);
-      setCurrentDate(newDate);
-    } else {
-      // Week view: go forward 7 days
-      const newDate = new Date(currentDate);
-      newDate.setDate(newDate.getDate() + 7);
-      setCurrentDate(newDate);
-    }
-  };
-
-  const goToToday = () => {
-    setCurrentDate(new Date());
-    setViewMode('today'); // Switch to today's view
-  };
-
-  // Get week dates
-  const getWeekDates = () => {
-    const dates = [];
-    const startOfWeek = new Date(currentDate);
-    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
-    
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(startOfWeek);
-      date.setDate(startOfWeek.getDate() + i);
-      dates.push(date);
-    }
-    
-    return dates;
-  };
-
-  // Get time slots based on day and clinic timings
-  const getTimeSlots = (date = new Date()) => {
-    const dayName = date.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-    const dayTimings = clinicTimings[dayName];
-    
-    // If clinic is closed on this day, return empty array
-    if (!dayTimings || dayTimings.closed) {
-      return [];
-    }
-    
-    // Parse open and close times
-    const [openHour, openMinute] = dayTimings.open.split(':').map(Number);
-    const [closeHour, closeMinute] = dayTimings.close.split(':').map(Number);
-    
-    const slots = [];
-    let currentHour = openHour;
-    
-    // Generate slots from open to close time
-    while (currentHour <= closeHour) {
-      // Don't add slot if it's the closing hour and we're at or past closing time
-      if (currentHour === closeHour && openMinute >= closeMinute) {
-        break;
-      }
-      
-      const time = `${currentHour.toString().padStart(2, '0')}:00`;
-      const displayTime = currentHour === 12 ? '12:00 PM' : 
-                        currentHour > 12 ? `${currentHour - 12}:00 PM` : 
-                        `${currentHour}:00 AM`;
-      slots.push({ time, displayTime, hour: currentHour });
-      currentHour++;
-    }
-    
-    return slots;
-  };
-
-  // Get appointments for a specific date — respects the team-member panel filter.
-  const getAppointmentsForDate = (date) => {
-    const dateStr = date.toISOString().split('T')[0];
-    return visibleAppointments.filter(apt => {
-      const aptDate = apt.date ? new Date(apt.date).toISOString().split('T')[0] : apt.date;
-      return aptDate === dateStr;
-    });
-  };
-
-  // Calculate appointment position and height
-  const getAppointmentStyle = (appointment) => {
-    const startHour = parseInt(appointment.startTime.split(':')[0]);
-    const startMinute = parseInt(appointment.startTime.split(':')[1]);
-    const endHour = parseInt(appointment.endTime.split(':')[0]);
-    const endMinute = parseInt(appointment.endTime.split(':')[1]);
-    
-    const startTimeInMinutes = startHour * 60 + startMinute;
-    const endTimeInMinutes = endHour * 60 + endMinute;
-    const duration = endTimeInMinutes - startTimeInMinutes;
-    
-    // Position from top (8 AM = 0 minutes) - each hour is 80px
-    // Since overlay has top: 60px, we need to account for that offset
-    const topPosition = (startTimeInMinutes - 8 * 60) * (80 / 60); // 80px per hour = 1.33px per minute
-    const height = duration * (80 / 60); // 80px per hour = 1.33px per minute
-
-    return {
-      top: `${topPosition}px`,
-      height: `${height}px`,
-      width: '12%',
-      left: '7.5%',
-      minHeight: '20px',
-      zIndex: 10
-    };
-  };
-
-  // Format time for display
-  const formatTime = (timeString) => {
-    const [hour, minute] = timeString.split(':').map(Number);
-    const period = hour >= 12 ? 'PM' : 'AM';
-    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-    return `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
-  };
-
-  // Get current time for indicator
-  const getCurrentTime = () => {
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
-    const currentTimeInMinutes = currentHour * 60 + currentMinute;
-    
-    // Position from top (8 AM = 0 minutes) - each hour is 80px
-    const topPosition = (currentTimeInMinutes - 8 * 60) * (80 / 60); // 80px per hour = 1.33px per minute
-    
-    return {
-      top: `${topPosition}px`,
-      time: now.toLocaleTimeString('en-US', { 
-        hour: 'numeric', 
-        minute: '2-digit',
-        hour12: false 
-      })
-    };
-  };
-
-  // Get client's timezone
-  const getClientTimezone = () => {
-    const now = new Date();
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const offset = now.getTimezoneOffset();
-    const offsetHours = Math.abs(offset) / 60;
-    const offsetMinutes = Math.abs(offset) % 60;
-    const sign = offset <= 0 ? '+' : '-';
-    
-    return {
-      timezone,
-      offset: `${sign}${offsetHours.toString().padStart(2, '0')}:${offsetMinutes.toString().padStart(2, '0')}`
-    };
-  };
-
   // Fetch clinic data
-  const fetchClinicData = async () => {
-    try {
-      const response = await api.get('/clinics/me');
-      setClinicData(response);
-      if (response.timings) {
-        setClinicTimings(response.timings);
-      }
-    } catch (error) {
-      console.error('Error fetching clinic data:', error);
-    }
-  };
+  // The second fetch that used to sit here was removed. openAppointmentDetails
+  // already loads the full record, and this rebuilt it from a shorter field
+  // list, so the drawer lost age, gender, city, chair and visit number moments
+  // after showing them.
 
-  const fetchTreatmentTypes = async () => {
-    try {
-      const response = await api.get('/treatment-types/');
-      setTreatmentTypes(response);
-    } catch (error) {
-      console.error('Error fetching treatment types:', error);
-      setTreatmentTypes([]);
-    }
-  };
-
-  // Fetch full appointment details when selectedAppointment changes to ensure we have latest patient_id
-  useEffect(() => {
-    const fetchFullAppointmentDetails = async () => {
-      if (!selectedAppointment || !selectedAppointment.id) return;
-      
-      try {
-        const fullAppointment = await api.get(`/appointments/${selectedAppointment.id}`);
-        const newPatientId = fullAppointment.patient_id || null;
-        const newStatus = fullAppointment.status;
-        
-        // Only update if patient_id or status has changed to avoid unnecessary re-renders
-        if (selectedAppointment.patientId !== newPatientId || selectedAppointment.status !== newStatus) {
-          const transformedAppointment = {
-            id: fullAppointment.id,
-            patientId: newPatientId,
-            patientName: fullAppointment.patient_name,
-            patientEmail: fullAppointment.patient_email || '',
-            patientPhone: fullAppointment.patient_phone || '',
-            patientAvatar: fullAppointment.patient_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
-            treatment: fullAppointment.treatment,
-            doctor: fullAppointment.doctor_name || 'Unassigned',
-            startTime: fullAppointment.start_time,
-            endTime: fullAppointment.end_time,
-            date: fullAppointment.appointment_date,
-            status: newStatus,
-            doctor_id: fullAppointment.doctor_id || null,
-            notes: fullAppointment.notes || ''
-          };
-          console.log('🔄 Updated appointment details:', transformedAppointment);
-          console.log('🆔 Patient ID:', transformedAppointment.patientId);
-          setSelectedAppointment(transformedAppointment);
-        }
-      } catch (error) {
-        console.error('Error fetching full appointment details:', error);
-        // Don't update if there's an error - keep existing selectedAppointment
-      }
-    };
-
-    fetchFullAppointmentDetails();
-  }, [selectedAppointment?.id]); // Only fetch when the appointment ID changes
-
-  // Handle form input changes
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setNewAppointment(prev => ({
-      ...prev,
-      [name]: value
-    }));
-
-    // Check for operating hours validation when time is changed
-    if (name === 'time' && value && newAppointment.date) {
-      const timeValidation = isTimeWithinOperatingHours(newAppointment.date, value);
-      if (!timeValidation.valid) {
-        notify.problem(`Outside clinic hours — ${timeValidation.message}`);
-        return;
-      }
-
-      // Check for conflicts when time is valid (per-doctor, matching create flow)
-      const durationMinutes = parseFloat(newAppointment.duration) * 60;
-      const [startHour, startMinute] = value.split(':').map(Number);
-      const endTimeInMinutes = (startHour * 60 + startMinute) + durationMinutes;
-      const endHour = Math.floor(endTimeInMinutes / 60);
-      const endMinute = endTimeInMinutes % 60;
-
-      const startTime = `${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}`;
-      const endTime = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
-
-      const conflict = checkTimeConflict(newAppointment.date, startTime, endTime, newAppointment.doctor_id || null);
-      if (conflict.hasConflict) {
-        const c = conflict.conflictingAppointment;
-        notify.problem(
-          <div>
-            <div className="font-semibold">Time conflict</div>
-            <div className="text-sm mt-1">{c.patientName} is booked {c.startTime}–{c.endTime}.</div>
-          </div>
-        );
-      }
-    }
-  };
 
   // Check if time slot overlaps with existing appointments for the SAME doctor.
   // Two appointments with different assigned doctors don't conflict. An unassigned
   // booking only conflicts with other unassigned bookings — the receptionist will
   // assign a doctor on check-in, at which point the chair/doctor check kicks in.
-  const checkTimeConflict = (date, startTime, endTime, doctorId = null, excludeId = null) => {
-    const timeToMinutes = (time) => {
-      const [hours, minutes] = time.split(':').map(Number);
-      return hours * 60 + minutes;
-    };
 
-    const newStart = timeToMinutes(startTime);
-    const newEnd = timeToMinutes(endTime);
 
-    const dateStr = date;
-    const dayAppointments = appointments.filter(apt => {
-      const aptDate = new Date(apt.date).toISOString().split('T')[0];
-      return aptDate === dateStr && apt.id !== excludeId;
-    });
-
-    const targetDoctor = doctorId ? Number(doctorId) : null;
-
-    for (const apt of dayAppointments) {
-      // Only count as conflict if both refer to the same resource:
-      // - same doctor id, OR
-      // - both unassigned (both null)
-      const aptDoctor = apt.doctor_id ? Number(apt.doctor_id) : null;
-      if (aptDoctor !== targetDoctor) continue;
-
-      const aptStart = timeToMinutes(apt.startTime);
-      const aptEnd = timeToMinutes(apt.endTime);
-
-      if (
-        (newStart >= aptStart && newStart < aptEnd) ||
-        (newEnd > aptStart && newEnd <= aptEnd) ||
-        (newStart <= aptStart && newEnd >= aptEnd)
-      ) {
-        return {
-          hasConflict: true,
-          conflictingAppointment: apt
-        };
-      }
-    }
-
-    return { hasConflict: false };
-  };
-
-  // Find next available time slot
-  const findNextAvailableSlot = (date, durationHours = 1) => {
-    const timeToMinutes = (time) => {
-      const [hours, minutes] = time.split(':').map(Number);
-      return hours * 60 + minutes;
-    };
-
-    const minutesToTime = (minutes) => {
-      const hours = Math.floor(minutes / 60);
-      const mins = minutes % 60;
-      return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
-    };
-    
-    // Get day name and check if clinic is open
-    const dateObj = new Date(date);
-    const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-    const dayTimings = clinicTimings[dayName];
-    
-    // If clinic is closed on this day, return null
-    if (!dayTimings || dayTimings.closed) {
-      return null;
-    }
-
-    // Get appointments for the same date
-    const dateStr = date;
-    const dayAppointments = appointments
-      .filter(apt => {
-        const aptDate = new Date(apt.date).toISOString().split('T')[0];
-        return aptDate === dateStr;
-      })
-      .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
-
-    // Use clinic hours from settings (default to 8 AM - 8 PM if not set)
-    const [openHour, openMinute] = (dayTimings.open || '08:00').split(':').map(Number);
-    const [closeHour, closeMinute] = (dayTimings.close || '20:00').split(':').map(Number);
-    const clinicStart = openHour * 60 + openMinute;
-    const clinicEnd = closeHour * 60 + closeMinute;
-    const durationMinutes = durationHours * 60;
-
-    // If no appointments, start at clinic opening
-    if (dayAppointments.length === 0) {
-      // Check if it's today and we're past clinic start time
-      const today = new Date().toISOString().split('T')[0];
-      if (date === today) {
-        const now = new Date();
-        const currentMinutes = now.getHours() * 60 + now.getMinutes();
-        // Round up to next 30-minute interval
-        const nextSlot = Math.ceil(currentMinutes / 30) * 30;
-        if (nextSlot >= clinicStart && nextSlot + durationMinutes <= clinicEnd) {
-          return minutesToTime(nextSlot);
-        }
-      }
-      return minutesToTime(clinicStart);
-    }
-
-    // Check for gaps between appointments
-    let checkTime = clinicStart;
-
-    // If it's today, start from current time
-    const today = new Date().toISOString().split('T')[0];
-    if (date === today) {
-      const now = new Date();
-      const currentMinutes = now.getHours() * 60 + now.getMinutes();
-      checkTime = Math.max(checkTime, Math.ceil(currentMinutes / 30) * 30);
-    }
-
-    for (const apt of dayAppointments) {
-      const aptStart = timeToMinutes(apt.startTime);
-      const aptEnd = timeToMinutes(apt.endTime);
-
-      // Check if there's a gap before this appointment
-      if (checkTime + durationMinutes <= aptStart) {
-        return minutesToTime(checkTime);
-      }
-
-      // Move check time to after this appointment
-      checkTime = Math.max(checkTime, aptEnd);
-    }
-
-    // Check if there's time after last appointment
-    if (checkTime + durationMinutes <= clinicEnd) {
-      return minutesToTime(checkTime);
-    }
-
-    // No slot available today
-    return null;
-  };
-
-  // Check if selected time is within clinic operating hours
-  const isTimeWithinOperatingHours = (date, time) => {
-    const dateObj = new Date(date);
-    const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-    const dayTimings = clinicTimings[dayName];
-
-    // If clinic is closed on this day
-    if (!dayTimings || dayTimings.closed) {
-      return { valid: false, message: `Clinic is closed on ${dayName.charAt(0).toUpperCase() + dayName.slice(1)}.` };
-    }
-
-    const [selectedHour, selectedMinute] = time.split(':').map(Number);
-    const selectedTimeInMinutes = selectedHour * 60 + selectedMinute;
-
-    const [openHour, openMinute] = dayTimings.open.split(':').map(Number);
-    const [closeHour, closeMinute] = dayTimings.close.split(':').map(Number);
-    const openTimeInMinutes = openHour * 60 + openMinute;
-    const closeTimeInMinutes = closeHour * 60 + closeMinute;
-
-    if (selectedTimeInMinutes < openTimeInMinutes) {
-      return {
-        valid: false,
-        message: `Clinic opens at ${dayTimings.open}. Selected time ${time} is too early.`
-      };
-    }
-
-    if (selectedTimeInMinutes >= closeTimeInMinutes) {
-      return {
-        valid: false,
-        message: `Clinic closes at ${dayTimings.close}. Selected time ${time} is too late.`
-      };
-    }
-
-    return { valid: true };
-  };
-
-  // Handle form submission
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    // Auto-assign time if not provided
-    let appointmentTime = newAppointment.time;
-    if (!appointmentTime) {
-    const durationHours = parseFloat(newAppointment.duration);
-      appointmentTime = findNextAvailableSlot(newAppointment.date, durationHours);
-
-      if (!appointmentTime) {
-        notify.problem('No available time slots for this date. Please choose another date.');
-        return;
-      }
-      // The chosen slot is written straight into the time field below, so the
-      // user can see what it picked without being told.
-    } else {
-      // Validate selected time is within operating hours
-      const timeValidation = isTimeWithinOperatingHours(newAppointment.date, appointmentTime);
-      if (!timeValidation.valid) {
-        notify.problem(`Invalid time — ${timeValidation.message}`);
-        return;
-      }
-    }
-    
-    try {
-    // Calculate start and end times from time and duration
-    const [startHour, startMinute] = appointmentTime.split(':').map(Number);
-      const durationMinutes = parseFloat(newAppointment.duration) * 60;
-      const endTimeInMinutes = (startHour * 60 + startMinute) + durationMinutes;
-    const endHour = Math.floor(endTimeInMinutes / 60);
-    const endMinute = endTimeInMinutes % 60;
-    
-    const startTime = `${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}`;
-    const endTime = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
-    
-      // Check for time conflicts (per-doctor; unassigned only conflicts with unassigned)
-      const conflict = checkTimeConflict(newAppointment.date, startTime, endTime, newAppointment.doctor_id || null);
-      if (conflict.hasConflict) {
-        const c = conflict.conflictingAppointment;
-        notify.problem(
-          <div>
-            <div className="font-semibold">Time slot conflict</div>
-            <div className="text-sm mt-1">
-              Overlaps with {c.patientName} ({c.doctor}) at {c.startTime}–{c.endTime}. Pick another time or doctor.
-            </div>
-          </div>
-        );
-        return;
-      }
-    
-      // Get clinic_id from clinicData or user
-      const clinicId = clinicData?.id || user?.clinic_id;
-      
-      if (!clinicId) {
-        notify.problem('Clinic info not available. Please refresh and try again.');
-        return;
-      }
-      
-      // Create appointment via API
-      const appointmentData = {
-        patient_name: newAppointment.patientName,
-        patient_email: newAppointment.patientEmail,
-        patient_phone: newAppointment.patientPhone,
-        patient_age: newAppointment.patientAge ? parseInt(newAppointment.patientAge) : null,
-        chair_number: newAppointment.chair_number,
-        appointment_date: newAppointment.date,
-        start_time: startTime,
-        end_time: endTime,
-        duration: parseInt(durationMinutes),
-        status: newAppointment.status,
-        doctor_id: newAppointment.doctor_id ? parseInt(newAppointment.doctor_id) : null,
-        clinic_id: clinicId // Required by backend schema (even though it uses current_user.clinic_id internally)
-      };
-
-      const response = await api.post('/appointments', appointmentData);
-
-      // Add to local state with transformed format (color is derived at render time via getAppointmentColor)
-      const newApt = {
-        id: response.id,
-        patientId: response.patient_id || null,
-        patientName: response.patient_name,
-        patientEmail: response.patient_email || '',
-        patientPhone: response.patient_phone || '',
-        patientAvatar: response.patient_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
-        treatment: response.treatment,
-        doctor_id: response.doctor_id || null,
-        doctor: response.doctor_name || 'Unassigned',
-        startTime: response.start_time,
-        endTime: response.end_time,
-        date: response.appointment_date,
-        status: response.status,
-        notes: response.notes || ''
-      };
-
-      setAppointments(prev => [...prev, newApt]);
-
-      // Reset form and close drawer
-      setNewAppointment({
-        patientName: '',
-        patientEmail: '',
-        patientPhone: '',
-        patientAge: '',
-        chair_number: '1',
-        time: '',
-        duration: '1',
-        date: new Date().toISOString().split('T')[0],
-        status: 'confirmed',
-        doctor_id: ''
-      });
-    setShowAddForm(false);
-    
-  } catch (error) {
-    console.error('Error creating appointment:', error);
-    
-    notify.problem(error, 'Could not create that appointment');
-  }
-};
-
-  const handleCheckIn = () => {
-    // Pre-fill check-in form with current appointment data
-    setCheckInFormData({
-      doctor_id: selectedAppointment.doctor_id || '',
-      chair_number: selectedAppointment.chair_number || '',
-      notes: selectedAppointment.notes || '',
-      patient_age: selectedAppointment.patientAge || '',
-      patient_gender: selectedAppointment.patientGender || 'Male',
-      patient_village: selectedAppointment.patientVillage || '',
-      patient_referred_by: selectedAppointment.patientReferredBy || 'Direct'
-    });
-    setPatientSearch(selectedAppointment.patientName || '');
-    setPatientResults([]);
-    setSelectedMatch(null);
-    setCheckingInAppointment(selectedAppointment);
-    setShowCheckInModal(true);
-  };
-
-  const searchPatients = async (query) => {
-    if (!query || query.length < 2) {
-      setPatientResults([]);
-      return;
-    }
-    setSearchingPatient(true);
-    try {
-      const response = await api.get('/appointments/search-patients', {
-        params: { q: query }
-      });
-      setPatientResults(response);
-    } catch (error) {
-      console.error('Error searching patients:', error);
-    } finally {
-      setSearchingPatient(false);
-    }
-  };
-
-  const handleSelectPatientMatch = (patient) => {
-    setSelectedMatch(patient);
-    setPatientSearch(patient.name);
-    setPatientResults([]);
-    setCheckInFormData(prev => ({
-      ...prev,
-      patient_age: patient.age || prev.patient_age,
-      patient_gender: patient.gender || prev.patient_gender,
-      patient_village: patient.village || prev.patient_village
-    }));
-  };
-
-  const handleConfirmCheckIn = async () => {
-    try {
-      setIsCheckingDuplicates(true);
-      console.log('🔍 Checking for potential duplicates...');
-      
-      // Check for duplicates before finalizing
-      const duplicates = await api.get('/patients/check-duplicates', {
-        params: {
-          name: checkingInAppointment.patientName,
-          phone: checkingInAppointment.patientPhone,
-          email: checkingInAppointment.patientEmail
-        }
-      });
-
-      if (duplicates && duplicates.length > 0) {
-        setDuplicateMatches(duplicates);
-        setShowDuplicateModal(true);
-        setIsCheckingDuplicates(false);
-        return; // Wait for user choice
-      }
-
-      // If no duplicates, proceed with finalize
-      await handleFinalizeCheckIn();
-    } catch (error) {
-      console.error('❌ Error during duplicate check:', error);
-      notify.problem('Failed to verify patient records. Please try again.');
-      setIsCheckingDuplicates(false);
-    }
-  };
-
-  const handleFinalizeCheckIn = async (existingPatientId = null) => {
-    try {
-      console.log('📋 Finalizing check-in for appointment:', checkingInAppointment.id);
-      setIsCheckingDuplicates(true);
-      
-      // Sanitize integer fields to avoid validation errors with empty strings
-      const sanitizedData = {
-        ...checkInFormData,
-        doctor_id: checkInFormData.doctor_id ? parseInt(checkInFormData.doctor_id) : null,
-        patient_age: checkInFormData.patient_age ? parseInt(checkInFormData.patient_age) : null,
-        patient_id: existingPatientId || checkingInAppointment.patientId || null,
-        status: 'checking'
-      };
-
-      const response = await api.put(`/appointments/${checkingInAppointment.id}`, {
-        ...sanitizedData,
-        patient_name: checkingInAppointment.patientName,
-        patient_phone: checkingInAppointment.patientPhone,
-        patient_email: checkingInAppointment.patientEmail
-      });
-      
-      console.log('✅ Check-in response:', response);
-      
-      // Update local state
-      const updatedApt = { 
-        ...checkingInAppointment, 
-        ...checkInFormData,
-        patientAge: checkInFormData.patient_age,
-        patientGender: checkInFormData.patient_gender,
-        patientVillage: checkInFormData.patient_village,
-        patientReferredBy: checkInFormData.patient_referred_by,
-        status: 'checking',
-        doctor_id: response.doctor_id,
-        doctor: response.doctor_name || 'Unassigned',
-        patientId: response.patient_id || checkingInAppointment.patientId 
-      };
-      
-      // Update appointments list
-      setAppointments(prev => prev.map(apt => 
-        apt.id === checkingInAppointment.id ? updatedApt : apt
-      ));
-      
-      // Update selected appointment if it's the one we just checked in
-      if (selectedAppointment && selectedAppointment.id === checkingInAppointment.id) {
-        setSelectedAppointment(updatedApt);
-      }
-      
-      setShowCheckInModal(false);
-      setShowDuplicateModal(false);
-      setCheckingInAppointment(null);
-      if (!existingPatientId) notify.done('Checked in, and a new patient file was created');
-      
-    } catch (error) {
-      console.error('❌ Error during check-in:', error);
-      notify.problem(error, 'Could not check that patient in');
-    } finally {
-      setIsCheckingDuplicates(false);
-    }
-  };
-
-  // Handle creating patient file - check for duplicates first
+  /**
+   * The drawer's primary action when a booking has no patient file yet.
+   *
+   * This used to POST to /patients/check-duplicates, which is registered
+   * GET-only, so every click 405'd into the catch and told the user the check
+   * had failed. The file was never created, and because the button is the only
+   * one shown for a booking without a file, there was no other way through.
+   *
+   * The second half was wrong too: it acted only `if (duplicates.length > 0)`.
+   * Even had the call succeeded, the ordinary case — a genuinely new patient,
+   * no duplicates — did nothing at all and gave no feedback. A duplicate check
+   * is a step on the way to creating the file, not the purpose of the button.
+   */
   const handleCreatePatientFile = async () => {
     try {
-      console.log('🔍 Checking for duplicates with data:', {
-        name: selectedAppointment.patientName,
-        phone: selectedAppointment.patientPhone,
-        email: selectedAppointment.patientEmail
+      const duplicateCheck = await api.get('/patients/check-duplicates', {
+        params: {
+          name: selectedAppointment.patientName || undefined,
+          phone: selectedAppointment.patientPhone || undefined,
+          email: selectedAppointment.patientEmail || undefined
+        }
       });
-      
-      // Check for duplicate patients
-      const duplicateCheck = await api.post('/patients/check-duplicates', {
-        name: selectedAppointment.patientName,
-        phone: selectedAppointment.patientPhone,
-        email: selectedAppointment.patientEmail
-      });
-      
-      console.log('✅ Duplicate check response:', duplicateCheck);
-      
+
       if (duplicateCheck && duplicateCheck.length > 0) {
-        // Found duplicates - show warning modal
-        console.log(`⚠️ Found ${duplicateCheck.length} duplicate(s)`);
+        // Someone with this name or number is already on file. Let the user
+        // decide whether it is the same person before a second record exists.
         setDuplicatePatients(duplicateCheck);
         setShowDuplicateWarning(true);
+        return;
       }
+
+      // Nobody matches, so this is a new patient. Carry over what the booking
+      // already knows and ask for the rest while they are at the desk.
+      setPatientFormData({
+        name: selectedAppointment.patientName || '',
+        age: selectedAppointment.patientAge || '',
+        gender: selectedAppointment.patientGender || '',
+        village: selectedAppointment.patientVillage || '',
+        phone: selectedAppointment.patientPhone || '',
+        referred_by: 'Walk-in',
+        treatment_type: '',
+        notes: selectedAppointment.notes || '',
+        payment_type: 'Cash'
+      });
+      setShowPatientForm(true);
     } catch (error) {
-      console.error('❌ Error checking duplicates:', error);
-      console.error('Error response:', error.response?.data);
-      console.error('Error status:', error.response?.status);
       notify.problem(error, 'Could not check for an existing patient file');
     }
   };
@@ -1477,11 +604,14 @@ const Calendar = () => {
         patient_id: patientResponse.id
       });
       
-      // Update selected appointment with patient_id and refresh appointments list
-      const updatedAppointment = { 
-        ...selectedAppointment, 
-        patientId: patientResponse.id,
-        status: 'accepted'
+      // Update selected appointment with patient_id and refresh appointments list.
+      // The status is deliberately left alone: the PUT above only sends
+      // patient_id, so claiming a status change here would put the card out of
+      // step with the server. It also used to claim 'accepted', a value the
+      // status migration removed, which made the card lose its badge entirely.
+      const updatedAppointment = {
+        ...selectedAppointment,
+        patientId: patientResponse.id
       };
       
       // Refresh appointments list to get updated data
@@ -1659,23 +789,6 @@ const Calendar = () => {
     return code ? `/booking?clinic=${code}` : null;
   };
 
-  const weekDates = getWeekDates();
-  // For week view calendar structure, use hardcoded 8 AM to 8 PM (same as desktop app)
-  // This ensures time slots are always visible in the grid
-  const getWeekViewTimeSlots = () => {
-    const slots = [];
-    for (let hour = 8; hour <= 20; hour++) {
-      const time = `${hour.toString().padStart(2, '0')}:00`;
-      const displayTime = hour === 12 ? '12:00 PM' : 
-                        hour > 12 ? `${hour - 12}:00 PM` : 
-                        `${hour}:00 AM`;
-      slots.push({ time, displayTime, hour });
-    }
-    return slots;
-  };
-  const timeSlots = getWeekViewTimeSlots();
-  const currentTimeIndicator = getCurrentTime();
-  const clientTimezone = getClientTimezone();
 
   return (
     <div className="flex flex-col h-screen p-6 bg-gray-50 overflow-hidden">
@@ -1694,7 +807,7 @@ const Calendar = () => {
             if (mode === 'today') setCurrentDate(new Date());
             setViewMode(mode);
           }}
-          onOpenCreate={() => setShowAddForm(true)}
+          onOpenCreate={() => setBookingSeed(seedForNewBooking())}
           publicBookingUrl={getBookingUrl()}
           doctors={doctors}
           focusDoctorId={focusDoctorId}
@@ -1702,81 +815,25 @@ const Calendar = () => {
           axis={axis}
           onSetAxis={setAxis}
           chairCount={dayShape?.chairs || 1}
-          prevDisabled={viewMode === 'today' && (() => {
-            const today = new Date(); today.setHours(0,0,0,0);
-            const current = new Date(currentDate); current.setHours(0,0,0,0);
-            return Math.round((current - today) / (1000 * 60 * 60 * 24)) <= -1;
-          })()}
-          nextDisabled={viewMode === 'today' && (() => {
-            const today = new Date(); today.setHours(0,0,0,0);
-            const current = new Date(currentDate); current.setHours(0,0,0,0);
-            return Math.round((current - today) / (1000 * 60 * 60 * 24)) >= 1;
-          })()}
+          showDayRail={showDayRail}
+          onShowDayRail={() => setShowDayRail(true)}
+          showSidePanel={showSidePanel}
+          onShowSidePanel={() => setShowSidePanel(true)}
+          attentionCount={needsOutcome.count}
+          onShowAttention={() => { setShowDayRail(true); setRailTab('open'); }}
+          query={query}
+          onQueryChange={setQuery}
         />
 
-      {/* A filter is on and it is hiding everything. An empty grid looks
-          identical to a broken one, so say which it is and offer the way out. */}
-      {appointments.length > 0 && visibleAppointments.length === 0 && (
-        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-          <p className="text-sm text-blue-900">
-            <strong>{appointments.length}</strong> appointment{appointments.length === 1 ? ' is' : 's are'} hidden by the filters on this page.
-          </p>
-          <button
-            onClick={() => {
-              setFocusDoctorId('');
-              setSelectedDoctorIds(new Set(doctors.map((d) => d.id)));
-              setShowUnassigned(true);
-            }}
-            className="px-3 py-1.5 rounded-lg bg-white border border-blue-300 text-xs font-bold text-blue-900 hover:bg-blue-100"
-          >
-            Show everyone
-          </button>
-        </div>
-      )}
-
-      {/* Appointments the day walked away from.
-          Surfaced, never auto-marked: guessing a no-show on a clinic's behalf
-          would poison the exact number this is here to earn. */}
-      {needsOutcome.count > 0 && (
-        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start justify-between gap-3 flex-wrap">
-          <div className="flex items-start gap-2.5 min-w-0">
-            <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-amber-900">
-                {needsOutcome.count} past appointment{needsOutcome.count === 1 ? '' : 's'} still open
-              </p>
-              <p className="text-xs text-amber-800 mt-0.5">
-                Say whether each one happened and your no-show rate starts working.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {needsOutcome.appointments.slice(0, 3).map((a) => (
-              <div key={a.id} className="flex items-center gap-1.5 bg-white border border-amber-200 rounded-lg px-2 py-1">
-                <span className="text-xs font-medium text-gray-700 truncate max-w-[8rem]">
-                  {a.patient_name}
-                </span>
-                <button
-                  onClick={() => applyOutcome(a.id, 'completed')}
-                  disabled={outcomeBusy}
-                  title="They came"
-                  className="px-1.5 py-0.5 rounded text-[11px] font-bold text-green-700 hover:bg-green-50 disabled:opacity-50"
-                >
-                  Seen
-                </button>
-                <button
-                  onClick={() => applyOutcome(a.id, 'no_show')}
-                  disabled={outcomeBusy}
-                  title="They did not come"
-                  className="px-1.5 py-0.5 rounded text-[11px] font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
-                >
-                  No show
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <CalendarBanners
+        totalCount={appointments.length}
+        visibleCount={visibleAppointments.length}
+        onShowEveryone={() => {
+          setFocusDoctorId('');
+          setSelectedDoctorIds(new Set(doctors.map((d) => d.id)));
+          setShowUnassigned(true);
+        }}
+      />
 
 
         {/* Mobile-only toggle: filters/mini-calendar vs the schedule grid */}
@@ -1792,7 +849,17 @@ const Calendar = () => {
 
         {/* Two-column layout: team members rail + calendar content */}
         <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
-          <div className={`${showFilters ? '' : 'hidden'} lg:block w-full lg:w-auto lg:shrink-0`}>
+          <div className={`${showFilters ? '' : 'hidden'} ${showSidePanel ? 'lg:block' : 'lg:hidden'} w-full lg:w-auto lg:shrink-0 relative`}>
+          {/* Fold it away from its own edge, the way the day list closes from
+              its own. A control that lives on the thing it hides is easier to
+              find again than one parked in the toolbar. */}
+          <button
+            onClick={() => setShowSidePanel(false)}
+            className="hidden lg:flex absolute -right-2 top-2 z-10 w-5 h-5 items-center justify-center rounded-full bg-white border border-gray-200 text-gray-400 hover:text-gray-700 hover:border-gray-300 transition-colors"
+            aria-label="Hide the mini-calendar and team filters"
+          >
+            <ChevronLeft size={12} />
+          </button>
           <TeamMembersPanel
             doctors={doctors}
             countsByDoctorId={countsByDoctorId}
@@ -1915,6 +982,25 @@ const Calendar = () => {
           />
         )}
           </div>
+
+          {/* The day as a worklist. Hidden on phones, where the grid already
+              becomes a list and a second one would just repeat it. */}
+          {showDayRail && !isPhone && (
+            <TodayRail
+              appointments={visibleAppointments}
+              dayKey={dateKey(currentDate)}
+              isToday={currentDate.toDateString() === new Date().toDateString()}
+              onSelect={openAppointmentDetails}
+              onRefresh={fetchAppointments}
+              onCollapse={() => setShowDayRail(false)}
+              loading={loading}
+              needsOutcome={needsOutcome}
+              tab={railTab}
+              onSetTab={setRailTab}
+              onApplyOutcome={applyOutcome}
+              outcomeBusy={outcomeBusy}
+            />
+          )}
         </div>
 
       {/* Book from a click on the grid. The clicked slot is a starting
@@ -1929,1057 +1015,92 @@ const Calendar = () => {
         chairCount={dayShape?.chairs || 1}
       />
 
-      {/* Cancelling asks why. A cancellation with no reason is a number; one
-          with a reason is something a clinic can act on. */}
-      {cancelPrompt && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setCancelPrompt(null)} />
-          <div className="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl p-5">
-            <h3 className="text-base font-bold text-gray-900">Cancel this appointment</h3>
-            <p className="text-xs text-gray-500 mt-0.5 mb-3">A short reason helps you spot a pattern later.</p>
-            <input
-              autoFocus
-              value={cancelPrompt.reason}
-              onChange={(e) => setCancelPrompt(c => ({ ...c, reason: e.target.value }))}
-              onKeyDown={(e) => e.key === 'Enter' && applyOutcome(cancelPrompt.id, 'cancelled', cancelPrompt.reason)}
-              placeholder="Patient rang to rearrange"
-              className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#2a276e] outline-none"
-            />
-            <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setCancelPrompt(null)}
-                      className="px-4 h-9 rounded-lg border border-gray-200 text-sm font-semibold text-gray-600">
-                Keep it
-              </button>
-              <button
-                onClick={() => applyOutcome(cancelPrompt.id, 'cancelled', cancelPrompt.reason)}
-                disabled={outcomeBusy}
-                className="px-4 h-9 rounded-lg bg-[#2a276e] text-white text-sm font-bold disabled:opacity-50"
-              >
-                Cancel appointment
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CancelReasonDialog
+        prompt={cancelPrompt}
+        onChange={setCancelPrompt}
+        onConfirm={applyOutcome}
+        onClose={() => setCancelPrompt(null)}
+        busy={outcomeBusy}
+      />
 
-      {/* Appointment Detail Modal */}
-      {selectedAppointment && (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={() => setSelectedAppointment(null)}></div>
-          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h3 className="text-xl font-semibold text-gray-900">Appointment Details</h3>
-              <button onClick={() => setSelectedAppointment(null)} className="p-2 hover:bg-gray-100 rounded-full transition">
-                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="relative">
-                  <img 
-                    src={generatePatientPersona({ name: selectedAppointment.patientName }, 160)} 
-                    onError={(e) => { e.target.onerror = null; e.target.src = generateInitialsAvatar(selectedAppointment.patientName || 'Patient'); }}
-                    alt={selectedAppointment.patientName} 
-                    className="w-16 h-16 rounded-full object-cover border border-gray-100 shadow-sm"
-                  />
-                  {selectedAppointment.patientId && (
-                    <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-2 border-white flex items-center justify-center" title="Patient file exists">
-                      <FileText className="w-3 h-3 text-white" />
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <h4 className="text-lg font-semibold text-gray-900">
-                    {selectedAppointment.patientName}
-                  </h4>
-                  {selectedAppointment.patientId && (
-                    <div className="text-xs text-green-600 font-medium mb-1">
-                      ✓ Patient file exists
-                    </div>
-                  )}
-                  <div className="flex items-center gap-4 text-sm text-gray-600">
-                    <div className="flex items-center gap-1">
-                      <Phone className="w-3 h-3" />
-                      {selectedAppointment.patientPhone}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Mail className="w-3 h-3" />
-                      {selectedAppointment.patientEmail}
-                    </div>
-                  </div>
-                </div>
-              </div>
+      {/* Everything about one appointment, without leaving the calendar.
+          Lives in its own file: this page composes, it does not draw. */}
+      <AppointmentPopover
+        appointment={selectedAppointment}
+        anchorId={anchorId}
+        isPhone={isPhone}
+        doctors={doctors}
+        onClose={() => setSelectedAppointment(null)}
+        onCheckIn={checkIn}
+        onStartVisit={handleStartVisit}
+        onCreatePatientFile={handleCreatePatientFile}
+        onApplyOutcome={applyOutcome}
+        onReopen={(id) => setOpenStatus(id, 'confirmed')}
+        onConfirm={(id) => setOpenStatus(id, 'confirmed')}
+        onBookAgain={(apt) => {
+          // A follow-up, not a change to this one: no appointmentId, so the
+          // modal creates rather than updates. Defaults to the same time a
+          // week on, which is the usual gap between dental visits and is the
+          // one field most likely to be right already.
+          const next = apt.date ? new Date(apt.date) : new Date();
+          next.setDate(next.getDate() + 7);
+          setBookingSeed({
+            patientId: apt.patientId,
+            patientName: apt.patientName,
+            patientPhone: apt.patientPhone,
+            treatment: apt.treatment || '',
+            date: dateKey(next),
+            startTime: apt.startTime,
+            duration: apt.duration || 30,
+            doctorId: apt.doctor_id || '',
+            chairNumber: apt.chair_number || '',
+            available: true,
+          });
+          setSelectedAppointment(null);
+        }}
+        onRequestCancel={setCancelPrompt}
+        onEdit={(apt) => {
+          // Same modal as booking, seeded from the appointment instead of an
+          // empty slot. Editing used to have no path at all: changing a doctor
+          // or a treatment meant cancelling and rebooking.
+          setBookingSeed({
+            appointmentId: apt.id,
+            patientId: apt.patientId,
+            patientName: apt.patientName,
+            patientPhone: apt.patientPhone,
+            treatment: apt.treatment || '',
+            date: apt.date ? dateKey(new Date(apt.date)) : undefined,
+            startTime: apt.startTime,
+            duration: apt.duration || 30,
+            doctorId: apt.doctor_id || '',
+            chairNumber: apt.chair_number || '',
+            available: true,
+          });
+          setSelectedAppointment(null);
+        }}
+        outcomeBusy={outcomeBusy}
+        details={details}
+        setDetails={setDetails}
+        saveDetails={saveDetails}
+        detailsSaving={detailsSaving}
+      />
 
-              {/* Appointment Details */}
-              <div className="space-y-3 mb-6">
-                <div>
-                  <span className="text-sm font-medium text-gray-600">Doctor:</span>
-                  <span className="ml-2 text-sm text-gray-900">{selectedAppointment.doctor}</span>
-                </div>
-                {selectedAppointment.chair_number && (
-                  <div>
-                    <span className="text-sm font-medium text-gray-600">Chair Number:</span>
-                    <span className="ml-2 text-sm text-gray-900">{selectedAppointment.chair_number}</span>
-                  </div>
-                )}
-                {selectedAppointment.patientAge && (
-                  <div>
-                    <span className="text-sm font-medium text-gray-600">Patient Age:</span>
-                    <span className="ml-2 text-sm text-gray-900">{selectedAppointment.patientAge} years</span>
-                  </div>
-                )}
-                {selectedAppointment.patientVillage && (
-                  <div>
-                    <span className="text-sm font-medium text-gray-600">Village:</span>
-                    <span className="ml-2 text-sm text-gray-900">{selectedAppointment.patientVillage}</span>
-                  </div>
-                )}
-                {selectedAppointment.visitNumber && (
-                  <div>
-                    <span className="text-sm font-medium text-gray-600">Visit Number:</span>
-                    <span className="ml-2 inline-flex items-center justify-center px-3 py-1 rounded-lg bg-gradient-to-br from-[#2a276e] to-[#4c449c] text-white font-bold text-sm shadow-md">
-                      Visit #{selectedAppointment.visitNumber}
-                    </span>
-                  </div>
-                )}
-                <div>
-                  <span className="text-sm font-medium text-gray-600">Status:</span>
-                  <span className={`ml-2 text-sm font-semibold ${
-                    selectedAppointment.status === 'accepted' ? 'text-[#2a276e]' :
-                    selectedAppointment.status === 'rejected' ? 'text-red-600' :
-                    selectedAppointment.status === 'checking' ? 'text-green-600' :
-                    'text-yellow-600'
-                  }`}>
-                    {selectedAppointment.status === 'accepted' && '✓ Accepted'}
-                    {selectedAppointment.status === 'rejected' && '✗ Rejected'}
-                    {selectedAppointment.status === 'checking' && '📋 Checking'}
-                    {selectedAppointment.status === 'confirmed' && '⏳ Pending Confirmation'}
-                    {!['accepted', 'rejected', 'confirmed', 'checking'].includes(selectedAppointment.status) && selectedAppointment.status}
-                  </span>
-                </div>
-              </div>
+      <PatientRegistrationModal
+        open={showPatientForm}
+        form={patientFormData}
+        setForm={setPatientFormData}
+        treatments={treatmentTypes}
+        onSubmit={handlePatientRegistration}
+        onClose={() => setShowPatientForm(false)}
+      />
 
-              {/* Status Message */}
-              {selectedAppointment.status === 'accepted' && (
-                <div className="mb-6 p-4 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
-                  <div className="flex items-center gap-2 text-[#2a276e]">
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="font-medium">Appointment Accepted</span>
-            </div>
-                  <p className="text-sm text-[#2a276e] mt-1">Patient registration completed.</p>
-                </div>
-              )}
-
-              {selectedAppointment.status === 'rejected' && (
-                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <div className="flex items-center gap-2 text-red-800">
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                    </svg>
-                    <span className="font-medium">Appointment Rejected</span>
-                  </div>
-                  <p className="text-sm text-red-700 mt-1">This appointment has been declined.</p>
-                </div>
-              )}
-
-            </div>
-            <div className="p-6 border-t border-gray-200 space-y-3">
-              {/* The file was created from a name and a phone number, which is
-                  all a booking needs. This is the one moment the patient is
-                  standing at the desk, so ask for the rest now instead of
-                  leaving a thin record nobody returns to. Skippable: a queue at
-                  the desk beats a complete form. */}
-              {details && (
-                <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50/60 p-3">
-                  <div className="flex items-start justify-between gap-2 mb-2.5">
-                    <p className="text-xs font-bold text-blue-900">
-                      Ask {selectedAppointment.patientName?.split(' ')[0] || 'them'} for their {details.gaps.join(', ')}
-                    </p>
-                    <button
-                      onClick={() => setDetails(null)}
-                      className="text-[11px] font-semibold text-blue-700/70 hover:text-blue-900 flex-shrink-0"
-                    >
-                      Not now
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <input
-                      value={details.age}
-                      onChange={(e) => setDetails((d) => ({ ...d, age: e.target.value.replace(/\D/g, '') }))}
-                      placeholder="Age" inputMode="numeric"
-                      className="h-9 px-2 border border-blue-200 rounded-lg text-sm bg-white outline-none focus:border-[#2a276e]"
-                    />
-                    <select
-                      value={details.gender}
-                      onChange={(e) => setDetails((d) => ({ ...d, gender: e.target.value }))}
-                      className="h-9 px-2 border border-blue-200 rounded-lg text-sm bg-white outline-none focus:border-[#2a276e]"
-                    >
-                      <option value="">Gender</option>
-                      <option value="male">Male</option>
-                      <option value="female">Female</option>
-                      <option value="other">Other</option>
-                    </select>
-                    <input
-                      value={details.village}
-                      onChange={(e) => setDetails((d) => ({ ...d, village: e.target.value }))}
-                      placeholder="City"
-                      className="h-9 px-2 border border-blue-200 rounded-lg text-sm bg-white outline-none focus:border-[#2a276e]"
-                    />
-                  </div>
-                  <button
-                    onClick={saveDetails}
-                    disabled={detailsSaving || (!details.age && !details.gender && !details.village)}
-                    className="mt-2 w-full h-9 rounded-lg bg-white border border-blue-300 text-xs font-bold text-blue-900 hover:bg-blue-50 disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
-                  >
-                    <Save size={13} /> Save to their file
-                  </button>
-                </div>
-              )}
-
-              {/* One decision at a time.
-                  This was five equal-weight buttons where two said the same
-                  thing: starting a visit already means the patient was seen, so
-                  offering "Seen" beside "Start visit" made the receptionist
-                  choose between two versions of yes. Now there is one primary
-                  action for what happens 90% of the time, and the exceptions
-                  sit underneath it in a quieter row. */}
-              {!['completed', 'no_show', 'cancelled'].includes(selectedAppointment.status) ? (
-                <div className="space-y-3">
-                  {selectedAppointment.patientId ? (
-                    <button
-                      onClick={() => handleStartVisit(selectedAppointment)}
-                      className="w-full bg-[#2a276e] hover:bg-[#1a1548] text-white py-3.5 rounded-lg transition-colors flex items-center justify-center gap-2 font-bold"
-                    >
-                      <FileText className="w-4 h-4" />
-                      <span>Start visit</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleCreatePatientFile}
-                      className="w-full bg-[#2a276e] hover:bg-[#1a1548] text-white py-3.5 rounded-lg transition-colors flex items-center justify-center gap-2 font-bold"
-                    >
-                      <UserPlus className="w-4 h-4" />
-                      <span>Create patient file</span>
-                    </button>
-                  )}
-
-                  {/* The exceptions. Deliberately text-weight, not filled: they
-                      are the rare path and should not compete with the button
-                      above for attention. */}
-                  <div className="flex items-center justify-center gap-1 text-sm">
-                    <button
-                      onClick={() => applyOutcome(selectedAppointment.id, 'completed')}
-                      disabled={outcomeBusy}
-                      title="They were seen, but no clinical record is needed"
-                      className="px-3 py-2 rounded-lg font-semibold text-gray-500 hover:text-green-700 hover:bg-green-50 transition-colors disabled:opacity-50"
-                    >
-                      Seen, no notes
-                    </button>
-                    <span className="text-gray-200">|</span>
-                    <button
-                      onClick={() => applyOutcome(selectedAppointment.id, 'no_show')}
-                      disabled={outcomeBusy}
-                      className="px-3 py-2 rounded-lg font-semibold text-gray-500 hover:text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-50"
-                    >
-                      No show
-                    </button>
-                    <span className="text-gray-200">|</span>
-                    <button
-                      onClick={() => setCancelPrompt({ id: selectedAppointment.id, reason: '' })}
-                      disabled={outcomeBusy}
-                      className="px-3 py-2 rounded-lg font-semibold text-gray-500 hover:text-red-700 hover:bg-red-50 transition-colors disabled:opacity-50"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                /* Already closed. Say so, and offer the way back rather than
-                   leaving a dead panel. */
-                <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5">
-                  <span className="text-sm text-gray-600">
-                    Marked <strong className="text-gray-900">
-                      {{ completed: 'seen', no_show: 'a no show', cancelled: 'cancelled' }[selectedAppointment.status]}
-                    </strong>
-                  </span>
-                  <button
-                    onClick={() => applyOutcome(selectedAppointment.id, 'confirmed')}
-                    disabled={outcomeBusy}
-                    className="text-xs font-bold text-[#2a276e] hover:underline disabled:opacity-50"
-                  >
-                    Reopen
-                  </button>
-                </div>
-              )}
-
-               {/* Patient File Actions - Show based on appointment status and patient_id */}
-               <div className="mt-6">
-                  {selectedAppointment.patientId ? (
-                    // Has patient file - show View button
-                    <div className="space-y-3">
-                      <button 
-                        onClick={() => {
-                          navigate(`/patient-profile/${selectedAppointment.patientId}?tab=case-papers`);
-                          setSelectedAppointment(null);
-                        }}
-                        className="w-full py-2.5 rounded-lg border border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-800 transition-colors flex items-center justify-center gap-2 text-sm font-semibold"
-                      >
-                        <FileText className="w-4 h-4" />
-                        <span>View patient file</span>
-                        <ExternalLink className="w-4 h-4" />
-                      </button>
-                      
-                      {/* NEW: Checked In Button - only show if status is accepted (not yet checking) */}
-                      {selectedAppointment.status === 'accepted' && (
-                        <button 
-                          onClick={handleCheckIn}
-                          className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-semibold shadow-lg"
-                        >
-                          <CheckCircle className="w-4 h-4" />
-                          <span>Checked In</span>
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    // No patient file - show "Checked In" button which will auto-create the file
-                    // But ONLY if status is accepted
-                    (selectedAppointment.status === 'accepted') && (
-                      <button 
-                        onClick={handleCheckIn}
-                        className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-semibold shadow-lg"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>Checked In (Auto-create File)</span>
-                      </button>
-                    )
-                  )}
-               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Patient Registration Form Modal - Shown after accepting appointment */}
-      {showPatientForm && (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={() => setShowPatientForm(false)}></div>
-          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h3 className="text-xl font-semibold text-gray-900">Complete Patient Registration</h3>
-              <button onClick={() => setShowPatientForm(false)} className="hover:bg-gray-100 p-2 rounded-lg transition-colors">
-                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              <form id="patient-registration-form" onSubmit={handlePatientRegistration} className="space-y-4">
-                {/* Patient Name (pre-filled) */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Patient Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={patientFormData.name}
-                    onChange={(e) => setPatientFormData({ ...patientFormData, name: e.target.value })}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent bg-gray-50"
-                    readOnly
-                  />
-                </div>
-
-                {/* Age */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Age *
-                  </label>
-                  <input
-                    type="number"
-                    value={patientFormData.age}
-                    onChange={(e) => setPatientFormData({ ...patientFormData, age: e.target.value })}
-                    required
-                    min="1"
-                    max="150"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-                    placeholder="Enter age"
-                  />
-                </div>
-
-                {/* Gender */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Gender *
-                  </label>
-                  <select
-                    value={patientFormData.gender}
-                    onChange={(e) => setPatientFormData({ ...patientFormData, gender: e.target.value })}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-                  >
-                    <option value="">Select gender</option>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-
-                {/* Village/City */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Village/City *
-                  </label>
-                  <input
-                    type="text"
-                    value={patientFormData.village}
-                    onChange={(e) => setPatientFormData({ ...patientFormData, village: e.target.value })}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-                    placeholder="Enter village or city"
-                  />
-                </div>
-
-                {/* Phone (pre-filled) */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Phone *
-                  </label>
-                  <input
-                    type="tel"
-                    value={patientFormData.phone}
-                    onChange={(e) => setPatientFormData({ ...patientFormData, phone: e.target.value })}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-                    placeholder="Enter phone number"
-                  />
-                </div>
-
-                {/* Referred By */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Referred By
-                  </label>
-                  <input
-                    type="text"
-                    value={patientFormData.referred_by}
-                    onChange={(e) => setPatientFormData({ ...patientFormData, referred_by: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-                    placeholder="Enter referral source (optional)"
-                  />
-                </div>
-
-                {/* Treatment Type (dropdown from clinic's treatment types) */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Treatment Type *
-                  </label>
-                  <select
-                    value={patientFormData.treatment_type}
-                    onChange={(e) => setPatientFormData({ ...patientFormData, treatment_type: e.target.value })}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent bg-white"
-                  >
-                    <option value="">Select treatment type</option>
-                    {treatmentTypes.map((type) => (
-                      <option key={type.id} value={type.name}>
-                        {type.name} - {getCurrencySymbol()}{type.price}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Payment Type */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Payment Type *
-                  </label>
-                  <select
-                    value={patientFormData.payment_type}
-                    onChange={(e) => setPatientFormData({ ...patientFormData, payment_type: e.target.value })}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-                  >
-                    <option value="Cash">Cash</option>
-                    <option value="Card">Card</option>
-                    <option value="UPI">UPI</option>
-                    <option value="Online">Online</option>
-                  </select>
-                </div>
-
-                {/* Notes */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Notes
-                  </label>
-                  <textarea
-                    value={patientFormData.notes}
-                    onChange={(e) => setPatientFormData({ ...patientFormData, notes: e.target.value })}
-                    rows="3"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-                    placeholder="Additional notes (optional)"
-                  />
-                </div>
-              </form>
-            </div>
-            <div className="p-6 border-t border-gray-200">
-              <button 
-                type="submit" 
-                form="patient-registration-form"
-                className="w-full bg-[#2a276e] text-white py-3 rounded-lg hover:bg-[#1a1548] transition-colors font-medium"
-              >
-                Complete Registration
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Appointment Form Modal */}
-      {showAddForm && (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 backdrop-blur-sm bg-black/20" onClick={() => setShowAddForm(false)}></div>
-          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl overflow-hidden flex flex-col animate-slide-in-right">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h3 className="text-xl font-semibold text-gray-900">Add New Appointment</h3>
-              <button onClick={() => setShowAddForm(false)} className="p-2 hover:bg-gray-100 rounded-full transition">
-                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
-            <form id="add-appointment-form" onSubmit={handleSubmit} className="space-y-4">
-              {/* Patient Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Patient Name *
-                </label>
-                <input
-                  type="text"
-                  name="patientName"
-                  value={newAppointment.patientName}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-                  placeholder="Enter patient name"
-                />
-              </div>
-
-              {/* Patient Email */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Patient Email *
-                </label>
-                <input
-                  type="email"
-                  name="patientEmail"
-                  value={newAppointment.patientEmail}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-                  placeholder="Enter patient email"
-                />
-              </div>
-
-              {/* Patient Phone */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Patient Phone *
-                </label>
-                <input
-                  type="tel"
-                  name="patientPhone"
-                  value={newAppointment.patientPhone}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-                  placeholder="Enter patient phone"
-                />
-              </div>
-
-              {/* Patient Age */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Patient Age
-                </label>
-                <input
-                  type="number"
-                  name="patientAge"
-                  value={newAppointment.patientAge}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-                  placeholder="Enter patient age"
-                />
-              </div>
-
-
-
-              {/* Doctor */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Doctor <span className="text-gray-500 text-xs">(optional — leave unassigned for public-style bookings)</span>
-                </label>
-                <select
-                  name="doctor_id"
-                  value={newAppointment.doctor_id}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent bg-white"
-                >
-                  <option value="">Unassigned — assign at check-in</option>
-                  {doctors.map(d => (
-                    <option key={d.id} value={d.id}>
-                      {d.name || d.email || `Doctor #${d.id}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Date *
-                </label>
-                <input
-                  type="date"
-                  name="date"
-                  value={newAppointment.date}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-                />
-              </div>
-
-              {/* Time */}
-              <div>
-                <label className="flex items-center justify-between gap-2 text-sm font-medium text-gray-700 mb-2">
-                  <span>Time <span className="text-gray-500 text-xs">(optional - auto-assigns next available)</span></span>
-                  <Link
-                    to="/admin/clinic"
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-[#2a276e] hover:underline whitespace-nowrap"
-                    title="View or change your clinic's operating hours"
-                  >
-                    Clinic timings
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M7 17L17 7M7 7h10v10" /></svg>
-                  </Link>
-                </label>
-                <input
-                  type="time"
-                  name="time"
-                  value={newAppointment.time}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
-                  placeholder="Leave empty to auto-assign"
-                />
-              </div>
-
-
-
-              {/* Next Slot Info */}
-              {newAppointment.date && (() => {
-                const dateObj = new Date(newAppointment.date);
-                const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-                const dayTimings = clinicTimings[dayName];
-                const nextSlot = findNextAvailableSlot(newAppointment.date, parseFloat(newAppointment.duration));
-
-                return (
-                  <div className="mt-2 space-y-2">
-                    {/* Operating Hours Info */}
-                    <div className="p-2 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
-                      <p className="text-xs text-[#2a276e] flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-                        </svg>
-                        <span>
-                          {dayTimings && !dayTimings.closed ? (
-                            `Operating hours: ${dayTimings.open} - ${dayTimings.close}`
-                          ) : (
-                            `Clinic closed on ${dayName.charAt(0).toUpperCase() + dayName.slice(1)}`
-                          )}
-                        </span>
-                      </p>
-                    </div>
-
-                    {/* Next Available Slot */}
-                    <div className="p-2 bg-[#9B8CFF]/10 border border-[#9B8CFF] rounded-lg">
-                      <p className="text-xs text-blue-700 flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 000 16zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                        </svg>
-                        <span>
-                          Next available slot: <strong>{nextSlot || 'No slots available'}</strong>
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <p className="text-xs text-gray-500 mt-1">
-                💡 Leave empty to automatically assign the next available time slot
-              </p>
-
-              {/* Duration */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Duration *
-                </label>
-                <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { value: '0.5', label: '30 min' },
-                    { value: '1', label: '1 hour' },
-                    { value: '1.5', label: '1.5 hours' },
-                    { value: '2', label: '2 hours' }
-                  ].map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setNewAppointment(prev => ({ ...prev, duration: option.value }))}
-                      className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
-                        newAppointment.duration === option.value
-                          ? 'bg-[#2a276e] text-white border-[#2a276e]'
-                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </form>
-            </div>
-            <div className="p-6 border-t border-gray-200">
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowAddForm(false)}
-                  className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  form="add-appointment-form"
-                  className="px-6 py-2 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition font-medium"
-                >
-                  Add Appointment
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Reject appointment dialog — replaces native confirm + prompt */}
-      {/* Duplicate Patient Warning Modal — registration flow, same clean style */}
-      {showDuplicateWarning && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setShowDuplicateWarning(false)}></div>
-          <div className="relative bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden">
-            <div className="px-6 pt-7 pb-5 text-center">
-              <div className="mx-auto w-14 h-14 rounded-full bg-[#9B8CFF]/15 flex items-center justify-center mb-4">
-                <User className="w-7 h-7 text-[#2a276e]" />
-              </div>
-              <h3 className="text-xl font-bold text-gray-900">Existing patient found</h3>
-              <p className="text-sm text-gray-500 mt-1">
-                {duplicatePatients.length} record{duplicatePatients.length === 1 ? '' : 's'} matched these details. Link to an existing one or create a new file.
-              </p>
-            </div>
-
-            <div className="px-6 pb-2 max-h-[50vh] overflow-y-auto space-y-2">
-              {duplicatePatients.map((patient) => (
-                <div key={patient.id} className="bg-gray-50 border border-gray-200 rounded-xl p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="font-semibold text-gray-900 truncate">{patient.name}</div>
-                      <div className="text-xs text-gray-500 mt-0.5">
-                        {patient.phone && <span>{patient.phone}</span>}
-                        {patient.email && <span> · {patient.email}</span>}
-                        {patient.age && <span> · Age {patient.age}</span>}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => window.open(`/patient-profile/${patient.id}`, '_blank')}
-                      className="text-xs font-semibold text-[#2a276e] hover:underline shrink-0"
-                    >
-                      View
-                    </button>
-                  </div>
-                  <button
-                    onClick={() => handleLinkToExistingPatient(patient.id)}
-                    className="mt-3 w-full py-2 bg-white border border-[#2a276e]/20 text-[#2a276e] rounded-lg text-sm font-semibold hover:bg-[#9B8CFF]/10 transition-colors"
-                  >
-                    Link to this patient
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <div className="px-6 py-5 mt-2 space-y-2">
-              <button
-                onClick={handleCreateNewPatientWithSuffix}
-                className="w-full py-3 bg-[#2a276e] text-white rounded-xl font-semibold hover:bg-[#1a1548] transition-colors"
-              >
-                Create new patient file
-              </button>
-              <button
-                onClick={() => setShowDuplicateWarning(false)}
-                className="w-full py-3 border border-gray-200 text-gray-600 rounded-xl font-semibold hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Check-in Details Modal */}
-      {showCheckInModal && (
-        <div className="fixed inset-0 z-[60] flex justify-end">
-          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity" onClick={() => setShowCheckInModal(false)}></div>
-          <div className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-[#2a276e] text-white">
-              <h3 className="text-xl font-bold flex items-center gap-2">
-                <CheckCircle className="w-6 h-6" />
-                Patient Check-in
-              </h3>
-              <button 
-                onClick={() => setShowCheckInModal(false)}
-                className="p-1 hover:bg-white/20 rounded-full transition-colors"
-                id="close-checkin-modal"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Patient Basic Info (Editable for Check-in) */}
-              <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 space-y-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <User className="w-4 h-4 text-[#2a276e]" />
-                  <span className="text-xs font-bold text-[#2a276e] uppercase tracking-wider">Draft Patient File</span>
-                </div>
-                
-                <div className="grid grid-cols-1 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">Full Name</label>
-                    <input 
-                      type="text"
-                      className="w-full px-3 py-2 bg-white border border-blue-100 rounded-xl focus:ring-2 focus:ring-[#2a276e] outline-none text-sm font-semibold"
-                      value={checkingInAppointment?.patientName}
-                      onChange={(e) => setCheckingInAppointment({...checkingInAppointment, patientName: e.target.value})}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">Phone Number</label>
-                      <input 
-                        type="text"
-                        className="w-full px-3 py-2 bg-white border border-blue-100 rounded-xl focus:ring-2 focus:ring-[#2a276e] outline-none text-sm font-semibold"
-                        value={checkingInAppointment?.patientPhone}
-                        onChange={(e) => setCheckingInAppointment({...checkingInAppointment, patientPhone: e.target.value})}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">Email (Optional)</label>
-                      <input 
-                        type="email"
-                        className="w-full px-3 py-2 bg-white border border-blue-100 rounded-xl focus:ring-2 focus:ring-[#2a276e] outline-none text-sm font-semibold"
-                        value={checkingInAppointment?.patientEmail}
-                        onChange={(e) => setCheckingInAppointment({...checkingInAppointment, patientEmail: e.target.value})}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Status Indicator for ALREADY Linked Patients */}
-              {checkingInAppointment?.patientId && (
-                <div className="p-3 bg-green-50 border border-green-100 rounded-xl flex items-center gap-3">
-                  <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-green-600">
-                    <CheckCircle className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-gray-900">Linked to existing file</div>
-                    <div className="text-xs text-green-600 font-medium tracking-wide uppercase">
-                      Patient ID: {checkingInAppointment.patientId}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <hr className="border-gray-100" />
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Assign Doctor</label>
-                <select 
-                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2a276e] focus:border-transparent outline-none transition-all"
-                  value={checkInFormData.doctor_id}
-                  onChange={(e) => setCheckInFormData({...checkInFormData, doctor_id: e.target.value})}
-                  id="checkin-doctor"
-                >
-                  <option value="">Select Doctor</option>
-                  {doctors.map(doc => (
-                    <option key={doc.id} value={doc.id}>{doc.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Chair Number</label>
-                  <select 
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2a276e] focus:border-transparent outline-none transition-all"
-                    value={checkInFormData.chair_number}
-                    onChange={(e) => setCheckInFormData({...checkInFormData, chair_number: e.target.value})}
-                    id="checkin-chair"
-                  >
-                    <option value="">Select Chair</option>
-                    {[...Array(clinicData?.number_of_chairs || 1)].map((_, i) => (
-                      <option key={i + 1} value={String(i + 1)}>
-                        Chair {i + 1}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Patient Age</label>
-                  <input 
-                    type="number"
-                    placeholder="Years"
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2a276e] focus:border-transparent outline-none transition-all"
-                    value={checkInFormData.patient_age}
-                    onChange={(e) => setCheckInFormData({...checkInFormData, patient_age: e.target.value})}
-                    id="checkin-age"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Gender</label>
-                  <select 
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2a276e] focus:border-transparent outline-none transition-all"
-                    value={checkInFormData.patient_gender}
-                    onChange={(e) => setCheckInFormData({...checkInFormData, patient_gender: e.target.value})}
-                    id="checkin-gender"
-                  >
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Village/Area</label>
-                  <input 
-                    type="text"
-                    placeholder="Village name"
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2a276e] focus:border-transparent outline-none transition-all"
-                    value={checkInFormData.patient_village}
-                    onChange={(e) => setCheckInFormData({...checkInFormData, patient_village: e.target.value})}
-                    id="checkin-village"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Referred By</label>
-                <input 
-                  type="text"
-                  placeholder="e.g. Dr. Sharma, Direct, Social Media"
-                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2a276e] focus:border-transparent outline-none transition-all"
-                  value={checkInFormData.patient_referred_by}
-                  onChange={(e) => setCheckInFormData({...checkInFormData, patient_referred_by: e.target.value})}
-                  id="checkin-referred"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Clinical Notes / Patient Concern</label>
-                <textarea 
-                  rows="2"
-                  placeholder="Enter any specific notes or complaints..."
-                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2a276e] focus:border-transparent outline-none transition-all resize-none"
-                  value={checkInFormData.notes}
-                  onChange={(e) => setCheckInFormData({...checkInFormData, notes: e.target.value})}
-                  id="checkin-notes"
-                ></textarea>
-              </div>
-            </div>
-
-            <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-3">
-              <button
-                onClick={() => setShowCheckInModal(false)}
-                className="flex-1 px-4 py-3 border border-gray-200 text-gray-600 rounded-xl font-semibold hover:bg-gray-100 transition-all font-inter"
-                id="checkin-cancel"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmCheckIn}
-                className="flex-[2] px-4 py-3 bg-[#2a276e] text-white rounded-xl font-bold hover:bg-[#1a1548] shadow-lg shadow-[#2a276e]/20 transition-all flex items-center justify-center gap-2 font-inter"
-                id="confirm-checkin-btn"
-              >
-                <CheckCircle className="w-5 h-5" />
-                Finish Check-in
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Duplicate Patient Modal — clean, minimal, matching booking-confirm aesthetic */}
-      {showDuplicateModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setShowDuplicateModal(false)}></div>
-          <div className="relative bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden">
-            <div className="px-6 pt-7 pb-5 text-center">
-              <div className="mx-auto w-14 h-14 rounded-full bg-[#9B8CFF]/15 flex items-center justify-center mb-4">
-                <User className="w-7 h-7 text-[#2a276e]" />
-              </div>
-              <h3 className="text-xl font-bold text-gray-900">Existing patient found</h3>
-              <p className="text-sm text-gray-500 mt-1">
-                We found {duplicateMatches.length} record{duplicateMatches.length === 1 ? '' : 's'} that may be the same patient. Use an existing record or create a new one.
-              </p>
-            </div>
-
-            <div className="px-6 pb-2 max-h-[50vh] overflow-y-auto space-y-2">
-              {duplicateMatches.map(patient => (
-                <button
-                  key={patient.id}
-                  onClick={() => handleFinalizeCheckIn(patient.id)}
-                  className="w-full text-left bg-gray-50 hover:bg-[#9B8CFF]/10 border border-gray-200 hover:border-[#2a276e]/30 rounded-xl px-4 py-3 transition-colors flex items-center justify-between gap-3"
-                >
-                  <div className="min-w-0">
-                    <div className="font-semibold text-gray-900 truncate">{patient.name}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">
-                      {patient.phone}
-                      {patient.village && <span> · {patient.village}</span>}
-                      <span> · ID #{patient.id}</span>
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold text-[#2a276e] shrink-0">Use this →</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="px-6 py-5 mt-2 space-y-2">
-              <button
-                onClick={() => handleFinalizeCheckIn(null)}
-                className="w-full py-3 bg-[#2a276e] text-white rounded-xl font-semibold hover:bg-[#1a1548] transition-colors"
-              >
-                Create new patient instead
-              </button>
-              <button
-                onClick={() => setShowDuplicateModal(false)}
-                className="w-full py-3 border border-gray-200 text-gray-600 rounded-xl font-semibold hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DuplicatePatientWarning
+        open={showDuplicateWarning}
+        matches={duplicatePatients}
+        onLinkExisting={handleLinkToExistingPatient}
+        onCreateNew={handleCreateNewPatientWithSuffix}
+        onClose={() => setShowDuplicateWarning(false)}
+      />
     </div>
   );
 };

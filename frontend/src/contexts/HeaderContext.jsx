@@ -10,6 +10,8 @@ export const useHeader = () => {
       refreshFunction: null,
       setTitle: () => {},
       setRefreshFunction: () => {},
+      sidebarCollapsed: false,
+      setSidebarCollapsed: () => {},
     };
   }
   return context;
@@ -21,6 +23,10 @@ export const HeaderProvider = ({ children }) => {
   const [refreshFunction, setRefreshFunction] = useState(null);
   const [refreshPath, setRefreshPath] = useState('');
   const [loading, setLoading] = useState(false);
+  // Chrome the page can drive. A screen that opens a wide panel of its own
+  // (the calendar's appointment drawer) needs the nav out of the way, and the
+  // nav is rendered above the router, so the request has to travel up here.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // All callbacks are wrapped in useCallback so their identity is stable across
   // re-renders. Without this, consumers that put `setTitle` / `setRefreshFunction`
@@ -64,6 +70,8 @@ export const HeaderProvider = ({ children }) => {
         setTitle: updateTitle,
         setRefreshFunction: updateRefreshFunction,
         handleRefresh,
+        sidebarCollapsed,
+        setSidebarCollapsed,
       }}
     >
       {children}

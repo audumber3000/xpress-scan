@@ -60,17 +60,19 @@ const BookingModal = ({
   useEffect(() => {
     if (!open || !initial) return;
     setForm({
-      patient_id: null,
-      patient_name: '',
-      patient_phone: '',
+      // Present only when reopening an existing appointment to change it.
+      appointment_id: initial.appointmentId ?? null,
+      patient_id: initial.patientId ?? null,
+      patient_name: initial.patientName ?? '',
+      patient_phone: initial.patientPhone ?? '',
       doctor_id: initial.doctorId ?? '',
       chair_number: initial.chairNumber ?? '',
-      treatment: '',
+      treatment: initial.treatment ?? '',
       date: initial.date,
       start_time: initial.startTime,
       duration: initial.duration || 30,
     });
-    setPatientQuery(''); setResults([]); setSlot(null); setError('');
+    setPatientQuery(initial.patientName ?? ''); setResults([]); setSlot(null); setError('');
     setSeries({ on: false, occurrences: 3, intervalDays: 7 });
   }, [open, initial]);
 
@@ -108,7 +110,11 @@ const BookingModal = ({
     if (q.trim().length < 2) { setResults([]); return; }
     setSearching(true);
     try {
-      const res = await api.get('/appointments/search-patients', { params: { query: q } });
+      // The endpoint's parameter is `q`. Sending `query` meant it never saw a
+      // search term, and with an empty `q` it skips the filter entirely, so the
+      // dropdown listed the first 8 patients in the clinic no matter what was
+      // typed. It looked like search worked and was simply bad at matching.
+      const res = await api.get('/appointments/search-patients', { params: { q } });
       setResults(Array.isArray(res) ? res.slice(0, 6) : (res?.patients || []).slice(0, 6));
     } catch { setResults([]); }
     finally { setSearching(false); }
@@ -161,6 +167,25 @@ const BookingModal = ({
           console.warn('Could not create the patient file', e);
         }
       }
+      // Editing an existing appointment: one PUT, and no patient is created
+      // because the booking already has whoever it is for.
+      if (form.appointment_id) {
+        const res = await api.put(`/appointments/${form.appointment_id}`, {
+          patient_id: patientId || null,
+          patient_name: form.patient_name,
+          patient_phone: form.patient_phone || null,
+          doctor_id: form.doctor_id ? Number(form.doctor_id) : null,
+          treatment: form.treatment || null,
+          chair_number: form.chair_number || null,
+          appointment_date: form.date,
+          start_time: form.start_time,
+          end_time: endTime,
+          duration: Number(form.duration),
+        });
+        onSaved?.({ kind: 'edit', appointment: res });
+        onClose();
+        return;
+      }
       if (series.on) {
         const res = await api.post('/scheduling/series', {
           patient_id: patientId || null,
@@ -208,10 +233,10 @@ const BookingModal = ({
       <div className="relative w-full sm:max-w-lg max-h-[92vh] bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden">
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-200 flex-shrink-0">
           <div>
-            <h2 className="text-base font-bold text-gray-900">New appointment</h2>
+            <h2 className="text-base font-bold text-gray-900">{form.appointment_id ? 'Edit appointment' : 'New appointment'}</h2>
             <p className="text-xs text-gray-500 mt-0.5">
               {new Date(form.date + 'T00:00:00').toLocaleDateString(undefined, {
-                weekday: 'long', day: 'numeric', month: 'long',
+                weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
               })}
             </p>
           </div>
@@ -272,14 +297,28 @@ const BookingModal = ({
             )}
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
+          {/* Date sits with the times because moving an appointment is one
+              decision, not two. It used to be read-only text in the header, so
+              a patient who rang to come next Tuesday had to be cancelled and
+              rebooked. The slot check below re-runs on any of the three. */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <Field label="Date">
+              <input type="date" value={form.date}
+                     onChange={(e) => e.target.value && set('date', e.target.value)}
+                     className={inputCls} />
+            </Field>
             <Field label="Starts">
               <input type="time" step={900} value={form.start_time}
                      onChange={(e) => set('start_time', e.target.value)} className={inputCls} />
             </Field>
-            <Field label="Ends" hint="Follows the length below">
+            <Field label="Ends" hint="Follows the length">
               <input type="time" value={endTime} readOnly
                      className={`${inputCls} bg-gray-50 text-gray-500`} />
+            </Field>
+            <Field label="Day">
+              <div className={`${inputCls} bg-gray-50 text-gray-500 flex items-center text-xs`}>
+                {new Date(form.date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short' })}
+              </div>
             </Field>
           </div>
 
@@ -341,7 +380,9 @@ const BookingModal = ({
           </Field>
 
           {/* Series. A root canal is three visits and each used to be booked
-              from scratch. */}
+              from scratch. Hidden when editing: turning one existing
+              appointment into a course is a different action from moving it. */}
+          {!form.appointment_id && (
           <div className="border border-gray-200 rounded-lg p-3">
             <label className="flex items-center gap-2.5 cursor-pointer">
               <input type="checkbox" checked={series.on}
@@ -368,6 +409,7 @@ const BookingModal = ({
               </div>
             )}
           </div>
+          )}
 
           {/* Live slot verdict */}
           <div className={`rounded-lg px-3 py-2.5 text-xs flex items-start gap-2 border ${
@@ -403,7 +445,7 @@ const BookingModal = ({
             className="px-5 h-10 rounded-lg bg-[#2a276e] hover:bg-[#221f5c] text-white text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
           >
             {saving && <Loader2 size={14} className="animate-spin" />}
-            {series.on ? 'Book the course' : 'Book'}
+            {form.appointment_id ? 'Save changes' : series.on ? 'Book the course' : 'Book'}
           </button>
         </div>
       </div>

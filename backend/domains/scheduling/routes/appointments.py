@@ -245,6 +245,7 @@ async def create_appointment(
             patient_gender=db_appointment.patient_gender,
             patient_village=db_appointment.patient_village,
             patient_referred_by=db_appointment.patient_referred_by,
+            visit_number=db_appointment.visit_number,
             created_at=db_appointment.created_at,
             updated_at=getattr(db_appointment, 'updated_at', db_appointment.created_at),
             synced_at=getattr(db_appointment, 'synced_at', None),
@@ -354,6 +355,7 @@ async def get_public_appointments(
                 patient_gender=apt.patient_gender,
                 patient_village=apt.patient_village,
                 patient_referred_by=apt.patient_referred_by,
+                visit_number=apt.visit_number,
                 created_at=apt.created_at
             ))
 
@@ -395,7 +397,14 @@ async def create_public_appointment(
             start_time=appointment.start_time,
             end_time=appointment.end_time,
             duration=appointment.duration,
-            status=appointment.status,
+            # Forced, never taken from the payload. This endpoint is public
+            # and unauthenticated, so a booking could arrive already `confirmed`
+            # just by asking, and the public page was sending exactly that.
+            # Confirming is the clinic's call: a confirmation nobody at the desk
+            # made is worse than no confirmation at all.
+            status=SCHEDULED,
+            # Where it came from, recorded at the one moment it is known.
+            patient_referred_by='online',
             notes=appointment.notes,
             visit_number=1,  # Public bookings start at visit 1
             created_by=None  # No logged-in user for public booking
@@ -442,6 +451,7 @@ async def create_public_appointment(
             patient_gender=db_appointment.patient_gender,
             patient_village=db_appointment.patient_village,
             patient_referred_by=db_appointment.patient_referred_by,
+            visit_number=db_appointment.visit_number,
             created_at=db_appointment.created_at,
             updated_at=getattr(db_appointment, 'updated_at', db_appointment.created_at),
             synced_at=getattr(db_appointment, 'synced_at', None),
@@ -644,6 +654,7 @@ async def get_appointments(
                 patient_gender=apt.patient_gender,
                 patient_village=apt.patient_village,
                 patient_referred_by=apt.patient_referred_by,
+                visit_number=apt.visit_number,
                 created_at=apt.created_at,
                 updated_at=getattr(apt, 'updated_at', apt.created_at),
                 synced_at=getattr(apt, 'synced_at', None),
@@ -765,6 +776,7 @@ def set_outcome(
         patient_gender=appointment.patient_gender,
         patient_village=appointment.patient_village,
         patient_referred_by=appointment.patient_referred_by,
+        visit_number=appointment.visit_number,
         created_at=appointment.created_at,
         updated_at=getattr(appointment, "updated_at", appointment.created_at),
         synced_at=getattr(appointment, "synced_at", None),
@@ -950,6 +962,7 @@ async def get_appointment(
         patient_gender=appointment.patient_gender,
         patient_village=appointment.patient_village,
         patient_referred_by=appointment.patient_referred_by,
+        visit_number=appointment.visit_number,
         created_at=appointment.created_at,
         updated_at=getattr(appointment, 'updated_at', appointment.created_at),
         synced_at=getattr(appointment, 'synced_at', None),
@@ -1009,6 +1022,9 @@ async def update_appointment(
                 # appointment keeps a stale "settled at" long after it reopened.
                 appointment.outcome_at = None
                 appointment.outcome_by = None
+                # And the reason with it: "patient rang to rearrange" is not
+                # true of an appointment that is back on the books.
+                appointment.cancel_reason = None
 
         if appointment_update.start_time:
             appointment.start_time = appointment_update.start_time
@@ -1178,6 +1194,7 @@ async def update_appointment(
             patient_gender=appointment.patient_gender,
             patient_village=appointment.patient_village,
             patient_referred_by=appointment.patient_referred_by,
+            visit_number=appointment.visit_number,
             created_at=appointment.created_at,
             updated_at=getattr(appointment, 'updated_at', appointment.created_at),
             synced_at=getattr(appointment, 'synced_at', None),

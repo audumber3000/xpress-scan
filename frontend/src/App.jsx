@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { HeaderProvider } from "./contexts/HeaderContext";
+import { HeaderProvider, useHeader } from "./contexts/HeaderContext";
 import { NavigationGuardProvider } from "./contexts/NavigationGuardContext";
 import { ToastContainer, Slide } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -173,7 +173,9 @@ function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  // Lives in HeaderContext so a page can ask for the nav to fold away; the
+  // sidebar is rendered above the router and cannot be reached from a route.
+  const { sidebarCollapsed: isSidebarCollapsed, setSidebarCollapsed: setIsSidebarCollapsed } = useHeader();
 
   // Redirect to dashboard if already authenticated and on login page
   useEffect(() => {
@@ -199,7 +201,10 @@ function AppContent() {
         navigate('/dashboard', { replace: true });
       }
     }
-  }, [location.pathname, loading, user, navigate]);
+    // setIsSidebarCollapsed now comes from HeaderContext rather than a local
+    // useState, so it has to be listed. It is still a plain state setter, so
+    // its identity is stable and nothing re-runs because of it.
+  }, [location.pathname, loading, user, navigate, setIsSidebarCollapsed]);
 
   // Check if current route is auth page, booking page, or public page
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/forgot-password' || location.pathname === '/reset-password' || location.pathname === '/onboarding' || location.pathname === '/auth/callback' || location.pathname === '/desktop-auth/start';

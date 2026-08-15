@@ -145,6 +145,7 @@ const MonthGrid = ({
                   return (
                     <button
                       key={apt.id}
+                      data-appointment-id={apt.id}
                       onClick={(e) => {
                         e.stopPropagation();
                         onSelectAppointment(apt);

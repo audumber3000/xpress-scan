@@ -111,7 +111,7 @@ const DayAgenda = ({ date, appointments, onAppointmentClick, onCreate }) => {
                   key={apt.id}
                   appointment={apt}
                   variant="today"
-                  onClick={() => onAppointmentClick(apt)}
+                  onClick={() => onAppointmentClick(apt, apt.id)}
                 />
               ))}
             </div>

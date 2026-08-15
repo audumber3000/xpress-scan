@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState, useEffect, useCallback } from "react"
 import AppointmentCard from "./AppointmentCard";
 import { computeDayLayout } from "../utils/layout";
 import { getDoctorColor, UNASSIGNED_STYLE } from "../utils/doctorColors";
+import useNow from "../hooks/useNow";
 
 /**
  * The day, one column per resource.
@@ -102,6 +103,9 @@ const DayGrid = ({
   // 60 minute card in the middle and dropping it at 8:00 booked 8:30 to 9:30.
   const grabOffsetMin = useRef(0);
 
+  // Ticks every minute, so the now-line moves on a screen left open all day.
+  const now = useNow();
+
   const visibleDoctors = useMemo(
     () => doctors.filter((d) => selectedDoctorIds.has(d.id)),
     [doctors, selectedDoctorIds]
@@ -128,13 +132,32 @@ const DayGrid = ({
     if (axis === "chair") {
       // A four-chair practice wants to see rooms, not people. Same grid, same
       // cards, different question: "which chair is free" instead of "who is busy".
-      return Array.from({ length: Math.max(1, chairCount) }, (_, i) => ({
+      const chairs = Array.from({ length: Math.max(1, chairCount) }, (_, i) => ({
         key: `chair-${i + 1}`,
         chair: String(i + 1),
         doctorId: null,
         label: `Chair ${i + 1}`,
         color: getDoctorColor(i + 1),
       }));
+      // Only when something actually needs it, so a clinic that always assigns
+      // a chair never sees an empty extra column. Computed from the props
+      // rather than dayAppointments, which is derived from `columns` further
+      // down and would still be in its temporal dead zone here.
+      const dayKey = date.toISOString().split("T")[0];
+      const anyChairless = appointments.some(
+        (a) => !a.chair_number && a.date &&
+          new Date(a.date).toISOString().split("T")[0] === dayKey
+      );
+      if (anyChairless) {
+        chairs.push({
+          key: "chair-unassigned",
+          chair: null,
+          doctorId: null,
+          label: "No chair",
+          color: UNASSIGNED_STYLE,
+        });
+      }
+      return chairs;
     }
     const list = visibleDoctors.map((d) => ({
       key: `doc-${d.id}`,
@@ -147,7 +170,7 @@ const DayGrid = ({
       list.push({ key: "unassigned", doctorId: null, chair: null, label: "Unassigned", color: UNASSIGNED_STYLE });
     }
     return list;
-  }, [axis, chairCount, visibleDoctors, showUnassignedCol, days]);
+  }, [axis, chairCount, visibleDoctors, showUnassignedCol, days, appointments, date]);
 
   // Time bounds. Clinic hours set the frame, but a booking that sits outside
   // them still has to be visible, otherwise an early appointment silently
@@ -202,7 +225,9 @@ const DayGrid = ({
       const key = axis === "day"
         ? `day-${isoOf(a)}`
         : axis === "chair"
-          ? `chair-${a.chair_number || 1}`
+          // A booking with no chair is not chair 1. Filing it there overstated
+          // that room's load and hid the fact that nobody had assigned one.
+          ? (a.chair_number ? `chair-${a.chair_number}` : "chair-unassigned")
           : (a.doctor_id ? `doc-${a.doctor_id}` : "unassigned");
       if (map[key]) map[key].push(a);
     });
@@ -358,6 +383,13 @@ const DayGrid = ({
 
   const handleOverlayPointerMove = (e) => {
     if (!resizing && !ghost) {
+      // Over a booking, the booking is the target, not the quarter hour behind
+      // it. Highlighting the slot there suggested a click would book on top of
+      // an appointment, when it actually opens the one under the cursor.
+      if (e.target?.closest?.('[data-appointment-card]')) {
+        setHoverSlot(null);
+        return;
+      }
       const p = pointToGrid(e.clientX, e.clientY);
       if (p) {
         setHoverSlot((h) =>
@@ -563,9 +595,8 @@ const DayGrid = ({
               ))
             )}
 
-            {/* Now line */}
+            {/* Now line. `now` ticks, so this advances on its own. */}
             {(() => {
-              const now = new Date();
               const todayIdx = axis === "day"
                 ? columns.findIndex((c) => c.isToday)
                 : (date.toDateString() === now.toDateString() ? 0 : -1);
@@ -693,7 +724,7 @@ const DayGrid = ({
                       onDragStart={(e) => handleCardDragStart(e, apt)}
                       onDragEnd={() => setDragOverColIdx(null)}
                       style={{ position: "absolute", inset: 0, minHeight: "22px" }}
-                      onClick={() => !resizing && onAppointmentClick(apt)}
+                      onClick={() => !resizing && onAppointmentClick(apt, apt.id)}
                     />
                     {onResize && (
                       <div

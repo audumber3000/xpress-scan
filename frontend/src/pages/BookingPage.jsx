@@ -217,7 +217,9 @@ const BookingPage = () => {
           start_time: formData.time,
           end_time: endTime,
           duration: parseInt(durMin),
-          status: 'confirmed',
+          // No status. A patient booking themselves in cannot confirm their own
+          // appointment; the desk does that. The server forces `scheduled`
+          // regardless, so this is the honest request rather than the guard.
           patient_age: formData.age ? parseInt(formData.age) : null,
           notes: formData.village ? `Address: ${formData.village}` : null,
         })

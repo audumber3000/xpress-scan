@@ -92,12 +92,17 @@ const AppointmentCard = ({ appointment, variant = "week", style, onClick, onDrag
   const color = getAppointmentColor(appointment);
   const isUnassigned = color.isUnassigned;
   const closed = ["completed", "no_show", "cancelled"].includes(appointment.status);
+  // A struck-through name reads as "not happening" at a glance, without having
+  // to decode the colour or find the badge.
+  const struck = appointment.status === "cancelled" ? "line-through" : "";
 
   if (variant === "today") {
     return (
       <div
+        data-appointment-card="true"
+        data-appointment-id={appointment.id}
         onClick={onClick}
-        className={`bg-white rounded-lg transition-colors cursor-pointer border border-gray-200 border-l-4 ${color.cardBorderLeft} ${isUnassigned ? "ring-1 ring-slate-200" : ""} p-5 hover:border-gray-300`}
+        className={`bg-white rounded-lg transition-colors cursor-pointer border border-gray-200 border-l-4 ${color.cardBorderLeft} ${closed ? "opacity-70" : ""} ${isUnassigned ? "ring-1 ring-slate-200" : ""} p-5 hover:border-gray-300`}
       >
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-5 flex-1 min-w-0">
@@ -109,7 +114,7 @@ const AppointmentCard = ({ appointment, variant = "week", style, onClick, onDrag
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-base font-bold text-gray-900 truncate">{appointment.patientName}</h3>
+                <h3 className={`text-base font-bold text-gray-900 truncate ${struck}`}>{appointment.patientName}</h3>
                 {isUnassigned && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-slate-100 text-slate-700 border border-slate-300">
                     <AlertCircle className="w-3 h-3" />
@@ -154,49 +159,55 @@ const AppointmentCard = ({ appointment, variant = "week", style, onClick, onDrag
 
   return (
     <div
+      data-appointment-card="true"
+      data-appointment-id={appointment.id}
       draggable={isDraggable}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      className={`absolute pointer-events-auto transition-colors rounded border-l-4 overflow-hidden ${color.card} ${color.cardBorderLeft} ${isUnassigned ? "border-dashed ring-1 ring-slate-200" : ""} ${closed ? "opacity-60" : ""} ${isDraggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
+      className={`absolute pointer-events-auto transition-colors rounded border-l-4 overflow-hidden ${color.card} ${color.cardBorderLeft} ${isUnassigned ? "border-dashed ring-1 ring-slate-200" : ""} ${closed ? "opacity-60" : ""} ${isDraggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"} hover:brightness-95 hover:ring-2 hover:ring-[#2a276e]/30`}
       style={style}
       title={`${appointment.patientName} · ${formatTime(appointment.startTime)} to ${formatTime(appointment.endTime)}${appointment.doctor ? ` · ${appointment.doctor}` : ""}`}
     >
       <div
         onClick={onClick}
-        className={`h-full flex flex-col justify-start overflow-hidden ${tiny ? "px-1.5 py-0.5" : "px-2 py-1"}`}
+        className={`h-full flex flex-col overflow-hidden ${tiny ? "px-1.5 py-0.5" : "px-2 py-1"}`}
       >
-        {/* Name and badges share one row so the badges cannot cover the name,
-            which is what the absolute-positioned ones used to do on a short
-            card. */}
-        <div className="flex items-center gap-1 min-w-0">
+        {/* The name owns the top line on its own now. The status and
+            patient-file marks used to sit beside it and ate the width a long
+            name needed; they sit along the bottom edge instead, where a card
+            has room going spare. */}
+        <div className="min-w-0">
+          <span className={`block font-semibold truncate ${struck} ${tiny ? "text-[10px]" : "text-xs"}`}>
+            {appointment.patientName}
+          </span>
+
+          {!tiny && (
+            <div className="text-[10px] opacity-80 truncate">
+              {formatTime(appointment.startTime)}
+              {!short && ` - ${formatTime(appointment.endTime)}`}
+            </div>
+          )}
+        </div>
+
+        {/* Pushed to the foot of the card. mt-auto rather than absolute, so a
+            30 minute card simply has no room for it and drops it, instead of
+            stacking marks on top of the name. */}
+        <div className="mt-auto flex items-center gap-1 flex-shrink-0">
+          <StatusBadge status={appointment.status} small={tiny} />
           {appointment.patientId && (
             <span
-              className="w-3.5 h-3.5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0"
+              className="w-3.5 h-3.5 bg-white/25 rounded-full flex items-center justify-center flex-shrink-0"
               title="Patient file exists"
             >
               <FileText className="w-2 h-2 text-white" />
             </span>
           )}
-          <span className={`font-semibold truncate min-w-0 ${tiny ? "text-[10px]" : "text-xs"}`}>
-            {appointment.patientName}
-          </span>
-          <span className="ml-auto flex-shrink-0">
-            <StatusBadge status={appointment.status} small={tiny} />
-          </span>
+          {!short && (
+            <span className={`text-[10px] truncate ml-auto ${isUnassigned ? "font-medium" : "opacity-80"}`}>
+              {isUnassigned ? "Needs a doctor" : appointment.doctor}
+            </span>
+          )}
         </div>
-
-        {!tiny && (
-          <div className="text-[10px] opacity-75 truncate">
-            {formatTime(appointment.startTime)}
-            {!short && ` - ${formatTime(appointment.endTime)}`}
-          </div>
-        )}
-
-        {!short && (
-          <div className={`text-[10px] truncate ${isUnassigned ? "text-slate-600 font-medium" : "opacity-75"}`}>
-            {isUnassigned ? "Needs a doctor" : appointment.doctor}
-          </div>
-        )}
       </div>
     </div>
   );
