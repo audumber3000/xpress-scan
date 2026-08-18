@@ -190,6 +190,10 @@ async def lifespan(app: FastAPI):
                 # everywhere except the database, where NOT NULL turned every
                 # omission into a 500.
                 "ALTER TABLE patients ALTER COLUMN treatment_type DROP NOT NULL",
+                # A sign-in is auditable before the user has a clinic — that is
+                # exactly the moment a new owner signs up. NOT NULL here made
+                # every such sign-in fail the audit insert and 500 the request.
+                "ALTER TABLE audit_logs ALTER COLUMN clinic_id DROP NOT NULL",
                 # Consents could only be scoped by walking to their patient,
                 # which is how the list endpoint returned other clinics' rows.
                 "ALTER TABLE patient_consents ADD COLUMN IF NOT EXISTS clinic_id INTEGER REFERENCES clinics(id)",

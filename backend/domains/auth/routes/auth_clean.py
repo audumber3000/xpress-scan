@@ -482,6 +482,12 @@ async def oauth_login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e)
         )
+    except HTTPException:
+        # The refusals this handler raises on purpose — a revoked device, a
+        # switched-off platform — are answers, not malfunctions. Without this
+        # they fell through to the catch-all below and reached the user as
+        # "something went wrong on our end", which told them nothing.
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -594,6 +600,10 @@ async def oauth_code_login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e),
         )
+    except HTTPException:
+        # Same as /oauth above: the device block and the Google token-exchange
+        # failure are both deliberate HTTPExceptions raised inside this try.
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

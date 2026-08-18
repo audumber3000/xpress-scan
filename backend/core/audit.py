@@ -126,19 +126,26 @@ def record_audit(
     try:
         from models import AuditLog
 
-        db.add(AuditLog(
-            clinic_id=clinic_id if clinic_id is not None else getattr(current_user, 'clinic_id', None),
-            user_id=getattr(current_user, 'id', None),
-            actor_name=actor_name or getattr(current_user, 'name', None),
-            actor_role=getattr(current_user, 'role', None),
-            action=action,
-            summary=summary[:500],
-            entity_type=entity_type,
-            entity_id=entity_id,
-            ip_address=_client_ip(request)[:64] or None,
-            user_agent=_user_agent(request),
-        ))
-        db.flush()
+        # SAVEPOINT, so a rejected audit row rolls back only itself. A bare
+        # flush() that fails leaves the whole session in PendingRollbackError,
+        # and then the next query the caller makes raises instead — which is
+        # how an already-successful Google sign-in came back to the user as a
+        # 500. Catching the error below is not enough on its own; the session
+        # has to be repaired, and rolling back to a savepoint repairs it
+        # without discarding work the caller has not committed yet.
+        with db.begin_nested():
+            db.add(AuditLog(
+                clinic_id=clinic_id if clinic_id is not None else getattr(current_user, 'clinic_id', None),
+                user_id=getattr(current_user, 'id', None),
+                actor_name=actor_name or getattr(current_user, 'name', None),
+                actor_role=getattr(current_user, 'role', None),
+                action=action,
+                summary=summary[:500],
+                entity_type=entity_type,
+                entity_id=entity_id,
+                ip_address=_client_ip(request)[:64] or None,
+                user_agent=_user_agent(request),
+            ))
         if commit:
             db.commit()
     except Exception as exc:

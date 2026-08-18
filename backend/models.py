@@ -1474,7 +1474,12 @@ class AuditLog(Base):
     """
     __tablename__ = 'audit_logs'
     id = Column(Integer, primary_key=True, index=True)
-    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    # Nullable because the audit trail starts before the clinic does: a brand
+    # new owner signs in, and only then onboards and creates one. NOT NULL here
+    # meant every pre-onboarding sign-in tried to write an illegal row. Reads
+    # are all scoped `WHERE clinic_id = :clinic`, so a clinic-less row is simply
+    # invisible to clinic views rather than leaking into the wrong one.
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=True, index=True)
 
     user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
     # Snapshotted, not joined: a deleted staff member must not erase the record
