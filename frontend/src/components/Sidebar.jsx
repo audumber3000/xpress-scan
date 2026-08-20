@@ -117,6 +117,16 @@ const mainNavItems = [
       {
         name: "Website",
         path: "/marketing/website",
+        // A globe, matching the 4x4 stroked style its sibling uses. This item
+        // was the only entry in the sidebar with no icon at all, so it sat
+        // blank next to Google Reviews' star and read as unfinished.
+        icon: (
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.6 9h16.8M3.6 15h16.8" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 3a15 15 0 010 18 15 15 0 010-18z" />
+          </svg>
+        )
       },
       {
         name: "Google Reviews",

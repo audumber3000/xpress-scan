@@ -120,6 +120,21 @@ class Clinic(Base):
     timezone = Column(String(50), default='Asia/Kolkata')  # IANA timezone
     tax_label = Column(String(20), default='GST No.')  # GST, VAT, TIN, ABN...
     tax_id = Column(String(50), nullable=True)  # replaces gst_number for intl
+    # Structured address. `address` above stays the single composed line and is
+    # still what invoices, receipts, prescriptions, the website and the mobile
+    # app read, so it is kept in sync from these parts on every save rather than
+    # being replaced by them. Named generically (not "pincode"/"district")
+    # because the app now serves ~160 countries.
+    address_line1 = Column(String(200), nullable=True)   # street / building
+    address_line2 = Column(String(200), nullable=True)   # area, landmark, suite
+    city = Column(String(120), nullable=True)            # city / town
+    state = Column(String(120), nullable=True)           # state / province / region
+    postal_code = Column(String(20), nullable=True)      # pincode / ZIP / postcode
+    # Filled when the address came from Google Places, so the pin on the website
+    # and the booking page agrees with what the clinic actually picked.
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    google_place_id = Column(String(255), nullable=True)
     # Practice licence / registration — shown on the Clinic Profile "License" tab.
     license_number = Column(String(80), nullable=True)  # council / clinical establishment reg. no.
     license_authority = Column(String(120), nullable=True)  # issuing body
@@ -299,6 +314,10 @@ class CasePaper(Base):
     clinical_examination = Column(Text, nullable=True)
     diagnosis = Column(Text, nullable=True)
     next_visit_recommendation = Column(String, nullable=True)
+    # The recommendation resolved to a real calendar day. "Review After 1 Month"
+    # is not something the front desk can act on; a date is. Null for outcomes
+    # that have no date by nature (SOS, no further treatment).
+    next_visit_date = Column(Date, nullable=True)
     notes = Column(Text, nullable=True)
     
     # Clinical Snapshots (Point-in-time state for this visit)
@@ -1444,6 +1463,44 @@ class WalletTransaction(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     clinic = relationship("Clinic")
+
+
+class Notification(Base):
+    """The clinic's in-app inbox: one row per recipient per event.
+
+    Deliberately distinct from two neighbours it is easy to confuse with:
+
+    * ``ActivityLog`` is a 10-row FIFO feed for the dashboard's recent-activity
+      card, with no read state and constant trimming. The header bell used to
+      read it, which is why the bell could never show anything meaningful.
+    * ``NotificationLog`` records OUTBOUND patient messages (WhatsApp/email via
+      MSG91) with delivery status and cost. Nothing to do with staff at all.
+
+    Fanned out on write: an event aimed at "the owner and the front desk"
+    becomes one row per user. That keeps read state a column rather than a join
+    table, and the unread badge a single indexed count. A clinic has a handful
+    of staff, so the row multiplication is not worth normalising away.
+    """
+    __tablename__ = 'notifications'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    event_type = Column(String(60), nullable=False, index=True)
+    severity = Column(String(10), default='info')      # info | action | critical
+    title = Column(String(160), nullable=False)
+    body = Column(String(400), nullable=True)
+    link = Column(String(255), nullable=True)          # in-app path that acts on it
+    # What this is about, so a repeat of the same thing can find and fold into
+    # the existing row instead of stacking another one.
+    entity_type = Column(String(40), nullable=True)
+    entity_id = Column(Integer, nullable=True)
+    count = Column(Integer, default=1)                 # "3 new bookings" is one row
+    read_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    clinic = relationship("Clinic")
+    user = relationship("User")
 
 
 class ActivityLog(Base):

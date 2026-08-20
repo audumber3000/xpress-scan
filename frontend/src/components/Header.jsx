@@ -5,7 +5,7 @@ import { useHeader } from "../contexts/HeaderContext";
 import {
   Search, X, Menu, Bell, ChevronRight, Keyboard, Headset,
   UserRound, CreditCard, LifeBuoy, LogOut, Settings, BadgeCheck,
-  UserPlus, CalendarDays, Pill, Receipt, Trash2,
+  UserPlus, CalendarDays, Pill, Receipt, ShieldAlert,
 } from "lucide-react";
 import ShortcutsDrawer from "./ShortcutsDrawer";
 import { canAccess } from "../utils/permissions";
@@ -65,12 +65,27 @@ const ICON_BUTTON =
  * which sat oddly next to the rest of the app's Lucide iconography.
  */
 const ACTIVITY_ICONS = {
+  appointment_booked_online: { icon: CalendarDays, className: 'bg-violet-50 text-violet-600' },
+  payment_recorded: { icon: CreditCard, className: 'bg-green-50 text-green-600' },
+  new_device_signin: { icon: ShieldAlert, className: 'bg-red-50 text-red-600' },
+  master_password_changed: { icon: ShieldAlert, className: 'bg-red-50 text-red-600' },
   patient_added: { icon: UserPlus, className: 'bg-blue-50 text-blue-600' },
-  appointment_booked: { icon: CalendarDays, className: 'bg-violet-50 text-violet-600' },
   prescription_saved: { icon: Pill, className: 'bg-teal-50 text-teal-600' },
   invoice_created: { icon: Receipt, className: 'bg-amber-50 text-amber-600' },
-  payment_received: { icon: CreditCard, className: 'bg-green-50 text-green-600' },
   general: { icon: Bell, className: 'bg-gray-100 text-gray-500' },
+};
+
+/**
+ * Severity earns a left border, not a shouty row.
+ *
+ * The list is read at a glance, so the one thing that has to survive being
+ * skimmed is which entries need acting on. Colour on a 3px edge does that
+ * without turning the panel into a traffic light.
+ */
+const SEVERITY_EDGE = {
+  critical: 'border-l-[3px] border-l-red-500',
+  action: 'border-l-[3px] border-l-amber-400',
+  info: 'border-l-[3px] border-l-transparent',
 };
 
 /** "3h ago" / "2d ago" — relative age of an activity entry. */
@@ -308,36 +323,53 @@ const Header = ({ onOpenMobileSidebar }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   // Fetch notifications
+  const [unreadCount, setUnreadCount] = useState(0);
+
   const fetchNotifications = useCallback(async () => {
     setNotifLoading(true);
     try {
-      const data = await api.get('/activity-log');
-      setNotifications(Array.isArray(data) ? data : []);
+      const data = await api.get('/notifications', { params: { limit: 30 } });
+      setNotifications(Array.isArray(data?.notifications) ? data.notifications : []);
     } catch { /* silent */ } finally {
       setNotifLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
-
-  // The feed is shared across the clinic, so clearing empties it for every
-  // colleague too — say so plainly rather than wiping on a single click.
-  const handleClearNotifications = async () => {
-    const ok = window.confirm(
-      'Clear the activity feed?\n\n' +
-      'This removes all entries for everyone in this clinic, not just you. It cannot be undone.'
-    );
-    if (!ok) return;
-    setNotifLoading(true);
+  // The badge is its own request. It is wanted on every page, while the list is
+  // only wanted when the panel opens, so pulling thirty rows just to count the
+  // unread ones would be the expensive way to render a number.
+  const refreshUnread = useCallback(async () => {
     try {
-      await api.delete('/activity-log');
-      setNotifications([]);
-    } catch {
-      // Refetch so the list reflects reality if the delete didn't land.
-      fetchNotifications();
-    } finally {
-      setNotifLoading(false);
+      const data = await api.get('/notifications/unread-count');
+      setUnreadCount(data?.unread || 0);
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => {
+    refreshUnread();
+    // Polled rather than pushed: there is no socket in this app yet, and a
+    // minute is late enough to be cheap and early enough that the badge is not
+    // meaningfully stale.
+    const timer = setInterval(refreshUnread, 60000);
+    return () => clearInterval(timer);
+  }, [refreshUnread]);
+
+  // Opening the panel is not reading the notifications. Only an entry the user
+  // actually clicks is marked read, so a glance at the bell does not silently
+  // clear something they meant to come back to.
+  const openNotification = async (n) => {
+    if (!n.read) {
+      setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
+      setUnreadCount((c) => Math.max(0, c - 1));
+      try { await api.post(`/notifications/${n.id}/read`); } catch { refreshUnread(); }
     }
+    if (n.link) { setShowNotifications(false); gnav(n.link); }
+  };
+
+  const markAllRead = async () => {
+    setNotifications((prev) => prev.map((x) => ({ ...x, read: true })));
+    setUnreadCount(0);
+    try { await api.post('/notifications/read-all'); } catch { refreshUnread(); fetchNotifications(); }
   };
 
   // Global keyboard shortcuts, driven off the same registry the panel renders.
@@ -616,13 +648,13 @@ const Header = ({ onOpenMobileSidebar }) => {
         <button
           onClick={() => { setShowNotifications(true); fetchNotifications(); }}
           className={`${ICON_BUTTON} relative`}
-          title="Activity Feed"
-          aria-label={notifications.length > 0 ? `Activity feed, ${notifications.length} unread` : 'Activity feed'}
+          title="Notifications"
+          aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
         >
           <Bell size={20} className="sm:w-[22px] sm:h-[22px]" />
-          {notifications.length > 0 && (
+          {unreadCount > 0 && (
             <span className="absolute top-0 right-0 min-w-[16px] h-4 px-1 bg-red-500 text-white text-xs font-semibold rounded-full flex items-center justify-center border border-white">
-              {notifications.length > 99 ? '99+' : notifications.length}
+              {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           )}
         </button>
@@ -737,20 +769,26 @@ const Header = ({ onOpenMobileSidebar }) => {
           <div className="fixed inset-y-0 right-0 w-[420px] max-w-full bg-white shadow-2xl z-[70] flex flex-col">
             <div className="flex items-start justify-between px-6 py-4 border-b border-gray-200">
               <div>
-                <h3 className="text-base font-bold text-gray-900">Activity Feed</h3>
+                <h3 className="text-base font-bold text-gray-900">Notifications</h3>
                 <p className="text-sm text-gray-500 mt-0.5">
-                  {notifications.length > 0
-                    ? `Latest ${notifications.length} ${notifications.length === 1 ? 'activity' : 'activities'}`
-                    : 'Everything happening in your clinic'}
+                  {unreadCount > 0 ? `${unreadCount} unread` : 'You are all caught up'}
                 </p>
               </div>
               <div className="flex items-center gap-1">
+                {unreadCount > 0 && (
+                  <button
+                    onClick={markAllRead}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-[#2a276e] hover:bg-[#2a276e]/5 transition-colors"
+                  >
+                    Mark all read
+                  </button>
+                )}
                 <button
                   onClick={fetchNotifications}
                   disabled={notifLoading}
                   className="p-2 rounded-lg text-gray-400 hover:text-[#2a276e] hover:bg-gray-50 transition-colors disabled:opacity-50"
                   title="Refresh"
-                  aria-label="Refresh activity"
+                  aria-label="Refresh notifications"
                 >
                   <FaSync className={`w-3.5 h-3.5 ${notifLoading ? 'animate-spin' : ''}`} />
                 </button>
@@ -775,9 +813,9 @@ const Header = ({ onOpenMobileSidebar }) => {
                   <div className="w-12 h-12 rounded-2xl bg-[#2a276e]/5 flex items-center justify-center">
                     <Bell size={22} className="text-[#2a276e]/40" />
                   </div>
-                  <p className="text-sm font-medium text-gray-500">No activity yet</p>
+                  <p className="text-sm font-medium text-gray-500">Nothing to catch up on</p>
                   <p className="text-xs text-gray-400">
-                    Adding patients, saving prescriptions and creating invoices will show up here.
+                    Online bookings, payments and anything touching your account will appear here.
                   </p>
                 </div>
               ) : (
@@ -788,22 +826,26 @@ const Header = ({ onOpenMobileSidebar }) => {
                     return (
                       <li
                         key={n.id}
-                        className={`px-6 py-4 transition-colors ${n.link ? 'cursor-pointer hover:bg-gray-50' : ''}`}
-                        onClick={() => n.link && gnav(n.link)}
+                        className={`px-6 py-4 cursor-pointer transition-colors hover:bg-gray-50 ${SEVERITY_EDGE[n.severity] || SEVERITY_EDGE.info} ${n.read ? '' : 'bg-[#2a276e]/[0.03]'}`}
+                        onClick={() => openNotification(n)}
                       >
                         <div className="flex items-start gap-3">
                           <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${meta.className}`}>
                             <Icon size={16} />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm text-gray-800 leading-snug">{n.description}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              {n.actor_name && (
-                                <span className="text-xs font-medium text-[#2a276e]">{n.actor_name}</span>
+                            <div className="flex items-start gap-2">
+                              <p className={`text-sm leading-snug ${n.read ? 'text-gray-700' : 'text-gray-900 font-semibold'}`}>
+                                {n.title}
+                              </p>
+                              {n.count > 1 && (
+                                <span className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-bold">
+                                  {n.count}
+                                </span>
                               )}
-                              {n.actor_name && <span className="text-xs text-gray-300">•</span>}
-                              <span className="text-xs text-gray-400">{timeAgo(n.created_at)}</span>
                             </div>
+                            {n.body && <p className="text-xs text-gray-500 mt-0.5 leading-snug">{n.body}</p>}
+                            <span className="text-xs text-gray-400 mt-1 block">{timeAgo(n.created_at)}</span>
                           </div>
                           {n.link && <ChevronRight size={16} className="text-gray-300 flex-shrink-0 mt-1" />}
                         </div>
@@ -814,19 +856,12 @@ const Header = ({ onOpenMobileSidebar }) => {
               )}
             </div>
 
-            <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200 bg-gray-50">
+            {/* "Clear all" used to live here and wiped the feed for every
+                colleague at once. These rows are now per-user, so there is
+                nothing shared left to destroy, and Mark all read covers what
+                that button was really being used for. */}
+            <div className="flex items-center px-6 py-3 border-t border-gray-200 bg-gray-50">
               <p className="text-xs text-gray-400">Press Esc to close</p>
-              {/* Owner-only: the backend rejects anyone else, so don't offer it. */}
-              {userRole === 'clinic_owner' && notifications.length > 0 && (
-                <button
-                  onClick={handleClearNotifications}
-                  disabled={notifLoading}
-                  className="flex items-center gap-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  <Trash2 size={13} />
-                  Clear all
-                </button>
-              )}
             </div>
           </div>
         </>

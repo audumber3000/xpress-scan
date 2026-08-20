@@ -168,6 +168,39 @@ class AuthService(AuthServiceProtocol):
             self.db.add(new_device)
             self.db.commit()
             self.db.refresh(new_device)
+
+            # A sign-in from a machine this account has never used before is the
+            # one security event an owner can actually act on, and until now it
+            # was only visible to somebody who went looking at the Devices page.
+            # Only fires on enrolment, so a familiar laptop stays silent.
+            try:
+                from domains.notification.services.notification_center_service import (
+                    notify, OWNER, SEVERITY_CRITICAL,
+                )
+                user = self.db.query(User).filter(User.id == user_id).first()
+                if user and user.clinic_id:
+                    where = device_info.get("location") or device_info.get("ip_address") or "an unrecognised location"
+                    notify(
+                        self.db,
+                        clinic_id=user.clinic_id,
+                        event_type="new_device_signin",
+                        severity=SEVERITY_CRITICAL,
+                        audience=OWNER,
+                        title="Sign-in from a new device",
+                        body=f"{user.name or user.email} signed in on "
+                             f"{device_info.get('device_name') or 'a new device'} from {where}.",
+                        link="/admin/security/devices",
+                        entity_type="user_device",
+                        entity_id=new_device.id,
+                        # The owner signing in on their own new phone should not
+                        # be told about themselves; anyone else's device should.
+                        actor_user_id=user_id if user.role == "clinic_owner" else None,
+                    )
+                    self.db.commit()
+            except Exception:
+                # Never let a notification stop somebody signing in.
+                self.db.rollback()
+
             return new_device
 
     def create_jwt_token(self, user_id: int, device_id: int = None) -> str:

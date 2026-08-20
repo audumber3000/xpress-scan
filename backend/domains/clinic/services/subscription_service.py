@@ -298,4 +298,38 @@ class SubscriptionService:
                 error_msg = payment_data.get("payment_message") or "Payment failed"
                 print(f"PAYMENT FAILED: order={order_id} reason={error_msg}")
 
+                # The clinic gets no other signal that this failed: the status
+                # deliberately stays pending, so the screen looks the same as
+                # before they paid. Without this the first they know is a
+                # subscription that quietly never activated.
+                try:
+                    from domains.notification.services.notification_center_service import (
+                        notify, OWNER, SEVERITY_CRITICAL,
+                    )
+                    sub = (
+                        self.db.query(Subscription)
+                        .filter(Subscription.provider_order_id == order_id)
+                        .first()
+                    )
+                    target_clinic_id = getattr(sub, "clinic_id", None) if sub else None
+                    if not target_clinic_id and sub and sub.user_id:
+                        owner = self.db.query(User).filter(User.id == sub.user_id).first()
+                        target_clinic_id = getattr(owner, "clinic_id", None)
+                    if target_clinic_id:
+                        notify(
+                            self.db,
+                            clinic_id=target_clinic_id,
+                            event_type="subscription_payment_failed",
+                            severity=SEVERITY_CRITICAL,
+                            audience=OWNER,
+                            title="Subscription payment failed",
+                            body=f"{error_msg}. Your plan has not changed, you can try again.",
+                            link="/admin/subscription",
+                            entity_type="subscription",
+                            entity_id=getattr(sub, "id", None),
+                        )
+                        self.db.commit()
+                except Exception:
+                    self.db.rollback()
+
         return False

@@ -4,6 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { api } from '../utils/api';
 import { notify } from '../utils/notify';
 import GearLoader from '../components/GearLoader';
+import ConfirmDialog from '../components/common/ConfirmDialog';
+import GoogleGlyph from '../components/common/GoogleGlyph';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ChevronLeft, Building2, IdCard, Receipt, MapPin, Clock, GitBranch, PlusCircle, Check, Images, Plus, Trash2, Loader2 } from 'lucide-react';
 
@@ -167,7 +169,7 @@ const PhotosPanel = ({ editable }) => {
 
 const ClinicInfo = () => {
   const { setTitle } = useHeader();
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -198,6 +200,16 @@ const ClinicInfo = () => {
     tagline: '',
     gst_number: '',
     tax_label: 'GST No.',
+    address_line1: '',
+    address_line2: '',
+    city: '',
+    state: '',
+    postal_code: '',
+    latitude: null,
+    longitude: null,
+    google_place_id: '',
+    currency_code: 'INR',
+    currency_symbol: '₹',
     license_number: '',
     license_authority: '',
     license_expiry: '',
@@ -206,6 +218,80 @@ const ClinicInfo = () => {
   const [loadingClinicData, setLoadingClinicData] = useState(false);
   const [savingClinicData, setSavingClinicData] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
+
+  // Options for the currency picker. A static table on the server, so one
+  // fetch per visit is plenty.
+  //
+  // The failure is surfaced rather than swallowed. When this list is empty the
+  // select still renders the clinic's own currency, so a failed load looks
+  // exactly like a working picker that happens to offer one option, and the
+  // reasonable conclusion is that the feature is broken. Say which it is.
+  const [currencies, setCurrencies] = useState([]);
+  const [currenciesFailed, setCurrenciesFailed] = useState(false);
+  // The currency as it is stored, not as the picker currently reads. Comparing
+  // against this is what tells an actual change from merely opening the tab.
+  const [savedCurrency, setSavedCurrency] = useState(null);
+  const [currencyConfirmOpen, setCurrencyConfirmOpen] = useState(false);
+  const loadCurrencies = useCallback(() => {
+    setCurrenciesFailed(false);
+    api.get('/clinics/currencies')
+      .then((list) => setCurrencies(list || []))
+      .catch(() => { setCurrencies([]); setCurrenciesFailed(true); });
+  }, []);
+  useEffect(() => { loadCurrencies(); }, [loadCurrencies]);
+
+  // Finding the clinic on Google and letting it fill the address in. Typing the
+  // address by hand still works; this only ever writes into the same fields.
+  const [placeQuery, setPlaceQuery] = useState('');
+  const [placeResults, setPlaceResults] = useState([]);
+  const [placeSearching, setPlaceSearching] = useState(false);
+  const [placeError, setPlaceError] = useState('');
+
+  useEffect(() => {
+    const q = placeQuery.trim();
+    if (q.length < 3) { setPlaceResults([]); return; }
+    // Places bills per request, so wait for a pause in the typing rather than
+    // firing on every keystroke.
+    const timer = setTimeout(async () => {
+      setPlaceSearching(true);
+      setPlaceError('');
+      try {
+        const res = await api.get('/google-places/search', { params: { q } });
+        setPlaceResults(res?.results || []);
+      } catch {
+        setPlaceResults([]);
+        setPlaceError('Could not reach Google just now. You can still type the address in below.');
+      } finally {
+        setPlaceSearching(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [placeQuery]);
+
+  const applyPlace = async (place) => {
+    setPlaceResults([]);
+    setPlaceQuery('');
+    setPlaceError('');
+    try {
+      const d = await api.get('/google-places/details', { params: { place_id: place.place_id } });
+      // Country is deliberately NOT taken from Google here. It drives currency,
+      // timezone and tax label elsewhere, and changing it as a side effect of
+      // picking an address is how a clinic ends up on the wrong day boundary.
+      setClinicData((prev) => ({
+        ...prev,
+        address_line1: d.address_line1 || '',
+        address_line2: d.address_line2 || '',
+        city: d.city || '',
+        state: d.state || '',
+        postal_code: d.postal_code || '',
+        latitude: d.latitude ?? null,
+        longitude: d.longitude ?? null,
+        google_place_id: place.place_id,
+      }));
+    } catch {
+      setPlaceError('Could not load that place. You can still type the address in below.');
+    }
+  };
 
   useEffect(() => {
     setTitle(
@@ -235,12 +321,23 @@ const ClinicInfo = () => {
         logo_url: data.logo_url || data.logo || '',
         gst_number: data.gst_number || '',
         tagline: data.tagline || '',
+        address_line1: data.address_line1 || '',
+        address_line2: data.address_line2 || '',
+        city: data.city || '',
+        state: data.state || '',
+        postal_code: data.postal_code || '',
+        latitude: data.latitude ?? null,
+        longitude: data.longitude ?? null,
+        google_place_id: data.google_place_id || '',
         tax_label: data.tax_label || 'GST No.',
+        currency_code: data.currency_code || 'INR',
+        currency_symbol: data.currency_symbol || '₹',
         license_number: data.license_number || '',
         license_authority: data.license_authority || '',
         license_expiry: data.license_expiry || '',
         timings: data.timings || DEFAULT_TIMINGS,
       });
+      setSavedCurrency(data.currency_code || 'INR');
     } catch (error) {
       console.error('Error fetching clinic data:', error);
       notify.problem('Failed to load clinic data');
@@ -277,18 +374,50 @@ const ClinicInfo = () => {
     reader.readAsDataURL(file);
   };
 
-  const handleSaveClinicData = async () => {
+  const persistClinicData = async () => {
+    setCurrencyConfirmOpen(false);
     try {
       setSavingClinicData(true);
       // An empty date must go as null — "" isn't a valid date for the DTO.
       const payload = { ...clinicData, license_expiry: clinicData.license_expiry || null };
-      await api.put(isActiveClinic ? '/clinics/me' : `/clinics/${targetClinicId}`, payload);
+      const saved = await api.put(isActiveClinic ? '/clinics/me' : `/clinics/${targetClinicId}`, payload);
+
+      // Every screen reads the currency symbol off the cached user in
+      // localStorage, and that cache is otherwise only written at sign-in.
+      // Without this the doctor changes currency here and keeps seeing the old
+      // symbol on invoices and the daily register until they sign out and back
+      // in, which reads as the setting not having saved at all.
+      if (saved && isActiveClinic) {
+        const patch = {
+          currency_code: saved.currency_code,
+          currency_symbol: saved.currency_symbol,
+        };
+        setUser({
+          ...user,
+          clinic: { ...(user.clinic || {}), ...patch },
+          ...(user.clinics
+            ? { clinics: user.clinics.map((c) => (c?.id === targetClinicId ? { ...c, ...patch } : c)) }
+            : {}),
+        });
+        setClinicData((prev) => ({ ...prev, ...patch }));
+      }
+      if (saved?.currency_code) setSavedCurrency(saved.currency_code);
     } catch (error) {
       console.error('Error saving clinic data:', error);
       notify.problem('Failed to save clinic data');
     } finally {
       setSavingClinicData(false);
     }
+  };
+
+  // Currency is the one field on this screen that rewrites how money reads
+  // everywhere, so it is the one field that asks first. The rest save silently.
+  const handleSaveClinicData = () => {
+    if (savedCurrency && clinicData.currency_code !== savedCurrency) {
+      setCurrencyConfirmOpen(true);
+      return;
+    }
+    persistClinicData();
   };
 
   if (!user?.clinic_id) {
@@ -316,6 +445,26 @@ const ClinicInfo = () => {
   }
 
   const setField = (field) => (e) => setClinicData({ ...clinicData, [field]: e.target.value });
+
+  // The symbol trails the code so nothing on screen briefly disagrees with the
+  // picker. The server resolves it from the same table again on save, so this
+  // is presentation only.
+  const setCurrency = (e) => {
+    const code = e.target.value;
+    const picked = currencies.find((c) => c.code === code);
+    setClinicData((prev) => ({
+      ...prev,
+      currency_code: code,
+      currency_symbol: picked ? picked.symbol : prev.currency_symbol,
+    }));
+  };
+
+  // Mirrors _sync_composed_address on the server so the preview is what will
+  // actually be stored, not an approximation of it.
+  const composedAddress = [
+    clinicData.address_line1, clinicData.address_line2,
+    clinicData.city, clinicData.state, clinicData.postal_code,
+  ].map((v) => (v || '').trim()).filter(Boolean).join(', ') || clinicData.address;
 
   const setTiming = (day, patch) =>
     setClinicData((prev) => ({
@@ -458,6 +607,30 @@ const ClinicInfo = () => {
         <Panel title="Taxation" description="Used on invoices for this branch">
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             <div>
+              <label className={labelClass}>Currency</label>
+              <select value={clinicData.currency_code || ''} onChange={setCurrency} className={inputClass}>
+                {/* The saved currency is always an option, even before the list
+                    arrives or if it never does, so the field is never blank. */}
+                {clinicData.currency_code
+                  && !currencies.some((c) => c.code === clinicData.currency_code) && (
+                  <option value={clinicData.currency_code}>
+                    {clinicData.currency_code} ({clinicData.currency_symbol})
+                  </option>
+                )}
+                {currencies.map((c) => (
+                  <option key={c.code} value={c.code}>{c.code} ({c.symbol})</option>
+                ))}
+              </select>
+              {currenciesFailed && (
+                <p className="text-xs text-red-600 mt-1.5">
+                  Could not load the currency list.{' '}
+                  <button type="button" onClick={loadCurrencies} className="underline font-medium">
+                    Retry
+                  </button>
+                </p>
+              )}
+            </div>
+            <div>
               <label className={labelClass}>{clinicData.tax_label || 'GST No.'}</label>
               <input
                 type="text"
@@ -468,17 +641,99 @@ const ClinicInfo = () => {
               />
             </div>
           </div>
+          <p className="text-xs text-gray-500 mt-3">
+            Billing currency for this branch. Your country and timezone are not affected.
+            Amounts are never converted, so a bill of 1,200 stays 1,200 and only the symbol
+            in front of it changes, on new invoices and on ones already issued.
+          </p>
         </Panel>
       )}
 
       {activeTab === 'location' && (
         <Panel title="Location" description="Where this branch operates">
-          <div className="grid grid-cols-1 gap-4">
+          {/* Find it on Google first. Everything below stays editable, so this
+              is a shortcut rather than the only way in. */}
+          <div className="relative mb-5">
+            <label className={labelClass}>Find your clinic on Google</label>
+            <div className="relative">
+              {/* The Google mark rather than a magnifying glass: this field
+                  does not search the clinic's own records, it queries Google,
+                  and the results that drop out of it are Google's. Saying so
+                  with the mark sets that expectation before anything is typed. */}
+              <GoogleGlyph size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={placeQuery}
+                onChange={(e) => setPlaceQuery(e.target.value)}
+                className={`${inputClass} pl-10`}
+                placeholder="Search by clinic name or address"
+                autoComplete="off"
+              />
+              {placeSearching && (
+                <Loader2 size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 animate-spin" />
+              )}
+            </div>
+
+            {placeResults.length > 0 && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setPlaceResults([])} />
+                <ul className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg overflow-hidden max-h-72 overflow-y-auto">
+                  {placeResults.map((r) => (
+                    <li key={r.place_id}>
+                      <button
+                        type="button"
+                        onClick={() => applyPlace(r)}
+                        className="w-full text-left px-4 py-2.5 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0"
+                      >
+                        <span className="block text-sm font-medium text-gray-900">{r.name}</span>
+                        {r.address && <span className="block text-xs text-gray-500 mt-0.5">{r.address}</span>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+
+            <p className="text-xs text-gray-500 mt-1.5">
+              {placeError || 'Pick your clinic and the address below fills in. You can correct any of it afterwards.'}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <label className={labelClass}>Street address *</label>
+              <input type="text" value={clinicData.address_line1} onChange={setField('address_line1')} className={inputClass} placeholder="Building and street, e.g. 12 Hamra Street" />
+            </div>
+            <div className="md:col-span-2">
+              <label className={labelClass}>Area / landmark</label>
+              <input type="text" value={clinicData.address_line2} onChange={setField('address_line2')} className={inputClass} placeholder="Locality, suite or a nearby landmark (optional)" />
+            </div>
             <div>
-              <label className={labelClass}>Address *</label>
-              <input type="text" value={clinicData.address} onChange={setField('address')} className={inputClass} placeholder="Enter clinic address" />
+              <label className={labelClass}>City / Town</label>
+              <input type="text" value={clinicData.city} onChange={setField('city')} className={inputClass} placeholder="e.g. Beirut" />
+            </div>
+            <div>
+              <label className={labelClass}>State / Province</label>
+              <input type="text" value={clinicData.state} onChange={setField('state')} className={inputClass} placeholder="e.g. Maharashtra" />
+            </div>
+            <div>
+              <label className={labelClass}>Postal code</label>
+              <input type="text" value={clinicData.postal_code} onChange={setField('postal_code')} className={inputClass} placeholder="Pincode / ZIP / postcode" />
             </div>
           </div>
+
+          {/* What actually prints. The parts above are the editing surface; this
+              one line is what invoices, receipts and the website render, so it
+              is worth showing rather than leaving to be discovered on a bill. */}
+          {composedAddress && (
+            <div className="mt-5 pt-4 border-t border-gray-100">
+              <p className="text-xs font-medium text-gray-500 mb-1">This is how it appears on invoices and receipts</p>
+              <p className="text-sm text-gray-800 flex items-start gap-1.5">
+                <MapPin size={15} className="text-[#29828a] mt-0.5 shrink-0" />
+                <span>{composedAddress}</span>
+              </p>
+            </div>
+          )}
         </Panel>
       )}
 
@@ -600,6 +855,36 @@ const ClinicInfo = () => {
         </div>
       )}
 
+      <ConfirmDialog
+        open={currencyConfirmOpen}
+        onClose={() => setCurrencyConfirmOpen(false)}
+        tone="danger"
+        title={`Change currency to ${clinicData.currency_code}?`}
+        message={
+          <>
+            <p>
+              Every amount in this branch will show {clinicData.currency_symbol} from now on:
+              invoices, receipts, payments and the daily register.
+            </p>
+            <p className="mt-2">
+              Amounts are never converted. A bill of 1,200 stays 1,200 and only the symbol in
+              front of it changes.
+            </p>
+            <p className="mt-2 font-medium text-gray-700">
+              Bills you have already issued will show {clinicData.currency_symbol} too, because an
+              invoice stores the amount and takes the symbol from your clinic settings.
+            </p>
+          </>
+        }
+        actions={[
+          {
+            label: `Change to ${clinicData.currency_code}`,
+            onClick: persistClinicData,
+            variant: 'danger',
+            disabled: savingClinicData,
+          },
+        ]}
+      />
     </div>
   );
 };

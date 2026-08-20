@@ -10,11 +10,18 @@ export interface PushNotificationState {
     expoPushToken?: string;
     notification?: Notifications.Notification;
     permissionGranted: boolean;
+    /** In-app path from the most recently tapped push, if it carried one. */
+    pendingLink?: string;
+    /** Clears pendingLink once the app has navigated, so it fires only once. */
+    consumePendingLink: () => void;
 }
 
 export function usePushNotifications(): PushNotificationState {
     const [expoPushToken, setExpoPushToken] = useState<string | undefined>();
     const [notification, setNotification] = useState<Notifications.Notification | undefined>();
+    // Set when a push is tapped; the app shell reads it, navigates, and clears
+    // it with consumePendingLink().
+    const [pendingLink, setPendingLink] = useState<string | undefined>();
     const [permissionGranted, setPermissionGranted] = useState(false);
 
     const notificationListener = useRef<Notifications.Subscription | null>(null);
@@ -52,14 +59,15 @@ export function usePushNotifications(): PushNotificationState {
 
         // Listen for user interaction with notification (tapping it)
         responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
-            console.log('👆 Notification Tapped:', response);
-            // Here you can navigate to a specific screen based on response.notification.request.content.data
-            const data = response.notification.request.content.data;
+            const data = response.notification.request.content.data as { link?: string } | undefined;
 
-            // Example: Navigate based on notification type
-            if (data?.type === 'appointment_reminder') {
-                // navigation.navigate('AppointmentDetails', { id: data.appointmentId });
-            }
+            // The notification centre stamps an in-app path onto every push it
+            // sends (`{"link": "/appointments"}`), so a tap can land on the
+            // thing the notification is about rather than just opening the app.
+            // Surfaced as state instead of navigating here: this hook has no
+            // navigator, and grabbing one would tie a notifications concern to
+            // whatever the navigation library happens to be this month.
+            if (data?.link) setPendingLink(data.link);
         });
 
         return () => {
@@ -72,5 +80,7 @@ export function usePushNotifications(): PushNotificationState {
         expoPushToken,
         notification,
         permissionGranted,
+        pendingLink,
+        consumePendingLink: () => setPendingLink(undefined),
     };
 }

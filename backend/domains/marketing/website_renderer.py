@@ -160,12 +160,39 @@ def render_site(ctx: dict) -> str:
     c = ctx["clinic"]
     accent = c.get("primary_color") or "#2a276e"
     name = e(c.get("name"))
-    tagline = e(c.get("tagline")) or "Gentle, unhurried dental care."
+    tagline_raw = (c.get("tagline") or "").strip()
+    tagline = e(tagline_raw) or "Gentle, unhurried dental care."
     phone = e(c.get("phone"))
     phone_digits = re.sub(r"\D", "", c.get("phone") or "")
     address = e(c.get("address"))
     logo = c.get("logo_url")
     about = e(c.get("website_about"))
+
+    # What the hero actually says about the practice.
+    #
+    # The hero used to print `tagline` and nothing else. Tagline is capped at
+    # 120 characters and most clinics leave it empty, so the biggest text on
+    # the page was usually the built-in fallback line — while the paragraph the
+    # clinic actually wrote sat unread near the bottom in the About band. The
+    # reference site leads with a real sentence or two about the practice, and
+    # so should this.
+    #
+    # Order of preference: the clinic's own words, then its tagline, then a
+    # sentence built from what we know (name and locality), and only then the
+    # generic line. A described clinic beats a slogan.
+    _locality_hint = e(c.get("locality") or "")
+    if about:
+        # First two sentences only. The About band still shows the whole thing;
+        # a hero that runs to six lines stops being a hero.
+        _sentences = re.split(r'(?<=[.!?])\s+', about.strip())
+        hero_desc = " ".join(_sentences[:2]).strip()
+    elif tagline_raw:
+        hero_desc = e(tagline_raw)
+    elif _locality_hint:
+        hero_desc = (f"{name} is a dental clinic in {_locality_hint}, "
+                     "offering gentle, unhurried care for the whole family.")
+    else:
+        hero_desc = "Gentle, unhurried dental care for the whole family."
 
     treatments = _curate(ctx.get("treatments") or [])
     import json as _json
@@ -213,10 +240,10 @@ def render_site(ctx: dict) -> str:
             for t in treatments[:18]
         )
         treatments_html = f'''
-        <section id="treatments" class="sec">
+        <section id="services" class="sec dark">
           <div class="wrap">
             <p class="eyebrow">What we do</p>
-            <h2>Treatments and prices</h2>
+            <h2>Products &amp; Services</h2>
             <p class="sub">Straightforward pricing, told to you before we start.</p>
             <ul class="tgrid">{cards}</ul>
           </div>
@@ -238,14 +265,14 @@ def render_site(ctx: dict) -> str:
             for r in reviews[:6]
         )
         summary = (
-            f'<p class="sub">{rating:.1f} average from {review_count:,} Google reviews</p>'
+            f'<p class="sub"><b>{review_count:,}+</b> users rated us <b>{rating:.1f}</b> out of 5.</p>'
             if rating else '<p class="sub">What our patients say on Google</p>'
         )
         reviews_html = f'''
-        <section id="reviews" class="sec alt">
+        <section id="reviews" class="sec dark">
           <div class="wrap">
-            <p class="eyebrow">Reviews</p>
-            <h2>In our patients' words</h2>
+            <p class="eyebrow">🌟 Trusted by our patients</p>
+            <h2>Why patients love {name}</h2>
             {summary}
             <div class="rgrid">{cards}</div>
           </div>
@@ -270,24 +297,14 @@ def render_site(ctx: dict) -> str:
           </div>
         </section>'''
 
-    gallery_html = ""
-    if len(photos) > 1:
-        tiles = "".join(
-            f'<figure class="gtile"><img src="{e(p["url"])}" alt="{e(p.get("caption") or name)}" loading="lazy"></figure>'
-            for p in photos[1:11]
-        )
-        gallery_html = f'''
-        <section id="gallery" class="sec alt">
-          <div class="wrap">
-            <p class="eyebrow">The practice</p>
-            <h2>Have a look around</h2>
-            <div class="ggrid">{tiles}</div>
-          </div>
-        </section>'''
-
     # Photos past the hero were being uploaded and never shown anywhere. A
     # clinic that took the trouble to add six pictures of its surgery should
     # see them on its own website.
+    #
+    # There used to be a second builder above this one writing the same
+    # variable. The later assignment won, but BOTH were interpolated into the
+    # page, so every clinic site rendered its gallery twice with a repeated
+    # id="gallery". One builder, interpolated once.
     gallery_html = ""
     if len(photos) > 1:
         tiles = "".join(
@@ -303,14 +320,30 @@ def render_site(ctx: dict) -> str:
       </div>
     </section>'''
 
+    # Stats stand alone as their own band rather than sitting inside the
+    # closing CTA, which is where the reference puts them and which stops the
+    # numbers competing with the button for attention.
     stats_html = ""
-    if c.get("website_show_stats") and stats:
-        items = "".join(
-            f'<li><b>{e(v)}</b><span>{e(k)}</span></li>'
-            for k, v in stats.items() if v
-        )
-        if items:
-            stats_html = f'<ul class="statlist">{items}</ul>'
+    if c.get("website_show_stats"):
+        # Treatments and reviews are counted from what is already on the page,
+        # so the band cannot claim more services than the site actually lists.
+        tiles = []
+        if treatments:
+            tiles.append((f"{len(treatments)}+", "Services Offered"))
+        if review_count:
+            tiles.append((f"{review_count:,}", "Customer Reviews"))
+        for label, value in (stats or {}).items():
+            if value:
+                tiles.append((str(value), label))
+        if tiles:
+            items = "".join(f'<li><b>{e(v)}</b><span>{e(k)}</span></li>' for v, k in tiles[:4])
+            stats_html = f'''
+    <section id="stats" class="sec stats">
+      <div class="wrap">
+        <h2>Proven Success in Numbers</h2>
+        <ul class="statlist">{items}</ul>
+      </div>
+    </section>'''
 
     # A phone number and a WhatsApp button were the only ways to act. The app
     # already publishes a booking page, so the site can send people straight
@@ -318,17 +351,17 @@ def render_site(ctx: dict) -> str:
     book_btn = (f'<a class="btn primary" href="{e(booking_url)}">Book an appointment</a>'
                 if booking_url else "")
     book_band = f'''
-    <section class="sec book">
+    <section class="sec book dark" id="contact">
       <div class="wrap">
-        {stats_html}
-        <h2>Ready when you are</h2>
-        <p class="sub">Book online, or send us a message and we will find you a time.</p>
+        <h2>Get in Touch</h2>
+        <p class="sub">Contact us today for more information about our services.</p>
         <div class="row">
           {book_btn}
           {f'<a class="btn btn-wa" href="{wa}">Message on WhatsApp</a>' if wa else ''}
+          {f'<a class="btn btn-ghost" href="tel:{phone}">{phone}</a>' if phone else ''}
         </div>
       </div>
-    </section>''' if (booking_url or wa) else ""
+    </section>''' if (booking_url or wa or phone) else ""
 
     hours_html = "".join(
         f'<li{" class=\"closed\"" if h["closed"] else ""}><span>{e(h["days"])}</span><b>{e(h["hours"])}</b></li>'
@@ -430,10 +463,37 @@ def render_site(ctx: dict) -> str:
   .sec.book h2{{color:#fff}}
   .sec.book .sub{{color:rgba(255,255,255,.75)}}
   .sec.book .row{{display:flex;gap:.6rem;justify-content:center;flex-wrap:wrap}}
-  .statlist{{list-style:none;display:flex;gap:2.5rem;justify-content:center;flex-wrap:wrap;margin:0 0 1.5rem;padding:0}}
-  .statlist strong{{display:block;font-size:1.7rem;font-weight:800;color:#fff}}
-  .statlist span{{font-size:.8rem;color:rgba(255,255,255,.7)}}
+  .statlist{{list-style:none;display:flex;gap:2.5rem;justify-content:center;flex-wrap:wrap;margin:0;padding:0}}
+  /* Was `.statlist strong`, which matched nothing: the markup emits <b>, so
+     every stat number rendered at body size and weight. */
+  .statlist b{{display:block;font-size:2rem;font-weight:800;line-height:1.1}}
+  .statlist span{{font-size:.8rem;color:var(--muted)}}
   .sec.book .btn.primary{{background:#fff;color:var(--accent);font-weight:800}}
+
+  /* ── Dark bands ──────────────────────────────────────────────────────
+     The reference alternates full-width dark sections against light ones,
+     which is what gives the page its rhythm. Set as one block so any section
+     can opt in with class="dark" rather than each growing its own overrides. */
+  .sec.dark{{background:#101828;color:#e8eaf0}}
+  .sec.dark h2{{color:#fff}}
+  .sec.dark .sub{{color:rgba(255,255,255,.7)}}
+  .sec.dark .eyebrow{{color:color-mix(in srgb,var(--accent) 55%,#fff)}}
+  .sec.dark .tcard,.sec.dark .rcard{{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.12);color:#e8eaf0}}
+  .sec.dark .tcard .tname,.sec.dark .rcard b{{color:#fff}}
+  .sec.dark blockquote{{color:rgba(255,255,255,.78)}}
+  .sec.dark .av{{background:rgba(255,255,255,.12);color:#fff}}
+  .sec.book.dark{{background:#101828}}
+  .sec.book.dark .btn.primary{{background:var(--accent);color:#fff}}
+
+  /* Stats sit on the light wash between two dark bands, so the numbers get
+     the page's full contrast rather than competing with a coloured ground. */
+  .sec.stats{{background:var(--wash);text-align:center}}
+  .sec.stats h2{{margin-bottom:1.5rem}}
+
+  /* Business info strip under the header: phone, hours, location, which the
+     reference puts above the fold rather than only in the footer. */
+  .infobar{{background:var(--wash);border-top:1px solid var(--rule);font-size:.8rem;color:var(--muted)}}
+  .infobar .wrap{{display:flex;flex-wrap:wrap;gap:1.25rem;padding:.5rem 1rem;height:auto}}
 
   header{{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--rule)}}
   header .wrap{{display:flex;align-items:center;justify-content:space-between;gap:1rem;height:4rem}}
@@ -448,12 +508,15 @@ def render_site(ctx: dict) -> str:
   nav{{display:none}}
   @media(min-width:820px){{nav{{display:block}}}}
 
-  .hero{{padding:3rem 0 3.5rem;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 7%,#fff),#fff)}}
+  /* Full-height hero, as the reference does (min-h-dvh). `dvh` accounts for
+     the mobile browser chrome that `vh` ignores, and the min-height is capped
+     by content so a long clinic name still fits. */
+  .hero{{padding:3rem 0 3.5rem;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 7%,#fff),#fff);min-height:calc(100dvh - 4rem);display:flex;align-items:center}}
   .hero .wrap{{display:grid;gap:2rem;align-items:center}}
   @media(min-width:820px){{.hero .wrap{{grid-template-columns:1.05fr .95fr}}}}
   .hero h1{{font-size:2.1rem;font-weight:850}}
   @media(min-width:820px){{.hero h1{{font-size:2.9rem}}}}
-  .hero p.lead{{font-size:1.05rem;color:var(--muted);max-width:34ch}}
+  .hero p.lead{{font-size:1.05rem;color:var(--muted);max-width:52ch;line-height:1.6}}
   .cta-row{{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1.5rem}}
   .trust{{display:flex;gap:1.25rem;flex-wrap:wrap;margin-top:1.75rem;font-size:.8125rem;color:var(--muted)}}
   .trust b{{color:var(--ink)}}
@@ -499,7 +562,10 @@ def render_site(ctx: dict) -> str:
   footer{{background:var(--ink);color:rgba(255,255,255,.72);padding:2.5rem 0;font-size:.8125rem}}
   footer b{{color:#fff}}
   footer .wrap{{display:grid;gap:1.25rem}}
-  @media(min-width:820px){{footer .wrap{{grid-template-columns:2fr 1fr}}}}
+  footer a{{color:rgba(255,255,255,.72);text-decoration:none}}
+  footer a:hover{{color:#fff}}
+  .fblurb{{color:rgba(255,255,255,.6);margin:.4rem 0 0;max-width:34rem}}
+  @media(min-width:820px){{footer .wrap{{grid-template-columns:2fr 1fr 1fr}}}}
   .credit{{margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,.12);font-size:.75rem;color:rgba(255,255,255,.5)}}
 </style>
 </head>
@@ -512,24 +578,31 @@ def render_site(ctx: dict) -> str:
       {name}
     </span>
     <nav>
-      {'<a href="#treatments">Treatments</a>' if treatments else ''}
-      {'<a href="#reviews">Reviews</a>' if reviews else ''}
-      {'<a href="#team">Our team</a>' if dentists else ''}
-      <a href="#visit">Visit</a>
+      <a href="#top">Home</a>
+      {'<a href="#services">Products &amp; Services</a>' if treatments else ''}
+      <a href="#about">About</a>
+      <a href="#contact">Contact</a>
     </nav>
-    {f'<a class="btn btn-wa" href="{wa}">WhatsApp</a>' if wa else (f'<a class="btn btn-solid" href="tel:{phone}">Call</a>' if phone else '')}
+    {f'<a class="btn btn-wa" href="{wa}">Contact</a>' if wa else (f'<a class="btn btn-solid" href="tel:{phone}">Call</a>' if phone else '')}
   </div>
+  {(
+    '<div class="infobar"><div class="wrap">'
+    + (f'<span>📞 {phone}</span>' if phone else '')
+    + (f'<span>🕒 {e(hours[0]["days"])} · {e(hours[0]["hours"])}</span>' if hours else '')
+    + (f'<span>📍 {address}</span>' if address else '')
+    + '</div></div>'
+  ) if (phone or hours or address) else ''}
 </header>
 
-<section class="hero">
+<section class="hero" id="top">
   <div class="wrap">
     <div>
       <p class="eyebrow">{e(c.get("locality") or "Dental care")}</p>
-      <h1>{name}</h1>
-      <p class="lead">{tagline}</p>
+      <h1>{name} · Dentist</h1>
+      <p class="lead">{hero_desc}</p>
       <div class="cta-row">
-        {f'<a class="btn btn-wa" href="{wa}">Message on WhatsApp</a>' if wa else ''}
-        {f'<a class="btn btn-ghost" href="tel:{phone}">{phone}</a>' if phone else ''}
+        {f'<a class="btn btn-wa" href="{wa}">Contact</a>' if wa else ''}
+        {'<a class="btn btn-ghost" href="#services">Explore</a>' if treatments else (f'<a class="btn btn-ghost" href="tel:{phone}">{phone}</a>' if phone else '')}
       </div>
       <div class="trust">
         {f'<span><b>{rating:.1f}★</b> on Google</span>' if rating else ''}
@@ -543,12 +616,11 @@ def render_site(ctx: dict) -> str:
 
 {treatments_html}
 {gallery_html}
-{reviews_html}
 {dentists_html}
-{gallery_html}
-{book_band}
+{reviews_html}
+{stats_html}
 
-<section id="visit" class="sec visit">
+<section id="about" class="sec visit">
   <div class="wrap">
     <div>
       <p class="eyebrow">Visit us</p>
@@ -568,20 +640,29 @@ def render_site(ctx: dict) -> str:
   </div>
 </section>
 
+{book_band}
+
 <footer>
   <div class="wrap">
     <div>
-      <b>{name}</b><br>
-      {address}<br>
-      {f'{phone}<br>' if phone else ''}
-      {f'Reg. {e(c.get("license_number"))}' if _looks_like_reg(c.get("license_number")) else ''}
+      <b>{name}</b>
+      <p class="fblurb">{about or tagline}</p>
     </div>
     <div>
-      <b>Hours</b><br>
-      {"<br>".join(f'{e(h["days"])}: {e(h["hours"])}' for h in hours)}
+      <b>Quick Links</b><br>
+      <a href="#top">Home</a><br>
+      {'<a href="#services">Products &amp; Services</a><br>' if treatments else ''}
+      <a href="#about">About</a><br>
+      <a href="#contact">Contact</a>
+    </div>
+    <div>
+      <b>Contact</b><br>
+      {f'{address}<br>' if address else ''}
+      {f'<a href="tel:{phone}">{phone}</a><br>' if phone else ''}
+      {f'Reg. {e(c.get("license_number"))}' if _looks_like_reg(c.get("license_number")) else ''}
     </div>
   </div>
-  <div class="wrap credit">Website by MolarPlus · Updated {datetime.utcnow():%B %Y}</div>
+  <div class="wrap credit">Copyright © {datetime.utcnow():%Y} {name}. Website by MolarPlus.</div>
 </footer>
 
 </body>

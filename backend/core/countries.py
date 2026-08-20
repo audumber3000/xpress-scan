@@ -9,6 +9,9 @@ even with ~160 countries. Tax labels are derived: VAT for EU/UK, GST for
 India/AU/NZ/SG/MY, TRN for the GCC, and "Tax ID" everywhere else.
 """
 
+from typing import Optional
+
+
 # Countries whose tax registration is labelled differently from the "Tax ID" default.
 _VAT = {
     "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU",
@@ -269,3 +272,37 @@ def get_all_countries() -> list:
          "tax_label": cfg["tax_label"]}
         for code, cfg in sorted(COUNTRIES.items(), key=lambda x: x[1]["name"])
     ]
+
+
+def _build_currencies() -> dict:
+    """Collapse the country table into one entry per currency.
+
+    A currency is not a country: USD alone is legal tender in a dozen of the
+    rows above, so the country list can't drive a currency picker without
+    offering "USD" a dozen times. Where several countries share a currency the
+    symbol comes from whichever sorts first by country name, which keeps the
+    result stable as more rows are added.
+    """
+    out = {}
+    for (_code, _name, currency_code, currency_symbol, _phone, _tz) in sorted(_DATA, key=lambda r: r[1]):
+        out.setdefault(currency_code, {"code": currency_code, "symbol": currency_symbol})
+    return out
+
+
+CURRENCIES = _build_currencies()
+
+
+def get_currency_config(currency_code: str) -> Optional[dict]:
+    """Look up one currency, or None if it isn't a currency we know.
+
+    Unlike get_country_config this does NOT fall back to India. A bad country
+    code on a signup form is worth absorbing; a bad currency code on a clinic
+    that already has billing history is worth rejecting, because silently
+    landing on INR would relabel every invoice they have.
+    """
+    return CURRENCIES.get((currency_code or "").upper())
+
+
+def get_all_currencies() -> list:
+    """Currencies for the clinic's currency picker, sorted by code."""
+    return [CURRENCIES[code] for code in sorted(CURRENCIES)]

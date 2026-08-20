@@ -61,7 +61,35 @@ async def create_payment(
         db.add(db_payment)
         db.commit()
         db.refresh(db_payment)
-        
+
+        # Money in, told to the owner. `actor_user_id` keeps the person who just
+        # took the payment out of it, so this is only ever news to somebody who
+        # was not standing at the desk.
+        try:
+            from domains.notification.services.notification_center_service import (
+                notify, OWNER, SEVERITY_INFO,
+            )
+            clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+            symbol = (getattr(clinic, "currency_symbol", None) or "") if clinic else ""
+            notify(
+                db,
+                clinic_id=current_user.clinic_id,
+                event_type="payment_recorded",
+                severity=SEVERITY_INFO,
+                audience=OWNER,
+                actor_user_id=current_user.id,
+                title="Payment received",
+                body=f"{symbol}{float(db_payment.amount or 0):,.2f} from {patient.name}",
+                link=f"/patients/{patient.id}",
+                entity_type="patient",
+                entity_id=patient.id,
+                # A patient paying in instalments across one visit is one line.
+                collapse_minutes=120,
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+
         # Return enriched payment data
         return get_enriched_payment(db, db_payment)
         

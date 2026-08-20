@@ -17,6 +17,7 @@ import { ReceptionistHomeScreen } from '../features/receptionist/screens/Recepti
 import { ReceptionistProfileScreen } from '../features/receptionist/screens/ReceptionistProfileScreen';
 import { HelpSupportScreen } from '../features/receptionist/screens/HelpSupportScreen';
 import { NotificationsScreen } from '../features/clinic-owner/home/screens/NotificationsScreen';
+import InboxScreen from '../features/clinic-owner/notifications/screens/InboxScreen';
 import { PatientsScreen } from '../features/clinic-owner/patients/screens/PatientsScreen';
 import { UtilitiesScreen } from '../features/clinic-owner/utilities/screens/UtilitiesScreen';
 import { UtilitySectionScreen } from '../features/clinic-owner/utilities/screens/UtilitySectionScreen';
@@ -61,6 +62,8 @@ export type RootStackParamList = {
   ReceptionistProfile: undefined;
   HelpSupport: undefined;
   Notifications: undefined;
+  /** The staff member's own notification inbox (not the messaging console). */
+  Inbox: undefined;
   AllTransactions: undefined;
   Profile: undefined;
   PatientDetails: { patientId: string };
@@ -179,6 +182,10 @@ export const AppNavigator = () => {
                 <Stack.Screen name="ReceptionistProfile" component={ReceptionistProfileScreen} />
                 <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
                 <Stack.Screen name="Notifications" component={NotificationsScreen} />
+                {/* The inbox proper. NotificationsScreen above is the
+                    outbound patient-messaging console, which is a
+                    different thing that happens to share the word. */}
+                <Stack.Screen name="Inbox" component={InboxScreen} />
                 <Stack.Screen name="PatientDetails" component={PatientDetailsScreen} />
                 <Stack.Screen name="AppointmentDetails" component={AppointmentDetailsScreen} />
                 <Stack.Screen name="SearchAppointments" component={SearchAppointmentsScreen} />
@@ -210,6 +217,10 @@ export const AppNavigator = () => {
                 <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
                 <Stack.Screen name="ReceptionistHome" component={ReceptionistHomeScreen} />
                 <Stack.Screen name="Notifications" component={NotificationsScreen} />
+                {/* The inbox proper. NotificationsScreen above is the
+                    outbound patient-messaging console, which is a
+                    different thing that happens to share the word. */}
+                <Stack.Screen name="Inbox" component={InboxScreen} />
                 <Stack.Screen name="AddAppointment" component={AddAppointmentScreen} />
                 <Stack.Screen name="InvoiceDetails" component={InvoiceDetailsScreen} />
                 <Stack.Screen name="ExpenseDetails" component={ExpenseDetailsScreen} />

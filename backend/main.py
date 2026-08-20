@@ -57,6 +57,7 @@ from domains.infrastructure.routes import devices, sync, template_configs
 from domains.infrastructure.services.template_service import TemplateService
 from domains.gmail.routes import gmail_routes
 from domains.google_business.routes import google_business_routes, google_places_routes
+from domains.notification.routes import notification_center
 from domains.vendor.routes import vendors
 from domains.inventory.routes import inventory
 from domains.inventory.routes import medications as medication_stock
@@ -216,6 +217,28 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_published_at TIMESTAMP"))
             conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_about TEXT"))
             conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_show_stats BOOLEAN DEFAULT TRUE"))
+            # In-app notification centre (added 2026-08). create_all makes the
+            # table; this is the index the unread badge counts through, and it
+            # is polled on every page so it is worth having from day one.
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_notifications_user_unread "
+                "ON notifications (user_id, read_at)"
+            ))
+            # Structured clinic address (added 2026-08). All nullable and all
+            # additive: `clinics.address` remains the composed line every invoice,
+            # receipt, prescription and the mobile app already read, so a clinic
+            # that never opens the Location tab is completely unaffected.
+            for _addr_col in (
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS address_line1 VARCHAR(200)",
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS address_line2 VARCHAR(200)",
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS city VARCHAR(120)",
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS state VARCHAR(120)",
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS postal_code VARCHAR(20)",
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION",
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION",
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS google_place_id VARCHAR(255)",
+            ):
+                conn.execute(text(_addr_col))
             conn.execute(text(
                 "CREATE UNIQUE INDEX IF NOT EXISTS ix_clinics_website_slug ON clinics (website_slug)"
             ))
@@ -313,6 +336,9 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE medication_stock ADD COLUMN IF NOT EXISTS units_per_pack DOUBLE PRECISION"))
             # A case paper can carry several invoices.
             conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS case_paper_id INTEGER REFERENCES case_papers(id)"))
+            # The next-visit recommendation resolved to a real calendar day, so
+            # the front desk has something to act on instead of "after 1 month".
+            conn.execute(text("ALTER TABLE case_papers ADD COLUMN IF NOT EXISTS next_visit_date DATE"))
             # Which Offer set the draft discount, so the bill can label it.
             conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS applied_offer_id INTEGER"))
             # Link a stock movement to the invoice line it was auto-billed as.
@@ -677,6 +703,7 @@ app.include_router(sync.router, prefix="/api/v1/sync", tags=["sync"])
 app.include_router(gmail_routes.router, prefix="/api/v1/gmail", tags=["gmail"])
 app.include_router(google_business_routes.router, prefix="/api/v1/google-business", tags=["google_business"])
 app.include_router(google_places_routes.router, prefix="/api/v1/google-places", tags=["google_places"])
+app.include_router(notification_center.router, prefix="/api/v1/notifications", tags=["notifications"])
 app.include_router(vendors.router, prefix="/api/v1/vendors", tags=["vendors"])
 # Ledger BEFORE the item router so /inventory/transactions isn't parsed as /inventory/{item_id}
 app.include_router(inventory_transactions.router, prefix="/api/v1", tags=["inventory-transactions"])

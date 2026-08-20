@@ -264,6 +264,32 @@ def add_clinic_user(user_in: ClinicUserIn, request: Request, db: Session = Depen
         except Exception as exc:  # noqa: BLE001
             logger.warning("staff welcome whatsapp failed for user %s: %s", user.id, type(exc).__name__)
 
+    # Who can get into the clinic's records is the owner's business, even when
+    # the owner is the one adding them. Excluded as actor so an owner adding
+    # staff themselves is not told about it, which leaves the case that matters:
+    # a manager or another owner adding someone.
+    try:
+        from domains.notification.services.notification_center_service import (
+            notify, OWNER, SEVERITY_INFO,
+        )
+        notify(
+            db,
+            clinic_id=current_user.clinic_id,
+            event_type="staff_added",
+            severity=SEVERITY_INFO,
+            audience=OWNER,
+            actor_user_id=current_user.id,
+            title="Staff member added",
+            body=f"{user_in.name} joined as {user_in.role or 'staff'}, "
+                 f"added by {current_user.name or current_user.email}",
+            link="/admin/staff",
+            entity_type="user",
+            entity_id=user.id,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+
     # Same reason as the update handler: has_password is derived, so returning
     # the ORM row would tell a freshly-created user they have no password even
     # when one was supplied at creation.
@@ -359,6 +385,30 @@ def delete_clinic_user(user_id: int, request: Request, db: Session = Depends(get
     record_audit(db, current_user, STAFF_DEACTIVATED,
                  f"Removed {label} from the clinic",
                  request=request, entity_type='user', entity_id=user_id)
+
+    # Somebody losing access is worth more than an audit-log line. Deliberately
+    # `action` rather than `info`: if the owner did not expect this, it wants
+    # looking at today.
+    try:
+        from domains.notification.services.notification_center_service import (
+            notify, OWNER, SEVERITY_ACTION,
+        )
+        notify(
+            db,
+            clinic_id=current_user.clinic_id,
+            event_type="staff_removed",
+            severity=SEVERITY_ACTION,
+            audience=OWNER,
+            actor_user_id=current_user.id,
+            title="Staff member removed",
+            body=f"{label} was removed by {current_user.name or current_user.email}",
+            link="/admin/staff",
+            entity_type="user",
+            entity_id=user_id,
+        )
+    except Exception:
+        logger.exception("staff_removed notification failed")
+
     db.commit()
     # 204 means no body. The old handler returned a JSON message with it, which
     # is a contradiction some clients treat as a malformed response.
@@ -429,6 +479,31 @@ def update_clinic_user(user_id: int, user_update: ClinicUserUpdate, request: Req
         record_audit(db, current_user, PERMISSIONS_CHANGED,
                      f"Changed module permissions for {user.name}",
                      request=request, entity_type='user', entity_id=user.id)
+
+        # Who can see what is an owner-level concern. Collapsed over an hour so
+        # working through the permissions grid for one person is one line rather
+        # than one per toggle.
+        try:
+            from domains.notification.services.notification_center_service import (
+                notify, OWNER, SEVERITY_ACTION,
+            )
+            notify(
+                db,
+                clinic_id=current_user.clinic_id,
+                event_type="permissions_changed",
+                severity=SEVERITY_ACTION,
+                audience=OWNER,
+                actor_user_id=current_user.id,
+                title="Staff permissions changed",
+                body=f"{user.name}'s access was changed by "
+                     f"{current_user.name or current_user.email}",
+                link="/admin/staff",
+                entity_type="user",
+                entity_id=user.id,
+                collapse_minutes=60,
+            )
+        except Exception:
+            logger.exception("permissions_changed notification failed")
     if user_update.is_active is not None:
         if user.role == 'clinic_owner':
             raise HTTPException(status_code=400, detail="Cannot deactivate the clinic owner")

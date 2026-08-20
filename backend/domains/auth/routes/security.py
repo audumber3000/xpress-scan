@@ -381,6 +381,28 @@ def set_master_password(
         "Changed the clinic's master password",
         request=request, entity_type='clinic', entity_id=c.id,
     )
+
+    # The master password gates deleting patients, paid bills and payments, so a
+    # change to it belongs in front of the owner rather than only in the audit
+    # log. No actor exclusion: an owner who did NOT do this is exactly who needs
+    # to see it, and an owner who did gets a harmless confirmation.
+    from domains.notification.services.notification_center_service import (
+        notify, OWNER, SEVERITY_CRITICAL,
+    )
+    notify(
+        db,
+        clinic_id=c.id,
+        event_type="master_password_changed",
+        severity=SEVERITY_CRITICAL,
+        audience=OWNER,
+        title="Master password changed",
+        body=f"Changed by {current_user.name or current_user.email}. "
+             "If this was not you, change it again straight away.",
+        link="/admin/security",
+        entity_type="clinic",
+        entity_id=c.id,
+    )
+
     db.commit()
     return {"updated": True, "is_default": mp.is_default(c)}
 

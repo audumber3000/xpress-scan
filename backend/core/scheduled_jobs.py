@@ -804,3 +804,331 @@ async def evening_motivation_push_job() -> None:
         logger.error("evening_motivation_push error: %s", exc)
     finally:
         db.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# In-app notification centre jobs
+#
+# These run HOURLY and pick their clinics by each clinic's OWN local hour, not
+# by the scheduler's. The scheduler is pinned to Asia/Kolkata, so a fixed 8am
+# cron would reach a Beirut clinic at half past five in the morning and a
+# Toronto one in the middle of the night. `clinic_now()` reads the timezone the
+# clinic actually set, which is the same clock its day boundaries already use.
+# ─────────────────────────────────────────────────────────────────────────────
+
+MORNING_DIGEST_HOUR = 8    # clinic-local
+DAY_CLOSE_HOUR = 20        # clinic-local
+DUES_REVIEW_HOUR = 11      # clinic-local
+DUES_OVERDUE_DAYS = 14
+
+
+def _clinics_at_local_hour(db, hour: int):
+    """Active clinics whose own local clock is currently in `hour`."""
+    from core.clinic_time import clinic_now
+    from models import Clinic
+
+    due = []
+    for clinic in db.query(Clinic).filter(Clinic.status == "active").all():
+        try:
+            if clinic_now(clinic).hour == hour:
+                due.append(clinic)
+        except Exception:
+            # A clinic with a broken timezone string should not stop the rest.
+            logger.warning("could not read local time for clinic %s", clinic.id)
+    return due
+
+
+async def clinic_morning_digest_job() -> None:
+    """Today at a glance, once per clinic, at 8am their time.
+
+    A digest rather than one notification per appointment: the point is to be
+    told what the day looks like, not to be pinged twelve times before it
+    starts.
+    """
+    from database import SessionLocal
+    from sqlalchemy import func
+    from models import Appointment
+    from core.clinic_time import clinic_today
+    from domains.notification.services.notification_center_service import (
+        notify, FRONT_DESK, SEVERITY_INFO,
+    )
+
+    db = SessionLocal()
+    try:
+        for clinic in _clinics_at_local_hour(db, MORNING_DIGEST_HOUR):
+            today = clinic_today(clinic)
+            rows = (
+                db.query(Appointment)
+                .filter(
+                    Appointment.clinic_id == clinic.id,
+                    func.date(Appointment.appointment_date) == today,
+                    Appointment.status.in_(list(OPEN_STATUSES)),
+                )
+                .order_by(Appointment.start_time.asc())
+                .all()
+            )
+            # Nothing booked is not worth a notification. An empty day announces
+            # itself by being empty.
+            if not rows:
+                continue
+
+            first = rows[0].start_time
+            notify(
+                db,
+                clinic_id=clinic.id,
+                event_type="morning_digest",
+                severity=SEVERITY_INFO,
+                audience=FRONT_DESK,
+                title=f"{len(rows)} appointment{'s' if len(rows) != 1 else ''} today",
+                body=f"First one is at {first}." if first else None,
+                link="/appointments",
+                entity_type="digest",
+                entity_id=int(today.strftime("%Y%m%d")),
+            )
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error("clinic_morning_digest error: %s", exc)
+    finally:
+        db.close()
+
+
+async def clinic_day_close_job() -> None:
+    """Billed vs collected for the day, at 8pm clinic-local."""
+    from database import SessionLocal
+    from sqlalchemy import func
+    from models import Invoice
+    from core.clinic_time import clinic_today, clinic_day_bounds_utc
+    from domains.notification.services.notification_center_service import (
+        notify, OWNER, SEVERITY_INFO,
+    )
+
+    db = SessionLocal()
+    try:
+        for clinic in _clinics_at_local_hour(db, DAY_CLOSE_HOUR):
+            today = clinic_today(clinic)
+            start_utc, end_utc = clinic_day_bounds_utc(clinic, today, today)
+            billed, collected = (
+                db.query(
+                    func.coalesce(func.sum(Invoice.total), 0),
+                    func.coalesce(func.sum(Invoice.paid_amount), 0),
+                )
+                .filter(
+                    Invoice.clinic_id == clinic.id,
+                    Invoice.created_at >= start_utc,
+                    Invoice.created_at < end_utc,
+                )
+                .one()
+            )
+            if not billed and not collected:
+                continue
+
+            symbol = clinic.currency_symbol or ""
+            outstanding = float(billed or 0) - float(collected or 0)
+            body = f"Collected {symbol}{float(collected or 0):,.2f} of {symbol}{float(billed or 0):,.2f} billed."
+            if outstanding > 0:
+                body += f" {symbol}{outstanding:,.2f} still due."
+
+            notify(
+                db,
+                clinic_id=clinic.id,
+                event_type="day_closed",
+                severity=SEVERITY_INFO,
+                audience=OWNER,
+                title="Today's takings",
+                body=body,
+                link="/reports/daily-register",
+                entity_type="digest",
+                entity_id=int(today.strftime("%Y%m%d")),
+            )
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error("clinic_day_close error: %s", exc)
+    finally:
+        db.close()
+
+
+async def dues_ageing_job() -> None:
+    """Bills still unpaid after DUES_OVERDUE_DAYS, summarised once per clinic.
+
+    One line with a total, not one per patient. A clinic with forty ageing bills
+    needs to know the number, and then to go and look at the list.
+    """
+    from database import SessionLocal
+    from sqlalchemy import func
+    from models import Invoice
+    from domains.notification.services.notification_center_service import (
+        notify, OWNER, SEVERITY_ACTION,
+    )
+
+    db = SessionLocal()
+    try:
+        cutoff = dt.datetime.utcnow() - dt.timedelta(days=DUES_OVERDUE_DAYS)
+        for clinic in _clinics_at_local_hour(db, DUES_REVIEW_HOUR):
+            count, outstanding = (
+                db.query(
+                    func.count(Invoice.id),
+                    func.coalesce(func.sum(Invoice.due_amount), 0),
+                )
+                .filter(
+                    Invoice.clinic_id == clinic.id,
+                    Invoice.created_at < cutoff,
+                    Invoice.due_amount > 0,
+                    Invoice.status.notin_(["paid_verified", "cancelled"]),
+                )
+                .one()
+            )
+            if not count or float(outstanding or 0) <= 0:
+                continue
+
+            symbol = clinic.currency_symbol or ""
+            notify(
+                db,
+                clinic_id=clinic.id,
+                event_type="dues_ageing",
+                severity=SEVERITY_ACTION,
+                audience=OWNER,
+                title=f"{symbol}{float(outstanding):,.2f} outstanding over {DUES_OVERDUE_DAYS} days",
+                body=f"Across {count} bill{'s' if count != 1 else ''}.",
+                link="/billing",
+                entity_type="digest",
+                # One per clinic per day, so a daily re-run updates rather than
+                # stacks. Reading it and letting the next day's land is the
+                # intended rhythm.
+                entity_id=int(dt.datetime.utcnow().strftime("%Y%m%d")),
+                collapse_minutes=60 * 24,
+            )
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error("dues_ageing error: %s", exc)
+    finally:
+        db.close()
+
+
+async def trial_lifecycle_job() -> None:
+    """Trial ending in three days, and trial ended.
+
+    Runs hourly but each notification collapses on a per-day entity id, so a
+    clinic is told once per stage however often this runs.
+    """
+    from database import SessionLocal
+    from models import Subscription, User
+    from domains.notification.services.notification_center_service import (
+        notify, OWNER, SEVERITY_ACTION,
+    )
+
+    db = SessionLocal()
+    try:
+        now = dt.datetime.utcnow()
+        trials = (
+            db.query(Subscription)
+            .filter(Subscription.is_trial == True, Subscription.status == "active")  # noqa: E712
+            .all()
+        )
+        for sub in trials:
+            if not sub.current_end:
+                continue
+            clinic_id = sub.clinic_id
+            if not clinic_id and sub.user_id:
+                owner = db.query(User).filter(User.id == sub.user_id).first()
+                clinic_id = getattr(owner, "clinic_id", None)
+            if not clinic_id:
+                continue
+
+            remaining = (sub.current_end - now).total_seconds() / 86400
+            stamp = int(now.strftime("%Y%m%d"))
+
+            if remaining <= 0:
+                notify(
+                    db, clinic_id=clinic_id, event_type="trial_ended",
+                    severity=SEVERITY_ACTION, audience=OWNER,
+                    title="Your free trial has ended",
+                    body="Add a plan to keep the Professional features.",
+                    link="/admin/subscription",
+                    entity_type="subscription", entity_id=sub.id,
+                    collapse_minutes=60 * 24,
+                )
+                db.commit()
+            elif remaining <= 3:
+                days = max(1, int(remaining) + 1)
+                notify(
+                    db, clinic_id=clinic_id, event_type="trial_ending",
+                    severity=SEVERITY_ACTION, audience=OWNER,
+                    title=f"Trial ends in {days} day{'s' if days != 1 else ''}",
+                    body=f"Ends on {sub.current_end.strftime('%d %b')}.",
+                    link="/admin/subscription",
+                    entity_type="subscription", entity_id=sub.id,
+                    collapse_minutes=60 * 24,
+                )
+                db.commit()
+            del stamp
+    except Exception as exc:
+        db.rollback()
+        logger.error("trial_lifecycle error: %s", exc)
+    finally:
+        db.close()
+
+
+ACCOUNT_NUDGE_HOUR = 10  # clinic-local
+
+
+async def account_verification_job() -> None:
+    """Nudge a clinic whose security contact is still unverified.
+
+    Sent ONCE per clinic, ever. Deliberately not a collapse window: collapsing
+    only folds unread rows, so once somebody read the nudge the next run would
+    write a fresh one and the app would nag weekly about a box they chose not
+    to tick. Checking for any existing row of this type, read or not, is what
+    makes it a reminder rather than a pester.
+    """
+    from database import SessionLocal
+    from models import Notification
+    from domains.notification.services.notification_center_service import (
+        notify, OWNER, SEVERITY_ACTION,
+    )
+
+    db = SessionLocal()
+    try:
+        for clinic in _clinics_at_local_hour(db, ACCOUNT_NUDGE_HOUR):
+            if clinic.security_phone_verified and clinic.security_email_verified:
+                continue
+
+            already = (
+                db.query(Notification.id)
+                .filter(
+                    Notification.clinic_id == clinic.id,
+                    Notification.event_type == "account_unverified",
+                )
+                .first()
+            )
+            if already:
+                continue
+
+            missing = []
+            if not clinic.security_phone_verified:
+                missing.append("phone")
+            if not clinic.security_email_verified:
+                missing.append("email")
+
+            notify(
+                db,
+                clinic_id=clinic.id,
+                event_type="account_unverified",
+                severity=SEVERITY_ACTION,
+                audience=OWNER,
+                title="Finish verifying your account",
+                body=f"Your recovery {' and '.join(missing)} "
+                     f"{'is' if len(missing) == 1 else 'are'} not verified yet. "
+                     "Without it there is no way back into the account if you are locked out.",
+                link="/admin/security",
+                entity_type="clinic",
+                entity_id=clinic.id,
+            )
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error("account_verification error: %s", exc)
+    finally:
+        db.close()

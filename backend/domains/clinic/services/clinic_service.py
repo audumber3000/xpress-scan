@@ -7,6 +7,38 @@ from core.dtos import ClinicCreateDTO, ClinicUpdateDTO, ClinicResponseDTO
 from models import Clinic, User
 
 
+# The parts that make up the single-line address, in the order they read.
+_ADDRESS_PARTS = ('address_line1', 'address_line2', 'city', 'state', 'postal_code')
+
+
+def _sync_composed_address(clinic: Clinic, updates: Dict[str, Any]) -> None:
+    """Rebuild `clinic.address` whenever any structured part changes.
+
+    `address` is the single line that invoices, receipts, prescriptions, the
+    public website and both mobile apps render, and there are far too many
+    readers to convert them all. So the structured fields are the editing
+    surface and `address` is the derived value kept in step with them.
+
+    Two deliberate restraints:
+
+    * Nothing happens unless a part is actually in the update, so saving the
+      phone number on another tab leaves the address alone.
+    * An all-empty set of parts does NOT blank the composed line. A clinic that
+      has only ever had free text keeps exactly what it typed, and no invoice
+      loses its letterhead because somebody opened the Location tab.
+    """
+    if not any(part in updates for part in _ADDRESS_PARTS):
+        return
+
+    merged = [
+        updates[part] if part in updates else getattr(clinic, part, None)
+        for part in _ADDRESS_PARTS
+    ]
+    composed = ', '.join(str(v).strip() for v in merged if v and str(v).strip())
+    if composed:
+        updates['address'] = composed
+
+
 class ClinicService(ClinicServiceProtocol):
     """Clinic service containing all clinic-related business logic"""
 
@@ -51,6 +83,8 @@ class ClinicService(ClinicServiceProtocol):
             existing_gst = self._get_clinic_by_gst(updates['gst_number'])
             if existing_gst and existing_gst.id != clinic_id:
                 raise ValueError(f"Clinic with GST number '{updates['gst_number']}' already exists")
+
+        _sync_composed_address(clinic, updates)
 
         return self.clinic_repo.update(clinic_id, updates)
 

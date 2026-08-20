@@ -39,15 +39,37 @@ class PatientCreateDTO(PatientBaseDTO):
 
 
 class PatientUpdateDTO(BaseModel):
+    """Fields that may be changed on an existing patient.
+
+    Deliberately not a subclass of PatientBaseDTO: creating requires a name and
+    a phone, updating requires nothing in particular. But it has to agree with
+    it on *how a value is spelled*, and for a long time it did not.
+
+    Two consequences of that drift, both fixed here:
+
+      * gender. Create accepts "Male" and lowercases it; update matched only
+        "^(male|female|other)$" with no normaliser, so the exact value the UI
+        sends for every patient it had just created came back 422. Editing a
+        patient could not succeed at all.
+      * blood_group and patient_history were absent, so the edit form could
+        collect them and the update would drop them on the floor.
+        patient_history is the medical alert shown on the patient's file, which
+        makes silently discarding it the worse of the two.
+
+    display_id and primary_doctor_id stay out on purpose: the first is assigned
+    by the server and shown read-only, the second is set from the case paper.
+    """
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     age: Optional[int] = Field(None, ge=0, le=150)
     date_of_birth: Optional[date] = None
-    gender: Optional[str] = Field(None, pattern="^(male|female|other)$")
+    gender: Optional[str] = Field(None, pattern="^(male|female|other|Male|Female|Other)$")
     village: Optional[str] = Field(None, min_length=1, max_length=100)
     phone: Optional[str] = Field(None, min_length=10, max_length=15)
     email: Optional[str] = Field(None, pattern=r"^[^@]+@[^@]+\.[^@]+$")
     referred_by: Optional[str] = Field(None, min_length=1, max_length=100)
     treatment_type: Optional[str] = Field(None, min_length=1, max_length=100)
+    blood_group: Optional[str] = Field(None, max_length=5)
+    patient_history: Optional[str] = None
     notes: Optional[str] = None
     payment_type: Optional[str] = Field(None, pattern="^(Cash|Card|UPI|Online)$")
     registered_on: Optional[date] = None
@@ -55,6 +77,15 @@ class PatientUpdateDTO(BaseModel):
     tooth_notes: Optional[Dict[str, Any]] = None
     treatment_plan: Optional[List[Dict[str, Any]]] = None
     prescriptions: Optional[List[Dict[str, Any]]] = None
+
+    @field_validator('gender', mode='before')
+    @classmethod
+    def normalize_gender(cls, v):
+        """Same normalisation as PatientBaseDTO, so "Male" and "male" both store
+        as "male" whether the patient is being created or edited."""
+        if isinstance(v, str):
+            return v.lower()
+        return v
 
 
 class PatientResponseDTO(PatientBaseDTO):
@@ -79,6 +110,12 @@ class PatientResponseDTO(PatientBaseDTO):
     clinic_id: int
     display_id: Optional[str] = None
     last_visit: Optional[datetime] = None
+    # The two clinical flags the patient's file shows beside their name. Stored
+    # on the row and editable in the patient form, but absent here, so neither
+    # the blood group pill nor the medical alert could ever render and the edit
+    # form always reopened them blank. Read must report what is stored.
+    blood_group: Optional[str] = None
+    patient_history: Optional[str] = None
     # Nullable on read: rows created before this column existed are backfilled
     # from created_at by migration, but an unbackfilled row must still respond.
     registered_on: Optional[date] = None
@@ -124,6 +161,16 @@ class ClinicBaseDTO(BaseModel):
     timezone: str = "Asia/Kolkata"
     tax_label: str = "GST No."
     tax_id: Optional[str] = None
+    # Structured address. `address` stays the composed single line that
+    # invoices, receipts and the mobile app read; these are its parts.
+    address_line1: Optional[str] = None
+    address_line2: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    postal_code: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    google_place_id: Optional[str] = None
     # Send patient WhatsApp messages manually from the clinic's own number.
     manual_whatsapp: bool = False
     # Practice licence — all optional so existing clinics respond unchanged.
@@ -161,6 +208,16 @@ class ClinicUpdateDTO(BaseModel):
     timezone: Optional[str] = None
     tax_label: Optional[str] = None
     tax_id: Optional[str] = None
+    # Structured address. `address` stays the composed single line that
+    # invoices, receipts and the mobile app read; these are its parts.
+    address_line1: Optional[str] = None
+    address_line2: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    postal_code: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    google_place_id: Optional[str] = None
     license_number: Optional[str] = None
     license_authority: Optional[str] = None
     license_expiry: Optional[date] = None
@@ -188,6 +245,12 @@ class ClinicResponseDTO(ClinicBaseDTO):
     trial_days_remaining: Optional[int] = None
     # True when this clinic is eligible to start a free trial (never used one and not currently Pro/trial)
     trial_available: bool = True
+    # Whether a recovery contact has actually been verified. Booleans only: the
+    # phone and email themselves stay behind the owner-only /security endpoint.
+    # Carried here so the profile badge and the Control Center menu can tell the
+    # truth about it without either of them making a second request.
+    security_phone_verified: bool = False
+    security_email_verified: bool = False
 
     class Config:
         from_attributes = True

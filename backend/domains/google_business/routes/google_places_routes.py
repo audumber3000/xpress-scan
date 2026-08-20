@@ -114,6 +114,80 @@ def search_places(q: str, current_user: User = Depends(get_current_user)):
     return {"results": results}
 
 
+# Google returns the address as a bag of typed components rather than fields,
+# so this maps its vocabulary onto ours. Each of our fields lists the Google
+# types that can fill it, best first, and the first one present wins.
+_COMPONENT_MAP = {
+    "city": ("locality", "postal_town", "administrative_area_level_2"),
+    "state": ("administrative_area_level_1",),
+    "postal_code": ("postal_code",),
+    "address_line2": ("sublocality_level_1", "sublocality", "neighborhood"),
+}
+
+
+def _parse_address_components(result: dict) -> dict:
+    """Flatten a Places result into the clinic address fields."""
+    components = result.get("address_components", [])
+
+    def first_of(*types, short=False):
+        for wanted in types:
+            for c in components:
+                if wanted in c.get("types", []):
+                    return (c.get("short_name") if short else c.get("long_name")) or ""
+        return ""
+
+    # Street line is built rather than looked up: Google splits the number from
+    # the road name, and neither alone is a usable first line.
+    line1 = " ".join(x for x in (first_of("street_number"), first_of("route")) if x).strip()
+    # Some establishments (a clinic inside a mall, say) carry no street at all.
+    # Falling back to the premise or the place's own name beats a blank line 1.
+    if not line1:
+        line1 = first_of("premise", "establishment") or result.get("name", "")
+
+    location = (result.get("geometry") or {}).get("location") or {}
+
+    return {
+        "address_line1": line1,
+        "address_line2": first_of(*_COMPONENT_MAP["address_line2"]),
+        "city": first_of(*_COMPONENT_MAP["city"]),
+        "state": first_of(*_COMPONENT_MAP["state"]),
+        "postal_code": first_of(*_COMPONENT_MAP["postal_code"]),
+        # ISO 3166-1 alpha-2, matching clinics.country.
+        "country": first_of("country", short=True),
+        "latitude": location.get("lat"),
+        "longitude": location.get("lng"),
+        "formatted_address": result.get("formatted_address", ""),
+        "name": result.get("name", ""),
+    }
+
+
+@router.get("/details")
+def place_details(place_id: str, current_user: User = Depends(get_current_user)):
+    """Address fields for one place, for prefilling the clinic's Location tab.
+
+    Separate from _fetch_place_details, which asks for reviews and ratings on
+    the reviews-sync path. This one asks only for what an address needs, so the
+    two can change independently without one breaking the other.
+    """
+    if not PLACES_KEY:
+        raise HTTPException(status_code=503, detail="GOOGLE_PLACES_API_KEY not configured")
+    r = requests.get(
+        f"{PLACES_BASE}/details/json",
+        params={
+            "place_id": place_id,
+            "fields": "name,address_components,formatted_address,geometry",
+            "key": PLACES_KEY,
+        },
+        timeout=10,
+    )
+    if not r.ok:
+        raise HTTPException(status_code=502, detail=f"Places API error: {r.text[:200]}")
+    body = r.json()
+    if body.get("status") != "OK":
+        raise HTTPException(status_code=404, detail=f"Place lookup failed: {body.get('status')}")
+    return _parse_address_components(body.get("result", {}))
+
+
 @router.get("/status")
 def get_status(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     link = db.query(GooglePlaceLink).filter(

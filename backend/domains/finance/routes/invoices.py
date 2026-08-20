@@ -27,6 +27,7 @@ def get_db():
         db.close()
 from models import Invoice, InvoiceLineItem, InvoiceAuditLog, InvoiceDiscount, InvoicePayment, Patient, User, Clinic, Appointment
 from core.auth_utils import get_current_user
+import logging as _logging
 from core.master_password import require_master_token
 from core.clinic_time import clinic_today, clinic_day_bounds_utc, clinic_now, clinic_tzinfo
 from zoneinfo import ZoneInfo
@@ -1864,6 +1865,32 @@ async def delete_invoice_payment(
                  f"Removed a {removed['amount']:,.2f} payment ({removed['receipt_number'] or 'no receipt'}) "
                  f"from invoice {invoice.invoice_number}",
                  request=request, entity_type='invoice', entity_id=invoice_id)
+
+    # Receipted money coming off the books is the event an owner most needs to
+    # see without going to look for it. It already lands in the audit log, but
+    # nobody reads an audit log on an ordinary Tuesday. No actor exclusion here
+    # on purpose: this is the one action where the person who did it is exactly
+    # who the owner may want to ask about it.
+    try:
+        from domains.notification.services.notification_center_service import (
+            notify, OWNER, SEVERITY_CRITICAL,
+        )
+        notify(
+            db,
+            clinic_id=current_user.clinic_id,
+            event_type="payment_deleted",
+            severity=SEVERITY_CRITICAL,
+            audience=OWNER,
+            title="A recorded payment was deleted",
+            body=f"{removed['amount']:,.2f} removed from invoice {invoice.invoice_number} "
+                 f"by {current_user.name or current_user.email}",
+            link=f"/patients/{invoice.patient_id}" if invoice.patient_id else "/billing",
+            entity_type="invoice",
+            entity_id=invoice_id,
+        )
+    except Exception:
+        _logging.getLogger(__name__).exception("payment_deleted notification failed")
+
     db.commit()
     db.refresh(invoice)
     return enrich_invoice(db, invoice)
@@ -2649,6 +2676,31 @@ async def delete_invoice(
             _detail += f". {_paid:,.2f} already collected against it was written off"
         record_audit(db, current_user, INVOICE_DELETED, _detail,
                      request=request, entity_type='invoice', entity_id=invoice_id)
+
+        # Only raised when the bill carried money. Deleting an unpaid draft is
+        # ordinary housekeeping; writing off collected money is not.
+        if carries_money:
+            try:
+                from domains.notification.services.notification_center_service import (
+                    notify, OWNER, SEVERITY_CRITICAL,
+                )
+                notify(
+                    db,
+                    clinic_id=current_user.clinic_id,
+                    event_type="paid_invoice_deleted",
+                    severity=SEVERITY_CRITICAL,
+                    audience=OWNER,
+                    title="A paid bill was deleted",
+                    body=f"Invoice {_num} ({_total:,.2f}) removed by "
+                         f"{current_user.name or current_user.email}."
+                         + (f" {_paid:,.2f} already collected was written off." if _paid > 0 else ""),
+                    link="/billing",
+                    entity_type="invoice",
+                    entity_id=invoice_id,
+                )
+            except Exception:
+                _logging.getLogger(__name__).exception("paid_invoice_deleted notification failed")
+
         db.delete(invoice)
         db.commit()
 

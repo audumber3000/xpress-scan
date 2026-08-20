@@ -213,6 +213,29 @@ async def start_free_trial(
         except Exception:
             pass
 
+    # In the bell as well as on WhatsApp. The trial has an end date the clinic
+    # will otherwise only meet when things stop working.
+    try:
+        from domains.notification.services.notification_center_service import (
+            notify, OWNER, SEVERITY_INFO,
+        )
+        ends = subscription.current_end.strftime("%d %b") if subscription.current_end else None
+        notify(
+            db,
+            clinic_id=current_user.clinic_id,
+            event_type="trial_started",
+            severity=SEVERITY_INFO,
+            audience=OWNER,
+            title=f"Your {TRIAL_DAYS}-day Professional trial has started",
+            body=f"Everything is unlocked until {ends}." if ends else "Everything is unlocked.",
+            link="/admin/subscription",
+            entity_type="subscription",
+            entity_id=subscription.id,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+
     return {
         "success": True,
         "message": f"Your {TRIAL_DAYS}-day Professional trial is now active.",

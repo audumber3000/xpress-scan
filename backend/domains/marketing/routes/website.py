@@ -7,6 +7,7 @@ reachable from outside. The public route is a separate, later piece with its own
 rate limiting and its own hard rule about what it may read.
 """
 import logging
+import os
 import re
 from datetime import datetime
 from typing import List, Optional
@@ -54,6 +55,19 @@ def _band(n: int) -> str:
         if n >= floor:
             return f"{floor:,}+"
     return str(n) if n else ""
+
+
+def _public_site_base() -> str:
+    """Where a published clinic site lives, without the trailing slash.
+
+    Configurable because the current answer is not the final one. Today the
+    sites sit at app.molarplus.com/c/<slug>, which is the logged-in app's
+    domain with an opaque prefix, and it reads like an internal link rather
+    than a clinic's website. Moving them to their own domain (or a subdomain
+    per clinic) is then a variable, not a code change here, in the og-image
+    route and in whatever else grows a link.
+    """
+    return (os.getenv("PUBLIC_SITE_BASE") or "https://app.molarplus.com").rstrip("/")
 
 
 def build_context(db: Session, clinic: Clinic) -> dict:
@@ -132,7 +146,7 @@ def build_context(db: Session, clinic: Clinic) -> dict:
         "review_count": link.total_review_count if link else 0,
         "stats": stats,
         # Where this page will live, for canonical and structured data.
-        "site_url": f"https://app.molarplus.com/c/{clinic.website_slug or slugify(clinic.name or '')}",
+        "site_url": f"{_public_site_base()}/c/{clinic.website_slug or slugify(clinic.name or '')}",
         # The public booking page the app already publishes. Without this the
         # only way to act on the site was to compose a WhatsApp message.
         "booking_url": f"https://app.molarplus.com/book/{clinic.id}",
@@ -275,6 +289,40 @@ def preview(db: Session = Depends(get_db), current_user: User = Depends(get_curr
     clinic = _clinic(db, current_user)
     html = render_site(build_context(db, clinic))
     return Response(content=html, media_type="text/html")
+
+
+@router.get("/public/{slug}", response_class=Response)
+def public_site(slug: str, db: Session = Depends(get_db)):
+    """A clinic's website, for anyone. No auth.
+
+    This is the endpoint the whole feature was missing. `render_site` had
+    exactly one caller — the authenticated `/preview` above — so the published
+    site existed only inside the editor's iframe. Meanwhile every page it
+    rendered carried a canonical tag, og:image and schema.org block pointing at
+    app.molarplus.com/c/<slug>, which is the React app's catch-all: that URL
+    answered 200 with the MolarPlus marketing shell, so anything that followed
+    it (Google, a WhatsApp preview, a patient) got our page instead of the
+    clinic's.
+    """
+    clinic = (
+        db.query(Clinic)
+        .filter(Clinic.website_slug == slug, Clinic.website_enabled == True)  # noqa: E712
+        .first()
+    )
+    if not clinic:
+        # 404 rather than a redirect: an unpublished or renamed site should
+        # drop out of the index, not quietly resolve to something else.
+        raise HTTPException(status_code=404, detail="Site not found")
+
+    html = render_site(build_context(db, clinic))
+    return Response(
+        content=html,
+        media_type="text/html",
+        # Cheap to render but hit by crawlers and every shared link. A few
+        # minutes of CDN caching absorbs that without making an edit feel
+        # stale to the clinic checking their own site.
+        headers={"Cache-Control": "public, max-age=300, s-maxage=300"},
+    )
 
 
 # ─── Photos ──────────────────────────────────────────────────────────────────

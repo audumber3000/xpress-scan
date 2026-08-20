@@ -53,8 +53,12 @@
       "destination": "/browserconfig.xml"
     },
     {
+      "source": "/c/:slug",
+      "destination": "https://api.molarplus.com/api/v1/marketing/website/public/:slug"
+    },
+    {
       "source": "/((?!assets/|.*\\..*).*)",
       "destination": "/index.html"
     }
   ]
-} 
+}

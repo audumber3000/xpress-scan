@@ -58,6 +58,11 @@ def _register_jobs(sched: AsyncIOScheduler) -> None:
         monthly_summary_broadcast_job,
         morning_motivation_push_job,
         evening_motivation_push_job,
+        clinic_morning_digest_job,
+        clinic_day_close_job,
+        dues_ageing_job,
+        trial_lifecycle_job,
+        account_verification_job,
     )
 
     sched.add_job(
@@ -65,6 +70,54 @@ def _register_jobs(sched: AsyncIOScheduler) -> None:
         trigger="cron",
         minute=0,
         id="platform_automation_hourly",
+        replace_existing=True,
+    )
+
+    # Notification-centre jobs.
+    #
+    # All four run HOURLY on purpose, even though each is conceptually a daily
+    # notification. The scheduler is pinned to Asia/Kolkata while clinics are
+    # spread across timezones, so a fixed hour here is the wrong hour for most
+    # of them. Each job wakes every hour and picks only the clinics whose OWN
+    # local clock has reached the target hour. Offset to :05, :10, :15 so four
+    # full-table sweeps don't land on the same second as the platform job.
+    sched.add_job(
+        clinic_morning_digest_job,
+        trigger="cron",
+        minute=5,
+        id="clinic_morning_digest",
+        replace_existing=True,
+    )
+
+    sched.add_job(
+        clinic_day_close_job,
+        trigger="cron",
+        minute=10,
+        id="clinic_day_close",
+        replace_existing=True,
+    )
+
+    sched.add_job(
+        dues_ageing_job,
+        trigger="cron",
+        minute=15,
+        id="clinic_dues_ageing",
+        replace_existing=True,
+    )
+
+    sched.add_job(
+        trial_lifecycle_job,
+        trigger="cron",
+        minute=20,
+        id="clinic_trial_lifecycle",
+        replace_existing=True,
+    )
+
+    sched.add_job(
+        account_verification_job,
+        trigger="cron",
+        minute=25,
+        id="clinic_account_verification",
         replace_existing=True,
     )
 

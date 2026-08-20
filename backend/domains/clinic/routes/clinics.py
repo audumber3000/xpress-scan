@@ -58,6 +58,19 @@ async def list_countries():
     return get_all_countries()
 
 
+@router.get("/currencies")
+async def list_currencies():
+    """Currencies for the clinic's Taxation settings (public, no auth).
+
+    Separate from /countries on purpose: a clinic can bill in a currency its
+    country doesn't issue. Lebanese practices quoting in USD are the common
+    case, and forcing the country to "US" to reach USD would drag the clinic's
+    timezone to America/New_York with it.
+    """
+    from core.countries import get_all_currencies
+    return get_all_currencies()
+
+
 @router.post(
     "/owner/add",
     response_model=ClinicResponseDTO,
@@ -383,6 +396,33 @@ async def get_clinic(
         )
 
 
+
+def _normalise_currency(update_data: dict) -> None:
+    """Keep currency_code and currency_symbol agreeing with each other.
+
+    The client picks a code and nothing else; the symbol is resolved here from
+    the same table the picker was built from. Letting a request set the two
+    independently means one hand-edited call leaves the clinic rendering "$"
+    against INR totals, and nothing downstream would catch it because invoices
+    store bare numbers and read the symbol off the clinic at print time.
+    """
+    code = update_data.get("currency_code")
+    if code is None:
+        # Not changing the currency, so a symbol on its own has nothing to
+        # agree with. Drop it rather than trust it.
+        update_data.pop("currency_symbol", None)
+        return
+
+    from core.countries import get_currency_config
+    cfg = get_currency_config(code)
+    if not cfg:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported currency: {code}",
+        )
+    update_data["currency_code"] = cfg["code"]
+    update_data["currency_symbol"] = cfg["symbol"]
+
 @router.put(
     "/me",
     response_model=ClinicResponseDTO,
@@ -412,6 +452,8 @@ async def update_my_clinic(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No valid fields provided for update"
             )
+
+        _normalise_currency(update_data)
 
         clinic = clinic_service.update_clinic(current_user.clinic_id, update_data)
 
@@ -469,6 +511,8 @@ async def update_clinic(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No valid fields provided for update"
             )
+
+        _normalise_currency(update_data)
 
         clinic = clinic_service.update_clinic(clinic_id, update_data)
 

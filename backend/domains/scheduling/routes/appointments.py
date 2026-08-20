@@ -414,14 +414,30 @@ async def create_public_appointment(
         db.commit()
         db.refresh(db_appointment)
 
-        # ── Push notification to clinic — new online booking ──────────
-        from core.push_notify import push_to_clinic
-        push_to_clinic(
-            db, db_appointment.clinic_id,
-            "📅 New Online Booking",
-            f"{db_appointment.patient_name} — {db_appointment.start_time}",
-            {"type": "new_appointment", "appointment_id": str(db_appointment.id)},
+        # ── Tell the clinic: nobody is watching the public booking page ──
+        # This replaces a bare push_to_clinic call. notify() pushes as well, so
+        # routing through it adds the bell entry the push never had, and avoids
+        # the phone buzzing twice for one booking.
+        from domains.notification.services.notification_center_service import (
+            notify, FRONT_DESK, SEVERITY_ACTION,
         )
+        notify(
+            db,
+            clinic_id=db_appointment.clinic_id,
+            event_type="appointment_booked_online",
+            severity=SEVERITY_ACTION,
+            audience=FRONT_DESK,
+            title="New online booking",
+            body=f"{db_appointment.patient_name} at {db_appointment.start_time}"
+                 f" on {db_appointment.appointment_date.strftime('%d %b')}",
+            link="/appointments",
+            entity_type="appointment",
+            entity_id=db_appointment.id,
+            # Several bookings in a quiet hour become one row with a count,
+            # rather than pushing the rest of the bell off the screen.
+            collapse_minutes=60,
+        )
+        db.commit()
 
         # Get doctor name if assigned
         doctor_name = None
@@ -753,6 +769,51 @@ def set_outcome(
     )
     db.commit()
     db.refresh(appointment)
+
+    # A cancelled or missed slot is a hole in the day somebody should fill, and
+    # a no-show is somebody to chase. A completed appointment is not news, so it
+    # notifies nothing: the whole point of the day is that they happen.
+    if status in (CANCELLED, NO_SHOW):
+        try:
+            from domains.notification.services.notification_center_service import (
+                notify, FRONT_DESK, OWNER, SEVERITY_ACTION, SEVERITY_INFO,
+            )
+            when = appointment.appointment_date.strftime("%d %b")
+            if status == CANCELLED:
+                reason = f" ({appointment.cancel_reason})" if appointment.cancel_reason else ""
+                notify(
+                    db,
+                    clinic_id=appointment.clinic_id,
+                    event_type="appointment_cancelled",
+                    severity=SEVERITY_ACTION,
+                    audience=FRONT_DESK,
+                    actor_user_id=current_user.id,
+                    title="Appointment cancelled",
+                    body=f"{appointment.patient_name}, {when} at {appointment.start_time}{reason}",
+                    link="/appointments",
+                    entity_type="appointment",
+                    entity_id=appointment.id,
+                )
+            else:
+                notify(
+                    db,
+                    clinic_id=appointment.clinic_id,
+                    event_type="appointment_no_show",
+                    severity=SEVERITY_INFO,
+                    audience=OWNER,
+                    actor_user_id=current_user.id,
+                    title="Patient did not turn up",
+                    body=f"{appointment.patient_name} missed {when} at {appointment.start_time}",
+                    link="/appointments",
+                    entity_type="appointment",
+                    entity_id=appointment.id,
+                    # A run of no-shows in a morning is one line worth chasing,
+                    # not six separate nudges.
+                    collapse_minutes=240,
+                )
+            db.commit()
+        except Exception:
+            db.rollback()
 
     doctor = db.query(User).filter(User.id == appointment.doctor_id).first() if appointment.doctor_id else None
     return AppointmentOut(
