@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StatusBar, StyleSheet, Platform, RefreshControl,
@@ -14,6 +14,8 @@ import {
   HelpCircle
 } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
+import { inboxApi } from '../../clinic-owner/notifications/inbox.api';
 import { RootStackParamList } from '../../../app/AppNavigator';
 import { useAuth } from '../../../app/AuthContext';
 import { dashboardApiService, DashboardMetrics } from '../../../services/api/dashboard.api';
@@ -118,6 +120,17 @@ export const ReceptionistHomeScreen: React.FC<Props> = ({ navigation }) => {
   const [overdueLabsCount, setOverdueLabsCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Unread count behind the header bell. Refreshed on focus so coming back
+  // from the inbox shows the badge cleared rather than a stale dot.
+  const [unreadCount, setUnreadCount] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      inboxApi.unreadCount().then((n) => { if (alive) setUnreadCount(n); });
+      return () => { alive = false; };
+    }, []),
+  );
 
   const fetchData = async () => {
     try {
@@ -262,13 +275,19 @@ export const ReceptionistHomeScreen: React.FC<Props> = ({ navigation }) => {
               </Text>
             </View>
 
-            <TouchableOpacity 
-              style={styles.iconBtn} 
+            {/* The bell opens the inbox, not the messaging console. It used
+                to go to 'Notifications', which is the OUTBOUND patient
+                WhatsApp/email admin screen — a reasonable destination for a
+                settings menu, but not for the thing shaped like an alert.
+                The dot was also hardcoded, so it showed unread state forever;
+                it now follows the real count. */}
+            <TouchableOpacity
+              style={styles.iconBtn}
               activeOpacity={0.7}
-              onPress={() => navigation.navigate('Notifications')}
+              onPress={() => navigation.navigate('Inbox')}
             >
               <Bell size={20} color="#FFFFFF" strokeWidth={2} />
-              <View style={styles.headerBadge} />
+              {unreadCount > 0 && <View style={styles.headerBadge} />}
             </TouchableOpacity>
           </View>
 
