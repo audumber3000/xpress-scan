@@ -54,10 +54,14 @@ const FeatureLock = ({ children, featureName = "Multiple branches" }) => {
             Add more branches
           </h3>
 
+          {/* The copy no longer says "free forever". Plus is a PAID plan that
+              happens to cover one location, and telling a customer paying ₹399
+              a month that their clinic is free is both wrong and the fastest
+              way to make the next invoice a surprise. */}
           <p className="text-gray-500 text-sm leading-relaxed mb-8">
-            Your single clinic is <span className="font-bold text-[#2a276e]">free forever</span> — every
-            feature included. Running <span className="font-bold text-[#2a276e]">multiple branches</span> from
-            one account is our only premium upgrade.
+            Your plan covers <span className="font-bold text-[#2a276e]">one clinic location</span>.
+            Running <span className="font-bold text-[#2a276e]">several branches</span> from one
+            login is part of Pro.
           </p>
 
           <button
@@ -65,7 +69,7 @@ const FeatureLock = ({ children, featureName = "Multiple branches" }) => {
             className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-gradient-to-r from-[#2a276e] to-[#403bb1] text-white font-bold text-lg shadow-xl hover:shadow-2xl hover:scale-[1.05] active:scale-95 transition-all animate-shine"
           >
             <Zap className="w-5 h-5 fill-current" />
-            Upgrade to add branches
+            See plans
           </button>
 
           <p className="mt-4 text-xs text-gray-400 font-medium">
