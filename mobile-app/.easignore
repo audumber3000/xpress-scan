@@ -26,3 +26,12 @@ __tests__/
 # Secrets — read locally by `eas submit`, never needs to be in the build archive
 play-service-account.json
 credentials.json
+
+# Local env overrides — NEVER ship. Expo gives .env.local precedence over .env,
+# and .env is what points at production. A stray .env.local from local testing
+# would silently build an app aimed at a developer's laptop, and the build would
+# succeed. .gitignore does not save us here: .easignore REPLACES it for EAS
+# uploads, so anything not listed in this file gets sent.
+.env.local
+.env.development
+.env.*.local
