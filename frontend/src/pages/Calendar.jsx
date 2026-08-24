@@ -24,6 +24,7 @@ import useCalendarNavigation, { formatWeekRange, getRelativeDateLabel, dateKey }
 import useClinicSchedule from "./appointments/hooks/useClinicSchedule";
 import useAppointments from "./appointments/hooks/useAppointments.jsx";
 import { toCalendarShape } from "./appointments/utils/appointmentShape";
+import { track, EVENTS } from '../analytics/track';
 
 const Calendar = () => {
   const navigate = useNavigate();
@@ -596,7 +597,8 @@ const Calendar = () => {
       
       // Create patient
       const patientResponse = await api.post('/patients/', patientDataToSend);
-      
+      track(EVENTS.PATIENT_CREATED, { source: 'calendar' });
+
       console.log('✅ Patient created:', patientResponse);
       
       // Link patient to appointment

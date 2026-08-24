@@ -17,6 +17,16 @@ if (POSTHOG_API_KEY) {
     capture_pageview: true,
     capture_exceptions: true,   // PostHog error tracking (replaces Sentry)
     // Surveys are enabled by default and render from the PostHog UI — no per-survey code.
+    // cross_subdomain_cookie defaults to true — DO NOT disable it. It is what
+    // carries a visitor's anonymous id over from www.molarplus.com, so their
+    // pre-signup marketing activity stitches onto this user at identify().
+    loaded: (ph) => {
+      // Marketing (www) shares this PostHog project and stamps
+      // source: 'marketing_site'. Stamp the counterpart here so acquisition
+      // funnels can filter each side explicitly, instead of relying on
+      // "source is not set" to mean "the app".
+      ph.register({ source: 'app' });
+    },
   })
 }
 

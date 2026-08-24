@@ -441,6 +441,24 @@ class SubscriptionOut(SubscriptionBase):
     is_trial: bool = False
     trial_ends_at: Optional[datetime] = None
     trial_available: bool = True
+
+    # These three are computed by the route, not columns.
+    #
+    # is_expired and trial_days_remaining were being returned by
+    # get_current_subscription and silently dropped here: a response_model only
+    # emits fields it declares. The Subscription page reads both
+    # (`subscription?.is_expired === true`, and the "N days left" badge), so
+    # until now the badge never appeared and an expired plan never read as
+    # expired anywhere in the UI.
+    is_expired: bool = False
+    trial_days_remaining: Optional[int] = None
+    plan_label: Optional[str] = None
+    # What the clinic can use RIGHT NOW. Differs from plan_name once a plan has
+    # lapsed: plan_name records what they last had, this records what they have.
+    effective_plan: Optional[str] = None
+    effective_plan_label: Optional[str] = None
+    plan_state: Optional[str] = None
+    plan_state_blocks: bool = False
     quantity: int = 1
     notes: Optional[Dict[str, Any]] = None
     created_at: datetime
@@ -471,7 +489,9 @@ class CouponValidateResponse(BaseModel):
     message: Optional[str] = None
 
 class CheckoutRequest(BaseModel):
-    plan_name: str = "professional"
+    # Required. This used to default to "professional", which meant a client
+    # that forgot the field silently bought the middle plan.
+    plan_name: str
     coupon_code: Optional[str] = None
 
 # Attendance Schemas
@@ -776,6 +796,7 @@ class CasePaperBase(BaseModel):
     clinical_examination: Optional[str] = None
     diagnosis: Optional[str] = None
     next_visit_recommendation: Optional[str] = None
+    next_visit_date: Optional[date] = None
     notes: Optional[str] = None
     
     # Clinical Snapshots
@@ -795,6 +816,7 @@ class CasePaperUpdate(BaseModel):
     clinical_examination: Optional[str] = None
     diagnosis: Optional[str] = None
     next_visit_recommendation: Optional[str] = None
+    next_visit_date: Optional[date] = None
     notes: Optional[str] = None
     dental_chart_snapshot: Optional[Any] = None
     treatment_plan_snapshot: Optional[Any] = None

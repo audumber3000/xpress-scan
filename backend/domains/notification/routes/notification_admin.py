@@ -1,4 +1,5 @@
 import os
+import secrets
 import httpx
 import logging
 from datetime import datetime
@@ -61,6 +62,12 @@ _HIDDEN_EVENT_TYPES = {"daily_report"}
 # send entirely when the chosen channel has nothing to send to.
 _SEED_OVERRIDES = {
     "lab_order_placed": {"channels": ["whatsapp", "email"], "is_enabled": False},
+    # The evening summary to the clinic owner. Off by default and opt-in for the
+    # same reason lab_order_placed is: it is a WhatsApp message per clinic per
+    # day, forever, and it comes out of our pocket rather than the clinic's
+    # wallet. daily_summary_broadcast_job now reads this row and skips any
+    # clinic that has not switched it on.
+    "daily_summary": {"channels": ["whatsapp"], "is_enabled": False},
     # Goes to the new staff member on both channels, because whichever one
     # the owner filled in is the one that reaches them. On by default: an
     # account nobody is told about is an account nobody uses.
@@ -317,6 +324,11 @@ def get_wallet(
     return {
         "balance": wallet.balance,
         "last_topup_at": wallet.last_topup_at.isoformat() if wallet.last_topup_at else None,
+        # Sent down rather than duplicated in the frontend, so the floor the
+        # top-up form enforces and the point the low-balance warning appears
+        # cannot drift away from what the server actually does.
+        "min_topup": wallet_service.MIN_TOPUP,
+        "low_balance_threshold": wallet_service.LOW_BALANCE_THRESHOLD,
         "transactions": [
             {
                 "id": t.id,
@@ -339,15 +351,21 @@ def initiate_wallet_topup(
     current_user: User = Depends(get_current_user),
 ):
     """Create a Cashfree order to top up the notification wallet."""
-    if body.amount < 100:
-        raise HTTPException(status_code=400, detail="Minimum top-up amount is ₹100")
+    if body.amount < wallet_service.MIN_TOPUP:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Minimum top-up amount is ₹{wallet_service.MIN_TOPUP:.0f}",
+        )
 
     clinic_id = current_user.clinic_id
     clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
     if not clinic:
         raise HTTPException(status_code=404, detail="Clinic not found")
 
-    order_id = f"WALLET_{clinic_id}_{int(datetime.utcnow().timestamp())}"
+    # Random suffix for the same reason subscription orders carry one: a
+    # whole-second timestamp collides when a clinic tops up twice quickly, and
+    # the frontend's `order_id.startswith('WALLET_')` check is unaffected.
+    order_id = f"WALLET_{clinic_id}_{int(datetime.utcnow().timestamp())}_{secrets.token_hex(3)}"
 
     frontend_base = os.getenv("FRONTEND_URL", "http://localhost:5173")
     wallet_return_url = f"{frontend_base}/admin/notifications?wallet_success=1&order_id={order_id}"

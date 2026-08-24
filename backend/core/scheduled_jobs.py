@@ -397,14 +397,23 @@ def _send_system_email(
 
 
 async def daily_summary_broadcast_job() -> None:
-    """Daily at 20:00 IST: send today's stats to each clinic owner.
+    """Daily at 20:00 IST: send today's stats to clinic owners who asked for it.
 
-    System notification — bypasses notification_preferences and wallet balance.
-    Sends WhatsApp + email (if owner has not unsubscribed from email reports).
+    OPT-IN. This is the one system broadcast that reads
+    notification_preferences, because it is the one that costs us a WhatsApp
+    message per clinic per day whether or not anybody reads it. A clinic with no
+    `daily_summary` row, or one switched off, is skipped entirely; the row is
+    seeded disabled for new clinics and toggled in Control Center ->
+    Notifications -> Preferences.
+
+    Still bypasses the wallet: an owner who opted in is not charged for it.
+    Email additionally respects the per-owner report unsubscribe.
     """
     from database import SessionLocal
     from sqlalchemy import func, or_
-    from models import Appointment, Clinic, Invoice, User, NotificationLog
+    from models import (
+        Appointment, Clinic, Invoice, User, NotificationLog, NotificationPreference,
+    )
 
     db = SessionLocal()
     try:
@@ -419,9 +428,30 @@ async def daily_summary_broadcast_job() -> None:
             .all()
         )
 
+        # One query for every opted-in clinic rather than one per clinic inside
+        # the loop. Maps clinic_id -> the channels it wants this on.
+        opted_in = {
+            pref.clinic_id: (pref.channels or ["whatsapp"])
+            for pref in (
+                db.query(NotificationPreference)
+                .filter(
+                    NotificationPreference.event_type == "daily_summary",
+                    NotificationPreference.is_enabled == True,  # noqa: E712
+                )
+                .all()
+            )
+        }
+        if not opted_in:
+            logger.info("daily_summary_broadcast: nobody opted in, nothing sent")
+            return
+
         sent_wa = 0
         sent_email = 0
         for clinic in clinics:
+            channels = opted_in.get(clinic.id)
+            if not channels:
+                continue
+
             owner = (
                 db.query(User)
                 .filter(
@@ -495,7 +525,7 @@ async def daily_summary_broadcast_job() -> None:
             }
 
             # ── WhatsApp ──
-            if not already_sent_wa:
+            if "whatsapp" in channels and not already_sent_wa:
                 try:
                     if _send_system_whatsapp(
                         db, clinic.id, clinic.phone or "",
@@ -506,7 +536,11 @@ async def daily_summary_broadcast_job() -> None:
                     logger.warning("daily_summary WA error clinic=%s: %s", clinic.id, exc)
 
             # ── Email ──
-            if owner.email and not getattr(owner, "email_report_unsubscribed", False):
+            if (
+                "email" in channels
+                and owner.email
+                and not getattr(owner, "email_report_unsubscribed", False)
+            ):
                 already_sent_email = (
                     db.query(NotificationLog.id)
                     .filter(
@@ -530,7 +564,10 @@ async def daily_summary_broadcast_job() -> None:
                     except Exception as exc:
                         logger.warning("daily_summary email error clinic=%s: %s", clinic.id, exc)
 
-        logger.info("daily_summary_broadcast: wa=%d email=%d clinics=%d", sent_wa, sent_email, len(clinics))
+        logger.info(
+            "daily_summary_broadcast: wa=%d email=%d opted_in=%d of %d clinics",
+            sent_wa, sent_email, len(opted_in), len(clinics),
+        )
     except Exception as exc:
         logger.error("daily_summary_broadcast fatal: %s", exc)
     finally:
@@ -820,6 +857,8 @@ MORNING_DIGEST_HOUR = 8    # clinic-local
 DAY_CLOSE_HOUR = 20        # clinic-local
 DUES_REVIEW_HOUR = 11      # clinic-local
 DUES_OVERDUE_DAYS = 14
+WALLET_CHECK_HOUR = 9      # clinic-local
+PLAN_LIMIT_HOUR = 12       # clinic-local
 
 
 def _clinics_at_local_hour(db, hour: int):
@@ -1007,6 +1046,159 @@ async def dues_ageing_job() -> None:
         db.close()
 
 
+async def wallet_low_balance_job() -> None:
+    """A wallet about to run dry, said in the app while there is still time.
+
+    Deliberately in-app only. The wallet pays for WhatsApp and email, so a
+    clinic that is nearly out of credit is exactly the clinic we cannot reach on
+    those channels: the warning would be the send that fails. The notification
+    centre costs nothing and pushes to the phone of anyone who has the mobile
+    app, which is the one channel an empty wallet cannot switch off.
+
+    Once per clinic per day, at their own 9am, on the same hourly sweep the
+    other centre jobs use.
+    """
+    from database import SessionLocal
+    from core.wallet_service import LOW_BALANCE_THRESHOLD, MIN_TOPUP, get_or_create_wallet
+    from domains.notification.services.notification_center_service import (
+        notify, OWNER, SEVERITY_ACTION,
+    )
+
+    db = SessionLocal()
+    try:
+        for clinic in _clinics_at_local_hour(db, WALLET_CHECK_HOUR):
+            wallet = get_or_create_wallet(db, clinic.id)
+            balance = float(wallet.balance or 0.0)
+            if balance >= LOW_BALANCE_THRESHOLD:
+                continue
+
+            symbol = clinic.currency_symbol or ""
+            empty = balance <= 0
+            notify(
+                db,
+                clinic_id=clinic.id,
+                event_type="wallet_low_balance",
+                severity=SEVERITY_ACTION,
+                audience=OWNER,
+                title=(
+                    "Notification balance has run out"
+                    if empty
+                    else f"Notification balance is low: {symbol}{balance:.2f} left"
+                ),
+                body=(
+                    f"Reminders, invoices and review requests stop going out until you top up. "
+                    f"You can add as little as {symbol}{MIN_TOPUP:.0f}."
+                    if empty
+                    else f"Top up from {symbol}{MIN_TOPUP:.0f} to keep reminders and invoices going out."
+                ),
+                link="/admin/notifications",
+                entity_type="wallet",
+                # One per clinic per day. The date keeps yesterday's warning from
+                # swallowing today's, so a wallet left empty keeps saying so
+                # rather than going quiet after the first morning.
+                entity_id=int(dt.datetime.utcnow().strftime("%Y%m%d")),
+                collapse_minutes=60 * 24,
+            )
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error("wallet_low_balance error: %s", exc)
+    finally:
+        db.close()
+
+
+async def plan_limit_nudge_job() -> None:
+    """A clinic pressing against its plan's limits, said once a month.
+
+    Deliberately not a warning. The pricing page promises that going over a
+    limit "doesn't break or delete anything", and nothing in the product
+    enforces one, so this is an offer rather than an alarm and its wording has
+    to match that or it becomes a lie the clinic can check.
+
+    `entity_id` is the month, so `collapse_minutes` folds every repeat into one
+    row and a clinic hears about a given limit once per month however many times
+    the hourly sweep sees it. Next month is genuinely new information and gets
+    its own line.
+    """
+    from database import SessionLocal
+    from core import plan_usage, plans
+    from domains.notification.services.notification_center_service import (
+        notify, OWNER, SEVERITY_INFO,
+    )
+
+    db = SessionLocal()
+    try:
+        for clinic in _clinics_at_local_hour(db, PLAN_LIMIT_HOUR):
+            try:
+                usage = plan_usage.compute(db, clinic)
+            except Exception:
+                logger.exception("plan usage failed for clinic %s", clinic.id)
+                continue
+
+            pressure = plan_usage.pressured(usage)
+            if not pressure:
+                continue
+
+            # The one it is closest to, not all of them. A list of four bars is
+            # a dashboard; one sentence is something somebody acts on.
+            worst = pressure[0]
+            metric = worst["key"]
+            when = " this month" if metric in plan_usage.MONTHLY else ""
+            # Already past the limit reads differently from approaching it.
+            # "You have used 2 of your 1 branches" is not a sentence.
+            over = worst["used"] >= worst["limit"]
+
+            # What the next plan up would actually do about THIS limit. Said in
+            # numbers, because "upgrade for more" is not a reason.
+            current_rank = plans.rank(usage["plan_name"])
+            better = next(
+                (
+                    key for key, plan in sorted(plans.PLANS.items(), key=lambda kv: kv[1]["rank"])
+                    if plan["rank"] > current_rank
+                    and (plan["limits"].get(metric) is None
+                         or plan["limits"].get(metric, 0) > worst["limit"])
+                ),
+                None,
+            )
+            if not better:
+                continue   # already on the best plan for this; nothing to offer
+
+            better_limit = plans.PLANS[better]["limits"].get(metric)
+            raises_to = "no limit" if better_limit is None else f"{better_limit:,}"
+
+            title = (
+                f"{plans.label(usage['plan_name'])} covers "
+                f"{worst['limit']:,} {plan_usage.noun(metric, worst['limit'])}{when} "
+                f"and you have {worst['used']:,}"
+                if over else
+                f"You have used {worst['used']:,} of your {worst['limit']:,} "
+                f"{plan_usage.noun(metric, worst['limit'])}{when}"
+            )
+
+            notify(
+                db,
+                clinic_id=clinic.id,
+                event_type="plan_limit_headroom",
+                severity=SEVERITY_INFO,
+                audience=OWNER,
+                title=title,
+                body=(
+                    f"Nothing has stopped working. {plans.PLANS[better]['label']} "
+                    f"raises this to {raises_to}."
+                ),
+                link="/admin/subscription",
+                entity_type="plan_limit",
+                entity_id=int(dt.datetime.utcnow().strftime("%Y%m")),
+                collapse_minutes=60 * 24 * 31,
+            )
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error("plan_limit_nudge error: %s", exc)
+    finally:
+        db.close()
+
+
 async def trial_lifecycle_job() -> None:
     """Trial ending in three days, and trial ended.
 
@@ -1044,8 +1236,11 @@ async def trial_lifecycle_job() -> None:
                 notify(
                     db, clinic_id=clinic_id, event_type="trial_ended",
                     severity=SEVERITY_ACTION, audience=OWNER,
-                    title="Your free trial has ended",
-                    body="Add a plan to keep the Professional features.",
+                    title="Your Pro trial has ended",
+                    body=(
+                        "You are back on Plus. Nothing has been deleted and your "
+                        "clinic keeps working; Pro adds branches and more staff."
+                    ),
                     link="/admin/subscription",
                     entity_type="subscription", entity_id=sub.id,
                     collapse_minutes=60 * 24,

@@ -189,7 +189,7 @@ const Devices = ({ embedded = false, reloadKey = 0 }) => {
       ) : (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full divide-y divide-gray-200">
+            <table className="w-full min-w-[780px] divide-y divide-gray-200">
               <thead className="bg-[#f8fafc]">
                 <tr>
                   {['Device', 'Person', 'Location', 'Last Seen'].map((h) => (

@@ -44,9 +44,14 @@ class CashfreeProvider(BasePaymentProvider):
             "customer_phone": phone
         }
 
-    def create_order(self, amount: float, customer_id: str, order_id: str, notes: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def create_order(self, amount: float, customer_id: str, order_id: str, notes: Optional[Dict[str, Any]] = None, currency: str = "INR") -> Dict[str, Any]:
         """
-        Create a Cashfree Order
+        Create a Cashfree Order.
+
+        `currency` defaults to INR, which is what every existing caller (wallet
+        top-ups, Indian subscriptions) wants and what this used to hardcode.
+        Anything else requires international collections to be enabled on the
+        Cashfree account; see core.plans and CASHFREE_INTERNATIONAL_ENABLED.
         """
         url = f"{self.base_url}/orders"
         
@@ -76,7 +81,7 @@ class CashfreeProvider(BasePaymentProvider):
 
         payload = {
             "order_amount": round(float(amount), 2),
-            "order_currency": "INR",
+            "order_currency": (currency or "INR").upper(),
             "order_id": order_id,
             "customer_details": {
                 "customer_id": str(customer_id),

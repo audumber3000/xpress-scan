@@ -141,6 +141,17 @@ const Signup = () => {
         sessionStorage.removeItem('referred_by_code');
         saveLastLogin({ provider: 'google', email: result.user.email, name: result.user.displayName });
 
+        // Only a genuinely new account is a signup. Someone with an existing
+        // account who lands here and uses Google has simply logged in, and
+        // counting that as a conversion would inflate the acquisition funnel.
+        // Firebase reports this directly; fall back to true only if the SDK
+        // gives us nothing, since they did arrive via the signup page.
+        const { getAdditionalUserInfo } = await import('firebase/auth');
+        const isNewUser = getAdditionalUserInfo(result)?.isNewUser ?? true;
+        if (isNewUser) {
+          track(EVENTS.SIGNUP_COMPLETED, { method: 'google', referred: !!referredBy });
+        }
+
         notify.done('Signup successful!');
 
         const redirectPath = !data.user.clinic_id ? '/onboarding' : '/dashboard';

@@ -217,6 +217,10 @@ const ClinicInfo = () => {
   });
   const [loadingClinicData, setLoadingClinicData] = useState(false);
   const [savingClinicData, setSavingClinicData] = useState(false);
+  // Confirmation at the control as well as a toast. A toast alone is easy to
+  // miss on a long form: you press Save, look back at the fields you were
+  // editing, and the notice has already gone from the far corner.
+  const [savedAt, setSavedAt] = useState(null);
   const [logoUploading, setLogoUploading] = useState(false);
 
   // Options for the currency picker. A static table on the server, so one
@@ -402,16 +406,26 @@ const ClinicInfo = () => {
         setClinicData((prev) => ({ ...prev, ...patch }));
       }
       if (saved?.currency_code) setSavedCurrency(saved.currency_code);
+      notify.done('Clinic details saved');
+      setSavedAt(Date.now());
     } catch (error) {
       console.error('Error saving clinic data:', error);
+      setSavedAt(null);
       notify.problem('Failed to save clinic data');
     } finally {
       setSavingClinicData(false);
     }
   };
 
+  useEffect(() => {
+    if (!savedAt) return undefined;
+    const t = setTimeout(() => setSavedAt(null), 4000);
+    return () => clearTimeout(t);
+  }, [savedAt]);
+
   // Currency is the one field on this screen that rewrites how money reads
-  // everywhere, so it is the one field that asks first. The rest save silently.
+  // everywhere, so it is the one field that asks first. The rest save without
+  // asking, and confirm afterwards.
   const handleSaveClinicData = () => {
     if (savedCurrency && clinicData.currency_code !== savedCurrency) {
       setCurrencyConfirmOpen(true);
@@ -844,7 +858,15 @@ const ClinicInfo = () => {
           Photos each save as you go, so a Save button there would only make the
           user wonder what it was for. */}
       {!['branches', 'photos'].includes(activeTab) && (
-        <div className="flex justify-end mt-6">
+        <div className="flex items-center justify-end gap-3 mt-6">
+          {savedAt && !savingClinicData && (
+            <span
+              role="status"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-600"
+            >
+              <Check size={15} /> Saved
+            </span>
+          )}
           <button
             onClick={handleSaveClinicData}
             disabled={savingClinicData}

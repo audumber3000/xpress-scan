@@ -29,7 +29,7 @@ import Calendar from "./pages/Calendar";
 import BookingPage from "./pages/BookingPage";
 import PatientProfile from "./pages/PatientProfile";
 import DentalChartDemo from "./pages/DentalChartDemo";
-import Subscription from "./pages/Subscription";
+import Subscription from "./pages/admin/subscription";
 import AdminHub from "./pages/AdminHub";
 import StaffManagement from "./pages/StaffManagement";
 import TreatmentsPricing from "./pages/TreatmentsPricing";
@@ -64,7 +64,9 @@ import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ConnectivityBanner from "./components/ConnectivityBanner";
-import DeviceUpsellModal from "./components/DeviceUpsellModal";
+import AnnouncementHost from "./components/announcements";
+import PlanStatusBanner from "./components/plan/PlanStatusBanner";
+import PlanBlockedModal from "./components/plan/PlanBlockedModal";
 
 const BANNER_KEY = 'mp_mobile_banner_dismissed';
 
@@ -143,6 +145,19 @@ function ProtectedRoute({ children }) {
 
   // Redirect to onboarding if clinic_owner hasn't completed it
   if (user.role === 'clinic_owner' && !user.clinic_id && window.location.pathname !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />;
+  }
+
+  // Signup verification is the last step of onboarding and it blocks. Coming
+  // back here without it done means the tab was reloaded mid-step, so send them
+  // to finish it. `security_verification_required` is computed server-side and
+  // is false for every clinic that predates the check, so no existing customer
+  // is caught by this.
+  if (
+    user.role === 'clinic_owner'
+    && user.clinic?.security_verification_required
+    && window.location.pathname !== '/onboarding'
+  ) {
     return <Navigate to="/onboarding" replace />;
   }
 
@@ -260,13 +275,22 @@ function AppContent() {
           {/* Header */}
           <Header onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)} />
 
+          {/* Plan needs attention: amber in the last three days, red and
+              permanent once the clinic is view only. */}
+          <PlanStatusBanner />
+
           {/* Mobile browser notice */}
           <MobileAppBanner />
 
-          {/* Post-login device upsell — pitches the desktop or mobile app
-              based on user-agent. Suppresses itself when running inside a
-              MolarPlus native shell. */}
-          <DeviceUpsellModal />
+          {/* Whatever the app has to say for itself: release notes, the
+              Microsoft Store review ask inside the Windows build, and the
+              desktop / mobile download nudges this absorbed from
+              DeviceUpsellModal. One at a time, content lives in
+              components/announcements/registry.jsx. */}
+          <AnnouncementHost />
+
+          {/* Explains any write refused with a 402, wherever it came from. */}
+          <PlanBlockedModal />
 
           {/* Main content area */}
           <main className="flex-1 w-full overflow-auto">

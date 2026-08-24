@@ -18,7 +18,7 @@ class CashfreeService {
         return this.cashfree;
     }
 
-    async initiateCheckout(planName = 'professional', couponCode = null) {
+    async initiateCheckout(planName, couponCode = null) {
         try {
             // 1. Create checkout session on backend
             const sessionData = await api.post('/subscriptions/checkout', {

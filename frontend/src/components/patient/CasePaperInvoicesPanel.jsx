@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import { X, Plus, ChevronRight } from 'lucide-react';
-import { api } from '../../utils/api';
 import { getCurrencySymbol } from '../../utils/currency';
 import { formatDate } from '../../utils/datetime';
 import EmptyState from '../common/EmptyState';
@@ -18,26 +17,13 @@ const STATUS = {
 /**
  * CasePaperInvoicesPanel — right-side panel listing every invoice for one case
  * paper (a case paper can carry several), with a button to start a new one.
+ *
+ * The list is fetched by CasePapersTab and passed in, not fetched here: the
+ * same list feeds the count badge on the Invoice button, and a badge that
+ * disagrees with the panel behind it is worse than no badge.
  */
-const CasePaperInvoicesPanel = ({ open, onClose, casePaperId, onNew, onOpen }) => {
-  const [invoices, setInvoices] = useState([]);
-  const [loading, setLoading] = useState(false);
+const CasePaperInvoicesPanel = ({ open, onClose, invoices = [], loading = false, onNew, onOpen }) => {
   const cur = getCurrencySymbol();
-
-  const fetchInvoices = useCallback(async () => {
-    if (!casePaperId) { setInvoices([]); return; }
-    setLoading(true);
-    try {
-      const data = await api.get('/invoices', { params: { case_paper_id: casePaperId, limit: 100 } });
-      setInvoices(Array.isArray(data) ? data : []);
-    } catch {
-      setInvoices([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [casePaperId]);
-
-  useEffect(() => { if (open) fetchInvoices(); }, [open, fetchInvoices]);
 
   if (!open) return null;
 

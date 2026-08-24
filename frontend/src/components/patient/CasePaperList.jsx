@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pencil, Trash2, Clock, Stethoscope, CalendarClock, ClipboardList } from 'lucide-react';
+import { nextVisitSummary, NOT_SPECIFIED } from '../../utils/nextVisit';
 
 /**
  * What a dentist is actually asking when they open this list:
@@ -85,7 +86,8 @@ const CasePaperList = ({ caseHistory, loading, onNewCasePaper, onSelectCasePaper
                 allergies: parsePills(paper.allergies),
                 clinical_examination: paper.clinical_examination || '',
                 diagnosis: paper.diagnosis || '',
-                next_visit_recommendation: paper.next_visit_recommendation || 'Not specified',
+                next_visit_recommendation: paper.next_visit_recommendation || NOT_SPECIFIED,
+                next_visit_date: paper.next_visit_date || null,
                 notes: paper.notes || ''
               });
             };
@@ -94,9 +96,10 @@ const CasePaperList = ({ caseHistory, loading, onNewCasePaper, onSelectCasePaper
             const open = paper.status !== 'Completed';
             const time = timeOf(paper);
             const treatments = planCount(paper);
-            const nextVisit = paper.next_visit_recommendation &&
-              paper.next_visit_recommendation !== 'Not specified'
-                ? paper.next_visit_recommendation : null;
+            const nextVisit = (paper.next_visit_date ||
+              (paper.next_visit_recommendation && paper.next_visit_recommendation !== NOT_SPECIFIED))
+                ? nextVisitSummary(paper.next_visit_recommendation, paper.next_visit_date)
+                : null;
 
             return (
             <div

@@ -21,7 +21,14 @@ logger = logging.getLogger(__name__)
 
 WAREACH_URL = os.getenv("WAREACH_URL", "http://116.203.142.56:3000").rstrip("/")
 WAREACH_MOCK = os.getenv("WAREACH_MOCK", "") in ("1", "true", "True")
-PRO_PLANS = ("professional", "professional_annual", "enterprise")
+# Which plans may send from the clinic's own number is `core.plans`'
+# has_own_whatsapp_number() (Pro and above), not a tuple kept here.
+#
+# Worth saying plainly: this gate is NOT enforced anywhere today. The tuple that
+# used to sit on this line was declared and never read by anything, so WA Reach
+# has always been open to any plan that got as far as configuring it. Left as a
+# note rather than quietly wired up, because switching it on is a commercial
+# decision about existing users, not a tidy-up.
 
 # 1×1 transparent PNG — placeholder QR for mock mode so the UI renders.
 _MOCK_QR = (

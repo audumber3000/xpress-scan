@@ -7,6 +7,7 @@ import { isValidPhone } from "../../utils/validators";
 import { computeAgeFromDob } from "./AgeOrDobField";
 // On-request (disposable) importers surfaced in the Special Request tab.
 import InvoiceSheetImporter from "./on-request-import/InvoiceSheetImporter";
+import { track, EVENTS } from '../../analytics/track';
 
 // Activity steps shown while the AI reads the register photos. The activities are
 // real (upload -> vision OCR -> field extraction -> table); the step timing is an
@@ -287,6 +288,13 @@ const ImportPatientsModal = ({ isOpen, onClose, onImported }) => {
     setImporting(true);
     try {
       const res = await api.post("/patients/import", { patients });
+      // Once per batch, NOT once per patient: importing 500 records is a single
+      // activation moment. Firing per row would swamp the activation funnel and
+      // the event volume alike.
+      track(EVENTS.PATIENT_CREATED, {
+        source: 'import',
+        count: res.imported_count ?? patients.length,
+      });
       notify.done(res.message || `Imported ${res.imported_count} patients`);
       if (res.errors && res.errors.length > 0) {
         notify.problem(`${res.errors.length} row(s) couldn't be saved. ${res.errors[0]}`);

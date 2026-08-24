@@ -8,6 +8,7 @@ import { SUPPORT_PHONE_RAW } from '../../../constants/support';
 import carestreamLogo from '../../../assets/brand-logos/carestream.png';
 import dentsplySironaLogo from '../../../assets/brand-logos/dentsplysirona.png';
 import acteonLogo from '../../../assets/brand-logos/acteon.png';
+import vatechLogo from '../../../assets/brand-logos/vatech.png';
 
 /**
  * X-ray tab — the sensor and machine brands clinics in India actually run.
@@ -18,16 +19,22 @@ import acteonLogo from '../../../assets/brand-logos/acteon.png';
  * per-brand certification — none have been bench-tested. Set `verified: true` on
  * a brand once it has been, and its card says "Tested".
  *
- * LOGOS: each brand renders its own logo image, never initials. Three are
- * bundled in assets/brand-logos/. The remaining three could not be sourced
- * automatically (their sites render client-side and the icon services returned
- * generic placeholders rather than the real mark), so they show a neutral
- * "logo missing" tile until a file is dropped in. To finish one: save the logo
- * as assets/brand-logos/<key>.png, import it, and set it as `logo` below.
+ * LOGOS: each brand renders its own logo image, never initials. Four are
+ * bundled in assets/brand-logos/, each taken from the vendor's own site so the
+ * mark is the real one rather than an icon service's guess. The remaining two
+ * could not be sourced automatically (their sites render client-side), so they
+ * show a neutral "logo missing" tile until a file is dropped in. To finish one:
+ * save the logo as assets/brand-logos/<key>.png, import it, and set it as
+ * `logo` below.
+ *
+ * Vatech ships a wordmark rather than a square icon, so it carries `wide: true`
+ * and gets a landscape tile. Squeezed into the square one it rendered about
+ * 13px tall and was unreadable, which is worse than the placeholder it
+ * replaced.
  */
 
 const BRANDS = [
-  { key: 'vatech',         name: 'Vatech',            origin: 'South Korea', kinds: ['RVG sensor', 'OPG', 'CBCT'], logo: null },
+  { key: 'vatech',         name: 'Vatech',            origin: 'South Korea', kinds: ['RVG sensor', 'OPG', 'CBCT'], logo: vatechLogo, wide: true },
   { key: 'carestream',     name: 'Carestream Dental', origin: 'USA',         kinds: ['RVG sensor', 'OPG', 'CBCT'], alias: 'Kodak',  logo: carestreamLogo },
   { key: 'dentsplysirona', name: 'Dentsply Sirona',   origin: 'Germany',     kinds: ['RVG sensor', 'OPG', 'CBCT'], alias: 'Schick', logo: dentsplySironaLogo },
   { key: 'planmeca',       name: 'Planmeca',          origin: 'Finland',     kinds: ['RVG sensor', 'OPG', 'CBCT'], logo: null },
@@ -42,7 +49,9 @@ const BrandCard = ({ brand, onRequest }) => (
         <img
           src={brand.logo}
           alt={`${brand.name} logo`}
-          className="w-12 h-12 rounded-xl object-contain bg-white border border-gray-100 p-1 shrink-0"
+          className={`h-12 rounded-xl object-contain bg-white border border-gray-100 p-1.5 shrink-0 ${
+            brand.wide ? 'w-[72px]' : 'w-12'
+          }`}
         />
       ) : (
         // Deliberately neutral, not initials — a placeholder reads as "logo not

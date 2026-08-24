@@ -2,14 +2,19 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Building2, Zap } from 'lucide-react';
+import { planAllowsBranches } from '../utils/plans';
 
 /**
  * FeatureLock — multi-branch upgrade gate.
  *
- * A single clinic is fully free (staff, attendance, reports, consent, etc.).
- * The ONLY premium capability is running more than one branch, so this wrapper
- * is used solely around the "Add Branch" flow. Free plans see the upgrade
- * overlay; paid plans pass straight through.
+ * Every plan carries the full clinical suite, so this wrapper is used solely
+ * around the "Add Branch" flow. Plus covers one location and sees the upgrade
+ * overlay; Pro and Growth pass straight through.
+ *
+ * The test is the plan's branch allowance, not its name. It used to be
+ * `plan === 'free'`, which silently stopped locking anything the moment the
+ * entry plan was renamed from `free` to `plus` — every clinic would have been
+ * handed multi-branch for ₹399.
  */
 const FeatureLock = ({ children, featureName = "Multiple branches" }) => {
   const { user, loading } = useAuth();
@@ -19,7 +24,7 @@ const FeatureLock = ({ children, featureName = "Multiple branches" }) => {
   // flashes before the gate kicks in.
   const plan = user?.clinic?.subscription_plan;
   const planKnown = plan != null;
-  const isLocked = planKnown ? plan === 'free' : true;
+  const isLocked = planKnown ? !planAllowsBranches(plan) : true;
 
   if (loading && (!planKnown || isLocked)) {
     return (

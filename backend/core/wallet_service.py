@@ -21,6 +21,23 @@ CHANNEL_COST: dict[str, float] = {
 # Event types classified as marketing on WhatsApp; everything else is utility
 MARKETING_EVENTS: set[str] = {"google_review", "marketing_campaign", "promotional"}
 
+# The three numbers that decide what a wallet costs us and what it costs the
+# clinic. Kept here rather than at each call site so raising or lowering one is
+# a single edit that the top-up endpoint, the signup credit and the low-balance
+# nudge all follow.
+#
+# WELCOME_CREDIT is a sample, not a starter pack: enough to watch a handful of
+# reminders go out (roughly 85 utility WhatsApps at the rate above) and decide
+# the feature is worth paying for. It was ₹50, which is a lot of messaging to
+# give away before anybody has decided to stay.
+#
+# MIN_TOPUP is low on purpose. A clinic that has just spent its sample should be
+# able to carry on for the price of a chai rather than commit ₹100 to find out
+# whether it likes this.
+WELCOME_CREDIT: float = 10.0
+MIN_TOPUP: float = 50.0
+LOW_BALANCE_THRESHOLD: float = 5.0
+
 
 class InsufficientWalletBalance(Exception):
     """Raised when a clinic's wallet cannot cover the notification cost."""

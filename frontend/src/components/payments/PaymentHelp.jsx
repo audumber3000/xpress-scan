@@ -7,7 +7,7 @@ import {
   isSupportOnline,
   supportResponseTime,
 } from '../../constants/support';
-import { PLAN, inr } from '../../utils/pricing';
+import { formatPrice, billingCurrency } from '../../utils/plans';
 
 /**
  * "If anything goes wrong, we will sort it out."
@@ -29,7 +29,7 @@ const WhatsAppGlyph = ({ size = 16 }) => (
   </svg>
 );
 
-const PaymentHelp = ({ amount = PLAN.monthly, plan = 'Professional', compact = false }) => {
+const PaymentHelp = ({ amount = 0, currency = billingCurrency(), plan = 'Plus', compact = false }) => {
   const { user } = useAuth();
   const online = isSupportOnline();
 
@@ -38,7 +38,7 @@ const PaymentHelp = ({ amount = PLAN.monthly, plan = 'Professional', compact = f
       'Hi MolarPlus support, I need help with a payment.',
       user?.clinic?.name ? `Clinic: ${user.clinic.name}` : null,
       `Plan: ${plan}`,
-      `Amount: ${inr(amount)}`,
+      amount ? `Amount: ${formatPrice(amount, currency)}` : null,
     ].filter(Boolean).join('\n')
   );
   const waLink = `https://wa.me/${SUPPORT_PHONE_RAW}?text=${message}`;

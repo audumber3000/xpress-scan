@@ -240,6 +240,13 @@ class ClinicResponseDTO(ClinicBaseDTO):
     timings: Optional[dict] = None
     # Subscription/trial info (owner-level, duplicated per clinic for header display)
     plan_name: Optional[str] = None
+    # What the clinic can use RIGHT NOW, which after an expiry is not plan_name.
+    #
+    # `subscription_plan` above ends up holding the same value, because /auth/me
+    # writes the downgrade back to the column. This says it outright instead of
+    # relying on every reader knowing about that side effect — mobile and the
+    # support tool both pick a plan to display and neither should have to.
+    effective_plan: Optional[str] = None
     is_trial: bool = False
     plan_ends_at: Optional[str] = None
     trial_days_remaining: Optional[int] = None
@@ -251,6 +258,19 @@ class ClinicResponseDTO(ClinicBaseDTO):
     # truth about it without either of them making a second request.
     security_phone_verified: bool = False
     security_email_verified: bool = False
+    # True when this clinic still owes us the signup verification step.
+    #
+    # Grandfathered by clinic age: clinics that existed before verification was
+    # introduced are never asked, because turning it on retrospectively would
+    # lock every current customer out of their own account on deploy day.
+    security_verification_required: bool = False
+    # Where the clinic stands with its plan: 'ok', 'renewal_due', 'grant_due',
+    # 'trial_ended', 'lapsed' or 'grant_ended'. Carried here so the header can
+    # warn in the last few days without a second request, and so every client
+    # reads the same answer as the middleware that enforces it.
+    plan_state: Optional[str] = None
+    plan_state_days: Optional[int] = None
+    plan_state_title: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -14,14 +14,23 @@ import {
   ToothRightDrawer
 } from "../components/patient";
 import { SkeletonBox, SkeletonCards } from "../components/Skeleton";
+import PatientHeaderActions from "../components/patient/PatientHeaderActions";
+import PatientEditModal from "../components/patient/PatientEditModal";
+import MasterPasswordModal from "../components/common/MasterPasswordModal";
 import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import { notify } from '../utils/notify';
 import { patientService, appointmentService, paymentService } from '../services/patientService';
+import { useAuth } from '../contexts/AuthContext';
+import { getCurrencySymbol } from '../utils/currency';
+import { formatDate, clinicToday } from '../utils/datetime';
+import { daysBetween } from '../utils/nextVisit';
+import { printPatientFile } from '../utils/patientPrint';
 
 const PatientProfile = () => {
   const { patientId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || "case-papers");
   const [loading, setLoading] = useState(true);
@@ -31,7 +40,6 @@ const PatientProfile = () => {
   const [appointments, setAppointments] = useState([]);
   const [payments, setPayments] = useState([]);
   const [invoices, setInvoices] = useState([]);
-  const [isSaving, setIsSaving] = useState(false);
 
   // Dental chart state
   const [teethData, setTeethData] = useState({});
@@ -42,6 +50,8 @@ const PatientProfile = () => {
   const [normalizedPrescriptions, setNormalizedPrescriptions] = useState([]);
   const [casePapers, setCasePapers] = useState([]);
   const [dailyVisits, setDailyVisits] = useState([]);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const tabs = [
     { id: "case-papers", name: "Case Papers" },
@@ -207,8 +217,6 @@ const PatientProfile = () => {
 
   const savePatientData = async (sessionData = null) => {
     try {
-      setIsSaving(true);
-      
       const currentTeethData = sessionData?.dental_chart || teethData;
       const currentToothNotes = sessionData?.tooth_notes || toothNotes;
       const currentTreatmentPlan = sessionData?.treatment_plan || treatmentPlan;
@@ -245,8 +253,6 @@ const PatientProfile = () => {
         "Failed to update clinical records.",
         "You don't have permission to update clinical records."
       ));
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -261,6 +267,64 @@ const PatientProfile = () => {
     const dateB = new Date(`${b.date}T${b.time}`);
     return dateA - dateB;
   });
+
+  /**
+   * What the doctor needs at a glance, so the answer is on screen instead of a
+   * tab away. Both are derived from data this page already loaded, so neither
+   * costs a request.
+   */
+
+  // What this patient still owes. Drafts are not bills yet and cancelled ones
+  // are not owed, so neither counts. The `due_amount ?? total - paid` fallback
+  // is the pattern used everywhere else invoices are totalled.
+  const outstandingDue = invoices
+    .filter((inv) => inv.status !== 'draft' && inv.status !== 'cancelled')
+    .reduce(
+      (sum, inv) => sum + Number(inv.due_amount ?? Math.max(0, (inv.total || 0) - (inv.paid_amount || 0))),
+      0
+    );
+
+  // When they are due back. A booked appointment is a firmer answer than a
+  // recommendation, so it wins; the case paper's next_visit_date is the
+  // fallback, and it can be overdue, which is the whole point of showing it.
+  const nextVisitChip = (() => {
+    const booked = upcomingAppointments[0];
+    if (booked?.date) return { text: `Booked ${formatDate(booked.date)}`, overdue: false };
+
+    // case-papers come back ordered by date desc, so [0] is the latest visit.
+    const due = casePapers[0]?.next_visit_date;
+    if (!due) return null;
+
+    const days = daysBetween(clinicToday(), due);
+    if (days < 0) {
+      const late = Math.abs(days);
+      return { text: `Overdue by ${late} day${late === 1 ? '' : 's'}`, overdue: true };
+    }
+    return { text: `Due back ${formatDate(due)}`, overdue: false };
+  })();
+
+  // Deleting a patient takes their case papers, bills and receipted payments
+  // with them, so the master password prompt IS the confirmation. The token
+  // comes from the modal, which has already checked the code.
+  const confirmDeletePatient = async (masterToken) => {
+    await api.delete(`/patients/${patientId}`, {
+      headers: { 'X-Master-Token': masterToken },
+    });
+    setDeleteOpen(false);
+    // The record being displayed no longer exists, so staying is not an option.
+    navigate('/patient-files');
+  };
+
+  const handlePrintFile = () => {
+    const opened = printPatientFile({
+      patient: patientData,
+      casePapers,
+      invoices,
+      prescriptions: normalizedPrescriptions,
+      user,
+    });
+    if (!opened) notify.problem('Your browser blocked the print window. Allow pop-ups for this site.');
+  };
 
   const pastAppointments = appointments.filter(apt =>
     apt.status === 'completed' || apt.status === 'rejected'
@@ -484,33 +548,37 @@ const PatientProfile = () => {
                         ⚠ {patientData.patient_history}
                       </span>
                     )}
+                    {/* Money owed and when they are due back: the two things a
+                        doctor would otherwise open a tab to find out. */}
+                    {outstandingDue > 0 && (
+                      <button
+                        onClick={() => setActiveTab('billing')}
+                        title="View this patient's bills"
+                        className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full hover:bg-amber-100 transition-colors"
+                      >
+                        {getCurrencySymbol()}{outstandingDue.toLocaleString('en-IN')} due
+                      </button>
+                    )}
+                    {nextVisitChip && (
+                      <span
+                        className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
+                          nextVisitChip.overdue
+                            ? 'text-amber-700 bg-amber-50 border-amber-200'
+                            : 'text-[#2a276e] bg-[#2a276e]/5 border-[#2a276e]/20'
+                        }`}
+                      >
+                        {nextVisitChip.text}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
-              {activeTab === "case-papers" && (
-                <button
-                  onClick={savePatientData}
-                  disabled={isSaving}
-                  className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors shadow-sm flex-shrink-0 ${isSaving
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : 'bg-[#2a276e] text-white hover:bg-[#1a1548]'
-                    }`}
-                >
-                  {isSaving ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-gray-300 border-t-[#2a276e] rounded-full animate-spin"></div>
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
-                      </svg>
-                      Save Clinical Records
-                    </>
-                  )}
-                </button>
-              )}
+              <PatientHeaderActions
+                patient={patientData}
+                onEdit={() => setEditOpen(true)}
+                onPrint={handlePrintFile}
+                onDelete={() => setDeleteOpen(true)}
+              />
             </div>
             );
           })()}
@@ -630,6 +698,30 @@ const PatientProfile = () => {
             }}
         />
       )}
+
+      <PatientEditModal
+        open={editOpen}
+        patient={patientData}
+        onClose={() => setEditOpen(false)}
+        onSaved={(updated) => setPatientData((prev) => ({ ...prev, ...updated }))}
+      />
+
+      {/* Delete — gated on the clinic's master password, which doubles as the
+          confirmation. There is deliberately no plain "are you sure" in front. */}
+      <MasterPasswordModal
+        open={deleteOpen}
+        title="Delete this patient?"
+        message={
+          <>
+            <span className="font-semibold text-gray-700">{patientData?.name}</span> and everything on
+            their file goes with them: case papers, x-rays, prescriptions, bills and any payments already
+            recorded. This <span className="font-semibold">cannot be undone</span>.
+          </>
+        }
+        confirmLabel="Delete patient"
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={confirmDeletePatient}
+      />
     </div>
   );
 };

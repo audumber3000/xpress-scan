@@ -4,7 +4,8 @@ import SetupProgress from '../components/admin/SetupProgress';
 import { api } from '../utils/api';
 import { useHeader } from '../contexts/HeaderContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Building2, Users, FileText, Bell, CreditCard, Activity, ChevronDown, Stethoscope, Shield, Laptop, Plug, Tag, Pill } from 'lucide-react';
+import { Building2, Users, FileText, Bell, CreditCard, SlidersHorizontal, ChevronDown, Stethoscope, Shield, History, Plug, Tag, Pill, AlertTriangle } from 'lucide-react';
+import { planLabel } from '../utils/plans';
 
 /**
  * Control Center navigation, grouped by category.
@@ -37,7 +38,7 @@ const NAV_GROUPS = [
   {
     title: 'Clinical',
     items: [
-      { id: 'practice_settings', icon: Activity, label: 'Practice Settings', hasChildren: true, activePath: '/admin/practice-settings' },
+      { id: 'practice_settings', icon: SlidersHorizontal, label: 'Practice Settings', hasChildren: true, activePath: '/admin/practice-settings' },
       { id: 'treatments', icon: Stethoscope, label: 'Treatments & Pricing', path: '/admin/treatments' },
       { id: 'offers', icon: Tag, label: 'Offers & Discounts', path: '/admin/offers' },
     ],
@@ -65,7 +66,7 @@ const NAV_GROUPS = [
       // Devices and Audit Log were two menu items and are now two tabs of one:
       // "who can get in" and "what they did" are read together, and splitting
       // them meant leaving the screen halfway through looking something up.
-      { id: 'security_activity', icon: Laptop, label: 'Access & Activity', path: '/admin/security/activity' },
+      { id: 'security_activity', icon: History, label: 'Access & Activity', path: '/admin/security/activity' },
     ],
   },
   {
@@ -122,6 +123,18 @@ const AdminHub = () => {
     setOpenSection(openSection === id ? '' : id);
   };
 
+  // Menu items that are still waiting on something, keyed by nav id. The
+  // checklist behind the progress ring already knows this, so nothing extra is
+  // fetched: the ring says "6 of 8 done" and this says which two.
+  const needsAttention = React.useMemo(() => {
+    const byKey = Object.fromEntries((setupStatus?.items || []).map((i) => [i.key, i]));
+    return {
+      // Nobody goes looking for the recovery contact until they are locked out,
+      // which is exactly too late. The menu is where it has to be said.
+      security_contact: byKey.recovery ? !byKey.recovery.done : false,
+    };
+  }, [setupStatus]);
+
   // Navigate to a section and, on mobile, switch from the menu to the content view.
   const goTo = (path) => {
     navigate(path);
@@ -129,7 +142,42 @@ const AdminHub = () => {
   };
 
   // Helper for Sidebar items
-  const SidebarItem = ({ id, icon: Icon, label, hasChildren, path, activePath }) => {
+  /**
+   * The plan, and whether it needs attention, on the Subscription row itself.
+   *
+   * Otherwise the only way to find out what you are paying for is to open the
+   * page, and the one state that matters most — a stopped plan — is invisible
+   * from the menu you are standing in.
+   */
+  const planBadge = () => {
+    const clinic = user?.clinic;
+    if (!clinic) return null;
+    const name = planLabel(clinic.subscription_plan);
+    switch (clinic.plan_state) {
+      case 'trial_ended':  return { text: 'Trial ended', tone: 'bad' };
+      case 'lapsed':       return { text: 'Payment failed', tone: 'bad' };
+      case 'grant_ended':  return { text: 'Renew', tone: 'bad' };
+      case 'renewal_due':
+      case 'grant_due':
+        return { text: clinic.plan_state_days ? `${clinic.plan_state_days}d left` : 'Due', tone: 'warn' };
+      default:
+        break;
+    }
+    if (clinic.is_trial) {
+      const d = clinic.trial_days_remaining;
+      return { text: typeof d === 'number' ? `Trial ${d}d` : 'Trial', tone: 'trial' };
+    }
+    return { text: name, tone: 'calm' };
+  };
+
+  const BADGE_TONES = {
+    bad: 'bg-red-100 text-red-700',
+    warn: 'bg-amber-100 text-amber-700',
+    trial: 'bg-[#29828a]/10 text-[#29828a]',
+    calm: 'bg-gray-100 text-gray-500',
+  };
+
+  const SidebarItem = ({ id, icon: Icon, label, hasChildren, path, activePath, warn, badge }) => {
     const isExpanded = openSection === id;
     // Match on a path boundary, not a bare prefix — otherwise /admin/templates
     // would also light up while you're on /admin/templates-editor.
@@ -153,7 +201,22 @@ const AdminHub = () => {
           <div className="flex items-center gap-3">
               <Icon size={20} className={isActive ? 'text-[#29828a]' : 'text-gray-500'} />
               <span className="font-medium tracking-wide text-[14px]">{label}</span>
+              {/* Amber, not teal: teal is where you are, amber is what is
+                  waiting. A count would be false precision here, so it is the
+                  sign itself that carries the meaning. */}
+              {warn && (
+                <AlertTriangle
+                  size={15}
+                  className="text-amber-500 shrink-0"
+                  aria-label="Not verified yet"
+                />
+              )}
           </div>
+          {badge && (
+            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${BADGE_TONES[badge.tone]}`}>
+              {badge.text}
+            </span>
+          )}
           {hasChildren && (
               <ChevronDown size={16} className={`transition-transform duration-300 text-gray-400 ${isExpanded ? 'rotate-180' : ''}`} />
           )}
@@ -197,6 +260,8 @@ const AdminHub = () => {
                     hasChildren={item.hasChildren}
                     path={item.path}
                     activePath={item.activePath}
+                    warn={needsAttention[item.id]}
+                    badge={item.id === 'subscription' ? planBadge() : null}
                   />
 
                   {/* Practice Settings expands to its per-category editors. */}

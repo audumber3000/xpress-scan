@@ -36,7 +36,34 @@ const StatCard = ({ channel, stats, channelStatus }) => {
   );
 };
 
-const OverviewTab = ({ stats, channelStatus, wallet, topUpAmount, setTopUpAmount, toppingUp, handleWalletTopup }) => (
+/**
+ * Top-up presets. ₹50 leads because it is the floor: a clinic that has just run
+ * through its welcome credit can carry on for the price of a chai instead of
+ * committing ₹100 to find out whether it wants this. ₹500 stays pre-selected,
+ * so the cheap option is available without being the suggested one.
+ */
+const TOPUP_PRESETS = [50, 100, 500, 1000, 5000];
+
+/** Empty, about to be empty, or merely worth keeping an eye on. */
+const balanceState = (balance, lowThreshold, minTopup) => {
+  if (balance <= 0) return 'empty';
+  if (balance < lowThreshold) return 'critical';
+  // Below the price of one top-up. Said in amber, not red: nothing has stopped
+  // working, and a clinic in a non-rupee currency gets a threshold that scales
+  // with its own floor rather than a hard-coded 50.
+  if (balance < minTopup) return 'watch';
+  return 'ok';
+};
+
+const OverviewTab = ({ stats, channelStatus, wallet, topUpAmount, setTopUpAmount, toppingUp, handleWalletTopup }) => {
+  // Server-sent, with the same values hard-coded as a fallback for the moment
+  // between an old cached response and a fresh one.
+  const minTopup = wallet.min_topup ?? 50;
+  const lowThreshold = wallet.low_balance_threshold ?? 5;
+  const balance = wallet.balance || 0;
+  const state = balanceState(balance, lowThreshold, minTopup);
+
+  return (
   <>
     {/* Stats cards */}
     <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -87,7 +114,7 @@ const OverviewTab = ({ stats, channelStatus, wallet, topUpAmount, setTopUpAmount
           </div>
           <div>
             <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">Wallet Balance</p>
-            <h2 className="text-3xl font-bold text-gray-900">{getCurrencySymbol()}{(wallet.balance || 0).toFixed(2)}</h2>
+            <h2 className="text-3xl font-bold text-gray-900">{getCurrencySymbol()}{balance.toFixed(2)}</h2>
           </div>
         </div>
 
@@ -97,9 +124,28 @@ const OverviewTab = ({ stats, channelStatus, wallet, topUpAmount, setTopUpAmount
           </p>
         )}
 
-        {(wallet.balance || 0) < 100 && (
-          <div className="flex items-center gap-2 bg-red-50 text-red-600 px-3 py-2 rounded-lg text-xs font-semibold border border-red-100">
-            <AlertCircle size={14} /> Low balance — top up to continue sending
+        {state === 'empty' && (
+          <div className="flex items-start gap-2 bg-red-50 text-red-600 px-3 py-2 rounded-lg text-xs font-semibold border border-red-100">
+            <AlertCircle size={14} className="shrink-0 mt-px" />
+            <span>
+              Balance is empty. Reminders, invoices and review requests are not going out.
+              Top up from {getCurrencySymbol()}{minTopup} to start them again.
+            </span>
+          </div>
+        )}
+        {state === 'critical' && (
+          <div className="flex items-start gap-2 bg-red-50 text-red-600 px-3 py-2 rounded-lg text-xs font-semibold border border-red-100">
+            <AlertCircle size={14} className="shrink-0 mt-px" />
+            <span>
+              Balance is about to run out. Top up from {getCurrencySymbol()}{minTopup} to keep
+              messages going.
+            </span>
+          </div>
+        )}
+        {state === 'watch' && (
+          <div className="flex items-start gap-2 bg-amber-50 text-amber-600 px-3 py-2 rounded-lg text-xs font-semibold border border-amber-100">
+            <AlertCircle size={14} className="shrink-0 mt-px" />
+            <span>Running low. You can add {getCurrencySymbol()}{minTopup} or more whenever you like.</span>
           </div>
         )}
 
@@ -107,12 +153,12 @@ const OverviewTab = ({ stats, channelStatus, wallet, topUpAmount, setTopUpAmount
           <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 mb-3">
             <CreditCard size={13} className="text-gray-400" /> Add Funds
           </p>
-          <div className="grid grid-cols-4 gap-1.5 mb-3">
-            {[100, 500, 1000, 5000].map(amt => (
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 mb-3">
+            {TOPUP_PRESETS.map(amt => (
               <button
                 key={amt}
                 onClick={() => setTopUpAmount(amt)}
-                className={`py-2 text-xs rounded-lg border font-medium transition-all ${
+                className={`py-2 text-[11px] rounded-lg border font-medium transition-all ${
                   topUpAmount === amt
                     ? 'border-[#29828a] bg-[#29828a]/10 text-[#29828a]'
                     : 'border-gray-200 text-gray-600 bg-white hover:border-gray-300'
@@ -124,9 +170,9 @@ const OverviewTab = ({ stats, channelStatus, wallet, topUpAmount, setTopUpAmount
           </div>
           <input
             type="number"
-            min={100}
+            min={minTopup}
             className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#29828a]/20 focus:border-[#29828a] outline-none mb-3 transition-all"
-            placeholder={`Custom amount (min ${getCurrencySymbol()}100)`}
+            placeholder={`Custom amount (min ${getCurrencySymbol()}${minTopup})`}
             value={topUpAmount}
             onChange={e => setTopUpAmount(Number(e.target.value))}
           />
@@ -141,6 +187,7 @@ const OverviewTab = ({ stats, channelStatus, wallet, topUpAmount, setTopUpAmount
       </div>
     </div>
   </>
-);
+  );
+};
 
 export default OverviewTab;

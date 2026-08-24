@@ -73,6 +73,11 @@ crash.log
 graphify-out/
 **/graphify-out/
 
+# Backend runtime uploads — patient files, x-rays, and the plan-state sandbox's
+# backup of whichever clinic row it is holding. User data or machine-local
+# state; none of it belongs in the repo.
+backend/uploads/
+
 # dental-labs runtime uploads (ephemeral, user data)
 dental-labs/backend/uploads/
 

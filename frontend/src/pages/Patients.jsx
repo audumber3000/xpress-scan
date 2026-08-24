@@ -16,12 +16,14 @@ import SectionError from "../components/common/SectionError";
 import InlineFeedback from "../components/common/InlineFeedback";
 import { notify } from "../utils/notify";
 import MasterPasswordModal from "../components/common/MasterPasswordModal";
+import PatientEditModal from "../components/patient/PatientEditModal";
 import { medicalCare } from "../assets/illustrations";
 import AgeOrDobField, { computeAgeFromDob } from "../components/patient/AgeOrDobField";
 import { clinicToday, formatDateTime, formatRelative } from "../utils/datetime";
 import DailyRegisterTab from "../components/patient/DailyRegisterTab";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
+import { track, EVENTS } from '../analytics/track';
 
 const PATIENTS_PER_PAGE = 20;
 
@@ -116,8 +118,9 @@ const Patients = () => {
 
   // Edit/Create states
   const [editDrawerOpen, setEditDrawerOpen] = useState(false);
-  const [drawerMode, setDrawerMode] = useState('edit'); // 'edit' or 'create'
   const [editingPatient, setEditingPatient] = useState(null);
+  // Edit opens a modal; the drawer below is only ever for creating someone new.
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const [editFormData, setEditFormData] = useState({
     name: "",
     age: "",
@@ -323,34 +326,16 @@ const Patients = () => {
     return () => clearInterval(t);
   }, [patients]);
 
+  // Editing is a modal, shared with the patient file page so there is one
+  // patient form to keep correct. The drawer stays for creation, which carries
+  // a post-create flow (daily register, case paper nudge) that editing has no
+  // use for. The modal seeds itself from the record, so nothing to fill in here.
   const handleEditPatient = (patient) => {
-    setAddToRegisterAfterCreate(false);
     setEditingPatient(patient);
-    setEditFormData({
-      name: patient.name || "",
-      age: patient.age || "",
-      date_of_birth: patient.date_of_birth || "",
-      gender: patient.gender || "Male",
-      phone: patient.phone || "",
-      village: patient.village || "",
-      treatment_type: patient.treatment_type || "General",
-      referred_by: patient.referred_by || "",
-      blood_group: patient.blood_group || "",
-      patient_history: patient.patient_history || "",
-      display_id: patient.display_id || "",
-      // Older rows are backfilled from created_at server-side; fall back here
-      // too so the field is never blank on an unmigrated record.
-      registered_on: patient.registered_on || (patient.created_at || "").slice(0, 10),
-      notes: patient.notes || ""
-    });
-    setAgeMode(patient.date_of_birth ? "dob" : "age");
-    setEditErrors({});
-    setDrawerMode('edit');
-    setEditDrawerOpen(true);
+    setEditModalOpen(true);
   };
 
   const handleCreatePatient = () => {
-    setDrawerMode('create');
     setEditingPatient(null);
     // Plain "Create Patient" is not the register flow (handleRegisterNewFromRegister
     // re-arms this straight after calling us).
@@ -469,34 +454,30 @@ const Patients = () => {
 
     try {
       setEditLoading(true);
-      if (drawerMode === 'edit') {
-        await api.put(`/patients/${editingPatient.id}`, buildPayload());
-        setEditDrawerOpen(false);
-      } else {
-        const payload = buildPayload();
-        const created = await api.post(`/patients/`, payload);
-        setEditDrawerOpen(false);
+      const payload = buildPayload();
+      const created = await api.post(`/patients/`, payload);
+      track(EVENTS.PATIENT_CREATED, { source: 'patients_list' });
+      setEditDrawerOpen(false);
 
-        // Came from the daily register: put them straight into today's list, so
-        // the front desk doesn't have to register the same person twice.
-        if (created?.id && addToRegisterAfterCreate) {
-          try {
-            await api.post('/daily-register', { patient_id: created.id });
-            setRegisterRefreshKey(k => k + 1);
-            notify.done(`${created.name || editFormData.name} added to today's register`);
-          } catch (regError) {
-            console.error("Error adding the new patient to the register:", regError);
-            notify.problem("Patient saved, but we couldn't add them to today's register.");
-          }
+      // Came from the daily register: put them straight into today's list, so
+      // the front desk doesn't have to register the same person twice.
+      if (created?.id && addToRegisterAfterCreate) {
+        try {
+          await api.post('/daily-register', { patient_id: created.id });
+          setRegisterRefreshKey(k => k + 1);
+          notify.done(`${created.name || editFormData.name} added to today's register`);
+        } catch (regError) {
+          console.error("Error adding the new patient to the register:", regError);
+          notify.problem("Patient saved, but we couldn't add them to today's register.");
         }
-        setAddToRegisterAfterCreate(false);
+      }
+      setAddToRegisterAfterCreate(false);
 
-        // Nudge the user to start the patient's case paper — turns creation
-        // into a flow rather than a dead end. Skipped when the register is
-        // driving, so the front desk isn't pulled out of the day's list.
-        if (created?.id && !addToRegisterAfterCreate) {
-          setCasePaperPrompt({ id: created.id, name: created.name || editFormData.name });
-        }
+      // Nudge the user to start the patient's case paper — turns creation
+      // into a flow rather than a dead end. Skipped when the register is
+      // driving, so the front desk isn't pulled out of the day's list.
+      if (created?.id && !addToRegisterAfterCreate) {
+        setCasePaperPrompt({ id: created.id, name: created.name || editFormData.name });
       }
       if (activeTab !== 'today') fetchPatients();
     } catch (e) {
@@ -983,7 +964,8 @@ const Patients = () => {
       </div>
       )}
 
-      {/* Edit Drawer (Modern update but keeping original fields) */}
+      {/* Create Drawer. Editing an existing patient is a modal (mounted below);
+          a drawer is for entering someone new, which is a flow you stay in. */}
       {editDrawerOpen && (
         <div className="fixed inset-0 z-50 overflow-hidden">
           <div className="absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity" onClick={() => setEditDrawerOpen(false)} />
@@ -991,10 +973,10 @@ const Patients = () => {
             <div className="flex justify-between items-center p-6 border-b border-gray-100">
             <div>
               <h2 className="text-xl font-bold text-gray-900">
-                {drawerMode === 'edit' ? 'Edit Patient' : 'Create New Patient'}
+                Create New Patient
               </h2>
               <p className="text-sm text-gray-500 mt-1">
-                {drawerMode === 'edit' ? 'Update patient details' : 'Enter patient information'}
+                Enter patient information
               </p>
             </div>
             <button 
@@ -1017,17 +999,6 @@ const Patients = () => {
                   />
                   <FieldError name="name" />
                 </div>
-                {drawerMode === 'edit' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Patient ID</label>
-                    <input 
-                      type="text" 
-                      readOnly
-                      value={editFormData.display_id}
-                      className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-500 text-sm cursor-not-allowed"
-                    />
-                  </div>
-                )}
                 <div className="grid grid-cols-2 gap-4">
                   <AgeOrDobField
                     mode={ageMode}
@@ -1177,7 +1148,7 @@ const Patients = () => {
                   className="flex-1 px-4 py-2.5 bg-[#2a276e] text-white rounded-lg text-sm font-semibold hover:bg-[#1a1548] transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {editLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : null}
-                  {drawerMode === 'edit' ? 'Update Patient' : 'Create Patient'}
+                  Create Patient
                 </button>
               </div>
             </div>
@@ -1227,6 +1198,13 @@ const Patients = () => {
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
         onImported={fetchPatients}
+      />
+
+      <PatientEditModal
+        open={editModalOpen}
+        patient={editingPatient}
+        onClose={() => setEditModalOpen(false)}
+        onSaved={fetchPatients}
       />
 
       {/* Delete patient — gated on the clinic's master password. */}

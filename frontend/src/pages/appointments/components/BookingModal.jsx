@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { X, Clock, AlertTriangle, Check, Loader2, Search, Repeat } from 'lucide-react';
 import { api, getFriendlyErrorMessage } from '../../../utils/api';
+import { track, EVENTS } from '../../../analytics/track';
 
 /**
  * Book an appointment, opened prefilled from a click on the grid.
@@ -160,6 +161,7 @@ const BookingModal = ({
             phone,
           });
           patientId = created?.id || null;
+          track(EVENTS.PATIENT_CREATED, { source: 'booking_modal' });
         } catch (e) {
           // Booking still goes ahead without the file rather than losing the
           // slot: a clash for the chair is worse than a patient record we can

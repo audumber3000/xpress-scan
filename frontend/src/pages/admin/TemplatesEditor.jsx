@@ -223,8 +223,8 @@ const TemplatesEditor = () => {
   return (
     <div className="flex flex-col h-full bg-[#f8fafc]">
       {/* Header */}
-      <div className="px-6 py-4 bg-white border-b border-gray-200 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="px-4 sm:px-6 py-4 bg-white border-b border-gray-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => navigate(-1)}
             className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
@@ -246,7 +246,7 @@ const TemplatesEditor = () => {
           <button
             onClick={handleSave}
             disabled={saving || loading}
-            className="flex items-center gap-2 px-4 py-2 bg-[#29828a] hover:bg-[#236d75] disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 bg-[#29828a] hover:bg-[#236d75] disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm shrink-0 whitespace-nowrap"
           >
             {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
             <span>{saving ? 'Saving…' : 'Save Changes'}</span>
@@ -254,12 +254,12 @@ const TemplatesEditor = () => {
         </div>
       </div>
 
-      {/* Body — side-by-side */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* Body — side by side once there is room, stacked before that */}
+      <div className="flex flex-col xl:flex-row flex-1 overflow-y-auto xl:overflow-hidden">
         {/* ── Left: form panel ───────────────────────────────────────────── */}
-        <aside className="w-[380px] bg-white border-r border-gray-200 flex flex-col shrink-0">
+        <aside className="w-full xl:w-[380px] bg-white border-b xl:border-b-0 xl:border-r border-gray-200 flex flex-col shrink-0 xl:h-full xl:overflow-hidden">
           {/* Tab bar */}
-          <div className="flex border-b border-gray-100 shrink-0">
+          <div className="flex border-b border-gray-100 shrink-0 overflow-x-auto [&::-webkit-scrollbar]:hidden">
             {TABS.map((t) => {
               const Icon = t.icon;
               const isActive = activeTab === t.id;
@@ -267,7 +267,7 @@ const TemplatesEditor = () => {
                 <button
                   key={t.id}
                   onClick={() => setActiveTab(t.id)}
-                  className={`flex-1 flex items-center justify-center gap-2 py-3.5 text-sm transition-colors ${
+                  className={`flex-1 shrink-0 whitespace-nowrap flex items-center justify-center gap-1.5 px-2 py-3.5 text-sm transition-colors ${
                     isActive
                       ? 'text-[#29828a] border-b-2 border-[#29828a] font-semibold'
                       : 'text-gray-500 border-b-2 border-transparent hover:text-gray-700'
@@ -281,7 +281,7 @@ const TemplatesEditor = () => {
           </div>
 
           {/* Sections */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 xl:overflow-y-auto">
             {loading ? (
               <div className="flex flex-col items-center justify-center py-16 gap-3">
                 <Loader2 size={20} className="animate-spin text-[#29828a]" />
@@ -444,7 +444,7 @@ const TemplatesEditor = () => {
         </aside>
 
         {/* ── Right: live preview ─────────────────────────────────────────── */}
-        <main className="flex-1 bg-gray-100 overflow-auto">
+        <main className="flex-1 bg-gray-100 xl:overflow-auto">
           <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200 sticky top-0 z-10">
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Live Preview</span>
             {previewLoading && (
@@ -454,7 +454,7 @@ const TemplatesEditor = () => {
               </div>
             )}
           </div>
-          <div className="p-6 flex justify-center">
+          <div className="p-4 sm:p-6 flex justify-center">
             <div className="w-full max-w-[820px] bg-white shadow-lg rounded-md overflow-hidden border border-gray-200" style={{ aspectRatio: '210 / 297' }}>
               {previewHtml ? (
                 <iframe

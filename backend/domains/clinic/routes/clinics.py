@@ -20,6 +20,7 @@ from models import Clinic, User, user_clinics, generate_clinic_code, Subscriptio
 from sqlalchemy import select, func
 import datetime
 from core.audit import record_audit, CLINIC_UPDATED
+from core import plans
 
 router = APIRouter()
 
@@ -103,20 +104,39 @@ async def owner_add_clinic(
                 detail="You have reached the maximum of 5 clinics. Contact support to increase this limit."
             )
 
-        # Multi-branch is the ONLY premium capability: a single clinic is fully
-        # free, but adding a 2nd+ branch requires an active paid plan. (The first
-        # clinic is created during onboarding, never through this endpoint, so any
-        # owner who already has >= 1 clinic here is trying to go multi-branch.)
+        # Branches are what separates the plans. Plus runs one clinic; Pro runs
+        # up to five; Growth is unlimited. (The first clinic is created during
+        # onboarding, never through this endpoint, so any owner who already has
+        # >= 1 clinic here is trying to go multi-branch.)
+        #
+        # The plan's own branch cap is checked as well as the flat 5 above,
+        # because they answer different questions: the 5 is a platform ceiling
+        # on any one owner, this is what the customer actually bought.
         owner_sub = db.query(Subscription).filter(Subscription.user_id == current_user.id).first()
-        PAID_PLANS = ('professional', 'professional_annual', 'enterprise')
-        is_paid = bool(owner_sub and owner_sub.status == 'active' and owner_sub.plan_name in PAID_PLANS)
-        if clinic_count >= 1 and not is_paid:
+        current_plan = owner_sub.plan_name if (owner_sub and owner_sub.status == 'active') else None
+        plan_label = plans.label(current_plan)
+
+        if clinic_count >= 1 and not plans.allows_branches(current_plan):
             raise HTTPException(
                 status_code=403,
-                detail="Adding another clinic branch is a premium feature. Your single clinic stays free — upgrade to add more branches."
+                detail=(
+                    f"{plan_label} covers one clinic location. "
+                    "Upgrade to Pro to run up to five branches from one account."
+                ),
             )
-        # New branch inherits the owner's paid plan.
-        branch_plan = owner_sub.plan_name if is_paid else "free"
+
+        allowed = plans.max_branches(current_plan)
+        if allowed is not None and clinic_count >= allowed:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    f"{plan_label} covers up to {allowed} branches and you have {clinic_count}. "
+                    "Upgrade to Growth for unlimited branches."
+                ),
+            )
+
+        # A new branch runs on whatever the owner is paying for.
+        branch_plan = current_plan or plans.DEFAULT_PLAN
 
         # Determine branch label and parent based on existing clinics
         existing_clinics = db.execute(
@@ -658,7 +678,12 @@ async def update_subscription(
     Requires admin privileges. Used for subscription management.
     """
     try:
-        valid_plans = ["free", "professional", "professional_annual", "enterprise"]
+        # Both the current names and every legacy one, because this is an admin
+        # endpoint that support tooling calls with whatever a row already holds.
+        valid_plans = sorted(
+            {plans.stored_name(k, c) for k in plans.PLANS for c in plans.CYCLES}
+            | set(plans.LEGACY_ALIASES)
+        )
         if subscription_plan not in valid_plans:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -803,6 +828,16 @@ async def get_setup_status(
             "hint": "How you get back in if you're locked out.",
             "path": "/admin/security/verification",
             "done": bool(clinic.security_phone_verified or clinic.security_email_verified),
+        },
+        {
+            # A NULL hash means the clinic is still on the factory default, which
+            # is public knowledge. Until it is changed, the six digits guarding
+            # every irreversible delete are the same six digits every other
+            # clinic has.
+            "key": "master_password", "label": "Set your master password",
+            "hint": "The six digits asked for before a delete nothing can undo.",
+            "path": "/admin/security/verification",
+            "done": bool(clinic.master_password_hash),
         },
         {
             "key": "branding", "label": "Document appearance",

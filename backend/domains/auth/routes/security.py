@@ -36,11 +36,28 @@ OTP_TTL_MIN = 5
 MAX_ATTEMPTS = 5
 RESEND_COOLDOWN_SEC = 45
 
+# Development escape hatch for signup verification.
+#
+# Nexus is a separate service and is not part of the local compose stack, so on
+# a developer machine BOTH OTP channels fail and signup cannot be completed at
+# all. With this set, a signup code that could not be delivered is written to
+# the backend log instead and the request succeeds.
+#
+# The code is NEVER returned in the HTTP response, only logged, so switching
+# this on by accident cannot leak a code to a browser. It also only ever
+# applies when real delivery has already failed, so it can never mask a working
+# Nexus. Must not be set in production.
+OTP_DEV_ECHO = os.getenv("OTP_DEV_ECHO", "").lower() in ("1", "true", "yes")
+
 # What a code is good for. A send only invalidates earlier codes with the same
 # purpose, so verifying the recovery phone and changing the master password can
 # be in flight together without one eating the other's code.
 PURPOSE_CONTACT = "contact_verification"
 PURPOSE_MASTER_PASSWORD = "master_password"
+# Verifying both contacts at the end of signup, with ONE code sent to both.
+# Filed separately so a signup code and a master-password code can be in flight
+# together without one invalidating the other.
+PURPOSE_SIGNUP = "signup_verification"
 
 
 def _hash_code(code: str, clinic_id: int, target: str) -> str:
@@ -132,61 +149,20 @@ def update_security(payload: SecurityUpdate, request: Request, db=Depends(get_db
     return _serialize(c)
 
 
-def _issue_otp(db, c: Clinic, channel: str, purpose: str) -> dict:
-    """Mint a code, send it, and report whether it actually left the building.
+def _deliver_otp(db, c: Clinic, channel: str, target: str, code: str) -> Optional[str]:
+    """Send one code down one channel. Returns an error string, or None on success.
 
-    Shared by recovery-contact verification and by a master password change —
-    same code, same template, same delivery accounting; only the purpose the
-    code is filed under differs.
+    Reports instead of raising because the signup flow sends the SAME code to
+    both the phone and the email, and one dead channel must not take the other
+    down with it. `_issue_otp` turns a returned error back into its 502, so the
+    single-channel callers behave exactly as before.
+
+    BOTH channels go through Nexus. The backend has no email provider of its own
+    in production — no ZOHO_* variables reach the container — so calling
+    EmailService directly could only ever fail with "ZOHO_FROM_EMAIL environment
+    variable not set", which is exactly what prod was logging. Nexus owns
+    ZeptoMail and MSG91 and both otp_verification templates.
     """
-    target = _target_for(c, channel)
-    if not target:
-        field = "phone" if channel == "whatsapp" else "email"
-        raise HTTPException(status_code=400, detail=f"Add a security {field} first.")
-
-    # Rate-limit resends.
-    recent = (
-        db.query(OtpVerification)
-        .filter(
-            OtpVerification.clinic_id == c.id,
-            OtpVerification.channel == channel,
-            OtpVerification.target == target,
-            OtpVerification.purpose == purpose,
-            OtpVerification.consumed == False,
-        )
-        .order_by(OtpVerification.created_at.desc())
-        .first()
-    )
-    if recent and (datetime.utcnow() - recent.created_at).total_seconds() < RESEND_COOLDOWN_SEC:
-        raise HTTPException(status_code=429, detail="Please wait a moment before requesting another code.")
-
-    # Invalidate any earlier unconsumed codes for this target — one active at a time.
-    db.query(OtpVerification).filter(
-        OtpVerification.clinic_id == c.id,
-        OtpVerification.channel == channel,
-        OtpVerification.target == target,
-        OtpVerification.purpose == purpose,
-        OtpVerification.consumed == False,
-    ).update({"consumed": True})
-
-    code = f"{secrets.randbelow(10 ** 6):06d}"
-    db.add(OtpVerification(
-        clinic_id=c.id, channel=channel, target=target, purpose=purpose,
-        code_hash=_hash_code(code, c.id, target),
-        expires_at=datetime.utcnow() + timedelta(minutes=OTP_TTL_MIN),
-    ))
-    db.commit()
-
-    # Delivery is checked, not fired and forgotten. `notify()` is documented to
-    # never raise and `_fire` ignores Nexus's response entirely, so the old code
-    # reported "code sent" whether or not anything left the building — and an
-    # unapproved WhatsApp template failed invisibly. An OTP nobody receives, with
-    # a UI that says it was sent, is the worst of both.
-    # BOTH channels go through Nexus. The backend has no email provider of its
-    # own in production — no ZOHO_* variables reach the container — so calling
-    # EmailService directly could only ever fail with "ZOHO_FROM_EMAIL
-    # environment variable not set", which is exactly what prod was logging.
-    # Nexus owns ZeptoMail and MSG91 and both otp_verification templates.
     if channel == "email":
         recipient, log_channel = target, "email"
         destination = {"to_email": recipient}
@@ -248,6 +224,60 @@ def _issue_otp(db, c: Clinic, channel: str, purpose: str) -> dict:
     except Exception:
         db.rollback()
 
+    return error
+
+
+def _issue_otp(db, c: Clinic, channel: str, purpose: str) -> dict:
+    """Mint a code, send it, and report whether it actually left the building.
+
+    Shared by recovery-contact verification and by a master password change —
+    same code, same template, same delivery accounting; only the purpose the
+    code is filed under differs.
+    """
+    target = _target_for(c, channel)
+    if not target:
+        field = "phone" if channel == "whatsapp" else "email"
+        raise HTTPException(status_code=400, detail=f"Add a security {field} first.")
+
+    # Rate-limit resends.
+    recent = (
+        db.query(OtpVerification)
+        .filter(
+            OtpVerification.clinic_id == c.id,
+            OtpVerification.channel == channel,
+            OtpVerification.target == target,
+            OtpVerification.purpose == purpose,
+            OtpVerification.consumed == False,
+        )
+        .order_by(OtpVerification.created_at.desc())
+        .first()
+    )
+    if recent and (datetime.utcnow() - recent.created_at).total_seconds() < RESEND_COOLDOWN_SEC:
+        raise HTTPException(status_code=429, detail="Please wait a moment before requesting another code.")
+
+    # Invalidate any earlier unconsumed codes for this target — one active at a time.
+    db.query(OtpVerification).filter(
+        OtpVerification.clinic_id == c.id,
+        OtpVerification.channel == channel,
+        OtpVerification.target == target,
+        OtpVerification.purpose == purpose,
+        OtpVerification.consumed == False,
+    ).update({"consumed": True})
+
+    code = f"{secrets.randbelow(10 ** 6):06d}"
+    db.add(OtpVerification(
+        clinic_id=c.id, channel=channel, target=target, purpose=purpose,
+        code_hash=_hash_code(code, c.id, target),
+        expires_at=datetime.utcnow() + timedelta(minutes=OTP_TTL_MIN),
+    ))
+    db.commit()
+
+    # Delivery is checked, not fired and forgotten. `notify()` is documented to
+    # never raise and `_fire` ignores Nexus's response entirely, so the old code
+    # reported "code sent" whether or not anything left the building — and an
+    # unapproved WhatsApp template failed invisibly. An OTP nobody receives, with
+    # a UI that says it was sent, is the worst of both.
+    error = _deliver_otp(db, c, channel, target, code)
     if error:
         logger.warning(f"OTP send failed ({channel}) for clinic {c.id}: {error}")
         raise HTTPException(
@@ -309,6 +339,173 @@ def verify_otp(payload: OtpVerifyRequest, db=Depends(get_db), current_user: User
         c.security_email_verified = True
     db.commit()
     return {"verified": True}
+
+
+# ── Signup verification ──────────────────────────────────────────────────────
+# The last step of onboarding: prove the clinic owns the phone and the email it
+# just typed in. ONE six-digit code goes to both, and they type it once.
+#
+# Two rows are written, one per channel, because the code hash is salted with
+# its target. Verifying either row verifies both contacts: the point is that the
+# person holding the phone is the person reading the email, and making them do
+# the dance twice proves nothing extra.
+
+class SignupOtpSend(BaseModel):
+    phone: str = Field(..., min_length=4, max_length=20)
+    email: str = Field(..., min_length=5, max_length=160)
+
+
+class SignupOtpVerify(BaseModel):
+    code: str = Field(..., min_length=4, max_length=8)
+
+
+@router.post("/signup-otp/send")
+def send_signup_otp(
+    payload: SignupOtpSend,
+    db=Depends(get_db),
+    current_user: User = Depends(require_clinic_owner),
+):
+    """Save the contacts, then send one code to both.
+
+    Returns per-channel delivery status rather than a 502, because this screen
+    blocks the end of signup. If WhatsApp is rejected by Meta but the email goes
+    out, the customer can still finish; refusing the whole request because one
+    provider is unhappy would wall a brand-new clinic out of the product on
+    their first day.
+    """
+    c = _clinic(db, current_user)
+
+    phone = (payload.phone or "").strip()
+    email = (payload.email or "").strip().lower()
+    if "@" not in email or "." not in email.split("@")[-1]:
+        raise HTTPException(status_code=400, detail="That email address does not look right.")
+
+    # Changing a contact clears its verified flag, same as the settings screen.
+    if phone != c.security_phone:
+        c.security_phone = phone
+        c.security_phone_verified = False
+    if email != c.security_email:
+        c.security_email = email
+        c.security_email_verified = False
+    db.commit()
+
+    # One code, both channels. Any earlier signup codes are burned first so only
+    # the newest pair can be used.
+    db.query(OtpVerification).filter(
+        OtpVerification.clinic_id == c.id,
+        OtpVerification.purpose == PURPOSE_SIGNUP,
+        OtpVerification.consumed == False,
+    ).update({"consumed": True})
+
+    code = f"{secrets.randbelow(10 ** 6):06d}"
+    targets = {"whatsapp": phone, "email": email}
+    for channel, target in targets.items():
+        db.add(OtpVerification(
+            clinic_id=c.id, channel=channel, target=target, purpose=PURPOSE_SIGNUP,
+            code_hash=_hash_code(code, c.id, target),
+            expires_at=datetime.utcnow() + timedelta(minutes=OTP_TTL_MIN),
+        ))
+    db.commit()
+
+    delivery = {}
+    for channel, target in targets.items():
+        error = _deliver_otp(db, c, channel, target, code)
+        delivery[channel] = {"sent": error is None, "error": error}
+        if error:
+            logger.warning(f"signup OTP {channel} failed for clinic {c.id}: {error}")
+
+    reached = [ch for ch, r in delivery.items() if r["sent"]]
+
+    if not reached and OTP_DEV_ECHO:
+        # Nothing left the building, but this machine has no Nexus. Put the code
+        # where a developer can read it and let signup continue.
+        logger.warning(
+            "OTP_DEV_ECHO is on and delivery failed. Signup code for clinic %s is %s",
+            c.id, code,
+        )
+        return {
+            "sent": True,
+            "delivery": delivery,
+            "reached": ["log"],
+            "dev_echo": True,
+            "expires_in": OTP_TTL_MIN * 60,
+            "phone": phone,
+            "email": email,
+        }
+
+    if not reached:
+        # Both dead. The codes stay valid in case delivery catches up, but the
+        # screen needs to know it should offer a way to reach a human.
+        raise HTTPException(
+            status_code=502,
+            detail="We could not send the code to your phone or your email. Please check both, or contact support.",
+        )
+
+    return {
+        "sent": True,
+        "delivery": delivery,
+        "reached": reached,
+        "expires_in": OTP_TTL_MIN * 60,
+        "phone": phone,
+        "email": email,
+    }
+
+
+@router.post("/signup-otp/verify")
+def verify_signup_otp(
+    payload: SignupOtpVerify,
+    db=Depends(get_db),
+    current_user: User = Depends(require_clinic_owner),
+):
+    """One code, either row, both contacts verified."""
+    c = _clinic(db, current_user)
+    code = (payload.code or "").strip()
+
+    rows = (
+        db.query(OtpVerification)
+        .filter(
+            OtpVerification.clinic_id == c.id,
+            OtpVerification.purpose == PURPOSE_SIGNUP,
+            OtpVerification.consumed == False,
+        )
+        .order_by(OtpVerification.created_at.desc())
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status_code=400, detail="No active code. Send a new one.")
+    if all(r.expires_at < datetime.utcnow() for r in rows):
+        raise HTTPException(status_code=400, detail="That code expired. Send a new one.")
+    if all((r.attempts or 0) >= MAX_ATTEMPTS for r in rows):
+        for r in rows:
+            r.consumed = True
+        db.commit()
+        raise HTTPException(status_code=429, detail="Too many attempts. Send a new code.")
+
+    matched = next(
+        (r for r in rows
+         if r.expires_at >= datetime.utcnow()
+         and _hash_code(code, c.id, r.target) == r.code_hash),
+        None,
+    )
+    if not matched:
+        # Counted against every live row, so the cap cannot be sidestepped by
+        # guessing against one channel and then the other.
+        for r in rows:
+            r.attempts = (r.attempts or 0) + 1
+        db.commit()
+        raise HTTPException(status_code=400, detail="Incorrect code. Try again.")
+
+    for r in rows:
+        r.consumed = True
+    c.security_phone_verified = True
+    c.security_email_verified = True
+    db.commit()
+
+    return {
+        "verified": True,
+        "security_phone_verified": True,
+        "security_email_verified": True,
+    }
 
 
 # ── Master password ──────────────────────────────────────────────────────────

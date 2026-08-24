@@ -4,7 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 import GearLoader from "../components/GearLoader";
 import { api } from "../utils/api";
 import { notify } from '../utils/notify';
-import { BadgeCheck } from "lucide-react";
+import { BadgeCheck, AlertTriangle } from "lucide-react";
 import { generateAvatarUrl } from "../utils/avatar";
 
 const ROLE_INFO = {
@@ -43,9 +43,18 @@ const DoctorProfile = () => {
   const [pwForm, setPwForm] = useState({ current_password: "", new_password: "", confirm: "" });
   const [changingPw, setChangingPw] = useState(false);
 
+  // Whether the clinic has a verified way back in. The green tick beside the
+  // name used to be decorative — it said "verified" on every account whether or
+  // not anything had been, which is worse than saying nothing. It now reports
+  // the same recovery contact the Control Center's Verification section owns.
+  // The flags ride along on /auth/me's clinic, so this costs no extra request.
+  const recoveryVerified = !!(clinicData?.security_phone_verified || clinicData?.security_email_verified);
+
   const role = userData?.role || user?.role || "staff";
   const roleInfo = getRoleInfo(role);
   const canAdmin = role === 'clinic_owner' || user?.permissions?.staff?.read === true;
+  // Verification is owner-only on the server, so only an owner is offered the link.
+  const isOwner = role === 'clinic_owner';
   const displayName = userData?.name || user?.name || "User";
   const email = userData?.email || user?.email || "";
 
@@ -277,9 +286,32 @@ const DoctorProfile = () => {
                 <div className="flex-1 min-w-0 pb-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-xl font-bold text-gray-900 truncate">{displayName}</h2>
-                    {/* Decorative only — there is no verification data behind this.
-                        Don't treat it as a signal that anything was verified. */}
-                    <BadgeCheck size={18} className="text-white fill-[#00ba7c] flex-shrink-0" />
+                    {recoveryVerified ? (
+                      <span title="Recovery contact verified" className="flex-shrink-0 flex">
+                        <BadgeCheck size={18} className="text-white fill-[#00ba7c]" aria-label="Recovery contact verified" />
+                      </span>
+                    ) : isOwner ? (
+                      // Only the owner can fix it, so only the owner is sent
+                      // anywhere. Anyone else would be nagged about a screen
+                      // that answers them with a 403.
+                      <button
+                        type="button"
+                        onClick={() => navigate('/admin/security/verification')}
+                        title="No verified recovery contact. Set one up so you can get back in if you are locked out."
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold hover:bg-amber-100 transition-colors flex-shrink-0"
+                      >
+                        <AlertTriangle size={13} />
+                        Not verified
+                      </button>
+                    ) : (
+                      <span
+                        title="Your clinic has no verified recovery contact yet. Your clinic owner can set one up."
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold flex-shrink-0"
+                      >
+                        <AlertTriangle size={13} />
+                        Not verified
+                      </span>
+                    )}
                     <span className={`text-xs font-medium px-2 py-0.5 rounded ${roleInfo.color} ${roleInfo.bg}`}>{roleInfo.label}</span>
                   </div>
                   <p className="text-sm text-gray-500 truncate" title={email}>{email || 'No email on file'}</p>

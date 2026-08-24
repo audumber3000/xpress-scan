@@ -1,9 +1,10 @@
 import { getFriendlyErrorMessage } from './api';
-import { getRedirectResult, onAuthStateChanged } from 'firebase/auth';
+import { getRedirectResult, onAuthStateChanged, getAdditionalUserInfo } from 'firebase/auth';
 import { notify } from '../utils/notify';
 import { auth } from '../firebaseClient';
 import { api } from './api';
 import { saveLastLogin } from './lastLogin';
+import { track, EVENTS } from '../analytics/track';
 
 const PENDING_KEY = 'molarplus_google_redirect_pending';
 
@@ -14,6 +15,9 @@ export const markGoogleRedirectPending = (mode) => {
 export const hasGoogleRedirectPending = () => {
   return !!sessionStorage.getItem(PENDING_KEY);
 };
+
+/** 'signup' | 'login' | null — which page started the redirect. */
+export const getGoogleRedirectMode = () => sessionStorage.getItem(PENDING_KEY);
 
 export const clearGoogleRedirectPending = () => {
   sessionStorage.removeItem(PENDING_KEY);
@@ -97,6 +101,9 @@ export const completeGoogleRedirectAuth = async ({
 } = {}) => {
   if (!hasGoogleRedirectPending()) return false;
 
+  // Read before clearGoogleRedirectPending() wipes it below.
+  const redirectMode = getGoogleRedirectMode();
+
   setLoading?.(true);
   setError?.('');
 
@@ -129,6 +136,18 @@ export const completeGoogleRedirectAuth = async ({
       email: firebaseUser.email,
       name: firebaseUser.displayName,
     });
+
+    // This helper serves BOTH the signup and login pages, so it must not fire
+    // signup_completed for a returning user — that would inflate the funnel by
+    // every Google login. Firebase tells us authoritatively whether the account
+    // was just created; only when the redirect result is missing (we recovered
+    // the session via auth.currentUser) do we fall back to the page's intent.
+    const isNewUser =
+      result ? getAdditionalUserInfo(result)?.isNewUser === true
+             : redirectMode === 'signup';
+    if (isNewUser) {
+      track(EVENTS.SIGNUP_COMPLETED, { method: 'google', referred: !!referredBy });
+    }
 
     notify.done(successMessage);
 

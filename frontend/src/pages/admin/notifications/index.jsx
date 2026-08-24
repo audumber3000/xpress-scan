@@ -8,6 +8,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { load as loadCashfree } from '@cashfreepayments/cashfree-js';
 import { api } from '../../../utils/api';
 import GearLoader from '../../../components/GearLoader';
+import SectionTabs from '../../../components/common/SectionTabs';
+import SectionHeader from '../../../components/common/SectionHeader';
 
 import { CHANNEL_META, EVENT_LABELS, EVENT_AUDIENCE, getChannelCost } from './constants';
 import OverviewTab from './OverviewTab';
@@ -27,7 +29,7 @@ const Notifications = () => {
   const [activeTab, setActiveTab]         = useState('overview');
   const [stats, setStats]                 = useState({});
   const [channelStatus, setChannelStatus] = useState({});
-  const [wallet, setWallet]               = useState({ balance: 0, last_topup_at: null, transactions: [] });
+  const [wallet, setWallet]               = useState({ balance: 0, last_topup_at: null, transactions: [], min_topup: 50, low_balance_threshold: 5 });
   const [preferences, setPreferences]     = useState([]);
   const [logs, setLogs]                   = useState([]);
   const [logsTotal, setLogsTotal]         = useState(0);
@@ -51,7 +53,7 @@ const Notifications = () => {
       const [s, cs, w, p] = await Promise.all([
         api.get('/notification-admin/stats').catch(() => ({})),
         api.get('/notification-admin/channel-status').catch(() => ({})),
-        api.get('/notification-admin/wallet').catch(() => ({ balance: 0, transactions: [] })),
+        api.get('/notification-admin/wallet').catch(() => ({ balance: 0, transactions: [], min_topup: 50, low_balance_threshold: 5 })),
         api.get('/notification-admin/preferences').catch(() => []),
       ]);
       setStats(s);
@@ -156,7 +158,13 @@ const Notifications = () => {
   };
 
   const handleWalletTopup = async () => {
-    if (topUpAmount < 100) { notify.problem(`Minimum top-up is ${getCurrencySymbol()}100`); return; }
+    // The floor comes from the server (wallet_service.MIN_TOPUP) so this check
+    // and the 400 the endpoint would raise cannot disagree.
+    const minTopup = wallet.min_topup ?? 50;
+    if (topUpAmount < minTopup) {
+      notify.problem(`Minimum top-up is ${getCurrencySymbol()}${minTopup}`);
+      return;
+    }
     setToppingUp(true);
     try {
       const sessionData = await api.post('/notification-admin/wallet/topup', { amount: topUpAmount });
@@ -207,7 +215,7 @@ const Notifications = () => {
           className="fixed inset-0 bg-black/30 z-40 backdrop-blur-[1px]"
           onClick={() => setTestDrawer(d => ({ ...d, open: false }))}
         />
-        <div className="fixed right-0 top-0 h-full w-[440px] bg-white shadow-2xl z-50 flex flex-col overflow-hidden">
+        <div className="fixed right-0 top-0 h-full w-full max-w-[440px] bg-white shadow-2xl z-50 flex flex-col overflow-hidden">
           <div className="p-5 border-b border-gray-100 flex items-start justify-between">
             <div>
               <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -333,37 +341,20 @@ const Notifications = () => {
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-y-auto custom-scrollbar p-6 lg:p-8 pb-10">
       <div className="mb-6">
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">Notifications</h2>
-            <p className="text-sm text-gray-500 mt-0.5">Manage channels, preferences, and message delivery</p>
-          </div>
-          <button
-            onClick={fetchAll}
-            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <RefreshCw size={14} /> Refresh
-          </button>
-        </div>
+        <SectionHeader
+          title="Notifications"
+          subtitle="Manage channels, preferences, and message delivery"
+          action={
+            <button
+              onClick={fetchAll}
+              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <RefreshCw size={14} /> Refresh
+            </button>
+          }
+        />
 
-        <div className="border-b border-gray-200">
-          <div className="flex gap-1 -mb-px">
-            {TABS.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                onClick={() => setActiveTab(id)}
-                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors rounded-t-lg ${
-                  activeTab === id
-                    ? 'border-[#29828a] text-[#29828a] bg-white'
-                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50'
-                }`}
-              >
-                <Icon size={14} />
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <SectionTabs tabs={TABS} active={activeTab} onChange={setActiveTab} />
       </div>
 
       <div className="space-y-6">

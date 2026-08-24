@@ -13,6 +13,8 @@ export { default as PatientFilesTab } from './PatientFilesTab';
 export { default as CasePapersTab } from './CasePapersTab';
 export { default as ToothRightDrawer } from './ToothRightDrawer';
 export { default as PatientVisitHistory } from './PatientVisitHistory';
+export { default as PatientHeaderActions } from './PatientHeaderActions';
+export { default as PatientEditModal } from './PatientEditModal';
 
 // Constants and utilities
 export * from './dentalConstants';

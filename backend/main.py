@@ -535,6 +535,64 @@ async def lifespan(app: FastAPI):
                     CONSTRAINT uq_feature_vote UNIQUE (feature_request_id, user_id)
                 )
             """))
+
+            # ── Added 2026-08-24: Plus / Pro / Growth ───────────────────────
+            # Repeated from deploy-aws.sh for the same reason the 2026-08-13
+            # block above is: the deploy rsyncs `backend/` only and then runs
+            # the SERVER'S own copy of deploy-aws.sh, which has drifted. Any
+            # migration that lives only in the repo's copy never reaches RDS.
+            #
+            # This one is not optional. `SubscriptionPayment` and
+            # `SubscriptionCoupon` now map these columns, and SQLAlchemy names
+            # every mapped column in its SELECT — so without them the whole
+            # subscription surface 500s with UndefinedColumn, on a release whose
+            # entire point is subscriptions.
+            for _plans_ddl in (
+                # What GST was charged, kept apart from the total so an invoice
+                # can show the tax line rather than one opaque figure.
+                "ALTER TABLE subscription_payments ADD COLUMN IF NOT EXISTS tax_amount DOUBLE PRECISION",
+                # Which promo code was used, and what it took off.
+                "ALTER TABLE subscription_payments ADD COLUMN IF NOT EXISTS coupon_code VARCHAR",
+                "ALTER TABLE subscription_payments ADD COLUMN IF NOT EXISTS discount_amount DOUBLE PRECISION",
+                # Lets support pin one code to the top of the subscription page.
+                "ALTER TABLE subscription_coupons ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE",
+            ):
+                conn.execute(text(_plans_ddl))
+
+            # ── One-shot DATA migrations ────────────────────────────────────
+            # Everything above is idempotent DDL, so re-running it every boot is
+            # free. These two CHANGE DATA, and a re-run would silently undo what
+            # a clinic did afterwards — re-disabling a summary they turned back
+            # on, or clawing back a wallet they topped up. Hence the ledger: each
+            # key fires exactly once, ever.
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS applied_data_migrations ("
+                "key VARCHAR PRIMARY KEY, applied_at TIMESTAMP DEFAULT NOW())"
+            ))
+            # The daily summary became opt-in — it was costing money to send a
+            # message most clinics never asked for. Existing rows are switched
+            # off once; anyone who turns it back on keeps it.
+            conn.execute(text("""
+                DO $do$ BEGIN
+                  IF NOT EXISTS (SELECT 1 FROM applied_data_migrations WHERE key = 'daily_summary_optin_v1') THEN
+                    UPDATE notification_preferences SET is_enabled = FALSE WHERE event_type = 'daily_summary';
+                    INSERT INTO applied_data_migrations (key) VALUES ('daily_summary_optin_v1');
+                  END IF;
+                END $do$;
+            """))
+            # New clinics now start on 10 credits rather than a larger welcome
+            # balance. Guarded twice over: `last_topup_at IS NULL` means it can
+            # never touch a clinic that has paid, and `balance > 10` means it can
+            # only ever reduce, never top anybody up.
+            conn.execute(text("""
+                DO $do$ BEGIN
+                  IF NOT EXISTS (SELECT 1 FROM applied_data_migrations WHERE key = 'wallet_welcome_credit_10_v1') THEN
+                    UPDATE notification_wallets SET balance = 10 WHERE last_topup_at IS NULL AND balance > 10;
+                    INSERT INTO applied_data_migrations (key) VALUES ('wallet_welcome_credit_10_v1');
+                  END IF;
+                END $do$;
+            """))
+
             conn.commit()
     except Exception as e:
         print(f"⚠️  Column migration skipped: {e}")
@@ -632,6 +690,12 @@ class TrailingSlashMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 app.add_middleware(TrailingSlashMiddleware)
+
+# View-only when a trial has ended or a renewal failed. Reads always pass; every
+# write is refused with a 402 carrying that state's own wording. See
+# core/plan_state.py for what is exempt and why it fails open.
+from core.plan_state import install_readonly_lock
+install_readonly_lock(app)
 
 
 # Report unhandled exceptions to PostHog error tracking (replaces Sentry).

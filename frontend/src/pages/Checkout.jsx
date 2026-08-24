@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { notify } from '../utils/notify';
 import { api } from '../utils/api';
@@ -8,7 +8,7 @@ import GearLoader from '../components/GearLoader';
 import { cashfreeService } from '../services/payments/cashfree/cashfree_service';
 import PaymentMarks from '../components/payments/PaymentMarks';
 import PaymentHelp from '../components/payments/PaymentHelp';
-import { PLAN, inr, localEstimateLabel, needsLocalEstimate } from '../utils/pricing';
+import { usePlanCatalogue, resolvePlan, planLabel, formatPrice } from '../utils/plans';
 
 /**
  * Checkout.
@@ -22,15 +22,25 @@ import { PLAN, inr, localEstimateLabel, needsLocalEstimate } from '../utils/pric
  * The one that mattered: it hardcoded 899 and rendered it against
  * getCurrencySymbol(), which is the currency the clinic *bills patients in*. A
  * Canadian clinic was shown "$899" for a charge that lands as ₹899, roughly
- * CA$14.60, having just been quoted $10 on the previous screen. Amounts now
- * come from pricing.js, are always labelled in rupees because rupees are what
- * Cashfree charges, and carry a clearly approximate local figure underneath.
+ * CA$14.60, having just been quoted $10 on the previous screen.
+ *
+ * Both halves of that are now structural rather than remembered. Every amount
+ * comes from the plan catalogue, which serves ONE currency per clinic: rupees
+ * in India, dollars everywhere else. There is no conversion left to get wrong,
+ * and an Indian clinic cannot be shown a dollar figure because the catalogue it
+ * receives does not contain one.
+ *
+ * GST is added on top for India and shown as its own line, because the total
+ * that leaves the account is the number this screen has to be honest about.
  */
 const Checkout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
-  const planName = queryParams.get('plan') || 'professional';
+  // Defaults to the entry plan, not the middle one. Every real entry point
+  // sets ?plan=, so a missing param means something went wrong upstream, and
+  // the safe direction to fail is the cheapest plan rather than the dearest.
+  const planName = queryParams.get('plan') || 'plus';
   const billing = queryParams.get('billing') || 'monthly';
   const isAnnual = billing === 'annual';
 
@@ -40,13 +50,27 @@ const Checkout = () => {
   const [isValidating, setIsValidating] = useState(false);
   const [discountInfo, setDiscountInfo] = useState(null);
 
-  const checkoutPlanName = isAnnual ? `${planName}_annual` : planName;
-  const basePrice = planName === 'professional'
-    ? (isAnnual ? PLAN.annualTotal : PLAN.monthly)
-    : 0;
-  const total = discountInfo ? discountInfo.final_amount : basePrice;
-  const localTotal = localEstimateLabel(total);
-  const showsFx = needsLocalEstimate();
+  // A code applied on the Subscription page arrives as ?coupon=. Applied once,
+  // on arrival, so nobody has to type it a second time on the screen where they
+  // are about to pay. The ref guards React 18's double-invoked effect.
+  const preApplied = useRef(false);
+
+  const { catalogue } = usePlanCatalogue();
+  const planKey = resolvePlan(planName).key;
+  const plan = catalogue.plans.find((p) => p.key === planKey) || catalogue.plans[0];
+  const currency = catalogue.currency;
+  const money = (amount) => formatPrice(amount, currency);
+
+  const checkoutPlanName = isAnnual ? `${planKey}_annual` : planKey;
+  const listPrice = isAnnual ? plan.annual_total : plan.monthly;
+
+  // Discount first, then tax, matching create_checkout_session. Taxing the list
+  // price and then discounting would charge GST on money nobody paid.
+  const subtotal = discountInfo ? discountInfo.final_amount : listPrice;
+  const taxRate = catalogue.tax_rate || 0;
+  const tax = Math.round(subtotal * taxRate * 100) / 100;
+  const total = Math.round((subtotal + tax) * 100) / 100;
+  const annualSaving = plan.monthly * 12 - plan.annual_total;
 
   const setBilling = (next) => {
     const p = new URLSearchParams(location.search);
@@ -54,12 +78,22 @@ const Checkout = () => {
     navigate({ pathname: location.pathname, search: p.toString() }, { replace: true });
   };
 
-  const handleApplyCoupon = async () => {
-    if (!couponCode) return;
+  useEffect(() => {
+    const fromUrl = queryParams.get('coupon');
+    if (!fromUrl || preApplied.current) return;
+    preApplied.current = true;
+    setCouponCode(fromUrl.toUpperCase());
+    setCouponOpen(true);
+    applyCoupon(fromUrl.toUpperCase());
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const applyCoupon = async (raw) => {
+    const value = (raw ?? couponCode).trim().toUpperCase();
+    if (!value) return;
     setIsValidating(true);
     try {
       const resp = await api.post('/subscriptions/validate-coupon', {
-        code: couponCode,
+        code: value,
         plan_name: checkoutPlanName,
       });
       if (resp.is_valid) {
@@ -75,6 +109,8 @@ const Checkout = () => {
       setIsValidating(false);
     }
   };
+
+  const handleApplyCoupon = () => applyCoupon();
 
   const handlePayNow = async () => {
     setLoading(true);
@@ -149,7 +185,7 @@ const Checkout = () => {
                   {b.label}
                   {b.id === 'annual' && (
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-50 text-green-700">
-                      SAVE {PLAN.annualPctOff}%
+                      SAVE {plan.annual_pct_off}%
                     </span>
                   )}
                 </button>
@@ -158,13 +194,13 @@ const Checkout = () => {
 
             <div className="border-t border-gray-100 pt-3">
               <Row
-                label={`${planName === 'professional' ? 'Professional' : planName}, ${isAnnual ? 'annual' : 'monthly'}`}
-                value={inr(basePrice)}
+                label={`${plan.label}, ${isAnnual ? 'annual' : 'monthly'}`}
+                value={money(listPrice)}
               />
-              {isAnnual && (
+              {isAnnual && annualSaving > 0 && (
                 <Row
-                  label={`${inr(PLAN.monthly)} × 12 if paid monthly`}
-                  value={`You save ${inr(PLAN.annualSave)}`}
+                  label={`${money(plan.monthly)} × 12 if paid monthly`}
+                  value={`You save ${money(annualSaving)}`}
                   muted
                 />
               )}
@@ -174,7 +210,7 @@ const Checkout = () => {
                     <Tag size={13} /> {couponCode}
                   </span>
                   <span className="text-sm font-bold tabular-nums">
-                    -{inr(discountInfo.discount_amount)}
+                    -{money(discountInfo.discount_amount)}
                   </span>
                 </div>
               )}
@@ -182,18 +218,24 @@ const Checkout = () => {
 
             {/* One amount, once. The old layout printed the same figure as
                 "Monthly price" and again as "TOTAL TO PAY" at equal weight. */}
+            {/* Tax on its own line. A total that silently includes 18% is the
+                kind of surprise that turns into a support ticket. */}
+            {tax > 0 && (
+              <div className="border-t border-gray-100 pt-1.5">
+                <Row label={`${catalogue.tax_label || 'Tax'} at ${Math.round(taxRate * 100)}%`} value={money(tax)} />
+              </div>
+            )}
+
             <div className="border-t border-gray-200 mt-3 pt-4">
               <div className="flex items-end justify-between gap-3">
                 <span className="text-sm font-bold text-gray-900">Total today</span>
                 <span className="text-3xl font-extrabold text-gray-900 tracking-tight tabular-nums leading-none">
-                  {inr(total)}
+                  {money(total)}
                 </span>
               </div>
-              {/* Never bold, never in the button: the rupee figure is what gets
-                  charged, this only answers "roughly how much is that". */}
-              {localTotal && (
+              {currency !== 'INR' && (
                 <p className="text-[11px] text-gray-500 mt-2 leading-relaxed">
-                  {localTotal}. Charged in Indian Rupees, your bank sets the final rate.
+                  Charged in US dollars. Your bank may add a foreign transaction fee.
                 </p>
               )}
             </div>
@@ -260,7 +302,7 @@ const Checkout = () => {
                 onClick={handlePayNow}
                 className="w-full mt-4 py-4 min-h-[3.25rem] rounded-xl bg-[#2a276e] hover:bg-[#1f1d52] text-white font-bold text-sm transition-colors flex items-center justify-center gap-2 group"
               >
-                Pay {inr(total)}
+                Pay {money(total)}
                 <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
               </button>
 
@@ -278,13 +320,16 @@ const Checkout = () => {
             {/* Renewal terms stated before the click, not after. */}
             <p className="text-[11px] text-gray-500 leading-relaxed px-1">
               {isAnnual
-                ? `Renews yearly at ${inr(PLAN.annualTotal)} until cancelled.`
-                : `Renews monthly at ${inr(PLAN.monthly)} until cancelled.`}
+                ? `Renews yearly at ${money(plan.annual_total)}${tax > 0 ? ' plus ' + (catalogue.tax_label || 'tax') : ''} until cancelled.`
+                : `Renews monthly at ${money(plan.monthly)}${tax > 0 ? ' plus ' + (catalogue.tax_label || 'tax') : ''} until cancelled.`}
               {' '}Manage or cancel any time from Control Center.
-              {showsFx && ' Your bank may add a foreign transaction fee.'}
             </p>
 
-            <PaymentHelp amount={total} plan={isAnnual ? 'Professional annual' : 'Professional monthly'} />
+            <PaymentHelp
+              amount={total}
+              currency={currency}
+              plan={planLabel(checkoutPlanName)}
+            />
           </section>
 
         </div>

@@ -66,6 +66,14 @@ export const EVENT_LABELS = {
   molarplus_trial_ended_mk:           'Trial Ended',
 };
 
+// A line under the event name, only where the toggle needs explaining. Most
+// events do not: "Appointment Reminder" says what it is. These two are off out
+// of the box, which is surprising enough to be worth a sentence.
+export const EVENT_NOTES = {
+  daily_summary:    'Off by default. Turn it on to get today’s numbers on WhatsApp each evening.',
+  lab_order_placed: 'Off by default. Turn it on to message the lab automatically when an order is placed.',
+};
+
 export const MARKETING_EVENTS = new Set([
   'google_review', 'molarplus_weekly_report_mk', 'molarplus_monthly_report_mk',
   'molarplus_review_report_mk', 'molarplus_trial_started_mk', 'molarplus_trial_mid_mk',

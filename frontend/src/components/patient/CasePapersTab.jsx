@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import PatientTimeline from './PatientTimeline';
 import ToothRightDrawer from './ToothRightDrawer';
 import PrescriptionDrawer from './PrescriptionDrawer';
@@ -12,7 +12,7 @@ import DocumentsNotesGrid from './DocumentsNotesGrid';
 import CasePaperActionBar from './CasePaperActionBar';
 import InvoiceEditor from '../payments/InvoiceEditor';
 import CasePaperInvoicesPanel from './CasePaperInvoicesPanel';
-import CaseCostsPanel from './CaseCostsPanel';
+import NextVisitModal from './NextVisitModal';
 import { notify } from '../../utils/notify';
 import { api } from "../../utils/api";
 import { universalToFDI } from "../../utils/toothNumbering";
@@ -73,9 +73,13 @@ const CasePapersTab = ({
   const [invoiceEditId, setInvoiceEditId] = useState(null);
   // A case paper can carry several invoices — the list panel shows them all.
   const [invoiceListOpen, setInvoiceListOpen] = useState(false);
-  const [costsOpen, setCostsOpen] = useState(false);
-  // Tracks if a finalized invoice already exists for this case paper
+  // Every invoice on this case paper, fetched once here rather than inside the
+  // panel: the action bar's badge and the panel's list must never disagree.
+  const [casePaperInvoices, setCasePaperInvoices] = useState([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
+  // Tracks if an invoice already exists for this case paper
   const [existingCasePaperInvoiceId, setExistingCasePaperInvoiceId] = useState(null);
+  const [nextVisitOpen, setNextVisitOpen] = useState(false);
 
   // Unsaved-changes guard: flips true on any edit, resets after save/load.
   const [dirty, setDirty] = useState(false);
@@ -105,6 +109,7 @@ const CasePapersTab = ({
       clinical_examination: '', // Move to notes/secondary
       diagnosis: '',            // Move to notes/secondary
       next_visit_recommendation: 'Not specified',
+      next_visit_date: null,
       notes: ''
   });
 
@@ -137,6 +142,7 @@ const CasePapersTab = ({
       clinical_examination: paper.clinical_examination || '',
       diagnosis: paper.diagnosis || '',
       next_visit_recommendation: paper.next_visit_recommendation || 'Not specified',
+      next_visit_date: paper.next_visit_date || null,
       notes: paper.notes || '',
     });
     setDirty(false);
@@ -227,28 +233,71 @@ const CasePapersTab = ({
       fetchInventoryConsumption(selectedCasePaper.id);
       if (!selectedCasePaper?.isNew) fetchExistingCasePaperInvoice();
     } else {
+      setCasePaperInvoices([]);
       setExistingCasePaperInvoiceId(null);
       setInventoryConsumptions([]);
     }
   }, [selectedCasePaper?.id]);
 
+  /**
+   * Every invoice on this case paper, in one list.
+   *
+   * Two linkages have to be asked for. Newer invoices carry case_paper_id;
+   * ones written before that column existed overload appointment_id with the
+   * case paper's id. All statuses are included (draft, finalized, paid) so we
+   * never create a duplicate invoice for the same case paper, and so the
+   * action bar's badge counts a draft that is quietly sitting there waiting.
+   *
+   * The patient filter on the legacy lookup is what stops an appointment that
+   * happens to share the case paper's id from being pulled in.
+   */
   const fetchExistingCasePaperInvoice = async () => {
-    if (!selectedCasePaper?.id || selectedCasePaper?.isNew || !patientData?.id) return;
+    if (!selectedCasePaper?.id || selectedCasePaper?.isNew || !patientData?.id) {
+      setCasePaperInvoices([]);
+      setExistingCasePaperInvoiceId(null);
+      return;
+    }
+    const casePaperId = String(selectedCasePaper.id);
+    setInvoicesLoading(true);
     try {
-      const casePaperId = String(selectedCasePaper.id);
-      // Fetch invoices filtered by appointment_id — includes ALL statuses (draft, finalized, paid)
-      // so we never create a duplicate invoice for the same case paper
-      const invoices = await api.get('/invoices', {
-        params: { patient_id: patientData.id, appointment_id: casePaperId, limit: 10 }
-      });
-      const existing = (invoices || []).find(
-        inv => String(inv.appointment_id) === casePaperId
+      const [byCase, byLegacy] = await Promise.all([
+        api.get('/invoices', { params: { case_paper_id: casePaperId, limit: 100 } }).catch(() => []),
+        api.get('/invoices', { params: { patient_id: patientData.id, appointment_id: casePaperId, limit: 100 } }).catch(() => []),
+      ]);
+      const merged = new Map();
+      for (const inv of [...(byCase || []), ...(byLegacy || [])]) {
+        if (inv?.id != null) merged.set(String(inv.id), inv);
+      }
+      const list = [...merged.values()].sort(
+        (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
       );
-      setExistingCasePaperInvoiceId(existing?.id || null);
+      setCasePaperInvoices(list);
+      setExistingCasePaperInvoiceId(list[0]?.id || null);
     } catch (err) {
       console.error('Failed to check existing invoice:', err);
+    } finally {
+      setInvoicesLoading(false);
     }
   };
+
+  // Medicines already written for this visit. Drives the count on the
+  // Prescription button, and is the same list the drawer reopens.
+  const casePaperPrescriptions = useMemo(() => {
+    if (!selectedCasePaper || selectedCasePaper.isNew) return [];
+    return visitPrescriptions.filter(
+      (rx) => String(rx.case_paper_id) === String(selectedCasePaper.id)
+    );
+  }, [visitPrescriptions, selectedCasePaper]);
+
+  const prescribedMedicineCount = useMemo(
+    () => casePaperPrescriptions.reduce(
+      (n, rx) => n + (Array.isArray(rx.items)
+        ? rx.items.filter((i) => (i?.medicine_name || '').trim()).length
+        : 0),
+      0
+    ),
+    [casePaperPrescriptions]
+  );
 
   // Persist a brand-new case paper if needed and return its id — so actions that
   // must attach to a real case_paper_id (lab orders, inventory) work even on a
@@ -330,6 +379,9 @@ const CasePapersTab = ({
       });
       // Refresh the record list AND both stock lists (counts just changed).
       await Promise.all([fetchInventoryConsumption(casePaperId), fetchInventoryItems(), fetchMedicationStock()]);
+      // Billing this may have opened the case paper's first draft invoice, which
+      // is exactly what the count on the Invoice button is there to announce.
+      if (addToBilling) fetchExistingCasePaperInvoice();
       notify.done(addToBilling ? 'Recorded and added to bill' : 'Recorded (not billed)');
     } catch (err) {
       console.error('Failed to record inventory:', err);
@@ -445,6 +497,7 @@ const CasePapersTab = ({
           clinical_examination: '',
           diagnosis: '',
           next_visit_recommendation: 'Not specified',
+          next_visit_date: null,
           notes: ''
       });
       setSelectedCasePaper(newPaper);
@@ -516,6 +569,7 @@ const CasePapersTab = ({
               clinical_examination: '',
               diagnosis: '',
               next_visit_recommendation: 'Not specified',
+              next_visit_date: null,
               notes: ''
           });
           onCasePaperStateChange?.(false);
@@ -912,11 +966,13 @@ const CasePapersTab = ({
       {/* 7. Sticky Bottom Action Bar */}
       <CasePaperActionBar
         form={form}
-        onFormChange={handleFormChange}
         onSave={handleSaveCasePaper}
+        onNextVisit={() => setNextVisitOpen(true)}
         onPrescription={() => {
           handleAutoSaveForDrawer(() => setPrescriptionOpen(true));
         }}
+        prescriptionCount={prescribedMedicineCount}
+        invoiceCount={casePaperInvoices.length}
         hasExistingInvoice={!!existingCasePaperInvoiceId}
         onInvoice={() => {
           // Warn about treatments not yet marked complete — only completed ones
@@ -930,9 +986,22 @@ const CasePapersTab = ({
               `${pending.length} treatment${pending.length > 1 ? 's are' : ' is'} still pending — mark ${pending.length > 1 ? 'them' : 'it'} complete to add to billing.`
             );
           }
-          handleAutoSaveForDrawer(() => setInvoiceListOpen(true));
+          handleAutoSaveForDrawer(() => {
+            // Refresh before showing: a procedure or used stock may have opened
+            // a draft since this case paper was loaded.
+            fetchExistingCasePaperInvoice();
+            setInvoiceListOpen(true);
+          });
         }}
-        onCosts={() => handleAutoSaveForDrawer(() => setCostsOpen(true))}
+      />
+
+      <NextVisitModal
+        open={nextVisitOpen}
+        onClose={() => setNextVisitOpen(false)}
+        value={{ label: form.next_visit_recommendation, date: form.next_visit_date }}
+        onSave={({ label, date }) =>
+          handleFormChange({ ...form, next_visit_recommendation: label, next_visit_date: date })
+        }
       />
 
       <LabOrderDrawer 
@@ -949,15 +1018,9 @@ const CasePapersTab = ({
           onClose={() => setPrescriptionOpen(false)}
           patientId={patientData?.id}
           patientData={patientData}
-          initialData={(() => {
-            const casePrescriptions = selectedCasePaper?.isNew
-              ? []
-              : visitPrescriptions.filter(rx =>
-                  rx.case_paper_id === selectedCasePaper?.id ||
-                  rx.case_paper_id?.toString() === selectedCasePaper?.id?.toString()
-                );
-            return casePrescriptions.length > 0 ? casePrescriptions[casePrescriptions.length - 1] : null;
-          })()}
+          initialData={casePaperPrescriptions.length > 0
+            ? casePaperPrescriptions[casePaperPrescriptions.length - 1]
+            : null}
           onSave={async (data) => {
               try {
                   if (selectedCasePaper?.isNew) {
@@ -965,13 +1028,9 @@ const CasePapersTab = ({
                       return;
                   }
                   const { dispenses = [], ...rxData } = data;
-                  const casePrescriptions = selectedCasePaper?.isNew
-                    ? []
-                    : visitPrescriptions.filter(rx =>
-                        rx.case_paper_id === selectedCasePaper?.id ||
-                        rx.case_paper_id?.toString() === selectedCasePaper?.id?.toString()
-                      );
-                  const existingRx = casePrescriptions.length > 0 ? casePrescriptions[casePrescriptions.length - 1] : null;
+                  const existingRx = casePaperPrescriptions.length > 0
+                    ? casePaperPrescriptions[casePaperPrescriptions.length - 1]
+                    : null;
                   if (existingRx?.id) {
                       await api.put(`/clinical/prescriptions/${existingRx.id}`, {
                           ...rxData,
@@ -1007,18 +1066,11 @@ const CasePapersTab = ({
           }}
       />
       
-      <CaseCostsPanel
-        open={costsOpen}
-        onClose={() => setCostsOpen(false)}
-        casePaperId={selectedCasePaper?.isNew ? null : selectedCasePaper?.id}
-        patientId={patientData?.id}
-        patientName={patientData?.name}
-      />
-
       <CasePaperInvoicesPanel
         open={invoiceListOpen}
         onClose={() => setInvoiceListOpen(false)}
-        casePaperId={selectedCasePaper?.isNew ? null : selectedCasePaper?.id}
+        invoices={casePaperInvoices}
+        loading={invoicesLoading}
         onNew={async () => {
           setInvoiceListOpen(false);
           if (selectedCasePaper?.isNew) { setInvoiceEditId('new'); return; }

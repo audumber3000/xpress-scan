@@ -576,6 +576,11 @@ class SubscriptionCoupon(Base):
     expiry_date = Column(DateTime, nullable=True)
     usage_limit = Column(Integer, default=100)
     used_count = Column(Integer, default=0)
+    # One promo at a time may be "featured", which surfaces it as a banner on
+    # every clinic's Subscription page instead of waiting for somebody to be
+    # told the code. Only ever honoured while the coupon is active, unexpired
+    # and has redemptions left.
+    is_featured = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 class SubscriptionPayment(Base):
@@ -588,7 +593,17 @@ class SubscriptionPayment(Base):
     provider_order_id = Column(String, nullable=True, index=True)
     provider_payment_id = Column(String, nullable=True, index=True)
     plan_name = Column(String, nullable=False)
-    amount = Column(Float, nullable=False)
+    amount = Column(Float, nullable=False)             # total charged, tax included
+    # The tax inside `amount`, so an invoice can show a GST line instead of one
+    # opaque figure. Nullable because every payment taken before this column
+    # existed has an unknown split, and guessing one retrospectively would put a
+    # number on a tax invoice that nobody actually charged.
+    tax_amount = Column(Float, nullable=True)
+    # Which promo code produced this payment, and what it took off. Without
+    # these a campaign cannot be attributed to revenue and the invoice cannot
+    # show the clinic the discount it was given.
+    coupon_code = Column(String, nullable=True)
+    discount_amount = Column(Float, nullable=True)
     currency = Column(String, default='INR')
     status = Column(String, nullable=False)            # paid, failed, refunded
     paid_at = Column(DateTime, nullable=True)

@@ -5,8 +5,8 @@ import { notify } from '../utils/notify';
 import { api } from '../utils/api';
 import { detectCountry, detectCountryAsync, flagEmoji } from '../utils/detectCountry';
 import ValidatedInput from '../components/forms/ValidatedInput';
+import VerifyContactStep from './onboarding/VerifyContactStep';
 import { isNonEmpty, isValidPhone } from '../utils/validators';
-import { getSubscriptionPricing } from '../utils/pricing';
 import { track, EVENTS } from '../analytics/track';
 import {
   Building2,
@@ -27,7 +27,13 @@ const STEPS = [
   { id: 1, title: 'Profile' },
   { id: 2, title: 'Clinic' },
   { id: 3, title: 'Setup' },
+  // The clinic exists by the time this shows: step 3 creates it, and the OTP
+  // endpoints are clinic-scoped. Verification therefore cannot happen any
+  // earlier than here without a second, clinic-less OTP path.
+  { id: 4, title: 'Verify' },
 ];
+
+const LAST_FORM_STEP = 3;
 
 const SPECIALIZATIONS = [
   'General Dentistry',
@@ -67,9 +73,14 @@ const ClinicOnboarding = () => {
       setUser(u);
       setFormData((prev) => ({
         ...prev,
-        clinic_email: u.email || "",
+        clinic_email: u.clinic?.email || u.email || "",
+        clinic_phone: u.clinic?.phone || prev.clinic_phone,
         full_name: u.name || u.full_name || "",
       }));
+      // Already has a clinic, so the form half is done and they are here
+      // because verification is still outstanding (App.jsx sends them back).
+      // Reloading the page must not be a way past a blocking step.
+      if (u.clinic_id) setCurrentStep(4);
     }
     // Fetch supported countries for the dropdown.
     // If the locale-detected country isn't in the supported list, snap back
@@ -159,15 +170,9 @@ const ClinicOnboarding = () => {
 
       localStorage.setItem('user', JSON.stringify(result.user));
       setAuthUser(result.user);
-      // Show the one-time welcome on the dashboard, and keep the recurring
-      // device-app upsell quiet for this first session so they don't stack —
-      // the welcome already carries a soft "get the app" nudge.
-      localStorage.setItem('mp_welcome_pending', '1');
-      try {
-        localStorage.setItem('mp_device_upsell_v1', JSON.stringify({ dismissedAt: Date.now() }));
-      } catch (_) { /* ignore */ }
-      track(EVENTS.ONBOARDING_COMPLETED, { clinic_id: result.user?.clinic_id });
-      navigate("/dashboard");
+      // The clinic now exists, so verification can happen. Everything below
+      // (the welcome flag, the redirect) waits until that step passes.
+      setCurrentStep(4);
     } catch (error) {
       notify.problem(error, "Onboarding failed.");
     } finally {
@@ -178,8 +183,25 @@ const ClinicOnboarding = () => {
   const handleNext = (e) => {
     e?.preventDefault();
     if (!isValidStep()) return;
-    if (currentStep < 3) setCurrentStep(currentStep + 1);
+    if (currentStep < LAST_FORM_STEP) setCurrentStep(currentStep + 1);
     else submitOnboarding();
+  };
+
+  /** Verification passed. Only now is onboarding actually over. */
+  const finishOnboarding = () => {
+    // Show the one-time welcome on the dashboard, and keep the recurring
+    // device-app upsell quiet for this first session so they don't stack: the
+    // welcome already carries a soft "get the app" nudge.
+    localStorage.setItem('mp_welcome_pending', '1');
+    try {
+      localStorage.setItem('mp_device_upsell_v1', JSON.stringify({ dismissedAt: Date.now() }));
+    } catch { /* private window, not worth failing signup over */ }
+    let clinicId = user?.clinic_id;
+    try {
+      clinicId = JSON.parse(localStorage.getItem('user') || '{}').clinic_id ?? clinicId;
+    } catch { /* fall back to the stale copy */ }
+    track(EVENTS.ONBOARDING_COMPLETED, { clinic_id: clinicId });
+    navigate('/dashboard');
   };
 
   if (!user) {
@@ -236,8 +258,6 @@ const ClinicOnboarding = () => {
   const inputCls =
     "w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent text-sm";
   const labelCls = "block text-sm font-medium text-gray-700 mb-1.5";
-  // Currency-aware pricing based on the chosen country (₹ for India, $ elsewhere).
-  const pricing = getSubscriptionPricing(formData.country);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#2a276e]/5 to-indigo-50 py-8 px-4">
@@ -455,9 +475,21 @@ const ClinicOnboarding = () => {
               </div>
             )}
 
+            {currentStep === 4 && (
+              <VerifyContactStep
+                phone={formData.clinic_phone}
+                email={formData.clinic_email}
+                onVerified={finishOnboarding}
+              />
+            )}
+
           </div>
 
-          {/* Nav buttons */}
+          {/* Nav buttons. Absent on the verify step: it owns its own actions,
+              and there is deliberately no way past it. Back is gone too, because
+              the clinic has already been created by this point and stepping
+              back into the form would offer to create it again. */}
+          {currentStep < 4 && (
           <div className="flex gap-3 mt-8 pt-6 border-t border-gray-100">
             {currentStep > 1 && (
               <button
@@ -483,6 +515,7 @@ const ClinicOnboarding = () => {
               {!loading && <ChevronRight className="w-4 h-4" />}
             </button>
           </div>
+          )}
         </div>
 
         <div className="text-center mt-6 text-xs text-gray-400">

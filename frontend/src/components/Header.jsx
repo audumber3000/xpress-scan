@@ -20,6 +20,7 @@ import SupportCard from "./support/SupportCard";
 import { SkeletonBox } from "./Skeleton";
 import GlobalSearchModal from "./GlobalSearchModal";
 import { useNavigationGuard } from "../contexts/NavigationGuardContext";
+import { planRank, planLabel, planAllowsBranches } from '../utils/plans';
 import { parseServerDate } from "../utils/datetime";
 
 /**
@@ -276,18 +277,60 @@ const Header = ({ onOpenMobileSidebar }) => {
    */
   const getPlanInfo = () => {
     const clinic = user?.clinic;
-    const isPro = clinic?.subscription_plan === 'professional';
-    const isTrial = !!clinic?.is_trial;
+    const plan = clinic?.subscription_plan;
+    // The plan's own name, from the catalogue. This used to print "Professional
+    // Plan" and "Starter Plan", neither of which is a plan any more: a clinic on
+    // Plus was told it was on Starter, and one on Growth was told Professional.
+    const name = planLabel(plan);
+    const isPaid = planRank(plan) > planRank('plus');
+    const state = clinic?.plan_state;
+    const days = clinic?.plan_state_days;
 
-    if (isTrial) {
-      const days = clinic.trial_days_remaining;
+    // The button carries the STATE, not just the plan name. A clinic that is
+    // view only because its trial ended was still reading a calm violet "Plus",
+    // which is the one moment the header has something urgent to say.
+    switch (state) {
+      case 'trial_ended':
+        return { title: 'Trial ended', subtitle: 'Choose a plan', tone: 'stopped' };
+      case 'lapsed':
+        return { title: 'Renewal failed', subtitle: 'Fix payment', tone: 'stopped' };
+      case 'grant_ended':
+        return { title: `${name} due`, subtitle: 'Choose a plan', tone: 'stopped' };
+      case 'renewal_due':
+      case 'grant_due':
+        return {
+          title: name,
+          subtitle: days ? `Renews in ${days} day${days === 1 ? '' : 's'}` : 'Renews soon',
+          tone: 'due',
+        };
+      default:
+        break;
+    }
+
+    if (clinic?.is_trial) {
+      const left = clinic.trial_days_remaining;
       return {
-        title: 'Trial Plan',
-        subtitle: typeof days === 'number' ? `${days} day${days === 1 ? '' : 's'} left` : 'Active',
+        title: `${name} trial`,
+        subtitle: typeof left === 'number'
+          ? (left === 0 ? 'Ends today' : `${left} day${left === 1 ? '' : 's'} left`)
+          : 'Active',
+        tone: 'trial',
       };
     }
-    if (isPro) return { title: 'Professional Plan', subtitle: 'Manage your plan' };
-    return { title: 'Starter Plan', subtitle: 'Upgrade your plan' };
+    return {
+      title: name,
+      subtitle: isPaid ? 'Manage your plan' : 'Compare plans',
+      tone: 'ok',
+    };
+  };
+
+  // Violet is the resting state. A stopped plan goes red and a due one amber,
+  // so the button reads at a glance instead of needing to be hovered.
+  const PLAN_BUTTON_TONES = {
+    ok: 'from-[#2a276e] to-[#5b57c4]',
+    trial: 'from-[#2a276e] to-[#5b57c4]',
+    due: 'from-amber-600 to-amber-500',
+    stopped: 'from-red-700 to-red-500',
   };
   const planInfo = getPlanInfo();
 
@@ -537,7 +580,8 @@ const Header = ({ onOpenMobileSidebar }) => {
                       </svg>
                       Add new branch
                     </div>
-                    {user?.clinic?.subscription_plan !== 'professional' && (
+                    {/* Padlock when the plan does not cover a second branch. */}
+                    {!planAllowsBranches(user?.clinic?.subscription_plan) && (
                       <svg className="w-3.5 h-3.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                       </svg>
@@ -577,7 +621,9 @@ const Header = ({ onOpenMobileSidebar }) => {
             icons; the profile menu's "Subscription & billing" covers it there. */}
         <button
           onClick={() => gnav("/subscription")}
-          className="hidden lg:flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-lg bg-gradient-to-r from-[#2a276e] to-[#5b57c4] hover:brightness-110 shadow-sm transition-all"
+          className={`hidden lg:flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-lg bg-gradient-to-r hover:brightness-110 shadow-sm transition-all ${
+            PLAN_BUTTON_TONES[planInfo.tone] || PLAN_BUTTON_TONES.ok
+          }`}
           title={`${planInfo.title} — ${planInfo.subtitle}`}
         >
           <span className="flex flex-col items-start leading-tight min-w-0">

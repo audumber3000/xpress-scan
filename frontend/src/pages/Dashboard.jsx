@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import WelcomeChecklistModal from '../components/WelcomeChecklistModal';
+import SetupGateModal from '../components/onboarding/SetupGateModal';
 import { useBreakpoint } from '../utils/useBreakpoint';
 
 import { useDashboardData } from './dashboard/useDashboardData';
@@ -36,7 +36,10 @@ const Dashboard = () => {
   const [showAssistant, setShowAssistant] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
 
-  // One-time welcome right after onboarding (flag set by ClinicOnboarding).
+  // The guided setup, once, right after onboarding (flag set by
+  // ClinicOnboarding once verification passes). The modal decides for itself
+  // whether there is anything left worth asking about, and closes immediately
+  // if the clinic is already configured.
   useEffect(() => {
     if (localStorage.getItem('mp_welcome_pending') === '1') {
       localStorage.removeItem('mp_welcome_pending');
@@ -156,7 +159,7 @@ const Dashboard = () => {
         />
       )}
 
-      <WelcomeChecklistModal open={showWelcome} onClose={() => setShowWelcome(false)} />
+      <SetupGateModal open={showWelcome} onClose={() => setShowWelcome(false)} />
 
       <SupportMenu onOpenAssistant={() => setShowAssistant(true)} />
       <AssistantPanel open={showAssistant} onClose={() => setShowAssistant(false)} />

@@ -32,6 +32,7 @@ from datetime import datetime as _dt
 from pydantic import BaseModel
 from domains.communication.services.email_service import EmailService
 from core.posthog_client import track_event, group_identify, EVENTS
+from core import plans
 from core.audit import (record_audit, LOGIN_SUCCEEDED, LOGIN_FAILED,
                         LOGIN_BLOCKED, LOGOUT, PASSWORD_CHANGED)
 
@@ -91,10 +92,47 @@ def _signed_out_reason(db: Session, token: str) -> str:
     return "Your session has ended. Please sign in again."
 
 
+# Clinics created from this date onward must verify a phone and an email before
+# they can use the app; see the last step of ClinicOnboarding. Anything older is
+# grandfathered, because switching a blocking check on retrospectively would
+# wall every existing customer out of their own clinic on deploy day. Move this
+# forward, never backward.
+SIGNUP_VERIFICATION_FROM = _dt(2026, 8, 24)
+
+
+def _verification_required(clinic: Clinic) -> bool:
+    """Does this clinic still owe us the signup verification step?
+
+    Either contact counts. The step sends one code to both, so having verified
+    one is proof the person completed it, and a clinic whose email later bounces
+    should not suddenly be locked out.
+    """
+    created = getattr(clinic, "created_at", None)
+    if not created or created < SIGNUP_VERIFICATION_FROM:
+        return False
+    return not (clinic.security_phone_verified or clinic.security_email_verified)
+
+
 def _enrich_clinic_dto(db: Session, clinic: Clinic) -> ClinicResponseDTO:
     """Build a ClinicResponseDTO and attach the owner's subscription info
     (plan_name, is_trial, plan_ends_at, trial_days_remaining) for header display."""
     dto = ClinicResponseDTO.from_orm(clinic)
+    dto.security_verification_required = _verification_required(clinic)
+    # Defaulted here so it is present on EVERY path out of this function, including
+    # the two early returns below. A field that is sometimes absent is worse than
+    # one that is sometimes stale: the reader falls through to a different field
+    # and the two clients disagree about which plan the clinic is on.
+    dto.effective_plan = plans.key_of(clinic.subscription_plan)
+    try:
+        from core import plan_state as _ps
+        _state = _ps.for_clinic(db, clinic)
+        dto.plan_state = _state.get("state")
+        dto.plan_state_days = _state.get("days_left")
+        dto.plan_state_title = _state.get("title")
+    except Exception:
+        # A billing read must never break /auth/me. Without a state the header
+        # simply shows no warning, which is the safe way to be wrong.
+        pass
     owner = (
         db.query(User)
         .join(user_clinics, user_clinics.c.user_id == User.id)
@@ -130,17 +168,34 @@ def _enrich_clinic_dto(db: Session, clinic: Clinic) -> ClinicResponseDTO:
     dto.is_trial = bool(getattr(sub, "is_trial", False) and sub.status == "active" and not is_expired)
 
     # Eligible to start a trial only if one was never used and they aren't
-    # currently on an active paid/trial plan.
-    is_active_paid = bool(sub.status == "active" and sub.plan_name != "free" and not is_expired)
+    # already paying. Kept deliberately identical to the same computation in
+    # subscriptions.py::get_current_subscription — the header badge and the
+    # subscription page reading this differently is exactly the sort of thing
+    # nobody notices until a customer asks why the trial button vanished.
+    #
+    # `provider == 'migration'` is excluded because a plan we handed out when
+    # the pricing changed is not a plan they bought, and must not consume the
+    # trial they have never taken.
+    is_active_paid = bool(
+        sub.status == "active"
+        and not is_expired
+        and sub.provider != "migration"
+        and plans.rank(sub.plan_name) > plans.rank(plans.DEFAULT_PLAN)
+    )
     dto.trial_available = not getattr(sub, "trial_used", False) and not is_active_paid
 
-    # Auto-downgrade: if expired, reflect 'free' so all clients see the right plan
-    if is_expired and clinic.subscription_plan != 'free':
+    # Auto-downgrade: an expired plan falls back to the entry plan so every
+    # client (web, mobile, support tool) sees the same thing.
+    # Same helper the subscription endpoint uses, so the header badge and the
+    # Subscription page cannot disagree about which plan a clinic is on.
+    effective = plans.effective_plan(sub.plan_name, sub.status, sub.current_end, now)
+    dto.effective_plan = effective
+    if is_expired and plans.key_of(clinic.subscription_plan) != effective:
         was_trial = bool(getattr(sub, "is_trial", False))
-        clinic.subscription_plan = 'free'
+        clinic.subscription_plan = effective
         sub.status = 'expired'
         db.commit()
-        dto.subscription_plan = 'free'
+        dto.subscription_plan = effective
         # Fire a survey-trigger event once, when the downgrade actually happens.
         actor = str(owner.id) if owner else f"clinic_{clinic.id}"
         track_event(
@@ -232,15 +287,25 @@ def _get_clinic_for_user(db: Session, user) -> Optional[ClinicResponseDTO]:
 def _seed_clinic_defaults(db: Session, clinic_id: int):
     """Seed wallet credit, default procedures, and clinical settings for a new clinic."""
     from models import TreatmentType, ClinicalSetting, NotificationPreference
-    from core.wallet_service import credit as wallet_credit
+    from core.wallet_service import credit as wallet_credit, WELCOME_CREDIT
 
-    wallet_credit(db, clinic_id, 50.0, "Welcome bonus — new clinic top-up")
+    wallet_credit(db, clinic_id, WELCOME_CREDIT, "Welcome credit for a new clinic")
 
-    # Default-enable platform summary notifications. Daily / weekly / monthly
-    # are system messages (not billed against the wallet) and should be on for
-    # every clinic out of the box. Without these rows the support-tool UI shows
-    # them as "disabled" even though delivery bypasses prefs.
-    for event_type in ("daily_summary", "molarplus_weekly_report_mk", "molarplus_monthly_report_mk"):
+    # Platform summary rows are seeded so the preferences screen and the support
+    # tool have something to show from day one. Weekly and monthly ship ON.
+    #
+    # The DAILY summary ships OFF, deliberately. It is a WhatsApp message to
+    # every clinic owner every evening, paid for by us rather than deducted from
+    # the clinic's wallet, which makes it the largest recurring notification
+    # cost we carry and the one nobody asked for. A clinic that wants it turns
+    # it on in Control Center -> Notifications -> Preferences, and only then
+    # does daily_summary_broadcast_job pick that clinic up.
+    summary_defaults = {
+        "daily_summary": False,
+        "molarplus_weekly_report_mk": True,
+        "molarplus_monthly_report_mk": True,
+    }
+    for event_type, enabled_by_default in summary_defaults.items():
         existing = (
             db.query(NotificationPreference)
             .filter(
@@ -254,7 +319,7 @@ def _seed_clinic_defaults(db: Session, clinic_id: int):
                 clinic_id=clinic_id,
                 event_type=event_type,
                 channels=["whatsapp"],
-                is_enabled=True,
+                is_enabled=enabled_by_default,
             ))
 
     procedures = [

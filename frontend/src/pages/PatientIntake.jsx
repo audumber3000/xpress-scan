@@ -5,6 +5,7 @@ import { api, getFriendlyErrorMessage } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
 import { getCurrencySymbol } from "../utils/currency";
 import AgeOrDobField, { computeAgeFromDob } from "../components/patient/AgeOrDobField";
+import { track, EVENTS } from '../analytics/track';
 
 const PatientIntake = () => {
   const { user } = useAuth();
@@ -207,6 +208,7 @@ const PatientIntake = () => {
       
       // 1. Save patient to database
       await api.post("/patients/", patientPayload);
+      track(EVENTS.PATIENT_CREATED, { source: 'intake' });
 
       // 3. Show success and redirect
       notify.done(`${formData.name} has been added 🎉`);

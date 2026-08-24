@@ -48,7 +48,7 @@ const LogsTab = ({ logs, logsTotal, logsPage, logsFilter, setLogsFilter, setLogs
     </div>
 
     <div className="overflow-x-auto">
-      <table className="w-full text-left">
+      <table className="w-full min-w-[760px] text-left">
         <thead>
           <tr className="border-b border-gray-100 bg-gray-50/50">
             {['Time', 'Channel', 'Recipient', 'Event', 'Status', 'Cost'].map(h => (

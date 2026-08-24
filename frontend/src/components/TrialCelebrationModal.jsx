@@ -12,7 +12,7 @@ import {
   X,
 } from 'lucide-react';
 
-// The highest-value Pro-only features (the ones locked on the Free plan) —
+// The highest-value Pro-only features (the ones Plus does not cover) —
 // keep this short and punchy so the popup stays scannable.
 const UNLOCKED_FEATURES = [
   { icon: Bot,          label: 'AI Report Generation', desc: 'Draft clinical reports in seconds' },

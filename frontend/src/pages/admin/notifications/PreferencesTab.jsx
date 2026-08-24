@@ -1,6 +1,6 @@
 import React from 'react';
 import { Loader2, Send } from 'lucide-react';
-import { EVENT_LABELS, EVENT_AUDIENCE, CHANNEL_META } from './constants';
+import { EVENT_LABELS, EVENT_AUDIENCE, EVENT_NOTES, CHANNEL_META } from './constants';
 
 const AUTOMATED_EVENTS = [
   { event_type: 'molarplus_app_welcome',            channels: ['whatsapp', 'email'] },
@@ -30,8 +30,8 @@ const PreferencesTab = ({ preferences, savingPrefs, handleSavePreferences, updat
   <>
     {/* Clinic event preferences */}
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between p-5 border-b border-gray-50">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-3 p-5 border-b border-gray-50">
+        <div className="min-w-[12rem] flex-1">
           <h3 className="font-semibold text-gray-900">Notification Preferences</h3>
           <p className="text-xs text-gray-400 mt-0.5">Choose channel, enable/disable, and test each event.</p>
         </div>
@@ -46,7 +46,9 @@ const PreferencesTab = ({ preferences, savingPrefs, handleSavePreferences, updat
       </div>
 
       {/* Table header */}
-      <div className="grid grid-cols-6 gap-3 px-5 py-3 bg-gray-50 border-b border-gray-100">
+      {/* Hidden on phones: below sm each row is a stacked card, so a column
+          header would be labelling columns that are not there. */}
+      <div className="hidden sm:grid grid-cols-6 gap-3 px-5 py-3 bg-gray-50 border-b border-gray-100">
         <div className="col-span-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">Event</div>
         {['whatsapp', 'email', 'sms'].map(ch => (
           <div key={ch} className={`text-xs font-semibold uppercase tracking-wider text-center ${ch === 'sms' ? 'text-gray-300' : CHANNEL_META[ch].color}`}>
@@ -64,12 +66,15 @@ const PreferencesTab = ({ preferences, savingPrefs, handleSavePreferences, updat
           preferences.map(pref => {
             const audience = EVENT_AUDIENCE[pref.event_type] || 'patient';
             return (
-              <div key={pref.event_type} className="grid grid-cols-6 gap-3 px-5 py-4 hover:bg-gray-50/50 transition-colors items-center">
-                <div className="col-span-2">
+              <div key={pref.event_type} className="flex flex-col gap-3 sm:grid sm:grid-cols-6 sm:gap-3 px-5 py-4 hover:bg-gray-50/50 transition-colors sm:items-center">
+                <div className="sm:col-span-2">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-medium text-gray-800">{EVENT_LABELS[pref.event_type] || pref.event_type}</p>
                     <AudienceBadge audience={audience} />
                   </div>
+                  {EVENT_NOTES[pref.event_type] && (
+                    <p className="text-xs text-gray-400 mt-1">{EVENT_NOTES[pref.event_type]}</p>
+                  )}
                   <div className="flex items-center gap-2 mt-1.5">
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
@@ -83,11 +88,17 @@ const PreferencesTab = ({ preferences, savingPrefs, handleSavePreferences, updat
                     <span className="text-xs text-gray-400">{pref.is_enabled ? 'Enabled' : 'Disabled'}</span>
                   </div>
                 </div>
+                <div className="flex items-center gap-5 sm:contents">
                 {['whatsapp', 'email', 'sms'].map(ch => {
                   const checked = (pref.channels || []).includes(ch);
                   const isSmsLocked = ch === 'sms';
                   return (
-                    <div key={ch} className="flex items-center justify-center">
+                    <div key={ch} className="flex items-center gap-2 sm:justify-center">
+                      {/* The column header is hidden on phones, so each toggle
+                          names itself instead. */}
+                      <span className={`sm:hidden text-xs font-semibold ${isSmsLocked ? 'text-gray-300' : CHANNEL_META[ch].color}`}>
+                        {CHANNEL_META[ch].label}
+                      </span>
                       {isSmsLocked ? (
                         <div title="SMS coming soon" className="w-5 h-5 rounded flex items-center justify-center border-2 border-gray-200 bg-gray-50 cursor-not-allowed opacity-40">
                           <svg width="9" height="12" viewBox="0 0 9 12" fill="none">
@@ -113,7 +124,8 @@ const PreferencesTab = ({ preferences, savingPrefs, handleSavePreferences, updat
                     </div>
                   );
                 })}
-                <div className="flex items-center justify-center">
+                </div>
+                <div className="flex sm:items-center sm:justify-center">
                   <button
                     onClick={() => openTestDrawer(pref)}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#29828a] border border-[#29828a]/30 bg-[#29828a]/5 hover:bg-[#29828a]/10 rounded-lg transition-all"
@@ -137,22 +149,22 @@ const PreferencesTab = ({ preferences, savingPrefs, handleSavePreferences, updat
         </p>
       </div>
 
-      <div className="grid grid-cols-6 gap-3 px-5 py-3 bg-gray-50 border-b border-gray-100">
+      <div className="hidden sm:grid grid-cols-6 gap-3 px-5 py-3 bg-gray-50 border-b border-gray-100">
         <div className="col-span-5 text-xs font-semibold text-gray-400 uppercase tracking-wider">Event</div>
         <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider text-center">Test</div>
       </div>
 
       <div className="divide-y divide-gray-50">
         {AUTOMATED_EVENTS.map(pref => (
-          <div key={pref.event_type} className="grid grid-cols-6 gap-3 px-5 py-4 hover:bg-gray-50/50 transition-colors items-center">
-            <div className="col-span-5">
+          <div key={pref.event_type} className="flex flex-col gap-3 sm:grid sm:grid-cols-6 sm:gap-3 px-5 py-4 hover:bg-gray-50/50 transition-colors sm:items-center">
+            <div className="sm:col-span-5">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="text-sm font-medium text-gray-800">{EVENT_LABELS[pref.event_type] || pref.event_type}</p>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-600 border border-violet-100">🤖 Auto</span>
                 <span className="text-[10px] font-mono text-gray-300">{pref.event_type}</span>
               </div>
             </div>
-            <div className="flex items-center justify-center">
+            <div className="flex sm:items-center sm:justify-center">
               <button
                 onClick={() => openTestDrawer({ ...pref, is_enabled: true })}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#29828a] border border-[#29828a]/30 bg-[#29828a]/5 hover:bg-[#29828a]/10 rounded-lg transition-all"

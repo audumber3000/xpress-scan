@@ -4,6 +4,8 @@ import { ChevronLeft, Pill, Layers } from 'lucide-react';
 import { useHeader } from '../../contexts/HeaderContext';
 import TreatmentsPricing from '../TreatmentsPricing';
 import MedicationGroupsTab from '../../components/vendors/MedicationGroupsTab';
+import SectionTabs from '../../components/common/SectionTabs';
+import SectionHeader from '../../components/common/SectionHeader';
 
 /**
  * Control Center → Medications.
@@ -52,31 +54,12 @@ const Medications = () => {
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-y-auto custom-scrollbar p-6 lg:p-8 pb-10">
       <div className="mb-6">
-        <div className="mb-5">
-          <h2 className="text-xl font-bold text-gray-900">Medications</h2>
-          <p className="text-sm text-gray-500 mt-0.5">
-            The drugs you prescribe, and the sets you apply in one tap on a case paper.
-          </p>
-        </div>
+        <SectionHeader
+          title="Medications"
+          subtitle="The drugs you prescribe, and the sets you apply in one tap on a case paper."
+        />
 
-        <div className="border-b border-gray-200">
-          <div className="flex gap-1 -mb-px">
-            {TABS.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                onClick={() => setTab(id)}
-                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors rounded-t-lg ${
-                  tab === id
-                    ? 'border-[#29828a] text-[#29828a] bg-white'
-                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50'
-                }`}
-              >
-                <Icon size={14} />
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <SectionTabs tabs={TABS} active={tab} onChange={setTab} />
       </div>
 
       {tab === 'catalogue'

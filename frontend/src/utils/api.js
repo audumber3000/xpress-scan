@@ -82,6 +82,20 @@ export const authenticatedFetch = async (url, options = {}) => {
         err.isAuthError = true;  // flag so callers can distinguish 401 from network errors
         throw err;
       }
+      // 402: the clinic's plan has stopped and the app is view-only. Announced
+      // as an event rather than handled here, for the same reason the 401 above
+      // is: AuthContext imports this module, so importing a component back
+      // would be a cycle. One listener turns this into one modal, wherever the
+      // blocked write came from.
+      if (response.status === 402 && errorData.detail?.reason === 'plan_inactive') {
+        window.dispatchEvent(new CustomEvent('plan:blocked', { detail: errorData.detail }));
+        const blocked = new Error(errorData.detail.title || 'Your plan has stopped.');
+        blocked.status = 402;
+        blocked.detail = errorData.detail;
+        blocked.isPlanBlocked = true;
+        throw blocked;
+      }
+
       console.error('API Error Response:', errorData);
       
       // Handle validation errors from FastAPI
@@ -224,6 +238,7 @@ export const getFriendlyErrorMessage = (error, fallback = "Something went wrong.
 
   // The 4xx family, in the user's terms. Each of these is a situation, not a
   // malfunction, so it gets its own sentence rather than the generic one.
+  if (status === 402) return error.detail?.title || "Your plan has stopped. Choose a plan to carry on.";
   if (status === 401) return "Your session has ended. Please sign in again.";
   if (status === 403) return "You don't have permission to do that. Ask your clinic owner if you need it.";
   if (status === 404) return "That isn't there any more. It may have been deleted or moved.";

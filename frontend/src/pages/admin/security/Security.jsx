@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ShieldCheck, Smartphone, Mail, CheckCircle2, AlertCircle, Loader2, X, Pencil,
+  ShieldCheck, Smartphone, Mail, CheckCircle2, AlertCircle, Loader2, X, Pencil, Plus,
 } from 'lucide-react';
 import { notify } from '../../../utils/notify';
 import { api } from '../../../utils/api';
@@ -17,9 +17,43 @@ import MasterPasswordCard from './MasterPasswordCard';
  */
 
 const CHANNELS = {
-  whatsapp: { field: 'security_phone', verifiedField: 'security_phone_verified', label: 'Phone', Icon: Smartphone, placeholder: '9876543210', help: 'We send a WhatsApp code to verify this number.' },
-  email: { field: 'security_email', verifiedField: 'security_email_verified', label: 'Email', Icon: Mail, placeholder: 'owner@clinic.com', help: 'We email a code to verify this address.' },
+  whatsapp: {
+    field: 'security_phone', verifiedField: 'security_phone_verified',
+    label: 'Phone', addLabel: 'Add phone', Icon: Smartphone, placeholder: '9876543210',
+    help: 'We send a WhatsApp code to verify this number.',
+    emptyHelp: 'Add the number first. We then send a WhatsApp code to verify it.',
+  },
+  email: {
+    field: 'security_email', verifiedField: 'security_email_verified',
+    label: 'Email', addLabel: 'Add email', Icon: Mail, placeholder: 'owner@clinic.com',
+    help: 'We email a code to verify this address.',
+    emptyHelp: 'Add the address first. We then email a code to verify it.',
+  },
 };
+
+/**
+ * Add, then Verify, then done — spelled out because the page used to show only
+ * the second half of that. With nothing on file there was a "Verify" button
+ * that never appeared and a pencil the size of a full stop, so the first step
+ * was the one nobody could find.
+ *
+ * @param {number} step 1 = nothing on file, 2 = on file but unverified, 3 = verified
+ */
+const StepTrail = ({ step }) => (
+  <div className="flex items-center gap-1.5 mt-2 text-[11px] font-semibold">
+    {['Add', 'Verify', 'Verified'].map((label, i) => {
+      const n = i + 1;
+      return (
+        <React.Fragment key={label}>
+          {i > 0 && <span className="text-gray-300 font-normal">&rsaquo;</span>}
+          <span className={step > n ? 'text-emerald-600' : step === n ? 'text-[#29828a]' : 'text-gray-300'}>
+            {label}
+          </span>
+        </React.Fragment>
+      );
+    })}
+  </div>
+);
 
 const Security = () => {
   const [data, setData] = useState(null);
@@ -137,11 +171,18 @@ const Security = () => {
                       </div>
                     ) : (
                       <div className="flex items-center gap-2 mt-0.5">
-                        <p className="text-sm text-gray-600 truncate">{value || <span className="text-gray-400 italic">Not set</span>}</p>
-                        <button onClick={() => startEdit(channel)} className="text-gray-400 hover:text-[#29828a]"><Pencil size={13} /></button>
+                        {value ? (
+                          <>
+                            <p className="text-sm text-gray-600 truncate">{value}</p>
+                            <button onClick={() => startEdit(channel)} className="text-gray-400 hover:text-[#29828a]"><Pencil size={13} /></button>
+                          </>
+                        ) : (
+                          <p className="text-sm text-gray-400 italic">Not set</p>
+                        )}
                       </div>
                     )}
-                    <p className="text-xs text-gray-400 mt-1">{meta.help}</p>
+                    <p className="text-xs text-gray-400 mt-1">{value ? meta.help : meta.emptyHelp}</p>
+                    {!isEditing && <StepTrail step={verified ? 3 : value ? 2 : 1} />}
                   </div>
                 </div>
 
@@ -150,17 +191,29 @@ const Security = () => {
                     <span className="flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100">
                       <CheckCircle2 size={12} /> Verified
                     </span>
-                  ) : (
+                  ) : value ? (
                     <span className="flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-600 border border-amber-100">
                       <AlertCircle size={12} /> Unverified
+                    </span>
+                  ) : (
+                    // Not the same thing as unverified, and saying so is the
+                    // whole point: nothing is on file yet.
+                    <span className="flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-gray-50 text-gray-400 border border-gray-200">
+                      <AlertCircle size={12} /> Not set
                     </span>
                   )}
                   {/* Solid, not outlined: verifying is the one thing this page
                       exists for, so it should read as the primary action. */}
-                  {!verified && value && !isEditing && (
-                    <button onClick={() => sendCode(channel)} disabled={sending === channel} className="text-xs font-semibold bg-[#29828a] hover:bg-[#216b71] text-white rounded-lg px-4 py-2 transition-colors disabled:opacity-50">
-                      {sending === channel ? 'Sending…' : 'Verify'}
-                    </button>
+                  {!verified && !isEditing && (
+                    value ? (
+                      <button onClick={() => sendCode(channel)} disabled={sending === channel} className="text-xs font-semibold bg-[#29828a] hover:bg-[#216b71] text-white rounded-lg px-4 py-2 transition-colors disabled:opacity-50">
+                        {sending === channel ? 'Sending…' : 'Verify'}
+                      </button>
+                    ) : (
+                      <button onClick={() => startEdit(channel)} className="flex items-center gap-1.5 text-xs font-semibold bg-[#29828a] hover:bg-[#216b71] text-white rounded-lg px-4 py-2 transition-colors">
+                        <Plus size={13} /> {meta.addLabel}
+                      </button>
+                    )
                   )}
                 </div>
               </div>

@@ -61,6 +61,8 @@ def _register_jobs(sched: AsyncIOScheduler) -> None:
         clinic_morning_digest_job,
         clinic_day_close_job,
         dues_ageing_job,
+        wallet_low_balance_job,
+        plan_limit_nudge_job,
         trial_lifecycle_job,
         account_verification_job,
     )
@@ -75,12 +77,13 @@ def _register_jobs(sched: AsyncIOScheduler) -> None:
 
     # Notification-centre jobs.
     #
-    # All four run HOURLY on purpose, even though each is conceptually a daily
+    # They all run HOURLY on purpose, even though each is conceptually a daily
     # notification. The scheduler is pinned to Asia/Kolkata while clinics are
     # spread across timezones, so a fixed hour here is the wrong hour for most
     # of them. Each job wakes every hour and picks only the clinics whose OWN
-    # local clock has reached the target hour. Offset to :05, :10, :15 so four
-    # full-table sweeps don't land on the same second as the platform job.
+    # local clock has reached the target hour. Each is offset by a few minutes
+    # so the full-table sweeps don't land on the same second as each other or
+    # as the platform job.
     sched.add_job(
         clinic_morning_digest_job,
         trigger="cron",
@@ -102,6 +105,22 @@ def _register_jobs(sched: AsyncIOScheduler) -> None:
         trigger="cron",
         minute=15,
         id="clinic_dues_ageing",
+        replace_existing=True,
+    )
+
+    sched.add_job(
+        wallet_low_balance_job,
+        trigger="cron",
+        minute=18,
+        id="clinic_wallet_low_balance",
+        replace_existing=True,
+    )
+
+    sched.add_job(
+        plan_limit_nudge_job,
+        trigger="cron",
+        minute=19,
+        id="clinic_plan_limit_nudge",
         replace_existing=True,
     )
 
