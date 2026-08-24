@@ -28,6 +28,18 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./backend/uploads:/app/uploads
+    # Everything in .env reaches the container. This used to be a hand-written
+    # allow-list, which silently drifted: preflight.py grew to require
+    # CASHFREE_APP_ID, CASHFREE_SECRET_KEY and BACKEND_URL, the list was never
+    # updated, and the container exited 1 before uvicorn ever started even
+    # though two of the three were sitting in .env the whole time.
+    env_file:
+      - path: .env
+        required: false
+    # These deliberately come AFTER env_file, which is what lets them win.
+    # .env is written for running the app on the host, so its DATABASE_URL and
+    # REDIS_URL point at localhost — inside a container that is the container
+    # itself. Both have to be re-pointed at the compose service names.
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379/0
@@ -37,6 +49,14 @@ services:
       - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
       - R2_ENDPOINT_URL=${R2_ENDPOINT_URL}
       - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      # Where this backend is reachable. Defaulted rather than required, so a
+      # fresh clone comes up without anyone having to edit .env first.
+      - BACKEND_URL=${BACKEND_URL:-http://localhost:8000}
+      # Signup verification needs Nexus, which is not part of this stack, so on
+      # a developer machine both OTP channels fail and signup cannot complete.
+      # Set OTP_DEV_ECHO=1 in .env and an undeliverable code is written to the
+      # backend log instead. Empty by default; never set this in production.
+      - OTP_DEV_ECHO=${OTP_DEV_ECHO:-}
     ports:
       - "8000:8000"
     depends_on:
@@ -50,10 +70,22 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     command: rq worker --url redis://redis:6379/0 high default low
+    # Same story as the backend. The worker skips preflight (command overrides
+    # the image CMD) so it starts either way, but a job that needs R2, MSG91 or
+    # Zoho would only fail once it was picked off the queue.
+    env_file:
+      - path: .env
+        required: false
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379/0
       - FIREBASE_SERVICE_ACCOUNT_PATH=${FIREBASE_SERVICE_ACCOUNT_PATH}
+      - BACKEND_URL=${BACKEND_URL:-http://localhost:8000}
+      # Signup verification needs Nexus, which is not part of this stack, so on
+      # a developer machine both OTP channels fail and signup cannot complete.
+      # Set OTP_DEV_ECHO=1 in .env and an undeliverable code is written to the
+      # backend log instead. Empty by default; never set this in production.
+      - OTP_DEV_ECHO=${OTP_DEV_ECHO:-}
     depends_on:
       - redis
       - db

@@ -366,6 +366,41 @@ run_migration "doctor_time_off_idx" "CREATE INDEX IF NOT EXISTS ix_doctor_time_o
 run_migration "appointment_waitlist" "CREATE TABLE IF NOT EXISTS appointment_waitlist (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL REFERENCES clinics(id), patient_id INTEGER REFERENCES patients(id), patient_name VARCHAR NOT NULL, patient_phone VARCHAR, doctor_id INTEGER REFERENCES users(id), treatment VARCHAR, duration INTEGER NOT NULL DEFAULT 30, preferred_from DATE, preferred_to DATE, note VARCHAR, status VARCHAR NOT NULL DEFAULT 'waiting', booked_appointment_id INTEGER REFERENCES appointments(id), created_by INTEGER REFERENCES users(id), created_at TIMESTAMP DEFAULT NOW())"
 run_migration "appointment_waitlist_idx" "CREATE INDEX IF NOT EXISTS ix_appointment_waitlist_clinic ON appointment_waitlist (clinic_id, status)"
 
+# The tax inside a subscription payment, so a GST invoice can itemise it rather
+# than printing one opaque total. Nullable: payments taken before this column
+# existed have an unknown split and are shown without a tax line.
+run_migration "subpay_tax_amount" "ALTER TABLE subscription_payments ADD COLUMN IF NOT EXISTS tax_amount DOUBLE PRECISION"
+
+# Which promo code produced a payment, and what it took off. Nullable: every
+# payment taken before promo attribution existed has neither.
+run_migration "subpay_coupon_code"     "ALTER TABLE subscription_payments ADD COLUMN IF NOT EXISTS coupon_code VARCHAR"
+run_migration "subpay_discount_amount" "ALTER TABLE subscription_payments ADD COLUMN IF NOT EXISTS discount_amount DOUBLE PRECISION"
+
+# The one promo, if any, shown as a banner on every clinic's Subscription page.
+# Defaults FALSE so shipping this feature does not start advertising an old code.
+run_migration "coupon_is_featured"    "ALTER TABLE subscription_coupons ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE"
+
+# ── One-shot data migrations ────────────────────────────────────────────────
+# Everything above is idempotent DDL that can safely run on every deploy. The
+# two below CHANGE DATA, and re-running them would undo decisions clinics made
+# after the first run: an owner who switched the daily summary back on would
+# find it off again the next time we deployed. So they are gated on a marker
+# row and run exactly once.
+run_migration "data_migration_ledger" "CREATE TABLE IF NOT EXISTS applied_data_migrations (key VARCHAR PRIMARY KEY, applied_at TIMESTAMP DEFAULT NOW())"
+
+# Daily summary becomes opt-in. It is a WhatsApp message to every clinic owner
+# every evening, on our tab rather than theirs, and almost nobody asked for it.
+# daily_summary_broadcast_job now skips any clinic whose row is off or missing,
+# so this switch-off is what stops the spend for the clinics already on it.
+run_migration "daily_summary_optin" "DO \$do\$ BEGIN IF NOT EXISTS (SELECT 1 FROM applied_data_migrations WHERE key = 'daily_summary_optin_v1') THEN UPDATE notification_preferences SET is_enabled = FALSE WHERE event_type = 'daily_summary'; INSERT INTO applied_data_migrations (key) VALUES ('daily_summary_optin_v1'); END IF; END \$do\$;"
+
+# Welcome credit drops from 50 to 10 (core/wallet_service.WELCOME_CREDIT).
+# Existing wallets are pulled back to the new figure, but ONLY the ones still
+# sitting on free money: `last_topup_at IS NULL` excludes every clinic that has
+# ever paid us, and `balance > 10` means this can only ever take back credit we
+# gave away, never credit somebody bought, and never top anybody up.
+run_migration "wallet_welcome_credit_10" "DO \$do\$ BEGIN IF NOT EXISTS (SELECT 1 FROM applied_data_migrations WHERE key = 'wallet_welcome_credit_10_v1') THEN UPDATE notification_wallets SET balance = 10 WHERE last_topup_at IS NULL AND balance > 10; INSERT INTO applied_data_migrations (key) VALUES ('wallet_welcome_credit_10_v1'); END IF; END \$do\$;"
+
 # ── Schema migration check (run against RDS) ──────────────────────────────────
 echo ""
 echo "▶ Running schema migration check against RDS..."
