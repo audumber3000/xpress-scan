@@ -153,6 +153,38 @@ class Subscription(Base):
     clinic = relationship("Clinic")
 
 
+class SubscriptionPayment(Base):
+    """Settled subscription payments.
+
+    Modelled here for the first time so a promo code can be traced to the
+    clinics that redeemed it and the revenue it actually brought. Read-only from
+    the support tool: the clinic app owns every write to this table.
+
+    `tax_amount`, `coupon_code` and `discount_amount` are recent additions, so
+    every payment taken before them has NULLs here. Treat a NULL as unknown
+    rather than as zero when totalling anything.
+    """
+    __tablename__ = 'subscription_payments'
+    id = Column(Integer, primary_key=True)
+    subscription_id = Column(Integer, nullable=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
+    user_id = Column(Integer, nullable=True)
+    provider = Column(String)
+    provider_order_id = Column(String, nullable=True)
+    provider_payment_id = Column(String, nullable=True)
+    plan_name = Column(String)
+    amount = Column(Float)
+    tax_amount = Column(Float, nullable=True)
+    coupon_code = Column(String, nullable=True)
+    discount_amount = Column(Float, nullable=True)
+    currency = Column(String)
+    status = Column(String)
+    paid_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime)
+
+    clinic = relationship("Clinic")
+
+
 class SubscriptionCoupon(Base):
     __tablename__ = 'subscription_coupons'
     id = Column(Integer, primary_key=True)
@@ -163,6 +195,11 @@ class SubscriptionCoupon(Base):
     expiry_date = Column(DateTime, nullable=True)
     usage_limit = Column(Integer, default=100)
     used_count = Column(Integer, default=0)
+    # One promo at a time may be "featured", which surfaces it as a banner on
+    # every clinic's Subscription page instead of waiting for somebody to be
+    # told the code. Only ever honoured while the coupon is active, unexpired
+    # and has redemptions left.
+    is_featured = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 class ReferralCode(Base):

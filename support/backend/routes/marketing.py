@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from database import get_db
-from models import User, SubscriptionCoupon, ReferralCode, Clinic, GrowthLead, MarketingCampaign, PushToken
+from models import User, SubscriptionCoupon, SubscriptionPayment, ReferralCode, Clinic, GrowthLead, MarketingCampaign, PushToken
 from .auth import get_current_admin
 from services.notification_service import notification_service
 from services.marketing_template_registry import (
@@ -25,6 +25,7 @@ class PromoCreate(BaseModel):
     expiry_date: Optional[str] = None
     usage_limit: int = 100
     is_active: bool = True
+    is_featured: bool = False
 
 class PromoUpdate(BaseModel):
     discount_percent: Optional[float] = None
@@ -32,6 +33,7 @@ class PromoUpdate(BaseModel):
     expiry_date: Optional[str] = None
     usage_limit: Optional[int] = None
     is_active: Optional[bool] = None
+    is_featured: Optional[bool] = None
 
 class ReferralCreate(BaseModel):
     code: Optional[str] = None  # If none, auto-generate
@@ -193,8 +195,17 @@ def _promo_dict(p):
         "expiry_date": p.expiry_date.isoformat() if p.expiry_date else None,
         "usage_limit": p.usage_limit,
         "used_count": p.used_count,
+        "is_featured": bool(getattr(p, "is_featured", False)),
         "created_at": p.created_at.isoformat() if p.created_at else None,
     }
+
+
+def _clear_other_featured(db: Session, except_id: int = None) -> None:
+    """Only one promo may be featured at a time."""
+    q = db.query(SubscriptionCoupon).filter(SubscriptionCoupon.is_featured == True)  # noqa: E712
+    if except_id is not None:
+        q = q.filter(SubscriptionCoupon.id != except_id)
+    q.update({SubscriptionCoupon.is_featured: False}, synchronize_session=False)
 
 
 # --- Promocode Endpoints ---
@@ -216,6 +227,9 @@ def create_promocode(data: PromoCreate, db: Session = Depends(get_db), current_u
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid expiry_date format")
 
+    if data.is_featured:
+        _clear_other_featured(db)
+
     promo = SubscriptionCoupon(
         code=data.code.upper(),
         discount_percent=data.discount_percent,
@@ -223,6 +237,7 @@ def create_promocode(data: PromoCreate, db: Session = Depends(get_db), current_u
         usage_limit=data.usage_limit,
         expiry_date=expiry,
         is_active=data.is_active,
+        is_featured=data.is_featured,
         used_count=0,
     )
     db.add(promo)
@@ -235,17 +250,102 @@ def toggle_promocode(promo_id: int, data: PromoUpdate, db: Session = Depends(get
     promo = db.query(SubscriptionCoupon).filter(SubscriptionCoupon.id == promo_id).first()
     if not promo:
         raise HTTPException(status_code=404, detail="Promocode not found")
-    for key, val in data.dict(exclude_unset=True).items():
+    changes = data.dict(exclude_unset=True)
+    # Featuring one promo un-features the rest. Two banners cannot both be shown
+    # and the clinic app would silently pick one, so the choice is made here
+    # where somebody can see it happen.
+    if changes.get("is_featured"):
+        _clear_other_featured(db, except_id=promo.id)
+    for key, val in changes.items():
         setattr(promo, key, val)
     db.commit()
     return _promo_dict(promo)
+
+
+@router.get("/promocodes/{promo_id}/redemptions")
+def promocode_redemptions(
+    promo_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+):
+    """Who actually used this code, and what it cost us.
+
+    Until subscription_payments started recording `coupon_code`, a campaign
+    could be run and there was no way to answer either question: the promo list
+    showed a redemption count that never moved, and nothing tied a discount to
+    the revenue it produced.
+
+    Matched on the code rather than a foreign key because that is what the
+    payment row stores, and because a code that is deleted and recreated should
+    still show its history.
+    """
+    promo = db.query(SubscriptionCoupon).filter(SubscriptionCoupon.id == promo_id).first()
+    if not promo:
+        raise HTTPException(status_code=404, detail="Promocode not found")
+
+    rows = (
+        db.query(SubscriptionPayment, Clinic)
+        .outerjoin(Clinic, Clinic.id == SubscriptionPayment.clinic_id)
+        .filter(
+            SubscriptionPayment.coupon_code == promo.code,
+            SubscriptionPayment.status == "paid",
+        )
+        .order_by(SubscriptionPayment.paid_at.desc().nullslast())
+        .all()
+    )
+
+    redemptions = [
+        {
+            "payment_id": pay.id,
+            "clinic_id": pay.clinic_id,
+            "clinic_name": clinic.name if clinic else None,
+            "plan_name": pay.plan_name,
+            "amount": pay.amount,
+            "discount_amount": pay.discount_amount,
+            "tax_amount": pay.tax_amount,
+            "currency": pay.currency or "INR",
+            "paid_at": (pay.paid_at or pay.created_at).isoformat() if (pay.paid_at or pay.created_at) else None,
+        }
+        for pay, clinic in rows
+    ]
+
+    # Totalled per currency. Summing rupees and dollars into one figure would be
+    # a number that means nothing, and overseas clinics are billed in USD.
+    totals = {}
+    for r in redemptions:
+        bucket = totals.setdefault(r["currency"], {"count": 0, "collected": 0.0, "discounted": 0.0})
+        bucket["count"] += 1
+        bucket["collected"] += float(r["amount"] or 0)
+        # NULL means "taken before we recorded the split", which is unknown
+        # rather than zero — but it cannot be added, so it is counted separately.
+        bucket["discounted"] += float(r["discount_amount"] or 0)
+
+    for bucket in totals.values():
+        bucket["collected"] = round(bucket["collected"], 2)
+        bucket["discounted"] = round(bucket["discounted"], 2)
+
+    return {
+        "code": promo.code,
+        # The counter and the rows can legitimately disagree: `used_count` also
+        # counts redemptions from before payments recorded their coupon. Showing
+        # both is more honest than picking one.
+        "used_count": promo.used_count or 0,
+        "redemptions": redemptions,
+        "totals": totals,
+    }
 
 @router.put("/promocodes/{promo_id}")
 def update_promocode(promo_id: int, data: PromoUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_admin)):
     promo = db.query(SubscriptionCoupon).filter(SubscriptionCoupon.id == promo_id).first()
     if not promo:
         raise HTTPException(status_code=404, detail="Promocode not found")
-    for key, val in data.dict(exclude_unset=True).items():
+    changes = data.dict(exclude_unset=True)
+    # Featuring one promo un-features the rest. Two banners cannot both be shown
+    # and the clinic app would silently pick one, so the choice is made here
+    # where somebody can see it happen.
+    if changes.get("is_featured"):
+        _clear_other_featured(db, except_id=promo.id)
+    for key, val in changes.items():
         setattr(promo, key, val)
     db.commit()
     return _promo_dict(promo)
