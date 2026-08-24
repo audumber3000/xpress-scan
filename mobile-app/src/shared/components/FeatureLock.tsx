@@ -1,10 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Building2, Zap } from 'lucide-react-native';
-import { useNavigation } from '@react-navigation/native';
+import { Building2 } from 'lucide-react-native';
 import { useAuth } from '../../app/AuthContext';
-import { IS_PURCHASE_UI_ENABLED, MARKETING_SITE_TEXT } from '../constants/platform';
+import { WhatsAppIcon } from './icons/WhatsAppIcon';
+import { MARKETING_SITE_TEXT } from '../constants/platform';
+import { SUPPORT_PHONE_RAW } from '../constants/support';
+import { planAllowsBranches } from '../constants/plans';
 
 interface FeatureLockProps {
   children: React.ReactNode;
@@ -15,8 +17,14 @@ interface FeatureLockProps {
 /**
  * FeatureLock — multi-branch upgrade gate.
  *
- * A single clinic is fully free (every feature). The ONLY premium capability is
- * running more than one branch, so this wraps the "Add branch" flow only.
+ * Every plan carries the full clinical suite, so this wraps the "Add branch"
+ * flow only. Plus covers one location and sees the overlay; Pro and Growth pass
+ * straight through.
+ *
+ * The test is the plan's branch allowance, NOT its name. It used to be
+ * `plan === 'professional'`, which would have locked multi-branch for every Pro
+ * customer the moment the plans were renamed — taking a feature away from
+ * exactly the people paying for it.
  */
 export const FeatureLock: React.FC<FeatureLockProps> = ({
   children,
@@ -24,11 +32,26 @@ export const FeatureLock: React.FC<FeatureLockProps> = ({
   description,
 }) => {
   const { backendUser } = useAuth();
-  const navigation = useNavigation<any>();
 
-  const plan = backendUser?.clinic?.subscription_plan as string | undefined;
-  const isPro = plan === 'professional' || plan === 'professional_annual';
-  const isLocked = !isPro;
+  // `effective_plan` is what the clinic can use today. `subscription_plan` is
+  // what it last bought, and after an expiry those differ — gating on the
+  // second would hand branch creation to a clinic whose plan has stopped.
+  const clinic = backendUser?.clinic;
+  const plan = (clinic?.effective_plan || clinic?.subscription_plan) as string | undefined;
+  // Until the plan is positively known, treat it as allowed rather than locked:
+  // a wrongly-shown overlay on a plan that permits branches is a support call,
+  // and this renders while /auth/me is still in flight.
+  const isLocked = plan ? !planAllowsBranches(plan) : false;
+
+  const openSupport = () => {
+    const text = encodeURIComponent(
+      [
+        'Hi MolarPlus support, I would like to add another branch.',
+        clinic?.name ? `Clinic: ${clinic.name}` : null,
+      ].filter(Boolean).join('\n')
+    );
+    Linking.openURL(`https://wa.me/${SUPPORT_PHONE_RAW}?text=${text}`).catch(() => {});
+  };
 
   if (!isLocked) return <>{children}</>;
 
@@ -52,38 +75,21 @@ export const FeatureLock: React.FC<FeatureLockProps> = ({
           </LinearGradient>
 
           <Text style={s.title}>Add more branches</Text>
-          {IS_PURCHASE_UI_ENABLED ? (
-            <>
-              <Text style={s.body}>
-                {description ||
-                  'Your single clinic is free forever — every feature included. Running multiple branches from one account is our only premium upgrade.'}
-              </Text>
 
-              <TouchableOpacity
-                style={s.btn}
-                onPress={() => navigation.navigate('Purchase')}
-                activeOpacity={0.85}
-              >
-                <LinearGradient
-                  colors={['#2E2A85', '#4338CA']}
-                  style={s.btnGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                >
-                  <Zap size={16} color="#fff" fill="#fff" />
-                  <Text style={s.btnText}>Upgrade to add branches</Text>
-                </LinearGradient>
-              </TouchableOpacity>
+          {/* No upgrade button on either platform, and `molarplus.com` is plain
+              text rather than a link. The copy no longer says "free forever":
+              Plus is a paid plan that happens to cover one location, and
+              telling a paying customer their plan is free is both wrong and
+              the fastest way to make the next invoice a surprise. */}
+          <Text style={s.body}>
+            {description ||
+              `Your plan covers one clinic location. Running several branches from one login is part of Pro, which is chosen on ${MARKETING_SITE_TEXT} from any browser.`}
+          </Text>
 
-              <Text style={s.hint}>Manage all your clinics from one login</Text>
-            </>
-          ) : (
-            // iOS: no in-app upgrade CTA. Plain text mentioning the website.
-            <Text style={s.body}>
-              Your single clinic is free forever. To run multiple branches from one
-              account, upgrade from your clinic account on {MARKETING_SITE_TEXT}.
-            </Text>
-          )}
+          <TouchableOpacity style={s.supportBtn} onPress={openSupport} activeOpacity={0.85}>
+            <WhatsAppIcon size={17} />
+            <Text style={s.supportText}>Ask us about Pro</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -148,29 +154,20 @@ const s = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 24,
   },
-  btn: {
-    width: '100%',
-    borderRadius: 10,
-    overflow: 'hidden',
-    marginBottom: 10,
-  },
-  btnGradient: {
+  supportBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
+    width: '100%',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingVertical: 13,
   },
-  btnText: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#fff',
-    letterSpacing: 0.2,
-  },
-  hint: {
-    fontSize: 11,
-    color: '#9CA3AF',
-    fontWeight: '500',
+  supportText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
   },
 });

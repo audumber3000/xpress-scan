@@ -11,7 +11,8 @@ import {
   MapPin, CheckCircle2, Building2, Users, Settings2, FileText, Bell,
   ChevronRight, ChevronDown, Plus,
   ClipboardList, Stethoscope, Leaf, TestTube, Activity, Pill, DollarSign,
-  CalendarClock, Shield, CreditCard, ScrollText, ShieldCheck, LogIn } from 'lucide-react-native';
+  CalendarClock, Shield, CreditCard, ScrollText, ShieldCheck, LogIn,
+  Tag, Receipt } from 'lucide-react-native';
 import { adminColors } from '../../../../shared/constants/adminColors';
 import { colors } from '../../../../shared/constants/colors';
 import { componentRadius } from '../../../../shared/constants/theme';
@@ -21,7 +22,10 @@ import { SupportCard } from '../components/SupportCard';
 import { GearLoader } from '../../../../shared/components/GearLoader';
 import { notify } from '../../../../shared/utils/notify';
 import { useAuth } from '../../../../app/AuthContext';
-import { IS_PURCHASE_UI_ENABLED } from '../../../../shared/constants/platform';
+import { MARKETING_SITE_TEXT } from '../../../../shared/constants/platform';
+import { PlanStatusBanner } from '../../../../shared/components/PlanStatusBanner';
+import { planAllowsBranches } from '../../../../shared/constants/plans';
+import { planBadge } from '../../../../shared/utils/planBadge';
 
 const PRACTICE_CATEGORIES = [
   { id: 'procedures',          label: 'Procedures',         backendKey: 'procedure',          icon: Stethoscope },
@@ -96,13 +100,12 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
   const onRefresh = () => { setRefreshing(true); loadData(); };
 
   const openAddBranch = () => {
-    // Free plans get the upgrade path instead of the create-branch form.
-    if (!isPro) {
-      if (IS_PURCHASE_UI_ENABLED) {
-        navigation.navigate('Purchase');
-      } else {
-        notify.done('Running multiple branches is a premium upgrade. Manage your plan from your clinic account on the website.');
-      }
+    // Plus covers one location, so it gets an explanation instead of the form.
+    // Asked of the plan's branch allowance, never of its name: the old test was
+    // `plan === 'professional'`, which would have refused this to every Pro
+    // customer the moment the plans were renamed.
+    if (!canAddBranches) {
+      notify.done(`More than one branch is on the Pro plan. Choose it on ${MARKETING_SITE_TEXT}.`);
       return;
     }
     setBranchName(''); setBranchAddr(''); setBranchPhone(''); setBranchEmail('');
@@ -156,16 +159,17 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
   const clinicName = activeClinic?.name || clinic?.name || 'My Clinic';
   const clinicAddr = activeClinic?.address || clinic?.address || 'Address not set';
 
-  // Subscription strip (hidden on iOS — App Store purchase-UI guideline)
-  const isTrial = activeClinic?.is_trial;
-  const daysLeft = activeClinic?.trial_days_remaining;
-  const plan = activeClinic?.subscription_plan;
-  // Multi-branch is the only premium capability — a single clinic is fully free.
-  const isPro = plan === 'professional' || plan === 'professional_annual';
-  const subText = isTrial
-    ? `Trial — ${typeof daysLeft === 'number' ? `${daysLeft} day${daysLeft === 1 ? '' : 's'} left` : 'active'}`
-    : plan === 'professional' ? 'Professional plan' : 'Free plan';
-  const showUpgrade = IS_PURCHASE_UI_ENABLED && plan !== 'professional';
+  // The subscription strip. Shown on both platforms now: which plan you are on
+  // is account information, and hiding it on iOS left that build unable to
+  // answer the single most common billing question. What is NOT here is any
+  // way to pay — that lives on the website, on both platforms.
+  //
+  // `effective_plan` is what the clinic can use today; `subscription_plan` is
+  // what it last bought. After a trial ends those differ, and printing the
+  // second one on a clinic that can no longer add a patient is a visible lie.
+  const planNow = activeClinic?.effective_plan || activeClinic?.subscription_plan;
+  const canAddBranches = planNow ? planAllowsBranches(planNow) : true;
+  const badge = planBadge(activeClinic);
 
   return (
     <View style={styles.container}>
@@ -205,25 +209,23 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
             </View>
           </View>
 
-          {IS_PURCHASE_UI_ENABLED && (
-            <TouchableOpacity
-              style={styles.subStrip}
-              activeOpacity={0.85}
-              onPress={() => navigation.navigate('Subscription')}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.subLabel}>Subscription</Text>
-                <Text style={styles.subValue} numberOfLines={1}>{subText}</Text>
-              </View>
-              {showUpgrade && (
-                <TouchableOpacity style={styles.upgradeBtn} activeOpacity={0.85} onPress={() => navigation.navigate('Purchase')}>
-                  <Text style={styles.upgradeText}>Upgrade</Text>
-                </TouchableOpacity>
-              )}
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={styles.subStrip}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('Subscription')}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.subLabel}>Subscription</Text>
+              <Text style={styles.subValue} numberOfLines={1}>{badge.label}</Text>
+            </View>
+            <ChevronRight size={18} color="rgba(255,255,255,0.7)" />
+          </TouchableOpacity>
         </LinearGradient>
       </SafeAreaView>
+
+      {/* Sits between the header and the content so it is the first thing read
+          on the screen where branches, staff and billing are managed. */}
+      <PlanStatusBanner onManage={() => navigation.navigate('Subscription')} />
 
       {/* ── Content ── */}
       <ScrollView
@@ -261,7 +263,7 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
           <TouchableOpacity style={styles.addBranchRow} onPress={openAddBranch} activeOpacity={0.7}>
             <Plus size={18} color={adminColors.primary} />
             <Text style={styles.addBranchText}>Add new branch</Text>
-            {!isPro && (
+            {!canAddBranches && (
               <View style={styles.proPill}>
                 <Text style={styles.proPillText}>PRO</Text>
               </View>
@@ -326,6 +328,26 @@ export const AdminHubScreen: React.FC<AdminHubScreenProps> = ({ navigation }) =>
             icon={Stethoscope} iconBg="#E0F7F5" iconColor="#4ECDC4"
             title="Treatments & pricing" subtitle="Your service catalogue & fees"
             onPress={() => navigation.navigate('TreatmentsPricing')}
+          />
+        </View>
+
+        {/* Billing.
+            Its own section rather than tacked onto CLINICAL: an offer is a
+            commercial decision about what to charge, not a clinical one, and it
+            sits beside "Treatments & pricing" in the reader's head rather than
+            beside diagnoses. */}
+        <Text style={styles.sectionLabel}>BILLING</Text>
+        <View style={styles.card}>
+          <ConfigRow
+            icon={Tag} iconBg="#FFE4E6" iconColor="#F43F5E"
+            title="Offers" subtitle="Reusable discounts for billing"
+            onPress={() => navigation.navigate('Offers')}
+          />
+          <View style={styles.rowDivider} />
+          <ConfigRow
+            icon={Receipt} iconBg="#FEE2E2" iconColor="#EF4444"
+            title="Expenses" subtitle="Record and review what you spend"
+            onPress={() => navigation.navigate('UtilitySection', { section: 'expenses' })}
           />
         </View>
 
@@ -464,8 +486,6 @@ const styles = StyleSheet.create({
   subStrip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: componentRadius.carouselCard, padding: 14, marginTop: 16 },
   subLabel: { fontSize: 12, color: 'rgba(255,255,255,0.7)' },
   subValue: { fontSize: 16, fontWeight: '700', color: '#fff', marginTop: 2 },
-  upgradeBtn: { backgroundColor: '#fff', paddingHorizontal: 18, paddingVertical: 10, borderRadius: componentRadius.button },
-  upgradeText: { fontSize: 14, fontWeight: '700', color: adminColors.gradientStart },
 
   // ── Sections ──
   sectionLabel: { fontSize: 12, fontWeight: '700', color: '#9CA3AF', letterSpacing: 1, marginTop: 22, marginBottom: 10, marginHorizontal: 20 },

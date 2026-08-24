@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, StatusBar, RefreshControl, Dimensions, Animated } from 'react-native';
 import { useAuth } from '../../../../../app/AuthContext';
+import { PlanStatusBanner } from '../../../../../shared/components/PlanStatusBanner';
 import { transactionsApiService, Transaction } from '../../../../../services/api/transactions.api';
 import { analyticsApiService, Analytics } from '../../../../../services/api/analytics.api';
 import { appointmentsApiService, Appointment } from '../../../../../services/api/appointments.api';
@@ -12,6 +13,7 @@ import {
   WelcomeHeaderStats
 } from './components/WelcomeHeader';
 import { MetricChartCard } from '../../../../../shared/components/home/MetricChartCard';
+import { Period } from '../../../../../shared/components/home/PeriodFilter';
 import { resolveUserPhoto } from '../../../../../shared/utils/avatar';
 import { getCurrencySymbol } from '../../../../../shared/utils/currency';
 import { ErrorBanner } from './components/ErrorBanner';
@@ -69,24 +71,47 @@ const ChartPage: React.FC<{
   );
 };
 
-type Period = 'Today' | 'Last 7 Days' | 'This Month';
-
-// Build x-axis labels for the selected period.
+/**
+ * X-axis labels for the selected period.
+ *
+ * Must produce exactly as many labels as `analytics.api` produced buckets, or
+ * the axis and the line drift apart. The bucketing lives in `getAnalytics`;
+ * these are its captions, and the two are changed together.
+ */
 function periodLabels(period: Period, length: number): string[] {
-  if (period === 'Today') {
-    return [new Date().toLocaleDateString('en-US', { weekday: 'short' })];
+  const now = new Date();
+
+  if (period === 'today') {
+    return [now.toLocaleDateString('en-US', { weekday: 'short' })];
   }
-  if (period === 'Last 7 Days') {
-    const labels: string[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      labels.push(d.toLocaleDateString('en-US', { weekday: 'short' }));
-    }
-    return labels;
+
+  if (period === 'yesterday') {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 1);
+    return [d.toLocaleDateString('en-US', { weekday: 'short' })];
   }
-  // This Month → weekly buckets
-  return Array.from({ length }, (_, i) => `W${i + 1}`);
+
+  if (period === '7days') {
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(now);
+      d.setDate(d.getDate() - (6 - i));
+      return d.toLocaleDateString('en-US', { weekday: 'short' });
+    });
+  }
+
+  if (period === 'month') {
+    // Five-day buckets: label each by the day it starts on, so "11" means the
+    // 11th to the 15th. "W1..W6" said nothing about which days those were.
+    return Array.from({ length }, (_, i) => `${i * 5 + 1}`);
+  }
+
+  // all: twelve monthly buckets, oldest first
+  return Array.from({ length }, (_, i) => {
+    const d = new Date(now);
+    d.setDate(1);
+    d.setMonth(d.getMonth() - (length - 1 - i));
+    return d.toLocaleDateString('en-US', { month: 'short' });
+  });
 }
 
 // The real per-bucket series the backend gives us (appointments / visits per bucket).
@@ -161,8 +186,7 @@ interface HomeScreenProps {
 
 export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const { user, backendUser, setIsClinicSwitcherVisible } = useAuth();
-  const [selectedPeriod, setSelectedPeriod] = useState<'Today' | 'Last 7 Days' | 'This Month'>('Today');
-  const [apiPeriod, setApiPeriod] = useState<'1D' | '1W' | '1M' | '3M' | '6M' | 'All'>('1D');
+  const [selectedPeriod, setSelectedPeriod] = useState<Period>('today');
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [todayAppointments, setTodayAppointments] = useState<Appointment[]>([]);
@@ -187,15 +211,11 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
     loadData();
   }, [backendUser?.clinic?.id]);
 
+  // The picked range IS the range the server is asked for. There is no
+  // translation step any more; the one that used to be here had three entries
+  // and silently answered "month" for anything else.
   useEffect(() => {
-    const periodMapping: Record<string, '1D' | '1W' | '1M' | '3M' | '6M' | 'All'> = {
-      'Today': '1D',
-      'Last 7 Days': '1W',
-      'This Month': '1M',
-    };
-    const newApiPeriod = periodMapping[selectedPeriod] || '1D';
-    setApiPeriod(newApiPeriod);
-    loadAnalytics(newApiPeriod, true);
+    loadAnalytics(selectedPeriod, true);
   }, [selectedPeriod]);
 
   const loadTransactions = async (preserveExisting = false) => {
@@ -209,13 +229,13 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
   };
 
   const loadAnalytics = async (
-    periodOverride?: '1D' | '1W' | '1M' | '3M' | '6M' | 'All',
+    periodOverride?: Period,
     preserveExisting = true,
   ) => {
     try {
       setAnalyticsLoading(true);
       const clinicId = backendUser?.clinic?.id;
-      const periodToUse = periodOverride || apiPeriod;
+      const periodToUse = periodOverride || selectedPeriod;
       const analyticsData = await analyticsApiService.getAnalytics(periodToUse, clinicId);
       setAnalytics(analyticsData);
     } catch (err) {
@@ -352,10 +372,11 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
           totalPatients={totalPatients}
           totalAppointments={totalAppointments}
           totalChecking={totalChecking}
-          subscriptionPlan={backendUser?.clinic?.subscription_plan}
+          subscriptionPlan={backendUser?.clinic?.effective_plan || backendUser?.clinic?.subscription_plan}
           isTrial={backendUser?.clinic?.is_trial}
           trialDaysRemaining={backendUser?.clinic?.trial_days_remaining}
-          onUpgradePress={() => navigation.navigate('Purchase')}
+          planState={backendUser?.clinic?.plan_state}
+          planStateDays={backendUser?.clinic?.plan_state_days}
           onPlanPress={() => navigation.navigate('Subscription')}
           photoURL={resolveUserPhoto(backendUser, user)}
           avatarSeed={user?.email || backendUser?.email}
@@ -364,16 +385,25 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
           onAddAppointment={goToAppointment}
         />
 
+        {/* Sits immediately under the sticky greeting, so a clinic that has been
+            turned view only reads why BEFORE it taps "Add patient" and loses
+            the typing to a refused save. Renders nothing when the plan is fine.
+            Deliberately NOT inside the sticky index: pinning a red bar to every
+            screen a clinic scrolls is punishment, not information. */}
+        <PlanStatusBanner onManage={() => navigation.navigate('Subscription')} />
+
         {/* KPI cards — scroll away with content; only the greeting above stays sticky */}
         <WelcomeHeaderStats
-          dailyRevenue={dailyRevenue}
-          totalPatients={totalPatients}
-          totalAppointments={totalAppointments}
-          totalChecking={totalChecking}
+          analytics={analytics}
           loading={showInitialSkeletons}
+          period={selectedPeriod}
+          onPeriodChange={setSelectedPeriod}
           onAddInvoice={goToInvoice}
           onAddPatient={goToPatient}
           onAddAppointment={goToAppointment}
+          onOutstandingPress={() =>
+            navigation.navigate('AllTransactions', { tab: 'payments', filter: 'unpaid' })}
+          onAppointmentsPress={() => navigation.navigate('Appointments')}
         />
 
         <RightNowStrip
@@ -420,7 +450,6 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
                 labels={visits.labels}
                 hasData={visits.hasData}
                 selectedPeriod={selectedPeriod}
-                onPeriodChange={setSelectedPeriod}
                 loading={showInitialSkeletons}
                 refreshing={refreshing || analyticsLoading}
                 lastUpdatedAt={lastUpdatedAt}
@@ -439,7 +468,6 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
                 labels={visits.labels}
                 hasData={visits.hasData}
                 selectedPeriod={selectedPeriod}
-                onPeriodChange={setSelectedPeriod}
                 loading={showInitialSkeletons}
                 refreshing={refreshing || analyticsLoading}
                 lastUpdatedAt={lastUpdatedAt}
@@ -458,7 +486,6 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
                 labels={revenue.labels}
                 hasData={revenue.hasData}
                 selectedPeriod={selectedPeriod}
-                onPeriodChange={setSelectedPeriod}
                 loading={showInitialSkeletons}
                 refreshing={refreshing || analyticsLoading}
                 lastUpdatedAt={lastUpdatedAt}
@@ -478,7 +505,6 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
                 labels={visits.labels}
                 hasData={visits.hasData}
                 selectedPeriod={selectedPeriod}
-                onPeriodChange={setSelectedPeriod}
                 loading={showInitialSkeletons}
                 refreshing={refreshing || analyticsLoading}
                 lastUpdatedAt={lastUpdatedAt}

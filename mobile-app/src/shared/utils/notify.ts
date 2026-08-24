@@ -1,5 +1,6 @@
 import { toast } from '../components/toastService';
 import { friendlyError, DEFAULT_FALLBACK } from './friendlyError';
+import { isPlanBlockedShowing } from '../../services/api/planLock';
 
 /**
  * How this app tells the user something.
@@ -66,8 +67,14 @@ export const notify = {
    * not proof a human wrote it — most of them are `(await res.json()).detail`,
    * which is a server exception by another route.
    */
-  problem: (error: unknown, fallback: string = DEFAULT_FALLBACK) =>
-    toast.error(friendlyError(error, fallback)),
+  problem: (error: unknown, fallback: string = DEFAULT_FALLBACK) => {
+    // Silent while the plan-blocked sheet is up. That sheet is already saying
+    // why the write was refused, in wording the server chose for this exact
+    // state; a toast reading "Something went wrong" over the top of it is a
+    // worse answer competing with a better one.
+    if (isPlanBlockedShowing()) return;
+    toast.error(friendlyError(error, fallback));
+  },
 };
 
 export default notify;

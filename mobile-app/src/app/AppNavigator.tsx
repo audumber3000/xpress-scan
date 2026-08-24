@@ -12,6 +12,7 @@ import { LoginScreen } from '../features/auth/screens/LoginScreen';
 import { SignupScreen } from '../features/auth/screens/SignupScreen';
 import { NoClinicLinkedScreen } from '../features/auth/screens/NoClinicLinkedScreen';
 import { IS_SIGNUP_ENABLED } from '../shared/constants/platform';
+import { VerifyContactScreen } from '../features/auth/screens/VerifyContactScreen';
 import { ClinicOwnerTabNavigator } from './ClinicOwnerTabNavigator';
 import { ReceptionistHomeScreen } from '../features/receptionist/screens/ReceptionistHomeScreen';
 import { ReceptionistProfileScreen } from '../features/receptionist/screens/ReceptionistProfileScreen';
@@ -22,6 +23,7 @@ import { PatientsScreen } from '../features/clinic-owner/patients/screens/Patien
 import { UtilitiesScreen } from '../features/clinic-owner/utilities/screens/UtilitiesScreen';
 import { UtilitySectionScreen } from '../features/clinic-owner/utilities/screens/UtilitySectionScreen';
 import { AllTransactionsScreen } from '../features/clinic-owner/transactions/screens/AllTransactionsScreen';
+import { OffersScreen } from '../features/admin/offers/screens/OffersScreen';
 import { InvoiceDetailsScreen } from '../features/clinic-owner/transactions/screens/InvoiceDetailsScreen';
 import { ExpenseDetailsScreen } from '../features/clinic-owner/transactions/screens/ExpenseDetailsScreen';
 import { PatientDetailsScreen } from '../features/clinic-owner/patients/screens/PatientDetailsScreen';
@@ -64,7 +66,10 @@ export type RootStackParamList = {
   Notifications: undefined;
   /** The staff member's own notification inbox (not the messaging console). */
   Inbox: undefined;
-  AllTransactions: undefined;
+  /** Openable pre-filtered from a dashboard tile, e.g. Outstanding →
+   *  { tab: 'payments', filter: 'unpaid' }. Both optional: opened without
+   *  params the screen behaves exactly as it always did. */
+  AllTransactions: { tab?: 'collections' | 'payments' | 'ledger'; filter?: string } | undefined;
   Profile: undefined;
   PatientDetails: { patientId: string };
   AppointmentDetails: { appointment: any };
@@ -76,6 +81,8 @@ export type RootStackParamList = {
   ClinicSettings: undefined;
   Subscription: undefined;
   Purchase: undefined;
+  VerifyContact: undefined;
+  Offers: undefined;
   ClinicInformation: undefined;
   NotificationSettings: undefined;
   AddAppointment: undefined;
@@ -138,6 +145,13 @@ export const AppNavigator = () => {
       // dead-end screen that tells them to set up their clinic on the web.
       return IS_SIGNUP_ENABLED ? 'Signup' : 'NoClinicLinked';
     }
+    // Signup verification is the last step of creating a clinic and it blocks.
+    // Arriving here with it outstanding means the app was killed mid-step, so
+    // finish it. Server-computed and false for every clinic that predates the
+    // check, so no existing customer is ever caught by this.
+    if (backendUser?.role === 'clinic_owner' && backendUser?.clinic?.security_verification_required) {
+      return 'VerifyContact';
+    }
     // Tablets get the responsive web app in a WebView instead of the native tabs.
     if (IS_TABLET) return 'TabletWebApp';
     if (backendUser?.role === 'receptionist') return 'ReceptionistHome';
@@ -170,6 +184,20 @@ export const AppNavigator = () => {
                   <Stack.Screen name="NoClinicLinked" component={NoClinicLinkedScreen} />
                 </>
               )
+            ) : backendUser?.role === 'clinic_owner'
+                && backendUser?.clinic?.security_verification_required ? (
+              // Nothing else is reachable until the contacts are verified. It is
+              // a whole stack rather than a modal so there is no back gesture
+              // out of it and no tab bar behind it — the clinic exists but is
+              // not finished being set up.
+              //
+              // Applies on iOS too. Clinics are not created there, but one made
+              // on Android and abandoned mid-step can be signed into from an
+              // iPhone, and leaving that person permanently unverified with no
+              // route out would be worse than showing them the step.
+              <>
+                <Stack.Screen name="VerifyContact" component={VerifyContactScreen} />
+              </>
             ) : IS_TABLET ? (
               // Tablet shell: the responsive web app in a WebView. Login stays
               // native (branches above); only the post-login surface is web.
@@ -212,6 +240,7 @@ export const AppNavigator = () => {
                 <Stack.Screen name="Permissions" component={PermissionsScreen} />
                 <Stack.Screen name="ClinicSettings" component={ClinicSettingsScreen} />
                 <Stack.Screen name="Subscription" component={SubscriptionScreen} />
+                <Stack.Screen name="Offers" component={OffersScreen} />
                 <Stack.Screen name="Purchase" component={PurchaseScreen} />
                 <Stack.Screen name="ClinicInformation" component={ClinicInformationScreen} />
                 <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiBaseUrl } from '../../config/api.config';
 import { notifySessionExpired } from './session';
+import { notifyPlanBlocked, PlanBlockedDetail } from './planLock';
 
 const FETCH_TIMEOUT_MS = 8000;
 
@@ -90,6 +91,24 @@ export class BaseApiService {
             /* non-JSON body — the default sentence is fine */
           }
           notifySessionExpired(reason);
+        }
+      }
+
+      // The clinic's plan has stopped, so the backend is refusing every write
+      // while still serving reads. Announced once, centrally, for the same
+      // reason as the 401 above: otherwise every screen has to recognise a 402
+      // for itself, and what the user actually sees is a save that silently
+      // fails.
+      //
+      // The response is cloned rather than read, because the caller still has
+      // to be able to consume the body itself.
+      if (response.status === 402) {
+        try {
+          const body = await response.clone().json();
+          const detail = body?.detail as PlanBlockedDetail | undefined;
+          if (detail?.reason === 'plan_inactive') notifyPlanBlocked(detail);
+        } catch {
+          /* non-JSON body: nothing useful to announce, let the caller handle it */
         }
       }
 

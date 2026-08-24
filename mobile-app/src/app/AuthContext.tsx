@@ -3,7 +3,10 @@ import { User, onAuthStateChanged } from "firebase/auth"
 import { auth } from "../config/firebase"
 import { signInWithEmail, signOutUser } from "../services/auth/authService"
 import { registerSessionExpiredHandler, unregisterSessionExpiredHandler } from "../services/api/session"
+import { registerPlanBlockedHandler, unregisterPlanBlockedHandler, clearPlanBlocked, PlanBlockedDetail } from "../services/api/planLock"
 import { SessionEndedModal } from "../shared/components/SessionEndedModal"
+import { PlanBlockedModal } from "../shared/components/PlanBlockedModal"
+import { SUPPORT_PHONE_RAW } from "../shared/constants/support"
 import { authApiService, type BackendUser } from "../services/api/auth.api"
 import { showAlert } from "../shared/components/alertService"
 import { usePostHog } from 'posthog-react-native'
@@ -37,6 +40,7 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
   const [backendUser, setBackendUser] = useState<BackendUser | null>(null)
   // Set only when the clinic ended the session, never on a normal sign-out.
   const [sessionEnded, setSessionEnded] = useState<string | null>(null)
+  const [planBlocked, setPlanBlocked] = useState<PlanBlockedDetail | null>(null)
   const [authEmail, setAuthEmail] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [isClinicSwitcherVisible, setIsClinicSwitcherVisible] = useState(false)
@@ -147,6 +151,15 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
     return () => unregisterSessionExpiredHandler()
   }, [])
 
+  // The plan stopped, so the backend refuses every write while still serving
+  // reads. Unlike an ended session this does NOT sign anybody out: their
+  // records are all still there and still readable, which is most of what the
+  // modal has to get across.
+  useEffect(() => {
+    registerPlanBlockedHandler((detail) => setPlanBlocked(detail))
+    return () => unregisterPlanBlockedHandler()
+  }, [])
+
   const logout = useCallback(async () => {
     await signOutUser()
     await authApiService.clearTokens()
@@ -249,6 +262,12 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
         // Dismissing only reveals the sign-in screen the sign-out already put
         // them on. There is nothing else useful for this button to do.
         onSignIn={() => setSessionEnded(null)}
+      />
+      <PlanBlockedModal
+        detail={planBlocked}
+        clinicName={backendUser?.clinic?.name}
+        supportPhone={SUPPORT_PHONE_RAW}
+        onClose={() => { clearPlanBlocked(); setPlanBlocked(null) }}
       />
     </AuthContext.Provider>
   )

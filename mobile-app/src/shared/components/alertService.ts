@@ -1,4 +1,5 @@
 import type { AlertButton } from './CustomAlertModal';
+import { isPlanBlockedShowing } from '../../services/api/planLock';
 
 export interface AlertOptions {
   title: string;
@@ -39,6 +40,12 @@ export function showAlert(
     typeof titleOrOptions === 'string'
       ? { title: titleOrOptions, message, buttons }
       : titleOrOptions;
+
+  // The plan-blocked sheet is already on screen explaining, in the server's own
+  // words, why this save was refused. Every screen also catches its own failure
+  // and calls this — which stacked a second dialog on top reading "Could not
+  // register patient" followed by the raw JSON error body. One explanation.
+  if (isPlanBlockedShowing()) return;
 
   if (showAlertFn) {
     showAlertFn(options);

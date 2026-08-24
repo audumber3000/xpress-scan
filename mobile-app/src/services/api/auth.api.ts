@@ -8,12 +8,32 @@ export interface ClinicInfo {
   id: string;
   name: string;
   address?: string;
+  phone?: string | null;
   imageUrl?: string;
-  subscription_plan?: 'free' | 'professional';
+  // Deliberately a loose string, not a union. Production has stored 'free',
+  // 'professional', 'professional_annual' and 'enterprise', and a phone that
+  // has not been opened in a year will still be handed them. Everything that
+  // reads this goes through resolvePlan() in shared/constants/plans.
+  subscription_plan?: string | null;
   plan_name?: string | null;
+  /** What the clinic can use RIGHT NOW, which after an expiry is not plan_name. */
+  effective_plan?: string | null;
   is_trial?: boolean;
   plan_ends_at?: string | null;
   trial_days_remaining?: number | null;
+  /** Two-letter country, which decides the billing currency. Defaults to IN. */
+  country?: string | null;
+  // Where the clinic stands with its plan: 'ok' | 'renewal_due' | 'grant_due'
+  // | 'trial_ended' | 'lapsed' | 'grant_ended'. Same value the write-lock
+  // enforces from, so the app cannot say everything is fine while the server
+  // refuses every save.
+  plan_state?: string | null;
+  plan_state_days?: number | null;
+  plan_state_title?: string | null;
+  /** True while the clinic still owes us the signup verification step. Server
+   *  computed, and false for every clinic that predates the check — so no
+   *  existing customer is ever sent to that screen. */
+  security_verification_required?: boolean;
   currency_symbol?: string;
   // Clinic sends patient WhatsApp manually from its own number (opt-in). When on,
   // the installed app shares via the OS share sheet instead of the automated send.
@@ -100,9 +120,16 @@ export class AuthApiService extends BaseApiService {
         id: clinicSource.id.toString(),
         name: clinicSource.name,
         address: clinicSource.address,
+        phone: clinicSource.phone ?? null,
         imageUrl: clinicSource.logo_url,
         subscription_plan: clinicSource.subscription_plan,
         plan_name: clinicSource.plan_name ?? null,
+        effective_plan: clinicSource.effective_plan ?? null,
+        country: clinicSource.country ?? null,
+        plan_state: clinicSource.plan_state ?? null,
+        plan_state_days: clinicSource.plan_state_days ?? null,
+        plan_state_title: clinicSource.plan_state_title ?? null,
+        security_verification_required: !!clinicSource.security_verification_required,
         is_trial: !!clinicSource.is_trial,
         plan_ends_at: clinicSource.plan_ends_at ?? null,
         trial_days_remaining: clinicSource.trial_days_remaining ?? null,

@@ -1,23 +1,24 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FlaskConical, Package, FileText, ChevronRight, LayoutGrid } from 'lucide-react-native';
+import { FlaskConical, Package, FileText, ChevronRight, LayoutGrid, Receipt } from 'lucide-react-native';
 import { colors } from '../../../../shared/constants/colors';
 import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
 
-type Section = 'inventory' | 'lab' | 'consent';
+type Section = 'inventory' | 'lab' | 'consent' | 'expenses';
 
 const CARDS: { section: Section; title: string; subtitle: string; icon: React.FC<any>; iconBg: string; iconColor: string }[] = [
   { section: 'inventory', title: 'Inventory', subtitle: 'Stock, medication & vendors', icon: Package, iconBg: '#EEF0FF', iconColor: '#6366F1' },
   { section: 'lab', title: 'Lab', subtitle: 'Lab orders & tracking', icon: FlaskConical, iconBg: '#E0F7F5', iconColor: '#4ECDC4' },
   { section: 'consent', title: 'Consent Forms', subtitle: 'Templates & signed forms', icon: FileText, iconBg: '#FEF3C7', iconColor: '#F59E0B' },
+  { section: 'expenses', title: 'Expenses', subtitle: 'What the clinic spent', icon: Receipt, iconBg: '#FEE2E2', iconColor: '#EF4444' },
 ];
 
 export const UtilitiesScreen: React.FC<{ navigation: any; route: any }> = ({ navigation, route }) => {
   // Deep link: /utilities?initialTab=inventory jumps straight into a section.
   React.useEffect(() => {
     const it = route?.params?.initialTab as Section | undefined;
-    if (it && ['inventory', 'lab', 'consent'].includes(it)) {
+    if (it && ['inventory', 'lab', 'consent', 'expenses'].includes(it)) {
       navigation.navigate('UtilitySection', { section: it });
     }
   }, [route?.params?.initialTab]);

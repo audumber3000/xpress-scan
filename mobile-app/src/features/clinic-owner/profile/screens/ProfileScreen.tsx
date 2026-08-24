@@ -19,7 +19,7 @@ import { ClinicSwitcherSheet } from '../../../../shared/components/ClinicSwitche
 import { resolveUserPhoto } from '../../../../shared/utils/avatar';
 import { ClinicInfo } from '../../../../services/api/admin.api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { IS_PURCHASE_UI_ENABLED } from '../../../../shared/constants/platform';
+import { planBadge } from '../../../../shared/utils/planBadge';
 import { usePostHog } from 'posthog-react-native';
 
 interface ProfileScreenProps {
@@ -29,6 +29,7 @@ interface ProfileScreenProps {
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
   const posthog = usePostHog();
   const { user, backendUser, logout, isLoading, switchBranch, refreshBackendUser } = useAuth();
+  const subBadge = planBadge(backendUser?.clinic);
   const [showClinicSwitcher, setShowClinicSwitcher] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
 
@@ -172,24 +173,26 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
               onPress={handleNotificationSettings}
             />
 
-            {/* Accounting — hidden on iOS (App Store guideline 3.1.3(b),
-                Path A multiplatform-services exemption). Plan & billing are
-                managed on the web. */}
-            {IS_PURCHASE_UI_ENABLED && (
-              <>
-                <Text style={[styles.sectionTitle, styles.sectionTitleSpacing]}>ACCOUNTING</Text>
-                <SettingsMenuItem
-                  icon={CreditCard}
-                  iconColor={colors.primary}
-                  iconBgColor={colors.primaryBg}
-                  title="Subscription & Billing"
-                  subtitle="Manage plans & invoices"
-                  badge={backendUser?.clinic?.subscription_plan === 'professional' ? "PRO" : "FREE"}
-                  badgeColor={backendUser?.clinic?.subscription_plan === 'professional' ? "#10B981" : "#F59E0B"}
-                  onPress={handleSubscription}
-                />
-              </>
-            )}
+            {/* Shown on both platforms. It used to be hidden on iOS entirely,
+                which left that build unable to answer "which plan am I on?" —
+                account information Apple has never objected to. What the screen
+                behind it does NOT do is sell anything, on either platform.
+
+                The badge used to read PRO or FREE off a literal comparison, so
+                every Plus clinic — every paying customer — was labelled FREE.
+                It now comes from planBadge, the same answer the Control Center
+                and the home header show. */}
+            <Text style={[styles.sectionTitle, styles.sectionTitleSpacing]}>ACCOUNTING</Text>
+            <SettingsMenuItem
+              icon={CreditCard}
+              iconColor={colors.primary}
+              iconBgColor={colors.primaryBg}
+              title="Subscription & Billing"
+              subtitle="Your plan and what it includes"
+              badge={subBadge.label.toUpperCase()}
+              badgeColor={subBadge.fg}
+              onPress={handleSubscription}
+            />
           </View>
         )}
 

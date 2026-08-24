@@ -10,14 +10,16 @@ import { InventoryTab } from '../tabs/InventoryTab';
 import { MedicationTab } from '../tabs/MedicationTab';
 import { VendorsTab } from '../tabs/VendorsTab';
 import { ConsentFormsTab } from '../tabs/ConsentFormsTab';
+import { ExpensesTab } from '../tabs/ExpensesTab';
 import type { UtilityTabHandle } from '../utilityTab';
 
-type Section = 'inventory' | 'lab' | 'consent';
+type Section = 'inventory' | 'lab' | 'consent' | 'expenses';
 
 const SECTION_TITLE: Record<Section, string> = {
   inventory: 'Inventory',
   lab: 'Lab',
   consent: 'Consent Forms',
+  expenses: 'Expenses',
 };
 
 // Each section's own sub-tabs. Web's inventory hub carries stock / medications /
@@ -30,6 +32,7 @@ const SECTION_TABS: Record<Section, { key: string; label: string }[]> = {
   ],
   lab: [{ key: 'orders', label: 'Orders' }],
   consent: [{ key: 'templates', label: 'Templates' }],
+  expenses: [{ key: 'expenses', label: 'Recorded' }],
 };
 
 export const UtilitySectionScreen: React.FC<{ navigation: any; route: any }> = ({ navigation, route }) => {
@@ -42,12 +45,14 @@ export const UtilitySectionScreen: React.FC<{ navigation: any; route: any }> = (
   const vendorRef = useRef<UtilityTabHandle>(null);
   const labRef = useRef<UtilityTabHandle>(null);
   const consentRef = useRef<UtilityTabHandle>(null);
+  const expenseRef = useRef<UtilityTabHandle>(null);
 
   const activeRef = useMemo(() => {
     if (active === 'stock') return stockRef;
     if (active === 'medication') return medRef;
     if (active === 'vendors') return vendorRef;
     if (active === 'orders') return labRef;
+    if (active === 'expenses') return expenseRef;
     return consentRef;
   }, [active]);
 
@@ -86,6 +91,7 @@ export const UtilitySectionScreen: React.FC<{ navigation: any; route: any }> = (
         {section === 'inventory' && active === 'vendors' && <VendorsTab ref={vendorRef} />}
         {section === 'lab' && <LabTab ref={labRef} />}
         {section === 'consent' && <ConsentFormsTab ref={consentRef} />}
+        {section === 'expenses' && <ExpensesTab ref={expenseRef} />}
       </View>
     </SafeAreaView>
   );

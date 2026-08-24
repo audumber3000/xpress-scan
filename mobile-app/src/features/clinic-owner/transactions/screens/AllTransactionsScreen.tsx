@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, StatusBar } from 'react-native';
 import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowDownLeft, ArrowUpRight, Receipt } from 'lucide-react-native';
-import { useNavigation } from '@react-navigation/native';
+import { ArrowDownLeft, ArrowUpRight, Receipt, X } from 'lucide-react-native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../../app/AppNavigator';
 import { GearLoader } from '../../../../shared/components/GearLoader';
@@ -17,14 +17,50 @@ import { CollectionsView } from '../components/CollectionsView';
 
 interface AllTransactionsScreenProps {}
 
+type Tab = 'collections' | 'payments' | 'ledger';
+
+/**
+ * What each tab can be narrowed to.
+ *
+ * `unpaid` is the one that matters most: it is where the Outstanding tile on
+ * the dashboard lands. That tile used to open this screen on Today's Collection
+ * with no filter at all, so tapping a figure of ₹68,430 showed today's takings
+ * instead of the twenty invoices that make up the debt. The number you tapped
+ * has to be the list you get.
+ */
+const FILTERS: Record<Exclude<Tab, 'collections'>, { id: string; label: string }[]> = {
+  payments: [
+    { id: 'all', label: 'All' },
+    { id: 'unpaid', label: 'Unpaid' },
+    { id: 'paid', label: 'Paid' },
+  ],
+  ledger: [
+    { id: 'all', label: 'All' },
+    { id: 'invoice', label: 'Income' },
+    { id: 'expense', label: 'Expenses' },
+  ],
+};
+
+const isUnpaid = (t: Transaction) => {
+  const status = String(t.status || '').toLowerCase();
+  return status === 'pending' || t.type === 'pending';
+};
+
 export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [activeTab, setActiveTab] = useState<'collections' | 'payments' | 'ledger'>('collections');
+  const route = useRoute<RouteProp<RootStackParamList, 'AllTransactions'>>();
+
+  // Arriving from a dashboard tile: open the tab it belongs to, already
+  // narrowed. Defaults are unchanged for anyone opening the screen normally.
+  const [activeTab, setActiveTab] = useState<Tab>(route.params?.tab || 'collections');
+  const [filter, setFilter] = useState<string>(route.params?.filter || 'all');
+  // Set only when the screen was opened pre-filtered, so the banner explaining
+  // why the list is short can be shown once and dismissed.
+  const [cameFiltered, setCameFiltered] = useState<boolean>(!!route.params?.filter);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [ledgerItems, setLedgerItems] = useState<LedgerItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     loadData();
@@ -86,10 +122,45 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () =>
     }
   };
 
-  const renderTab = (tab: 'collections' | 'payments' | 'ledger', label: string) => (
+  // What the list actually shows. Kept separate from the loaded data so the
+  // counts on the chips can describe the whole set while the list shows a slice.
+  const visibleTransactions = transactions.filter((t) => {
+    if (filter === 'unpaid') return isUnpaid(t);
+    if (filter === 'paid') return !isUnpaid(t);
+    return true;
+  });
+
+  const visibleLedger = ledgerItems.filter((i) =>
+    filter === 'all' ? true : i.type === filter
+  );
+
+  const countFor = (id: string): number => {
+    if (activeTab === 'payments') {
+      if (id === 'unpaid') return transactions.filter(isUnpaid).length;
+      if (id === 'paid') return transactions.filter((t) => !isUnpaid(t)).length;
+      return transactions.length;
+    }
+    if (id === 'all') return ledgerItems.length;
+    return ledgerItems.filter((i) => i.type === id).length;
+  };
+
+  const activeFilterLabel =
+    activeTab === 'collections' || filter === 'all'
+      ? null
+      : FILTERS[activeTab].find((f) => f.id === filter)?.label || null;
+
+  const selectTab = (tab: Tab) => {
+    setActiveTab(tab);
+    // Filters do not carry across tabs: "unpaid" means nothing on the ledger,
+    // and a stale selection would silently hide rows on arrival.
+    setFilter('all');
+    setCameFiltered(false);
+  };
+
+  const renderTab = (tab: Tab, label: string) => (
     <TouchableOpacity
       style={[styles.tab, activeTab === tab && styles.activeTab]}
-      onPress={() => setActiveTab(tab)}
+      onPress={() => selectTab(tab)}
     >
       <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
         {label}
@@ -117,6 +188,53 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () =>
         {renderTab('ledger', 'Ledger')}
       </View>
 
+      {/* Filter chips. Each carries its count, so the size of what you are not
+          looking at is visible without switching to it. */}
+      {activeTab !== 'collections' && !loading && (
+        <View style={styles.filterBar}>
+          {FILTERS[activeTab].map((f) => {
+            const active = filter === f.id;
+            const count = countFor(f.id);
+            return (
+              <TouchableOpacity
+                key={f.id}
+                style={[styles.filterChip, active && styles.filterChipActive]}
+                onPress={() => { setFilter(f.id); setCameFiltered(false); }}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                  {f.label}
+                </Text>
+                <View style={[styles.filterCount, active && styles.filterCountActive]}>
+                  <Text style={[styles.filterCountText, active && styles.filterCountTextActive]}>
+                    {count}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
+      {/* Says out loud that the list was narrowed before they got here, with a
+          way out. Landing on a filtered list with no explanation is how people
+          conclude their data is missing. */}
+      {cameFiltered && !!activeFilterLabel && (
+        <View style={styles.appliedBar}>
+          <Text style={styles.appliedText} numberOfLines={1}>
+            Showing {activeFilterLabel.toLowerCase()} only, from your dashboard
+          </Text>
+          <TouchableOpacity
+            onPress={() => { setFilter('all'); setCameFiltered(false); }}
+            style={styles.appliedClear}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.appliedClearText}>Show all</Text>
+            <X size={12} color={colors.primary} strokeWidth={3} />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {activeTab === 'collections' ? (
         <CollectionsView onOpenInvoice={(invoiceId) => navigation.navigate('InvoiceDetails', { invoiceId: String(invoiceId) })} />
       ) : loading ? (
@@ -138,14 +256,20 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () =>
           }
         >
             {activeTab === 'payments' ? (
-              transactions.length === 0 ? (
+              visibleTransactions.length === 0 ? (
                 <View style={styles.emptyState}>
                   <Text style={styles.emptyIcon}>🧾</Text>
-                  <Text style={styles.emptyTitle}>No transactions found</Text>
-                  <Text style={styles.emptySubtitle}>Patient payments will appear here once invoices are created.</Text>
+                  <Text style={styles.emptyTitle}>
+                    {activeFilterLabel ? `Nothing ${activeFilterLabel.toLowerCase()}` : 'No transactions found'}
+                  </Text>
+                  <Text style={styles.emptySubtitle}>
+                    {activeFilterLabel
+                      ? 'Every invoice in this period is settled. Tap All to see them.'
+                      : 'Patient payments will appear here once invoices are created.'}
+                  </Text>
                 </View>
               ) : (
-                transactions.map((transaction, index) => {
+                visibleTransactions.map((transaction, index) => {
                   const s = transaction.status.toLowerCase();
                   // Paid is paid — no user-facing "verification" distinction.
                   const isPaid = s === 'completed' || s === 'success';
@@ -184,14 +308,14 @@ export const AllTransactionsScreen: React.FC<AllTransactionsScreenProps> = () =>
                 })
               )
             ) : (
-              ledgerItems.length === 0 ? (
+              visibleLedger.length === 0 ? (
                 <View style={styles.emptyState}>
                   <Text style={styles.emptyIcon}>📊</Text>
                   <Text style={styles.emptyTitle}>No ledger entries found</Text>
                   <Text style={styles.emptySubtitle}>All income and expenses will appear here.</Text>
                 </View>
               ) : (
-                ledgerItems.map((item, index) => {
+                visibleLedger.map((item, index) => {
                   const isExpense = item.type === 'expense';
                   const indicatorColor = isExpense ? '#EF4444' : '#10B981';
                   const initials = getInitials(item.entityName || '??');
@@ -246,6 +370,54 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
   backButton: { width: 40, alignItems: 'center' },
   tabContainer: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+
+  filterBar: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingLeft: 12,
+    paddingRight: 8,
+    paddingVertical: 7,
+    borderRadius: componentRadius.pill,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  filterChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  filterChipText: { fontSize: 12.5, fontWeight: '700', color: '#4B5563' },
+  filterChipTextActive: { color: '#FFFFFF' },
+  filterCount: {
+    minWidth: 20,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: componentRadius.pill,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+  },
+  filterCountActive: { backgroundColor: 'rgba(255,255,255,0.24)' },
+  filterCountText: { fontSize: 10.5, fontWeight: '800', color: '#6B7280' },
+  filterCountTextActive: { color: '#FFFFFF' },
+
+  appliedBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    backgroundColor: colors.primaryBg,
+  },
+  appliedText: { flex: 1, fontSize: 12, fontWeight: '700', color: colors.primary },
+  appliedClear: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  appliedClearText: { fontSize: 12, fontWeight: '800', color: colors.primary },
   tab: { flex: 1, paddingVertical: 15, alignItems: 'center', position: 'relative' },
   activeTab: { backgroundColor: '#FFFFFF' },
   tabText: { fontSize: 14, fontWeight: '500', color: '#6B7280' },

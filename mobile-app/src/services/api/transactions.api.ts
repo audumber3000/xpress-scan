@@ -241,6 +241,39 @@ export class TransactionsApiService extends BaseApiService {
     }
   }
 
+  /**
+   * Record an outgoing expense.
+   *
+   * `POST /ledger/expenses` has existed the whole time; the phone could read an
+   * expense by id and show it in the ledger, but never create one. Expenses get
+   * written down at the desk, which is where the phone is, so this was the last
+   * everyday money task that forced somebody onto a computer.
+   *
+   * `date` is optional and the server defaults it to now. It is sent explicitly
+   * so a bill paid on Friday and entered on Monday lands on Friday.
+   */
+  async createExpense(data: {
+    amount: number;
+    payment_method: string;
+    category: string;
+    notes?: string;
+    vendor_id?: number;
+    date?: string;
+  }): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/ledger/expenses`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      let detail = `HTTP ${response.status}`;
+      try { detail = (await response.json())?.detail || detail; } catch {}
+      throw new Error(detail);
+    }
+    return response.json();
+  }
+
   async sendInvoiceViaWhatsApp(invoiceId: string | number): Promise<any> {
     const headers = await this.getAuthHeaders();
     const response = await this.fetchWithTimeout(`${this.baseURL}/invoices/${invoiceId}/send-whatsapp`, {

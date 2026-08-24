@@ -4,7 +4,7 @@ import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import { componentRadius } from '../../constants/theme';
 import { AppSkeleton } from '../Skeleton';
 
-type Period = 'Today' | 'Last 7 Days' | 'This Month';
+import type { Period } from '../../../services/api/analytics.api';
 type BadgeTone = 'neutral' | 'positive' | 'negative';
 
 export interface MetricChartCardProps {
@@ -17,8 +17,10 @@ export interface MetricChartCardProps {
   data: number[];
   labels: string[];
   hasData: boolean;
+  /** Read only. The one filter that sets this lives above the KPI row now:
+   *  see shared/components/home/PeriodFilter. This card used to draw its own
+   *  copy of it, and so did the other three, all bound to the same state. */
   selectedPeriod: Period;
-  onPeriodChange: (period: Period) => void;
   loading?: boolean;
   refreshing?: boolean;
   lastUpdatedAt?: Date | null;
@@ -67,19 +69,28 @@ const formatUpdatedAt = (date?: Date | null) => {
   })}`;
 };
 
-const compactPeriodLabel = (period: Period) => {
-  if (period === 'Last 7 Days') return '7D';
-  if (period === 'This Month') return 'Month';
-  return 'Today';
+/**
+ * What the percentage is measured against.
+ *
+ * Has to match `_period_bounds` on the server, which computes each delta
+ * against the window immediately before the one being shown. Saying "vs
+ * yesterday" under a figure the server compared to last month is the kind of
+ * caption nobody checks and everybody believes.
+ *
+ * All-time has no previous window, so the server returns 0% and there is
+ * nothing honest to compare against.
+ */
+const TREND_BASELINE: Record<Period, string | null> = {
+  today: 'yesterday',
+  yesterday: 'the day before',
+  '7days': 'the previous 7 days',
+  month: 'last month',
+  all: null,
 };
 
 const defaultTrendSummary = (badgeText: string, period: Period) => {
-  const baseline = period === 'Today'
-    ? 'yesterday'
-    : period === 'Last 7 Days'
-      ? 'previous 7D'
-      : 'last month';
-  return `${badgeText} vs ${baseline}`;
+  const baseline = TREND_BASELINE[period];
+  return baseline ? `${badgeText} vs ${baseline}` : 'Everything recorded so far';
 };
 
 const formatInspectDetail = (
@@ -188,7 +199,6 @@ export const MetricChartCard: React.FC<MetricChartCardProps> = ({
   labels,
   hasData,
   selectedPeriod,
-  onPeriodChange,
   loading = false,
   refreshing = false,
   lastUpdatedAt,
@@ -259,24 +269,6 @@ export const MetricChartCard: React.FC<MetricChartCardProps> = ({
           <Text style={styles.trendSummary} numberOfLines={1}>
             {summary}
           </Text>
-
-          {/* Period pills */}
-          <View style={styles.pills}>
-            {(['Today', 'Last 7 Days', 'This Month'] as const).map((period) => {
-              const active = selectedPeriod === period;
-              const label = compactPeriodLabel(period);
-              return (
-                <TouchableOpacity
-                  key={period}
-                  style={[styles.pill, active && { backgroundColor: color + '14', borderColor: color }]}
-                  onPress={() => onPeriodChange(period)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.pillText, active && { color, fontWeight: '700' }]}>{label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
 
           {/* Chart */}
           <Animated.View
@@ -419,25 +411,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 13,
     lineHeight: 16,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  pills: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 18,
-  },
-  pill: {
-    flex: 1,
-    paddingVertical: 11,
-    borderRadius: componentRadius.button, // 10 — period selector behaves like a button
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-  },
-  pillText: {
-    fontSize: 15,
     fontWeight: '600',
     color: '#6B7280',
   },
