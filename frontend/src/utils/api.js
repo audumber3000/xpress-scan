@@ -95,6 +95,19 @@ export const authenticatedFetch = async (url, options = {}) => {
         blocked.isPlanBlocked = true;
         throw blocked;
       }
+      // A 402 also carries an empty notification wallet, which is a different
+      // problem with a different fix: the plan is fine, the message credit ran
+      // out. Flagged here so the message helper can say that, instead of
+      // falling through to the plan sentence and telling a paying clinic their
+      // subscription has stopped.
+      if (response.status === 402 && errorData.code === 'INSUFFICIENT_WALLET_BALANCE') {
+        const empty = new Error(WALLET_EMPTY_MESSAGE);
+        empty.status = 402;
+        empty.detail = errorData.detail;
+        empty.code = errorData.code;
+        empty.isWalletEmpty = true;
+        throw empty;
+      }
 
       console.error('API Error Response:', errorData);
       
@@ -177,6 +190,13 @@ const SERVER_FAULT =
   "Something went wrong on our end, not yours. Nothing you entered was lost. " +
   "Please try again in a moment, and tell support if it keeps happening.";
 
+// An empty notification wallet, in the clinic's terms. Deliberately says what
+// stopped and what fixes it, and names no amount: the minimum top-up differs by
+// currency, and the Notifications screen already shows the real figure.
+const WALLET_EMPTY_MESSAGE =
+  "That message wasn't sent. Your notification balance has run out, so top it " +
+  "up under Control Center, Notifications to start messages going out again.";
+
 /**
  * Turn anything thrown by the API into a sentence a dentist would say.
  *
@@ -238,6 +258,7 @@ export const getFriendlyErrorMessage = (error, fallback = "Something went wrong.
 
   // The 4xx family, in the user's terms. Each of these is a situation, not a
   // malfunction, so it gets its own sentence rather than the generic one.
+  if (error.isWalletEmpty || error.code === "INSUFFICIENT_WALLET_BALANCE") return WALLET_EMPTY_MESSAGE;
   if (status === 402) return error.detail?.title || "Your plan has stopped. Choose a plan to carry on.";
   if (status === 401) return "Your session has ended. Please sign in again.";
   if (status === 403) return "You don't have permission to do that. Ask your clinic owner if you need it.";

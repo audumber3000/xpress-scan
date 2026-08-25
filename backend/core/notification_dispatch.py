@@ -4,8 +4,8 @@ Looks up the clinic's NotificationPreference for the given event_type
 and fires nexus_notify for every enabled channel.
 
 Wallet balance is checked before the first send and deducted per channel.
-Raises InsufficientWalletBalance (from wallet_service) when funds are low —
-callers should catch this and return HTTP 402 to the frontend.
+A shortfall raises InsufficientWalletBalance only when the caller passes
+`required=True`; otherwise the send is skipped and logged. See notify_event.
 """
 import logging
 import datetime
@@ -27,12 +27,27 @@ def notify_event(
     to_email: str = "",
     to_name: str = "",
     template_data: dict = None,
+    required: bool = False,
 ):
     """
     Check NotificationPreference for the clinic, verify wallet balance,
     and fire nexus_notify for every enabled channel.
 
-    Raises InsufficientWalletBalance if the clinic cannot afford even one channel.
+    `required` says whether the message is the point of the caller's request.
+
+    Most sends are a side effect of something else — booking an appointment,
+    finalising an invoice — and there an empty wallet must not break the thing
+    the clinic actually asked for, so the shortfall is logged and swallowed.
+    It used to escape into the route's blanket `except Exception`, which rolled
+    back and answered 500 after the commit had already landed: the appointment
+    existed, the front desk saw a crash, and booked it a second time.
+
+    When the send IS the request (the Send on WhatsApp buttons), pass
+    `required=True` and the shortfall propagates as InsufficientWalletBalance,
+    which main.py turns into the 402 the frontend explains. Those routes need an
+    `except InsufficientWalletBalance: raise` ahead of their blanket handler,
+    for the same reason they already re-raise HTTPException.
+
     All other errors are caught and logged so they never break the calling request.
     """
     from models import NotificationPreference, NotificationLog, Clinic
@@ -78,7 +93,15 @@ def notify_event(
     if total_cost > 0:
         wlt = wallet_service.get_or_create_wallet(db, clinic_id)
         if wlt.balance < total_cost:
-            raise InsufficientWalletBalance(needed=total_cost, available=wlt.balance)
+            shortfall = InsufficientWalletBalance(needed=total_cost, available=wlt.balance)
+            if required:
+                raise shortfall
+            # A side-effect send. The clinic learns about the empty wallet from
+            # wallet_low_balance_job, not by having this request fail.
+            logger.info(
+                "notify_event [%s] clinic=%s skipped: %s", event_type, clinic_id, shortfall
+            )
+            return
 
     # ── Send per channel ──────────────────────────────────────────────────────
     for channel in channels:
@@ -149,8 +172,15 @@ def notify_event(
                     clinic_id=clinic_id,
                 )
 
-        except InsufficientWalletBalance:
-            raise  # let the caller handle this
+        except InsufficientWalletBalance as exc:
+            # The pre-flight already proved the balance covers every channel, so
+            # this only fires when a concurrent debit lands mid-loop. Same rule.
+            if required:
+                raise
+            logger.info(
+                "notify_event [%s] %s clinic=%s skipped: %s",
+                event_type, channel, clinic_id, exc,
+            )
         except Exception as exc:
             logger.warning(f"notify_event [{event_type}] {channel} error: {exc}")
 

@@ -12,7 +12,7 @@ import requests
 import re
 
 from database import SessionLocal
-from core.notification_dispatch import notify_event
+from core.notification_dispatch import notify_event, InsufficientWalletBalance
 from core.posthog_client import track_event, EVENTS
 from core.audit import (
     record_audit, INVOICE_DELETED, PAYMENT_DELETED, PAYMENT_ADDED,
@@ -2939,9 +2939,15 @@ async def send_receipt_via_whatsapp(
                 "clinic_phone": clinic.phone or "",
                 "media_id": media_id,
             },
+            required=True,
         )
         return {"success": True, "dispatched": True, "message": "Receipt sharing initiated"}
     except HTTPException:
+        raise
+    except InsufficientWalletBalance:
+        # main.py answers this with a 402 carrying needed/available. Without this
+        # line the blanket handler below reports an empty wallet as a 500, and
+        # the clinic is told the app broke rather than that it needs a top-up.
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error sending receipt via WhatsApp: {str(e)}")
@@ -3020,12 +3026,18 @@ async def send_invoice_via_whatsapp(
                 "total_amount": float(invoice.total),
                 "clinic_phone": clinic.phone or "",
                 "media_id": media_id  # Nexus handles this public R2 URL
-            }
+            },
+            required=True,
         )
 
         return {"success": True, "message": "Invoice sharing initiated via official Nexus service"}
         
     except HTTPException:
+        raise
+    except InsufficientWalletBalance:
+        # main.py answers this with a 402 carrying needed/available. Without this
+        # line the blanket handler below reports an empty wallet as a 500, and
+        # the clinic is told the app broke rather than that it needs a top-up.
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error sending invoice via WhatsApp: {str(e)}")

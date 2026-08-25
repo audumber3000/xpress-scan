@@ -9,7 +9,7 @@ from datetime import datetime
 from domains.activity.routes.activity_log import push_activity
 from domains.medical.services.prescription_service import PrescriptionService
 from domains.infrastructure.services.pdf_service import html_template_to_pdf
-from core.notification_dispatch import notify_event
+from core.notification_dispatch import notify_event, InsufficientWalletBalance
 import os
 import requests
 import re
@@ -236,12 +236,18 @@ async def send_prescription_via_whatsapp(
                 "doctor_name": getattr(clinic, "doctor_name", "your doctor"),
                 "clinic_phone": clinic.phone or "",
                 "media_id": media_id  # Nexus handles this public R2 URL
-            }
+            },
+            required=True,
         )
         
         return {"success": True, "message": "Prescription sharing initiated via official Nexus service"}
 
     except HTTPException:
+        raise
+    except InsufficientWalletBalance:
+        # main.py answers this with a 402 carrying needed/available. Without this
+        # line the blanket handler below reports an empty wallet as a 500, and
+        # the clinic is told the app broke rather than that it needs a top-up.
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"WhatsApp Error: {str(e)}")
