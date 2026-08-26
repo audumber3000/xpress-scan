@@ -28,20 +28,49 @@ import { signupOtpApiService } from '../../../services/api/signupOtp.api';
  * server, it comes back on the next launch until it is done. That mirrors
  * `App.jsx` on the web, which sends the same clinic back to /onboarding.
  *
+ * ## Why opening this screen does not always send a code
+ *
+ * It used to, guarded by a `useRef` that reset on every mount. That guard was
+ * the wrong lifetime for the job: the navigator is torn down and rebuilt on an
+ * auth-state re-fire or an Android memory reclaim, and each rebuild is a fresh
+ * mount asking for another code. One clinic collected more than twenty messages
+ * that way, and because a resend used to invalidate the code before it, every
+ * message they opened was already dead. They uninstalled the app.
+ *
+ * So the record of "a code is already out there" lives in AsyncStorage, keyed by
+ * clinic, and survives the mount. On open this screen asks that record first and
+ * sends only when there is genuinely nothing live. The countdown is derived from
+ * an absolute timestamp rather than a number ticking down in state, so a remount
+ * resumes it instead of restarting it. The server enforces all of this again on
+ * its own side; none of it is trusted from here.
+ *
  * ## Nobody gets stranded
  *
- * If both channels fail the screen says so and offers WhatsApp support rather
- * than repeating "try again" at someone who cannot. The codes stay valid
+ * If both channels fail, or the clinic has asked for so many codes that the
+ * hourly ceiling has stopped it, the screen says so and offers WhatsApp support
+ * rather than repeating "try again" at someone who cannot. Codes stay valid
  * server-side in case delivery catches up.
  */
 
-const COOLDOWN_SECONDS = 45;
-
 const looksLikeEmail = (v: string) => /\S+@\S+\.\S+/.test(v.trim());
+
+const secondsUntil = (at: number, now: number) => Math.max(0, Math.ceil((at - now) / 1000));
+
+/**
+ * Guards against two mounts sending at once.
+ *
+ * Module scope on purpose: a ref would not help, because the case being guarded
+ * is precisely the one where a second component instance exists. React Native
+ * keeps the JS context alive across the navigator being rebuilt, so this does
+ * too. Holding the promise rather than a boolean means the second caller waits
+ * for the first result instead of dropping the request on the floor.
+ */
+let inFlightSend: Promise<any> | null = null;
 
 export const VerifyContactScreen: React.FC<{ navigation: any }> = () => {
   const { backendUser, refreshBackendUser } = useAuth();
   const clinic = backendUser?.clinic;
+  const clinicId = clinic?.id ?? 'pending';
 
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -57,47 +86,97 @@ export const VerifyContactScreen: React.FC<{ navigation: any }> = () => {
   const [devEcho, setDevEcho] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [error, setError] = useState('');
-  const [cooldown, setCooldown] = useState(0);
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // Guards the send-on-open. Without it a re-render mid-request fires a second
-  // send, which burns the first code and leaves the user typing a dead one.
-  const sentOnce = useRef(false);
+  // Absolute instants, not counters. A countdown held as a number that ticks
+  // down in state restarts at its full value every time the component mounts,
+  // which is how the resend limit came to mean nothing.
+  const [resendAt, setResendAt] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
 
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; }, []);
+
+  // One ticker for every countdown on the screen.
   useEffect(() => {
-    if (cooldown <= 0) return;
-    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    if (resendAt <= now) return;
+    const t = setTimeout(() => setNow(Date.now()), 1000);
     return () => clearTimeout(t);
-  }, [cooldown]);
+  }, [resendAt, now]);
 
-  const send = useCallback(async (to: { phone: string; email: string }) => {
-    setSending(true);
-    setError('');
-    setBlocked(false);
+  const cooldown = secondsUntil(resendAt, now);
 
-    const res = await signupOtpApiService.send(to.phone, to.email);
+  const applySendResult = useCallback((res: any) => {
+    if (!alive.current) return;
+
+    if (res.alreadyVerified) {
+      // Server says the step is done. Let the navigator move on.
+      refreshBackendUser();
+      return;
+    }
 
     if (!res.ok) {
       setError(res.error || '');
       // Both channels dead. Stop asking them to try again and offer a human.
       setBlocked(true);
-      setSending(false);
       return;
     }
 
+    if (res.rateLimited) {
+      // Not a failure: a code is already out there. Say so, start the
+      // countdown, and leave the input alone.
+      setResendAt(Date.now() + res.resendIn * 1000);
+      setNotice(res.error || 'A code is already on its way. Use the most recent one you received.');
+      // An hourly ceiling is a different situation from a 45 second pause: it
+      // means minutes of waiting, so it gets the route to a human.
+      if (res.resendIn > 120) setBlocked(true);
+      return;
+    }
+
+    setBlocked(false);
+    setNotice('');
     setReached(res.reached);
-    setFailed(Object.entries(res.delivery)
-      .filter(([, r]) => !r.sent)
+    setFailed(Object.entries(res.delivery || {})
+      .filter(([, r]: any) => !r.sent)
       .map(([ch]) => ch));
     setDevEcho(res.devEcho);
-    setCooldown(COOLDOWN_SECONDS);
-    setSending(false);
-  }, []);
+    setResendAt(Date.now() + res.resendIn * 1000);
+  }, [refreshBackendUser]);
 
-  // Prefill from what the clinic already has on file, then send once.
+  const send = useCallback(async (to: { phone: string; email: string }) => {
+    if (inFlightSend) {
+      // Another mount is already asking. Wait on its answer rather than
+      // starting a second request that the server would only reject.
+      setSending(true);
+      try { applySendResult(await inFlightSend); } finally {
+        if (alive.current) setSending(false);
+      }
+      return;
+    }
+
+    setSending(true);
+    setError('');
+    setNotice('');
+    const p = signupOtpApiService.send(clinicId, to.phone, to.email);
+    inFlightSend = p;
+    try {
+      applySendResult(await p);
+    } finally {
+      inFlightSend = null;
+      if (alive.current) setSending(false);
+    }
+  }, [applySendResult, clinicId]);
+
+  // Open the screen: prefill, then send ONLY if nothing is live.
   useEffect(() => {
     (async () => {
-      const contacts = await signupOtpApiService.getContacts();
+      const [contacts, sendState] = await Promise.all([
+        signupOtpApiService.getContacts(),
+        signupOtpApiService.readSendState(clinicId),
+      ]);
+      if (!alive.current) return;
+
       const p = contacts?.security_phone || clinic?.phone || backendUser?.phone || '';
       const e = contacts?.security_email || backendUser?.email || '';
       setPhone(p);
@@ -106,10 +185,34 @@ export const VerifyContactScreen: React.FC<{ navigation: any }> = () => {
       setDraftEmail(e);
       setLoading(false);
 
-      if (!sentOnce.current && p && looksLikeEmail(e)) {
-        sentOnce.current = true;
-        send({ phone: p, email: e });
+      if (contacts?.security_phone_verified || contacts?.security_email_verified) {
+        // Verified on another device, or a verify whose response was lost.
+        await signupOtpApiService.clearSendState(clinicId);
+        refreshBackendUser();
+        return;
       }
+
+      const t = Date.now();
+      const contactsMatch = !sendState
+        || (sendState.phone === p && sendState.email === e);
+      const codeStillLive = !!sendState && sendState.expiresAt > t && contactsMatch;
+      const stillCoolingDown = !!sendState && sendState.resendAt > t;
+
+      if (codeStillLive || stillCoolingDown) {
+        // There is already a code on its phone, or one was sent seconds ago.
+        // Restore what we told them last time instead of sending again.
+        setReached(sendState!.reached);
+        setFailed(sendState!.failed);
+        setDevEcho(sendState!.devEcho);
+        setResendAt(sendState!.resendAt);
+        setNow(t);
+        if (!codeStillLive) {
+          setNotice('Your last code has expired. You can send a new one in a moment.');
+        }
+        return;
+      }
+
+      if (p && looksLikeEmail(e)) send({ phone: p, email: e });
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -124,9 +227,9 @@ export const VerifyContactScreen: React.FC<{ navigation: any }> = () => {
     setEditing(false);
     setCode('');
     // A corrected typo resends immediately. The cooldown exists to stop somebody
-    // hammering the same wrong number, not to punish them for fixing it.
-    setCooldown(0);
-    sentOnce.current = true;
+    // hammering the same wrong number, not to punish them for fixing it, and the
+    // server waives it for a genuine contact change too.
+    setResendAt(0);
     send({ phone: p, email: e });
   };
 
@@ -134,9 +237,18 @@ export const VerifyContactScreen: React.FC<{ navigation: any }> = () => {
     if (code.trim().length < 4) return;
     setVerifying(true);
     setError('');
-    const res = await signupOtpApiService.verify(code.trim());
+    setNotice('');
+    const res = await signupOtpApiService.verify(clinicId, code.trim());
+    if (!alive.current) return;
     if (!res.ok) {
       setError(res.error || '');
+      if (res.rateLimited) {
+        // Out of tries on the live codes. Point them at the resend and make it
+        // available when the server says it will be.
+        setResendAt(Date.now() + (res.retryAfter || 45) * 1000);
+        setNow(Date.now());
+        setCode('');
+      }
       setVerifying(false);
       return;
     }
@@ -144,7 +256,7 @@ export const VerifyContactScreen: React.FC<{ navigation: any }> = () => {
     // refreshed user, so this is what lets them through. No navigate() call:
     // the navigator swaps the whole stack once the flag clears.
     await refreshBackendUser();
-    setVerifying(false);
+    if (alive.current) setVerifying(false);
   };
 
   const openSupport = () => {
@@ -257,6 +369,8 @@ export const VerifyContactScreen: React.FC<{ navigation: any }> = () => {
             </Text>
           )}
 
+          {!editing && !!notice && <Text style={s.partial}>{notice}</Text>}
+
           {devEcho && (
             <Text style={s.partial}>
               Development machine: no messaging service here, so the code was written to the
@@ -278,6 +392,12 @@ export const VerifyContactScreen: React.FC<{ navigation: any }> = () => {
                 maxLength={6}
                 autoFocus
               />
+
+              {/* Said plainly, because it is the thing that was not true before:
+                  if several messages arrived, every one of them works. */}
+              <Text style={s.hint}>
+                Got more than one message? Any of the recent codes will work.
+              </Text>
 
               {!!error && <Text style={s.error}>{error}</Text>}
 
@@ -309,14 +429,15 @@ export const VerifyContactScreen: React.FC<{ navigation: any }> = () => {
             </>
           )}
 
-          {/* Neither channel worked. Repeating "try again" at somebody who
-              cannot receive anything is how a signup gets abandoned. */}
+          {/* Neither channel worked, or they have asked so often that the hourly
+              ceiling stopped them. Repeating "try again" at somebody who cannot
+              get anywhere is how a signup gets abandoned. */}
           {blocked && (
             <View style={s.stuck}>
               <Text style={s.stuckTitle}>Not getting the code?</Text>
               <Text style={s.stuckText}>
-                We could not reach you on either channel. Check the number and the address
-                above, or message us and we will verify you ourselves.
+                Check the number and the address above, or message us and we will verify you
+                ourselves. Nothing you have set up so far is lost.
               </Text>
               <TouchableOpacity style={s.supportBtn} onPress={openSupport} activeOpacity={0.85}>
                 <WhatsAppIcon size={17} />
@@ -380,6 +501,7 @@ const s = StyleSheet.create({
     borderRadius: 14, paddingVertical: 15, textAlign: 'center',
     fontSize: 26, fontWeight: '800', letterSpacing: 10, color: colors.gray900,
   },
+  hint: { fontSize: 12, lineHeight: 18, color: colors.gray500, marginTop: 9 },
   error: { fontSize: 13, color: '#DC2626', marginTop: 10, fontWeight: '600' },
 
   primary: {

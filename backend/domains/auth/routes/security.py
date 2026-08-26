@@ -32,9 +32,30 @@ from sqlalchemy import func, or_
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-OTP_TTL_MIN = 5
+OTP_TTL_MIN = 10
 MAX_ATTEMPTS = 5
 RESEND_COOLDOWN_SEC = 45
+
+# ── Signup verification limits ───────────────────────────────────────────────
+# This step BLOCKS a brand-new clinic out of the whole product, so it is tuned
+# to be forgiving where the settings-screen flow is tight.
+#
+# SIGNUP_ACTIVE_CODES is the important one. A resend used to burn the previous
+# code, which meant that with two messages on a phone exactly one of them worked
+# and the older one answered "Incorrect code" — indistinguishable, from the
+# customer's side, from the product being broken. WhatsApp template delivery is
+# not ordered and not prompt, so the message somebody opens is very often not
+# the newest one. Keeping the last few generations alive costs nothing (three
+# live codes out of a million is not a brute-force surface) and removes the
+# single sharpest edge in the flow: every code you were actually sent works.
+SIGNUP_ACTIVE_CODES = 3
+# Wrong guesses allowed before every live code is torn up. Higher than
+# MAX_ATTEMPTS because a person juggling three real messages will mistype.
+SIGNUP_MAX_ATTEMPTS = 10
+# Ceiling on sends per clinic per hour. The cooldown paces a human; this stops
+# a loop — a client that re-sends on every mount, a stuck retry — from turning
+# into a hundred WhatsApp messages and a hundred rupees of MSG91.
+SIGNUP_MAX_SENDS_PER_HOUR = 8
 
 # Development escape hatch for signup verification.
 #
@@ -64,6 +85,22 @@ def _hash_code(code: str, clinic_id: int, target: str) -> str:
     # Salted with clinic + target so a leaked hash can't be reversed via a
     # rainbow table of the 1M six-digit codes. Codes are short-lived + capped too.
     return hashlib.sha256(f"{code}:{clinic_id}:{target}".encode()).hexdigest()
+
+
+def _too_many(detail: str, retry_after: int) -> HTTPException:
+    """A 429 that says WHEN, not just no.
+
+    `retry_after` rides in the body as well as the header because the clients
+    render a live countdown from it. A rate limit a screen cannot count down
+    from just looks like a failure, and the customer's answer to a failure is
+    to press the button again.
+    """
+    seconds = max(1, int(retry_after))
+    return HTTPException(
+        status_code=429,
+        detail=detail,
+        headers={"Retry-After": str(seconds), "X-Retry-After-Seconds": str(seconds)},
+    )
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
@@ -239,7 +276,10 @@ def _issue_otp(db, c: Clinic, channel: str, purpose: str) -> dict:
         field = "phone" if channel == "whatsapp" else "email"
         raise HTTPException(status_code=400, detail=f"Add a security {field} first.")
 
-    # Rate-limit resends.
+    # Rate-limit resends. Deliberately looks at the latest row whether or not it
+    # was consumed: a send burns the previous code, so filtering on
+    # `consumed == False` meant the act of sending cleared its own cooldown and
+    # the limit only ever caught the very first repeat.
     recent = (
         db.query(OtpVerification)
         .filter(
@@ -247,13 +287,17 @@ def _issue_otp(db, c: Clinic, channel: str, purpose: str) -> dict:
             OtpVerification.channel == channel,
             OtpVerification.target == target,
             OtpVerification.purpose == purpose,
-            OtpVerification.consumed == False,
         )
         .order_by(OtpVerification.created_at.desc())
         .first()
     )
-    if recent and (datetime.utcnow() - recent.created_at).total_seconds() < RESEND_COOLDOWN_SEC:
-        raise HTTPException(status_code=429, detail="Please wait a moment before requesting another code.")
+    if recent:
+        waited = (datetime.utcnow() - recent.created_at).total_seconds()
+        if waited < RESEND_COOLDOWN_SEC:
+            raise _too_many(
+                "Please wait a moment before requesting another code.",
+                RESEND_COOLDOWN_SEC - waited,
+            )
 
     # Invalidate any earlier unconsumed codes for this target — one active at a time.
     db.query(OtpVerification).filter(
@@ -310,7 +354,7 @@ def _consume_otp(db, c: Clinic, channel: str, purpose: str, code: str) -> None:
         raise HTTPException(status_code=400, detail="No active code. Send a new one.")
     if otp.expires_at < datetime.utcnow():
         raise HTTPException(status_code=400, detail="That code expired. Send a new one.")
-    if otp.attempts >= MAX_ATTEMPTS:
+    if (otp.attempts or 0) >= MAX_ATTEMPTS:
         otp.consumed = True
         db.commit()
         raise HTTPException(status_code=429, detail="Too many attempts. Send a new code.")
@@ -359,6 +403,94 @@ class SignupOtpVerify(BaseModel):
     code: str = Field(..., min_length=4, max_length=8)
 
 
+def _live_signup_rows(db, clinic_id: int):
+    """Every signup code still usable, newest first.
+
+    Note the absence of an expiry filter: an expired row is still needed by the
+    caller so it can say "that code expired" instead of "no active code". They
+    are different sentences to the person reading them — one means wait for the
+    next message, the other means press resend.
+    """
+    return (
+        db.query(OtpVerification)
+        .filter(
+            OtpVerification.clinic_id == clinic_id,
+            OtpVerification.purpose == PURPOSE_SIGNUP,
+            OtpVerification.consumed == False,
+        )
+        .order_by(OtpVerification.created_at.desc())
+        .all()
+    )
+
+
+def _signup_send_limits(db, clinic_id: int, contacts_changed: bool) -> None:
+    """Pace the sends, or raise the 429 that says how long to wait.
+
+    Two limits, doing two different jobs. The cooldown paces a person pressing
+    resend. The hourly ceiling is the one that matters operationally: it bounds
+    what a client stuck in a loop can cost, and until it existed this endpoint
+    had no limit at all while every other OTP path had one.
+
+    A contact edit skips the cooldown on purpose. Somebody who just fixed a typo
+    in their own phone number should not be told to wait 45 seconds to find out
+    whether the fix worked; they still count against the hourly ceiling, so the
+    loop protection holds either way.
+    """
+    now = datetime.utcnow()
+
+    window_start = now - timedelta(hours=1)
+    sends_this_hour = (
+        db.query(func.count(OtpVerification.id))
+        .filter(
+            OtpVerification.clinic_id == clinic_id,
+            OtpVerification.purpose == PURPOSE_SIGNUP,
+            OtpVerification.channel == "whatsapp",  # one row per send, not per channel
+            OtpVerification.created_at >= window_start,
+        )
+        .scalar()
+    ) or 0
+
+    if sends_this_hour >= SIGNUP_MAX_SENDS_PER_HOUR:
+        oldest_in_window = (
+            db.query(OtpVerification.created_at)
+            .filter(
+                OtpVerification.clinic_id == clinic_id,
+                OtpVerification.purpose == PURPOSE_SIGNUP,
+                OtpVerification.channel == "whatsapp",
+                OtpVerification.created_at >= window_start,
+            )
+            .order_by(OtpVerification.created_at.asc())
+            .first()
+        )
+        frees_up = (oldest_in_window[0] + timedelta(hours=1) - now).total_seconds() if oldest_in_window else 3600
+        raise _too_many(
+            "That is a lot of codes for one clinic. Any of the codes we already "
+            "sent you still works. If none of them arrived, message support and "
+            "we will verify you ourselves.",
+            frees_up,
+        )
+
+    if contacts_changed:
+        return
+
+    latest = (
+        db.query(OtpVerification)
+        .filter(
+            OtpVerification.clinic_id == clinic_id,
+            OtpVerification.purpose == PURPOSE_SIGNUP,
+        )
+        .order_by(OtpVerification.created_at.desc())
+        .first()
+    )
+    if latest:
+        waited = (now - latest.created_at).total_seconds()
+        if waited < RESEND_COOLDOWN_SEC:
+            raise _too_many(
+                "We just sent you a code. Give it a few seconds to arrive.",
+                RESEND_COOLDOWN_SEC - waited,
+            )
+
+
 @router.post("/signup-otp/send")
 def send_signup_otp(
     payload: SignupOtpSend,
@@ -372,13 +504,34 @@ def send_signup_otp(
     out, the customer can still finish; refusing the whole request because one
     provider is unhappy would wall a brand-new clinic out of the product on
     their first day.
+
+    Resending does NOT invalidate the code before it. See SIGNUP_ACTIVE_CODES:
+    the last few codes all stay live until they expire, so whichever message the
+    customer happens to open is one that works.
     """
     c = _clinic(db, current_user)
+
+    # Already done. Not an error: a client whose verify succeeded but whose
+    # follow-up refresh failed will land back here, and sending it a fresh code
+    # to type would be asking it to redo work that is finished.
+    if c.security_phone_verified or c.security_email_verified:
+        return {
+            "sent": False,
+            "already_verified": True,
+            "delivery": {},
+            "reached": [],
+            "phone": c.security_phone,
+            "email": c.security_email,
+        }
 
     phone = (payload.phone or "").strip()
     email = (payload.email or "").strip().lower()
     if "@" not in email or "." not in email.split("@")[-1]:
         raise HTTPException(status_code=400, detail="That email address does not look right.")
+
+    contacts_changed = phone != c.security_phone or email != c.security_email
+
+    _signup_send_limits(db, c.id, contacts_changed)
 
     # Changing a contact clears its verified flag, same as the settings screen.
     if phone != c.security_phone:
@@ -389,13 +542,9 @@ def send_signup_otp(
         c.security_email_verified = False
     db.commit()
 
-    # One code, both channels. Any earlier signup codes are burned first so only
-    # the newest pair can be used.
-    db.query(OtpVerification).filter(
-        OtpVerification.clinic_id == c.id,
-        OtpVerification.purpose == PURPOSE_SIGNUP,
-        OtpVerification.consumed == False,
-    ).update({"consumed": True})
+    # Snapshot what was already live, so the retirement pass below knows what
+    # counts as "previous" once the new pair is in.
+    previous = _live_signup_rows(db, c.id)
 
     code = f"{secrets.randbelow(10 ** 6):06d}"
     targets = {"whatsapp": phone, "email": email}
@@ -406,6 +555,26 @@ def send_signup_otp(
             expires_at=datetime.utcnow() + timedelta(minutes=OTP_TTL_MIN),
         ))
     db.commit()
+
+    # Retire what is no longer wanted, AFTER the new code exists so a crash in
+    # between can never leave the clinic with nothing to type.
+    if contacts_changed:
+        # Correcting a typo voids every outstanding code, both channels of it.
+        # Retiring only the row for the contact that changed would leave the old
+        # generation half-alive, which is a state nobody can reason about: the
+        # code sitting on a number they have just disowned would still be
+        # accepted through its email twin. A replacement was minted just above,
+        # so nothing is lost by tearing up the old one.
+        retired = previous
+    else:
+        # A plain resend keeps the last few generations usable. This is the
+        # whole point of SIGNUP_ACTIVE_CODES: whichever message they open works.
+        retired = previous[(SIGNUP_ACTIVE_CODES - 1) * len(targets):]
+
+    if retired:
+        for row in retired:
+            row.consumed = True
+        db.commit()
 
     delivery = {}
     for channel, target in targets.items():
@@ -429,6 +598,7 @@ def send_signup_otp(
             "reached": ["log"],
             "dev_echo": True,
             "expires_in": OTP_TTL_MIN * 60,
+            "resend_in": RESEND_COOLDOWN_SEC,
             "phone": phone,
             "email": email,
         }
@@ -446,6 +616,10 @@ def send_signup_otp(
         "delivery": delivery,
         "reached": reached,
         "expires_in": OTP_TTL_MIN * 60,
+        # The cooldown is the server's to state, not the client's to assume. A
+        # screen that gets torn down and rebuilt loses its own countdown, and a
+        # countdown that restarts at zero is how this endpoint got hammered.
+        "resend_in": RESEND_COOLDOWN_SEC,
         "phone": phone,
         "email": email,
     }
@@ -457,44 +631,66 @@ def verify_signup_otp(
     db=Depends(get_db),
     current_user: User = Depends(require_clinic_owner),
 ):
-    """One code, either row, both contacts verified."""
+    """Any of the live codes, either channel's row, both contacts verified."""
     c = _clinic(db, current_user)
     code = (payload.code or "").strip()
 
-    rows = (
-        db.query(OtpVerification)
-        .filter(
-            OtpVerification.clinic_id == c.id,
-            OtpVerification.purpose == PURPOSE_SIGNUP,
-            OtpVerification.consumed == False,
-        )
-        .order_by(OtpVerification.created_at.desc())
-        .all()
-    )
+    # Already through. Returning success rather than "no active code" is what
+    # makes this endpoint safe to retry: a verify that committed and then lost
+    # its response — a dropped connection, a backgrounded app — must not leave
+    # the customer staring at an error on a step that is actually finished.
+    if c.security_phone_verified or c.security_email_verified:
+        return {
+            "verified": True,
+            "already_verified": True,
+            "security_phone_verified": bool(c.security_phone_verified),
+            "security_email_verified": bool(c.security_email_verified),
+        }
+
+    now = datetime.utcnow()
+    rows = _live_signup_rows(db, c.id)
+
     if not rows:
         raise HTTPException(status_code=400, detail="No active code. Send a new one.")
-    if all(r.expires_at < datetime.utcnow() for r in rows):
-        raise HTTPException(status_code=400, detail="That code expired. Send a new one.")
-    if all((r.attempts or 0) >= MAX_ATTEMPTS for r in rows):
+
+    usable = [r for r in rows if r.expires_at >= now and (r.attempts or 0) < SIGNUP_MAX_ATTEMPTS]
+    if not usable:
+        if all(r.expires_at < now for r in rows):
+            raise HTTPException(status_code=400, detail="That code expired. Send a new one.")
+        # Attempt budget spent. Burn what is left so the next send starts clean,
+        # and say how long until they can ask for one.
         for r in rows:
             r.consumed = True
         db.commit()
-        raise HTTPException(status_code=429, detail="Too many attempts. Send a new code.")
+        newest = max(r.created_at for r in rows)
+        raise _too_many(
+            "Too many incorrect tries. Send a new code and use the newest message.",
+            RESEND_COOLDOWN_SEC - (now - newest).total_seconds(),
+        )
 
     matched = next(
-        (r for r in rows
-         if r.expires_at >= datetime.utcnow()
-         and _hash_code(code, c.id, r.target) == r.code_hash),
+        (r for r in usable if _hash_code(code, c.id, r.target) == r.code_hash),
         None,
     )
     if not matched:
-        # Counted against every live row, so the cap cannot be sidestepped by
-        # guessing against one channel and then the other.
-        for r in rows:
+        # Counted against every usable row, so the cap cannot be sidestepped by
+        # guessing against one channel and then the other, nor by keeping three
+        # generations alive.
+        for r in usable:
             r.attempts = (r.attempts or 0) + 1
         db.commit()
-        raise HTTPException(status_code=400, detail="Incorrect code. Try again.")
+        # The freshest row is the one with room left, so it sets what remains.
+        left = max(0, SIGNUP_MAX_ATTEMPTS - min((r.attempts or 0) for r in usable))
+        if left == 0:
+            detail = "Incorrect code. That was the last try, so send a new code."
+        elif left <= 2:
+            detail = f"Incorrect code. {left} more {'try' if left == 1 else 'tries'} before you need a new code."
+        else:
+            detail = "Incorrect code. Try again."
+        raise HTTPException(status_code=400, detail=detail)
 
+    # Every live code is spent by one success, including the older generations
+    # this customer never used.
     for r in rows:
         r.consumed = True
     c.security_phone_verified = True

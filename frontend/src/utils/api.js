@@ -125,6 +125,15 @@ export const authenticatedFetch = async (url, options = {}) => {
       const apiError = new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
       apiError.status = response.status;
       apiError.detail = errorData.detail;
+      // Rate limits carry their wait in a header, not the body. Surfacing it
+      // here means a caller can render a countdown rather than a dead end, and
+      // a screen that can count down is one the user stops hammering.
+      if (response.status === 429) {
+        const seconds = Number(
+          response.headers.get('X-Retry-After-Seconds') || response.headers.get('Retry-After')
+        );
+        if (Number.isFinite(seconds) && seconds > 0) apiError.retryAfter = Math.ceil(seconds);
+      }
       throw apiError;
     }
 

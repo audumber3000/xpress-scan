@@ -1,4 +1,4 @@
-import { createContext, FC, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { createContext, FC, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { User, onAuthStateChanged } from "firebase/auth"
 import { auth } from "../config/firebase"
 import { signInWithEmail, signOutUser } from "../services/auth/authService"
@@ -83,9 +83,32 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
     }
   }, [])
 
+  // Which account the listener last settled on, and whether it has settled at
+  // all. Both are refs because they gate a side effect, not a render.
+  const settledUid = useRef<string | null>(null)
+  const hasSettled = useRef(false)
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setIsLoading(true)
+      const nextUid = firebaseUser?.uid ?? null
+
+      // `isLoading` puts ConnectingScreen up, and AppNavigator renders that
+      // INSTEAD of the NavigationContainer — so raising it unmounts every
+      // screen and mounts them again when it drops. That is the right thing on
+      // a real sign-in or sign-out, where the whole stack changes anyway, and
+      // the wrong thing when the listener simply re-fires for the account we
+      // are already on: the customer loses whatever they had half-typed, and
+      // any screen with work on mount does that work a second time. The signup
+      // verification screen sent another OTP every time it happened.
+      //
+      // So block only on the first resolution and on an actual change of
+      // account. A repeat fire for the same uid updates state in place.
+      const isFirstResolution = !hasSettled.current
+      const accountChanged = settledUid.current !== nextUid
+      if (isFirstResolution || accountChanged) setIsLoading(true)
+      settledUid.current = nextUid
+      hasSettled.current = true
+
       setUser(firebaseUser)
 
       if (firebaseUser) {
