@@ -2,7 +2,6 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
-  sendPasswordResetEmail,
   updatePassword,
   User,
   signInWithCredential,
@@ -83,6 +82,10 @@ export const signUpWithEmail = async (email: string, password: string, role?: st
     const firebaseIdToken = await userCredential.user.getIdToken()
     try {
       await authApiService.oauthLogin(firebaseIdToken, role)
+      // The backend row this just created has no password of its own, because
+      // it was made from a Firebase token. Without this the clinic could never
+      // sign in on the web and could never reset their password there either.
+      await authApiService.adoptPassword(password)
     } catch (backendError) {
       console.warn('Backend sync failed:', backendError)
       // Continue even if backend sync fails - user is still logged in to Firebase
@@ -141,6 +144,9 @@ export const signInWithEmail = async (identifier: string, password: string) => {
     const firebaseIdToken = await userCredential.user.getIdToken()
     try {
       await authApiService.oauthLogin(firebaseIdToken)
+      // Migrates the accounts that signed up before signup started doing it.
+      // A no-op once the password is stored, so it costs one call, once.
+      await authApiService.adoptPassword(password)
     } catch (backendError) {
       console.warn('Backend sync failed:', backendError)
     }
@@ -197,18 +203,18 @@ export const signOutUser = async () => {
 }
 
 /**
- * Send password reset email
+ * DELETED: resetPassword via Firebase.
+ *
+ * It sent from noreply@<project>.firebaseapp.com, a Google-owned domain with no
+ * SPF or DKIM alignment to ours, so the mail landed in spam. It also only knew
+ * about accounts created in this app, so it silently did nothing for anyone who
+ * signed up on the web.
+ *
+ * Password resets go through authApiService.requestBackendPasswordReset, which
+ * serves every account from our own authenticated sender. Nothing should call
+ * Firebase for a reset again; if you are about to add it back, that is the
+ * bug, not the fix.
  */
-export const resetPassword = async (email: string) => {
-  try {
-    await sendPasswordResetEmail(auth, email)
-    return { error: null }
-  } catch (error: any) {
-    return {
-      error: error.message || 'Failed to send password reset email',
-    }
-  }
-}
 
 /**
  * Update user password

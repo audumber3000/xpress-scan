@@ -10,6 +10,9 @@ from datetime import datetime, timedelta
 from fastapi import Request
 from core.interfaces import AuthServiceProtocol, AuthRepositoryProtocol, ClinicRepositoryProtocol, UserRepositoryProtocol
 from models import User, UserDevice
+from core.login_identifier import normalize_email
+from core.passwords import hash_password as _hash, needs_rehash, verify_password
+from core.app_secret import get_jwt_secret
 
 # Import Firebase Admin SDK for OAuth verification
 try:
@@ -34,18 +37,47 @@ class AuthService(AuthServiceProtocol):
         self.auth_repo = auth_repo
         self.clinic_repo = clinic_repo
         self.user_repo = user_repo
-        self.jwt_secret = os.getenv("JWT_SECRET", "your-secret-key")
+        self.jwt_secret = get_jwt_secret()
         self.jwt_algorithm = "HS256"
 
-    def authenticate_user(self, email: str, password: str) -> Optional[User]:
-        """Authenticate user with email and password"""
-        password_hash = self._hash_password(password)
-        return self.auth_repo.authenticate_user(email, password_hash)
+    def authenticate_user(self, identifier: str, password: str) -> Optional[User]:
+        """Sign somebody in by email-or-username and password.
+
+        Upgrades the stored hash on the way through. Signing in is the only
+        moment the plain password is in hand, so it is the only moment an old
+        unsalted row can be rewritten under the current scheme without asking
+        anybody to reset anything. Everyone who logs in migrates themselves; the
+        rows left behind belong to accounts nobody is using.
+        """
+        user = self.auth_repo.authenticate_user(identifier, password)
+        if not user:
+            return None
+
+        if needs_rehash(user.password_hash):
+            user.password_hash = _hash(password)
+            try:
+                self.auth_repo.db.commit()
+            except Exception:
+                # The sign-in itself succeeded and that is what matters here.
+                # A failed upgrade just means the next login tries again.
+                self.auth_repo.db.rollback()
+
+        return user
 
     def create_user(self, user_data: Dict[str, Any], clinic_id: Optional[int] = None) -> User:
         """Create a new user with business validations"""
+        # Stored lower-cased, always. Two rows differing only by case are one
+        # person as far as every mail provider is concerned, and letting both
+        # exist is how somebody ends up signing in with Google and landing on a
+        # brand-new empty account instead of their own clinic. The uniqueness
+        # check below is case-insensitive now too (see core.login_identifier),
+        # so the pair can no longer be created in the first place.
+        user_data = dict(user_data)
+        if user_data.get('email'):
+            user_data['email'] = normalize_email(user_data['email'])
+
         # Validate email uniqueness
-        if self.auth_repo.get_user_by_email(user_data['email']):
+        if user_data.get('email') and self.auth_repo.get_user_by_email(user_data['email']):
             raise ValueError(f"User with email '{user_data['email']}' already exists")
 
         # Validate clinic if provided
@@ -282,12 +314,12 @@ class AuthService(AuthServiceProtocol):
         return user_id
 
     def _hash_password(self, password: str) -> str:
-        """Hash password using SHA256"""
-        return hashlib.sha256(password.encode()).hexdigest()
+        """Hash a password for storage. See core.passwords for the scheme."""
+        return _hash(password)
 
     def _verify_password(self, plain: str, hashed: str) -> bool:
-        """Verify password against hash"""
-        return self._hash_password(plain) == hashed
+        """Check a password against a stored hash of either scheme."""
+        return verify_password(plain, hashed)
 
     def _get_default_permissions(self, role: str) -> Dict[str, Any]:
         """Get default permissions for a role"""
@@ -444,7 +476,7 @@ class AuthService(AuthServiceProtocol):
 
             # Extract user information from token
             firebase_uid = decoded_token.get("uid")
-            email = decoded_token.get("email")
+            email = normalize_email(decoded_token.get("email"))
             name = decoded_token.get("name", "")
 
             # Apple Sign-In quirk: Apple only includes the email claim on the
@@ -520,6 +552,8 @@ class AuthService(AuthServiceProtocol):
             else:
                 first_name = email.split("@")[0] or "User"
                 last_name = "Account"
+
+            email = normalize_email(email)
 
             # Check if user exists — by Firebase UID first (stable across
             # Apple Sign-In email changes / Hide My Email), then by email.

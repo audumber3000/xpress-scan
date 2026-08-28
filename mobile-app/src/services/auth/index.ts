@@ -3,7 +3,6 @@ export {
   signUpWithEmail,
   signInWithEmail,
   signOutUser,
-  resetPassword,
   changePassword,
   signInWithGoogle,
   getCurrentUser,

@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, status, Request
 from sqlalchemy.orm import Session
 from database import get_db
 from models import User, Clinic
+from core.login_identifier import email_matches
 from schemas import UserCreate, UserOut
 from typing import List
 from core.auth_utils import get_current_user, require_clinic_owner, require_doctor_or_owner
@@ -44,7 +45,7 @@ def create_user(
             raise HTTPException(status_code=403, detail="You don't have permission to edit users")
     try:
         # Check if user already exists
-        existing = db.query(User).filter(User.email == user_in.email).first()
+        existing = db.query(User).filter(email_matches(user_in.email)).first()
         if existing:
             raise HTTPException(status_code=400, detail="User already exists")
         

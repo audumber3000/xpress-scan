@@ -1,6 +1,7 @@
 """
 Auth routes using clean architecture
 """
+import logging
 import os
 import jwt
 import requests
@@ -28,9 +29,18 @@ from sqlalchemy.orm import Session, joinedload
 from domains.notification.services.platform_notification_service import PlatformNotificationService
 from models import Clinic, User, Subscription, UserDevice, user_clinics
 from sqlalchemy import or_
+
+logger = logging.getLogger(__name__)
+from core.login_identifier import (
+    find_user_by_email,
+    find_user_by_identifier,
+    normalize_email,
+    normalize_identifier,
+)
+from core.passwords import verify_password
+from core.login_throttle import throttle, client_ip, lockout_message
 from datetime import datetime as _dt
 from pydantic import BaseModel
-from domains.communication.services.email_service import EmailService
 from core.posthog_client import track_event, group_identify, EVENTS
 from core import plans
 from core.audit import (record_audit, LOGIN_SUCCEEDED, LOGIN_FAILED,
@@ -404,20 +414,68 @@ async def login_user(
         # Bound here so the token can record which device it belongs to, even
         # on the paths that never register one.
         device = None
-        user = auth_service.authenticate_user(login_data.email, login_data.password)
+        # Trimmed, because a pasted address or an autofilled one arrives with a
+        # trailing space often enough to matter. Case is handled in the lookup
+        # itself (core.login_identifier) rather than here, so the address the
+        # audit trail records is the one they actually typed.
+        identifier = normalize_identifier(login_data.email)
+
+        # Checked BEFORE the password, so a locked-out attempt costs a dict
+        # lookup instead of a bcrypt verification. bcrypt is deliberately slow;
+        # letting anybody spend that CPU at will is its own denial of service.
+        cooling = throttle.check(identifier, client_ip(request))
+        if cooling:
+            seconds, reason = cooling
+            raise HTTPException(
+                status_code=429,
+                detail=lockout_message(seconds, reason),
+                headers={"Retry-After": str(seconds), "X-Retry-After-Seconds": str(seconds)},
+            )
+
+        user = auth_service.authenticate_user(identifier, login_data.password)
 
         if not user:
+            throttle.record_failure(identifier, client_ip(request))
             # Recorded against the clinic the email belongs to, when there is
             # one, so an owner can see attempts on their own accounts. An
             # address that matches nobody is not logged at all: it would let
             # anyone write rows into an arbitrary clinic's audit trail.
-            attempted = db.query(User).filter(User.email == login_data.email).first()
+            attempted = find_user_by_identifier(db, identifier)
+
+            # A deactivated person and a wrong password are two different
+            # problems with two different fixes, and answering both with
+            # "Invalid credentials" sends someone who has been removed from the
+            # clinic round the reset-password loop instead of to their owner.
+            # Only said once the password checks out, so it cannot be used to
+            # probe which accounts exist.
+            if (
+                attempted
+                and not attempted.is_active
+                and attempted.password_hash
+                and verify_password(login_data.password, attempted.password_hash)
+            ):
+                # LOGIN_BLOCKED, not LOGIN_FAILED — nothing about their
+                # credentials failed. The owner reading this trail should see a
+                # deactivated person still trying to get in, not a wrong
+                # password that never happened.
+                record_audit(
+                    db, None, LOGIN_BLOCKED,
+                    "Sign-in blocked: this account is deactivated",
+                    request=request, entity_type='user', entity_id=attempted.id,
+                    clinic_id=attempted.clinic_id, actor_name=attempted.name or identifier,
+                    commit=True,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="This account has been deactivated. Ask your clinic owner to restore your access.",
+                )
+
             if attempted:
                 record_audit(
                     db, None, LOGIN_FAILED,
-                    f"Failed sign-in attempt for {login_data.email}",
+                    f"Failed sign-in attempt for {identifier}",
                     request=request, entity_type='user', entity_id=attempted.id,
-                    clinic_id=attempted.clinic_id, actor_name=attempted.name or login_data.email,
+                    clinic_id=attempted.clinic_id, actor_name=attempted.name or identifier,
                     commit=True,
                 )
             raise HTTPException(
@@ -437,6 +495,10 @@ async def login_user(
                     request=request, entity_type='user', entity_id=user.id, commit=True,
                 )
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=blocked)
+
+        # Cleared only once the device checks above have also passed, so a
+        # blocked device cannot be used to keep an account's counter at zero.
+        throttle.record_success(identifier, client_ip(request))
 
         record_audit(
             db, user, LOGIN_SUCCEEDED,
@@ -1370,40 +1432,172 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
+class AdoptPasswordRequest(BaseModel):
+    password: str
+
+
+@router.post("/adopt-password", summary="Store a password for an account that has none here")
+def adopt_password(
+    payload: AdoptPasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    auth_service=Depends(get_auth_service),
+):
+    """Close the gap between the two places a password can live.
+
+    Signing up on the web writes a password_hash on our own users row. Signing
+    up in the mobile app creates a FIREBASE password and syncs the backend
+    through /auth/oauth, which leaves password_hash null. That second group
+    could not sign in on the web at all, and /forgot-password had nothing to
+    reset for them, so it skipped them silently and still said "we've sent a
+    link".
+
+    Both clients now call this immediately after a successful Firebase password
+    sign-in, and mobile calls it on signup too. The account gets a password on
+    our side the first time its owner uses it, so from then on the ordinary
+    login path works everywhere and password reset has something to reset.
+    Nobody is emailed and nobody is asked to do anything.
+
+    Safe because of what it refuses. The caller is already authenticated for
+    this account, which means Firebase has just checked this exact password. And
+    an account that ALREADY has a password_hash is left untouched: overwriting
+    one without knowing the old one is a takeover, not a migration. Once the
+    second store is empty this endpoint stops doing anything and can go.
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization header",
+        )
+
+    token = auth_header.split(" ")[1]
+    user = auth_service.validate_token(token)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=_signed_out_reason(db, token),
+        )
+
+    if user.password_hash:
+        # Already has one. Not an error: both clients call this on every
+        # Firebase sign-in, so the second time round there is simply nothing
+        # left to do.
+        return {"adopted": False, "reason": "already_set"}
+
+    if not payload.password or len(payload.password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters.",
+        )
+
+    user.password_hash = auth_service.hash_password(payload.password)
+    user.updated_at = _dt.utcnow()
+    db.commit()
+    return {"adopted": True}
+
+
 @router.post("/forgot-password", summary="Request a password reset link")
 def forgot_password(
     payload: ForgotPasswordRequest,
     db: Session = Depends(get_db),
     auth_service=Depends(get_auth_service),
 ):
-    """Email a time-limited reset link for email/password accounts.
+    """Email a time-limited reset link. From OUR sender, for EVERY account.
+
+    Both halves of that sentence used to be false, and they were the same bug.
+
+    This route refused any account with no password_hash, on the reasoning that
+    a Google account has no password to reset. But "no password on our side"
+    also describes every clinic that signed up in the mobile app, where the
+    password lives in Firebase. So the largest group needing a reset was the one
+    group this endpoint would not serve, and it answered them with the same
+    cheerful "we've sent a link" as everybody else while sending nothing.
+
+    The clients worked around that by asking Firebase to send the mail instead.
+    Firebase sends from noreply@<project>.firebaseapp.com, a Google-owned domain
+    with no SPF or DKIM alignment to molarplus.com and no relationship to any
+    other mail this product sends, so those messages landed in spam. A password
+    reset in the spam folder is the same as no password reset.
+
+    So: no account is skipped. If the address matches somebody, they get a link
+    from our own authenticated Zoho sender. For an account with no password on
+    our side the link SETS one, which is both the thing they were asking for and
+    the thing that migrates them off the second password store for good.
+
+    Letting a Google-only account set a password is not a new trust decision.
+    Proving control of the inbox is exactly what a reset has always proved, and
+    the link only ever goes to the address already on the account.
 
     Always returns a generic success message regardless of whether the email
     exists or how the account signed up — this avoids leaking which emails are
     registered (account enumeration)."""
-    generic = {"message": "If an account with that email exists, we've sent a password reset link."}
+    # Who it will come from and what it is called, handed to the client so the
+    # "not in your inbox?" panel can name both. Somebody scanning a full spam
+    # folder is searching, and the sender and the subject are the only two
+    # things they can search on. Carried on the generic response, which reveals
+    # nothing: this is the same answer whether or not the address is registered,
+    # and both values are printed on every email we have ever sent anyway.
+    generic = {
+        "message": "If an account with that email exists, we've sent a password reset link.",
+        "from_email": os.getenv("ZEPTO_PLATFORM_FROM_EMAIL") or "clinic@molarplus.com",
+        "subject": "Reset your MolarPlus password",
+    }
 
-    email = (payload.email or "").strip().lower()
+    email = normalize_email(payload.email)
     if not email:
         return generic
 
-    user = db.query(User).filter(User.email == email).first()
+    user = find_user_by_email(db, email)
 
-    # Only email/password accounts can reset a password. Google-only accounts
-    # have no password_hash — silently skip (same generic response).
-    if user and user.password_hash:
+    if user:
+        token = auth_service.create_password_reset_token(user)
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+        reset_url = f"{frontend_url}/reset-password?token={token}"
+
+        # Through Nexus, like every other email this product sends.
+        #
+        # This used to call EmailService directly, which talks to Zoho. In
+        # production that could never work: no ZOHO_* variables reach the
+        # backend container, so the call failed with "ZOHO_FROM_EMAIL
+        # environment variable not set" every single time, the exception was
+        # swallowed, and the customer was told a link was on its way. Reset mail
+        # was not landing in spam, it was never being sent at all. The staff
+        # invitation email had the same defect and is now on Nexus too.
+        #
+        # Nexus owns ZeptoMail and sends as the platform sender on our own
+        # domain, which is also what keeps this out of the spam folder rather
+        # than arriving from an unrelated one.
+        #
+        # Called synchronously rather than through the fire-and-forget notify()
+        # helper for the same reason _deliver_otp is: this screen has just
+        # promised somebody an email, so whether it actually left the building
+        # is worth knowing. Failures are logged and never surfaced, because the
+        # answer has to look identical whether or not the address is registered.
         try:
-            token = auth_service.create_password_reset_token(user)
-            frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
-            reset_url = f"{frontend_url}/reset-password?token={token}"
-            EmailService().send_password_reset_email(
-                to_email=user.email,
-                reset_url=reset_url,
-                user_name=user.name,
+            resp = requests.post(
+                f"{os.getenv('NEXUS_SERVICES_URL', 'http://localhost:8001')}"
+                f"/api/v1/notifications/send-event",
+                json={
+                    "event_type": "password_reset",
+                    "channel": "email",
+                    "to_email": user.email,
+                    "to_name": user.name or "",
+                    "template_data": {
+                        "reset_url": reset_url,
+                        "user_name": user.name or "",
+                        "expires_in_minutes": 60,
+                    },
+                },
+                timeout=10,
             )
-        except Exception as e:
-            # Never surface internal failures to the caller; just log.
-            print(f"[forgot-password] failed to send reset email to {email}: {e}")
+            if resp.status_code >= 400:
+                logger.error(
+                    "[forgot-password] Nexus refused the reset email for %s: %s %s",
+                    email, resp.status_code, resp.text[:300],
+                )
+        except Exception:
+            logger.exception("[forgot-password] could not reach Nexus for %s", email)
 
     return generic
 
@@ -1442,11 +1636,11 @@ def account_preview(payload: ForgotPasswordRequest, db: Session = Depends(get_db
     is registered (account enumeration) so the user gets a clear confirmation —
     a deliberate product decision for the in-app reset UX.
     """
-    email = (payload.email or "").strip().lower()
+    email = normalize_email(payload.email)
     if not email:
         return {"found": False}
 
-    user = db.query(User).filter(User.email == email).first()
+    user = find_user_by_email(db, email)
     if not user:
         return {"found": False}
 

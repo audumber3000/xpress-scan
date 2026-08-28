@@ -1,7 +1,7 @@
 """
 Data Transfer Objects for API requests and responses
 """
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 
@@ -143,6 +143,57 @@ class PatientSummaryDTO(BaseModel):
 
 
 # Clinic DTOs
+class NullSafeResponse(BaseModel):
+    """Base for response models: a NULL column can never refuse a request.
+
+    A response model describes a row that already exists. Somebody is already
+    signed in as it, it is already in the database, and refusing to serialise
+    it protects nobody — it just turns a data quirk into a 500 on whichever
+    route was reading it, for that one person, on every attempt, with no way
+    for them to fix it.
+
+    That has now happened four times on the sign-in path alone: a staff member
+    with one name failed `last_name` min_length; four real roles missing from a
+    hardcoded pattern failed `role`; a blank `first_name` failed min_length;
+    a NULL `sync_status` failed `str`. Each was fixed on its own, which is
+    exactly why there was a next one.
+
+    So the rule lives here and applies to every field at once: any field that
+    declares a default takes that default when the stored value is None.
+
+    Fields with NO default are left alone deliberately. `id` or `created_at`
+    being null is not a quirk, it is a broken row, and that should still fail
+    loudly rather than be papered over with a guess.
+
+    Request models must NOT inherit this. Rejecting bad input is the entire job
+    of a write model, and this would quietly turn a missing required value into
+    a default.
+    """
+
+    @model_validator(mode="before")
+    @classmethod
+    def _nulls_fall_back_to_defaults(cls, data):
+        if data is None:
+            return data
+
+        # `from_attributes` means this can arrive as a SQLAlchemy row rather
+        # than a dict, so read through whichever accessor fits.
+        if isinstance(data, dict):
+            values = dict(data)
+        else:
+            values = {
+                name: getattr(data, name)
+                for name in cls.model_fields
+                if hasattr(data, name)
+            }
+
+        for name, field in cls.model_fields.items():
+            if values.get(name) is None and not field.is_required():
+                values[name] = field.get_default(call_default_factory=True)
+
+        return values
+
+
 class ClinicBaseDTO(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     tagline: Optional[str] = Field(None, max_length=120)
@@ -224,7 +275,7 @@ class ClinicUpdateDTO(BaseModel):
     manual_whatsapp: Optional[bool] = None
 
 
-class ClinicResponseDTO(ClinicBaseDTO):
+class ClinicResponseDTO(ClinicBaseDTO, NullSafeResponse):
     id: int
     # Unguessable public code (e.g. CLN-A3X9K2B7FQ) used to build the public
     # booking link, so the link can't be enumerated by numeric clinic id.
@@ -317,14 +368,39 @@ class UserUpdateDTO(BaseModel):
     role: Optional[str] = Field(None, pattern="^(clinic_owner|doctor|receptionist)$")
 
 
-class UserResponseDTO(UserBaseDTO):
+class UserResponseDTO(UserBaseDTO, NullSafeResponse):
+    """What a user looks like on the way OUT.
+
+    Every constraint inherited from UserBaseDTO is relaxed here, on purpose.
+    That base is shared with UserCreateDTO, where strictness is right: it is
+    guarding a write, and rejecting a blank name stops bad data being stored.
+    On the way out it guards nothing. The row already exists, somebody is
+    already signed in as it, and a validation error at this point does not
+    protect anyone — it turns a data quirk into a 500 on the login route, for
+    that one person, on every single attempt, with no way for them to fix it.
+
+    This is the FOURTH time the same shape has bitten. A staff member with one
+    name failed `last_name` min_length. Four real roles missing from a hardcoded
+    pattern failed `role`. A blank `first_name` failed min_length. Then a NULL
+    `sync_status` failed `str` — and that one was found only by running the
+    server against a real database, after the first three had each been fixed
+    one field at a time.
+
+    Fixing them one field at a time is what guarantees a fifth, so the rule now
+    lives in NullSafeResponse and applies to every field of both response models
+    at once. See that class.
+    """
+
     id: int
-    name: str  # computed field
+    name: str = ""  # computed from first + last
     clinic_id: Optional[int] = None
     permissions: Dict[str, Any] = {}
     is_active: bool = True
-    created_at: datetime
-    updated_at: datetime
+    # Optional on the way OUT only. See the class docstring: real rows exist
+    # with a null updated_at, and refusing to describe them locks those accounts
+    # out of the product entirely.
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     synced_at: Optional[datetime] = None
     sync_status: str = "local"
     signature_url: Optional[str] = None
@@ -333,6 +409,28 @@ class UserResponseDTO(UserBaseDTO):
     phone: Optional[str] = None
     avatar_url: Optional[str] = None
     clinics: List[ClinicResponseDTO] = []
+
+    # Overridden to be permissive. See the class docstring.
+    first_name: str = Field("", max_length=50)
+    last_name: str = Field("", max_length=50)
+    role: str = ""
+
+
+    @field_validator("role")
+    @classmethod
+    def _known_role(cls, v: str) -> str:
+        """Deliberately shadows the base's role check by reusing its NAME.
+
+        A same-named method is how a Pydantic v2 subclass replaces an inherited
+        validator; defining a differently-named one just adds a second check and
+        the strict parent still runs.
+
+        A role this build has not heard of is a real row in the database that
+        somebody is signed in as. Refusing to serialise it locks that person out
+        of the product until a deploy. Reporting what is stored is the only
+        useful thing to do with it.
+        """
+        return v
 
     class Config:
         from_attributes = True

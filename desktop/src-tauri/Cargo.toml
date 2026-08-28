@@ -1,6 +1,6 @@
 [package]
 name = "molarplus-desktop"
-version = "0.1.1"
+version = "0.2.0"
 description = "MolarPlus desktop app — thin Tauri wrapper around https://app.molarplus.com"
 authors = ["MolarPlus"]
 edition = "2021"
@@ -20,6 +20,17 @@ tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 open = "5"
+
+# WinRT, for the Microsoft Store's in-app rate-and-review dialog. Windows only:
+# on macOS the whole module compiles to a no-op, so this must not be a plain
+# dependency or `cargo build` on a Mac pulls in a crate it can never use.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+  "Foundation",
+  "Services_Store",
+  "Win32_Foundation",
+  "Win32_UI_Shell",
+] }
 
 [features]
 default = ["custom-protocol"]

@@ -27,7 +27,7 @@ import {
 } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../app/AppNavigator';
-import { signInWithGoogle, signInWithApple, resetPassword } from '../../../services/auth/authService';
+import { signInWithGoogle, signInWithApple } from '../../../services/auth/authService';
 import { authApiService } from '../../../services/api/auth.api';
 import { AuthInput } from '../components/AuthInput';
 import { useAuth } from '../../../app/AuthContext';
@@ -51,6 +51,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   const [isPasswordHidden, setIsPasswordHidden] = useState(true);
   const [resetEmail, setResetEmail] = useState('');
   const [resetSent, setResetSent] = useState(false);
+  // How the mail will actually arrive, from the server. See the panel below.
+  const [resetDelivery, setResetDelivery] = useState<{ fromEmail?: string; subject?: string }>({});
   const [previewLoading, setPreviewLoading] = useState(false);
   const [resetPreview, setResetPreview] = useState<{
     found: boolean;
@@ -194,13 +196,30 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   };
 
   // Step 2: actually send the reset link for the confirmed account.
+  //
+  // Always our own backend now, never Firebase. Two reasons, and the second is
+  // the one that mattered to customers.
+  //
+  // Firebase only ever knew about accounts created in this app, so a clinic who
+  // signed up on the web was shown their own name and clinic here and then
+  // waited for a mail Firebase was never going to send.
+  //
+  // And when Firebase DID send, it sent from noreply@<project>.firebaseapp.com:
+  // a Google-owned domain with no SPF or DKIM alignment to ours and no
+  // relationship to any other mail this product sends. Those went to spam. A
+  // reset link in the spam folder is the same as no reset link.
+  //
+  // The backend serves every account now, including ones with no password on
+  // our side, where the link sets one instead of resetting it.
   const handleSendReset = async () => {
     setIsLoading(true);
     try {
-      const { error } = await resetPassword(resetEmail.trim());
+      const { error, fromEmail, subject } =
+        await authApiService.requestBackendPasswordReset(resetEmail.trim());
       if (error) {
         notify.problem(error);
       } else {
+        setResetDelivery({ fromEmail, subject });
         setResetSent(true);
       }
     } catch (err: any) {
@@ -362,7 +381,27 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
           <Text style={[styles.title, { fontSize: 32, marginBottom: 8 }]}>Check your inbox</Text>
           <Text style={styles.formSubtitle}>
             We've sent a password reset link to {resetEmail.trim()}. Open it to set a new password.
+            The link expires in 1 hour.
           </Text>
+
+          {/* Named, not just "check spam". A person scanning a full spam folder
+              is searching, and the sender and the subject are the only two
+              things they can search on. */}
+          <View style={styles.spamHint}>
+            <Text style={styles.spamHintTitle}>Not in your inbox?</Text>
+            <Text style={styles.spamHintBody}>
+              Check your spam or junk folder, and search for{' '}
+              <Text style={styles.spamHintStrong}>
+                {resetDelivery.fromEmail || 'support@molarplus.com'}
+              </Text>
+              {' '}or the subject{' '}
+              <Text style={styles.spamHintStrong}>
+                "{resetDelivery.subject || 'Reset your MolarPlus password'}"
+              </Text>
+              . Marking it as "not spam" means the next one reaches you.
+            </Text>
+          </View>
+
           <TouchableOpacity style={styles.loginBtn} onPress={() => setViewMode('email')}>
             <Text style={styles.loginBtnText}>Back to login</Text>
           </TouchableOpacity>
@@ -632,6 +671,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: colors.primary,
+  },
+  // Border-only, like every other card in the app. Matches accountCard below
+  // rather than inventing a second treatment for the same kind of surface.
+  spamHint: {
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: colors.gray50,
+    marginBottom: 24,
+    marginTop: -8,
+  },
+  spamHintTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.gray900,
+    marginBottom: 4,
+  },
+  spamHintBody: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.gray500,
+  },
+  spamHintStrong: {
+    fontWeight: '700',
+    color: colors.gray900,
   },
   accountCard: {
     flexDirection: 'row',

@@ -93,6 +93,67 @@ export class AuthApiService extends BaseApiService {
     }
   }
 
+  /**
+   * Ask the backend to email a reset link for an account whose password lives
+   * on our side (signed up on the web, or on the desktop app).
+   *
+   * The mobile app used to send EVERY reset through Firebase, including for
+   * accounts Firebase has never held a password for. Because this screen
+   * confirms the account against the backend first, somebody who signed up on
+   * the web was shown their own name and clinic, tapped send, and then waited
+   * for a mail that was never going to arrive.
+   *
+   * Always resolves. The endpoint deliberately answers the same way whether or
+   * not the address is registered, so there is nothing here worth surfacing as
+   * a failure beyond the request itself not going out.
+   */
+  async requestBackendPasswordReset(
+    email: string,
+  ): Promise<{ error: string | null; fromEmail?: string; subject?: string }> {
+    try {
+      const res = await this.fetchWithTimeout(`${this.baseURL}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+      if (!res.ok) return { error: 'Could not send the reset link. Please try again.' };
+      // Who it arrives from and what it is called. Somebody hunting through a
+      // spam folder is searching, and these are the two things they can search
+      // on. Read from the server rather than hardcoded here, so the app cannot
+      // start naming the wrong sender the day the sending address changes.
+      const body = await res.json().catch(() => ({}));
+      return { error: null, fromEmail: body?.from_email, subject: body?.subject };
+    } catch {
+      return { error: 'Could not reach the server. Check your connection and try again.' };
+    }
+  }
+
+  /**
+   * Copy a password that Firebase just accepted onto our own account, for
+   * accounts that have none on our side (everyone who signed up in this app).
+   *
+   * Until this existed those clinics could not sign in on the web at all, and
+   * web password reset had nothing to reset for them so it did nothing while
+   * still saying a link had been sent. The backend ignores the call when a
+   * password is already stored, so it is safe to make on every sign-in.
+   *
+   * Best effort by design: the person is already signed in, and a failed
+   * migration is not a reason to interrupt them. The next sign-in retries.
+   */
+  async adoptPassword(password: string): Promise<void> {
+    try {
+      const token = await AsyncStorage.getItem('access_token');
+      if (!token) return;
+      await this.fetchWithTimeout(`${this.baseURL}/auth/adopt-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ password }),
+      });
+    } catch {
+      // Retried on the next sign-in.
+    }
+  }
+
   private transformUser(data: any): BackendUser {
     // Backend returns data in different formats depending on endpoint
     // AuthResponseDTO: { user: {...}, clinic: {...}, clinics: [...] }

@@ -2,6 +2,12 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 from sqlalchemy.orm import Session
 from database import get_db
 from models import User, UserDevice
+from core.login_identifier import (
+    find_user_by_email,
+    find_user_by_identifier,
+    normalize_email,
+    normalize_identifier,
+)
 import jwt
 import os
 from typing import Optional
@@ -10,7 +16,10 @@ import re
 from datetime import datetime
 
 # Mobile-specific JWT secrets (different from web to avoid conflicts)
-JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
+# Read through core.app_secret rather than captured at import time. A
+# module-level os.getenv snapshot cannot pick up a corrected value without a
+# restart, and it was a fourth copy of the same fallback.
+from core.app_secret import get_jwt_secret
 JWT_REFRESH_SECRET = os.getenv("JWT_REFRESH_SECRET", "your-refresh-secret-key-mobile")
 
 def create_jwt_token(user_id: int, expires_in: int = 3600) -> str:
@@ -22,7 +31,7 @@ def create_jwt_token(user_id: int, expires_in: int = 3600) -> str:
         "iat": int(time.time()),
         "type": "access"
     }
-    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    return jwt.encode(payload, get_jwt_secret(), algorithm="HS256")
 
 def create_refresh_token(user_id: int) -> str:
     """Create JWT refresh token for mobile user (30 days)"""
@@ -51,13 +60,12 @@ def verify_refresh_token(token: str) -> dict:
         # straight into the signed-out modal on the phone.
         raise HTTPException(status_code=401, detail="Your session has ended. Please sign in again.")
 
-def hash_password(password: str) -> str:
-    """Simple password hashing for offline mode"""
-    return hashlib.sha256(password.encode()).hexdigest()
-
-def verify_password(password: str, hashed: str) -> bool:
-    """Verify password against hash"""
-    return hash_password(password) == hashed
+# One scheme for the whole product, defined in core.passwords. These used to
+# be a private sha256 pair living here, which meant a password set on mobile and
+# a password set on the web were hashed by two different functions that only
+# happened to agree.
+from core.passwords import hash_password, needs_rehash, verify_password
+from core.login_throttle import throttle, client_ip, lockout_message
 
 def detect_device_info(request: Request, device_data: dict = None) -> dict:
     """Detect device information from request headers and optional device data"""
@@ -179,20 +187,46 @@ router = APIRouter()
 async def mobile_login(request: Request, db: Session = Depends(get_db)):
     """Mobile login with refresh tokens"""
     data = await request.json()
-    email = data.get("email")
+    email = normalize_identifier(data.get("email"))
     password = data.get("password")
     device_data = data.get("device", {})
 
+    # Same limit as the web route, sharing the same buckets: an attacker
+    # blocked on one endpoint must not simply move to the other.
+    cooling = throttle.check(email, client_ip(request))
+    if cooling:
+        seconds, reason = cooling
+        raise HTTPException(
+            status_code=429,
+            detail=lockout_message(seconds, reason),
+            headers={"Retry-After": str(seconds), "X-Retry-After-Seconds": str(seconds)},
+        )
+
     try:
-        # Get user from database
-        user = db.query(User).filter(User.email == email).first()
+        # Email OR username, case-insensitively — the same rule the web login
+        # uses. This route matched User.email exactly, so a staff account with
+        # only a username could never sign in here at all, and an owner whose
+        # address was stored with a capital was told their password was wrong.
+        user = find_user_by_identifier(db, email)
         if not user or not user.is_active:
+            throttle.record_failure(email, client_ip(request))
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
         # Check if user has a password_hash
         if user.password_hash:
             if not verify_password(password, user.password_hash):
+                throttle.record_failure(email, client_ip(request))
                 raise HTTPException(status_code=401, detail="Invalid credentials")
+            throttle.record_success(email, client_ip(request))
+            # Same upgrade the web login does: signing in is the only moment the
+            # plain password is in hand, so it is the only moment an old
+            # unsalted hash can be rewritten without asking anybody to reset.
+            if needs_rehash(user.password_hash):
+                user.password_hash = hash_password(password)
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
         else:
             raise HTTPException(
                 status_code=401,
@@ -267,7 +301,8 @@ async def mobile_oauth_login(request: Request, db: Session = Depends(get_db)):
             last_name = ""
 
         # Check if user exists
-        user = db.query(User).filter(User.email == email).first()
+        email = normalize_email(email)
+        user = find_user_by_email(db, email)
         if not user:
             # Create user for mobile OAuth
             user_data = {

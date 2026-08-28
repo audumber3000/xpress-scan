@@ -46,6 +46,27 @@ for var in REQUIRED:
         ok(var)
 
 
+# ── 1b. JWT_SECRET — identity, and whether it survived the last migration ────
+print("\n[ 1b ] Signing secret")
+_jwt = os.environ.get("JWT_SECRET", "")
+if _jwt:
+    if _jwt == "your-secret-key":
+        fail("JWT_SECRET is still the development placeholder. Every session token "
+             "this container issues could be forged by anyone who has read the source.")
+    elif len(_jwt) < 32:
+        warn(f"JWT_SECRET is only {len(_jwt)} characters. 32 or more is the sensible floor.")
+
+    # A short, non-reversible tag for the secret. Changing JWT_SECRET
+    # invalidates every token already in circulation at the instant of the
+    # change, which customers experience as being signed out at random and
+    # which is indistinguishable from a bug in the app. Run preflight on the old
+    # host and the new one and compare these eight characters: same tag means
+    # sessions carried over, different means they were all killed at cutover.
+    import hashlib as _h
+    print(f"      secret fingerprint: {_h.sha256(_jwt.encode()).hexdigest()[:8]}"
+          "  (compare across hosts; it is not the secret)")
+
+
 # ── 2. DATABASE_URL — no bare @ in password ───────────────────────────────────
 print("\n[ 2 ] DATABASE_URL format")
 db_url = os.environ.get("DATABASE_URL", "")

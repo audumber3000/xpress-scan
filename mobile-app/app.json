@@ -2,7 +2,7 @@
   "expo": {
     "name": "MolarPlus",
     "slug": "molarplus",
-    "version": "3.18.0",
+    "version": "3.19.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.molarplus.ios",
-      "buildNumber": "11",
+      "buildNumber": "12",
       "googleServicesFile": "./GoogleService-Info.plist",
       "usesAppleSignIn": true,
       "infoPlist": {
@@ -31,7 +31,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.molarplus.app",
-      "versionCode": 4,
+      "versionCode": 5,
       "label": "MolarPlus",
       "permissions": [
         "ACCESS_COARSE_LOCATION",

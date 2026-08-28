@@ -16,6 +16,7 @@ import hashlib
 import hmac
 import io
 import os
+from core.app_secret import get_jwt_secret
 
 router = APIRouter()
 
@@ -78,7 +79,7 @@ def thumbnail_token(document_id: int) -> str:
 
     Deliberately no expiry: browsers cache thumbnails for a day and a rotating
     query string would defeat that. Deleting the document revokes access."""
-    secret = os.getenv("JWT_SECRET", "your-secret-key").encode()
+    secret = get_jwt_secret().encode()
     return hmac.new(secret, f"thumb:{document_id}".encode(), hashlib.sha256).hexdigest()[:32]
 
 def _ensure_case_paper_column(db: Session):

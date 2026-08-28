@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AISparkleIcon, SUPPORT_WHATSAPP } from './icons';
+import { isDesktopApp, openStoreReviewPage } from '../../utils/desktopReview';
 
 const SupportMenu = ({ onOpenAssistant }) => {
   const navigate = useNavigate();
@@ -37,6 +38,30 @@ const SupportMenu = ({ onOpenAssistant }) => {
       onClick: () => onOpenAssistant(),
     },
   ];
+
+  // Desktop only. This opens the Microsoft Store, which exists on exactly one
+  // of the places this app runs — offering it in a browser or on the Mac build
+  // would be a dead end, so the item is not rendered at all rather than shown
+  // and then failing.
+  //
+  // Goes straight to our Store page rather than trying the in-app dialog:
+  // somebody who picked "Rate MolarPlus" has already decided, and the in-app
+  // dialog can silently decline to appear (Windows throttles it, and it only
+  // works on Store-installed builds at all). A menu item that sometimes does
+  // visibly nothing is worse than one that always opens the Store.
+  if (isDesktopApp()) {
+    items.push({
+      title: 'Rate MolarPlus',
+      desc: 'Leave a review on the Microsoft Store',
+      bg: 'bg-amber-50',
+      icon: (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="#F59E0B">
+          <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+        </svg>
+      ),
+      onClick: () => openStoreReviewPage(),
+    });
+  }
 
   return (
     <div className="fixed bottom-6 right-6 z-40">

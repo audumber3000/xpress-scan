@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import { askForReviewOnSignIn } from '../utils/desktopReview';
 import SessionEndedModal from '../components/common/SessionEndedModal';
 import { api } from '../utils/api';
 import posthog from 'posthog-js';
@@ -159,6 +160,23 @@ export const AuthProvider = ({ children }) => {
       console.warn('[AuthContext] refreshUser failed:', error.message);
     }
   };
+
+  // Ask desktop users for a Store review, once they are actually in.
+  //
+  // Deliberately fires on session RESTORE as well as on a fresh credential
+  // entry. A desktop user signs in once and stays signed in for months, so
+  // counting only fresh sign-ins would mean the threshold is never reached and
+  // nobody is ever asked. "Opened the app and got through" is the moment.
+  //
+  // The ref keeps it to once per mount; utils/desktopReview does the rest
+  // (from the second sign-in, once per app version, never within a week,
+  // and never again at all once a review has actually been submitted).
+  const reviewAskedRef = useRef(false);
+  useEffect(() => {
+    if (loading || !user || reviewAskedRef.current) return;
+    reviewAskedRef.current = true;
+    askForReviewOnSignIn();
+  }, [user, loading]);
 
   // Identify user in PostHog when user state changes
   useEffect(() => {

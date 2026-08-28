@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func
 from models import User, Clinic
 from core.interfaces import UserRepositoryProtocol
+from core.login_identifier import find_active_user_by_identifier, find_user_by_email
+from core.passwords import verify_password
 from domains.infrastructure.repositories.base_repository import BaseRepository
 
 
@@ -16,8 +18,8 @@ class UserRepository(BaseRepository[User], UserRepositoryProtocol):
         super().__init__(db, User)
 
     def get_by_email(self, email: str) -> Optional[User]:
-        """Get user by email address"""
-        return self.db.query(User).filter(User.email == email).first()
+        """Get user by email address, ignoring case and stray whitespace."""
+        return find_user_by_email(self.db, email)
 
     def get_by_clinic_id_and_role(self, clinic_id: int, role: str) -> List[User]:
         """Get users by clinic and role"""
@@ -37,19 +39,12 @@ class UserRepository(BaseRepository[User], UserRepositoryProtocol):
         """Get doctors for a specific clinic"""
         return self.get_by_clinic_id_and_role(clinic_id, 'doctor')
 
-    def authenticate_user(self, email: str, password_hash: str) -> Optional[User]:
-        """Authenticate user by login identifier (email OR username) + password hash.
-
-        First arg keeps the legacy ``email`` name for protocol compatibility but
-        now matches against either column.
-        """
-        return self.db.query(User).filter(
-            and_(
-                or_(User.email == email, User.username == email),
-                User.password_hash == password_hash,
-                User.is_active == True
-            )
-        ).first()
+    def authenticate_user(self, identifier: str, password: str) -> Optional[User]:
+        """Find the account, then verify the password. See AuthRepository."""
+        user = find_active_user_by_identifier(self.db, identifier)
+        if not user or not user.password_hash:
+            return None
+        return user if verify_password(password, user.password_hash) else None
 
     def update_user_permissions(self, user_id: int, permissions: Dict[str, Any]) -> bool:
         """Update user permissions"""

@@ -37,6 +37,18 @@ def _save_credentials(creds: dict):
         json.dump(creds, f)
 
 
+# NOT a 401. "This clinic has not linked their Google Business Profile" says
+# nothing about who is signed in, but 401 is the one status the web client
+# treats as the end of a session: it clears the stored token, signs the user
+# out and puts "Your session has ended" on screen. Answering 401 here means the
+# first screen that polls this endpoint before a clinic has connected would
+# throw that person out of the product entirely.
+#
+# 428 Precondition Required is the honest code: the request is fine, the caller
+# is who they say they are, and something has to be set up first.
+NOT_CONNECTED = "This clinic has not connected a Google Business Profile yet."
+
+
 def _get_client_config():
     backend_url = os.getenv('BACKEND_URL', 'http://localhost:8000')
     return {
@@ -53,7 +65,7 @@ def _get_client_config():
 def _get_valid_token(user_id: str) -> str:
     all_creds = _load_credentials()
     if user_id not in all_creds:
-        raise HTTPException(status_code=401, detail="Not connected to Google Business Profile")
+        raise HTTPException(status_code=428, detail=NOT_CONNECTED)
 
     creds_data = all_creds[user_id]
     creds = Credentials(
@@ -168,7 +180,7 @@ async def list_accounts(refresh: bool = False, current_user: User = Depends(get_
     user_id = str(current_user.id)
     all_creds = _load_credentials()
     if user_id not in all_creds:
-        raise HTTPException(status_code=401, detail="Not connected to Google Business Profile")
+        raise HTTPException(status_code=428, detail=NOT_CONNECTED)
 
     cached = all_creds[user_id].get("cached_accounts", [])
     if cached and not refresh:
@@ -193,7 +205,7 @@ async def list_locations(account_id: str, refresh: bool = False, current_user: U
     user_id = str(current_user.id)
     all_creds = _load_credentials()
     if user_id not in all_creds:
-        raise HTTPException(status_code=401, detail="Not connected to Google Business Profile")
+        raise HTTPException(status_code=428, detail=NOT_CONNECTED)
 
     name = account_id if account_id.startswith("accounts/") else f"accounts/{account_id}"
     cached = all_creds[user_id].get("cached_locations", {}).get(name, [])

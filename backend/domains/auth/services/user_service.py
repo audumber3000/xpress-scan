@@ -3,6 +3,7 @@ User service with business logic
 """
 from typing import List, Optional, Dict, Any
 import hashlib
+from core.passwords import hash_password as _hash
 from core.interfaces import UserServiceProtocol, UserRepositoryProtocol, ClinicRepositoryProtocol
 from core.dtos import UserCreateDTO, UserUpdateDTO, UserResponseDTO
 from models import User, Clinic
@@ -147,8 +148,8 @@ class UserService(UserServiceProtocol):
         return self.user_repo.get_user_stats(clinic_id)
 
     def _hash_password(self, password: str) -> str:
-        """Hash password using SHA256 (should be upgraded to bcrypt)"""
-        return hashlib.sha256(password.encode()).hexdigest()
+        """Hash a password for storage. See core.passwords for the scheme."""
+        return _hash(password)
 
     def _get_default_permissions(self, role: str) -> Dict[str, Any]:
         """Get default permissions for a role"""

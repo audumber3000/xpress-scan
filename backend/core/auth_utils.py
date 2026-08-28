@@ -7,12 +7,16 @@ from database import get_db
 from models import User, Clinic, UserDevice
 from typing import Optional
 import jwt
+import logging
 import os
 from core.roles import is_clinical, CLINICAL_ROLES
 
-def get_jwt_secret():
-    """Get JWT secret from environment"""
-    return os.getenv("JWT_SECRET", "your-secret-key")
+logger = logging.getLogger(__name__)
+
+# Re-exported so the dozens of existing `from core.auth_utils import
+# get_jwt_secret` imports keep working. The definition lives in core.app_secret,
+# which is now the only place the variable is read.
+from core.app_secret import get_jwt_secret  # noqa: F401
 
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> Optional[User]:
@@ -72,9 +76,23 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Optiona
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
     except Exception:
-        # Deliberately not str(e). Whatever broke here is ours, and its text is
-        # for the logs, not for the person holding the phone.
-        raise HTTPException(status_code=401, detail="Your session could not be verified. Please sign in again.")
+        # NOT a 401. Every genuine authentication failure is already handled
+        # above; anything reaching here is our infrastructure — the database
+        # was unreachable, the connection pool timed out, RDS failed over
+        # mid-query. Those are not statements about who this person is.
+        #
+        # This mattered more than it looks. A 401 is the one status the client
+        # treats as destructive: it clears the stored token, ends the session
+        # and puts "Your session has ended" on the screen. So a one-second
+        # database hiccup during any ordinary request signed a dentist out
+        # mid-consultation, and the app made it look like their own account had
+        # been revoked. A 503 says the true thing, and the client retries
+        # instead of tearing the session down.
+        logger.exception("Token validation failed for a non-auth reason")
+        raise HTTPException(
+            status_code=503,
+            detail="We could not reach the server just now. Please try again in a moment.",
+        )
 
 
 def check_permission(required_permission: str, resource: str = None):

@@ -10,6 +10,7 @@ endpoints called below. Until it exists, set WAREACH_MOCK=1 to demo the connect
 UI with a placeholder QR.
 """
 import os
+from core.app_secret import get_jwt_secret
 import base64
 import hashlib
 import logging
@@ -41,7 +42,7 @@ _MOCK_QR = (
 def _fernet() -> Fernet:
     """Fernet keyed off WAREACH_ENCRYPTION_KEY, falling back to JWT_SECRET so the
     feature works without extra env setup (override in prod for key separation)."""
-    secret = os.getenv("WAREACH_ENCRYPTION_KEY") or os.getenv("JWT_SECRET", "your-secret-key")
+    secret = os.getenv("WAREACH_ENCRYPTION_KEY") or get_jwt_secret()
     key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
     return Fernet(key)
 

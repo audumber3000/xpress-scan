@@ -6,6 +6,8 @@ import ValidatedInput from '../components/forms/ValidatedInput';
 import { isValidEmail } from '../utils/validators';
 import loginImage from '../assets/login-page-left-side.png';
 import PublicSupportButton from '../components/PublicSupportButton';
+import WhatsAppIcon from '../components/icons/WhatsAppIcon';
+import { SUPPORT_EMAIL, SUPPORT_PHONE_RAW } from '../constants/support';
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState("");
@@ -13,10 +15,17 @@ const ForgotPassword = () => {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [preview, setPreview] = useState(null); // null | { found, name, clinic_name, has_password }
   const [sent, setSent] = useState(false);
+  // What the mail will actually arrive as. Taken from the server rather than
+  // guessed here, because telling somebody to search their spam for the wrong
+  // sender is worse than not naming one at all.
+  const [delivery, setDelivery] = useState(null);   // { from_email, subject }
 
   const account = preview?.found ? preview : null;
   const notFound = preview != null && !preview.found;
-  const googleOnly = !!account && account.has_password === false;
+  // Whether we already hold a password for them. Informational only now: the
+  // backend sends a link either way, and for an account with no password on
+  // our side the link sets one. Used just to word the confirmation honestly.
+  const settingFirstPassword = !!account && account.has_password === false;
 
   // Step 1 — confirm the account exists and show whose it is.
   const handleLookup = async (e) => {
@@ -25,7 +34,13 @@ const ForgotPassword = () => {
     setPreviewLoading(true);
     try {
       const res = await api.post('/auth/account-preview', { email: email.trim() });
-      setPreview(res.data || { found: false });
+      // `api.post` already returns the parsed body, not an axios-style
+      // { data } envelope. Reading res.data here made every lookup undefined,
+      // so this page told EVERY customer "we couldn't find an account with
+      // that email" and never showed the send button at all. Web password
+      // recovery was a dead end for everyone, and a locked-out dentist was
+      // being invited to create a second clinic instead.
+      setPreview(res || { found: false });
     } catch (error) {
       setPreview({ found: false });
     } finally {
@@ -38,7 +53,13 @@ const ForgotPassword = () => {
     if (loading) return;
     setLoading(true);
     try {
-      await api.post('/auth/forgot-password', { email: email.trim() });
+      // Always our own backend, never Firebase. Firebase sends from
+      // noreply@<project>.firebaseapp.com, which has no SPF or DKIM alignment
+      // to our domain and no relationship to any other mail this product
+      // sends, so those messages went to spam. A reset link in the spam folder
+      // is the same as no reset link at all.
+      const res = await api.post('/auth/forgot-password', { email: email.trim() });
+      setDelivery(res || null);
       setSent(true);
     } catch (error) {
       notify.problem(error, 'Something went wrong. Please try again.');
@@ -70,15 +91,42 @@ const ForgotPassword = () => {
                 We've sent a link to reset your password to <span className="font-semibold">{email}</span>.
                 The link expires in 1 hour.
               </p>
-              <p className="text-sm text-gray-500">
-                Didn't get it? Check your spam folder, or{' '}
-                <button
-                  onClick={() => { setSent(false); setPreview(null); }}
-                  className="text-[#2a276e] hover:text-[#1a1548] font-semibold underline"
-                >
-                  try again
-                </button>.
-              </p>
+              {/* Named, not just "check spam". A person scanning a spam folder
+                  full of mail is looking for something specific, and the two
+                  things they can actually search on are who it is from and what
+                  it is called. */}
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 space-y-1.5">
+                <p className="text-sm font-semibold text-gray-700">Not in your inbox?</p>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  Check your spam or junk folder. Search for{' '}
+                  <span className="font-semibold text-gray-800">{delivery?.from_email || SUPPORT_EMAIL}</span>
+                  {' '}or the subject{' '}
+                  <span className="font-semibold text-gray-800">
+                    "{delivery?.subject || 'Reset your MolarPlus password'}"
+                  </span>.
+                  Marking it as "not spam" means the next one reaches you.
+                </p>
+                <p className="text-sm text-gray-500">
+                  Still nothing?{' '}
+                  <button
+                    onClick={() => { setSent(false); setPreview(null); setDelivery(null); }}
+                    className="text-[#2a276e] hover:text-[#1a1548] font-semibold underline"
+                  >
+                    Try again
+                  </button>
+                  {' '}or{' '}
+                  <a
+                    href={`https://wa.me/${SUPPORT_PHONE_RAW}?text=${encodeURIComponent(
+                      `Hi MolarPlus support, I asked for a password reset link for ${email.trim()} and it has not arrived.`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[#2a276e] hover:text-[#1a1548] font-semibold underline"
+                  >
+                    <WhatsAppIcon className="h-3.5 w-3.5 text-[#25D366]" /> message us
+                  </a>.
+                </p>
+              </div>
               <Link to="/login" className="inline-block text-sm text-[#2a276e] hover:text-[#1a1548] font-semibold">
                 ← Back to sign in
               </Link>
@@ -104,28 +152,24 @@ const ForgotPassword = () => {
                 </div>
               </div>
 
-              {googleOnly ? (
-                <>
-                  <p className="text-sm text-gray-500">
-                    This account signs in with Google, so there's no password to reset. Use “Continue with Google”
-                    on the sign-in page to log in.
-                  </p>
-                  <Link
-                    to="/login"
-                    className="block text-center w-full bg-[#2a276e] text-white py-3 px-4 rounded-lg hover:bg-[#1a1548] font-medium transition-colors"
-                  >
-                    Back to sign in
-                  </Link>
-                </>
-              ) : (
-                <button
-                  onClick={handleSend}
-                  disabled={loading}
-                  className="w-full bg-[#2a276e] text-white py-3 px-4 rounded-lg hover:bg-[#1a1548] focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:ring-offset-2 disabled:opacity-50 font-medium transition-colors"
-                >
-                  {loading ? "Sending..." : "Send reset link"}
-                </button>
+              {/* No dead end for a Google account any more. The link sets a
+                  password rather than resetting one, which is a thing they may
+                  well want: it is what lets them sign in on the desktop app, or
+                  on a machine where the Google pop-up is blocked. */}
+              {settingFirstPassword && (
+                <p className="text-sm text-gray-500">
+                  You currently sign in with Google. This link lets you set a password as well, so
+                  you can sign in either way. Continuing with Google will keep working.
+                </p>
               )}
+
+              <button
+                onClick={handleSend}
+                disabled={loading}
+                className="w-full bg-[#2a276e] text-white py-3 px-4 rounded-lg hover:bg-[#1a1548] focus:outline-none focus:ring-2 focus:ring-[#2a276e] focus:ring-offset-2 disabled:opacity-50 font-medium transition-colors"
+              >
+                {loading ? "Sending..." : settingFirstPassword ? "Send me a link" : "Send reset link"}
+              </button>
 
               <div className="text-center">
                 <button

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ShieldCheck, Pencil, Loader2, CheckCircle2, AlertTriangle, MessageCircle } from 'lucide-react';
+import { ShieldCheck, Pencil, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import WhatsAppIcon from '../../components/icons/WhatsAppIcon';
 import { api, getFriendlyErrorMessage } from '../../utils/api';
 import { SUPPORT_PHONE_RAW } from '../../constants/support';
 
@@ -391,7 +392,7 @@ const VerifyContactStep = ({ phone: initialPhone, email: initialEmail, onVerifie
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 font-medium text-gray-400 hover:text-gray-600"
             >
-              <MessageCircle size={12} /> Need help?
+              <WhatsAppIcon className="h-3.5 w-3.5 text-[#25D366]" /> Need help?
             </a>
           </div>
 
@@ -411,7 +412,7 @@ const VerifyContactStep = ({ phone: initialPhone, email: initialEmail, onVerifie
                 rel="noopener noreferrer"
                 className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2.5 min-h-[2.75rem] text-xs font-semibold text-white hover:bg-red-700"
               >
-                <MessageCircle size={13} /> Message support on WhatsApp
+                <WhatsAppIcon className="h-3.5 w-3.5" /> Message support on WhatsApp
               </a>
             </div>
           )}

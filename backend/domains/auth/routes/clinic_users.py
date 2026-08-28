@@ -2,6 +2,12 @@ from fastapi import APIRouter, HTTPException, Depends, status, Request
 from sqlalchemy.orm import Session
 from database import get_db
 from models import User, Clinic
+from core.login_identifier import (
+    email_matches,
+    normalize_email,
+    normalize_username,
+    username_matches,
+)
 from typing import List, Optional
 from pydantic import BaseModel, Field
 import datetime
@@ -9,15 +15,14 @@ from datetime import date
 from core.auth_utils import get_current_user
 from core.audit import (record_audit, STAFF_CREATED, STAFF_UPDATED,
                         STAFF_DEACTIVATED, PERMISSIONS_CHANGED, PASSWORD_CHANGED)
-from domains.communication.services.email_service import EmailService
 import hashlib
 import logging
 import os
+import requests
 from core.roles import assignable_by, ROLE_VALUES
 
-def hash_password(password: str) -> str:
-    """Simple password hashing for offline mode"""
-    return hashlib.sha256(password.encode()).hexdigest()
+# Staff passwords go through the same scheme as everybody else's.
+from core.passwords import hash_password
 
 logger = logging.getLogger(__name__)
 
@@ -148,8 +153,8 @@ def add_clinic_user(user_in: ClinicUserIn, request: Request, db: Session = Depen
             raise HTTPException(status_code=403, detail="You don't have permission to edit users")
     
     # Normalise inputs — treat empty strings as missing
-    email = (user_in.email or "").strip() or None
-    username = (user_in.username or "").strip() or None
+    email = normalize_email(user_in.email) or None
+    username = normalize_username(user_in.username) or None
 
     if not email and not username:
         raise HTTPException(
@@ -158,12 +163,12 @@ def add_clinic_user(user_in: ClinicUserIn, request: Request, db: Session = Depen
         )
 
     if email:
-        existing_email = db.query(User).filter(User.email == email).first()
+        existing_email = db.query(User).filter(email_matches(email)).first()
         if existing_email:
             raise HTTPException(status_code=400, detail="A user with this email already exists")
 
     if username:
-        existing_username = db.query(User).filter(User.username == username).first()
+        existing_username = db.query(User).filter(username_matches(username)).first()
         if existing_username:
             raise HTTPException(status_code=400, detail="This username is already taken")
 
@@ -225,18 +230,45 @@ def add_clinic_user(user_in: ClinicUserIn, request: Request, db: Session = Depen
     delivery = {"email": False, "whatsapp": False}
 
     if email and clinic:
+        # Through Nexus, which is the only thing in this system that can send
+        # email. This called EmailService directly, which talks to Zoho, and no
+        # ZOHO_* variables reach the backend container in production — so every
+        # staff invitation ever created failed on the first line, was caught
+        # here, and logged as a warning nobody was reading. No staff member has
+        # ever received one of these.
+        #
+        # `delivery["email"]` is set from the ACTUAL response rather than from
+        # reaching the next line, so the owner's screen stops claiming an
+        # invitation went out when it did not.
         try:
-            EmailService().send_staff_invitation_email(
-                to_email=email,
-                staff_name=user_in.name,
-                clinic_name=clinic.name,
-                role=user_in.role,
-                inviter_name=current_user.name,
-                login_id=login_id,
-                password=user_in.password,
-                login_url=os.environ.get("APP_URL") or None,
+            resp = requests.post(
+                f"{os.getenv('NEXUS_SERVICES_URL', 'http://localhost:8001')}"
+                f"/api/v1/notifications/send-event",
+                json={
+                    "event_type": "staff_invitation",
+                    "channel": "email",
+                    "to_email": email,
+                    "to_name": user_in.name or "",
+                    "template_data": {
+                        "staff_name": user_in.name or "",
+                        "clinic_name": clinic.name or "",
+                        "role": user_in.role or "",
+                        "inviter_name": current_user.name or "",
+                        "login_id": login_id or "",
+                        "password": user_in.password or "",
+                        "login_url": os.environ.get("APP_URL") or "",
+                    },
+                },
+                timeout=10,
             )
-            delivery["email"] = True
+            delivery["email"] = resp.status_code < 400
+            if resp.status_code >= 400:
+                # Deliberately not logging the body: the template_data above
+                # carries the new staff member's password.
+                logger.warning(
+                    "staff invitation email refused for user %s: HTTP %s",
+                    user.id, resp.status_code,
+                )
         except Exception as exc:  # noqa: BLE001
             logger.warning("staff welcome email failed for user %s: %s", user.id, type(exc).__name__)
 
@@ -436,16 +468,16 @@ def update_clinic_user(user_id: int, user_update: ClinicUserUpdate, request: Req
     if user_update.name is not None:
         user.name = user_update.name
     if user_update.email is not None:
-        new_email = user_update.email.strip() or None
+        new_email = normalize_email(user_update.email) or None
         if new_email and new_email != user.email:
-            clash = db.query(User).filter(User.email == new_email, User.id != user.id).first()
+            clash = db.query(User).filter(email_matches(new_email), User.id != user.id).first()
             if clash:
                 raise HTTPException(status_code=400, detail="A user with this email already exists")
         user.email = new_email
     if user_update.username is not None:
-        new_username = user_update.username.strip() or None
+        new_username = normalize_username(user_update.username) or None
         if new_username and new_username != user.username:
-            clash = db.query(User).filter(User.username == new_username, User.id != user.id).first()
+            clash = db.query(User).filter(username_matches(new_username), User.id != user.id).first()
             if clash:
                 raise HTTPException(status_code=400, detail="This username is already taken")
         user.username = new_username

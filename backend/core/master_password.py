@@ -1,3 +1,5 @@
+from core.app_secret import get_jwt_secret
+
 """The clinic's master password.
 
 Six digits that stand between a staff member and the deletes nothing can undo:
@@ -56,7 +58,7 @@ _TOKEN_SCOPE = "master_password"
 
 
 def _jwt_secret() -> str:
-    return os.getenv("JWT_SECRET", "your-secret-key")
+    return get_jwt_secret()
 
 
 def hash_password(clinic_id: int, password: str) -> str:

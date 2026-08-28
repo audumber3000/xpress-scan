@@ -527,6 +527,105 @@ def vendor_lab_order_placed(clinic_name: str, clinic_logo_url: str = "",
     }
 
 
+def platform_password_reset(reset_url: str = "", user_name: str = "",
+                            expires_in_minutes: int = 60, **_) -> dict:
+    """A link to set a new MolarPlus password.
+
+    Lives here, in Nexus, because Nexus is the only thing in this system that
+    can actually send email. The backend has no mail provider of its own in
+    production: no ZOHO_* variables reach that container, so the EmailService
+    call the forgot-password route used to make could only ever fail, and it
+    failed silently. Every customer who asked for a reset link was told one was
+    on its way and nothing was ever sent.
+
+    A PLATFORM email, like otp_verification above: it comes from MolarPlus
+    rather than from the clinic, and it goes to the account holder rather than
+    to a patient. That also puts it on the authenticated molarplus.com sender
+    instead of an unrelated domain, which is the difference between the inbox
+    and the spam folder.
+    """
+    greeting = f"Hi <strong>{user_name}</strong>," if user_name else "Hi,"
+    body = f"""
+<p>{greeting}</p>
+<p>We received a request to set a new password for your <strong>MolarPlus</strong> account.
+   Use the button below to choose one.</p>
+<a href="{reset_url}" class="btn">Set a new password &rarr;</a>
+<p style="font-size:13px;color:#6b7280;margin-top:18px;">
+  If the button does not work, copy this link into your browser:<br>
+  <a href="{reset_url}" style="word-break:break-all;">{reset_url}</a>
+</p>
+<div class="info-box">
+  This link expires in {expires_in_minutes} minutes and can only be used once.
+</div>
+<p>If you did not ask for this, you can safely ignore this email. Your password
+   will not change and nobody else can use the link.</p>"""
+    body += _SUPPORT_BLOCK
+    return {
+        "subject": "Reset your MolarPlus password",
+        "html": _base_wrapper(_platform_header(), body, _platform_footer()),
+    }
+
+
+def platform_staff_invitation(staff_name: str = "", clinic_name: str = "your clinic",
+                              role: str = "", inviter_name: str = "", login_id: str = "",
+                              password: str = "", login_url: str = "", **_) -> dict:
+    """The account details a new staff member needs to sign in for the first time.
+
+    A PLATFORM email for the same reason otp_verification is: the credentials in
+    it are MolarPlus credentials and the link goes to the MolarPlus app, so it
+    should arrive from MolarPlus rather than wearing the clinic's branding as if
+    the clinic had sent it. The clinic is named throughout the body, which is
+    what the reader actually needs to recognise it.
+
+    Moved here from the backend's EmailService, which could never send it: no
+    ZOHO_* variables reach the backend container in production, so every staff
+    invitation since that code was written failed on the first line and was
+    logged as a warning. Nobody has ever received one.
+
+    The password is included when the caller supplies it, matching the existing
+    behaviour. That is a real trade: a password sitting in an inbox forever is a
+    standing risk, which is why the sign-in prompt below tells them to change it.
+    """
+    inviter_text = f" by {inviter_name}" if inviter_name else ""
+    role_text = (role or "team member").replace("_", " ")
+
+    if login_id:
+        password_row = (
+            f'<p style="margin:4px 0;"><strong>Password:</strong> '
+            f'<code style="background:#fff;padding:2px 6px;border-radius:4px;">{password}</code></p>'
+            if password else
+            '<p style="margin:4px 0;">Your password has been shared with you separately.</p>'
+        )
+        credentials = f"""
+<div class="info-box">
+  <p style="margin:4px 0;"><strong>Login ID:</strong> {login_id}</p>
+  {password_row}
+  <p style="margin:4px 0;"><strong>Role:</strong> {role_text}</p>
+</div>
+<p style="font-size:13px;color:#6b7280;">Please change your password once you have signed in.</p>"""
+    else:
+        credentials = ""
+
+    button = (
+        f'<a href="{login_url}" class="btn">Sign in &rarr;</a>'
+        if login_url else
+        '<a href="https://app.molarplus.com/login" class="btn">Sign in &rarr;</a>'
+    )
+
+    greeting = f"Hi <strong>{staff_name}</strong>," if staff_name else "Hi,"
+    body = f"""
+<p>{greeting}</p>
+<p>You have been added to <strong>{clinic_name}</strong> on MolarPlus as a
+   <strong>{role_text}</strong>{inviter_text}.</p>
+{credentials}
+{button}"""
+    body += _SUPPORT_BLOCK
+    return {
+        "subject": f"You have been added to {clinic_name} on MolarPlus",
+        "html": _base_wrapper(_platform_header(), body, _platform_footer()),
+    }
+
+
 # ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 PLATFORM_EVENTS = {
@@ -537,6 +636,9 @@ PLATFORM_EVENTS = {
     "molarplus_trial_ending_mk", "molarplus_trial_ended_mk",
     # Goes to the clinic owner's recovery address, from the platform sender.
     "otp_verification",
+    # Same reasoning: from MolarPlus, to the account holder, never to a patient.
+    "password_reset",
+    "staff_invitation",
 }
 
 PATIENT_EVENTS = {
@@ -558,6 +660,8 @@ def build_email(event_type: str, **kwargs) -> dict:
         "wallet_topup":               platform_wallet_topup,
         "wallet_low":                 platform_wallet_low,
         "molarplus_app_welcome":      platform_app_welcome,
+        "password_reset":             platform_password_reset,
+        "staff_invitation":           platform_staff_invitation,
         "molarplus_subscription_confirmed": platform_subscription_confirmed,
         "molarplus_topup_success":    platform_topup_success,
         "molarplus_lab_due_tomorrow": platform_lab_due_tomorrow,

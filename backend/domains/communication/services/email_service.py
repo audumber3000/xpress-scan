@@ -17,6 +17,31 @@ except ImportError:
 
 
 class EmailService:
+    """DEAD IN PRODUCTION. Do not call this. Use Nexus.
+
+    This talks to Zoho and needs ZOHO_* environment variables. None of them
+    reach the backend container, so every call it has ever made in production
+    failed with "ZOHO_FROM_EMAIL environment variable not set". Because each
+    call site wrapped it in a try/except, those failures were invisible: the
+    password reset email and the staff invitation email were never sent, for
+    years, while the app told customers they had been.
+
+    Email in this product is sent by nexus-service via ZeptoMail, from an
+    authenticated molarplus.com sender. To add a new one:
+
+      1. write a builder in
+         nexus-service/app/services/infrastructure/email_templates.py
+      2. register it in PLATFORM_EVENTS or PATIENT_EVENTS *and* in build_email
+      3. POST to Nexus /api/v1/notifications/send-event from the backend
+
+    Copy domains/auth/routes/auth_clean.py::forgot_password when the caller
+    needs to know whether the send succeeded, or core.nexus_notify.notify when
+    fire-and-forget is genuinely fine.
+
+    Kept only because deleting it is a separate change from fixing the callers.
+    Nothing imports it any more.
+    """
+
     """
     Email notification service using Zoho Mail API
     Architecture designed to support future WhatsApp integration

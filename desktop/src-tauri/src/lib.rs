@@ -1,3 +1,5 @@
+mod review;
+
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_deep_link::DeepLinkExt;
 
@@ -39,10 +41,46 @@ const INIT_SCRIPT: &str = r#"
   // instead of `signInWithPopup`, since popups don't work in thin webviews.
   try {
     Object.defineProperty(window, '__MOLARPLUS_DESKTOP__', {
-      value: { version: '0.1.1', platform: 'tauri' },
+      value: {
+        version: '0.2.0',
+        platform: 'tauri',
+
+        // Ask for a Microsoft Store rating.
+        //
+        // Navigating to a sentinel path rather than calling a Tauri command:
+        // capabilities/default.json deliberately withholds IPC from this remote
+        // origin, and a review prompt is not worth opening that door. Rust's
+        // on_navigation hook recognises the path, cancels the navigation, and
+        // shows the dialog — so the page never actually moves. Same mechanism
+        // as /desktop-auth/start.
+        //
+        // Silently does nothing off Windows, which is correct: the Mac build
+        // ships from R2, not the Mac App Store.
+        requestReview() {
+          try { window.location.href = '/desktop/review'; } catch (_) {}
+        },
+
+        // Skip the dialog and go straight to our page in the Store app. For a
+        // "Rate us" menu item, where they have already decided.
+        openStoreReviewPage() {
+          try { window.location.href = '/desktop/review?direct=1'; } catch (_) {}
+        },
+      },
       writable: false,
       configurable: false,
     });
+  } catch (_) {}
+
+  // Called by Rust when the Store reports a review was actually SUBMITTED
+  // (not merely dismissed). The web app persists that and stops asking.
+  // Defined before anything else so it exists no matter when the dialog closes.
+  try {
+    window.__molarplusReviewGiven = function () {
+      try { localStorage.setItem('mp_desktop_review_given', '1'); } catch (_) {}
+      try {
+        window.dispatchEvent(new CustomEvent('molarplus:review-given'));
+      } catch (_) {}
+    };
   } catch (_) {}
 
   try {
@@ -96,6 +134,10 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            // `on_navigation` runs before `build()` returns, so it cannot look
+            // the window up through the builder. It gets its own handle.
+            let review_handle = app.handle().clone();
+
             WebviewWindowBuilder::new(
                 app,
                 "main",
@@ -108,11 +150,28 @@ pub fn run() {
             .resizable(true)
             .devtools(true)
             .initialization_script(INIT_SCRIPT)
-            .on_navigation(|url| {
+            .on_navigation(move |url| {
                 if url.host_str() == Some("app.molarplus.com")
                     && url.path() == "/desktop-auth/start"
                 {
                     let _ = open::that(url.to_string());
+                    return false;
+                }
+                // The web app asking for a Store review. Cancelled either way,
+                // so the page the person was on stays exactly where it was.
+                if url.host_str() == Some("app.molarplus.com")
+                    && url.path() == "/desktop/review"
+                {
+                    let direct = url
+                        .query_pairs()
+                        .any(|(k, v)| k == "direct" && v == "1");
+                    if let Some(win) = review_handle.get_webview_window("main") {
+                        if direct {
+                            review::open_store_page();
+                        } else {
+                            review::request_review(&win);
+                        }
+                    }
                     return false;
                 }
                 if host_is_allowed(url.host_str()) {

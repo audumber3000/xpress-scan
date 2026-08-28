@@ -36,3 +36,6 @@ APScheduler>=3.10.4,<4.0
 posthog>=6.0.0,<8.0
 sentry-sdk[fastapi]>=2.0.0
 anthropic>=0.40.0
+
+# Password hashing (core/passwords.py). Pure-wheel install, no build step.
+bcrypt==5.0.0
