@@ -39,7 +39,7 @@ const Feature = ({ text }) => {
   );
 };
 
-const PlanCard = ({ plan, cycle, isCurrent, isDowngrade, taxLabel, discount, adds, onChoose }) => {
+const PlanCard = ({ plan, cycle, isCurrent, isDowngrade, locked, continues, taxLabel, discount, adds, onChoose }) => {
   const annual = cycle === 'annual';
   const listHeadline = annual ? plan.annual_monthly : plan.monthly;
   const headline = applyDiscount(listHeadline, discount);
@@ -95,11 +95,15 @@ const PlanCard = ({ plan, cycle, isCurrent, isDowngrade, taxLabel, discount, add
         {(plan.features || []).map((f) => <Feature key={f} text={f} />)}
       </ul>
 
+      {/* A paying clinic can only move up. The lower plans stay on the page,
+          because seeing what is underneath you is how you understand what you
+          are paying for, but they are not buyable: everything in them is
+          already included in what the clinic has. */}
       <button
         onClick={() => onChoose(plan.key, cycle)}
-        disabled={isCurrent}
+        disabled={isCurrent || locked}
         className={`mt-5 flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors min-h-[2.75rem] ${
-          isCurrent
+          isCurrent || locked
             ? 'cursor-default border border-gray-200 bg-gray-50 text-gray-400'
             : plan.popular
             ? 'bg-[#29828a] text-white hover:bg-[#1f6b72]'
@@ -108,6 +112,10 @@ const PlanCard = ({ plan, cycle, isCurrent, isDowngrade, taxLabel, discount, add
       >
         {isCurrent
           ? 'Your current plan'
+          : locked
+          ? 'Included in your plan'
+          : continues
+          ? <>Continue on {plan.label} <ArrowRight size={14} /></>
           : <>{isDowngrade ? 'Switch to' : 'Upgrade to'} {plan.label} <ArrowRight size={14} /></>}
       </button>
     </div>
@@ -133,7 +141,22 @@ const differentiator = (plan, currentPlan) => {
   return `Takes you to ${bits.slice(0, 3).join(', ')}.`;
 };
 
-const PlanCards = ({ catalogue, currentPlanName, cycle, onCycleChange, onChoose, discount }) => {
+/**
+ * `isPaying` is the difference between being ON a plan and having BOUGHT one,
+ * and getting it wrong made the entry plan unbuyable.
+ *
+ * A clinic trialling Plus, or holding the migration grant, resolves to Plus, so
+ * the Plus card said "Your current plan" and was disabled. The only things it
+ * could actually buy were Pro and Growth. Every clinic on the platform was in
+ * that state: 176 on the grant and every new signup on a Plus trial, all of
+ * them shown the entry plan greyed out and the two plans above it as the only
+ * way to pay. That is the opposite of promoting Plus, and on 30 Sep it would
+ * have met 176 clinics at once.
+ *
+ * Now only a live paid plan marks a card as current. A trial or a grant makes
+ * it "Continue on Plus", which is both truthful and the thing we want clicked.
+ */
+const PlanCards = ({ catalogue, currentPlanName, cycle, onCycleChange, onChoose, discount, isPaying }) => {
   const current = resolvePlan(currentPlanName);
   const currentPlan = catalogue.plans.find((p) => p.key === current.key);
   const currentRank = planRank(currentPlanName);
@@ -178,8 +201,10 @@ const PlanCards = ({ catalogue, currentPlanName, cycle, onCycleChange, onChoose,
             taxLabel={catalogue.tax_label}
             discount={discount}
             adds={differentiator(plan, currentPlan)}
-            isCurrent={plan.key === current.key && cycle === current.cycle}
+            isCurrent={!!isPaying && plan.key === current.key && cycle === current.cycle}
             isDowngrade={plan.rank < currentRank}
+            locked={!!isPaying && plan.rank < currentRank}
+            continues={!isPaying && plan.key === current.key && cycle === current.cycle}
             onChoose={onChoose}
           />
         ))}

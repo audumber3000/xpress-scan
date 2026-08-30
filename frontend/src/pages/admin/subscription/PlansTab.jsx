@@ -53,7 +53,11 @@ const StatusBanner = ({ tone, icon, title, body }) => {
 };
 
 const REASSURANCE = [
-  { icon: <RefreshCcw size={14} />, text: 'Cancel any time. Downgrades take effect at your next renewal, never mid-month.' },
+  // Promised something the checkout refuses. A paying clinic can move up at any
+  // time and cannot move down while the plan it bought is still running, so
+  // this says how a smaller plan is actually reached rather than implying a
+  // button that is disabled.
+  { icon: <RefreshCcw size={14} />, text: 'Move up at any time. To move to a smaller plan, pick it when your current one comes up for renewal.' },
   { icon: <FileText size={14} />, text: 'A GST invoice for every payment, so a registered clinic can claim input credit.' },
   { icon: <Lock size={14} />, text: 'Payments handled by Cashfree. We never see or store your card.' },
 ];
@@ -74,6 +78,14 @@ const PlansTab = ({
   const isTrial = subscription?.is_trial === true && subscription?.status === 'active' && !isExpired;
   const isGranted = subscription?.provider === 'migration';
   const currentPlan = catalogue.plans.find((p) => p.key === planKey) || catalogue.plans[0];
+
+  // Actually paying us, right now. Mirrors the guard in
+  // subscription_service.create_checkout_session: a trial, a grant and anything
+  // expired are all free to buy any plan, including the entry one. Only a live
+  // paid plan locks the ones below it.
+  const isPaying = !isTrial && !isGranted && !isExpired
+    && subscription?.status === 'active'
+    && !['migration', 'trial', 'none'].includes(subscription?.provider);
   const renews = fmtDate(subscription?.current_end);
 
   const scrollToPlans = () =>
@@ -101,14 +113,23 @@ const PlansTab = ({
         />
       )}
 
+      {/* Said "you are back on Plus", which read as reassurance while the red
+          strip above it said the clinic was view only. Both were describing the
+          same clinic. What matters here is not which plan they resolve to, it
+          is that writing has stopped and how to start it again, so this says
+          that in the same words as the header and the blocked-write modal. */}
       {isExpired && (
         <StatusBanner
           tone="red"
           icon={<Clock size={16} />}
-          title={`Your ${planLabel(lapsedPlan)} plan has expired`}
-          body={renews
-            ? `It ran out on ${renews}, so you are back on ${planLabel(planName)}. Nothing has been deleted. Choose a plan below to pick up where you left off.`
-            : `You are back on ${planLabel(planName)}. Nothing has been deleted.`}
+          title={subscription?.is_trial || subscription?.plan_state === 'trial_ended'
+            ? `Your ${planLabel(lapsedPlan)} trial has ended`
+            : `Your ${planLabel(lapsedPlan)} plan has expired`}
+          body={[
+            renews ? `It ran out on ${renews}.` : null,
+            'Your clinic is view only for now: you can open and read everything, and nothing has been deleted.',
+            'Adding new patients, appointments and invoices starts again the moment you choose a plan below.',
+          ].filter(Boolean).join(' ')}
         />
       )}
 
@@ -159,11 +180,14 @@ const PlansTab = ({
           })}
         />
 
+        {/* The quote is against Plus, the plan we actually want chosen. This
+            priced every promo against Pro, so the headline saving a clinic saw
+            was always for the plan above the one being pushed. */}
         <PromoCodeBox
           discount={discount}
           onApply={setDiscount}
           onClear={() => setDiscount(null)}
-          planKeyForQuote={catalogue.plans[1]?.key || 'pro'}
+          planKeyForQuote={catalogue.plans[0]?.key || 'plus'}
         />
 
         <PlanCards
@@ -172,6 +196,7 @@ const PlansTab = ({
           cycle={cycle}
           onCycleChange={setCycle}
           onChoose={choose}
+          isPaying={isPaying}
           discount={discount}
         />
 

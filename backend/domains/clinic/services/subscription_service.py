@@ -97,6 +97,30 @@ class SubscriptionService:
         if not clinic:
             raise ValueError("Clinic not found")
 
+        # Once a clinic is PAYING for something, the only move is up.
+        #
+        # Scoped to an active paid plan on purpose. A trial, a migration grant,
+        # and anything already expired all leave the clinic free to buy any plan
+        # including the entry one: somebody whose Pro trial ended has bought
+        # nothing, and refusing to sell them Plus because Plus ranks lower than
+        # the trial they just lost would be absurd.
+        #
+        # Enforced here rather than in the UI alone. The UI hides the button;
+        # this is what makes the rule true.
+        existing = None
+        if user_id:
+            existing = self.db.query(Subscription).filter(Subscription.user_id == user_id).first()
+        if not existing:
+            existing = self.db.query(Subscription).filter(Subscription.clinic_id == clinic_id).first()
+
+        from core import plan_state as _ps
+        if _ps.blocks_downgrade_to(existing, plan_name):
+            raise ValueError(
+                f"You are on {plans.label(existing.plan_name)}. You can move up to a "
+                f"higher plan at any time, but not down to {plans.label(plan_name)} "
+                f"while your current plan is running. Message us and we will sort it out."
+            )
+
         currency = plans.billing_currency(clinic)
         if currency != plans.INR and not INTERNATIONAL_ENABLED:
             # Cashfree international collections is an account-level facility.
@@ -169,19 +193,37 @@ class SubscriptionService:
             sub = self.db.query(Subscription).filter(Subscription.clinic_id == clinic_id).first()
             
         if not sub:
-            sub = Subscription(clinic_id=clinic_id, user_id=user_id, plan_name=plan_name, status="pending", provider="cashfree")
-            self.db.add(sub)
-        
+            # Should not happen: every clinic is provisioned a row at onboarding.
+            # If one slipped through, give it the standard row rather than
+            # inventing a half-built one here.
+            from core import plan_bootstrap
+            clinic_row = self.db.query(Clinic).filter(Clinic.id == clinic_id).first()
+            sub = plan_bootstrap.provision_new_clinic(self.db, clinic_row or clinic_id, user_id)
+
         sub.user_id = user_id or sub.user_id
-        sub.provider = "cashfree"
         sub.provider_order_id = order_id
-        sub.plan_name = plan_name
-        sub.status = "pending"
-        # Parked on the subscription so it survives the gap between here and the
-        # webhook. Cashfree hands back an order_id and nothing else, so a coupon
-        # that lives only in the gateway's `notes` is a coupon we can never
-        # attribute, count, or print on the invoice.
+
+        # What they are BUYING is parked, not applied.
+        #
+        # This block used to overwrite plan_name, status and provider on the
+        # live row the moment a checkout was opened, which meant simply opening
+        # the payment page destroyed whatever plan the clinic was actually on.
+        # Clinic 204 opened a Cashfree checkout three minutes into its Pro
+        # trial: the row became plan_name=plus/status=pending/provider=cashfree
+        # while keeping the trial's dates and is_trial flag, so the header read
+        # Pro from the clinic column, the Subscription page read Plus from the
+        # row, and plan_state still saw a trial that would blocking-expire on a
+        # date nobody had bought.
+        #
+        # Nothing about the plan changes until money actually arrives.
+        # handle_webhook and verify_payment read `pending_plan` back out.
+        #
+        # The coupon rides along in the same dict, parked for the same reason:
+        # Cashfree hands back an order_id and nothing else, so a coupon that
+        # lives only in the gateway's `notes` is one we can never attribute,
+        # count, or print on the invoice.
         notes = dict(sub.notes or {})
+        notes["pending_plan"] = plan_name
         if applied_coupon:
             notes["pending_coupon"] = applied_coupon["code"]
             notes["pending_discount"] = applied_coupon["discount"]
@@ -290,7 +332,12 @@ class SubscriptionService:
             self._redeem_coupon(coupon_code)
             notes.pop("pending_coupon", None)
             notes.pop("pending_discount", None)
-            sub.notes = notes
+
+        # The order has settled, so the plan it was for is no longer pending —
+        # it is the plan on the row. Leaving it parked would let a later
+        # checkout that the clinic abandoned still look like an intent to buy.
+        notes.pop("pending_plan", None)
+        sub.notes = notes
 
         try:
             track_event(
@@ -320,9 +367,23 @@ class SubscriptionService:
                     Subscription.provider_order_id == order_id
                 ).first()
 
-                if sub and sub.status != "active":
+                # `status != "active"` was the old guard, and it stops working
+                # now that a checkout leaves the live plan alone: a clinic that
+                # pays mid-trial is still 'active', so this path would decline
+                # to apply the plan it just bought. Settle on whether the ORDER
+                # has been banked instead, which is the same question
+                # handle_webhook's replay guard asks.
+                already_paid = self.db.query(SubscriptionPayment).filter(
+                    SubscriptionPayment.provider_order_id == order_id,
+                    SubscriptionPayment.status == "paid",
+                ).first()
+                if sub and not already_paid:
+                    bought = (sub.notes or {}).get("pending_plan") or sub.plan_name
+                    sub.plan_name = bought
+                    sub.provider = "cashfree"
                     sub.status = "active"
                     sub.is_trial = False
+                    sub.trial_ends_at = None
                     sub.current_start = datetime.utcnow()
                     sub.current_end = self._billing_end(sub.plan_name, sub.current_start)
 
@@ -383,21 +444,33 @@ class SubscriptionService:
                         return True
 
                     warn_clinic = self.db.query(Clinic).filter(Clinic.id == sub.clinic_id).first()
+
+                    # What they bought, parked at checkout. `sub.plan_name` is
+                    # still whatever they were on BEFORE paying, because opening
+                    # a checkout no longer overwrites the live plan. Read the
+                    # pending plan first and apply it here, where the money is
+                    # confirmed. Falls back to the row's own plan for orders
+                    # created before `pending_plan` existed.
+                    bought = (sub.notes or {}).get("pending_plan") or sub.plan_name
+
                     # Compared in the order's OWN currency, plus tax, because
                     # that is what was charged. Against a bare INR list price a
                     # perfectly good $4 order looks like a 395-rupee shortfall.
-                    expected = self._plan_price(sub.plan_name, warn_clinic)
+                    expected = self._plan_price(bought, warn_clinic)
                     expected = round(expected * (1 + plans.gst_rate(warn_clinic)), 2)
                     if payment_amount and expected and float(payment_amount) + 0.01 < expected:
                         # Not fatal — coupons and partial promos legitimately pay
                         # less — but it should never pass silently.
                         logger.warning(
                             f"cashfree webhook: order {order_id} paid {payment_amount} "
-                            f"but {sub.plan_name} lists {expected}"
+                            f"but {bought} lists {expected}"
                         )
 
+                    sub.plan_name = bought
+                    sub.provider = "cashfree"
                     sub.status = "active"
                     sub.is_trial = False
+                    sub.trial_ends_at = None
                     sub.provider_subscription_id = cf_payment_id
                     sub.current_start = datetime.utcnow()
                     sub.current_end = self._billing_end(sub.plan_name, sub.current_start)

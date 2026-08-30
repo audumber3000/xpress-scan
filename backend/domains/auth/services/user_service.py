@@ -138,6 +138,19 @@ class UserService(UserServiceProtocol):
         # Link user to clinic
         self.user_repo.transfer_user_to_clinic(user_id, clinic.id)
 
+        # Give the clinic its subscription row. This is the ONLY place a new
+        # tenant is provisioned, and it is deliberately not wrapped in a
+        # try/except: a clinic that reaches the app without a subscription row
+        # reads as Plus forever, expires never, and is invisible to every
+        # billing warning. That is the incident this call exists to prevent, so
+        # failing onboarding loudly beats creating another one silently.
+        #
+        # Branches are not provisioned here — clinics.py::owner_add_clinic
+        # creates those under an existing owner and they inherit the plan.
+        from core import plan_bootstrap
+        plan_bootstrap.provision_new_clinic(self.user_repo.db, clinic, user_id)
+        self.user_repo.db.commit()
+
         return {
             'user': user,
             'clinic': clinic

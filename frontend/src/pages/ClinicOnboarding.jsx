@@ -62,7 +62,10 @@ const ClinicOnboarding = () => {
     country: detectCountry(),
     number_of_chairs: 1,
     category: "General Dentistry",
-    subscription_plan: "free",
+    // Sent for completeness only. The server ignores it and provisions the plan
+    // itself in user_service.complete_onboarding, so a client can never choose
+    // its own plan by editing this payload.
+    subscription_plan: "plus",
     billing_cycle: "monthly",
   });
 

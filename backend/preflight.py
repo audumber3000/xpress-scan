@@ -146,6 +146,44 @@ else:
     fail("One or more R2 credentials are missing")
 
 
+# ── 7. Plan invariant: every clinic owns a subscription row ───────────────────
+#
+# A clinic with no subscription row is not an empty state, it is an invisible
+# one: plans.LEGACY_ALIASES resolves its 'free' column to Plus and
+# plan_state.evaluate(None) reports 'ok' with no expiry, so the clinic reads
+# exactly like a healthy paying customer while being free, unbilled and
+# unexpiring. Nineteen clinics sat in that state for five days in Aug 2026
+# before anyone noticed, because nothing anywhere could tell the difference.
+#
+# WARN, never fail. Booting is not the fix for a data drift, and refusing to
+# start would turn a billing problem into an outage.
+print("\n[ 7 ] Plan invariant")
+try:
+    from sqlalchemy import create_engine, text
+
+    engine = create_engine(os.environ["DATABASE_URL"])
+    with engine.connect() as conn:
+        orphans = conn.execute(text(
+            "SELECT count(*) FROM clinics c "
+            "WHERE NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.clinic_id = c.id)"
+        )).scalar()
+        legacy = conn.execute(text(
+            "SELECT count(*) FROM clinics WHERE subscription_plan = 'free'"
+        )).scalar()
+
+    if orphans:
+        warn(f"{orphans} clinic(s) have NO subscription row — they read as a free, "
+             f"unexpiring Plus and no billing warning can reach them. "
+             f"Run database/migrations/2026_08_30_signup_subscription_backfill.sql")
+    else:
+        ok("Every clinic owns a subscription row")
+
+    if legacy:
+        warn(f"{legacy} clinic(s) still on the retired 'free' plan name")
+except Exception as e:
+    warn(f"Could not check the plan invariant: {e}")
+
+
 # ── Result ─────────────────────────────────────────────────────────────────────
 print("\n========================================")
 if errors:
