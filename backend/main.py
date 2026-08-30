@@ -355,16 +355,25 @@ async def lifespan(app: FastAPI):
             # migrations do not reach prod; the lifespan block does, because it
             # travels inside backend/. Same reason the two ALTERs above are here.
             #
-            # Each new row COPIES the clinic's existing appointment_reminder
-            # row: same channels, same enabled flag. A clinic that turned
-            # reminders off stays off, and one on email-only does not suddenly
-            # start spending on WhatsApp. Idempotent on its own terms — the NOT
-            # EXISTS is per clinic, so re-running on every boot inserts nothing
-            # and cannot resurrect a preference an owner has since switched off
-            # (switching off updates the row, it does not delete it).
+            # Seeded OFF, and that is a cost decision rather than a technical
+            # one. A second reminder per appointment roughly doubles this line
+            # of WhatsApp spend for every clinic that has reminders on, and
+            # that is the clinic's money, so the clinic opts in from
+            # Notifications -> Preferences rather than waking up to it.
+            #
+            # The row is still created for everyone, because without a row the
+            # switch does not appear on that screen at all and there would be
+            # nothing to opt into. Channels are copied from the clinic's
+            # existing reminder so switching it on respects a clinic that runs
+            # on email only.
+            #
+            # Idempotent on its own terms — the NOT EXISTS is per clinic, so
+            # re-running on every boot inserts nothing and cannot flip a
+            # preference an owner has since switched ON back to off (toggling
+            # updates the row, it does not delete it).
             conn.execute(text("""
                 INSERT INTO notification_preferences (clinic_id, event_type, channels, is_enabled)
-                SELECT p.clinic_id, 'appointment_reminder_2h', p.channels, p.is_enabled
+                SELECT p.clinic_id, 'appointment_reminder_2h', p.channels, false
                   FROM notification_preferences p
                  WHERE p.event_type = 'appointment_reminder'
                    AND NOT EXISTS (

@@ -73,6 +73,12 @@ _SEED_OVERRIDES = {
     # the owner filled in is the one that reaches them. On by default: an
     # account nobody is told about is an account nobody uses.
     "staff_welcome": {"channels": ["whatsapp", "email"], "is_enabled": True},
+    # The second appointment reminder, about two hours before the slot. Off for
+    # the same reason lab_order_placed and daily_summary are: it is an extra
+    # paid message per appointment, forever, and roughly doubles this line of a
+    # clinic's reminder spend. The clinic decides that, not us. The row is still
+    # seeded so the switch exists on the Preferences screen to be turned on.
+    "appointment_reminder_2h": {"channels": ["whatsapp"], "is_enabled": False},
 }
 
 def get_db():

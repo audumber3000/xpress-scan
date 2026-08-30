@@ -254,12 +254,11 @@ run_migration "wallet_welcome_credit_10" "DO \$do\$ BEGIN IF NOT EXISTS (SELECT 
 # opens Notifications -> Preferences). Without this backfill the second reminder
 # would quietly never fire for any existing clinic.
 #
-# Each clinic's new row COPIES its existing appointment_reminder row: same
-# channels, same enabled flag. A clinic that turned reminders off stays off, and
-# a clinic on email-only does not suddenly start spending on WhatsApp. Clinics
-# with no appointment_reminder row at all are left alone — they get both rows
-# from the normal seeding path the next time that screen is opened.
-run_migration "appointment_reminder_2h_prefs" "DO \$do\$ BEGIN IF NOT EXISTS (SELECT 1 FROM applied_data_migrations WHERE key = 'appointment_reminder_2h_prefs_v1') THEN INSERT INTO notification_preferences (clinic_id, event_type, channels, is_enabled) SELECT p.clinic_id, 'appointment_reminder_2h', p.channels, p.is_enabled FROM notification_preferences p WHERE p.event_type = 'appointment_reminder' AND NOT EXISTS (SELECT 1 FROM notification_preferences q WHERE q.clinic_id = p.clinic_id AND q.event_type = 'appointment_reminder_2h'); INSERT INTO applied_data_migrations (key) VALUES ('appointment_reminder_2h_prefs_v1'); END IF; END \$do\$;"
+# Seeded OFF: a second reminder per appointment roughly doubles this line of a
+# clinic's WhatsApp spend, and that is their money to commit. The row is created
+# anyway so the switch exists on Notifications -> Preferences to be turned on.
+# Channels are copied so a clinic running on email only stays that way.
+run_migration "appointment_reminder_2h_prefs" "DO \$do\$ BEGIN IF NOT EXISTS (SELECT 1 FROM applied_data_migrations WHERE key = 'appointment_reminder_2h_prefs_v1') THEN INSERT INTO notification_preferences (clinic_id, event_type, channels, is_enabled) SELECT p.clinic_id, 'appointment_reminder_2h', p.channels, false FROM notification_preferences p WHERE p.event_type = 'appointment_reminder' AND NOT EXISTS (SELECT 1 FROM notification_preferences q WHERE q.clinic_id = p.clinic_id AND q.event_type = 'appointment_reminder_2h'); INSERT INTO applied_data_migrations (key) VALUES ('appointment_reminder_2h_prefs_v1'); END IF; END \$do\$;"
 
 # 6. Schema migration check — catch missing ALTER TABLE migrations before deploy
 echo ""
