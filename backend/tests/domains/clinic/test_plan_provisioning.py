@@ -176,3 +176,84 @@ def test_an_expired_plan_does_not_lock_anything():
     sub = _live_paid("pro")
     sub.current_end = dt.datetime.utcnow() - dt.timedelta(days=1)
     assert _locks_downgrade(sub, "plus") is False
+
+
+# ── A branch is covered by its parent's plan, and its parent's lock ──────────
+#
+# owner_add_clinic creates branches with no subscription row, on the
+# understanding that the parent's plan covers them. Nothing enforced that: the
+# owner fallback in for_clinic looks for a clinic_owner sitting in *this*
+# clinic, the owner is normally in the main one, so a branch resolved to no
+# subscription at all, which evaluate() reads as healthy with no expiry.
+# A locked parent had freely writable branches.
+
+def _user(clinic_id, email, role):
+    from models import User
+    return User(clinic_id=clinic_id, email=email, first_name="A", last_name="B",
+                name="A B", role=role, is_active=True)
+
+
+@pytest.fixture()
+def branch_setup(db):
+    main = Clinic(name="Main"); branch = Clinic(name="Branch")
+    db.add_all([main, branch]); db.commit()
+    branch.parent_clinic_id = main.id
+    owner = _user(main.id, "o@x.com", "clinic_owner")
+    db.add_all([owner, _user(branch.id, "r@x.com", "receptionist")])
+    db.commit()
+    return main, branch, owner
+
+
+def test_a_branch_inherits_its_parents_lock(db, branch_setup):
+    main, branch, owner = branch_setup
+    db.add(Subscription(
+        clinic_id=main.id, user_id=owner.id, plan_name="pro", status="active",
+        provider="cashfree", is_trial=False,
+        current_end=dt.datetime.utcnow() - dt.timedelta(days=1),
+    ))
+    db.commit()
+
+    assert plan_state.for_clinic(db, main)["blocks"] is True
+    assert plan_state.for_clinic(db, branch)["blocks"] is True
+
+
+def test_a_branch_inherits_a_healthy_parent_too(db, branch_setup):
+    main, branch, owner = branch_setup
+    db.add(Subscription(
+        clinic_id=main.id, user_id=owner.id, plan_name="pro", status="active",
+        provider="cashfree", is_trial=False,
+        current_end=dt.datetime.utcnow() + dt.timedelta(days=30),
+    ))
+    db.commit()
+
+    assert plan_state.for_clinic(db, branch)["state"] == plan_state.OK
+    assert plan_state.for_clinic(db, branch)["blocks"] is False
+
+
+def test_a_branch_with_its_own_row_uses_it(db, branch_setup):
+    """The Aug 2026 backfill gave branches real grant rows. Those still win."""
+    main, branch, owner = branch_setup
+    db.add(Subscription(
+        clinic_id=main.id, user_id=owner.id, plan_name="pro", status="active",
+        provider="cashfree", is_trial=False,
+        current_end=dt.datetime.utcnow() - dt.timedelta(days=1),      # parent lapsed
+    ))
+    db.add(Subscription(
+        clinic_id=branch.id, plan_name="plus", status="active",
+        provider="migration", is_trial=False,
+        current_end=dt.datetime.utcnow() + dt.timedelta(days=30),     # branch granted
+    ))
+    db.commit()
+
+    assert plan_state.for_clinic(db, branch)["blocks"] is False
+
+
+def test_a_parent_cycle_cannot_hang_the_walk(db):
+    """Defensive: bad data must not spin the request thread forever."""
+    a = Clinic(name="A"); b = Clinic(name="B")
+    db.add_all([a, b]); db.commit()
+    a.parent_clinic_id = b.id
+    b.parent_clinic_id = a.id
+    db.commit()
+
+    assert plan_state.for_clinic(db, a)["state"] == plan_state.OK

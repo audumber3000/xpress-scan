@@ -273,38 +273,30 @@ async def get_clinics(
         )
 
 
-@router.post(
-    "/",
-    response_model=ClinicResponseDTO,
-    status_code=status.HTTP_201_CREATED,
-    summary="Create a new clinic",
-    description="Create a new clinic (admin only)"
-)
-async def create_clinic(
-    clinic_data: ClinicCreateDTO,
-    clinic_service = Depends(get_clinic_service),
-    current_user = Depends(require_role("clinic_owner"))  # Only clinic owners can create clinics
-):
-    """
-    Create a new clinic.
-
-    Requires clinic_owner role. The clinic will be created with default settings.
-    """
-    try:
-        clinic = clinic_service.create_clinic(clinic_data.dict())
-
-        return ClinicResponseDTO.from_orm(clinic)
-
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create clinic: {str(e)}"
-        )
+# ── REMOVED: POST /api/v1/clinics/ ───────────────────────────────────────────
+#
+# Deleted 2026-08-30. It was described as "admin only" but guarded by nothing
+# more than require_role("clinic_owner"), which is every clinic owner on the
+# platform, and it handed each of them three things at once:
+#
+#   * a clinic with NO subscription row, because it called create_clinic
+#     directly and never provisioned one. That is precisely the state that put
+#     nineteen clinics on a free, unexpiring, invisible Plus in Aug 2026.
+#   * whatever plan they asked for. ClinicCreateDTO inherits
+#     `subscription_plan` from ClinicBaseDTO and it went straight into
+#     Clinic(**clinic_data), so POSTing "growth" produced a Growth clinic.
+#   * a standalone tenant with no parent_clinic_id, so it never met
+#     plans.allows_branches() — the one real feature gate this product has.
+#
+# Nothing called it. The web app creates branches through /clinics/owner/add
+# (which IS gated), onboarding goes through /auth/onboarding, and the support
+# tool talks to its own backend. Removing it returns 405 to anything that
+# turns up, which is the loud failure you want, rather than quietly minting
+# free tenants.
+#
+# If an admin-created clinic is ever genuinely needed, it must go through
+# core.plan_bootstrap.provision_new_clinic and must not take the plan from the
+# request body.
 
 
 @router.get(
@@ -659,64 +651,29 @@ async def get_clinic_stats(
         )
 
 
-@router.put(
-    "/{clinic_id}/subscription",
-    response_model=SuccessResponseDTO,
-    summary="Update clinic subscription",
-    description="Update clinic subscription plan (admin only)"
-)
-async def update_subscription(
-    clinic_id: int,
-    subscription_plan: str = Query(..., description="New subscription plan"),
-    razorpay_subscription_id: Optional[str] = Query(None, description="Razorpay subscription ID"),
-    clinic_service = Depends(get_clinic_service),
-    current_user = Depends(require_role("clinic_owner"))
-):
-    """
-    Update clinic subscription plan.
-
-    Requires admin privileges. Used for subscription management.
-    """
-    try:
-        # Both the current names and every legacy one, because this is an admin
-        # endpoint that support tooling calls with whatever a row already holds.
-        valid_plans = sorted(
-            {plans.stored_name(k, c) for k in plans.PLANS for c in plans.CYCLES}
-            | set(plans.LEGACY_ALIASES)
-        )
-        if subscription_plan not in valid_plans:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid subscription plan. Must be one of: {', '.join(valid_plans)}"
-            )
-
-        success = clinic_service.update_subscription(
-            clinic_id,
-            subscription_plan,
-            razorpay_subscription_id
-        )
-
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Clinic not found"
-            )
-
-        return SuccessResponseDTO(
-            message="Subscription updated successfully",
-            data={
-                "clinic_id": clinic_id,
-                "subscription_plan": subscription_plan
-            }
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update subscription: {str(e)}"
-        )
+# ── REMOVED: PUT /api/v1/clinics/{clinic_id}/subscription ────────────────────
+#
+# Deleted 2026-08-30. Documented as "admin only" and "Requires admin
+# privileges", but its actual guard was require_role("clinic_owner"), which
+# checks user.role and nothing else — no check that clinic_id belonged to the
+# caller, at the route, the service, or the repository. The repo simply did
+# get_by_id(clinic_id) and assigned clinics.subscription_plan.
+#
+# So any of the 177 clinic owners could set ANY clinic's plan to anything in
+# the catalogue, their own included, by PUTting a sequential id. That column
+# drives effective_plan on /auth/me, the header badge, FeatureLock and the
+# usage-meter limits.
+#
+# It was not a full billing bypass — the branch gate in owner_add_clinic reads
+# the SUBSCRIPTION ROW (owner_sub.plan_name), not this column, and so does
+# plan_state — which is the only reason this was not worse.
+#
+# Nothing called it: no web, mobile or support-tool caller exists. Plans change
+# through the Cashfree flow, or by hand in psql for a support grant.
+#
+# If support tooling ever needs this, it needs a real admin role and an
+# ownership check, and it must write the subscription row rather than this
+# column, or the two disagree exactly as they did for clinic 204.
 
 
 @router.get(

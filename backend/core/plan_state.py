@@ -232,34 +232,73 @@ def _payload(state: str, days_left: Optional[int], sub) -> dict:
     return result
 
 
-def for_clinic(db, clinic) -> dict:
-    """Evaluate the subscription behind a clinic, however it is attached."""
+def _sub_attached_to(db, clinic_id: int):
+    """The subscription for exactly this clinic, by row or by its owner."""
     from models import Subscription, User
 
     sub = (
         db.query(Subscription)
-        .filter(Subscription.clinic_id == clinic.id)
+        .filter(Subscription.clinic_id == clinic_id)
         .order_by(Subscription.id.desc())
         .first()
     )
-    if sub is None:
-        owner = (
-            db.query(User)
-            .filter(
-                User.clinic_id == clinic.id,
-                User.role == "clinic_owner",
-                User.is_active == True,  # noqa: E712
-            )
-            .first()
+    if sub is not None:
+        return sub
+
+    owner = (
+        db.query(User)
+        .filter(
+            User.clinic_id == clinic_id,
+            User.role == "clinic_owner",
+            User.is_active == True,  # noqa: E712
         )
-        if owner:
-            sub = (
-                db.query(Subscription)
-                .filter(Subscription.user_id == owner.id)
-                .order_by(Subscription.id.desc())
-                .first()
-            )
-    return evaluate(sub)
+        .first()
+    )
+    if owner is None:
+        return None
+    return (
+        db.query(Subscription)
+        .filter(Subscription.user_id == owner.id)
+        .order_by(Subscription.id.desc())
+        .first()
+    )
+
+
+def for_clinic(db, clinic) -> dict:
+    """Evaluate the subscription behind a clinic, however it is attached.
+
+    Walks up `parent_clinic_id` when a clinic has no subscription of its own,
+    because a BRANCH never has one: owner_add_clinic creates branches without a
+    row on the understanding that they are covered by the parent's plan.
+
+    Without the walk that understanding was never enforced. The owner fallback
+    above looks for a clinic_owner sitting in *this* clinic, and the owner is
+    normally in the main one, so a branch resolved to no subscription at all,
+    which `evaluate` reads as a healthy plan with no expiry. A lapsed parent was
+    locked while everybody working in its branches carried on writing:
+
+        parent  state=lapsed  blocks=True
+        branch  state=ok      blocks=False
+
+    A branch that DOES have its own row still uses it. That is not a special
+    case to unwind: the Aug 2026 backfill gave every row-less clinic a grant,
+    branches included, and those rows are real.
+    """
+    seen = set()
+    node = clinic
+    while node is not None and getattr(node, "id", None) not in seen:
+        seen.add(node.id)
+        sub = _sub_attached_to(db, node.id)
+        if sub is not None:
+            return evaluate(sub)
+
+        parent_id = getattr(node, "parent_clinic_id", None)
+        if not parent_id or parent_id in seen:
+            break
+        from models import Clinic
+        node = db.query(Clinic).filter(Clinic.id == parent_id).first()
+
+    return evaluate(None)
 
 
 # ── The guard ────────────────────────────────────────────────────────────────
