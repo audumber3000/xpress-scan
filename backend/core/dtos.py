@@ -224,6 +224,8 @@ class ClinicBaseDTO(BaseModel):
     google_place_id: Optional[str] = None
     # Send patient WhatsApp messages manually from the clinic's own number.
     manual_whatsapp: bool = False
+    # 'dental' (tooth chart + dental history) or 'general' (neither).
+    case_paper_type: str = "dental"
     # Practice licence — all optional so existing clinics respond unchanged.
     license_number: Optional[str] = None
     license_authority: Optional[str] = None
@@ -273,6 +275,7 @@ class ClinicUpdateDTO(BaseModel):
     license_authority: Optional[str] = None
     license_expiry: Optional[date] = None
     manual_whatsapp: Optional[bool] = None
+    case_paper_type: Optional[str] = None
 
 
 class ClinicResponseDTO(ClinicBaseDTO, NullSafeResponse):

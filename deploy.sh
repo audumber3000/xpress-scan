@@ -92,6 +92,8 @@ run_migration "currency_symbol"  "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS c
 run_migration "timezone"         "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS timezone VARCHAR(50) DEFAULT 'Asia/Kolkata'"
 run_migration "tax_label"        "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS tax_label VARCHAR(20) DEFAULT 'GST No.'"
 run_migration "tax_id"           "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS tax_id VARCHAR(50)"
+run_migration "case_paper_type" "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS case_paper_type VARCHAR(16) DEFAULT 'dental'"
+run_migration "derm_findings" "ALTER TABLE case_papers ADD COLUMN IF NOT EXISTS derm_findings JSON"
 run_migration "email_report_unsubscribed" "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_report_unsubscribed BOOLEAN DEFAULT FALSE"
 run_migration "trial_used"        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_used BOOLEAN DEFAULT FALSE"
 
@@ -247,12 +249,24 @@ run_migration "daily_summary_optin" "DO \$do\$ BEGIN IF NOT EXISTS (SELECT 1 FRO
 # gave away, never credit somebody bought, and never top anybody up.
 run_migration "wallet_welcome_credit_10" "DO \$do\$ BEGIN IF NOT EXISTS (SELECT 1 FROM applied_data_migrations WHERE key = 'wallet_welcome_credit_10_v1') THEN UPDATE notification_wallets SET balance = 10 WHERE last_topup_at IS NULL AND balance > 10; INSERT INTO applied_data_migrations (key) VALUES ('wallet_welcome_credit_10_v1'); END IF; END \$do\$;"
 
+# The 2-hour appointment reminder. notify_event sends nothing when a clinic has
+# no preference row for an event, and rows are seeded lazily (only when somebody
+# opens Notifications -> Preferences). Without this backfill the second reminder
+# would quietly never fire for any existing clinic.
+#
+# Each clinic's new row COPIES its existing appointment_reminder row: same
+# channels, same enabled flag. A clinic that turned reminders off stays off, and
+# a clinic on email-only does not suddenly start spending on WhatsApp. Clinics
+# with no appointment_reminder row at all are left alone — they get both rows
+# from the normal seeding path the next time that screen is opened.
+run_migration "appointment_reminder_2h_prefs" "DO \$do\$ BEGIN IF NOT EXISTS (SELECT 1 FROM applied_data_migrations WHERE key = 'appointment_reminder_2h_prefs_v1') THEN INSERT INTO notification_preferences (clinic_id, event_type, channels, is_enabled) SELECT p.clinic_id, 'appointment_reminder_2h', p.channels, p.is_enabled FROM notification_preferences p WHERE p.event_type = 'appointment_reminder' AND NOT EXISTS (SELECT 1 FROM notification_preferences q WHERE q.clinic_id = p.clinic_id AND q.event_type = 'appointment_reminder_2h'); INSERT INTO applied_data_migrations (key) VALUES ('appointment_reminder_2h_prefs_v1'); END IF; END \$do\$;"
+
 # 6. Schema migration check — catch missing ALTER TABLE migrations before deploy
 echo ""
 echo "▶ Running schema migration check against prod DB..."
 
 declare -A REQUIRED_COLS=(
-  ["clinics"]="id clinic_code name address phone email gst_number specialization subscription_plan status razorpay_customer_id cashfree_customer_id logo_url invoice_template primary_color number_of_chairs timings created_at updated_at synced_at sync_status referred_by_code clinic_label parent_clinic_id country currency_code currency_symbol timezone tax_label tax_id master_password_hash master_password_updated_at master_password_attempts master_password_locked_until"
+  ["clinics"]="id clinic_code name address phone email gst_number specialization subscription_plan status razorpay_customer_id cashfree_customer_id logo_url invoice_template primary_color number_of_chairs timings created_at updated_at synced_at sync_status referred_by_code clinic_label parent_clinic_id country currency_code currency_symbol timezone tax_label tax_id master_password_hash master_password_updated_at master_password_attempts master_password_locked_until case_paper_type"
   ["users"]="id email name first_name last_name role is_active permissions created_at updated_at email_report_unsubscribed"
   ["user_clinics"]="user_id clinic_id role is_active created_at"
   ["patients"]="id clinic_id name phone date_of_birth registered_on created_at updated_at"

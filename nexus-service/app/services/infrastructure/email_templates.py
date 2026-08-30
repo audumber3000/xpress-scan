@@ -643,7 +643,8 @@ PLATFORM_EVENTS = {
 
 PATIENT_EVENTS = {
     "appointment_booked", "appointment_confirmation", "checked_in",
-    "appointment_reminder", "invoice_notification", "prescription_notification",
+    "appointment_reminder", "appointment_reminder_2h",
+    "invoice_notification", "prescription_notification",
     "consent_form", "google_review",
 }
 
@@ -693,6 +694,9 @@ def build_email(event_type: str, **kwargs) -> dict:
         "appointment_confirmation":   patient_appointment_confirmed,
         "checked_in":                 patient_checked_in,
         "appointment_reminder":       patient_appointment_reminder,
+        # Same email body as the day-before reminder. The two tiers differ
+        # in when they are sent, not in what they need to say.
+        "appointment_reminder_2h":    patient_appointment_reminder,
         "invoice_notification":       patient_invoice_sent,
         "prescription_notification":  patient_prescription_sent,
         "consent_form":               patient_consent_form,

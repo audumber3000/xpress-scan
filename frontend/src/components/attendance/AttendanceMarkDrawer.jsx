@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { X, CheckCircle2, Clock, XCircle, Calendar } from "lucide-react";
 import { format } from "date-fns";
+import ClockInDetail from "./ClockInDetail";
 
 const STATUS_OPTIONS = [
   {
@@ -82,6 +83,12 @@ const AttendanceMarkDrawer = ({ employee, date, currentAttendance, onClose, onSa
             <Calendar size={15} className="text-[#29828a]" />
             <span className="font-medium">{dateLabel}</span>
           </div>
+
+          {/* What was actually recorded, before the controls that overwrite it.
+              Marking somebody absent when their phone says they clocked in at
+              09:04 from inside the clinic should be a decision taken with that
+              on screen, not one made blind and discovered later. */}
+          <ClockInDetail day={currentAttendance} />
 
           {/* Status Selection */}
           <div>

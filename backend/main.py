@@ -324,6 +324,12 @@ async def lifespan(app: FastAPI):
             conn.execute(text(
                 "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS manual_whatsapp BOOLEAN DEFAULT FALSE"
             ))
+            # Dental case paper vs the general one (hair/skin and other
+            # non-dental practices). Defaulted so every existing clinic keeps
+            # the dental paper it already has.
+            conn.execute(text(
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS case_paper_type VARCHAR(16) DEFAULT 'dental'"
+            ))
             # Inventory ledger: event label + medication link, so Usage is a full log.
             conn.execute(text(
                 "ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS action VARCHAR"
@@ -336,6 +342,9 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE medication_stock ADD COLUMN IF NOT EXISTS units_per_pack DOUBLE PRECISION"))
             # A case paper can carry several invoices.
             conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS case_paper_id INTEGER REFERENCES case_papers(id)"))
+            # The dermatology case paper's findings (skin profile, lesions,
+            # scalp/hair, severity scores). Null on every dental case paper.
+            conn.execute(text("ALTER TABLE case_papers ADD COLUMN IF NOT EXISTS derm_findings JSON"))
             # The next-visit recommendation resolved to a real calendar day, so
             # the front desk has something to act on instead of "after 1 month".
             conn.execute(text("ALTER TABLE case_papers ADD COLUMN IF NOT EXISTS next_visit_date DATE"))

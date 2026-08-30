@@ -165,7 +165,10 @@ const TreatmentsPricing = ({ mode = 'services', embedded = false }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setTitle, navigate, activeTab, embedded]);
 
-  const fetchData = () => { isServices ? fetchTreatmentTypes() : fetchMedications(); };
+  // Returns the promise so callers can await the refetch. Without the return
+  // an `await fetchData()` resolves instantly and the caller carries on
+  // against the old rows.
+  const fetchData = () => (isServices ? fetchTreatmentTypes() : fetchMedications());
 
   const fetchTreatmentTypes = async () => {
     try {
@@ -234,26 +237,53 @@ const TreatmentsPricing = ({ mode = 'services', embedded = false }) => {
     return next;
   });
 
+  // The clear-up after a delete runs in `finally`, and that is the whole point.
+  //
+  // This used to end with a bare `toast[...]` call, and `toast` was never
+  // imported here. So every bulk delete threw a ReferenceError on the line
+  // after the rows had already been deleted server-side: the list was never
+  // refetched, the checkboxes stayed ticked, and `saving` stayed true, which
+  // left the whole action bar disabled. The rows sat there looking alive until
+  // the page was hard-refreshed. Anything that must happen after a delete
+  // belongs below, where a failure to report cannot take the refresh with it.
   const bulkDelete = async () => {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
     if (!window.confirm(`Delete ${ids.length} selected ${isServices ? 'treatment(s)' : 'medication(s)'}? This cannot be undone.`)) return;
     setSaving(true);
-    const results = await Promise.allSettled(ids.map(id => api.delete(`${endpoint}/${id}`)));
-    const failed = results.filter(r => r.status === 'rejected').length;
-    toast[failed ? 'warning' : 'success'](`Deleted ${ids.length - failed}${failed ? `, ${failed} failed` : ''}`);
-    setSelectedIds(new Set());
-    setSaving(false);
-    fetchData();
+    try {
+      const results = await Promise.allSettled(ids.map(id => api.delete(`${endpoint}/${id}`)));
+      const failed = results.filter(r => r.status === 'rejected').length;
+      // Tier 1 on a clean run: the rows vanish from the table, which says it
+      // better than a toast would. A partial failure is invisible, though —
+      // some rows go and some stay — so that one gets said out loud.
+      if (failed) {
+        notify.problem(
+          `Deleted ${ids.length - failed} of ${ids.length}. ${failed} could not be deleted.`
+        );
+      }
+    } finally {
+      setSelectedIds(new Set());
+      setSaving(false);
+      await fetchData();
+    }
   };
 
   const deleteOne = async (item) => {
     if (!window.confirm(`Delete this ${isServices ? 'treatment' : 'medication'}?`)) return;
     try {
       await api.delete(`${endpoint}/${item.id}`);
-      fetchData();
     } catch (error) {
       notify.problem(error, "Failed to delete");
+    } finally {
+      // Refetch either way. A delete that failed for a reason the server knows
+      // about (already gone, for one) still leaves the table wrong.
+      await fetchData();
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        next.delete(item.id);
+        return next;
+      });
     }
   };
 

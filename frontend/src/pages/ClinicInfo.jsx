@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/common/ConfirmDialog';
 import GoogleGlyph from '../components/common/GoogleGlyph';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ChevronLeft, Building2, IdCard, Receipt, MapPin, Clock, GitBranch, PlusCircle, Check, Images, Plus, Trash2, Loader2 } from 'lucide-react';
+import CasePaperTypeField from '../components/settings/CasePaperTypeField';
 
 /**
  * Clinic Profile — the details for one branch, split across tabs.
@@ -213,6 +214,7 @@ const ClinicInfo = () => {
     license_number: '',
     license_authority: '',
     license_expiry: '',
+    case_paper_type: 'dental',
     timings: DEFAULT_TIMINGS,
   });
   const [loadingClinicData, setLoadingClinicData] = useState(false);
@@ -339,6 +341,7 @@ const ClinicInfo = () => {
         license_number: data.license_number || '',
         license_authority: data.license_authority || '',
         license_expiry: data.license_expiry || '',
+        case_paper_type: data.case_paper_type || 'dental',
         timings: data.timings || DEFAULT_TIMINGS,
       });
       setSavedCurrency(data.currency_code || 'INR');
@@ -395,6 +398,11 @@ const ClinicInfo = () => {
         const patch = {
           currency_code: saved.currency_code,
           currency_symbol: saved.currency_symbol,
+          // Same reason as the currency fields above: the case paper screen
+          // reads this off the cached user, so without it the doctor switches
+          // to the general paper here and still gets the tooth chart until
+          // they sign out and back in.
+          case_paper_type: saved.case_paper_type,
         };
         setUser({
           ...user,
@@ -594,6 +602,11 @@ const ClinicInfo = () => {
               <input type="email" value={clinicData.email} onChange={setField('email')} className={inputClass} placeholder="Enter clinic email" />
             </div>
           </div>
+
+          <CasePaperTypeField
+            value={clinicData.case_paper_type}
+            onChange={(v) => setClinicData((prev) => ({ ...prev, case_paper_type: v }))}
+          />
         </Panel>
       )}
 

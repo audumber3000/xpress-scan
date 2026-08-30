@@ -330,6 +330,10 @@ def build_whatsapp(event_type: str, **kwargs) -> dict:
         "appointment_confirmation":  wa_appointment_confirmed,
         "checked_in":                wa_checked_in,
         "appointment_reminder":      wa_appointment_reminder,
+        # Deliberately the SAME approved template (mp_appointment_reminder).
+        # The two-hour tier says the same sentence at a different time, so
+        # giving it its own event_type cost no new Meta template approval.
+        "appointment_reminder_2h":   wa_appointment_reminder,
         "invoice_notification":      wa_invoice_sent,
         "receipt_notification":      wa_receipt_sent,
         "prescription_notification": wa_prescription_sent,
@@ -480,6 +484,8 @@ def build_whatsapp_text(event_type: str, **kw) -> str:
         body = f"Hi {pn}, you're checked in at {cn}" + (f" with {dn}" if dn else "") + ". We'll call you shortly."
     elif event_type == "appointment_reminder":
         body = f"Reminder: {pn}, you have an appointment at {cn} on {date} at {time}. Reply here if you need to reschedule."
+    elif event_type == "appointment_reminder_2h":
+        body = f"Hi {pn}, your appointment at {cn} is in about 2 hours, at {time}. See you soon. Reply here if you cannot make it."
     elif event_type == "invoice_notification":
         body = f"Hi {pn}, please find your invoice from {cn} attached. Thank you for visiting us."
     elif event_type == "receipt_notification":

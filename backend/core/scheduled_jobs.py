@@ -48,16 +48,52 @@ async def run_platform_automation_job() -> None:
         db.close()
 
 
-async def appointment_reminder_scan_job() -> None:
-    """Every 15 minutes: send reminders for appointments ~24 hours away."""
+# ── Appointment reminders ────────────────────────────────────────────────────
+#
+# A patient gets reminded twice, and the two are deliberately different jobs
+# rather than one job with a list of offsets.
+#
+#   appointment_reminder      ~24 hours out. The one that lets somebody
+#                             rearrange their day, or call to reschedule.
+#   appointment_reminder_2h   ~2 hours out. The one that stops a no-show from
+#                             somebody who meant to come and lost the day.
+#
+# Each tier is its own event_type all the way through: its own NotificationLog
+# rows, its own row in Notifications → Preferences, its own wallet spend. That
+# matters more than it looks. Sharing one event_type would mean a clinic that
+# wants the day-before nudge but not the two-hour one has no way to say so, and
+# the dedup guard below could not tell the two apart, so the second reminder
+# would look like a duplicate of the first and be dropped.
+#
+# Both map to the same approved WhatsApp template (mp_appointment_reminder) in
+# nexus-service, so the second tier needed no new Meta template registration.
+
+REMINDER_TIERS = {
+    # event_type: (lead time, half-width of the catch window, dedup lookback)
+    #
+    # The window is half-width either side of the lead time, and must be at
+    # least half the cron interval or an appointment can fall between two scans
+    # and be missed entirely. The scan runs every 15 minutes, so 15 minutes
+    # either side gives a 30-minute net with a 15-minute overlap: every
+    # appointment is seen at least once, most are seen twice, and the dedup
+    # lookback is what stops the second sighting from sending again.
+    "appointment_reminder":    (dt.timedelta(hours=24), dt.timedelta(minutes=15), dt.timedelta(hours=6)),
+    "appointment_reminder_2h": (dt.timedelta(hours=2),  dt.timedelta(minutes=15), dt.timedelta(hours=2)),
+}
+
+
+def _scan_appointment_reminders(event_type: str) -> None:
+    """Send one tier of appointment reminder. Shared body, tier picked by name."""
     from database import SessionLocal
     from models import Appointment, Clinic, NotificationLog
+
+    lead, half_width, dedup_window = REMINDER_TIERS[event_type]
 
     db = SessionLocal()
     try:
         now = _ist_now()
-        window_lo = now + dt.timedelta(hours=23, minutes=45)
-        window_hi = now + dt.timedelta(hours=24, minutes=15)
+        window_lo = now + lead - half_width
+        window_hi = now + lead + half_width
 
         appts = (
             db.query(Appointment, Clinic)
@@ -77,13 +113,16 @@ async def appointment_reminder_scan_job() -> None:
             if not recipients:
                 continue
 
+            # Scoped to this tier's own event_type, so the 24-hour reminder
+            # cannot suppress the 2-hour one (and vice versa). Without the
+            # event_type filter the two tiers would silently collapse into one.
             already_sent = (
                 db.query(NotificationLog.id)
                 .filter(
                     NotificationLog.clinic_id == clinic.id,
-                    NotificationLog.event_type == "appointment_reminder",
+                    NotificationLog.event_type == event_type,
                     NotificationLog.recipient.in_(recipients),
-                    NotificationLog.created_at >= now - dt.timedelta(hours=6),
+                    NotificationLog.created_at >= now - dedup_window,
                 )
                 .first()
             )
@@ -92,7 +131,7 @@ async def appointment_reminder_scan_job() -> None:
 
             try:
                 notify_event(
-                    "appointment_reminder",
+                    event_type,
                     db=db,
                     clinic_id=clinic.id,
                     to_phone=appt.patient_phone or "",
@@ -108,15 +147,25 @@ async def appointment_reminder_scan_job() -> None:
                 )
                 sent += 1
             except InsufficientWalletBalance:
-                logger.info("appointment_reminder skipped clinic=%s: low balance", clinic.id)
+                logger.info("%s skipped clinic=%s: low balance", event_type, clinic.id)
             except Exception as exc:
-                logger.warning("appointment_reminder error clinic=%s: %s", clinic.id, exc)
+                logger.warning("%s error clinic=%s: %s", event_type, clinic.id, exc)
 
-        logger.info("appointment_reminder_scan: sent=%d scanned=%d", sent, len(appts))
+        logger.info("%s_scan: sent=%d scanned=%d", event_type, sent, len(appts))
     except Exception as exc:
-        logger.error("appointment_reminder_scan fatal: %s", exc)
+        logger.error("%s_scan fatal: %s", event_type, exc)
     finally:
         db.close()
+
+
+async def appointment_reminder_scan_job() -> None:
+    """Every 15 minutes: remind about appointments roughly 24 hours away."""
+    _scan_appointment_reminders("appointment_reminder")
+
+
+async def appointment_reminder_2h_scan_job() -> None:
+    """Every 15 minutes: the last nudge, roughly 2 hours before the slot."""
+    _scan_appointment_reminders("appointment_reminder_2h")
 
 
 def _send_system_whatsapp(db, clinic_id: int, to_phone: str, event_type: str, template_data: dict) -> bool:

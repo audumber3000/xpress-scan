@@ -39,6 +39,7 @@ DEFAULT_EVENT_TYPES = [
     "receipt_notification",
     "prescription_notification",
     "appointment_reminder",
+    "appointment_reminder_2h",
     "google_review",
     "consent_form",
     "daily_summary",
@@ -765,6 +766,11 @@ async def template_test_send(
             "doctor_name": "Dr. Mehta", "clinic_phone": "+91 9000000000",
         },
         "appointment_reminder": {
+            "patient_name": "Rahul Sharma", "clinic_name": clinic_name,
+            "appointment_date": "25 Apr 2026", "appointment_time": "10:30 AM",
+            "clinic_phone": "+91 9000000000",
+        },
+        "appointment_reminder_2h": {
             "patient_name": "Rahul Sharma", "clinic_name": clinic_name,
             "appointment_date": "25 Apr 2026", "appointment_time": "10:30 AM",
             "clinic_phone": "+91 9000000000",

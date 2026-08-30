@@ -1,8 +1,14 @@
 import React from 'react';
 import ClinicalMultiSelect from './ClinicalMultiSelect';
 import { ClipboardList } from 'lucide-react';
+import { useCasePaperLabels } from '../../utils/casePaper';
 
 const ClinicalExamSection = ({ form, onFormChange }) => {
+  // 'Dental History' on the dental paper, 'Treatment History' on the general
+  // one. Same stored field either way, so switching a clinic over never
+  // orphans what has already been written.
+  const { historyLabel, historyPlaceholder } = useCasePaperLabels();
+
   return (
     <section>
       <div className="flex items-center gap-3 mb-6">
@@ -29,8 +35,8 @@ const ClinicalExamSection = ({ form, onFormChange }) => {
         />
         <ClinicalMultiSelect 
           category="dental-history"
-          label="Dental History"
-          placeholder="e.g. Previous RCT, Extractions"
+          label={historyLabel}
+          placeholder={historyPlaceholder}
           selectedValues={form.dental_history}
           onChange={(vals) => onFormChange({...form, dental_history: vals})}
         />

@@ -6,6 +6,7 @@ from database import get_db
 from models import Attendance, User, Clinic
 from schemas import AttendanceOut
 from core.auth_utils import get_current_user, require_clinic_owner
+from domains.scheduling.services.attendance_view import status_for_check_in
 from pydantic import BaseModel, Field
 
 router = APIRouter()
@@ -127,12 +128,22 @@ async def clock_in(
     if existing_attendance:
         raise HTTPException(status_code=400, detail="You are already clocked in today")
     
-    # Create attendance record
+    # Create attendance record.
+    #
+    # The status is worked out from the clinic's opening time for this weekday
+    # rather than left to the column default. It used to take that default, so
+    # every phone clock-in was stored as 'on_time' no matter how late it was:
+    # somebody arriving 102 minutes after opening produced a green "Present"
+    # cell on the owner's grid. A screen where everybody is always on time is
+    # not a screen, and this is the same helper the grid uses to compute
+    # "late by N minutes", so the badge and the number cannot disagree.
+    check_in_at = datetime.now()
     attendance = Attendance(
         user_id=current_user.id,
         clinic_id=current_user.clinic_id,
         date=today,
-        check_in_time=datetime.now(),
+        status=status_for_check_in(clinic, today, check_in_at),
+        check_in_time=check_in_at,
         clock_in_latitude=request.latitude,
         clock_in_longitude=request.longitude,
         clock_in_address=request.address,
@@ -187,11 +198,12 @@ async def clock_out(
     attendance.clock_out_accuracy = request.accuracy
     attendance.clock_out_distance_m = distance
     
-    # Calculate hours worked
-    if attendance.check_in_time:
-        time_diff = attendance.check_out_time - attendance.check_in_time
-        attendance.hours_worked = time_diff.total_seconds() / 3600
-    
+    # Hours worked are deliberately NOT stored. There is no hours_worked
+    # column, so the assignment that used to live here set a throwaway Python
+    # attribute and vanished on commit. The grid and both exports derive the
+    # figure from the two timestamps, which also means correcting a time
+    # corrects the total instead of leaving a stale number behind.
+
     db.commit()
     db.refresh(attendance)
     

@@ -1,129 +1,140 @@
 import React from "react";
 import AttendanceCell from "./AttendanceCell";
-import { format } from "date-fns";
 import { resolveUserAvatar } from "../../utils/avatar";
 
-const AttendanceGrid = ({ employees, weekDays, onEmployeeProfileClick, onCellClick }) => {
-  const getDayName = (date) => {
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    return days[date.getDay()];
+/**
+ * The register: employees down, days across.
+ *
+ * One grid for both views rather than a week component and a month component.
+ * They differ in how many columns there are and how much each cell can say,
+ * which is two props, not two files — and a second file is how the month view
+ * ends up quietly disagreeing with the week about what "late" means.
+ */
+
+const fmtDuration = (minutes) => {
+  if (!minutes) return "0h 00m";
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
+};
+
+const AttendanceGrid = ({
+  employees,
+  days,              // ["YYYY-MM-DD", ...] straight from the API
+  view = "week",     // "week" | "month"
+  onEmployeeProfileClick,
+  onCellClick,
+}) => {
+  const dense = view === "month";
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  // Parsed from the key rather than from a Date the caller passes in, so the
+  // column header can never drift from the data keyed under it.
+  const headerFor = (key) => {
+    const [y, m, d] = key.split("-").map(Number);
+    const date = new Date(y, m - 1, d);
+    const weekday = date.toLocaleDateString("en-US", { weekday: dense ? "narrow" : "long" });
+    return { day: d, weekday, isWeekend: date.getDay() === 0 || date.getDay() === 6 };
   };
 
-  const formatDayHeader = (date) => {
-    const day = date.getDate();
-    const dayName = getDayName(date);
-    return `${day} ${dayName}`;
-  };
-
-  const getEmployeeAttendance = (employeeId, date) => {
-    const employee = employees.find(emp => emp.id === employeeId);
-    if (!employee || !employee.attendance) return null;
-    
-    const dateStr = format(date, 'yyyy-MM-dd'); // local date, not UTC
-    const val = employee.attendance[dateStr];
-    return val !== undefined ? val : null;
-  };
-
-  const isHoliday = (date) => {
-    // Check if date is a holiday (you can expand this logic)
-    const holidays = [
-      '2024-09-25', // Example holiday
-    ];
-    return holidays.includes(format(date, 'yyyy-MM-dd'));
-  };
-
-  const getHolidayName = (date) => {
-    const holidays = {
-      '2024-09-25': 'Annual Book Fair',
-    };
-    return holidays[format(date, 'yyyy-MM-dd')] || null;
-  };
-
-
+  if (!employees.length) {
+    return (
+      <div className="p-12 text-center">
+        <p className="text-sm text-gray-500">No employees match this view.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
-      <div className="bg-white overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead className="bg-gray-50 sticky top-0 z-10">
-              <tr>
-                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-100 sticky left-0 bg-gray-50 z-20 min-w-[220px]">
-                  Employee Profile
-                </th>
-                {weekDays.map((date, index) => (
-                  <th
-                    key={index}
-                    className="px-4 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-100 min-w-[140px]"
-                  >
-                    {formatDayHeader(date)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="bg-white">
-          {employees.map((employee, empIndex) => (
-            <tr
-              key={employee.id}
-              className="border-t border-gray-100"
-            >
-              {/* Employee Profile Cell — click opens attendance history drawer */}
-              <td
-                onClick={() => onEmployeeProfileClick && onEmployeeProfileClick(employee)}
-                className="px-6 py-4 border-r border-gray-100 sticky left-0 bg-white hover:bg-gray-50 z-10 cursor-pointer"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0 bg-gray-100">
-                    <img
-                      src={resolveUserAvatar(employee, 44)}
-                      alt={employee.name}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div>
-                    <div className="font-semibold text-gray-900 text-sm">{employee.name}</div>
-                    {employee.designation && (
-                      <div className="text-xs text-gray-500 capitalize">{employee.designation}</div>
-                    )}
-                  </div>
-                </div>
-              </td>
-
-              {/* Attendance Cells */}
-              {weekDays.map((date, dayIndex) => {
-                const attendance = getEmployeeAttendance(employee.id, date);
-                const holiday = isHoliday(date);
-                const holidayName = getHolidayName(date);
-                // attendance === null means future date — show as disabled
-                const isFutureDate = attendance === null;
-
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead className="bg-gray-50 sticky top-0 z-10">
+            <tr>
+              <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-100 sticky left-0 bg-gray-50 z-20 min-w-[200px]">
+                Employee
+              </th>
+              {days.map((key) => {
+                const { day, weekday, isWeekend } = headerFor(key);
+                const isToday = key === todayKey;
                 return (
-                  <AttendanceCell
-                    key={dayIndex}
-                    status={attendance?.status}
-                    reason={attendance?.reason}
-                    isHoliday={holiday}
-                    holidayName={holidayName}
-                    isFuture={isFutureDate}
-                    onClick={isFutureDate ? undefined : () => onCellClick && onCellClick(employee, date)}
-                  />
+                  <th
+                    key={key}
+                    className={`py-3 text-center text-xs font-medium uppercase tracking-wider border-r border-gray-100 ${
+                      dense ? "px-1 min-w-[34px]" : "px-3 min-w-[120px]"
+                    } ${isToday ? "text-[#29828a]" : isWeekend ? "text-gray-400" : "text-gray-500"}`}
+                  >
+                    <span className={`block ${dense ? "text-[11px]" : "text-sm"} ${isToday ? "font-bold" : ""}`}>
+                      {day}
+                    </span>
+                    <span className="block text-[9px] font-normal normal-case">{weekday}</span>
+                  </th>
                 );
               })}
+              {/* Totals belong on the row they total, not in a separate report.
+                  This is the column an owner actually opens the screen for at
+                  the end of a month. */}
+              <th className="px-3 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50 min-w-[80px]">
+                Present
+              </th>
+              <th className="px-3 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50 min-w-[90px]">
+                Hours
+              </th>
             </tr>
-          ))}
+          </thead>
+
+          <tbody className="bg-white">
+            {employees.map((employee) => (
+              <tr key={employee.id} className="border-t border-gray-100">
+                <td
+                  onClick={() => onEmployeeProfileClick?.(employee)}
+                  className="px-6 py-3 border-r border-gray-100 sticky left-0 bg-white hover:bg-gray-50 z-10 cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full overflow-hidden shrink-0 bg-gray-100">
+                      <img
+                        src={resolveUserAvatar(employee, 36)}
+                        alt={employee.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-semibold text-gray-900 text-sm truncate">{employee.name}</div>
+                      {employee.role && (
+                        <div className="text-xs text-gray-500 capitalize truncate">{employee.role}</div>
+                      )}
+                    </div>
+                  </div>
+                </td>
+
+                {days.map((key) => {
+                  const day = employee.attendance?.[key];
+                  // null from the API means the day has not happened yet.
+                  const isFuture = day === null || day === undefined;
+                  return (
+                    <AttendanceCell
+                      key={key}
+                      day={day}
+                      isFuture={isFuture}
+                      dense={dense}
+                      onClick={isFuture ? undefined : () => onCellClick?.(employee, key)}
+                    />
+                  );
+                })}
+
+                <td className="px-3 py-3 text-center bg-gray-50/60 text-sm font-semibold text-gray-700 tabular-nums">
+                  {employee.summary?.present ?? 0}
+                  <span className="text-gray-400 font-normal">/{employee.summary?.marked_days ?? 0}</span>
+                </td>
+                <td className="px-3 py-3 text-center bg-gray-50/60 text-sm font-semibold text-gray-700 tabular-nums">
+                  {fmtDuration(employee.summary?.worked_minutes)}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
-    </div>
     </div>
   );
 };
 
 export default AttendanceGrid;
-
-
-
-
-
-
-
