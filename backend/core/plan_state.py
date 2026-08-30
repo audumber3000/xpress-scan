@@ -26,11 +26,21 @@ with no way to reach a person is worst.
 
 ## What blocks
 
-Only creating NEW records: a new patient, a new appointment, a new invoice or
-payment. Reading, editing and completing existing work is never blocked. A
-clinic must always be able to open its own patient records and finish treating
-the person in the chair, and holding medical records hostage over a subscription
-is not a thing this product will do.
+EVERY write: POST, PUT, PATCH and DELETE alike. Not just new records, but
+edits to existing ones too, so an expired clinic cannot mark an appointment
+complete, finish a case paper, or correct a phone number either.
+
+This paragraph used to claim the opposite ("reading, editing and completing
+existing work is never blocked"), which was never true of the middleware below.
+Reviewed and kept strict deliberately on 2026-08-30: one rule is easier to
+explain and to reason about than a split between creating and editing, and
+softening it is a business decision rather than a bug fix.
+
+Reading is never blocked, and nothing is ever deleted. The clinic keeps full
+access to its records; it just cannot change them until it picks a plan.
+
+If this is ever revisited, the change is `_MUTATING` below: dropping PUT and
+PATCH from it is what "you can finish what you started" would mean.
 
 ## The grant is not enforced by default
 
