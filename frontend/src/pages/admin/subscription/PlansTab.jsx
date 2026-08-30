@@ -53,7 +53,11 @@ const StatusBanner = ({ tone, icon, title, body }) => {
 };
 
 const REASSURANCE = [
-  { icon: <RefreshCcw size={14} />, text: 'Cancel any time. Downgrades take effect at your next renewal, never mid-month.' },
+  // Promised something the checkout refuses. A paying clinic can move up at any
+  // time and cannot move down while the plan it bought is still running, so
+  // this says how a smaller plan is actually reached rather than implying a
+  // button that is disabled.
+  { icon: <RefreshCcw size={14} />, text: 'Move up at any time. To move to a smaller plan, pick it when your current one comes up for renewal.' },
   { icon: <FileText size={14} />, text: 'A GST invoice for every payment, so a registered clinic can claim input credit.' },
   { icon: <Lock size={14} />, text: 'Payments handled by Cashfree. We never see or store your card.' },
 ];
@@ -176,11 +180,14 @@ const PlansTab = ({
           })}
         />
 
+        {/* The quote is against Plus, the plan we actually want chosen. This
+            priced every promo against Pro, so the headline saving a clinic saw
+            was always for the plan above the one being pushed. */}
         <PromoCodeBox
           discount={discount}
           onApply={setDiscount}
           onClear={() => setDiscount(null)}
-          planKeyForQuote={catalogue.plans[1]?.key || 'pro'}
+          planKeyForQuote={catalogue.plans[0]?.key || 'plus'}
         />
 
         <PlanCards
@@ -189,7 +196,7 @@ const PlansTab = ({
           cycle={cycle}
           onCycleChange={setCycle}
           onChoose={choose}
-          lockDowngrades={isPaying}
+          isPaying={isPaying}
           discount={discount}
         />
 

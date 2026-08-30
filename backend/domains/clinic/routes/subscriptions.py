@@ -474,6 +474,13 @@ async def create_checkout(
             user_id=current_user.id
         )
         return result
+    except ValueError as e:
+        # Everything create_checkout_session raises deliberately is a ValueError
+        # with a sentence meant for the clinic: a downgrade while a paid plan is
+        # running, or a card payment outside India before that facility is on.
+        # These went out as 500s, so a rule we chose to enforce reached the
+        # screen as "something went wrong on our end" and the person retried.
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         import traceback
         traceback.print_exc()

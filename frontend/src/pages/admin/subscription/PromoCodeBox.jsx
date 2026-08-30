@@ -21,7 +21,7 @@ import { api, getFriendlyErrorMessage } from '../../../utils/api';
  * changes nothing that reaches Cashfree.
  */
 
-const PromoCodeBox = ({ discount, onApply, onClear, planKeyForQuote = 'pro' }) => {
+const PromoCodeBox = ({ discount, onApply, onClear, planKeyForQuote = 'plus' }) => {
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState('');
   const [checking, setChecking] = useState(false);

@@ -39,7 +39,7 @@ const Feature = ({ text }) => {
   );
 };
 
-const PlanCard = ({ plan, cycle, isCurrent, isDowngrade, locked, taxLabel, discount, adds, onChoose }) => {
+const PlanCard = ({ plan, cycle, isCurrent, isDowngrade, locked, continues, taxLabel, discount, adds, onChoose }) => {
   const annual = cycle === 'annual';
   const listHeadline = annual ? plan.annual_monthly : plan.monthly;
   const headline = applyDiscount(listHeadline, discount);
@@ -114,6 +114,8 @@ const PlanCard = ({ plan, cycle, isCurrent, isDowngrade, locked, taxLabel, disco
           ? 'Your current plan'
           : locked
           ? 'Included in your plan'
+          : continues
+          ? <>Continue on {plan.label} <ArrowRight size={14} /></>
           : <>{isDowngrade ? 'Switch to' : 'Upgrade to'} {plan.label} <ArrowRight size={14} /></>}
       </button>
     </div>
@@ -139,7 +141,22 @@ const differentiator = (plan, currentPlan) => {
   return `Takes you to ${bits.slice(0, 3).join(', ')}.`;
 };
 
-const PlanCards = ({ catalogue, currentPlanName, cycle, onCycleChange, onChoose, discount, lockDowngrades }) => {
+/**
+ * `isPaying` is the difference between being ON a plan and having BOUGHT one,
+ * and getting it wrong made the entry plan unbuyable.
+ *
+ * A clinic trialling Plus, or holding the migration grant, resolves to Plus, so
+ * the Plus card said "Your current plan" and was disabled. The only things it
+ * could actually buy were Pro and Growth. Every clinic on the platform was in
+ * that state: 176 on the grant and every new signup on a Plus trial, all of
+ * them shown the entry plan greyed out and the two plans above it as the only
+ * way to pay. That is the opposite of promoting Plus, and on 30 Sep it would
+ * have met 176 clinics at once.
+ *
+ * Now only a live paid plan marks a card as current. A trial or a grant makes
+ * it "Continue on Plus", which is both truthful and the thing we want clicked.
+ */
+const PlanCards = ({ catalogue, currentPlanName, cycle, onCycleChange, onChoose, discount, isPaying }) => {
   const current = resolvePlan(currentPlanName);
   const currentPlan = catalogue.plans.find((p) => p.key === current.key);
   const currentRank = planRank(currentPlanName);
@@ -184,9 +201,10 @@ const PlanCards = ({ catalogue, currentPlanName, cycle, onCycleChange, onChoose,
             taxLabel={catalogue.tax_label}
             discount={discount}
             adds={differentiator(plan, currentPlan)}
-            isCurrent={plan.key === current.key && cycle === current.cycle}
+            isCurrent={!!isPaying && plan.key === current.key && cycle === current.cycle}
             isDowngrade={plan.rank < currentRank}
-            locked={!!lockDowngrades && plan.rank < currentRank}
+            locked={!!isPaying && plan.rank < currentRank}
+            continues={!isPaying && plan.key === current.key && cycle === current.cycle}
             onChoose={onChoose}
           />
         ))}
