@@ -77,6 +77,16 @@ class Clinic(Base):
     # one reused web tab) with a prefilled message instead of auto-sending via
     # the MolarPlus/MSG91 number — so the clinic sends from their own number.
     manual_whatsapp = Column(Boolean, default=False)
+    # Which case paper this clinic writes: the dental one (tooth chart, dental
+    # history) or the general one.
+    #
+    # Separate from `specialization` on purpose. That field is descriptive — it
+    # is what the clinic calls itself, and it is shown on the public booking
+    # page — and it has drifted to free text ("dental", "cardiology", whatever
+    # the signup form was given). This is a decision the clinical screen has to
+    # branch on, so it is a closed set of two and defaults to the dental paper,
+    # which is what every existing clinic is already using.
+    case_paper_type = Column(String(16), default='dental')  # 'dental' | 'general'
     # Security contact — a phone + email for account recovery and sensitive
     # actions, each verified via OTP (Control Center → Security). Kept separate
     # from the public phone/email above.
@@ -330,6 +340,21 @@ class CasePaper(Base):
     dental_chart_snapshot = Column(JSON, nullable=True)
     treatment_plan_snapshot = Column(JSON, nullable=True)
     tooth_notes_snapshot = Column(JSON, nullable=True)
+
+    # Everything the dermatology case paper records that the dental one has no
+    # column for: skin profile, the lesion list, scalp and hair findings,
+    # severity scores, investigations, differential diagnosis.
+    #
+    # One JSON column rather than twenty typed ones, deliberately. This is a
+    # clinical form that will keep growing — a hair clinic wants trichoscopy
+    # fields a skin clinic never opens — and a migration per field is how a
+    # form like this stops being edited. The shape is owned by the frontend
+    # vocabulary module (components/patient/derm/dermVocabulary.js), which is
+    # the single place the terms are defined.
+    #
+    # Null on every dental case paper, and on a derm paper that has not been
+    # filled in yet. Readers must treat it as optional.
+    derm_findings = Column(JSON, nullable=True)
     
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)

@@ -53,6 +53,7 @@ def _register_jobs(sched: AsyncIOScheduler) -> None:
     from core.scheduled_jobs import (
         run_platform_automation_job,
         appointment_reminder_scan_job,
+        appointment_reminder_2h_scan_job,
         daily_summary_broadcast_job,
         weekly_summary_broadcast_job,
         monthly_summary_broadcast_job,
@@ -145,6 +146,19 @@ def _register_jobs(sched: AsyncIOScheduler) -> None:
         trigger="cron",
         minute="*/15",
         id="appointment_reminder_scan",
+        replace_existing=True,
+    )
+
+    # The second reminder tier, ~2 hours before the slot. Its own job rather
+    # than a second offset inside the first one, so a failure or a slow run of
+    # the day-before scan cannot swallow the two-hour nudge with it. Offset by
+    # 7 minutes so the two scans never contend for the same DB session at the
+    # top of the hour.
+    sched.add_job(
+        appointment_reminder_2h_scan_job,
+        trigger="cron",
+        minute="7,22,37,52",
+        id="appointment_reminder_2h_scan",
         replace_existing=True,
     )
 

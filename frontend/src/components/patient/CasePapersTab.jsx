@@ -20,6 +20,8 @@ import { Clock, ChevronLeft, Activity } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigationGuard } from '../../contexts/NavigationGuardContext';
 import { getUserDisplayName } from '../../utils/userName';
+import { useCasePaperLabels } from '../../utils/casePaper';
+import DermClinicalSections from './derm/DermClinicalSections';
 
 const CasePapersTab = ({
   patientData,
@@ -48,6 +50,9 @@ const CasePapersTab = ({
   const { user } = useAuth();
   const { registerBlocker, attemptNavigate } = useNavigationGuard();
   const currentUserName = getUserDisplayName(user); // logged-in dentist, used as fallback
+  // Which case paper this clinic keeps. Drives the tooth chart and the two
+  // labels that would otherwise say 'dental' to a dermatologist.
+  const { isDental, clinicianLabel } = useCasePaperLabels();
   const [selectedCasePaper, setSelectedCasePaper] = useState(null);
   // ?casePaper=<id> opens that paper directly. Guarded by a ref so it only
   // fires on the first load: without it, closing the paper would immediately
@@ -110,7 +115,11 @@ const CasePapersTab = ({
       diagnosis: '',            // Move to notes/secondary
       next_visit_recommendation: 'Not specified',
       next_visit_date: null,
-      notes: ''
+      notes: '',
+      // Null on a dental case paper. The derm sections fill this in and it is
+      // spread into the save payload with everything else, so it needs no
+      // special handling on either the create or the update path.
+      derm_findings: null
   });
 
   const [labOrders, setLabOrders] = useState([]);
@@ -144,6 +153,7 @@ const CasePapersTab = ({
       next_visit_recommendation: paper.next_visit_recommendation || 'Not specified',
       next_visit_date: paper.next_visit_date || null,
       notes: paper.notes || '',
+      derm_findings: paper.derm_findings || null,
     });
     setDirty(false);
     onCasePaperStateChange?.(true);
@@ -498,7 +508,8 @@ const CasePapersTab = ({
           diagnosis: '',
           next_visit_recommendation: 'Not specified',
           next_visit_date: null,
-          notes: ''
+          notes: '',
+          derm_findings: null
       });
       setSelectedCasePaper(newPaper);
       setLabOrders([]);
@@ -570,7 +581,8 @@ const CasePapersTab = ({
               diagnosis: '',
               next_visit_recommendation: 'Not specified',
               next_visit_date: null,
-              notes: ''
+              notes: '',
+              derm_findings: null
           });
           onCasePaperStateChange?.(false);
       } catch (err) {
@@ -867,30 +879,56 @@ const CasePapersTab = ({
         
         <div className="flex items-center gap-6">
             <div className="text-right hidden sm:block">
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Treating Dentist</p>
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">{clinicianLabel}</p>
                 <p className="text-sm font-extrabold text-[#2a276e]">{selectedDentistName}</p>
             </div>
         </div>
       </div>
 
       <div className="space-y-12 pb-32">
-        {/* 2. Clinical Examination Profile (Pills) */}
-        <ClinicalExamSection form={form} onFormChange={handleFormChange} />
+        {/* 2. The clinical middle.
+             Dental gets the pill exam plus the tooth chart plus the treatment
+             timeline. Dermatology gets its own case paper: skin profile,
+             history, lesion examination, scalp and hair, grading,
+             investigations, diagnosis and plan. Everything BELOW this point —
+             lab orders, prescriptions, documents, inventory used, clinical
+             notes and the whole action bar — is shared, because none of it is
+             dental. */}
+        {isDental ? (
+          <ClinicalExamSection form={form} onFormChange={handleFormChange} />
+        ) : (
+          <DermClinicalSections
+            form={form}
+            onFormChange={handleFormChange}
+            patientData={patientData}
+          />
+        )}
 
-        {/* 3. Dental Charting Tabbed View */}
-        <DentalChartSection
-          activeChartTab={activeChartTab}
-          onTabChange={setActiveChartTab}
-          sessionTeethData={sessionTeethData}
-          sessionToothNotes={sessionToothNotes}
-          selectedTooth={selectedTooth}
-          onToothSelect={onToothSelect}
-          onSurfaceConditionChange={handleSurfaceConditionChange}
-          onToothStatusChange={handleToothStatusChange}
-          onNotesChange={handleNotesChange}
-        />
+        {/* 3. Dental Charting Tabbed View — dental case paper only.
+             Hidden rather than emptied on the general paper: a skin clinic has
+             no use for a tooth chart, and an empty one invites somebody to fill
+             it in. The snapshots keep saving either way (see the save handler),
+             so a clinic that switches back finds its charts intact. */}
+        {isDental && (
+          <DentalChartSection
+            activeChartTab={activeChartTab}
+            onTabChange={setActiveChartTab}
+            sessionTeethData={sessionTeethData}
+            sessionToothNotes={sessionToothNotes}
+            selectedTooth={selectedTooth}
+            onToothSelect={onToothSelect}
+            onSurfaceConditionChange={handleSurfaceConditionChange}
+            onToothStatusChange={handleToothStatusChange}
+            onNotesChange={handleNotesChange}
+          />
+        )}
 
-        {/* 4. Patient Progression (Timeline) - Scrollable columns */}
+        {/* 4. Patient Progression (Timeline) — dental only.
+             Every card on this board is tooth-keyed and clicking one opens the
+             tooth drawer, so on a derm paper it would read as a bug. The
+             dermatology equivalent is "Procedures planned" in the assessment
+             section above. */}
+        {isDental && (
         <section className="pt-8 border-t border-gray-100 timeline-kanban-fixed">
             <style>{`
                 .timeline-kanban-fixed [onDragOver] { 
@@ -915,6 +953,7 @@ const CasePapersTab = ({
                 teethData={sessionTeethData}
             />
         </section>
+        )}
 
         {/* 5. Diagnostics Grid Row 1: Lab Orders & Prescriptions */}
         <DiagnosticsGrid
@@ -1118,7 +1157,7 @@ const CasePapersTab = ({
       )}
 
       <ToothRightDrawer 
-          isOpen={!!selectedTooth}
+          isOpen={isDental && !!selectedTooth}
           onClose={() => onToothSelect(null)}
           selectedTooth={selectedTooth}
           teethData={sessionTeethData}

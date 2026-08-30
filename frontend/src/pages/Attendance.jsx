@@ -1,37 +1,56 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import AttendanceHeader from "../components/attendance/AttendanceHeader";
 import AttendanceGrid from "../components/attendance/AttendanceGrid";
-import EmployeeDetailsPanel from "../components/attendance/EmployeeDetailsPanel";
 import AttendanceMarkDrawer from "../components/attendance/AttendanceMarkDrawer";
 import AttendanceEmployeeDrawer from "../components/attendance/AttendanceEmployeeDrawer";
+import AttendanceExportModal from "../components/attendance/AttendanceExportModal";
 import { useHeader } from "../contexts/HeaderContext";
 import { api } from "../utils/api";
 import TeamTabs from "../components/team/TeamTabs";
 import TableToolbar from "../components/common/TableToolbar";
 
-import { startOfWeek, endOfWeek, addWeeks, subWeeks, format, eachDayOfInterval } from "date-fns";
-import { useNavigate } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
-import { notify } from '../utils/notify';
+import {
+  startOfWeek, endOfWeek, addWeeks, subWeeks,
+  startOfMonth, endOfMonth, addMonths, subMonths,
+  format, parseISO,
+} from "date-fns";
+import { useNavigate } from "react-router-dom";
+import { ChevronLeft } from "lucide-react";
+import { notify } from "../utils/notify";
+
+/**
+ * The attendance register.
+ *
+ * One period at a time, a week or a month, both served by /attendance/calendar
+ * so the two views can never disagree about what a day says. The period is held
+ * as a single anchor date plus a view mode rather than as two separate cursors:
+ * switching from week to month keeps you looking at the same part of the year,
+ * which is what you expect when you have just found the week you were after.
+ */
+
+const ISO = "yyyy-MM-dd";
 
 const Attendance = () => {
   const { setTitle } = useHeader();
   const navigate = useNavigate();
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedEmployee, setSelectedEmployee] = useState(null);
+
+  const [view, setView] = useState("week");          // "week" | "month"
+  const [anchor, setAnchor] = useState(new Date());  // any day inside the period
   const [employees, setEmployees] = useState([]);
+  const [days, setDays] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
-  const [searchQuery, setSearchQuery] = useState('');
-  const [markDrawer, setMarkDrawer] = useState({ open: false, employee: null, date: null });
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [markDrawer, setMarkDrawer] = useState({ open: false, employee: null, dateKey: null });
   const [savingMark, setSavingMark] = useState(false);
   const [profileEmployee, setProfileEmployee] = useState(null);
+  const [exportOpen, setExportOpen] = useState(false);
 
   useEffect(() => {
     setTitle(
       <div className="flex items-center gap-2">
         <button
-          onClick={() => navigate('/admin')}
+          onClick={() => navigate("/admin")}
           className="flex items-center gap-1 text-gray-600 hover:text-gray-900 transition"
         >
           <ChevronLeft className="w-5 h-5" />
@@ -41,129 +60,107 @@ const Attendance = () => {
     );
   }, [setTitle, navigate]);
 
-  // Fetch employees and attendance data
-  useEffect(() => {
-    fetchAttendanceData();
-  }, [currentWeekStart]);
+  // The period the anchor sits in. Weeks start Monday, which is how a clinic
+  // rota is read; date-fns defaults to Sunday, so it is set explicitly.
+  const { start, end, label } = useMemo(() => {
+    if (view === "month") {
+      return {
+        start: startOfMonth(anchor),
+        end: endOfMonth(anchor),
+        label: format(anchor, "MMMM yyyy"),
+      };
+    }
+    const s = startOfWeek(anchor, { weekStartsOn: 1 });
+    const e = endOfWeek(anchor, { weekStartsOn: 1 });
+    const sameMonth = format(s, "MMM") === format(e, "MMM");
+    return {
+      start: s,
+      end: e,
+      label: sameMonth
+        ? `${format(s, "d")} – ${format(e, "d MMM yyyy")}`
+        : `${format(s, "d MMM")} – ${format(e, "d MMM yyyy")}`,
+    };
+  }, [view, anchor]);
 
-  const fetchAttendanceData = async () => {
+  const startKey = format(start, ISO);
+  const endKey = format(end, ISO);
+
+  const fetchAttendance = useCallback(async () => {
     try {
       setLoading(true);
-      const weekStartStr = format(currentWeekStart, "yyyy-MM-dd");
-      
-      // Fetch attendance data for the week
-      const response = await api.get(`/attendance/week?week_start=${weekStartStr}`);
-      
-      // Transform data to match component expectations
-      const employeesData = response.employees.map((emp) => ({
-        id: emp.id,
-        name: emp.name,
-        email: emp.email,
-        role: emp.role,
-        designation: emp.role, // Use role as designation
-        phone: emp.phone || "",
-        // Pass the photo through rather than resolving it here — the grid and
-        // the details panel both call resolveUserAvatar, and baking a generated
-        // URL in at this point would hide a real uploaded one from them.
-        avatar_url: emp.avatar_url || null,
-        attendance: emp.attendance || {}
-      }));
-      
-      setEmployees(employeesData);
+      setLoadFailed(false);
+      const res = await api.get(`/attendance/calendar?start=${startKey}&end=${endKey}`);
+      setEmployees(res.employees || []);
+      setDays(res.days || []);
     } catch (error) {
       console.error("Error fetching attendance data:", error);
       setEmployees([]);
+      setDays([]);
+      // Tier 3: the section says it failed and offers a retry, rather than
+      // rendering an empty grid that reads as "nobody works here".
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
+  }, [startKey, endKey]);
+
+  useEffect(() => { fetchAttendance(); }, [fetchAttendance]);
+
+  // Totals across everyone on screen. Counts, not percentages: the old header
+  // showed "on time 67%" of marked days, which quietly changed meaning every
+  // time somebody marked one more day.
+  const stats = useMemo(() => {
+    const seed = { present: 0, late: 0, absent: 0 };
+    return employees.reduce((acc, e) => ({
+      present: acc.present + (e.summary?.present || 0),
+      late: acc.late + (e.summary?.late || 0),
+      absent: acc.absent + (e.summary?.absent || 0),
+    }), seed);
+  }, [employees]);
+
+  const step = (direction) => {
+    const move = view === "month"
+      ? (direction > 0 ? addMonths : subMonths)
+      : (direction > 0 ? addWeeks : subWeeks);
+    setAnchor((prev) => move(prev, 1));
   };
 
-  // Generate week days (Monday to Sunday)
-  const weekDays = useMemo(() => {
-    return eachDayOfInterval({
-      start: currentWeekStart,
-      end: endOfWeek(currentWeekStart, { weekStartsOn: 1 })
-    });
-  }, [currentWeekStart]);
-
-  // Calculate statistics
-  const statistics = useMemo(() => {
-    let onTime = 0;
-    let late = 0;
-    let absent = 0;
-    let total = 0;
-
-    employees.forEach((employee) => {
-      if (employee.attendance) {
-        weekDays.forEach((date) => {
-          const dateStr = format(date, "yyyy-MM-dd");
-          const attendance = employee.attendance[dateStr];
-          if (attendance) {
-            total++;
-            if (attendance.status === 'on_time') onTime++;
-            else if (attendance.status === 'late') late++;
-            else if (attendance.status === 'absent') absent++;
-          }
-        });
-      }
-    });
-
-    const totalRecords = total || 1; // Avoid division by zero
-    return {
-      onTime: Math.round((onTime / totalRecords) * 100),
-      late: Math.round((late / totalRecords) * 100),
-      absent: Math.round((absent / totalRecords) * 100),
-    };
-  }, [employees, weekDays]);
-
-  const handleClosePanel = () => {
-    setSelectedEmployee(null);
-  };
-
-  const handleCellClick = (employee, date) => {
-    setMarkDrawer({ open: true, employee, date });
-  };
-
-  const handleMarkSave = async ({ employeeId, date, status, reason }) => {
+  const handleMarkSave = async ({ employeeId, dateKey, status, reason }) => {
     try {
       setSavingMark(true);
-      await api.post('/attendance', {
+      await api.post("/attendance", {
         user_id: employeeId,
-        date: format(date, "yyyy-MM-dd"),
+        date: dateKey,
         status,
         reason: reason || null,
       });
-      notify.done('Attendance marked');
-      setMarkDrawer({ open: false, employee: null, date: null });
-      fetchAttendanceData();
+      setMarkDrawer({ open: false, employee: null, dateKey: null });
+      await fetchAttendance();
     } catch (err) {
-      notify.problem('Failed to mark attendance');
+      notify.problem(err, "Failed to mark attendance");
     } finally {
       setSavingMark(false);
     }
   };
 
-  const handlePreviousWeek = () => {
-    setCurrentWeekStart((prev) => subWeeks(prev, 1));
-  };
-
-  const handleNextWeek = () => {
-    setCurrentWeekStart((prev) => addWeeks(prev, 1));
-  };
-
-  const handleToday = () => {
-    setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }));
-  };
-
-  // Filter employees based on search query
   const filteredEmployees = useMemo(() => {
-    if (!searchQuery) return employees;
-    return employees.filter(emp => 
-      emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      emp.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      emp.role?.toLowerCase().includes(searchQuery.toLowerCase())
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return employees;
+    return employees.filter((e) =>
+      e.name?.toLowerCase().includes(q) ||
+      e.email?.toLowerCase().includes(q) ||
+      e.role?.toLowerCase().includes(q)
     );
   }, [employees, searchQuery]);
+
+  // The drawer needs the record for the cell that was clicked. Read off the
+  // freshly fetched employee rather than the one captured when the cell was
+  // clicked, so a save that changes the day is reflected without reopening.
+  const drawerDay = useMemo(() => {
+    if (!markDrawer.open) return null;
+    const emp = employees.find((e) => e.id === markDrawer.employee?.id);
+    return emp?.attendance?.[markDrawer.dateKey] || null;
+  }, [markDrawer, employees]);
 
   return (
     <TeamTabs active="attendance">
@@ -173,39 +170,51 @@ const Attendance = () => {
         placeholder="Search employees..."
       />
 
-      <>
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {/* Week picker + legend */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <AttendanceHeader
-          currentWeekStart={currentWeekStart}
-          onPreviousWeek={handlePreviousWeek}
-          onNextWeek={handleNextWeek}
-          onToday={handleToday}
-          overallStats={statistics}
+          periodLabel={label}
+          view={view}
+          onViewChange={setView}
+          onPrevious={() => step(-1)}
+          onNext={() => step(1)}
+          onToday={() => setAnchor(new Date())}
+          onExport={() => setExportOpen(true)}
+          stats={stats}
         />
 
-        {/* Attendance Grid */}
         <div className="flex-1 overflow-hidden">
           <div className="h-full overflow-auto">
             {loading ? (
-              <div className="flex items-center justify-center h-full">
+              <div className="flex items-center justify-center py-20">
                 <div className="text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#29828a] mx-auto"></div>
-                  <p className="mt-4 text-gray-600">Loading attendance data...</p>
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#29828a] mx-auto" />
+                  <p className="mt-4 text-gray-600">Loading attendance...</p>
                 </div>
+              </div>
+            ) : loadFailed ? (
+              <div className="py-20 text-center">
+                <p className="text-sm text-gray-600">Could not load attendance for this period.</p>
+                <button
+                  onClick={fetchAttendance}
+                  className="mt-3 px-4 py-2 text-sm font-semibold text-white bg-[#29828a] hover:bg-[#216b71] rounded-lg transition-colors"
+                >
+                  Try again
+                </button>
               </div>
             ) : (
               <AttendanceGrid
                 employees={filteredEmployees}
-                weekDays={weekDays}
+                days={days}
+                view={view}
                 onEmployeeProfileClick={setProfileEmployee}
-                onCellClick={handleCellClick}
+                onCellClick={(employee, dateKey) =>
+                  setMarkDrawer({ open: true, employee, dateKey })
+                }
               />
             )}
           </div>
         </div>
 
-        {/* Employee Attendance History Drawer */}
         {profileEmployee && (
           <AttendanceEmployeeDrawer
             employee={profileEmployee}
@@ -213,21 +222,27 @@ const Attendance = () => {
           />
         )}
 
-        {/* Mark Attendance Drawer */}
         {markDrawer.open && (
           <AttendanceMarkDrawer
             employee={markDrawer.employee}
-            date={markDrawer.date}
-            currentAttendance={
-              markDrawer.employee?.attendance?.[format(markDrawer.date, 'yyyy-MM-dd')] || null
+            date={parseISO(markDrawer.dateKey)}
+            currentAttendance={drawerDay}
+            onClose={() => setMarkDrawer({ open: false, employee: null, dateKey: null })}
+            onSave={({ employeeId, status, reason }) =>
+              handleMarkSave({ employeeId, dateKey: markDrawer.dateKey, status, reason })
             }
-            onClose={() => setMarkDrawer({ open: false, employee: null, date: null })}
-            onSave={handleMarkSave}
             saving={savingMark}
           />
         )}
-        </div>
-      </>
+      </div>
+
+      <AttendanceExportModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        defaultStart={startKey}
+        defaultEnd={endKey}
+        employees={employees}
+      />
     </TeamTabs>
   );
 };

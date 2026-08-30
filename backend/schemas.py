@@ -803,6 +803,8 @@ class CasePaperBase(BaseModel):
     dental_chart_snapshot: Optional[Any] = None
     treatment_plan_snapshot: Optional[Any] = None
     tooth_notes_snapshot: Optional[Any] = None
+    # The dermatology case paper's findings. Null on a dental paper.
+    derm_findings: Optional[Any] = None
 
 class CasePaperCreate(CasePaperBase):
     clinic_id: Optional[int] = None
@@ -821,6 +823,7 @@ class CasePaperUpdate(BaseModel):
     dental_chart_snapshot: Optional[Any] = None
     treatment_plan_snapshot: Optional[Any] = None
     tooth_notes_snapshot: Optional[Any] = None
+    derm_findings: Optional[Any] = None
 
 import json as _json
 

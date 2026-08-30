@@ -324,6 +324,12 @@ async def lifespan(app: FastAPI):
             conn.execute(text(
                 "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS manual_whatsapp BOOLEAN DEFAULT FALSE"
             ))
+            # Dental case paper vs the general one (hair/skin and other
+            # non-dental practices). Defaulted so every existing clinic keeps
+            # the dental paper it already has.
+            conn.execute(text(
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS case_paper_type VARCHAR(16) DEFAULT 'dental'"
+            ))
             # Inventory ledger: event label + medication link, so Usage is a full log.
             conn.execute(text(
                 "ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS action VARCHAR"
@@ -336,6 +342,46 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE medication_stock ADD COLUMN IF NOT EXISTS units_per_pack DOUBLE PRECISION"))
             # A case paper can carry several invoices.
             conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS case_paper_id INTEGER REFERENCES case_papers(id)"))
+            # The dermatology case paper's findings (skin profile, lesions,
+            # scalp/hair, severity scores). Null on every dental case paper.
+            conn.execute(text("ALTER TABLE case_papers ADD COLUMN IF NOT EXISTS derm_findings JSON"))
+
+            # The 2-hour appointment reminder needs a preference row per clinic
+            # or notify_event sends nothing at all, and rows are seeded lazily
+            # (only when somebody opens Notifications -> Preferences).
+            #
+            # This lives here rather than in deploy-aws.sh because the server's
+            # copy of that script has drifted from the repo's and repo-side
+            # migrations do not reach prod; the lifespan block does, because it
+            # travels inside backend/. Same reason the two ALTERs above are here.
+            #
+            # Seeded OFF, and that is a cost decision rather than a technical
+            # one. A second reminder per appointment roughly doubles this line
+            # of WhatsApp spend for every clinic that has reminders on, and
+            # that is the clinic's money, so the clinic opts in from
+            # Notifications -> Preferences rather than waking up to it.
+            #
+            # The row is still created for everyone, because without a row the
+            # switch does not appear on that screen at all and there would be
+            # nothing to opt into. Channels are copied from the clinic's
+            # existing reminder so switching it on respects a clinic that runs
+            # on email only.
+            #
+            # Idempotent on its own terms — the NOT EXISTS is per clinic, so
+            # re-running on every boot inserts nothing and cannot flip a
+            # preference an owner has since switched ON back to off (toggling
+            # updates the row, it does not delete it).
+            conn.execute(text("""
+                INSERT INTO notification_preferences (clinic_id, event_type, channels, is_enabled)
+                SELECT p.clinic_id, 'appointment_reminder_2h', p.channels, false
+                  FROM notification_preferences p
+                 WHERE p.event_type = 'appointment_reminder'
+                   AND NOT EXISTS (
+                       SELECT 1 FROM notification_preferences q
+                        WHERE q.clinic_id = p.clinic_id
+                          AND q.event_type = 'appointment_reminder_2h'
+                   )
+            """))
             # The next-visit recommendation resolved to a real calendar day, so
             # the front desk has something to act on instead of "after 1 month".
             conn.execute(text("ALTER TABLE case_papers ADD COLUMN IF NOT EXISTS next_visit_date DATE"))
