@@ -345,6 +345,34 @@ async def lifespan(app: FastAPI):
             # The dermatology case paper's findings (skin profile, lesions,
             # scalp/hair, severity scores). Null on every dental case paper.
             conn.execute(text("ALTER TABLE case_papers ADD COLUMN IF NOT EXISTS derm_findings JSON"))
+
+            # The 2-hour appointment reminder needs a preference row per clinic
+            # or notify_event sends nothing at all, and rows are seeded lazily
+            # (only when somebody opens Notifications -> Preferences).
+            #
+            # This lives here rather than in deploy-aws.sh because the server's
+            # copy of that script has drifted from the repo's and repo-side
+            # migrations do not reach prod; the lifespan block does, because it
+            # travels inside backend/. Same reason the two ALTERs above are here.
+            #
+            # Each new row COPIES the clinic's existing appointment_reminder
+            # row: same channels, same enabled flag. A clinic that turned
+            # reminders off stays off, and one on email-only does not suddenly
+            # start spending on WhatsApp. Idempotent on its own terms — the NOT
+            # EXISTS is per clinic, so re-running on every boot inserts nothing
+            # and cannot resurrect a preference an owner has since switched off
+            # (switching off updates the row, it does not delete it).
+            conn.execute(text("""
+                INSERT INTO notification_preferences (clinic_id, event_type, channels, is_enabled)
+                SELECT p.clinic_id, 'appointment_reminder_2h', p.channels, p.is_enabled
+                  FROM notification_preferences p
+                 WHERE p.event_type = 'appointment_reminder'
+                   AND NOT EXISTS (
+                       SELECT 1 FROM notification_preferences q
+                        WHERE q.clinic_id = p.clinic_id
+                          AND q.event_type = 'appointment_reminder_2h'
+                   )
+            """))
             # The next-visit recommendation resolved to a real calendar day, so
             # the front desk has something to act on instead of "after 1 month".
             conn.execute(text("ALTER TABLE case_papers ADD COLUMN IF NOT EXISTS next_visit_date DATE"))
