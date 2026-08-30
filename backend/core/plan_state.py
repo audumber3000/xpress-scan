@@ -114,6 +114,40 @@ def blocks(state: str) -> bool:
     return state in _BLOCKING
 
 
+# ── Paying, and what that entitles them to change ────────────────────────────
+def is_live_paid(sub, now: Optional[dt.datetime] = None) -> bool:
+    """Is this clinic paying us for something right now?
+
+    Three things are deliberately NOT this: a trial, a migration grant, and
+    anything already expired. All of them are active plans the clinic never
+    bought, so none of them should constrain what it may buy next.
+    """
+    if sub is None:
+        return False
+    now = now or dt.datetime.utcnow()
+    if getattr(sub, "status", None) != "active":
+        return False
+    end = getattr(sub, "current_end", None)
+    if end and end < now:
+        return False
+    if (getattr(sub, "provider", None) or "") == "none":
+        return False       # the synthesised "no row yet" response, not a purchase
+    return _kind(sub) == "paid"
+
+
+def blocks_downgrade_to(sub, wanted_plan: str, now: Optional[dt.datetime] = None) -> bool:
+    """Once a clinic is paying, the only move is up.
+
+    Lives here rather than inline in the checkout so the API guard and the
+    Subscription page's disabled buttons are answering the same question. A UI
+    that hides the button and a server that would still take the money are two
+    different rules wearing one name.
+    """
+    return is_live_paid(sub, now) and plans.rank(wanted_plan) < plans.rank(
+        getattr(sub, "plan_name", None)
+    )
+
+
 def _payload(state: str, days_left: Optional[int], sub) -> dict:
     lapsed_plan = plans.label(getattr(sub, "plan_name", None)) if sub is not None else plans.label(None)
     entry = plans.PLANS[plans.DEFAULT_PLAN]["label"]

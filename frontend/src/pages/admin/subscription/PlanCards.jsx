@@ -39,7 +39,7 @@ const Feature = ({ text }) => {
   );
 };
 
-const PlanCard = ({ plan, cycle, isCurrent, isDowngrade, taxLabel, discount, adds, onChoose }) => {
+const PlanCard = ({ plan, cycle, isCurrent, isDowngrade, locked, taxLabel, discount, adds, onChoose }) => {
   const annual = cycle === 'annual';
   const listHeadline = annual ? plan.annual_monthly : plan.monthly;
   const headline = applyDiscount(listHeadline, discount);
@@ -95,11 +95,15 @@ const PlanCard = ({ plan, cycle, isCurrent, isDowngrade, taxLabel, discount, add
         {(plan.features || []).map((f) => <Feature key={f} text={f} />)}
       </ul>
 
+      {/* A paying clinic can only move up. The lower plans stay on the page,
+          because seeing what is underneath you is how you understand what you
+          are paying for, but they are not buyable: everything in them is
+          already included in what the clinic has. */}
       <button
         onClick={() => onChoose(plan.key, cycle)}
-        disabled={isCurrent}
+        disabled={isCurrent || locked}
         className={`mt-5 flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors min-h-[2.75rem] ${
-          isCurrent
+          isCurrent || locked
             ? 'cursor-default border border-gray-200 bg-gray-50 text-gray-400'
             : plan.popular
             ? 'bg-[#29828a] text-white hover:bg-[#1f6b72]'
@@ -108,6 +112,8 @@ const PlanCard = ({ plan, cycle, isCurrent, isDowngrade, taxLabel, discount, add
       >
         {isCurrent
           ? 'Your current plan'
+          : locked
+          ? 'Included in your plan'
           : <>{isDowngrade ? 'Switch to' : 'Upgrade to'} {plan.label} <ArrowRight size={14} /></>}
       </button>
     </div>
@@ -133,7 +139,7 @@ const differentiator = (plan, currentPlan) => {
   return `Takes you to ${bits.slice(0, 3).join(', ')}.`;
 };
 
-const PlanCards = ({ catalogue, currentPlanName, cycle, onCycleChange, onChoose, discount }) => {
+const PlanCards = ({ catalogue, currentPlanName, cycle, onCycleChange, onChoose, discount, lockDowngrades }) => {
   const current = resolvePlan(currentPlanName);
   const currentPlan = catalogue.plans.find((p) => p.key === current.key);
   const currentRank = planRank(currentPlanName);
@@ -180,6 +186,7 @@ const PlanCards = ({ catalogue, currentPlanName, cycle, onCycleChange, onChoose,
             adds={differentiator(plan, currentPlan)}
             isCurrent={plan.key === current.key && cycle === current.cycle}
             isDowngrade={plan.rank < currentRank}
+            locked={!!lockDowngrades && plan.rank < currentRank}
             onChoose={onChoose}
           />
         ))}

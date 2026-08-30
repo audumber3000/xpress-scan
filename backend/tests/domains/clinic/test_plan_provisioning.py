@@ -122,3 +122,57 @@ def test_row_less_clinic_reads_as_a_healthy_plus_forever(db, clinic):
     assert state["state"] == plan_state.OK
     assert state["days_left"] is None
     assert state["blocks"] is False
+
+
+# ── Once you are paying, the only move is up ─────────────────────────────────
+#
+# Enforced in subscription_service.create_checkout_session. These cover the rule
+# itself rather than the gateway call around it: the interesting part is WHICH
+# subscriptions lock the plans below them, and a trial, a grant and an expired
+# plan all deliberately do not.
+
+def _live_paid(plan="pro"):
+    return Subscription(
+        plan_name=plan, status="active", provider="cashfree",
+        is_trial=False, current_end=dt.datetime.utcnow() + dt.timedelta(days=20),
+    )
+
+
+def _locks_downgrade(sub, wanted, now=None):
+    """The production predicate itself, not a copy of it.
+
+    Reimplementing the rule here would let the test keep passing while the
+    checkout drifted, which is the failure mode these tests exist to catch.
+    """
+    return plan_state.blocks_downgrade_to(sub, wanted, now)
+
+
+def test_a_paying_clinic_cannot_drop_to_a_lower_plan():
+    assert _locks_downgrade(_live_paid("pro"), "plus") is True
+    assert _locks_downgrade(_live_paid("growth"), "pro") is True
+
+
+def test_a_paying_clinic_can_always_move_up_or_stay():
+    assert _locks_downgrade(_live_paid("plus"), "pro") is False
+    assert _locks_downgrade(_live_paid("pro"), "pro") is False
+
+
+def test_a_trial_does_not_lock_anything():
+    """Converting a Plus trial into paid Plus is the normal path, not a downgrade."""
+    sub = _live_paid("pro")
+    sub.is_trial = True
+    sub.provider = "trial"
+    assert _locks_downgrade(sub, "plus") is False
+
+
+def test_a_migration_grant_does_not_lock_anything():
+    sub = _live_paid("plus")
+    sub.provider = "migration"
+    assert _locks_downgrade(sub, "plus") is False
+
+
+def test_an_expired_plan_does_not_lock_anything():
+    """Somebody whose Pro trial ran out has bought nothing; sell them Plus."""
+    sub = _live_paid("pro")
+    sub.current_end = dt.datetime.utcnow() - dt.timedelta(days=1)
+    assert _locks_downgrade(sub, "plus") is False

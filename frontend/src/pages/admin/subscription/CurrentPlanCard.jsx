@@ -70,7 +70,8 @@ const CurrentPlanCard = ({
                 )}
               </div>
               <p className="mt-0.5 text-xs text-gray-400">
-                {stopped && renews ? `Your ${planLabel(lapsedPlan)} plan ended ${renews}`
+                {stopped && renews
+                  ? `Your ${planLabel(lapsedPlan)} ${subscription?.plan_state === 'trial_ended' ? 'trial' : 'plan'} ended ${renews}`
                   : isGranted && renews ? `Included until ${renews}`
                   : renews ? `${isExpired ? 'Ended' : 'Renews'} ${renews}`
                   : 'No renewal date on file'}

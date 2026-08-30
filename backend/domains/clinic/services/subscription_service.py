@@ -97,6 +97,30 @@ class SubscriptionService:
         if not clinic:
             raise ValueError("Clinic not found")
 
+        # Once a clinic is PAYING for something, the only move is up.
+        #
+        # Scoped to an active paid plan on purpose. A trial, a migration grant,
+        # and anything already expired all leave the clinic free to buy any plan
+        # including the entry one: somebody whose Pro trial ended has bought
+        # nothing, and refusing to sell them Plus because Plus ranks lower than
+        # the trial they just lost would be absurd.
+        #
+        # Enforced here rather than in the UI alone. The UI hides the button;
+        # this is what makes the rule true.
+        existing = None
+        if user_id:
+            existing = self.db.query(Subscription).filter(Subscription.user_id == user_id).first()
+        if not existing:
+            existing = self.db.query(Subscription).filter(Subscription.clinic_id == clinic_id).first()
+
+        from core import plan_state as _ps
+        if _ps.blocks_downgrade_to(existing, plan_name):
+            raise ValueError(
+                f"You are on {plans.label(existing.plan_name)}. You can move up to a "
+                f"higher plan at any time, but not down to {plans.label(plan_name)} "
+                f"while your current plan is running. Message us and we will sort it out."
+            )
+
         currency = plans.billing_currency(clinic)
         if currency != plans.INR and not INTERNATIONAL_ENABLED:
             # Cashfree international collections is an account-level facility.

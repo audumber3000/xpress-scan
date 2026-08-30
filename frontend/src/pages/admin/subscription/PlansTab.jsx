@@ -74,6 +74,14 @@ const PlansTab = ({
   const isTrial = subscription?.is_trial === true && subscription?.status === 'active' && !isExpired;
   const isGranted = subscription?.provider === 'migration';
   const currentPlan = catalogue.plans.find((p) => p.key === planKey) || catalogue.plans[0];
+
+  // Actually paying us, right now. Mirrors the guard in
+  // subscription_service.create_checkout_session: a trial, a grant and anything
+  // expired are all free to buy any plan, including the entry one. Only a live
+  // paid plan locks the ones below it.
+  const isPaying = !isTrial && !isGranted && !isExpired
+    && subscription?.status === 'active'
+    && !['migration', 'trial', 'none'].includes(subscription?.provider);
   const renews = fmtDate(subscription?.current_end);
 
   const scrollToPlans = () =>
@@ -101,14 +109,23 @@ const PlansTab = ({
         />
       )}
 
+      {/* Said "you are back on Plus", which read as reassurance while the red
+          strip above it said the clinic was view only. Both were describing the
+          same clinic. What matters here is not which plan they resolve to, it
+          is that writing has stopped and how to start it again, so this says
+          that in the same words as the header and the blocked-write modal. */}
       {isExpired && (
         <StatusBanner
           tone="red"
           icon={<Clock size={16} />}
-          title={`Your ${planLabel(lapsedPlan)} plan has expired`}
-          body={renews
-            ? `It ran out on ${renews}, so you are back on ${planLabel(planName)}. Nothing has been deleted. Choose a plan below to pick up where you left off.`
-            : `You are back on ${planLabel(planName)}. Nothing has been deleted.`}
+          title={subscription?.is_trial || subscription?.plan_state === 'trial_ended'
+            ? `Your ${planLabel(lapsedPlan)} trial has ended`
+            : `Your ${planLabel(lapsedPlan)} plan has expired`}
+          body={[
+            renews ? `It ran out on ${renews}.` : null,
+            'Your clinic is view only for now: you can open and read everything, and nothing has been deleted.',
+            'Adding new patients, appointments and invoices starts again the moment you choose a plan below.',
+          ].filter(Boolean).join(' ')}
         />
       )}
 
@@ -172,6 +189,7 @@ const PlansTab = ({
           cycle={cycle}
           onCycleChange={setCycle}
           onChoose={choose}
+          lockDowngrades={isPaying}
           discount={discount}
         />
 
