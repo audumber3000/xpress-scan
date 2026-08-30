@@ -115,8 +115,10 @@ async def get_current_subscription(
     )
     is_trial = bool(getattr(subscription, 'is_trial', False) and subscription.status == 'active' and not is_expired)
 
-    # Auto-downgrade: if the subscription has expired, reset the clinic to 'free'
-    # so that /auth/me also reflects the correct plan for mobile and other clients.
+    # Auto-downgrade: if the subscription has expired, drop the clinic back to
+    # the entry plan so /auth/me reflects it for mobile and other clients.
+    # (Said "reset to 'free'" until Aug 2026. There is no free plan; the code
+    # has always used plans.DEFAULT_PLAN, but the comment outlived the tier.)
     if is_expired and subscription.clinic_id:
         clinic = db.query(Clinic).filter(Clinic.id == subscription.clinic_id).first()
         if clinic and plans.key_of(clinic.subscription_plan) != plans.DEFAULT_PLAN:

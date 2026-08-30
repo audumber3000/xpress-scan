@@ -4,6 +4,10 @@ from sqlalchemy.ext.declarative import declarative_base
 import uuid
 import datetime
 
+# The plan catalogue, so the column defaults below cannot drift from it again.
+# Safe to import at module scope: core.plans imports nothing from models.
+from core import plans
+
 Base = declarative_base()
 
 
@@ -60,7 +64,9 @@ class Clinic(Base):
     email = Column(String)
     gst_number = Column(String)
     specialization = Column(String, default='dental')  # dental, cardiology, pathology, etc.
-    subscription_plan = Column(String, default='free')  # free, professional, enterprise
+    # plus, pro, growth (and their _annual forms). Never 'free' — that tier was
+    # retired in Aug 2026 and only survives as a read alias in plans.LEGACY_ALIASES.
+    subscription_plan = Column(String, default=plans.DEFAULT_PLAN)
     status = Column(String, default='active')  # active, suspended, cancelled
     razorpay_customer_id = Column(String, nullable=True)  # Razorpay customer ID
     cashfree_customer_id = Column(String, nullable=True)  # Cashfree customer ID
@@ -549,7 +555,7 @@ class Subscription(Base):
     provider_customer_id = Column(String, nullable=True)
     provider_plan_id = Column(String, nullable=True)
     provider_order_id = Column(String, nullable=True, index=True) # Used for some checkout flows
-    plan_name = Column(String, nullable=False, default='free')  # free, professional, enterprise
+    plan_name = Column(String, nullable=False, default=plans.DEFAULT_PLAN)  # plus, pro, growth (+ _annual)
     status = Column(String, nullable=False, default='active')  # active, paused, cancelled, expired
     current_start = Column(DateTime, nullable=True)  # Current billing period start
     current_end = Column(DateTime, nullable=True)  # Current billing period end

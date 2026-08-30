@@ -10,7 +10,7 @@ class ClinicBase(BaseModel):
     email: Optional[str] = None
     gst_number: Optional[str] = None
     specialization: str = "dental"
-    subscription_plan: str = "free"
+    subscription_plan: str = "plus"
     status: str = "active"
     logo_url: Optional[str] = None
     invoice_template: str = "modern_orange"

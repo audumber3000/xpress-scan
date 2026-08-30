@@ -192,7 +192,7 @@ export const AuthProvider = ({ children }) => {
         // plan / trial / size (B2B group analytics).
         posthog.group('clinic', user.clinic_id, {
           name: c.name || `Clinic ${user.clinic_id}`,
-          plan: c.subscription_plan || 'free',
+          plan: c.subscription_plan || 'plus',
           is_trial: !!c.is_trial,
           trial_days_remaining: c.trial_days_remaining ?? null,
           country: c.country || null,

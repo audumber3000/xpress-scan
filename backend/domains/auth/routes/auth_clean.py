@@ -43,6 +43,7 @@ from datetime import datetime as _dt
 from pydantic import BaseModel
 from core.posthog_client import track_event, group_identify, EVENTS
 from core import plans
+from core import plan_bootstrap
 from core.audit import (record_audit, LOGIN_SUCCEEDED, LOGIN_FAILED,
                         LOGIN_BLOCKED, LOGOUT, PASSWORD_CHANGED)
 
@@ -1215,7 +1216,13 @@ async def complete_onboarding(
             "email": data.get("clinic_email", user.email),
             "specialization": data.get("specialization", "dental"),
             "number_of_chairs": chairs,
-            "subscription_plan": "free",
+            # Not a literal. This said "free" for a year after the free tier was
+            # retired, and because LEGACY_ALIASES maps free->plus the clinic then
+            # read as Plus everywhere while owning no subscription row at all.
+            # user_service.complete_onboarding overwrites this with the same
+            # value when it provisions the row; it is set here so the INSERT is
+            # never briefly wrong.
+            "subscription_plan": plans.stored_name(plan_bootstrap.SIGNUP_PLAN),
             "clinic_label": "main_branch",
             "referred_by_code": data.get("referred_by_code"),
             "country": country_code,

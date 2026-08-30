@@ -202,7 +202,7 @@ class ClinicBaseDTO(BaseModel):
     email: Optional[str] = Field(None, pattern=r"^[^@]+@[^@]+\.[^@]+$")
     gst_number: Optional[str] = None
     specialization: str = "dental"
-    subscription_plan: str = "free"
+    subscription_plan: str = "plus"
     logo_url: Optional[str] = None
     primary_color: str = "#10B981"
     number_of_chairs: int = 1
