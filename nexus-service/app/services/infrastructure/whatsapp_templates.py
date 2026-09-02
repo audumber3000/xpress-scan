@@ -145,14 +145,14 @@ def wa_appointment_reminder(patient_name: str, clinic_name: str,
 def wa_invoice_sent(patient_name: str, clinic_name: str,
                     invoice_number: str, total_amount: float,
                     clinic_phone: str = "", document_url: str = "",
-                    media_id: str = "") -> dict:
+                    media_id: str = "", currency: str = "₹", **_) -> dict:
     """
     Header: document (PDF invoice) — pass media_id (preferred) or document_url.
     Body params: {{1}} patient_name, {{2}} clinic_name,
                  {{3}} invoice_number, {{4}} total_amount, {{5}} clinic_phone
     """
     tpl = _get_tpl("WA_TPL_INVOICE", "mp_invoice_sent")
-    components = [_body_params(patient_name, clinic_name, invoice_number, f"₹{total_amount:,.2f}", clinic_phone)]
+    components = [_body_params(patient_name, clinic_name, invoice_number, f"{currency}{total_amount:,.2f}", clinic_phone)]
     if media_id or document_url:
         components.insert(0, _header_document(document_url, f"Invoice_{invoice_number}.pdf", media_id))
     return {
@@ -164,7 +164,7 @@ def wa_invoice_sent(patient_name: str, clinic_name: str,
 def wa_receipt_sent(patient_name: str, clinic_name: str,
                     receipt_number: str = "", amount: float = 0,
                     clinic_phone: str = "", document_url: str = "",
-                    media_id: str = "", **_) -> dict:
+                    media_id: str = "", currency: str = "₹", **_) -> dict:
     """
     Payment receipt for one installment. Header: the receipt PDF.
 
@@ -175,7 +175,7 @@ def wa_receipt_sent(patient_name: str, clinic_name: str,
     """
     tpl = _get_tpl("WA_TPL_RECEIPT", _get_tpl("WA_TPL_INVOICE", "mp_invoice_sent"))
     components = [_body_params(
-        patient_name, clinic_name, receipt_number, f"₹{float(amount or 0):,.2f}", clinic_phone
+        patient_name, clinic_name, receipt_number, f"{currency}{float(amount or 0):,.2f}", clinic_phone
     )]
     if media_id or document_url:
         components.insert(0, _header_document(document_url, f"Receipt_{receipt_number}.pdf", media_id))
@@ -230,7 +230,8 @@ def wa_google_review(patient_name: str, clinic_name: str, review_link: str,
 
 def wa_daily_summary(doctor_name: str, clinic_name: str, date: str, 
                      total_patients: int, total_appointments: int,
-                     total_revenue: float, cash_revenue: float, online_revenue: float) -> dict:
+                     total_revenue: float, cash_revenue: float, online_revenue: float,
+                     currency: str = "₹", **_) -> dict:
     """
     Body params: {{1}} doctor_name, {{2}} clinic_name, {{3}} date,
                  {{4}} total_patients, {{5}} total_appointments,
@@ -247,9 +248,9 @@ def wa_daily_summary(doctor_name: str, clinic_name: str, date: str,
                 date, 
                 str(total_patients), 
                 str(total_appointments), 
-                f"₹{total_revenue:,.2f}", 
-                f"₹{cash_revenue:,.2f}", 
-                f"₹{online_revenue:,.2f}"
+                f"{currency}{total_revenue:,.2f}", 
+                f"{currency}{cash_revenue:,.2f}", 
+                f"{currency}{online_revenue:,.2f}"
             )
         ],
     }

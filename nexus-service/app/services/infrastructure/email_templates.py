@@ -416,14 +416,15 @@ def patient_appointment_reminder(patient_name: str, clinic_name: str, clinic_log
 
 
 def patient_invoice_sent(patient_name: str, clinic_name: str, clinic_logo_url: str,
-                          invoice_number: str, total_amount: float, treatment: str = "") -> dict:
+                          invoice_number: str, total_amount: float, treatment: str = "",
+                          currency: str = "₹", **_) -> dict:
     treat_line = f"<p>Treatment: <strong>{treatment}</strong></p>" if treatment else ""
     body = f"""
 <p>Dear <strong>{patient_name}</strong>,</p>
 <p>Please find your invoice from <strong>{clinic_name}</strong> attached to this email.</p>
 <div class="info-box">
   <strong>🧾 Invoice {invoice_number}</strong>
-  Total Amount: <strong>₹{total_amount:,.2f}</strong>
+  Total Amount: <strong>{currency}{total_amount:,.2f}</strong>
   {treat_line}
 </div>
 <p>If you have any questions about this invoice, please contact us and we'll be happy to assist.</p>

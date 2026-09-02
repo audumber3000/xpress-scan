@@ -19,6 +19,14 @@ from core.posthog_client import track_event, EVENTS
 logger = logging.getLogger(__name__)
 
 
+# Events whose templates print an amount, and whose builders therefore accept a
+# `currency` kwarg. Kept as an explicit list rather than sent to everything:
+# template_data is splatted straight into the builder, and most WhatsApp and
+# email builders take fixed keyword arguments, so an unexpected key is a
+# TypeError that kills the send.
+_MONEY_EVENTS = {"invoice_notification", "receipt_notification", "daily_summary"}
+
+
 def notify_event(
     event_type: str,
     db: Session,
@@ -68,8 +76,23 @@ def notify_event(
     channels = pref.channels or []
     data = template_data or {}
     # Country-code the recipient using the clinic's country (defaults to IN).
-    clinic_country = db.query(Clinic.country).filter(Clinic.id == clinic_id).scalar()
+    clinic_row = (
+        db.query(Clinic.country, Clinic.currency_symbol)
+        .filter(Clinic.id == clinic_id)
+        .first()
+    )
+    clinic_country = clinic_row[0] if clinic_row else None
     phone = normalize_phone(to_phone, clinic_country) if to_phone else ""
+
+    # The clinic's currency, for the handful of templates that print an amount.
+    # Deliberately NOT injected into `data` for every event: template_data is
+    # splatted straight into the builder, and 30 of the 33 WhatsApp and email
+    # builders take fixed keyword arguments with no **kwargs, so an extra key
+    # raises TypeError and kills the send. Only the money builders take it, and
+    # only their call sites pass it.
+    clinic_currency = (clinic_row[1] if clinic_row else None) or "₹"
+    if event_type in _MONEY_EVENTS:
+        data.setdefault("currency", clinic_currency)
 
     # ── WA Reach (own-number WhatsApp) ────────────────────────────────────────
     # Default-off guard: None unless this clinic is Pro AND has connected its own
