@@ -3,7 +3,7 @@ import Spinner from '../common/Spinner';
 import { api } from "../../utils/api";
 import InvoiceLineItemForm from "./InvoiceLineItemForm";
 import { getCurrencySymbol } from "../../utils/currency";
-import { useIsDentalCasePaper } from '../../utils/casePaper';
+import { useIsDentalPatient } from '../../utils/casePaper';
 
 /* ── GST Info Popover ─────────────────────────────────────────────────────── */
 const GST_INFO = {
@@ -103,7 +103,7 @@ const GSTInfoPopover = () => {
 };
 
 const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdateInvoice, canEdit }) => {
-  const isDental = useIsDentalCasePaper();
+  const isDental = useIsDentalPatient({ case_paper_type: invoice?.patient_case_paper_type });
   const [editingId, setEditingId] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
@@ -219,6 +219,7 @@ const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdat
         <InvoiceLineItemForm
           onSave={handleSave}
           onCancel={handleCancel}
+          patient={{ case_paper_type: invoice?.patient_case_paper_type }}
         />
       )}
 
@@ -260,6 +261,7 @@ const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdat
                           lineItem={item}
                           onSave={handleSave}
                           onCancel={handleCancel}
+                          patient={{ case_paper_type: invoice?.patient_case_paper_type }}
                         />
                       </div>
                     </td>

@@ -26,6 +26,10 @@ class PatientBaseDTO(BaseModel):
     blood_group: Optional[str] = Field(None, max_length=5)
     allergies: Optional[str] = None
     patient_history: Optional[str] = None
+    # NULL means "inherit the clinic's setting". Only the two values are
+    # accepted, so a typo cannot quietly put a patient on a paper that does not
+    # exist and blank their whole clinical column.
+    case_paper_type: Optional[str] = Field(None, pattern="^(dental|general)$")
     notes: Optional[str] = None
     payment_type: Optional[str] = Field(default="Cash", pattern="^(Cash|Card|UPI|Online)$")
 
@@ -80,6 +84,7 @@ class PatientUpdateDTO(BaseModel):
     blood_group: Optional[str] = Field(None, max_length=5)
     allergies: Optional[str] = None
     patient_history: Optional[str] = None
+    case_paper_type: Optional[str] = Field(None, pattern="^(dental|general)$")
     notes: Optional[str] = None
     payment_type: Optional[str] = Field(None, pattern="^(Cash|Card|UPI|Online)$")
     registered_on: Optional[date] = None
@@ -111,6 +116,7 @@ class PatientResponseDTO(PatientBaseDTO):
     village: Optional[str] = None
     referred_by: Optional[str] = None
     treatment_type: Optional[str] = None
+    case_paper_type: Optional[str] = None
     payment_type: Optional[str] = None
     # No ge/le here: a stored row of age=2020 (a birth year typed into the age
     # field on import) once 500'd the entire patient list. Read must report what

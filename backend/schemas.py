@@ -294,6 +294,7 @@ class InvoiceOut(InvoiceBase):
     # One free-text line. Undeclared fields are dropped by the response model, so
     # the serialiser emitting this is not enough on its own.
     patient_address: Optional[str] = None
+    patient_case_paper_type: Optional[str] = None
     patient_display_id: Optional[str] = None
     
     # Line items

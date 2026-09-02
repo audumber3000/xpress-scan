@@ -126,6 +126,10 @@ def enrich_invoice(db: Session, invoice: Invoice):
         # One free-text line, not a structured address: the column is still
         # `village` underneath, only the label ever changed.
         'patient_address': (invoice.patient.village if invoice.patient else None),
+        # Which paper this patient's file keeps, so the drawer can call the line
+        # field "Tooth / area" or "Area / site" to match. Null means the clinic's
+        # own setting decides, which the frontend resolves.
+        'patient_case_paper_type': (invoice.patient.case_paper_type if invoice.patient else None),
         'patient_display_id': invoice.patient.display_id if invoice.patient else None,
         'invoice_number': invoice.invoice_number,
         'status': invoice.status,

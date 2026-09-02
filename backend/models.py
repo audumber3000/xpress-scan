@@ -266,6 +266,16 @@ class Patient(Base):
     # corrected, without editing a historical case paper.
     allergies = Column(Text, nullable=True)
     patient_history = Column(Text, nullable=True)
+    # Which record this patient's file keeps, when it differs from the clinic's
+    # own setting. NULL means "whatever the clinic keeps", which is every patient
+    # that exists today and every one added without touching the field — so a
+    # dental clinic stays dental without editing 2,000 rows.
+    #
+    # Nullable rather than defaulted for that reason: a default would freeze each
+    # patient at whatever the clinic was set to on the day they were created, and
+    # a clinic that later switched would find its old patients still on the old
+    # paper.
+    case_paper_type = Column(String(16), nullable=True)  # 'dental' | 'general' | NULL = inherit
     display_id = Column(String, nullable=True, index=True)
     notes = Column(Text)
     payment_type = Column(String, nullable=False, default="Cash")

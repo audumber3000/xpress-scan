@@ -35,7 +35,7 @@ const toOptionCase = (g) => {
 const emptyForm = {
   name: "", age: "", date_of_birth: "", gender: "Male", phone: "", village: "",
   treatment_type: "General", referred_by: "", blood_group: "", allergies: "",
-  patient_history: "",
+  patient_history: "", case_paper_type: "",
   display_id: "", registered_on: "", notes: "",
 };
 
@@ -62,6 +62,7 @@ const PatientEditModal = ({ open, patient, onClose, onSaved }) => {
       blood_group: patient.blood_group || "",
       allergies: patient.allergies || "",
       patient_history: patient.patient_history || "",
+      case_paper_type: patient.case_paper_type || "",
       display_id: patient.display_id || "",
       registered_on: patient.registered_on || clinicToday(),
       notes: patient.notes || "",
@@ -138,6 +139,10 @@ const PatientEditModal = ({ open, patient, onClose, onSaved }) => {
 
     // Send either age or date of birth, following the toggle.
     const payload = { ...form };
+    // "Same as clinic default" is the absence of a value, not the empty string.
+    // The API validates this against ^(dental|general)$, so sending "" would 422
+    // every save from this modal, including saves that never touched the field.
+    payload.case_paper_type = form.case_paper_type || null;
     if (ageMode === "dob") {
       payload.date_of_birth = form.date_of_birth || null;
       payload.age = computeAgeFromDob(form.date_of_birth) || null;
@@ -318,6 +323,25 @@ const PatientEditModal = ({ open, patient, onClose, onSaved }) => {
                   {BLOOD_GROUPS.map((g) => <option key={g} value={g}>{g}</option>)}
                 </select>
               </div>
+            </div>
+
+            {/* Which record this patient's file keeps. Blank inherits the clinic
+                setting, which is what every existing patient does, so a
+                single-speciality clinic never has to touch this. */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Case paper</label>
+              <select
+                value={form.case_paper_type}
+                onChange={(e) => setField("case_paper_type", e.target.value)}
+                className={plainInput}
+              >
+                <option value="">Same as clinic default</option>
+                <option value="dental">Dental (tooth chart)</option>
+                <option value="general">General (no tooth chart)</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Controls whether this patient's file shows the dental chart and per-tooth plan.
+              </p>
             </div>
 
             <div>

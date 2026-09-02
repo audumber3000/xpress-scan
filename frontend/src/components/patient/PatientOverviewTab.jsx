@@ -10,7 +10,7 @@ import ToothSummaryCard from './overview/ToothSummaryCard';
 import PrescriptionsCard from './overview/PrescriptionsCard';
 import DiagnosesCard from './overview/DiagnosesCard';
 import { daysBetween } from '../../utils/nextVisit';
-import { useIsDentalCasePaper } from '../../utils/casePaper';
+import { useIsDentalPatient } from '../../utils/casePaper';
 import { clinicToday, formatDate } from '../../utils/datetime';
 
 /**
@@ -38,11 +38,11 @@ const PatientOverviewTab = ({
   onOpenPrescription,
   onStartVisit,
 }) => {
-  // Which record this clinic keeps. A general clinic was being shown a tooth
-  // chart and a per-tooth summary on every patient, always empty, because this
-  // tab never asked — the switch and its hook already existed and only the case
-  // paper screen was reading them.
-  const isDental = useIsDentalCasePaper();
+  // Which record THIS patient's file keeps: their own setting when they have
+  // one, the clinic's otherwise. A general clinic was being shown a tooth chart
+  // and a per-tooth summary on every patient, always empty, because this tab
+  // never asked at all.
+  const isDental = useIsDentalPatient(patient);
   // Newest first. The list arrives in whatever order the endpoint returns, and
   // "latest visit" has to mean latest.
   const latestCasePaper = useMemo(
@@ -103,6 +103,7 @@ const PatientOverviewTab = ({
       <div className="space-y-4 min-w-0">
         <LatestVisitCard
           casePaper={latestCasePaper}
+          isDental={isDental}
           onOpen={() => onOpenTab('case-papers')}
           onStartVisit={onStartVisit}
         />
@@ -134,6 +135,7 @@ const PatientOverviewTab = ({
       <div className="min-w-0 lg:col-span-2 xl:col-span-3">
         <TreatmentPlanCard
           plan={patient?.treatment_plan}
+          isDental={isDental}
           onOpen={() => onOpenTab('case-papers')}
         />
       </div>

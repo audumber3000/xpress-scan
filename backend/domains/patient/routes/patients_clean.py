@@ -634,6 +634,15 @@ async def update_patient(
         # Filter out None values
         update_data = {k: v for k, v in patient_data.dict().items() if v is not None}
 
+        # case_paper_type is the one field whose *absence* is the meaningful
+        # value: NULL means "keep whatever the clinic keeps". Stripping None
+        # along with every other unset field made "Same as clinic default"
+        # impossible to choose — once a patient was pinned to dental or general
+        # there was no way back. Only honoured when the client actually sent the
+        # key, so an untouched form still cannot blank it by omission.
+        if 'case_paper_type' in getattr(patient_data, 'model_fields_set', set()):
+            update_data['case_paper_type'] = patient_data.case_paper_type
+
         print(f"📝 [UPDATE PATIENT] Patient ID: {patient_id}")
         print(f"📝 [UPDATE PATIENT] Update data keys: {list(update_data.keys())}")
         print(f"📝 [UPDATE PATIENT] Has dental_chart: {'dental_chart' in update_data}")

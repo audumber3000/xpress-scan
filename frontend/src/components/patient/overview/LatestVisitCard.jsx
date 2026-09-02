@@ -3,7 +3,6 @@ import { Stethoscope, ClipboardList, ArrowRightCircle } from 'lucide-react';
 import OverviewCard, { OverviewEmpty } from './OverviewCard';
 import { formatDate, clinicDateKey, clinicToday } from '../../../utils/datetime';
 import { asText } from './clinicalText';
-import { useCasePaperLabels } from '../../../utils/casePaper';
 
 /**
  * The most recent case paper, in three lines.
@@ -27,9 +26,8 @@ const Row = ({ icon, label, value }) => (
   </div>
 );
 
-const LatestVisitCard = ({ casePaper, onOpen, onStartVisit }) => {
+const LatestVisitCard = ({ casePaper, onOpen, onStartVisit, isDental = true }) => {
   // "No dentist recorded" is wrong wording in a clinic that does not employ one.
-  const { clinicianLabel } = useCasePaperLabels();
   if (!casePaper) {
     return (
       <OverviewCard title="Visits" action="Start New Visit" onOpen={onStartVisit || onOpen}>
@@ -62,7 +60,7 @@ const LatestVisitCard = ({ casePaper, onOpen, onStartVisit }) => {
 
       <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-gray-50/60 border-t border-gray-100">
         <span className="text-[11px] text-gray-500 truncate" title={casePaper.dentist_name || undefined}>
-          {casePaper.dentist_name || `No ${clinicianLabel.replace(/^Treating /, '').toLowerCase()} recorded`}
+          {casePaper.dentist_name || (isDental ? 'No dentist recorded' : 'No doctor recorded')}
         </span>
         {casePaper.status && (
           <span className={`text-[10px] font-bold px-2 py-0.5 rounded flex-shrink-0 ${

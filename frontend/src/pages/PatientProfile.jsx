@@ -661,7 +661,7 @@ const PatientProfile = () => {
               )
             )}
 
-            {activeTab === "imaging" && <ImagingTab patientId={patientId} user={user} />}
+            {activeTab === "imaging" && <ImagingTab patientId={patientId} patient={patient} user={user} />}
 
             {activeTab === "files" && (
               <DocumentsTab

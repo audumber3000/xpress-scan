@@ -224,6 +224,7 @@ async def lifespan(app: FastAPI):
             # the patient page both went down. deploy.sh carried these three and
             # deploy.sh does not reach the box.
             conn.execute(text("ALTER TABLE patients ADD COLUMN IF NOT EXISTS allergies TEXT"))
+            conn.execute(text("ALTER TABLE patients ADD COLUMN IF NOT EXISTS case_paper_type VARCHAR(16)"))
             conn.execute(text("ALTER TABLE xray_images ADD COLUMN IF NOT EXISTS tooth_area VARCHAR"))
             conn.execute(text("ALTER TABLE patient_documents ADD COLUMN IF NOT EXISTS category VARCHAR"))
 

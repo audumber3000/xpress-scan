@@ -12,7 +12,7 @@ import FileFilterBar from './files/FileFilterBar';
 import {
   ACCEPT, MAX_FILE_MB, humanSize, fileUrl, canOpen, isDicom, uploadDocumentWithProgress,
 } from './files/fileHelpers';
-import { useIsDentalCasePaper } from '../../utils/casePaper';
+import { useIsDentalPatient } from '../../utils/casePaper';
 
 const DicomViewerModal = lazy(() => import('./DicomViewerModal'));
 
@@ -74,9 +74,9 @@ const Thumb = ({ image }) => {
   );
 };
 
-const ImagingTab = ({ patientId, user }) => {
+const ImagingTab = ({ patientId, patient, user }) => {
   // The field is one column; only its name is dental.
-  const isDental = useIsDentalCasePaper();
+  const isDental = useIsDentalPatient(patient);
   const areaLabel = isDental ? 'Tooth / Area' : 'Area / Site';
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(true);

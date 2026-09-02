@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Search, Plus, Check } from "lucide-react";
 import { api } from "../../utils/api";
 import { getCurrencySymbol } from "../../utils/currency";
-import { useIsDentalCasePaper } from '../../utils/casePaper';
+import { useIsDentalPatient } from '../../utils/casePaper';
 
 /**
  * Add or edit an invoice line.
@@ -24,8 +24,8 @@ const TYPES = [
   { id: "Custom", label: "Custom" },
 ];
 
-const InvoiceLineItemForm = ({ lineItem, onSave, onCancel }) => {
-  const isDental = useIsDentalCasePaper();
+const InvoiceLineItemForm = ({ lineItem, onSave, onCancel, patient = null }) => {
+  const isDental = useIsDentalPatient(patient);
   const [itemType, setItemType] = useState("Treatment");
 
   const [treatments, setTreatments] = useState([]);

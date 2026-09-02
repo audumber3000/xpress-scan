@@ -1,7 +1,6 @@
 import React from 'react';
 import OverviewCard, { OverviewEmpty } from './OverviewCard';
 import { getCurrencySymbol } from '../../../utils/currency';
-import { useIsDentalCasePaper } from '../../../utils/casePaper';
 
 /**
  * The active treatment plan, straight off `Patient.treatment_plan`.
@@ -22,7 +21,7 @@ const STATUS = {
 
 const money = (n) => `${getCurrencySymbol()}${Number(n || 0).toLocaleString('en-IN')}`;
 
-const TreatmentPlanCard = ({ plan = [], onOpen }) => {
+const TreatmentPlanCard = ({ plan = [], onOpen, isDental = true }) => {
   const items = Array.isArray(plan) ? plan : [];
   const lineTotal = (i) => Number(i.cost || 0) * (i.qty || 1);
   const isDone = (i) => String(i.status || 'planned').toLowerCase() === 'completed';
@@ -31,8 +30,7 @@ const TreatmentPlanCard = ({ plan = [], onOpen }) => {
   // payment against an estimate is what made its three totals contradict.
   // A general paper plans procedures, not teeth: the column would be "General"
   // on every row, and the empty state would send the reader to a chart that is
-  // not on their screen.
-  const isDental = useIsDentalCasePaper();
+  // not on their screen. Resolved by the Overview tab, which holds the patient.
   const estimated = items.reduce((sum, i) => sum + lineTotal(i), 0);
   const done = items.filter(isDone).reduce((sum, i) => sum + lineTotal(i), 0);
   const remaining = estimated - done;
