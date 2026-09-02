@@ -1,6 +1,7 @@
 import React from 'react';
 import OverviewCard, { OverviewEmpty } from './OverviewCard';
 import { getCurrencySymbol } from '../../../utils/currency';
+import { useIsDentalCasePaper } from '../../../utils/casePaper';
 
 /**
  * The active treatment plan, straight off `Patient.treatment_plan`.
@@ -28,6 +29,10 @@ const TreatmentPlanCard = ({ plan = [], onOpen }) => {
   // Three figures, all from the plan and all about the plan. The reference put
   // Paid and Remaining here, but money paid lives on invoices — reading a
   // payment against an estimate is what made its three totals contradict.
+  // A general paper plans procedures, not teeth: the column would be "General"
+  // on every row, and the empty state would send the reader to a chart that is
+  // not on their screen.
+  const isDental = useIsDentalCasePaper();
   const estimated = items.reduce((sum, i) => sum + lineTotal(i), 0);
   const done = items.filter(isDone).reduce((sum, i) => sum + lineTotal(i), 0);
   const remaining = estimated - done;
@@ -36,7 +41,9 @@ const TreatmentPlanCard = ({ plan = [], onOpen }) => {
     <OverviewCard title="Active Treatment Plan" action="View Full Treatment Plan" onOpen={onOpen}>
       {items.length === 0 ? (
         <OverviewEmpty action="Plan a treatment" onAction={onOpen}>
-          No treatment planned yet. Pick a tooth on the chart to start one.
+          {isDental
+            ? 'No treatment planned yet. Pick a tooth on the chart to start one.'
+            : 'No treatment planned yet. Add one from the case paper.'}
         </OverviewEmpty>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[1.7fr_1fr]">
@@ -44,7 +51,9 @@ const TreatmentPlanCard = ({ plan = [], onOpen }) => {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">Tooth</th>
+                  {isDental && (
+                    <th className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">Tooth</th>
+                  )}
                   <th className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">Treatment</th>
                   <th className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">Status</th>
                   <th className="px-4 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-gray-400">Est. cost</th>
@@ -55,9 +64,11 @@ const TreatmentPlanCard = ({ plan = [], onOpen }) => {
                   const s = STATUS[String(item.status || 'planned').toLowerCase()] || STATUS.planned;
                   return (
                     <tr key={item.id ?? `${item.tooth}-${i}`}>
-                      <td className="px-4 py-2.5 text-xs font-bold text-gray-900 whitespace-nowrap">
-                        {item.tooth || 'General'}
-                      </td>
+                      {isDental && (
+                        <td className="px-4 py-2.5 text-xs font-bold text-gray-900 whitespace-nowrap">
+                          {item.tooth || 'General'}
+                        </td>
+                      )}
                       <td className="px-4 py-2.5 text-xs text-gray-700">
                         <span className="block truncate max-w-[14rem]" title={item.procedure}>{item.procedure}</span>
                       </td>

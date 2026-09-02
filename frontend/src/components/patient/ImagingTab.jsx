@@ -12,6 +12,7 @@ import FileFilterBar from './files/FileFilterBar';
 import {
   ACCEPT, MAX_FILE_MB, humanSize, fileUrl, canOpen, isDicom, uploadDocumentWithProgress,
 } from './files/fileHelpers';
+import { useIsDentalCasePaper } from '../../utils/casePaper';
 
 const DicomViewerModal = lazy(() => import('./DicomViewerModal'));
 
@@ -74,6 +75,9 @@ const Thumb = ({ image }) => {
 };
 
 const ImagingTab = ({ patientId, user }) => {
+  // The field is one column; only its name is dental.
+  const isDental = useIsDentalCasePaper();
+  const areaLabel = isDental ? 'Tooth / Area' : 'Area / Site';
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -188,7 +192,7 @@ const ImagingTab = ({ patientId, user }) => {
       <FileFilterBar
         query={query}
         onQuery={setQuery}
-        placeholder="Search by tooth, note or file name…"
+        placeholder={`Search by ${isDental ? 'tooth' : 'area'}, note or file name…`}
         sort={sort}
         onSort={setSort}
         sortOptions={SORTS}
@@ -240,7 +244,7 @@ const ImagingTab = ({ patientId, user }) => {
           <table className="w-full min-w-[46rem]">
             <thead>
               <tr className="border-b border-gray-100">
-                {['Date', 'Type', 'Tooth / Area', 'Description', 'Size', ''].map((h, i) => (
+                {['Date', 'Type', areaLabel, 'Description', 'Size', ''].map((h, i) => (
                   <th key={h || i} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">{h}</th>
                 ))}
               </tr>

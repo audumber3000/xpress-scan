@@ -8,7 +8,9 @@ import RecentVisitsCard from './overview/RecentVisitsCard';
 import QuickActionsCard from './overview/QuickActionsCard';
 import ToothSummaryCard from './overview/ToothSummaryCard';
 import PrescriptionsCard from './overview/PrescriptionsCard';
+import DiagnosesCard from './overview/DiagnosesCard';
 import { daysBetween } from '../../utils/nextVisit';
+import { useIsDentalCasePaper } from '../../utils/casePaper';
 import { clinicToday, formatDate } from '../../utils/datetime';
 
 /**
@@ -36,6 +38,11 @@ const PatientOverviewTab = ({
   onOpenPrescription,
   onStartVisit,
 }) => {
+  // Which record this clinic keeps. A general clinic was being shown a tooth
+  // chart and a per-tooth summary on every patient, always empty, because this
+  // tab never asked — the switch and its hook already existed and only the case
+  // paper screen was reading them.
+  const isDental = useIsDentalCasePaper();
   // Newest first. The list arrives in whatever order the endpoint returns, and
   // "latest visit" has to mean latest.
   const latestCasePaper = useMemo(
@@ -74,14 +81,23 @@ const PatientOverviewTab = ({
     // the money column drops under rather than squeezing all three.
     <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-[1.15fr_1fr_0.95fr] gap-4 items-start">
       <div className="space-y-4 min-w-0">
-        <DentalChartCard
-          teethData={patient?.dental_chart}
-          onOpen={() => onOpenTab('case-papers')}
-        />
-        <ToothSummaryCard
-          plan={patient?.treatment_plan}
-          onOpen={() => onOpenTab('case-papers')}
-        />
+        {isDental ? (
+          <>
+            <DentalChartCard
+              teethData={patient?.dental_chart}
+              onOpen={() => onOpenTab('case-papers')}
+            />
+            <ToothSummaryCard
+              plan={patient?.treatment_plan}
+              onOpen={() => onOpenTab('case-papers')}
+            />
+          </>
+        ) : (
+          <DiagnosesCard
+            casePapers={casePapers}
+            onOpen={() => onOpenTab('case-papers')}
+          />
+        )}
       </div>
 
       <div className="space-y-4 min-w-0">

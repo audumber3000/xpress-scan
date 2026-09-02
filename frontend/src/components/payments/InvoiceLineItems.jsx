@@ -3,6 +3,7 @@ import Spinner from '../common/Spinner';
 import { api } from "../../utils/api";
 import InvoiceLineItemForm from "./InvoiceLineItemForm";
 import { getCurrencySymbol } from "../../utils/currency";
+import { useIsDentalCasePaper } from '../../utils/casePaper';
 
 /* ── GST Info Popover ─────────────────────────────────────────────────────── */
 const GST_INFO = {
@@ -102,6 +103,7 @@ const GSTInfoPopover = () => {
 };
 
 const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdateInvoice, canEdit }) => {
+  const isDental = useIsDentalCasePaper();
   const [editingId, setEditingId] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
@@ -230,7 +232,7 @@ const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdat
                   Description
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Tooth / Area
+                  {isDental ? 'Tooth / Area' : 'Area / Site'}
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Qty

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Search, Plus, Check } from "lucide-react";
 import { api } from "../../utils/api";
 import { getCurrencySymbol } from "../../utils/currency";
+import { useIsDentalCasePaper } from '../../utils/casePaper';
 
 /**
  * Add or edit an invoice line.
@@ -24,6 +25,7 @@ const TYPES = [
 ];
 
 const InvoiceLineItemForm = ({ lineItem, onSave, onCancel }) => {
+  const isDental = useIsDentalCasePaper();
   const [itemType, setItemType] = useState("Treatment");
 
   const [treatments, setTreatments] = useState([]);
@@ -286,13 +288,13 @@ const InvoiceLineItemForm = ({ lineItem, onSave, onCancel }) => {
 
       <div>
         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
-          Tooth / area <span className="font-medium normal-case tracking-normal text-gray-400">(optional)</span>
+          {isDental ? 'Tooth / area' : 'Area / site'} <span className="font-medium normal-case tracking-normal text-gray-400">(optional)</span>
         </label>
         <input
           type="text"
           value={toothNumber}
           onChange={(e) => setToothNumber(e.target.value)}
-          placeholder="e.g. 26, or upper right quadrant"
+          placeholder={isDental ? "e.g. 26, or upper right quadrant" : "e.g. left forearm, scalp"}
           maxLength={50}
           className={inputCls("toothNumber")}
         />
