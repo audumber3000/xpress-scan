@@ -7,6 +7,7 @@ import {
 import { SkeletonBox, SkeletonCards } from "../components/Skeleton";
 import PatientOverviewTab from "../components/patient/PatientOverviewTab";
 import ImagingTab from "../components/patient/ImagingTab";
+import FormsTab from "../components/patient/FormsTab";
 import DocumentsTab from "../components/patient/DocumentsTab";
 import VisitsTab from "../components/patient/VisitsTab";
 import BillingTab from "../components/patient/BillingTab";
@@ -94,6 +95,7 @@ const PatientProfile = () => {
     { id: "visits", name: "Visits" },
     { id: "billing", name: "Billing" },
     { id: "imaging", name: "Imaging" },
+    { id: "forms", name: "Forms" },
     { id: "files", name: "Documents" }
   ];
 
@@ -662,6 +664,8 @@ const PatientProfile = () => {
             )}
 
             {activeTab === "imaging" && <ImagingTab patientId={patientId} patient={patient} user={user} />}
+
+            {activeTab === "forms" && <FormsTab patientId={patientId} patient={patient} />}
 
             {activeTab === "files" && (
               <DocumentsTab
