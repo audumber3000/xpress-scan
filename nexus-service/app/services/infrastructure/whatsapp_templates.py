@@ -214,6 +214,27 @@ def wa_consent_form(patient_name: str, clinic_name: str, consent_link: str,
     }
 
 
+def wa_patient_form(patient_name: str, clinic_name: str, form_link: str,
+                    form_name: str = "", clinic_phone: str = "", **_) -> dict:
+    """
+    A medical form for the patient to fill in on their phone.
+
+    Body params: {{1}} patient_name, {{2}} clinic_name,
+                 {{3}} form_name, {{4}} form_link, {{5}} clinic_phone
+
+    Same shape as mp_consent_form deliberately — name, clinic, what it is, the
+    link, a number to call — so the Meta submission is a copy of one already
+    approved rather than a new argument with their reviewers.
+    """
+    tpl = _get_tpl("WA_TPL_PATIENT_FORM", "mp_patient_form")
+    return {
+        "template_name": tpl,
+        "components": [_body_params(patient_name, clinic_name,
+                                    form_name or "a short medical form",
+                                    form_link, clinic_phone)],
+    }
+
+
 def wa_google_review(patient_name: str, clinic_name: str, review_link: str,
                      clinic_phone: str = "") -> dict:
     """
@@ -339,6 +360,7 @@ def build_whatsapp(event_type: str, **kwargs) -> dict:
         "receipt_notification":      wa_receipt_sent,
         "prescription_notification": wa_prescription_sent,
         "consent_form":              wa_consent_form,
+        "patient_form":              wa_patient_form,
         "google_review":             wa_google_review,
         "daily_summary":             wa_daily_summary,
         "lab_order_placed":          wa_lab_order_placed,

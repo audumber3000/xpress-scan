@@ -196,6 +196,13 @@ run_migration "audit_logs_action_idx"  "CREATE INDEX IF NOT EXISTS ix_audit_logs
 # WhatsApp receipt messages need a preference row or notify_event no-ops in
 # silence. Seeded enabled for every existing clinic; new clinics get it from
 # DEFAULT_EVENT_TYPES.
+# Patient form messages are opt-in per clinic and default OFF: the Meta template
+# has to be approved and the wallet has a cost per send, so nobody should be
+# billed for a message they did not switch on. Without a row at all notify_event
+# returns silently, which is why the route reports "not configured" rather than
+# claiming a send.
+run_migration "patient_form_pref" "INSERT INTO notification_preferences (clinic_id, event_type, channels, is_enabled) SELECT c.id, 'patient_form', '[\"whatsapp\"]'::json, FALSE FROM clinics c WHERE NOT EXISTS (SELECT 1 FROM notification_preferences p WHERE p.clinic_id = c.id AND p.event_type = 'patient_form')"
+
 run_migration "receipt_notification_pref" "INSERT INTO notification_preferences (clinic_id, event_type, channels, is_enabled) SELECT c.id, 'receipt_notification', '[\"whatsapp\"]'::json, TRUE FROM clinics c WHERE NOT EXISTS (SELECT 1 FROM notification_preferences p WHERE p.clinic_id = c.id AND p.event_type = 'receipt_notification')"
 # mp_lab_order_placed is approved in Meta now, so lab orders are no longer
 # email-only. Existing rows stay disabled; this only widens the channel list.

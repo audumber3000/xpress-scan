@@ -23,6 +23,7 @@ from database import get_db
 from models import FormTemplate, FormSubmission, Patient, User
 from core.auth_utils import get_current_user
 from domains.forms.starter_forms import CATEGORIES, STARTER_FORMS, MAPPABLE_FIELDS
+from core.notification_dispatch import notify_event, InsufficientWalletBalance
 
 router = APIRouter()
 
@@ -413,3 +414,78 @@ async def apply_answers(
     sub.reviewed_by = current_user.id
     db.commit()
     return {"applied": applied, "count": len(applied)}
+
+
+class SendWhatsAppDTO(BaseModel):
+    submission_id: int
+    # Where the patient's link lives. Passed by the caller rather than built
+    # here because the app is served from a different host than the API, and
+    # the backend has no reliable way to know which one a given clinic uses.
+    app_origin: str = Field(..., max_length=200)
+
+
+@router.post("/send-whatsapp")
+async def send_form_whatsapp(
+    payload: SendWhatsAppDTO,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """WhatsApp the link for a submission that has already been created.
+
+    Separate from /send on purpose: the link exists whether or not the message
+    goes out, so a clinic with an empty wallet still has something to hand the
+    patient. required=True because here the send IS the request — a silent
+    failure would leave staff believing the patient had been messaged.
+    """
+    sub = db.query(FormSubmission).filter(
+        FormSubmission.id == payload.submission_id,
+        FormSubmission.clinic_id == current_user.clinic_id,
+    ).first()
+    if not sub:
+        raise HTTPException(404, "Form not found")
+    if not sub.token:
+        raise HTTPException(400, "This form has already been filled in.")
+    if _is_expired(sub):
+        raise HTTPException(400, "This link has expired. Send the form again.")
+
+    patient = sub.patient
+    if not patient or not patient.phone:
+        raise HTTPException(400, "This patient has no phone number on file.")
+
+    # notify_event returns quietly when the clinic has no preference row for an
+    # event, which is every clinic until this one is seeded. Reporting "sent" on
+    # that is worse than failing: staff stop chasing a patient who was never
+    # messaged. Checked here so the answer can say what actually happened.
+    from models import NotificationPreference
+    pref = db.query(NotificationPreference).filter(
+        NotificationPreference.clinic_id == current_user.clinic_id,
+        NotificationPreference.event_type == "patient_form",
+    ).first()
+    if not pref or not pref.is_enabled:
+        return {
+            "sent": False,
+            "reason": "not_configured",
+            "message": "Patient form messages aren't switched on for this clinic. "
+                       "The link above still works — copy it and send it yourself.",
+        }
+
+    origin = payload.app_origin.rstrip("/")
+    try:
+        notify_event(
+            "patient_form",
+            db=db,
+            clinic_id=current_user.clinic_id,
+            to_phone=patient.phone,
+            to_name=patient.name,
+            required=True,
+            template_data={
+                "patient_name": patient.name,
+                "clinic_name": (sub.clinic.name if sub.clinic else ""),
+                "form_name": (sub.template.name if sub.template else ""),
+                "form_link": f"{origin}/form/fill/{sub.token}",
+                "clinic_phone": (sub.clinic.phone if sub.clinic else ""),
+            },
+        )
+    except InsufficientWalletBalance:
+        raise
+    return {"sent": True}
