@@ -51,6 +51,7 @@ import ConsentForms from "./pages/ConsentForms";
 import Reports from "./pages/Reports";
 import AddClinic from "./pages/AddClinic";
 import ConsentSign from "./pages/ConsentSign";
+import FormFill from "./pages/FormFill";
 import ConsentPreview from "./pages/ConsentPreview";
 import SelectClinic from "./pages/SelectClinic";
 import GoogleReviews from "./pages/marketing/GoogleReviews";
@@ -224,7 +225,7 @@ function AppContent() {
   // Check if current route is auth page, booking page, or public page
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/forgot-password' || location.pathname === '/reset-password' || location.pathname === '/onboarding' || location.pathname === '/auth/callback' || location.pathname === '/desktop-auth/start';
   const isBookingPage = location.pathname === '/booking';
-  const isPublicPage = location.pathname === '/dental-demo' || location.pathname.startsWith('/consent/sign/') || location.pathname.startsWith('/consent/preview/') || location.pathname === '/checkout';
+  const isPublicPage = location.pathname === '/dental-demo' || location.pathname.startsWith('/consent/sign/') || location.pathname.startsWith('/form/fill/') || location.pathname.startsWith('/consent/preview/') || location.pathname === '/checkout';
 
   // While auth is initializing, show a global loading screen to prevent false redirects
   if (loading) {
@@ -255,6 +256,7 @@ function AppContent() {
           <Route path="/booking" element={<BookingPage />} />
           <Route path="/dental-demo" element={<DentalChartDemo />} />
           <Route path="/consent/sign/:token" element={<ConsentSign />} />
+          <Route path="/form/fill/:token" element={<FormFill />} />
           <Route path="/consent/preview/:templateId" element={<ProtectedRoute><ConsentPreview /></ProtectedRoute>} />
           <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
           <Route path="/select-clinic" element={<ProtectedRoute><SelectClinic /></ProtectedRoute>} />
