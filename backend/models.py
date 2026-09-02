@@ -1129,6 +1129,81 @@ class ConsentTemplate(Base):
     
     clinic = relationship("Clinic")
 
+class FormTemplate(Base):
+    """A questionnaire a clinic sends to a patient to fill in.
+
+    Sits beside ConsentTemplate rather than extending it, because the two are
+    different documents. A consent is fixed wording the patient agrees to; a
+    form has fields the patient answers, and those answers have to come back as
+    data. Sharing one table would mean a `content` column that is prose for one
+    kind of row and a schema for the other.
+
+    `schema` is the field list:
+        [{ key, label, type, required, options[], maps_to }]
+
+    `type` is one of: text, textarea, boolean, single_select, multi_select,
+    date, signature.
+
+    `maps_to` names a Patient column the answer can update (allergies,
+    blood_group, patient_history, date_of_birth). It is the whole point of the
+    feature — without it the clinic reads a PDF and retypes the allergies by
+    hand. Fields with no `maps_to` are still recorded, they just touch nothing.
+    """
+    __tablename__ = 'form_templates'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    # 'medical_history' | 'pre_op' | 'post_op' | 'custom'. Groups the picker the
+    # same way consent categories do.
+    category = Column(String, nullable=True)
+    # Which case paper this form belongs with: 'dental', 'general', or NULL for
+    # both. Matches patients.case_paper_type so a skin clinic is not offered a
+    # form asking about bleeding gums.
+    case_paper_type = Column(String(16), nullable=True)
+    schema = Column(JSON, nullable=False, default=list)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    clinic = relationship("Clinic")
+
+
+class FormSubmission(Base):
+    """One send of one form to one patient, and whatever came back.
+
+    The token is the patient's link. It lives in Redis with a TTL for the actual
+    validation (same as consents), but it is stored here too so the clinic can
+    see what was sent, when, and whether it was answered — a Redis key that has
+    expired must not erase the fact that a form was ever sent.
+
+    `status` walks sent -> opened -> submitted -> applied. `applied` is
+    deliberately separate from `submitted`: answers land for review and a person
+    accepts them before anything reaches the chart. A patient's typo must not be
+    able to silently replace a clinical field.
+    """
+    __tablename__ = 'form_submissions'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False, index=True)
+    template_id = Column(Integer, ForeignKey('form_templates.id'), nullable=False)
+    token = Column(String, nullable=True, index=True)
+    # Frozen at send time. A template edited later must not change what a
+    # patient was actually asked, the way an invoice keeps its own line items.
+    schema_snapshot = Column(JSON, nullable=True)
+    answers = Column(JSON, nullable=True)
+    status = Column(String(16), default='sent', index=True)
+    sent_at = Column(DateTime, default=datetime.datetime.utcnow)
+    opened_at = Column(DateTime, nullable=True)
+    submitted_at = Column(DateTime, nullable=True)
+    applied_at = Column(DateTime, nullable=True)
+    reviewed_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+
+    clinic = relationship("Clinic")
+    patient = relationship("Patient")
+    template = relationship("FormTemplate")
+    reviewer = relationship("User")
+
+
 class PatientConsent(Base):
     __tablename__ = 'patient_consents'
     id = Column(Integer, primary_key=True, index=True)

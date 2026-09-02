@@ -849,6 +849,15 @@ app.include_router(inventory.router, prefix="/api/v1/inventory", tags=["inventor
 app.include_router(medication_groups.router, prefix="/api/v1", tags=["medication-groups"])
 app.include_router(medication_stock.router, prefix="/api/v1/medication-stock", tags=["medication-stock"])
 app.include_router(consents.router, prefix="/api/v1/consents", tags=["consents"])
+
+# Patient forms. Two routers on purpose: the clinic side is authenticated like
+# everything else, and the patient side is not — the token in the URL is the
+# only credential a patient has, and asking them to log in to fill in a medical
+# history is how the form goes unanswered.
+from domains.forms.routes import forms as patient_forms
+from domains.forms.routes import public_forms
+app.include_router(patient_forms.router, prefix="/api/v1/forms", tags=["forms"])
+app.include_router(public_forms.router, prefix="/api/v1/public/forms", tags=["public-forms"])
 # Internal service-to-service routes (Nexus calls these). Auth via shared
 # X-Internal-Auth header; never call from public clients.
 app.include_router(consents_internal.router, prefix="/api/v1/internal", tags=["internal"])
