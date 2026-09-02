@@ -217,6 +217,16 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_published_at TIMESTAMP"))
             conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_about TEXT"))
             conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_show_stats BOOLEAN DEFAULT TRUE"))
+            # Patient file (added 2026-09). Same reasoning as the invoice block
+            # below, and this one is why prod broke on 2026-09-02: allergies is
+            # mapped on Patient, so its absence did not disable an allergy field,
+            # it made every SELECT on patients fail. Adding patients and opening
+            # the patient page both went down. deploy.sh carried these three and
+            # deploy.sh does not reach the box.
+            conn.execute(text("ALTER TABLE patients ADD COLUMN IF NOT EXISTS allergies TEXT"))
+            conn.execute(text("ALTER TABLE xray_images ADD COLUMN IF NOT EXISTS tooth_area VARCHAR"))
+            conn.execute(text("ALTER TABLE patient_documents ADD COLUMN IF NOT EXISTS category VARCHAR"))
+
             # Invoice drawer (added 2026-09). These three are mapped on
             # InvoiceLineItem / InvoicePayment, and SQLAlchemy names every mapped
             # column in its SELECTs — so if they are missing on the box, it is not
