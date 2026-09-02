@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import Spinner from '../components/common/Spinner';
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import GearLoader from "../components/GearLoader";
@@ -329,8 +330,9 @@ const DoctorProfile = () => {
                   {clinicData?.name && <p className="text-sm text-gray-400 truncate mt-1">{clinicData.name}</p>}
                 </div>
                 {avatarPreview && (
-                  <button onClick={handleRemoveAvatar} disabled={avatarUploading} className="text-xs text-red-500 hover:text-red-600 font-medium self-start sm:self-end disabled:opacity-60">
-                    Remove photo
+                  <button onClick={handleRemoveAvatar} disabled={avatarUploading} className="text-xs text-red-500 hover:text-red-600 font-medium self-start sm:self-end inline-flex items-center gap-1.5 disabled:opacity-60">
+                    {avatarUploading ? 'Removing' : 'Remove photo'}
+                    {avatarUploading && <Spinner className="w-3 h-3" />}
                   </button>
                 )}
               </div>
@@ -458,8 +460,10 @@ const DoctorProfile = () => {
                       disabled={signatureUploading}
                       className="flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-500 hover:bg-red-50 text-sm font-semibold rounded-lg transition-colors disabled:opacity-60"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                      Remove
+                      {signatureUploading
+                        ? <Spinner className="w-4 h-4" />
+                        : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>}
+                      {signatureUploading ? 'Removing' : 'Remove'}
                     </button>
                   )}
                   <p className="text-[11px] text-gray-400">PNG or JPG, max 512KB</p>

@@ -23,9 +23,48 @@ import KpiDetailDrawer from "../components/common/KpiDetailDrawer";
 import InvoiceCardList from "../components/payments/InvoiceCardList";
 import HelpBulb from "../components/common/HelpBulb";
 import { useBreakpoint } from "../utils/useBreakpoint";
+import useDockedHeader from "../utils/useDockedHeader";
+import MoreMenu from "../components/common/MoreMenu";
+import { ColGroup, ResizableHead } from "../components/common/ColumnResizer";
+import useColumnWidths from "../utils/useColumnWidths";
+import { Download, Columns3 } from "lucide-react";
 
-const INVOICES_PER_PAGE = 10;
+// A screen of All payments now fits far more than ten rows once the summary
+// cards scroll away, and ten meant clicking through pages to read a week.
+const INVOICES_PER_PAGE = 25;
 const LEDGER_PER_PAGE = 10;
+
+// Column layouts for the three tables on this page. `width` is a percentage and
+// each set must sum to 100; `min` is the pixel floor a drag can reach.
+const PAYMENT_COLUMNS = [
+  { key: 'invoice',  label: 'Invoice / Patient ID', width: 15, min: 130 },
+  { key: 'patient',  label: 'Patient',              width: 20, min: 140 },
+  { key: 'work',     label: 'Work Done',            width: 20, min: 140 },
+  { key: 'amount',   label: 'Amount',               width: 12, min: 96 },
+  { key: 'status',   label: 'Status',               width: 11, min: 92 },
+  { key: 'datetime', label: 'Date & Time',          width: 13, min: 110 },
+  { key: 'action',   label: 'Action',               width: 9,  min: 80, align: 'right' },
+];
+
+const COLLECTION_COLUMNS = [
+  { key: 'invoice',   label: 'Invoice / Patient ID', width: 16, min: 130 },
+  { key: 'patient',   label: 'Patient',              width: 19, min: 140 },
+  { key: 'work',      label: 'Work Done',            width: 20, min: 140 },
+  { key: 'collected', label: 'Collected',            width: 12, min: 96 },
+  { key: 'time',      label: 'Time',                 width: 11, min: 88 },
+  { key: 'method',    label: 'Method',               width: 11, min: 88 },
+  { key: 'status',    label: 'Invoice Status',       width: 11, min: 104 },
+];
+
+const PAYMENT_LEDGER_COLUMNS = [
+  { key: 'date',        label: 'Date',        width: 12, min: 96 },
+  { key: 'entity',      label: 'Entity',      width: 18, min: 130 },
+  { key: 'description', label: 'Description', width: 24, min: 150 },
+  { key: 'category',    label: 'Category',    width: 14, min: 100 },
+  { key: 'flow',        label: 'In / Out',    width: 13, min: 100 },
+  { key: 'mode',        label: 'Mode',        width: 10, min: 84 },
+  { key: 'details',     label: 'Details',     width: 9,  min: 84 },
+];
 
 const Payments = () => {
   const { user } = useAuth();
@@ -57,6 +96,21 @@ const Payments = () => {
 
   // Ledger states
   const [activeTab, setActiveTab] = useState('payments'); // 'payments' or 'ledger'
+
+  // All payments scrolls as one page rather than squeezing the table into an
+  // inner box; see useDockedHeader. Today's Collection and the ledger keep the
+  // old fixed-height layout.
+  const stickyLayout = activeTab === 'payments';
+  const { tabsRef, filtersRef, offsets: dockOffsets } = useDockedHeader(stickyLayout);
+
+  // One table renders at a time, so one hook serves all three. The storage key
+  // carries the tab, so each keeps its own layout.
+  const tableColumns = activeTab === 'today' ? COLLECTION_COLUMNS
+    : activeTab === 'ledger' ? PAYMENT_LEDGER_COLUMNS
+      : PAYMENT_COLUMNS;
+  const { tableRef, widths, startResize, reset: resetColumns } = useColumnWidths(
+    `payments.${activeTab}`, tableColumns,
+  );
   const [ledgerItems, setLedgerItems] = useState([]);
   const [ledgerTotalCount, setLedgerTotalCount] = useState(0);
   const [ledgerStats, setLedgerStats] = useState({ inflow: 0, outflow: 0, net: 0, expensesCount: 0 });
@@ -144,6 +198,9 @@ const Payments = () => {
         plans: s?.plans || {},
         methods: s?.methods || {},
         drafts: s?.drafts || {},
+        // Month-on-month figures for the change arrows. Measured over their own
+        // window, not the filtered set the headlines describe.
+        comparison: s?.comparison || null,
       }));
     } catch (err) {
       console.error('Error fetching stats:', err);
@@ -388,10 +445,18 @@ const Payments = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50/30">
+    <div className={`flex flex-col ${stickyLayout ? 'min-h-full' : 'h-screen'} bg-gray-50/30`}>
       
       {/* Tabs */}
-      <div className="px-4 md:px-6 pt-4 border-b border-gray-200 flex items-end justify-between gap-3">
+      {/* #fdfdfe is gray-50/30 over white: the same colour the page already
+          shows, but opaque, so rows pass behind the docked bar instead of
+          through it. */}
+      <div
+        ref={tabsRef}
+        className={`px-4 md:px-6 pt-4 border-b border-gray-200 flex items-end justify-between gap-3 ${
+          stickyLayout ? 'sticky top-0 z-30 bg-[#fdfdfe]' : ''
+        }`}
+      >
         <nav className="-mb-px flex space-x-8 overflow-x-auto">
           <button
             onClick={() => setActiveTab('today')}
@@ -448,10 +513,18 @@ const Payments = () => {
         )}
       </div>
 
-      <div className="px-4 md:px-6 flex-shrink-0">
+      <div
+        ref={filtersRef}
+        style={stickyLayout ? { top: dockOffsets.filters } : undefined}
+        className={`px-4 md:px-6 flex-shrink-0 ${
+          stickyLayout ? 'sticky z-20 bg-[#fdfdfe] pt-2 pb-4' : ''
+        }`}
+      >
 
         {/* Search, Filters & Actions */}
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4">
+        {/* Docked, the gap below has to be painted padding on the bar rather
+            than margin on the row, or rows show through it. */}
+        <div className={`flex flex-col sm:flex-row justify-between items-center gap-4 ${stickyLayout ? '' : 'mb-4'}`}>
           <div className="flex items-center gap-3 w-full sm:w-auto flex-1">
             <div className="w-full sm:max-w-sm relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -490,15 +563,30 @@ const Payments = () => {
             )}
           </div>
           <div className="w-full sm:w-auto flex space-x-3">
-            <button
-              onClick={() => activeTab === 'today' ? setShowDayExport(true) : setShowExport(true)}
-              className="w-full sm:w-auto inline-flex justify-center items-center px-4 py-2.5 border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2a276e] transition-colors"
-            >
-              <svg className="mr-2 h-5 w-5 text-[#2a276e]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              Export
-            </button>
+            {/* Two controls on the right, not a growing row of outline
+                buttons: the one thing you came here to do, and the rest behind
+                More. */}
+            <MoreMenu
+              className="w-full sm:w-auto"
+              items={[
+                {
+                  key: 'export',
+                  label: 'Export to CSV',
+                  icon: <Download size={15} />,
+                  hint: activeTab === 'today'
+                    ? "This day's collections"
+                    : 'Every row your filters select',
+                  onClick: () => (activeTab === 'today' ? setShowDayExport(true) : setShowExport(true)),
+                },
+                {
+                  key: 'reset-columns',
+                  label: 'Reset column widths',
+                  icon: <Columns3 size={15} />,
+                  hint: 'Back to the default layout',
+                  onClick: resetColumns,
+                },
+              ]}
+            />
             {activeTab === 'payments' || activeTab === 'today' ? (
               <button
                  onClick={() => setSelectedInvoiceId('new')}
@@ -525,14 +613,22 @@ const Payments = () => {
       </div>
 
       {/* Invoices Table Container */}
-      <div className="flex-1 overflow-hidden px-6 pb-4">
-        <div className="h-full overflow-auto bg-white border border-gray-200 rounded-xl shadow-sm">
+      {/* On All payments the page is the only scroller: no inner overflow, or
+          the sticky header would stick to this box instead of the window. */}
+      <div className={`flex-1 px-6 pb-4 ${stickyLayout ? 'flex flex-col' : 'overflow-hidden'}`}>
+        <div className={`bg-white border border-gray-200 rounded-xl shadow-sm ${
+          stickyLayout ? 'flex-1' : 'h-full overflow-auto'
+        }`}>
           {loading && invoices.length === 0 ? (
-            <table className="w-full">
-              <thead className="bg-[#f8fafc] border-b border-gray-100 sticky top-0 z-10">
+            <table className="w-full min-w-[880px] table-fixed mp-table-fixed">
+              <ColGroup widths={widths} />
+              <thead
+                className="bg-[#f8fafc] border-b border-gray-100 sticky z-10"
+                style={{ top: stickyLayout ? dockOffsets.thead : 0 }}
+              >
                 <tr>
-                  {Array.from({ length: 7 }).map((_, i) => (
-                    <th key={i} className="px-6 py-4"><SkeletonBox className="h-3 w-20" /></th>
+                  {tableColumns.map((col) => (
+                    <th key={col.key} className="px-6 py-4"><SkeletonBox className="h-3 w-20" /></th>
                   ))}
                 </tr>
               </thead>
@@ -576,22 +672,18 @@ const Payments = () => {
               <InvoiceCardList invoices={currentItems} onSelect={handleInvoiceSelect} />
             )
           ) : activeTab === 'payments' ? (
-            <table className="w-full">
-              <thead className="bg-[#f8fafc] border-b border-gray-100 sticky top-0 z-10">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Invoice / Patient ID</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Patient</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Work Done</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Amount</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Date & Time</th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</th>
-                </tr>
-              </thead>
+            <table ref={tableRef} className="w-full min-w-[880px] table-fixed mp-table-fixed">
+              <ColGroup widths={widths} />
+              <ResizableHead
+                columns={tableColumns}
+                startResize={startResize}
+                onReset={resetColumns}
+                style={{ top: dockOffsets.thead }}
+              />
               <tbody className="divide-y divide-gray-100">
                 {currentItems.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-8">
+                    <td colSpan={tableColumns.length} className="px-6 py-8">
                       <EmptyState
                         image={receipt}
                         title="No transactions yet"
@@ -612,22 +704,18 @@ const Payments = () => {
             </table>
           ) : activeTab === 'today' ? (
             /* Today's Collection — one row per payment received today (incl. partials on older invoices) */
-            <table className="w-full">
-              <thead className="bg-[#f8fafc] border-b border-gray-100 sticky top-0 z-10">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Invoice / Patient ID</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Patient</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Work Done</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Collected</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Time</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Method</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Invoice Status</th>
-                </tr>
-              </thead>
+            <table ref={tableRef} className="w-full min-w-[880px] table-fixed mp-table-fixed">
+              <ColGroup widths={widths} />
+              <ResizableHead
+                columns={tableColumns}
+                startResize={startResize}
+                onReset={resetColumns}
+                style={{ top: stickyLayout ? dockOffsets.thead : 0 }}
+              />
               <tbody className="divide-y divide-gray-100">
                 {filteredTodayCollections.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-8">
+                    <td colSpan={tableColumns.length} className="px-6 py-8">
                       <EmptyState
                         image={receipt}
                         title="No payments collected today"
@@ -678,22 +766,18 @@ const Payments = () => {
               </tbody>
             </table>
           ) : (
-            <table className="w-full">
-              <thead className="bg-[#f8fafc] border-b border-gray-100 sticky top-0 z-10">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Entity</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Description</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Category</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">In / Out</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Mode</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Details</th>
-                </tr>
-              </thead>
+            <table ref={tableRef} className="w-full min-w-[880px] table-fixed mp-table-fixed">
+              <ColGroup widths={widths} />
+              <ResizableHead
+                columns={tableColumns}
+                startResize={startResize}
+                onReset={resetColumns}
+                style={{ top: stickyLayout ? dockOffsets.thead : 0 }}
+              />
               <tbody className="divide-y divide-gray-100">
                 {currentItems.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-8">
+                    <td colSpan={tableColumns.length} className="px-6 py-8">
                       <EmptyState
                         image={receipt}
                         title="No ledger items yet"

@@ -3,8 +3,7 @@ import { X, Wallet } from "lucide-react";
 import { notify } from '../../utils/notify';
 import { getCurrencySymbol } from "../../utils/currency";
 import { clinicToday, formatDate } from "../../utils/datetime";
-import GearLoader from "../GearLoader";
-
+import Spinner from "../common/Spinner";
 /**
  * Record a payment against an invoice.
  *
@@ -262,7 +261,7 @@ const MarkAsPaidModal = ({ invoice, onClose, onConfirm }) => {
             disabled={loading}
             className="flex-1 px-4 py-2.5 bg-[#2a276e] text-white rounded-lg text-sm font-semibold hover:bg-[#1a1548] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            {loading && <GearLoader size="w-4 h-4" />}
+            {loading && <Spinner />}
             {loading ? "Recording..." : "Record payment"}
           </button>
         </div>

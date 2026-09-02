@@ -861,7 +861,7 @@ const CasePapersTab = ({
                     <h2 className="text-xl font-black text-gray-900">
                       Case Paper {selectedVisitNumber ? `#${selectedVisitNumber}` : `#${selectedCasePaper.id}`}
                     </h2>
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                    <span className={`px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border ${
                         selectedCasePaper.status === 'Completed' ? 'bg-green-50 text-green-700 border-green-100' : 'bg-amber-50 text-amber-700 border-amber-100'
                     }`}>
                         {selectedCasePaper.status}

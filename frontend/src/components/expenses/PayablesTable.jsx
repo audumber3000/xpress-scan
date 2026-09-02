@@ -147,4 +147,15 @@ export const PayablesCardList = ({ rows, busyId, onSettle, onUnsettle }) => (
   </div>
 );
 
-export const PAYABLE_COLUMNS = ['Raised', 'Payee', 'For', 'Kind', 'Amount', 'Status', ''];
+// Column layout for the resizable table. `width` is a percentage of the table
+// and the set must sum to 100; `min` is the pixel floor a drag can take a column
+// down to. Changing this list invalidates saved layouts, which is handled.
+export const PAYABLE_COLUMNS = [
+  { key: 'raised', label: 'Raised',  width: 12, min: 96 },
+  { key: 'payee',  label: 'Payee',   width: 20, min: 140 },
+  { key: 'for',    label: 'For',     width: 22, min: 140 },
+  { key: 'kind',   label: 'Kind',    width: 11, min: 88 },
+  { key: 'amount', label: 'Amount',  width: 12, min: 96, align: 'right' },
+  { key: 'status', label: 'Status',  width: 12, min: 96 },
+  { key: 'action', label: '',        width: 11, min: 96, align: 'right' },
+];

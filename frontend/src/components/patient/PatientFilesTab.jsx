@@ -1,4 +1,5 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
+import Spinner from "../common/Spinner";
 import { api, getFriendlyErrorMessage } from '../../utils/api';
 import { notify } from '../../utils/notify';
 import EmptyState from '../common/EmptyState';
@@ -293,12 +294,15 @@ const PatientFilesTab = ({ patientId, variant = 'all' }) => {
         if (!uploading) uploadFiles(e.dataTransfer.files);
     };
 
+    const [deleting, setDeleting] = useState(false);
+
     const doDelete = async (file) => {
         const endpoint = deleteEndpoint(file);
         if (!endpoint) {
             setPendingDelete(null);
             return;
         }
+        setDeleting(true);
         try {
             await api.delete(endpoint);
             notify.done('File deleted.');
@@ -307,6 +311,7 @@ const PatientFilesTab = ({ patientId, variant = 'all' }) => {
             console.error('Error deleting file:', error);
             notify.problem(getFriendlyErrorMessage(error, 'Failed to delete file.'));
         } finally {
+            setDeleting(false);
             setPendingDelete(null);
         }
     };
@@ -539,7 +544,14 @@ const PatientFilesTab = ({ patientId, variant = 'all' }) => {
                         <p className="text-xs text-gray-400 text-center mt-1">This can't be undone.</p>
                         <div className="flex gap-3 mt-6">
                             <button onClick={() => setPendingDelete(null)} className="flex-1 px-4 py-2.5 bg-gray-50 text-gray-600 rounded-lg text-sm font-semibold hover:bg-gray-100 transition-colors">Cancel</button>
-                            <button onClick={() => doDelete(pendingDelete)} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors">Delete</button>
+                            <button
+                                onClick={() => doDelete(pendingDelete)}
+                                disabled={deleting}
+                                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors inline-flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                                {deleting ? 'Deleting' : 'Delete'}
+                                {deleting && <Spinner className="w-3.5 h-3.5" />}
+                            </button>
                         </div>
                     </div>
                 </div>

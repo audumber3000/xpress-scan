@@ -373,7 +373,7 @@ body {{
       </div>
     </div>
 
-    <div class="invoice-title">TAX INVOICE</div>
+    <div class="invoice-title">INVOICE</div>
 
     <!-- PATIENT / INVOICE INFO -->
     <table class="info-table">

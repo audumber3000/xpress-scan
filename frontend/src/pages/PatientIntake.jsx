@@ -32,6 +32,7 @@ const PatientIntake = () => {
     phone: "",
     referred_by: "",
     treatment_type: "",
+    allergies: "",
     notes: "",
     payment_type: "Cash"
   });
@@ -161,8 +162,9 @@ const PatientIntake = () => {
       errors.phone = "Please enter a valid phone number (at least 7 digits).";
     }
 
-    if (!formData.treatment_type) errors.treatment_type = "Treatment type is required.";
-    if (!formData.referred_by.trim()) errors.referred_by = "Referring doctor is required.";
+    // Treatment type and referred-by are not gates here either, matching the
+    // Patients drawer. Both fall back on save rather than being demanded from
+    // somebody who does not yet know the answer.
 
     return errors;
   };
@@ -196,6 +198,10 @@ const PatientIntake = () => {
       // Prepare payload — send either age or date_of_birth based on the toggle.
       const patientPayload = {
         ...formData,
+        // Same defaults the Patients drawer writes, so a patient created from
+        // the dashboard and one created from the list read identically.
+        treatment_type: treatmentTypeName || formData.treatment_type || 'General',
+        referred_by: formData.referred_by?.trim() || 'Self',
         scan_type: treatmentTypeName, // Backend still expects scan_type field
       };
       if (ageMode === "dob") {
@@ -311,7 +317,7 @@ const PatientIntake = () => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Village/City
+                  Address
                 </label>
                 <div className="relative">
                   <input
@@ -371,7 +377,7 @@ const PatientIntake = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Referred By *
+                  Referred By
                 </label>
                 <select
                   name="referred_by"
@@ -402,7 +408,7 @@ const PatientIntake = () => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Treatment Type *
+                  Treatment Type
                 </label>
                 <select
                   name="treatment_type"
@@ -439,6 +445,24 @@ const PatientIntake = () => {
                 <option value="UPI">UPI</option>
                 <option value="Other">Other</option>
               </select>
+            </div>
+
+            {/* Allergies. The only clinical field this shorter intake form
+                collects, because it is the one that has to be on file before
+                anybody touches the patient. */}
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Allergies
+              </label>
+              <input
+                type="text"
+                name="allergies"
+                value={formData.allergies}
+                onChange={handleChange}
+                placeholder="e.g. Penicillin, Latex"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a276e]"
+              />
+              <p className="mt-1 text-xs text-gray-400">Shown in red at the top of the patient's file.</p>
             </div>
 
             {/* Medical Notes */}

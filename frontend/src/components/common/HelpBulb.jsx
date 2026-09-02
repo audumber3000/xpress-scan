@@ -1,6 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Lightbulb, X, PlayCircle, ChevronDown } from 'lucide-react';
 
+// Which sections this browser has already opened help for. The bulb only
+// asks for attention until it has been answered once, so a doctor who has read
+// the Payments help never sees the Payments bulb pulse again.
+const OPENED_KEY = 'mp.help.opened';
+
+const readOpened = () => {
+  try { return JSON.parse(localStorage.getItem(OPENED_KEY) || '{}'); } catch { return {}; }
+};
+
 /**
  * The help affordance that sits at the right-hand end of a section's tab row.
  *
@@ -105,6 +114,8 @@ export const HELP_CONTENT = {
 const HelpBulb = ({ section, className = '' }) => {
   const [open, setOpen] = useState(false);
   const [openFaq, setOpenFaq] = useState(0);
+  const [glow, setGlow] = useState(false);
+  const [answered, setAnswered] = useState(() => Boolean(readOpened()[section]));
   const content = HELP_CONTENT[section];
 
   useEffect(() => {
@@ -114,15 +125,55 @@ const HelpBulb = ({ section, className = '' }) => {
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
+  // A grey bulb in a corner is invisible, so it lights up on its own every so
+  // often. Random gaps rather than a fixed interval: a pulse that arrives on
+  // the beat starts to read as a broken element instead of an offer of help.
+  // It waits a while before the first one so it never fires mid page-load, and
+  // it goes quiet permanently once this section's help has been opened.
+  useEffect(() => {
+    if (!content || answered || open) return undefined;
+    let cancelled = false;
+    let pulse;
+    let rest;
+    const schedule = (delay) => {
+      rest = setTimeout(() => {
+        if (cancelled) return;
+        setGlow(true);
+        pulse = setTimeout(() => {
+          if (cancelled) return;
+          setGlow(false);
+          schedule(45000 + Math.random() * 45000);
+        }, 2600);
+      }, delay);
+    };
+    schedule(9000 + Math.random() * 11000);
+    return () => { cancelled = true; clearTimeout(pulse); clearTimeout(rest); };
+  }, [content, answered, open]);
+
+  const openHelp = () => {
+    setOpen(true);
+    setGlow(false);
+    if (answered) return;
+    setAnswered(true);
+    try {
+      localStorage.setItem(OPENED_KEY, JSON.stringify({ ...readOpened(), [section]: true }));
+    } catch {
+      // Private window or storage off. The bulb just keeps offering itself,
+      // which is the harmless failure of the two.
+    }
+  };
+
   if (!content) return null;
 
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={openHelp}
         title="How this works"
         aria-label="How this works"
-        className={`flex-shrink-0 w-9 h-9 grid place-items-center rounded-lg text-gray-400 hover:text-amber-500 hover:bg-amber-50 transition-colors ${className}`}
+        className={`flex-shrink-0 w-9 h-9 grid place-items-center rounded-lg transition-colors cursor-pointer hover:text-amber-500 hover:bg-amber-50 ${
+          glow ? 'animate-bulb-glow text-amber-500' : 'text-gray-400'
+        } ${className}`}
       >
         <Lightbulb size={18} />
       </button>

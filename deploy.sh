@@ -22,7 +22,8 @@ else
   REQUIRED_VARS="DATABASE_URL JWT_SECRET FIREBASE_JSON_PATH R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY CASHFREE_APP_ID CASHFREE_SECRET_KEY BACKEND_URL"
   for VAR in $REQUIRED_VARS; do
     VALUE=$(grep -E "^${VAR}=" .env.production | cut -d'=' -f2-)
-    if [ -z "$VALUE" ] || [ "$VALUE" = "your_${VAR,,}_here" ]; then
+    PLACEHOLDER="your_$(printf '%s' "$VAR" | tr '[:upper:]' '[:lower:]')_here"
+    if [ -z "$VALUE" ] || [ "$VALUE" = "$PLACEHOLDER" ]; then
       echo "  ❌ $VAR is not set in .env.production"
       ERRORS=$((ERRORS+1))
     else
@@ -112,6 +113,43 @@ run_migration "lab_order_invoice_line" "ALTER TABLE lab_orders ADD COLUMN IF NOT
 # patients are never blank.
 run_migration "patient_registered_on" "ALTER TABLE patients ADD COLUMN IF NOT EXISTS registered_on DATE"
 run_migration "patient_registered_on_backfill" "UPDATE patients SET registered_on = created_at::date WHERE registered_on IS NULL"
+
+# Standing allergies on the patient. Case papers already carry a per-visit
+# allergies list; this is the fact about the person that the patient file's
+# safety banner reads. No backfill: an empty allergy field means "not asked",
+# and guessing one from historical case papers would be inventing a clinical
+# record.
+run_migration "patient_allergies" "ALTER TABLE patients ADD COLUMN IF NOT EXISTS allergies TEXT"
+
+# Invoice drawer rebuild.
+#
+# tooth_number: which tooth a billed line is for. Both PDF templates already read
+# this field and have been printing an empty column on every invoice.
+run_migration "line_item_tooth" "ALTER TABLE invoice_line_items ADD COLUMN IF NOT EXISTS tooth_number VARCHAR"
+
+# reference / recorded_by: the transaction a part payment arrived on, and who
+# took it. invoices.utr holds one reference for the whole bill, which cannot
+# describe a bill settled over three instalments on three different rails.
+run_migration "payment_reference" "ALTER TABLE invoice_payments ADD COLUMN IF NOT EXISTS reference VARCHAR"
+run_migration "payment_recorded_by" "ALTER TABLE invoice_payments ADD COLUMN IF NOT EXISTS recorded_by INTEGER REFERENCES users(id)"
+
+# Imaging and documents, rebuilt as real tabs.
+#
+# tooth_area: which tooth or region a film covers. Free text — an OPG covers
+# every tooth and a bitewing covers a pair, so a numeric column would be wrong
+# for most of them.
+run_migration "xray_tooth_area" "ALTER TABLE xray_images ADD COLUMN IF NOT EXISTS tooth_area VARCHAR"
+
+# category: what an uploaded file is. Consents, prescriptions, invoices and
+# reports live in their own tables and need no column; this is for hand uploads.
+run_migration "document_category" "ALTER TABLE patient_documents ADD COLUMN IF NOT EXISTS category VARCHAR"
+
+# Image types move to the words clinics actually use. Done as data rather than
+# a display-time map so the database, the screen and any export agree on one
+# name. Idempotent: re-running matches nothing the second time.
+run_migration "xray_type_iopa" "UPDATE xray_images SET image_type = 'IOPA' WHERE lower(image_type) IN ('periapical', 'iopa')"
+run_migration "xray_type_opg"  "UPDATE xray_images SET image_type = 'OPG' WHERE lower(image_type) IN ('panoramic', 'opg')"
+run_migration "xray_type_bitewing" "UPDATE xray_images SET image_type = 'Bitewing' WHERE lower(image_type) = 'bitewing'"
 
 # Discounts granted after an invoice was issued (append-only, one row each).
 run_migration "invoice_discounts" "CREATE TABLE IF NOT EXISTS invoice_discounts (id SERIAL PRIMARY KEY, invoice_id INTEGER NOT NULL REFERENCES invoices(id), clinic_id INTEGER NOT NULL REFERENCES clinics(id), value DOUBLE PRECISION NOT NULL DEFAULT 0, discount_type VARCHAR NOT NULL DEFAULT 'amount', amount DOUBLE PRECISION NOT NULL DEFAULT 0, reason VARCHAR NOT NULL, applied_by INTEGER REFERENCES users(id), applied_at TIMESTAMP DEFAULT NOW())"
@@ -264,30 +302,33 @@ run_migration "appointment_reminder_2h_prefs" "DO \$do\$ BEGIN IF NOT EXISTS (SE
 echo ""
 echo "▶ Running schema migration check against prod DB..."
 
-declare -A REQUIRED_COLS=(
-  ["clinics"]="id clinic_code name address phone email gst_number specialization subscription_plan status razorpay_customer_id cashfree_customer_id logo_url invoice_template primary_color number_of_chairs timings created_at updated_at synced_at sync_status referred_by_code clinic_label parent_clinic_id country currency_code currency_symbol timezone tax_label tax_id master_password_hash master_password_updated_at master_password_attempts master_password_locked_until case_paper_type"
-  ["users"]="id email name first_name last_name role is_active permissions created_at updated_at email_report_unsubscribed"
-  ["user_clinics"]="user_id clinic_id role is_active created_at"
-  ["patients"]="id clinic_id name phone date_of_birth registered_on created_at updated_at"
-  ["appointments"]="id clinic_id patient_name appointment_date start_time end_time status created_at updated_at"
-  ["subscriptions"]="id plan_name status current_start current_end is_trial trial_ends_at"
-)
-
 SCHEMA_OK=true
-for table in "${!REQUIRED_COLS[@]}"; do
+while IFS='|' read -r table required_cols; do
+  [ -z "$table" ] && continue
   ACTUAL=$(docker exec molarplus-db-1 psql -U postgres -d molarplus -tA -c \
     "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='$table'" 2>/dev/null)
   if [ -z "$ACTUAL" ]; then
     echo "  ❌ Schema check could not query table '$table' — DB unreachable"
     exit 1
   fi
-  for col in ${REQUIRED_COLS[$table]}; do
+  for col in $required_cols; do
     if ! echo "$ACTUAL" | grep -qx "$col"; then
       echo "  ❌ $table is missing column: $col"
       SCHEMA_OK=false
     fi
   done
-done
+done <<'REQUIRED_COLUMNS'
+clinics|id clinic_code name address phone email gst_number specialization subscription_plan status razorpay_customer_id cashfree_customer_id logo_url invoice_template primary_color number_of_chairs timings created_at updated_at synced_at sync_status referred_by_code clinic_label parent_clinic_id country currency_code currency_symbol timezone tax_label tax_id master_password_hash master_password_updated_at master_password_attempts master_password_locked_until case_paper_type
+users|id email name first_name last_name role is_active permissions created_at updated_at email_report_unsubscribed
+user_clinics|user_id clinic_id role is_active created_at
+patients|id clinic_id name phone date_of_birth registered_on allergies created_at updated_at
+xray_images|id clinic_id patient_id file_path image_type tooth_area created_at
+patient_documents|id clinic_id patient_id file_name file_path category created_at
+invoice_line_items|id invoice_id description tooth_number quantity unit_price amount
+invoice_payments|id invoice_id amount paid_on method reference recorded_by
+appointments|id clinic_id patient_name appointment_date start_time end_time status created_at updated_at
+subscriptions|id plan_name status current_start current_end is_trial trial_ends_at
+REQUIRED_COLUMNS
 
 if [ "$SCHEMA_OK" = true ]; then
   echo "  ✅ Schema check passed — all required columns exist"

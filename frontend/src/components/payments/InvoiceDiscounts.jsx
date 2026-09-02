@@ -3,8 +3,7 @@ import React, { useState } from "react";
 import { Trash2, TicketPercent } from "lucide-react";
 import { getCurrencySymbol } from "../../utils/currency";
 import { formatDateTime } from "../../utils/datetime";
-import GearLoader from "../GearLoader";
-
+import Spinner from "../common/Spinner";
 /**
  * Discounts granted after an invoice was issued.
  *
@@ -86,23 +85,18 @@ const InvoiceDiscounts = ({ invoice, onAdd, onRemove }) => {
   };
 
   return (
-    <div className="mt-8">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <TicketPercent size={18} className="text-amber-600" />
-          <h3 className="text-lg font-semibold text-gray-900">Discounts after issue</h3>
-        </div>
-        {!adding && (
-          <button
-            onClick={() => setAdding(true)}
-            disabled={outstanding <= 0}
-            title={outstanding <= 0 ? "Nothing left to discount — this invoice is fully settled." : undefined}
-            className="px-4 py-2 bg-white border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 transition text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            + Add discount
-          </button>
-        )}
-      </div>
+    <div>
+      {!adding && (
+        <button
+          onClick={() => setAdding(true)}
+          disabled={outstanding <= 0}
+          title={outstanding <= 0 ? "Nothing left to discount — this invoice is fully settled." : undefined}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-[12px] font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <TicketPercent size={13} className="text-gray-500" />
+          Add discount
+        </button>
+      )}
 
       {adding && (
         <form
@@ -177,7 +171,7 @@ const InvoiceDiscounts = ({ invoice, onAdd, onRemove }) => {
                 disabled={saving || exceedsDue}
                 className="px-4 py-2 bg-[#2a276e] text-white rounded-lg text-sm font-semibold hover:bg-[#1a1548] transition disabled:opacity-50 flex items-center gap-2"
               >
-                {saving && <GearLoader size="w-4 h-4" />}
+                {saving && <Spinner />}
                 Apply discount
               </button>
             </div>
@@ -187,13 +181,7 @@ const InvoiceDiscounts = ({ invoice, onAdd, onRemove }) => {
         </form>
       )}
 
-      {discounts.length === 0 ? (
-        !adding && (
-          <p className="text-sm text-gray-500 bg-gray-50 border border-dashed border-gray-200 rounded-lg px-4 py-3">
-            No discount has been given on this invoice since it was issued.
-          </p>
-        )
-      ) : (
+      {discounts.length > 0 && (
         <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 overflow-hidden">
           {discounts.map((d) => (
             <div key={d.id} className="flex items-start justify-between gap-3 px-4 py-3 bg-white">
@@ -216,7 +204,7 @@ const InvoiceDiscounts = ({ invoice, onAdd, onRemove }) => {
                 title="Remove this discount"
                 className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition flex-shrink-0 disabled:opacity-40"
               >
-                {removingId === d.id ? <GearLoader size="w-4 h-4" /> : <Trash2 size={15} />}
+                {removingId === d.id ? <Spinner /> : <Trash2 size={15} />}
               </button>
             </div>
           ))}

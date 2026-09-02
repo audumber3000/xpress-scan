@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, ArrowRight, X } from 'lucide-react';
-import { FaWhatsapp } from 'react-icons/fa6';
+import WhatsAppIcon from '../common/WhatsAppIcon';
 import { useAuth } from '../../contexts/AuthContext';
 import { SUPPORT_PHONE_RAW } from '../../constants/support';
 
@@ -106,7 +106,7 @@ const PlanBlockedModal = () => {
             rel="noopener noreferrer"
             className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 px-5 py-3 min-h-[3rem] text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
           >
-            <FaWhatsapp size={16} className="text-[#25D366]" /> Message support on WhatsApp
+            <WhatsAppIcon size={16} className="text-[#25D366]" /> Message support on WhatsApp
           </a>
         </div>
       </div>

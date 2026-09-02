@@ -469,7 +469,17 @@ const Header = ({ onOpenMobileSidebar }) => {
   };
 
   return (
-    <header className="bg-white border-b border-gray-200 h-14 flex items-center justify-between px-4 md:px-6 sticky top-0 z-30 shadow-sm">
+    /* z-40, above the page. The section screens dock their own tab strip at
+       sticky z-30, and this header used to sit at z-30 too — equal z-index, so
+       DOM order decided it, and <main> comes after <header>. Every dropdown
+       hanging off this bar (profile, clinic switcher, support, search) is
+       positioned inside it, so they inherit its stacking context and could not
+       climb out. They rendered behind the page's tab strip.
+
+       The layers above this, for anything added later: sidebar drawer 45-50,
+       inline popovers (FilterPanel, MoreMenu) 50, notifications 60-70, help
+       drawer 80, global search 100. */
+    <header className="bg-white border-b border-gray-200 h-14 flex items-center justify-between px-4 md:px-6 sticky top-0 z-40 shadow-sm">
       {/* Centered command-palette search (opens from the search icon or ⌘K) */}
       <GlobalSearchModal open={showSearch} onClose={() => setShowSearch(false)} />
 

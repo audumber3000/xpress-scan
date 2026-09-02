@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import { useHeader } from "../contexts/HeaderContext";
 import { notify } from '../utils/notify';
-import { Package, Pill, Building2, Activity, Wallet, Layers, Edit2, Trash2, Search, Plus, Upload } from "lucide-react";
+import { Package, Pill, Building2, Activity, Wallet, Layers, Edit2, Trash2, Search, Plus, Upload, Columns3 } from "lucide-react";
 import InventoryAlerts from "../components/vendors/InventoryAlerts";
 import InventoryTable from "../components/vendors/InventoryTable";
 import MedicationTable from "../components/vendors/MedicationTable";
@@ -21,8 +21,33 @@ import PayablesTable from "../components/vendors/PayablesTable";
 import HelpBulb from "../components/common/HelpBulb";
 import KpiDetailDrawer from "../components/common/KpiDetailDrawer";
 import { useBreakpoint } from "../utils/useBreakpoint";
+import useDockedHeader from "../utils/useDockedHeader";
+import MoreMenu from "../components/common/MoreMenu";
+import useColumnWidths, { resetColumnWidths } from "../utils/useColumnWidths";
+import { ColGroup, ResizableHead } from "../components/common/ColumnResizer";
 
-const VENDORS_PAGE_SIZE = 10;
+// Matches the other list pages now that the table gets the whole window.
+const VENDORS_PAGE_SIZE = 25;
+
+// The vendors table lives on this page rather than in a child component, so it
+// carries its own spec. The stock, medication and activity tables carry theirs.
+const VENDOR_TABLE_COLUMNS = [
+    { key: 'vendor',   label: 'Vendor Details', width: 30, min: 180 },
+    { key: 'category', label: 'Category',       width: 16, min: 110 },
+    { key: 'phone',    label: 'Phone',          width: 18, min: 120 },
+    { key: 'email',    label: 'Email',          width: 26, min: 150 },
+    { key: 'actions',  label: 'Actions',        width: 10, min: 88, align: 'right' },
+];
+
+// Which saved layout the More menu's reset should clear, per tab. The three
+// stock tables own their widths inside their own components; a named reset
+// reaches them without threading a callback back up.
+const COLUMN_KEY_BY_TAB = {
+    stock: 'inventory.stock',
+    medications: 'inventory.medications',
+    ledger: 'inventory.activity',
+    vendors: 'inventory.vendors',
+};
 
 const Vendors = () => {
     const { setTitle } = useHeader();
@@ -34,6 +59,12 @@ const Vendors = () => {
     const [loading, setLoading] = useState(true);
 
     const [activeTab, setActiveTab] = useState('stock');  // stock | medications | ledger | vendors
+    // The page scrolls as one and the tab strip and filter bar dock at the top.
+    const { tabsRef, filtersRef, offsets } = useDockedHeader();
+    const {
+        tableRef: vendorTableRef, widths: vendorWidths,
+        startResize: startVendorResize, reset: resetVendorColumns,
+    } = useColumnWidths('inventory.vendors', VENDOR_TABLE_COLUMNS);
     const [invSummary, setInvSummary] = useState(null);
     const [selectedKpi, setSelectedKpi] = useState(null);
     const breakpoint = useBreakpoint();
@@ -218,26 +249,31 @@ const Vendors = () => {
     const setupGap = inventorySetupGap(invSummary);
     const addBtn = addButton();
 
+    // min-h-full, not min-h-screen: <main> is already a header shorter than
+    // the viewport, so a screen-tall page overflowed by that much. The top
+    // padding moved onto the tab strip, which paints over it once docked.
     return (
-        <div className="p-8 max-w-[1600px] mx-auto min-h-screen bg-[#fafafa]">
+        <div className="px-8 pb-8 max-w-[1600px] mx-auto min-h-full bg-[#fafafa]">
             {/* Tabs */}
-            <div className="flex items-end justify-between gap-3 border-b border-gray-200 mb-6">
-                <div className="flex gap-8 overflow-x-auto">
-                    {TABS.map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => { setActiveTab(tab.id); setSearchTerm(''); setFilterCategory(''); setFilterStockStatus(''); }}
-                            className={`pb-4 flex items-center gap-2 text-sm font-semibold transition-all whitespace-nowrap border-b-2 relative top-[1px] ${
-                                activeTab === tab.id ? 'border-[#2a276e] text-[#2a276e]' : 'border-transparent text-gray-500 hover:text-gray-700'
-                            }`}
-                        >
-                            <tab.icon size={18} />
-                            {tab.label}
-                        </button>
-                    ))}
+            <div ref={tabsRef} className="sticky top-0 z-30 bg-[#fafafa] pt-8 pb-6">
+                <div className="flex items-end justify-between gap-3 border-b border-gray-200">
+                    <div className="flex gap-8 overflow-x-auto">
+                        {TABS.map(tab => (
+                            <button
+                                key={tab.id}
+                                onClick={() => { setActiveTab(tab.id); setSearchTerm(''); setFilterCategory(''); setFilterStockStatus(''); }}
+                                className={`pb-4 flex items-center gap-2 text-sm font-semibold transition-all whitespace-nowrap border-b-2 relative top-[1px] ${
+                                    activeTab === tab.id ? 'border-[#2a276e] text-[#2a276e]' : 'border-transparent text-gray-500 hover:text-gray-700'
+                                }`}
+                            >
+                                <tab.icon size={18} />
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
+                    {/* Rightmost in the tab strip, on every section. */}
+                    <HelpBulb section="inventory" className="mb-2" />
                 </div>
-                {/* Rightmost in the tab strip, on every section. */}
-                <HelpBulb section="inventory" className="mb-2" />
             </div>
 
             {/* KPI cards. Shown on the two tabs that are about what's on the
@@ -259,7 +295,11 @@ const Vendors = () => {
 
             {/* Search & filters */}
             {showsFilters && (
-                <div className="flex flex-col md:flex-row items-center justify-between gap-4 pb-4">
+                <div
+                    ref={filtersRef}
+                    style={{ top: offsets.filters }}
+                    className="flex flex-col md:flex-row items-center justify-between gap-4 pb-4 sticky z-20 bg-[#fafafa]"
+                >
                     <div className="flex items-center gap-3 w-full md:w-auto flex-1">
                         <div className="w-full md:max-w-sm relative">
                             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -298,14 +338,27 @@ const Vendors = () => {
                                 onClick={() => setAlertsOpen(true)}
                             />
                         )}
-                        {activeTab === 'medications' && (
-                            <button
-                                onClick={() => setShowMedImport(true)}
-                                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-50 transition-colors whitespace-nowrap"
-                            >
-                                <Upload size={16} className="text-[#2a276e]" /> Import
-                            </button>
-                        )}
+                        {/* The alerts capsule stays outside: it is a count of
+                            things going wrong, and a warning filed inside a menu
+                            is a warning nobody sees. */}
+                        <MoreMenu
+                            items={[
+                                activeTab === 'medications' && {
+                                    key: 'import',
+                                    label: 'Import medications',
+                                    icon: <Upload size={15} />,
+                                    hint: 'From a spreadsheet, with a preview first',
+                                    onClick: () => setShowMedImport(true),
+                                },
+                                {
+                                    key: 'reset-columns',
+                                    label: 'Reset column widths',
+                                    icon: <Columns3 size={15} />,
+                                    hint: 'Back to the default layout',
+                                    onClick: () => resetColumnWidths(COLUMN_KEY_BY_TAB[activeTab]),
+                                },
+                            ]}
+                        />
                         {addBtn && (
                             <button
                                 onClick={addBtn.onClick}
@@ -323,15 +376,17 @@ const Vendors = () => {
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2a276e]"></div>
                 </div>
             ) : (
-                <div className="h-[calc(100vh-250px)]">
-                    <div className="flex flex-col h-full min-w-0">
+                <div>
+                    {/* The magic viewport height is gone. The page scrolls, so
+                        the table simply runs as long as its rows. */}
+                    <div className="flex flex-col min-w-0">
                         {/* Below 768px the stock tables have too many columns to
                             shrink honestly, so each item becomes a stacked card.
                             Tapping one opens the same edit drawer the table's
                             edit button does. */}
                         {activeTab === 'stock' && (
                             breakpoint === 'mobile' ? (
-                                <div className="bg-white rounded-xl border border-gray-200 overflow-y-auto">
+                                <div className="bg-white rounded-xl border border-gray-200">
                                     <StockCardList
                                         items={filteredInventory}
                                         kind="stock"
@@ -340,6 +395,7 @@ const Vendors = () => {
                                 </div>
                             ) : (
                                 <InventoryTable
+                                    headerOffset={offsets.thead}
                                     inventory={filteredInventory}
                                     onEditItem={(item) => setStockDrawer({ open: true, item })}
                                     onDeleteItem={(id) => deleteItem('inventory', id, 'stock item')}
@@ -348,7 +404,7 @@ const Vendors = () => {
                         )}
                         {activeTab === 'medications' && (
                             breakpoint === 'mobile' ? (
-                                <div className="bg-white rounded-xl border border-gray-200 overflow-y-auto">
+                                <div className="bg-white rounded-xl border border-gray-200">
                                     <StockCardList
                                         items={filteredMedications}
                                         kind="medications"
@@ -357,6 +413,7 @@ const Vendors = () => {
                                 </div>
                             ) : (
                                 <MedicationTable
+                                    headerOffset={offsets.thead}
                                     medications={filteredMedications}
                                     onEditItem={(item) => setMedDrawer({ open: true, item })}
                                     onDeleteItem={(id) => deleteItem('medication-stock', id, 'medication')}
@@ -364,7 +421,7 @@ const Vendors = () => {
                             )
                         )}
                         {activeTab === 'payables' && (
-                            <div className="overflow-y-auto h-full pr-1">
+                            <div className="pr-1">
                                 {/* Settling here writes an Expense, so the Activity
                                     tab and the dashboard pick it up with no extra
                                     wiring. fetchData refreshes the ledger totals. */}
@@ -372,21 +429,19 @@ const Vendors = () => {
                             </div>
                         )}
                         {activeTab === 'ledger' && (
-                            <InventoryLedger inventoryItems={inventory} onStockChanged={fetchData} />
+                            <InventoryLedger headerOffset={offsets.thead} inventoryItems={inventory} onStockChanged={fetchData} />
                         )}
                         {activeTab === 'vendors' && (
-                            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden h-full flex flex-col">
-                                <div className="flex-1 overflow-x-auto overflow-y-auto">
-                                    <table className="w-full divide-y divide-gray-200">
-                                        <thead className="bg-[#f8fafc] sticky top-0 z-10">
-                                            <tr>
-                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Vendor Details</th>
-                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Category</th>
-                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
-                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</th>
-                                                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
-                                            </tr>
-                                        </thead>
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col">
+                                <div>
+                                    <table ref={vendorTableRef} className="w-full min-w-[820px] table-fixed mp-table-fixed divide-y divide-gray-200">
+                                        <ColGroup widths={vendorWidths} />
+                                        <ResizableHead
+                                            columns={VENDOR_TABLE_COLUMNS}
+                                            startResize={startVendorResize}
+                                            onReset={resetVendorColumns}
+                                            style={{ top: offsets.thead }}
+                                        />
                                         <tbody className="bg-white divide-y divide-gray-100">
                                             {filteredVendors.length === 0 ? (
                                                 <tr>

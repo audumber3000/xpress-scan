@@ -1,8 +1,13 @@
 import React from "react";
+import Toggle from "../common/Toggle";
 
 /**
- * Lets the user enter EITHER an age OR a date of birth, toggled with a small
- * segmented control. When a DOB is entered we show the derived age inline.
+ * Lets the user enter EITHER an age OR a date of birth, switched with a real
+ * toggle. When a DOB is entered we show the derived age inline.
+ *
+ * It used to be two 11px segmented buttons. Nobody read them as a control, and
+ * receptionists who wanted a date of birth typed the year into the age box
+ * instead. A switch reads as a switch.
  *
  * Controlled via the parent's `age` and `dob` values; emits changes through
  * `onAgeChange` / `onDobChange`. `mode` + `onModeChange` control which input
@@ -40,26 +45,13 @@ const AgeOrDobField = ({
         <label className="block text-sm font-medium text-gray-700">
           {mode === "dob" ? "Date of Birth" : "Age"} <span className="text-red-500">*</span>
         </label>
-        <div className="inline-flex rounded-md border border-gray-200 overflow-hidden text-xs">
-          <button
-            type="button"
-            onClick={() => onModeChange("age")}
-            className={`px-2.5 py-1 font-medium transition-colors ${
-              mode === "age" ? "bg-[#2a276e] text-white" : "bg-white text-gray-500 hover:bg-gray-50"
-            }`}
-          >
-            Age
-          </button>
-          <button
-            type="button"
-            onClick={() => onModeChange("dob")}
-            className={`px-2.5 py-1 font-medium transition-colors ${
-              mode === "dob" ? "bg-[#2a276e] text-white" : "bg-white text-gray-500 hover:bg-gray-50"
-            }`}
-          >
-            DOB
-          </button>
-        </div>
+        {/* Labelled by what turning it on does, not by the state it is in, so
+            the switch never has to be read backwards. */}
+        <Toggle
+          checked={mode === "dob"}
+          onChange={(on) => onModeChange(on ? "dob" : "age")}
+          label="Use date of birth"
+        />
       </div>
 
       {mode === "dob" ? (

@@ -1,29 +1,33 @@
 import React from "react";
 import { Phone, Pencil, Printer, Trash2 } from "lucide-react";
-import { FaWhatsapp } from "react-icons/fa6";
+import MoreMenu from "../common/MoreMenu";
+import WhatsAppIcon from "../common/WhatsAppIcon";
 import { openWhatsApp } from "../../utils/whatsapp";
 import { notify } from "../../utils/notify";
 
 /**
- * Patient-level actions, as circular icons in the file header.
+ * Patient-level actions in the file header.
  *
- * Matches the mobile app's patient screen (PatientDetailsScreen.tsx), where the
- * same four live beside the name. These replaced a "Save Clinical Records"
- * button that only ever re-POSTed unchanged data.
+ * Labelled buttons, not bare icon circles. A phone glyph in a circle is a
+ * guess until you hover it, and these four are the actions a receptionist uses
+ * most on this screen — they can afford the words.
  *
- * They are patient-level, not tab-level, so unlike the button they replaced
- * these show on every tab. The whole header is already hidden while a case
- * paper is open, which is correct: that is clinical mode, not admin mode.
+ * Flat: border and fill only, no shadow anywhere. The lifted `shadow-sm`
+ * treatment made More float a layer above the three buttons beside it, which
+ * read as a different kind of control rather than the same row.
+ *
+ * Print and Delete live behind More. That keeps a destructive action off the
+ * top row of a clinical record, one click away from Edit.
  */
-const ActionButton = ({ label, onClick, tone = "brand", children }) => (
+const Button = ({ onClick, label, children, tone = "ghost" }) => (
   <button
+    type="button"
     onClick={onClick}
-    title={label}
     aria-label={label}
-    className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors active:scale-95 ${
-      tone === "danger"
-        ? "bg-red-50 text-red-600 hover:bg-red-100"
-        : "bg-[#2a276e]/10 text-[#2a276e] hover:bg-[#2a276e]/20"
+    className={`inline-flex items-center gap-2 h-10 px-3.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2a276e] ${
+      tone === "primary"
+        ? "bg-[#2a276e] text-white hover:bg-[#1a1548]"
+        : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300"
     }`}
   >
     {children}
@@ -40,26 +44,46 @@ const PatientHeaderActions = ({ patient, onEdit, onPrint, onDelete }) => {
   };
 
   return (
-    <div className="flex items-center gap-2 flex-shrink-0">
+    <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
       {phone && (
         <>
-          <ActionButton label="Call patient" onClick={() => { window.location.href = `tel:${phone}`; }}>
-            <Phone size={17} />
-          </ActionButton>
-          <ActionButton label="Message on WhatsApp" onClick={handleWhatsApp}>
-            <FaWhatsapp size={18} />
-          </ActionButton>
+          <Button onClick={() => { window.location.href = `tel:${phone}`; }} label="Call patient">
+            <Phone size={16} className="text-[#2a276e]" />
+            <span className="hidden sm:inline">Call</span>
+          </Button>
+          {/* Brand green on the mark, because that is what makes it read as
+              WhatsApp rather than as a generic chat bubble. */}
+          <Button onClick={handleWhatsApp} label="Message on WhatsApp">
+            <WhatsAppIcon size={17} brand />
+            <span className="hidden sm:inline">WhatsApp</span>
+          </Button>
         </>
       )}
-      <ActionButton label="Edit patient" onClick={onEdit}>
-        <Pencil size={16} />
-      </ActionButton>
-      <ActionButton label="Print patient file" onClick={onPrint}>
-        <Printer size={16} />
-      </ActionButton>
-      <ActionButton label="Delete patient" tone="danger" onClick={onDelete}>
-        <Trash2 size={16} />
-      </ActionButton>
+
+      <Button onClick={onEdit} label="Edit patient" tone="primary">
+        <Pencil size={15} />
+        <span className="hidden sm:inline">Edit Patient</span>
+      </Button>
+
+      <MoreMenu
+        items={[
+          {
+            key: 'print',
+            label: 'Print patient file',
+            icon: <Printer size={15} />,
+            hint: 'Everything on record, as one document',
+            onClick: onPrint,
+          },
+          {
+            key: 'delete',
+            label: 'Delete patient',
+            icon: <Trash2 size={15} />,
+            hint: 'Removes the record and its history',
+            danger: true,
+            onClick: onDelete,
+          },
+        ]}
+      />
     </div>
   );
 };

@@ -1,6 +1,5 @@
 import React from 'react';
-import GearLoader from '../GearLoader';
-
+import Spinner from "../common/Spinner";
 /**
  * What is happening right now, said out loud, while somebody signs in.
  *
@@ -70,7 +69,7 @@ const SignInStatus = ({ phase }) => {
       className="flex items-start gap-3 rounded-lg border border-[#c9c7e4] bg-[#f1f0fa] px-4 py-3"
     >
       <span className="mt-0.5 shrink-0 text-[#2a276e]">
-        <GearLoader size="w-4 h-4" />
+        <Spinner />
       </span>
       <div className="min-w-0">
         <p className="text-sm font-semibold text-[#2a276e]">{state.message}</p>

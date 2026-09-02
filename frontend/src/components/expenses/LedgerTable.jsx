@@ -142,4 +142,15 @@ export const LedgerCardList = ({ rows, onOpenExpense, onOpenInvoice }) => (
   </div>
 );
 
-export const LEDGER_COLUMNS = ['Date', 'Entity', 'Description', 'Category', 'In / Out', 'Mode', 'Details'];
+// Column layout for the resizable table. `width` is a percentage of the table
+// and the set must sum to 100; `min` is the pixel floor a drag can take a column
+// down to. Changing this list invalidates saved layouts, which is handled.
+export const LEDGER_COLUMNS = [
+  { key: 'date',        label: 'Date',        width: 12, min: 96 },
+  { key: 'entity',      label: 'Entity',      width: 18, min: 130 },
+  { key: 'description', label: 'Description', width: 24, min: 150 },
+  { key: 'category',    label: 'Category',    width: 14, min: 100 },
+  { key: 'flow',        label: 'In / Out',    width: 13, min: 100, align: 'right' },
+  { key: 'mode',        label: 'Mode',        width: 10, min: 84 },
+  { key: 'details',     label: 'Details',     width: 9,  min: 84, align: 'right' },
+];

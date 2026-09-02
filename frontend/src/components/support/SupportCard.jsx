@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Phone, Mail, Clock, X } from 'lucide-react';
-import { FaWhatsapp } from 'react-icons/fa6';
+import WhatsAppIcon from '../common/WhatsAppIcon';
 import {
   SUPPORT_AGENT, SUPPORT_EMAIL, SUPPORT_PHONE,
   supportGreeting, supportHoursLabel, supportResponseTime, supportWhatsAppLink,
@@ -118,7 +118,7 @@ const SupportCard = ({ user, online, onClose }) => (
         onClick={onClose}
         className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#25D366] hover:bg-[#1da851] text-white text-[15px] font-bold transition-colors"
       >
-        <FaWhatsapp size={19} /> Chat with {SUPPORT_AGENT.name.split(' ')[0]}
+        <WhatsAppIcon size={19} /> Chat with {SUPPORT_AGENT.name.split(' ')[0]}
       </a>
 
       {/* Call and email are the fallbacks, so they are quieter than the chat

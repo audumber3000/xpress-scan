@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import Spinner from "../../components/common/Spinner";
 import {
   Tag, Plus, Pencil, Trash2, Loader2, X, Percent, BadgeIndianRupee, Calendar,
 } from 'lucide-react';
@@ -49,6 +50,8 @@ const Offers = () => {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null); // offer being edited, or null for new
+  // The offer being deleted, so only that card's button reports it.
+  const [deletingId, setDeletingId] = useState(null);
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
 
@@ -125,13 +128,17 @@ const Offers = () => {
   };
 
   const remove = async (o) => {
+    if (deletingId) return;
     if (!window.confirm(`Delete the offer "${o.name}"? This can't be undone.`)) return;
+    setDeletingId(o.id);
     try {
       await api.delete(`/offers/${o.id}`);
       setOffers((prev) => prev.filter((x) => x.id !== o.id));
       notify.done('Offer deleted');
     } catch (e) {
       notify.problem('Could not delete the offer');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -199,8 +206,13 @@ const Offers = () => {
                 <button onClick={() => toggleActive(o)} className="px-2.5 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
                   {o.is_active ? 'Deactivate' : 'Activate'}
                 </button>
-                <button onClick={() => remove(o)} className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-red-500 border border-red-100 rounded-lg hover:bg-red-50">
-                  <Trash2 size={12} /> Delete
+                <button
+                  onClick={() => remove(o)}
+                  disabled={deletingId === o.id}
+                  className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-red-500 border border-red-100 rounded-lg hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {deletingId === o.id ? <Spinner className="w-3 h-3" /> : <Trash2 size={12} />}
+                  {deletingId === o.id ? 'Deleting' : 'Delete'}
                 </button>
               </div>
             </div>

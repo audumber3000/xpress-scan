@@ -258,6 +258,13 @@ class Patient(Base):
     # anomaly.
     treatment_type = Column(String, nullable=True)
     blood_group = Column(String, nullable=True)
+    # Standing allergies, on the patient rather than the visit.
+    #
+    # CasePaper carries its own `allergies` list, but that is a snapshot of what
+    # was asked on one day. A penicillin allergy is a fact about the person, and
+    # the patient file's safety banner needs somewhere it can be read from, and
+    # corrected, without editing a historical case paper.
+    allergies = Column(Text, nullable=True)
     patient_history = Column(Text, nullable=True)
     display_id = Column(String, nullable=True, index=True)
     notes = Column(Text)
@@ -730,7 +737,19 @@ class InvoicePayment(Base):
     amount = Column(Float, nullable=False, default=0.0)
     paid_on = Column(Date, nullable=True)          # date the payment was received
     method = Column(String, nullable=True)         # Cash, UPI, Card, ...
+    # The transaction the money arrived on: a UPI reference, a card auth code, a
+    # cheque number. Invoice.utr holds one for the bill as a whole, which cannot
+    # describe a bill settled over three instalments on three different rails.
+    reference = Column(String, nullable=True)
+    # Who took the payment. Distinct from created_at: the audit log knows who
+    # touched the invoice, but a part payment handed to the front desk is its own
+    # event and the person who received it is the one to ask about it.
+    recorded_by = Column(Integer, ForeignKey('users.id'), nullable=True)
     note = Column(String, nullable=True)
+    # Named `recorder`, not `user`: InvoicePayment already sits beside models
+    # whose `user` relationship means something else, and the invoice serialiser
+    # reads this to put a name on the timeline.
+    recorder = relationship("User", foreign_keys=[recorded_by])
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     # ── Receipt for this installment ────────────────────────────────────────
@@ -821,6 +840,12 @@ class InvoiceLineItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     invoice_id = Column(Integer, ForeignKey('invoices.id'), nullable=False)
     description = Column(String, nullable=False)
+    # Which tooth or region this line is for: an FDI number ("46"), an arch, or
+    # blank for anything that is not tooth-specific. Free text rather than an
+    # integer because a scaling covers a whole mouth and a consultation covers
+    # none. Both invoice PDF templates already read this field and have been
+    # printing an empty column on every real bill.
+    tooth_number = Column(String, nullable=True)
     quantity = Column(Float, default=1.0)
     unit_price = Column(Float, nullable=False)
     amount = Column(Float, nullable=False)  # quantity * unit_price
@@ -902,7 +927,15 @@ class XrayImage(Base):
     file_path = Column(String, nullable=False)  # DICOM file path
     file_name = Column(String, nullable=False)
     file_size = Column(Integer, nullable=False)
-    image_type = Column(String, nullable=False)  # 'bitewing', 'panoramic', 'periapical', etc.
+    # Clinic vocabulary, not radiology's: IOPA, OPG, Bitewing, CBCT, Photo,
+    # Scan. The old values ('periapical', 'panoramic') are migrated in
+    # deploy.sh, because a screen and a database calling the same film two
+    # different names is how an export stops matching the app.
+    image_type = Column(String, nullable=False)
+    # Which tooth or region the film covers: a single FDI number ("46"), an
+    # arch ("Lower Arch"), or "Full Mouth". Free text, because an OPG covers
+    # everything and a bitewing covers a pair, and neither fits a tooth column.
+    tooth_area = Column(String, nullable=True)
     capture_date = Column(DateTime, nullable=False)
     brightness = Column(Float, nullable=True)  # Editing metadata
     contrast = Column(Float, nullable=True)
@@ -1112,6 +1145,10 @@ class PatientDocument(Base):
     file_path = Column(String, nullable=False)  # S3 or local path
     file_size = Column(Integer)
     file_type = Column(String)  # pdf, dicom, png, etc.
+    # What kind of paperwork this is: referral, report, estimate, insurance,
+    # other. Consents, prescriptions, invoices and reports are their own tables
+    # and carry their own category; this one is for anything uploaded by hand.
+    category = Column(String, nullable=True)
     uploaded_by = Column(Integer, ForeignKey('users.id'))
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)

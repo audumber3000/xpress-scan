@@ -7,7 +7,7 @@ import { clinicToday, formatDate, formatTime } from "../../utils/datetime";
 import { getCurrencySymbol } from "../../utils/currency";
 import { generatePatientPersona, generateInitialsAvatar } from "../../utils/avatar";
 import ConfirmDialog from "../common/ConfirmDialog";
-import GearLoader from "../GearLoader";
+import Spinner from "../common/Spinner";
 import { SkeletonTableRows } from "../Skeleton";
 import EmptyState from "../common/EmptyState";
 import TrendBadge from "../common/TrendBadge";
@@ -434,7 +434,7 @@ const DailyRegisterTab = ({ onRegisterNew, refreshKey = 0 }) => {
                                 : "text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-30"
                             }`}
                           >
-                            {removingId === e.id ? <GearLoader size="w-4 h-4" /> : <Trash2 size={15} />}
+                            {removingId === e.id ? <Spinner /> : <Trash2 size={15} />}
                           </button>
                         </div>
                       </td>

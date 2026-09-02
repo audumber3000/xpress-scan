@@ -36,6 +36,9 @@ const InvoiceLineItemForm = ({ lineItem, onSave, onCancel }) => {
   const [description, setDescription] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [unitPrice, setUnitPrice] = useState("");
+  // Free text, not a tooth picker. A line is as often "upper right quadrant" or
+  // "full arch" as it is a single FDI number, and a 32-box chart cannot say those.
+  const [toothNumber, setToothNumber] = useState("");
   const [pickedFromCatalogue, setPickedFromCatalogue] = useState(false);
 
   const [open, setOpen] = useState(false);
@@ -72,6 +75,7 @@ const InvoiceLineItemForm = ({ lineItem, onSave, onCancel }) => {
     setDescription(lineItem.description || "");
     setQuantity(String(lineItem.quantity ?? 1));
     setUnitPrice(String(lineItem.unit_price ?? ""));
+    setToothNumber(lineItem.tooth_number || "");
     setItemType("Custom");
   }, [lineItem]);
 
@@ -172,6 +176,7 @@ const InvoiceLineItemForm = ({ lineItem, onSave, onCancel }) => {
     }
     onSave({
       description: description.trim(),
+      tooth_number: toothNumber.trim() || null,
       quantity: qtyNum,
       unit_price: priceNum,
       amount,
@@ -277,6 +282,20 @@ const InvoiceLineItemForm = ({ lineItem, onSave, onCancel }) => {
           )}
         </div>
         <FieldError name="description" />
+      </div>
+
+      <div>
+        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+          Tooth / area <span className="font-medium normal-case tracking-normal text-gray-400">(optional)</span>
+        </label>
+        <input
+          type="text"
+          value={toothNumber}
+          onChange={(e) => setToothNumber(e.target.value)}
+          placeholder="e.g. 26, or upper right quadrant"
+          maxLength={50}
+          className={inputCls("toothNumber")}
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-4">

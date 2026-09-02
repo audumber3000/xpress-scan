@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import Spinner from '../../components/common/Spinner';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useHeader } from '../../contexts/HeaderContext';
 import { api, getPermissionAwareErrorMessage } from '../../utils/api';
@@ -11,9 +12,34 @@ import LabCaseList from '../../components/lab/LabCaseList';
 import HelpBulb from '../../components/common/HelpBulb';
 import KpiDetailDrawer from '../../components/common/KpiDetailDrawer';
 import { useBreakpoint } from '../../utils/useBreakpoint';
+import useDockedHeader from '../../utils/useDockedHeader';
+import useColumnWidths from '../../utils/useColumnWidths';
+import MoreMenu from '../../components/common/MoreMenu';
+import { ColGroup, ResizableHead } from '../../components/common/ColumnResizer';
 import { generatePatientPersona, generateInitialsAvatar } from '../../utils/avatar';
 
-const LAB_PAGE_SIZE = 10;
+// Matches the other list pages. Ten was a page of table and half a page of
+// nothing once the summary cards scroll away.
+const LAB_PAGE_SIZE = 25;
+
+// Column layouts. `width` is a percentage and each set must sum to 100; `min` is
+// the pixel floor a drag can reach.
+const LAB_ORDER_COLUMNS = [
+    { key: 'order',   label: 'Order Details', width: 22, min: 150 },
+    { key: 'patient', label: 'Patient',       width: 18, min: 130 },
+    { key: 'partner', label: 'Lab Partner',   width: 18, min: 130 },
+    { key: 'due',     label: 'Due Date',      width: 16, min: 120 },
+    { key: 'cost',    label: 'Cost',          width: 13, min: 96, align: 'right' },
+    { key: 'status',  label: 'Status',        width: 13, min: 96, align: 'right' },
+];
+
+const LAB_PARTNER_COLUMNS = [
+    { key: 'partner', label: 'Lab Partner', width: 24, min: 150 },
+    { key: 'contact', label: 'Contact',     width: 18, min: 120 },
+    { key: 'email',   label: 'Email',       width: 22, min: 140 },
+    { key: 'address', label: 'Address',     width: 24, min: 150 },
+    { key: 'status',  label: 'Status',      width: 12, min: 96, align: 'right' },
+];
 import { 
     Beaker, 
     Building2, 
@@ -29,7 +55,8 @@ import {
     Globe,
     Calendar,
     ChevronRight,
-    MapPin
+    MapPin,
+    Columns3
 } from 'lucide-react';
 
 const LabHub = () => {
@@ -37,6 +64,15 @@ const LabHub = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const [activeTab, setActiveTab] = useState('orders');
+    const [savingVendor, setSavingVendor] = useState(false);
+    // The page scrolls as one and the tab strip and search bar dock at the top.
+    const { tabsRef, filtersRef, offsets } = useDockedHeader();
+    // One table on screen at a time, so one hook. The key carries the tab so
+    // each keeps its own layout.
+    const tableColumns = activeTab === 'orders' ? LAB_ORDER_COLUMNS : LAB_PARTNER_COLUMNS;
+    const { tableRef, widths, startResize, reset: resetColumns } = useColumnWidths(
+        `lab.${activeTab}`, tableColumns,
+    );
     // Set by the ?order=<id> deep link so the matching row stands out.
     const [highlightOrderId, setHighlightOrderId] = useState(null);
     const [labSummary, setLabSummary] = useState(null);
@@ -93,6 +129,8 @@ const LabHub = () => {
 
     const handleAddVendor = async (e) => {
         e.preventDefault();
+        if (savingVendor) return;
+        setSavingVendor(true);
         try {
             await api.post('/vendors', vendorForm);
             setIsVendorDrawerOpen(false);
@@ -105,6 +143,8 @@ const LabHub = () => {
                 "Failed to add vendor",
                 "You don't have permission to add lab vendors."
             ));
+        } finally {
+            setSavingVendor(false);
         }
     };
 
@@ -196,11 +236,19 @@ const LabHub = () => {
     }, [vendors, searchTerm]);
 
     return (
-        <div className="flex flex-col h-screen bg-gray-50/50">
-            <div className="flex-1 flex flex-col px-6 pt-4 max-w-[1600px] mx-auto w-full overflow-hidden">
+        <div className="flex flex-col min-h-full bg-gray-50/50">
+            {/* No overflow on the way down to the sticky bars, or they dock to
+                this box instead of the window. The top padding moved onto the
+                tab strip so the docked strip paints over it. */}
+            <div className="flex-1 flex flex-col px-6 max-w-[1600px] mx-auto w-full">
 
                 {/* Tabs row with primary action on the right — page title is already in the global header */}
-                <div className="flex justify-between items-end border-b border-gray-200">
+                {/* #fcfdfd is gray-50/50 over white: the colour the page already
+                    shows, but opaque, so rows pass behind the docked strip. */}
+                <div
+                    ref={tabsRef}
+                    className="flex justify-between items-end border-b border-gray-200 sticky top-0 z-30 bg-[#fcfdfd] pt-4"
+                >
                     <div className="flex gap-10">
                         {[
                             { id: 'orders', label: 'Clinical Orders', icon: Beaker },
@@ -250,7 +298,11 @@ const LabHub = () => {
                 )}
 
                 {/* Search & Filters toolbar */}
-                <div className="flex items-center gap-3 py-4">
+                <div
+                    ref={filtersRef}
+                    style={{ top: offsets.filters }}
+                    className="flex items-center gap-3 py-4 sticky z-20 bg-[#fcfdfd]"
+                >
                     <div className="w-full max-w-sm relative">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                             <Search className="h-4 w-4 text-gray-400" />
@@ -261,6 +313,21 @@ const LabHub = () => {
                             value={searchTerm}
                             onChange={(e) => { setSearchTerm(e.target.value); setOrdersPage(1); setVendorsPage(1); }}
                             className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] transition-all"
+                        />
+                    </div>
+
+                    {/* Lab's primary action lives up in the tab strip, so the
+                        right of this row is free for the secondary menu. It has
+                        no export of its own yet, so this is all it carries. */}
+                    <div className="ml-auto flex-shrink-0">
+                        <MoreMenu
+                            items={[{
+                                key: 'reset-columns',
+                                label: 'Reset column widths',
+                                icon: <Columns3 size={15} />,
+                                hint: 'Back to the default layout',
+                                onClick: resetColumns,
+                            }]}
                         />
                     </div>
                     {activeTab === 'orders' && (
@@ -285,26 +352,23 @@ const LabHub = () => {
                             {orders.length > 0 && breakpoint === 'mobile' ? (
                                 // A nine-column table has no honest phone
                                 // layout; each case becomes a stacked card.
-                                <div className="bg-white rounded-xl border border-gray-200 overflow-y-auto flex-1 min-h-0">
+                                <div className="bg-white rounded-xl border border-gray-200 flex-1 min-h-0">
                                     <LabCaseList
                                         orders={filteredOrders.slice((ordersPage - 1) * LAB_PAGE_SIZE, ordersPage * LAB_PAGE_SIZE)}
                                         onSelect={() => setIsOrderDrawerOpen(true)}
                                     />
                                 </div>
                             ) : orders.length > 0 ? (
-                                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col flex-1 min-h-0">
-                                    <div className="flex-1 overflow-x-auto overflow-y-auto">
-                                    <table className="w-full divide-y divide-gray-200">
-                                        <thead className="bg-[#f8fafc] sticky top-0 z-10">
-                                            <tr>
-                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Order Details</th>
-                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Patient</th>
-                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Lab Partner</th>
-                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Due Date</th>
-                                                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Cost</th>
-                                                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                                            </tr>
-                                        </thead>
+                                <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col flex-1 min-h-0">
+                                    <div className="flex-1">
+                                    <table ref={tableRef} className="w-full min-w-[860px] table-fixed mp-table-fixed divide-y divide-gray-200">
+                                        <ColGroup widths={widths} />
+                                        <ResizableHead
+                                            columns={tableColumns}
+                                            startResize={startResize}
+                                            onReset={resetColumns}
+                                            style={{ top: offsets.thead }}
+                                        />
                                         <tbody className="bg-white divide-y divide-gray-100">
                                             {filteredOrders.slice((ordersPage - 1) * LAB_PAGE_SIZE, ordersPage * LAB_PAGE_SIZE).map(order => {
                                                 const isTerminal = order.status === 'Received' || order.status === 'Cancelled';
@@ -414,18 +478,16 @@ const LabHub = () => {
                         /* Vendors Table */
                         <div className="flex flex-col flex-1 min-h-0">
                             {vendors.length > 0 ? (
-                                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col flex-1 min-h-0">
-                                    <div className="flex-1 overflow-x-auto overflow-y-auto">
-                                    <table className="w-full divide-y divide-gray-200">
-                                        <thead className="bg-[#f8fafc] sticky top-0 z-10">
-                                            <tr>
-                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Lab Partner</th>
-                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Contact</th>
-                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</th>
-                                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Address</th>
-                                                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                                            </tr>
-                                        </thead>
+                                <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col flex-1 min-h-0">
+                                    <div className="flex-1">
+                                    <table ref={tableRef} className="w-full min-w-[860px] table-fixed mp-table-fixed divide-y divide-gray-200">
+                                        <ColGroup widths={widths} />
+                                        <ResizableHead
+                                            columns={tableColumns}
+                                            startResize={startResize}
+                                            onReset={resetColumns}
+                                            style={{ top: offsets.thead }}
+                                        />
                                         <tbody className="bg-white divide-y divide-gray-100">
                                             {filteredLabVendors.slice((vendorsPage - 1) * LAB_PAGE_SIZE, vendorsPage * LAB_PAGE_SIZE).map(vendor => (
                                                 <tr key={vendor.id} className="hover:bg-indigo-50/30 transition-colors duration-150 group">
@@ -544,8 +606,14 @@ const LabHub = () => {
                     </form>
                     
                     <div className="px-8 py-8 border-t border-gray-50 bg-gray-50/30">
-                        <button type="submit" onClick={handleAddVendor} className="w-full py-3 bg-[#2a276e] text-white rounded-lg font-semibold hover:bg-[#1a1548] transition-colors shadow-sm">
-                            Add Lab Partner
+                        <button
+                            type="submit"
+                            onClick={handleAddVendor}
+                            disabled={savingVendor}
+                            className="w-full py-3 bg-[#2a276e] text-white rounded-lg font-semibold hover:bg-[#1a1548] transition-colors shadow-sm inline-flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                            {savingVendor ? 'Adding' : 'Add Lab Partner'}
+                            {savingVendor && <Spinner />}
                         </button>
                     </div>
                 </div>

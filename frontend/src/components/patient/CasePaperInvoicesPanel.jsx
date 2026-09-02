@@ -64,7 +64,7 @@ const CasePaperInvoicesPanel = ({ open, onClose, invoices = [], loading = false,
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold text-gray-900">{inv.invoice_number}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border ${s.cls}`}>{s.label}</span>
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-semibold border ${s.cls}`}>{s.label}</span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">{formatDate(inv.created_at)}</p>
                     <p className="text-sm text-gray-700 mt-1.5">

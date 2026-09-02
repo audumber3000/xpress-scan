@@ -34,7 +34,8 @@ const toOptionCase = (g) => {
 
 const emptyForm = {
   name: "", age: "", date_of_birth: "", gender: "Male", phone: "", village: "",
-  treatment_type: "General", referred_by: "", blood_group: "", patient_history: "",
+  treatment_type: "General", referred_by: "", blood_group: "", allergies: "",
+  patient_history: "",
   display_id: "", registered_on: "", notes: "",
 };
 
@@ -59,6 +60,7 @@ const PatientEditModal = ({ open, patient, onClose, onSaved }) => {
       treatment_type: patient.treatment_type || "General",
       referred_by: patient.referred_by || "",
       blood_group: patient.blood_group || "",
+      allergies: patient.allergies || "",
       patient_history: patient.patient_history || "",
       display_id: patient.display_id || "",
       registered_on: patient.registered_on || clinicToday(),
@@ -117,7 +119,7 @@ const PatientEditModal = ({ open, patient, onClose, onSaved }) => {
     // Both are YYYY-MM-DD, so a string compare is a date compare.
     else if (form.registered_on > clinicToday()) e.registered_on = "Registration date can't be in the future.";
 
-    if (!form.village?.trim()) e.village = "Village/City is required.";
+    if (!form.village?.trim()) e.village = "Address is required.";
     if (!form.treatment_type?.trim()) e.treatment_type = "Treatment type is required.";
     if (!form.referred_by?.trim()) e.referred_by = "Referred by is required.";
     return e;
@@ -287,7 +289,7 @@ const PatientEditModal = ({ open, patient, onClose, onSaved }) => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Village/City <span className="text-red-500">*</span>
+                  Address <span className="text-red-500">*</span>
                 </label>
                 <input type="text" value={form.village} onChange={(e) => setField("village", e.target.value)} className={fieldClass("village")} />
                 <FieldError name="village" />
@@ -319,7 +321,19 @@ const PatientEditModal = ({ open, patient, onClose, onSaved }) => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Patient History</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Allergies</label>
+              <input
+                type="text"
+                placeholder="e.g. Penicillin, Latex"
+                value={form.allergies}
+                onChange={(e) => setField("allergies", e.target.value)}
+                className={plainInput}
+              />
+              <p className="mt-1 text-xs text-gray-400">Shown in red at the top of the patient's file.</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Medical History</label>
               <input
                 type="text"
                 placeholder="e.g. Diabetics, Hypertension"
@@ -327,7 +341,7 @@ const PatientEditModal = ({ open, patient, onClose, onSaved }) => {
                 onChange={(e) => setField("patient_history", e.target.value)}
                 className={plainInput}
               />
-              <p className="mt-1 text-xs text-gray-400">Shows as a warning on the patient's file.</p>
+              <p className="mt-1 text-xs text-gray-400">Shows on the patient's file.</p>
             </div>
 
             <div>

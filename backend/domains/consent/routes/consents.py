@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
@@ -23,10 +24,23 @@ async def list_templates(
     current_user = Depends(get_current_user),
     clinic_id: Optional[int] = None
 ):
-    query = db.query(ConsentTemplate)
     target_clinic_id = clinic_id or current_user.clinic_id
-    query = query.filter(ConsentTemplate.clinic_id == target_clinic_id)
-    return query.all()
+    templates = db.query(ConsentTemplate).filter(
+        ConsentTemplate.clinic_id == target_clinic_id
+    ).all()
+
+    # One grouped count for the whole list, not one query per template. Lets the
+    # documents tab rank templates by what the clinic actually uses instead of
+    # showing them alphabetically forever.
+    counts = dict(
+        db.query(PatientConsent.template_id, func.count(PatientConsent.id))
+        .filter(PatientConsent.clinic_id == target_clinic_id)
+        .group_by(PatientConsent.template_id)
+        .all()
+    )
+    for t in templates:
+        t.usage_count = counts.get(t.id, 0)
+    return templates
 
 
 @router.get("/starter-library")

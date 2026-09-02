@@ -23,6 +23,8 @@ class PatientInfo(BaseModel):
     name: str
     age: int
     gender: str
+    # Wire name kept as scan_type; the value comes from Patient.treatment_type,
+    # which is what the column has always actually been called.
     scan_type: str
     referred_by: str
     # Add more fields as needed
@@ -32,11 +34,20 @@ class PatientInfo(BaseModel):
 
 class ReportResponse(BaseModel):
     id: int
+    # Whose report this is. Without it a caller could only attribute a report by
+    # matching patient_name, which breaks on two patients sharing one.
+    patient_id: Optional[int] = None
     patient_name: str
-    patient_age: int
-    patient_gender: str
-    scan_type: str
-    referred_by: str
+    # All optional. A report describes a patient who already exists, and plenty
+    # have no age, gender or referrer recorded. Requiring them made the row
+    # unserialisable, and the builder's per-row `except` turned that into a
+    # silently missing report instead of an error anybody could see.
+    patient_age: Optional[int] = None
+    patient_gender: Optional[str] = None
+    # Wire name kept so the reports page keeps working; the value is
+    # Patient.treatment_type, which is what the column has always been called.
+    scan_type: Optional[str] = None
+    referred_by: Optional[str] = None
     docx_url: Optional[str] = None
     pdf_url: Optional[str] = None
     status: str
@@ -50,8 +61,17 @@ class ReportResponse(BaseModel):
         from_attributes = True
 
 @router.get("", response_model=List[ReportResponse])
-def get_all_reports(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    """Get all reports with patient information from database - scoped by clinic"""
+def get_all_reports(
+    patient_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    """Reports for the clinic, or for one patient when patient_id is given.
+
+    The filter exists for the patient file's Documents tab, which needs one
+    patient's reports and would otherwise have to pull every report in the
+    clinic and match them up by name.
+    """
     # Check if user has permission to view reports
     if current_user.role != "clinic_owner":
         permissions = current_user.permissions or {}
@@ -61,9 +81,12 @@ def get_all_reports(db: Session = Depends(get_db), current_user = Depends(get_cu
     
     try:
         # Get all reports for current clinic with patient information
-        reports = db.query(Report).join(Patient).filter(
+        query = db.query(Report).join(Patient).filter(
             Patient.clinic_id == current_user.clinic_id
-        ).order_by(Report.created_at.desc()).all()
+        )
+        if patient_id is not None:
+            query = query.filter(Report.patient_id == patient_id)
+        reports = query.order_by(Report.created_at.desc()).all()
         
         report_list = []
         for report in reports:
@@ -71,10 +94,16 @@ def get_all_reports(db: Session = Depends(get_db), current_user = Depends(get_cu
                 patient = report.patient
                 report_list.append(ReportResponse(
                     id=report.id,
+                    patient_id=report.patient_id,
                     patient_name=patient.name,
                     patient_age=patient.age,
                     patient_gender=patient.gender,
-                    scan_type=patient.scan_type,
+                    # `patient.treatment_type`, not `patient.treatment_type`. Patient
+                    # has no scan_type attribute and never has, so this line
+                    # raised AttributeError on every single report and the
+                    # per-row `except` below swallowed it — the endpoint has
+                    # been returning an empty list to everyone.
+                    scan_type=patient.treatment_type,
                     referred_by=patient.referred_by,
                     docx_url=report.docx_url,
                     pdf_url=get_presigned_url(report.pdf_url) if report.pdf_url else None,
@@ -135,7 +164,7 @@ def get_report(report_id: int, db: Session = Depends(get_db), current_user = Dep
             patient_name=patient.name,
             patient_age=patient.age,
             patient_gender=patient.gender,
-            scan_type=patient.scan_type,
+            scan_type=patient.treatment_type,
             referred_by=patient.referred_by,
             docx_url=report.docx_url,
             pdf_url=report.pdf_url,
@@ -250,7 +279,7 @@ def create_voice_doc(transcript_data: dict, db: Session = Depends(get_db), curre
             'name': patient.name,
             'age': patient.age,
             'gender': patient.gender,
-            'scan_type': patient.scan_type,
+            'scan_type': patient.treatment_type,
             'referred_by': patient.referred_by,
             'village': patient.village,
             'phone': patient.phone,
@@ -317,7 +346,7 @@ def finalize_report(report_id: int, final_data: dict, db: Session = Depends(get_
             'name': patient.name,
             'age': patient.age,
             'gender': patient.gender,
-            'scan_type': patient.scan_type,
+            'scan_type': patient.treatment_type,
             'referred_by': patient.referred_by,
             'village': patient.village,
             'phone': patient.phone,
@@ -337,7 +366,7 @@ def finalize_report(report_id: int, final_data: dict, db: Session = Depends(get_
         pdf_path = html_template_to_pdf(html_report, patient_data)
         
         # Generate filename
-        filename = generate_pdf_filename(patient.name, patient.scan_type)
+        filename = generate_pdf_filename(patient.name, patient.treatment_type)
         
         # Upload to R2 Storage with standardized clinic/patient path
         pdf_url = upload_pdf_to_r2(
@@ -414,7 +443,7 @@ def get_draft_report(report_id: int, db: Session = Depends(get_db), current_user
                 "name": patient.name,
                 "age": patient.age,
                 "gender": patient.gender,
-                "scan_type": patient.scan_type,
+                "scan_type": patient.treatment_type,
                 "referred_by": patient.referred_by,
                 "village": patient.village,
                 "phone": patient.phone

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Monitor, ScanLine, ImageOff } from 'lucide-react';
-import { FaWhatsapp } from 'react-icons/fa6';
+import WhatsAppIcon from '../../../components/common/WhatsAppIcon';
 import { api } from '../../../utils/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import { SUPPORT_PHONE_RAW } from '../../../constants/support';
@@ -96,7 +96,7 @@ const BrandCard = ({ brand, onRequest }) => (
         onClick={() => onRequest(brand)}
         className="text-[11px] font-semibold text-[#25D366] hover:text-[#1da851] inline-flex items-center gap-1.5 shrink-0"
       >
-        <FaWhatsapp size={13} /> Request setup
+        <WhatsAppIcon size={13} /> Request setup
       </button>
     </div>
   </div>

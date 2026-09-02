@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import Spinner from "../components/common/Spinner";
 import { notify } from '../utils/notify';
 import { useNavigate } from 'react-router-dom';
 import { useHeader } from "../contexts/HeaderContext";
@@ -139,6 +140,8 @@ const TreatmentsPricing = ({ mode = 'services', embedded = false }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
+  // The row being deleted, so only that row's button reports it.
+  const [deletingId, setDeletingId] = useState(null);
 
   const [drawer, setDrawer] = useState({ open: false, item: null });
   const [showImport, setShowImport] = useState(false);
@@ -270,7 +273,9 @@ const TreatmentsPricing = ({ mode = 'services', embedded = false }) => {
   };
 
   const deleteOne = async (item) => {
+    if (deletingId) return;
     if (!window.confirm(`Delete this ${isServices ? 'treatment' : 'medication'}?`)) return;
+    setDeletingId(item.id);
     try {
       await api.delete(`${endpoint}/${item.id}`);
     } catch (error) {
@@ -284,6 +289,7 @@ const TreatmentsPricing = ({ mode = 'services', embedded = false }) => {
         next.delete(item.id);
         return next;
       });
+      setDeletingId(null);
     }
   };
 
@@ -368,7 +374,8 @@ const TreatmentsPricing = ({ mode = 'services', embedded = false }) => {
           <div className="flex items-center gap-2">
             <button onClick={() => setSelectedIds(new Set())} className="px-3 py-1.5 text-sm font-semibold rounded-lg hover:bg-white/10 transition">Clear</button>
             <button onClick={bulkDelete} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 text-white text-sm font-semibold rounded-lg hover:bg-red-600 transition disabled:opacity-50">
-              <Trash2 size={15} /> Delete selected
+              {saving ? <Spinner className="w-3.5 h-3.5" /> : <Trash2 size={15} />}
+              {saving ? 'Deleting' : 'Delete selected'}
             </button>
           </div>
         </div>
@@ -429,7 +436,14 @@ const TreatmentsPricing = ({ mode = 'services', embedded = false }) => {
                         <td className="px-6 py-4 text-right">
                           <div className="flex justify-end gap-3">
                             <button onClick={() => setDrawer({ open: true, item })} className="text-[#29828a] hover:text-[#216b71] text-[11px] font-bold uppercase tracking-wider">Edit</button>
-                            <button onClick={() => deleteOne(item)} className="text-red-400 hover:text-red-600 text-[11px] font-bold uppercase tracking-wider">Delete</button>
+                            <button
+                              onClick={() => deleteOne(item)}
+                              disabled={deletingId === item.id}
+                              className="text-red-400 hover:text-red-600 text-[11px] font-bold uppercase tracking-wider inline-flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                              {deletingId === item.id ? 'Deleting' : 'Delete'}
+                              {deletingId === item.id && <Spinner className="w-3 h-3" />}
+                            </button>
                           </div>
                         </td>
                       </tr>

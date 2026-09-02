@@ -49,7 +49,10 @@ const RealisticDentalChart = ({
     onToothSelect,
     editable = true,
     dentition = 'adult',
-    numberingSystem = 'fdi'
+    numberingSystem = 'fdi',
+    // Off in the compact Overview card, where the chart is a signal that
+    // something is marked rather than something to read a key against.
+    showLegend = true
 }) => {
     const isPrimary = dentition === 'primary';
     const isUniversal = numberingSystem === 'universal';
@@ -258,29 +261,36 @@ const RealisticDentalChart = ({
             </p>
 
 
-            {/* Status Legend — matches exactly what the chart can draw */}
-            <div className="mt-10 grid grid-cols-2 sm:grid-cols-5 gap-3 border-t border-gray-50 pt-8">
-                <div className="flex items-center gap-2.5 bg-gray-50/50 p-2.5 rounded-xl border border-gray-100/50">
+            {/* Status legend — matches exactly what the chart can draw.
+                flex-wrap, not `sm:grid-cols-5`: a grid column count answers the
+                viewport, so in any container narrower than about 700px each
+                cell got ~70px and every label overran the swatch beside it. The
+                labels also lost `tracking-widest`, which was adding a character
+                of width per letter to text that had none to give. */}
+            {showLegend && (
+            <div className="mt-8 flex flex-wrap gap-2 border-t border-gray-50 pt-6">
+                <div className="inline-flex items-center gap-2 bg-gray-50/50 px-2.5 py-1.5 rounded-lg border border-gray-100/50">
                     <div className="w-4 h-4 rounded-lg bg-white ring-2 ring-[#2a276e] shadow-[0_0_6px_#2a276e] flex-shrink-0"></div>
-                    <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest leading-none">Selected</span>
+                    <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wide leading-none whitespace-nowrap">Selected</span>
                 </div>
-                <div className="flex items-center gap-2.5 bg-amber-50/50 p-2.5 rounded-xl border border-amber-100/50">
+                <div className="inline-flex items-center gap-2 bg-amber-50/50 px-2.5 py-1.5 rounded-lg border border-amber-100/50">
                     <div className="w-4 h-4 rounded-lg bg-[#f59e0b] shadow-sm flex-shrink-0"></div>
-                    <span className="text-[10px] font-bold text-amber-700 uppercase tracking-widest leading-none">Planned</span>
+                    <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wide leading-none whitespace-nowrap">Planned</span>
                 </div>
-                <div className="flex items-center gap-2.5 bg-blue-50/50 p-2.5 rounded-xl border border-blue-100/50">
+                <div className="inline-flex items-center gap-2 bg-blue-50/50 px-2.5 py-1.5 rounded-lg border border-blue-100/50">
                     <div className="w-4 h-4 rounded-lg bg-[#3b82f6] shadow-sm flex-shrink-0"></div>
-                    <span className="text-[10px] font-bold text-blue-700 uppercase tracking-widest leading-none">Existing Work</span>
+                    <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wide leading-none whitespace-nowrap">Existing Work</span>
                 </div>
-                <div className="flex items-center gap-2.5 bg-red-50/50 p-2.5 rounded-xl border border-red-100/50">
+                <div className="inline-flex items-center gap-2 bg-red-50/50 px-2.5 py-1.5 rounded-lg border border-red-100/50">
                     <div className="w-4 h-4 rounded-lg bg-[#ef4444] shadow-sm flex-shrink-0"></div>
-                    <span className="text-[10px] font-bold text-red-700 uppercase tracking-widest leading-none">Extracted</span>
+                    <span className="text-[10px] font-bold text-red-700 uppercase tracking-wide leading-none whitespace-nowrap">Extracted</span>
                 </div>
-                <div className="flex items-center gap-2.5 bg-gray-50/50 p-2.5 rounded-xl border border-gray-100/50">
+                <div className="inline-flex items-center gap-2 bg-gray-50/50 px-2.5 py-1.5 rounded-lg border border-gray-100/50">
                     <div className="w-4 h-4 rounded-lg shadow-sm flex-shrink-0" style={{ backgroundColor: '#3f2b1d' }}></div>
-                    <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest leading-none">Caries</span>
+                    <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wide leading-none whitespace-nowrap">Caries</span>
                 </div>
             </div>
+            )}
         </div>
     );
 };

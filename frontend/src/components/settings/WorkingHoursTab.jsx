@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import Spinner from '../common/Spinner';
 import { Plus, Trash2, Loader2, CalendarOff, Info, Coffee, Copy } from 'lucide-react';
 import { notify } from '../../utils/notify';
 import { api } from '../../utils/api';
@@ -42,6 +43,7 @@ const WorkingHoursTab = ({ doctorId, doctorName }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [newOff, setNewOff] = useState({ start_date: '', end_date: '', reason: '' });
+  const [addingOff, setAddingOff] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,7 +129,9 @@ const WorkingHoursTab = ({ doctorId, doctorName }) => {
   const removeBlock = (idx) => save(blocks.filter((_, i) => i !== idx));
 
   const addTimeOff = async () => {
+    if (addingOff) return;
     if (!newOff.start_date) { notify.problem('Pick a first day'); return; }
+    setAddingOff(true);
     try {
       const res = await api.post('/scheduling/time-off', {
         doctor_id: doctorId,
@@ -291,8 +295,10 @@ const WorkingHoursTab = ({ doctorId, doctorName }) => {
                    className={`${timeCls} w-full`} />
           </div>
           <button onClick={addTimeOff}
-                  className="h-9 px-4 rounded-lg bg-[#29828a] hover:bg-[#216b71] text-white text-xs font-bold">
-            Add
+                  disabled={addingOff}
+                  className="h-9 px-4 rounded-lg bg-[#29828a] hover:bg-[#216b71] text-white text-xs font-bold inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+            {addingOff ? 'Adding' : 'Add'}
+            {addingOff && <Spinner className="w-3.5 h-3.5" />}
           </button>
         </div>
       </div>

@@ -123,4 +123,15 @@ export const VendorCardList = ({ rows, owedBy, onEdit }) => (
   </div>
 );
 
-export const VENDOR_COLUMNS = ['Vendor', 'Category', 'Contact', 'Open balance', 'Status', 'Last order', ''];
+// Column layout for the resizable table. `width` is a percentage of the table
+// and the set must sum to 100; `min` is the pixel floor a drag can take a column
+// down to. Changing this list invalidates saved layouts, which is handled.
+export const VENDOR_COLUMNS = [
+  { key: 'vendor',   label: 'Vendor',       width: 22, min: 150 },
+  { key: 'category', label: 'Category',     width: 14, min: 100 },
+  { key: 'contact',  label: 'Contact',      width: 17, min: 120 },
+  { key: 'balance',  label: 'Open balance', width: 15, min: 110, align: 'right' },
+  { key: 'status',   label: 'Status',       width: 12, min: 96 },
+  { key: 'last',     label: 'Last order',   width: 12, min: 100 },
+  { key: 'action',   label: '',             width: 8,  min: 72, align: 'right' },
+];

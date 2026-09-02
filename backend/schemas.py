@@ -217,6 +217,9 @@ class PaymentOut(PaymentBase):
 # Invoice Schemas
 class InvoiceLineItemBase(BaseModel):
     description: str
+    # Which tooth or region this line bills for. Optional: a scaling covers the
+    # whole mouth and a consultation covers none.
+    tooth_number: Optional[str] = None
     quantity: float = 1.0
     unit_price: float
     amount: Optional[float] = None  # Will be calculated as quantity * unit_price
@@ -288,6 +291,9 @@ class InvoiceOut(InvoiceBase):
     # Nested patient info
     patient_name: Optional[str] = None
     patient_phone: Optional[str] = None
+    # One free-text line. Undeclared fields are dropped by the response model, so
+    # the serialiser emitting this is not enough on its own.
+    patient_address: Optional[str] = None
     patient_display_id: Optional[str] = None
     
     # Line items
@@ -334,6 +340,12 @@ class InvoicePaymentOut(BaseModel):
     recorded_on: Optional[str] = None
     is_back_dated: bool = False
     method: Optional[str] = None
+    # The transaction this instalment arrived on, and who took it. Resolved to a
+    # name by the route, the way case papers resolve dentist_name — a bare user
+    # id tells the timeline nothing.
+    reference: Optional[str] = None
+    recorded_by: Optional[int] = None
+    recorded_by_name: Optional[str] = None
     note: Optional[str] = None
     created_at: Optional[datetime] = None
     # This installment's receipt: the number the patient quotes back, and the two
@@ -348,7 +360,7 @@ class InvoicePaymentOut(BaseModel):
 
 class MarkAsPaidRequest(BaseModel):
     payment_mode: str  # UPI, Cash, Card, etc.
-    utr: Optional[str] = None
+    utr: Optional[str] = None  # also stored as the payment's reference
     is_partial: Optional[bool] = False
     amount_paid: Optional[float] = None
     # The day the money was actually received (YYYY-MM-DD). Defaults to the
@@ -361,6 +373,7 @@ class InvoicePaymentCreate(BaseModel):
     amount: float
     paid_on: Optional[str] = None   # YYYY-MM-DD; defaults to today
     method: Optional[str] = None    # Cash, UPI, Card, ...
+    reference: Optional[str] = None # UPI ref, card auth code, cheque number
     note: Optional[str] = None
 
 # X-ray Image Schemas
@@ -380,6 +393,9 @@ class XrayImageOut(BaseModel):
     file_path: str
     file_size: int
     image_type: str
+    # Which tooth or region the film covers. Nullable: every row predating the
+    # column has none, and an OPG legitimately never gets one.
+    tooth_area: Optional[str] = None
     capture_date: datetime
     brightness: Optional[float] = None
     contrast: Optional[float] = None
@@ -400,11 +416,19 @@ class XrayImageOut(BaseModel):
 class ReportResponse(BaseModel):
     id: Optional[int] = None
     clinic_id: int
+    # Whose report this is. Absent until now, so the only way to attribute one
+    # was to match on patient_name — which breaks on two patients of the same
+    # name, and is exactly what the patient file's Documents tab needs.
+    patient_id: Optional[int] = None
     patient_name: str
-    patient_age: int
-    patient_gender: str
-    treatment_type: str
-    referred_by: str
+    # Optional, all four. A report describes a patient who already exists, and
+    # plenty of them have no age, gender or referrer on file. Requiring them
+    # here made the row unserialisable, and the builder's per-row `except`
+    # turned that into a silently missing report rather than an error.
+    patient_age: Optional[int] = None
+    patient_gender: Optional[str] = None
+    treatment_type: Optional[str] = None
+    referred_by: Optional[str] = None
     docx_url: Optional[str] = None
     pdf_url: Optional[str] = None
     status: str

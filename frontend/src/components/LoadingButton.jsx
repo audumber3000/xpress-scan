@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
-import GearLoader from './GearLoader';
+import Spinner from './common/Spinner';
 
 /**
  * A button that reports on its own action.
@@ -14,6 +14,15 @@ import GearLoader from './GearLoader';
  * Pass `saved` and the label becomes "Saved ✓" for a beat, then goes back on
  * its own. The caller flips one boolean and forgets about it; the revert is
  * handled here so every screen holds it for the same length of time.
+ *
+ * The spinner sits after the label, not before it. The word is the message —
+ * "Saving…" — and the spinner is the proof it is still running; leading with
+ * the spinner pushes the label sideways the moment you click, which is the one
+ * time you want it to stay still.
+ *
+ * Pass `loadingLabel` and the text changes while it works. Worth doing on
+ * anything that takes a round trip: a button that only spins makes the reader
+ * guess whether it heard them.
  *
  *   const [saved, setSaved] = useState(false);
  *   ...
@@ -29,6 +38,7 @@ const HOLD_MS = 1500;
 const LoadingButton = ({
   children,
   loading = false,
+  loadingLabel,
   saved = false,
   savedLabel = 'Saved',
   onSaved,
@@ -66,7 +76,6 @@ const LoadingButton = ({
       title={title}
       {...props}
     >
-      {loading && <GearLoader size="w-4 h-4" />}
       {/* The tick is the whole message, so it replaces the label rather than
           crowding in beside it. No animation on the swap: a button that pulses
           every time you save it becomes the thing you notice instead of the
@@ -77,7 +86,10 @@ const LoadingButton = ({
           {savedLabel}
         </>
       ) : (
-        children
+        <>
+          {loading && loadingLabel ? loadingLabel : children}
+          {loading && <Spinner />}
+        </>
       )}
     </button>
   );

@@ -17,9 +17,18 @@ class PatientBaseDTO(BaseModel):
     email: Optional[str] = Field(None, pattern=r"^[^@]+@[^@]+\.[^@]+$")
     referred_by: Optional[str] = Field(None, min_length=1, max_length=100)
     treatment_type: Optional[str] = Field(None, min_length=1, max_length=100)
+    # These three were on the update and response DTOs but not here, and pydantic
+    # drops unknown fields silently. Every blood group, medical history and
+    # allergy typed into the Create Patient drawer was discarded on the way in,
+    # then had to be entered a second time through the edit modal, which does
+    # accept them. Allergies especially cannot work that way: the whole point of
+    # the field is that it is on file before the first visit.
+    blood_group: Optional[str] = Field(None, max_length=5)
+    allergies: Optional[str] = None
+    patient_history: Optional[str] = None
     notes: Optional[str] = None
     payment_type: Optional[str] = Field(default="Cash", pattern="^(Cash|Card|UPI|Online)$")
-    
+
     @field_validator('gender', mode='before')
     @classmethod
     def normalize_gender(cls, v):
@@ -69,6 +78,7 @@ class PatientUpdateDTO(BaseModel):
     referred_by: Optional[str] = Field(None, min_length=1, max_length=100)
     treatment_type: Optional[str] = Field(None, min_length=1, max_length=100)
     blood_group: Optional[str] = Field(None, max_length=5)
+    allergies: Optional[str] = None
     patient_history: Optional[str] = None
     notes: Optional[str] = None
     payment_type: Optional[str] = Field(None, pattern="^(Cash|Card|UPI|Online)$")
@@ -110,11 +120,12 @@ class PatientResponseDTO(PatientBaseDTO):
     clinic_id: int
     display_id: Optional[str] = None
     last_visit: Optional[datetime] = None
-    # The two clinical flags the patient's file shows beside their name. Stored
-    # on the row and editable in the patient form, but absent here, so neither
-    # the blood group pill nor the medical alert could ever render and the edit
-    # form always reopened them blank. Read must report what is stored.
+    # The clinical flags the patient's file shows beside their name. Stored on
+    # the row and editable in the patient form, but absent here, so neither the
+    # blood group pill nor the medical alert could ever render and the edit form
+    # always reopened them blank. Read must report what is stored.
     blood_group: Optional[str] = None
+    allergies: Optional[str] = None
     patient_history: Optional[str] = None
     # Nullable on read: rows created before this column existed are backfilled
     # from created_at by migration, but an unbackfilled row must still respond.
@@ -687,6 +698,10 @@ class ConsentTemplateResponseDTO(ConsentTemplateBaseDTO):
     id: int
     clinic_id: int
     is_active: bool
+    # How many times this template has actually been signed. Counted from
+    # patient_consents rather than stored on the row: a counter column drifts
+    # the first time a consent is deleted, and this is one GROUP BY.
+    usage_count: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -721,6 +736,9 @@ class PatientDocumentResponseDTO(BaseModel):
     file_path: str
     file_size: int
     file_type: str
+    # What kind of paperwork this upload is. Null on everything uploaded before
+    # the column existed, which the Documents tab files under "Other".
+    category: Optional[str] = None
     uploader_name: Optional[str] = None
     created_at: datetime
 

@@ -16,6 +16,32 @@ const pct = (part, whole) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
 
 const ico = (Icon) => <Icon size={15} />;
 
+/**
+ * Builds the change pill for one card.
+ *
+ * Worth being precise about what these arrows mean. The headline on each card
+ * describes everything the page's filters select, which is all of history until
+ * somebody sets a date range. A percentage needs two comparable windows, so the
+ * backend measures these separately: this calendar month so far against the
+ * same span of last month. The two are deliberately different windows, so the
+ * pill carries a label naming both figures rather than leaving a bare
+ * percentage to be read against the number beside it.
+ *
+ * Returns an empty object when there is nothing to compare, which leaves the
+ * card with no pill rather than one asserting a flat zero.
+ */
+const changePill = (metric, cmpLabel, fmt) => {
+  if (!metric || metric.change === null || metric.change === undefined) return {};
+  const [now, before] = cmpLabel === 'vs last month'
+    ? ['this month', 'last month']
+    : ['this period', 'the period before'];
+  return {
+    change: metric.change,
+    changeType: metric.change_type,
+    changeLabel: `${fmt(metric.current)} ${now} vs ${fmt(metric.previous)} ${before}`,
+  };
+};
+
 /** All-payments tab: where the money is, and where it's stuck. */
 function paymentsCards(s) {
   const billed = s.billed || 0;
@@ -23,6 +49,7 @@ function paymentsCards(s) {
   const out = s.outstanding || {};
   const plans = s.plans || {};
   const methods = s.methods || {};
+  const cmp = s.comparison || {};
 
   const collectionRate = pct(collected, billed);
   const agedPct = pct(out.aged_amount, out.amount);
@@ -33,6 +60,7 @@ function paymentsCards(s) {
       isMoney: true,
       title: 'Collected',
       display: formatCompactMoney(collected),
+      ...changePill(cmp.collected, cmp.label, formatCompactMoney),
       icon: ico(Wallet),
       variant: 'meter',
       story: billed > 0
@@ -50,6 +78,7 @@ function paymentsCards(s) {
       isMoney: true,
       title: 'Outstanding',
       display: formatCompactMoney(out.amount),
+      ...changePill(cmp.outstanding, cmp.label, formatCompactMoney),
       // Money owed going up is bad news, so the pill has to invert.
       invert: true,
       icon: ico(Clock),
@@ -69,6 +98,9 @@ function paymentsCards(s) {
       key: 'plans',
       title: 'On payment plans',
       display: formatCount(plans.open || 0),
+      // More bills going onto instalments is not obviously good or bad, so this
+      // one stays uninverted and is read as a fact rather than a score.
+      ...changePill(cmp.plans, cmp.label, formatCount),
       icon: ico(CalendarClock),
       variant: 'spark',
       // The sparkline is the distribution of plan lengths, not a time series —

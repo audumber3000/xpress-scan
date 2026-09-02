@@ -22,6 +22,11 @@ import InvoiceEditor from "../components/payments/InvoiceEditor";
 import ExportModal from "../components/payments/ExportModal";
 import { receipt } from "../assets/illustrations";
 import { useBreakpoint } from "../utils/useBreakpoint";
+import useDockedHeader from "../utils/useDockedHeader";
+import MoreMenu from "../components/common/MoreMenu";
+import { ColGroup, ResizeHandle } from "../components/common/ColumnResizer";
+import useColumnWidths from "../utils/useColumnWidths";
+import { Download, Columns3 } from "lucide-react";
 
 /**
  * Money going out, the mirror of Payments.
@@ -47,7 +52,9 @@ import { useBreakpoint } from "../utils/useBreakpoint";
  * Tab order follows the work: what is owed, what has moved, who it goes to.
  */
 
-const PER_PAGE = 10;
+// Ten rows was a page of table and half a page of nothing once the summary
+// cards scroll away. Slicing is client side here, so this costs nothing.
+const PER_PAGE = 25;
 
 const TABS = [
   { id: 'payables', label: 'Payables' },
@@ -100,6 +107,8 @@ const Expenses = () => {
   const breakpoint = useBreakpoint();
 
   const [activeTab, setActiveTab] = useState('payables');
+  // The page scrolls as one and the tab strip and filter bar dock at the top.
+  const { tabsRef, filtersRef, offsets } = useDockedHeader();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterValue, setFilterValue] = useState(EMPTY_FILTERS);
   const [page, setPage] = useState(1);
@@ -394,6 +403,11 @@ const Expenses = () => {
   const columns = activeTab === 'payables' ? PAYABLE_COLUMNS
     : activeTab === 'ledger' ? LEDGER_COLUMNS
       : VENDOR_COLUMNS;
+  // One hook, three tables. The storage key carries the tab, so each keeps its
+  // own layout and switching tabs reloads the right one.
+  const { tableRef, widths, startResize, reset: resetColumns } = useColumnWidths(
+    `expenses.${activeTab}`, columns,
+  );
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
@@ -460,9 +474,14 @@ const Expenses = () => {
   const emptyBlock = <EmptyState image={receipt} title={emptyState.title} subtitle={emptyState.subtitle} />;
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50/30">
-      {/* Tabs */}
-      <div className="px-4 md:px-6 pt-4 border-b border-gray-200 flex items-end justify-between gap-3">
+    <div className="flex flex-col min-h-full bg-gray-50/30">
+      {/* Tabs. #fdfdfe is gray-50/30 over white: the colour the page already
+          shows, but opaque, so rows pass behind the docked strip rather than
+          through it. */}
+      <div
+        ref={tabsRef}
+        className="px-4 md:px-6 pt-4 border-b border-gray-200 flex items-end justify-between gap-3 sticky top-0 z-30 bg-[#fdfdfe]"
+      >
         <nav className="-mb-px flex space-x-8 overflow-x-auto">
           {TABS.map((t) => (
             <button
@@ -501,13 +520,17 @@ const Expenses = () => {
         )}
       </div>
 
-      <div className="px-4 md:px-6 flex-shrink-0">
+      <div
+        ref={filtersRef}
+        style={{ top: offsets.filters }}
+        className="px-4 md:px-6 flex-shrink-0 sticky z-20 bg-[#fdfdfe] pt-2 pb-4"
+      >
         {/* Search, filters and the tab's action.
             Split at `lg`, not `sm`. On iPad portrait this row has a search box,
             a filter trigger, Export and Record expense in it; side by side at
             768px the search shrank past its own placeholder and rendered as a
             bare magnifying glass. */}
-        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3 mb-4">
+        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3">
           <div className="flex items-center gap-3 w-full lg:w-auto flex-1 min-w-0">
             <div className="flex-1 min-w-0 lg:max-w-sm relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -542,17 +565,28 @@ const Expenses = () => {
           </div>
 
           <div className="w-full lg:w-auto flex gap-3 flex-shrink-0">
-            {activeTab === 'ledger' && (
-              <button
-                onClick={() => setShowExport(true)}
-                className="flex-1 lg:flex-none inline-flex justify-center items-center whitespace-nowrap px-4 py-2.5 border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2a276e] transition-colors"
-              >
-                <svg className="mr-2 h-5 w-5 text-[#2a276e]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                Export
-              </button>
-            )}
+            {/* Only the ledger has a CSV writer behind it today, so on the
+                other two tabs this renders nothing rather than offering an
+                export that would come back empty. */}
+            <MoreMenu
+              className="flex-1 lg:flex-none"
+              items={[
+                activeTab === 'ledger' && {
+                  key: 'export',
+                  label: 'Export to CSV',
+                  icon: <Download size={15} />,
+                  hint: 'Every row your filters select',
+                  onClick: () => setShowExport(true),
+                },
+                {
+                  key: 'reset-columns',
+                  label: 'Reset column widths',
+                  icon: <Columns3 size={15} />,
+                  hint: 'Back to the default layout',
+                  onClick: resetColumns,
+                },
+              ]}
+            />
             {activeTab === 'vendors' ? (
               <button
                 onClick={() => setVendorDrawer({ open: true, vendor: null })}
@@ -578,15 +612,20 @@ const Expenses = () => {
         </div>
       </div>
 
-      {/* Table container */}
-      <div className="flex-1 overflow-hidden px-4 md:px-6 pb-4">
-        <div className="h-full overflow-auto bg-white border border-gray-200 rounded-xl shadow-sm">
+      {/* Table container. The page is the only scroller: an overflow here
+          would capture the sticky header and pin it to this box. */}
+      <div className="flex-1 flex flex-col px-4 md:px-6 pb-4">
+        <div className="flex-1 bg-white border border-gray-200 rounded-xl shadow-sm">
           {loading && allRows.length === 0 ? (
-            <table className="w-full">
-              <thead className="bg-[#f8fafc] border-b border-gray-100 sticky top-0 z-10">
+            <table className="w-full min-w-[880px] table-fixed">
+              <ColGroup widths={widths} />
+              <thead
+                className="bg-[#f8fafc] border-b border-gray-100 sticky z-10"
+                style={{ top: offsets.thead }}
+              >
                 <tr>
-                  {columns.map((_, i) => (
-                    <th key={i} className="px-6 py-4"><SkeletonBox className="h-3 w-20" /></th>
+                  {columns.map((col, i) => (
+                    <th key={col.key || i} className="px-6 py-4"><SkeletonBox className="h-3 w-20" /></th>
                   ))}
                 </tr>
               </thead>
@@ -633,17 +672,29 @@ const Expenses = () => {
               />
             )
           ) : (
-            <table className="w-full">
-              <thead className="bg-[#f8fafc] border-b border-gray-100 sticky top-0 z-10">
+            <table ref={tableRef} className="w-full min-w-[880px] table-fixed mp-table-fixed">
+              {/* table-fixed is what makes a dragged width hold; mp-table-fixed
+                  is what stops a clipped cell spilling into the one beside it. */}
+              <ColGroup widths={widths} />
+              <thead
+                className="border-b border-gray-100 sticky z-10"
+                style={{ top: offsets.thead }}
+              >
                 <tr>
-                  {columns.map((label, i) => (
+                  {columns.map((col, i) => (
                     <th
-                      key={i}
-                      className={`px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider ${
-                        label ? 'text-left' : 'text-right'
-                      }`}
+                      key={col.key}
+                      className={`relative bg-[#f8fafc] px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider ${
+                        col.align === 'right' ? 'text-right' : 'text-left'
+                      } ${i === 0 ? 'rounded-tl-xl' : ''} ${i === columns.length - 1 ? 'rounded-tr-xl' : ''}`}
                     >
-                      {label}
+                      <span className="block truncate">{col.label}</span>
+                      {i < columns.length - 1 && (
+                        <ResizeHandle
+                          onPointerDown={(e) => startResize(i, e)}
+                          onDoubleClick={resetColumns}
+                        />
+                      )}
                     </th>
                   ))}
                 </tr>

@@ -5,11 +5,29 @@ import EmptyState from '../common/EmptyState';
 import { takeOutBoxes } from '../../assets/illustrations';
 import { formatDateTime } from '../../utils/datetime';
 import { StockStatusBadge, ExpiryCell } from './StockBadges';
+import useColumnWidths from '../../utils/useColumnWidths';
+import { ColGroup, ResizableHead } from '../common/ColumnResizer';
 
-const ITEMS_PER_PAGE = 10;
+// Column layout for the resizable table. `width` is a percentage and the set
+// must sum to 100; `min` is the pixel floor a drag can reach.
+const MEDICATION_COLUMNS = [
+  { key: 'medicine', label: 'Medicine',         width: 22, min: 150 },
+  { key: 'strength', label: 'Strength / Form',  width: 16, min: 120 },
+  { key: 'stock',    label: 'Current Stock',    width: 14, min: 110 },
+  { key: 'expiry',   label: 'Expiry',           width: 13, min: 100 },
+  { key: 'status',   label: 'Status',           width: 13, min: 100 },
+  { key: 'updated',  label: 'Updated',          width: 13, min: 100 },
+  { key: 'actions',  label: 'Actions',          width: 9,  min: 80, align: 'right' },
+];
 
-const MedicationTable = ({ medications, onEditItem, onDeleteItem }) => {
+// Matches the other list pages now that the table gets the whole window.
+const ITEMS_PER_PAGE = 25;
+
+const MedicationTable = ({ medications, onEditItem, onDeleteItem, headerOffset = 0 }) => {
   const [currentPage, setCurrentPage] = useState(1);
+  const { tableRef, widths, startResize, reset: resetColumns } = useColumnWidths(
+    'inventory.medications', MEDICATION_COLUMNS,
+  );
 
   const paginated = medications.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
@@ -17,20 +35,16 @@ const MedicationTable = ({ medications, onEditItem, onDeleteItem }) => {
   );
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto">
-        <table className="w-full divide-y divide-gray-200">
-          <thead className="bg-[#f8fafc] sticky top-0 z-10">
-            <tr>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Medicine</th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Strength / Form</th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Current Stock</th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Expiry</th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Updated</th>
-              <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col">
+      <div>
+        <table ref={tableRef} className="w-full min-w-[880px] table-fixed mp-table-fixed divide-y divide-gray-200">
+          <ColGroup widths={widths} />
+          <ResizableHead
+            columns={MEDICATION_COLUMNS}
+            startResize={startResize}
+            onReset={resetColumns}
+            style={{ top: headerOffset }}
+          />
           <tbody className="bg-white divide-y divide-gray-100">
             {paginated.map(item => (
               <tr

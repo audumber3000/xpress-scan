@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Download, AlertTriangle, Trash2 } from 'lucide-react';
-import { FaWhatsapp } from 'react-icons/fa6';
+import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getCurrencySymbol } from '../../utils/currency';
 import { formatDate, formatTime } from '../../utils/datetime';
 import { downloadAuthedFile, isManualWhatsApp, shareReceiptManually } from '../../utils/whatsapp';
@@ -8,6 +8,8 @@ import { api } from '../../utils/api';
 import { notify } from '../../utils/notify';
 import { useAuth } from '../../contexts/AuthContext';
 import EmptyState from '../common/EmptyState';
+import InvoiceTitleBlock from './invoice/InvoiceTitleBlock';
+import InvoiceCollectionStats from './invoice/InvoiceCollectionStats';
 import MasterPasswordModal from '../common/MasterPasswordModal';
 import { receipt as receiptArt } from '../../assets/illustrations';
 
@@ -123,43 +125,53 @@ const InvoicePayments = ({ invoice, onChanged }) => {
 
   if (!canRecord) {
     return (
-      <EmptyState
-        image={receiptArt}
-        title="Not billable yet"
-        subtitle="Finalize the invoice and payments against it show up here."
-        className="bg-white rounded-xl border border-dashed border-gray-200"
-      />
+      <>
+        <InvoiceTitleBlock invoice={invoice} stats={<InvoiceCollectionStats invoice={invoice} />} />
+        <EmptyState
+          image={receiptArt}
+          title="Not billable yet"
+          subtitle="Finalize the invoice and payments against it show up here."
+          className="bg-white rounded-lg border border-dashed border-gray-200"
+        />
+      </>
     );
   }
 
   return (
-    <div className="space-y-4">
-      {/* Where the bill stands */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'Invoice total', value: total, cls: 'text-gray-900' },
-          { label: 'Paid so far', value: paid, cls: 'text-green-600' },
-          { label: 'Balance due', value: due, cls: due > 0 ? 'text-amber-600' : 'text-green-600' },
-        ].map((s) => (
-          <div key={s.label} className="bg-white border border-gray-200 rounded-xl px-4 py-3">
-            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">{s.label}</p>
-            <p className={`text-lg font-bold mt-0.5 tabular-nums ${s.cls}`}>{money(s.value)}</p>
-          </div>
-        ))}
+    <>
+      <InvoiceTitleBlock invoice={invoice} stats={<InvoiceCollectionStats invoice={invoice} />} />
+
+      {/* The band above already carries the last payment and the balance, so
+          this says the one thing it does not: how the instalments add up. */}
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h3 className="text-[13px] font-semibold uppercase tracking-wide text-gray-500">
+          Part payments
+        </h3>
+        <p className="text-[12px] text-gray-500">
+          {payments.length === 0
+            ? 'Nothing collected yet'
+            : <>
+                <span className="font-semibold text-emerald-600 tabular-nums">{money(paid)}</span>
+                {' of '}
+                <span className="font-semibold text-gray-900 tabular-nums">{money(total)}</span>
+                {' collected'}
+                {due > 0 && <> · <span className="font-semibold text-amber-600 tabular-nums">{money(due)}</span> due</>}
+              </>}
+        </p>
       </div>
 
-      {/* The installments */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      {/* Same table treatment as Line items on the Invoice tab. */}
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full divide-y divide-gray-200">
-            <thead className="bg-[#f8fafc]">
+          <table className="w-full min-w-[680px] divide-y divide-gray-200">
+            <thead className="bg-gray-50">
               <tr>
                 {['Receipt', 'Received on', 'Amount', 'Method', 'Note'].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     {h}
                   </th>
                 ))}
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-100">
@@ -221,7 +233,7 @@ const InvoicePayments = ({ invoice, onChanged }) => {
                       >
                         {sharingFor === p.id
                           ? <span className="block w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                          : <FaWhatsapp size={17} />}
+                          : <WhatsAppIcon size={17} />}
                       </button>
                       <button
                         onClick={() => openReceipt(p)}
@@ -263,7 +275,7 @@ const InvoicePayments = ({ invoice, onChanged }) => {
         onCancel={() => setDeleteTarget(null)}
         onConfirm={deletePayment}
       />
-    </div>
+    </>
   );
 };
 

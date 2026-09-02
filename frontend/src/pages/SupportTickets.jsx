@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import Spinner from '../components/common/Spinner';
 import {
   ArrowRight,
   ChevronDown,
@@ -875,8 +876,8 @@ export default function SupportTickets() {
                 >
                   {submitting ? (
                     <>
-                      <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                      Submitting ticket...
+                      Submitting ticket
+                      <Spinner />
                     </>
                   ) : (
                     <>

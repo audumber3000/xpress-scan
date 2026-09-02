@@ -1,30 +1,31 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  RealisticDentalChart,
-  PatientTimeline,
-  PatientBilling,
-  PatientInfo,
-  PatientPrescriptions,
-  PatientFilesTab,
-  PatientVisitHistory,
   CasePapersTab,
-  CONDITION_LABELS,
-  TOOTH_NAMES,
   ToothRightDrawer
 } from "../components/patient";
 import { SkeletonBox, SkeletonCards } from "../components/Skeleton";
-import PatientHeaderActions from "../components/patient/PatientHeaderActions";
+import PatientOverviewTab from "../components/patient/PatientOverviewTab";
+import ImagingTab from "../components/patient/ImagingTab";
+import DocumentsTab from "../components/patient/DocumentsTab";
+import VisitsTab from "../components/patient/VisitsTab";
+import BillingTab from "../components/patient/BillingTab";
+import PatientFileHeader from "../components/patient/PatientFileHeader";
+// Everything the Overview's shortcuts open. All of these already existed and
+// are used elsewhere; mounting them here means the Overview does the work
+// rather than handing you to another screen to start over.
+import BookingModal from "./appointments/components/BookingModal";
+import useClinicSchedule from "./appointments/hooks/useClinicSchedule";
+import PrescriptionDrawer from "../components/patient/PrescriptionDrawer";
+import ScanUploadDrawer from "../components/patient/ScanUploadDrawer";
+import InvoiceEditor from "../components/payments/InvoiceEditor";
 import PatientEditModal from "../components/patient/PatientEditModal";
 import MasterPasswordModal from "../components/common/MasterPasswordModal";
-import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
 import { notify } from '../utils/notify';
 import { patientService, appointmentService, paymentService } from '../services/patientService';
 import { useAuth } from '../contexts/AuthContext';
-import { getCurrencySymbol } from '../utils/currency';
-import { formatDate, clinicToday } from '../utils/datetime';
-import { daysBetween } from '../utils/nextVisit';
+import { clinicToday } from '../utils/datetime';
 import { printPatientFile } from '../utils/patientPrint';
 
 const PatientProfile = () => {
@@ -32,7 +33,7 @@ const PatientProfile = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || "case-papers");
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || "overview");
   const [loading, setLoading] = useState(true);
   const [secondaryLoading, setSecondaryLoading] = useState(true);
   const [patientData, setPatientData] = useState(null);
@@ -53,11 +54,46 @@ const PatientProfile = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
+  // Overview shortcuts, opened in place. `uploadKind` splits the same drawer
+  // between an X-ray and a document so the two tiles land in the right tab.
+  const [bookingOpen, setBookingOpen] = useState(false);
+  const [rxOpen, setRxOpen] = useState(false);
+  const [rxEditing, setRxEditing] = useState(null);
+  const [uploadKind, setUploadKind] = useState(null);
+  const [newInvoiceOpen, setNewInvoiceOpen] = useState(false);
+  // Doctors, treatments and the day's chair count, the three things
+  // BookingModal needs. Same hook the calendar uses, so the two agree on what
+  // the clinic looks like.
+  const { treatmentTypes, doctors, dayShape } = useClinicSchedule(new Date());
+
+  // Memoised, and it matters. BookingModal re-seeds its form from `initial` in
+  // an effect keyed on that object, so an inline literal here would hand it a
+  // new identity on every render of this page and wipe whatever was half-typed.
+  //
+  // startTime is required, not optional: without it the modal opens with an
+  // empty time, and its end-time and slot-availability checks both run on
+  // undefined. Defaults to the next half hour, which is what someone booking
+  // from a patient's file almost always wants.
+  const bookingInitial = useMemo(() => {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + (30 - (now.getMinutes() % 30)), 0, 0);
+    const startTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    return {
+      patientId: Number(patientId),
+      patientName: patientData?.name || '',
+      patientPhone: patientData?.phone || '',
+      date: clinicToday(),
+      startTime,
+      duration: 30,
+    };
+  }, [patientId, patientData?.name, patientData?.phone]);
+
   const tabs = [
+    { id: "overview", name: "Overview" },
     { id: "case-papers", name: "Case Papers" },
+    { id: "visits", name: "Visits" },
     { id: "billing", name: "Billing" },
-    { id: "profile", name: "Patient Info" },
-    { id: "xrays", name: "X-rays" },
+    { id: "imaging", name: "Imaging" },
     { id: "files", name: "Documents" }
   ];
 
@@ -92,6 +128,42 @@ const PatientProfile = () => {
       setPayments([]);
     }
   };
+
+  // Hoisted out of the load effect so the Overview's drawers can refresh what
+  // they changed. They were closures inside a useEffect; calling one from a
+  // save handler would have thrown a ReferenceError, and optional chaining
+  // does not save you from an identifier that was never declared.
+  const loadAppointments = useCallback(async () => {
+    try {
+      const all = await appointmentService.getAppointments();
+      const mine = all.filter((apt) => apt.patient_id === parseInt(patientId));
+      setAppointments(mine.map((apt) => ({
+        id: apt.id,
+        date: apt.appointment_date,
+        time: apt.start_time,
+        procedure: apt.treatment,
+        status: apt.status,
+        duration: apt.duration || null,
+        notes: apt.notes || '',
+        doctor: apt.doctor_name || 'Unassigned',
+        visit_number: apt.visit_number || null,
+        clinic_name: apt.clinic_name || 'Zendral Dental Central',
+      })));
+    } catch (error) {
+      console.error('Error fetching appointments:', error);
+      setAppointments([]);
+    }
+  }, [patientId]);
+
+  const loadPrescriptions = useCallback(async () => {
+    try {
+      const res = await api.get(`/clinical/prescriptions/patient/${patientId}`);
+      setNormalizedPrescriptions(Array.isArray(res) ? res : []);
+    } catch (error) {
+      console.error('Error fetching normalized prescriptions:', error);
+      setNormalizedPrescriptions([]);
+    }
+  }, [patientId]);
 
   const fetchInvoices = async () => {
     try {
@@ -138,37 +210,10 @@ const PatientProfile = () => {
         // Secondary data (appointments, payments, invoices, prescriptions,
         // case papers) — fetched in parallel so the page fills in quickly.
         // Each settles independently; a failure just leaves that slice empty.
-        const fetchAppointments = async () => {
-          try {
-            const allAppointments = await appointmentService.getAppointments();
-            const patientAppointments = allAppointments.filter(apt => apt.patient_id === parseInt(patientId));
-            const transformedAppointments = patientAppointments.map(apt => ({
-              id: apt.id,
-              date: apt.appointment_date,
-              time: apt.start_time,
-              procedure: apt.treatment,
-              status: apt.status,
-              notes: apt.notes || '',
-              doctor: apt.doctor_name || 'Unassigned',
-              visit_number: apt.visit_number || null,
-              clinic_name: apt.clinic_name || 'Zendral Dental Central'
-            }));
-            setAppointments(transformedAppointments);
-          } catch (error) {
-            console.error('Error fetching appointments:', error);
-            setAppointments([]);
-          }
-        };
+        const fetchAppointments = loadAppointments;
 
-        const fetchNormalizedPrescriptions = async () => {
-          try {
-            const res = await api.get(`/clinical/prescriptions/patient/${patientId}`);
-            setNormalizedPrescriptions(Array.isArray(res) ? res : []);
-          } catch (error) {
-            console.error('Error fetching normalized prescriptions:', error);
-            setNormalizedPrescriptions([]);
-          }
-        };
+
+        const fetchNormalizedPrescriptions = loadPrescriptions;
 
         const fetchCasePapers = async () => {
           try {
@@ -284,24 +329,22 @@ const PatientProfile = () => {
       0
     );
 
-  // When they are due back. A booked appointment is a firmer answer than a
-  // recommendation, so it wins; the case paper's next_visit_date is the
-  // fallback, and it can be overdue, which is the whole point of showing it.
-  const nextVisitChip = (() => {
-    const booked = upcomingAppointments[0];
-    if (booked?.date) return { text: `Booked ${formatDate(booked.date)}`, overdue: false };
-
-    // case-papers come back ordered by date desc, so [0] is the latest visit.
-    const due = casePapers[0]?.next_visit_date;
-    if (!due) return null;
-
-    const days = daysBetween(clinicToday(), due);
-    if (days < 0) {
-      const late = Math.abs(days);
-      return { text: `Overdue by ${late} day${late === 1 ? '' : 's'}`, overdue: true };
-    }
-    return { text: `Due back ${formatDate(due)}`, overdue: false };
-  })();
+  // Derived once for both the header and the Overview tab. Two copies of
+  // "which visit was last" is two chances to disagree.
+  const latestCasePaper = useMemo(
+    () => [...casePapers].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))[0] || null,
+    [casePapers],
+  );
+  const nextAppointment = useMemo(() => {
+    const now = new Date();
+    return [...appointments]
+      // `date`, not `appointment_date`: the loader above renames every field
+      // on the way in, and reading the raw names here meant this was null for
+      // every patient and the header always said "Not booked".
+      .filter((a) => a.date && new Date(a.date) >= now)
+      .filter((a) => !['cancelled', 'no_show', 'no-show'].includes(String(a.status || '').toLowerCase()))
+      .sort((a, b) => new Date(a.date) - new Date(b.date))[0] || null;
+  }, [appointments]);
 
   // Deleting a patient takes their case papers, bills and receipted payments
   // with them, so the master password prompt IS the confirmation. The token
@@ -507,81 +550,19 @@ const PatientProfile = () => {
     <div className="w-full h-full flex flex-col bg-gray-50 overflow-hidden">
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
         <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          {!isCasePaperOpen && (() => {
-            const ageGender = [patientData.age ? `${patientData.age} yrs` : null, patientData.gender].filter(Boolean).join(' • ');
-            return (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-4">
-              <div className="flex items-center gap-3 min-w-0">
-                <button
-                  onClick={() => navigate("/patient-files")}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
-                  aria-label="Back to patients"
-                >
-                  <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
-                <img
-                  src={generatePatientPersona(patientData, 80)}
-                  onError={(e) => { e.target.onerror = null; e.target.src = generateInitialsAvatar(patientData.name || 'Patient'); }}
-                  alt={patientData.name}
-                  className="w-12 h-12 rounded-full object-cover border border-gray-100 flex-shrink-0"
-                />
-                <div className="min-w-0">
-                  <h1 className="text-2xl md:text-3xl font-bold text-gray-900 tracking-tight truncate">{patientData.name}</h1>
-                  <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                    {patientData.display_id && (
-                      <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">#{patientData.display_id}</span>
-                    )}
-                    {ageGender && (
-                      <span className="text-xs font-medium text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">{ageGender}</span>
-                    )}
-                    {patientData.phone && (
-                      <span className="text-xs font-medium text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">{patientData.phone}</span>
-                    )}
-                    {patientData.blood_group && (
-                      <span className="text-xs font-bold text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">🩸 {patientData.blood_group}</span>
-                    )}
-                    {patientData.patient_history && (
-                      <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-full" title={patientData.patient_history}>
-                        ⚠ {patientData.patient_history}
-                      </span>
-                    )}
-                    {/* Money owed and when they are due back: the two things a
-                        doctor would otherwise open a tab to find out. */}
-                    {outstandingDue > 0 && (
-                      <button
-                        onClick={() => setActiveTab('billing')}
-                        title="View this patient's bills"
-                        className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full hover:bg-amber-100 transition-colors"
-                      >
-                        {getCurrencySymbol()}{outstandingDue.toLocaleString('en-IN')} due
-                      </button>
-                    )}
-                    {nextVisitChip && (
-                      <span
-                        className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
-                          nextVisitChip.overdue
-                            ? 'text-amber-700 bg-amber-50 border-amber-200'
-                            : 'text-[#2a276e] bg-[#2a276e]/5 border-[#2a276e]/20'
-                        }`}
-                      >
-                        {nextVisitChip.text}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <PatientHeaderActions
-                patient={patientData}
-                onEdit={() => setEditOpen(true)}
-                onPrint={handlePrintFile}
-                onDelete={() => setDeleteOpen(true)}
-              />
-            </div>
-            );
-          })()}
+          {!isCasePaperOpen && (
+            <PatientFileHeader
+              patient={patientData}
+              lastVisit={latestCasePaper?.date || patientData.last_visit}
+              nextAppointment={nextAppointment}
+              outstanding={outstandingDue}
+              onBack={() => navigate("/patient-files")}
+              onEdit={() => setEditOpen(true)}
+              onPrint={handlePrintFile}
+              onDelete={() => setDeleteOpen(true)}
+              onViewBilling={() => setActiveTab('billing')}
+            />
+          )}
 
           {/* Tab Navigation */}
           {!isCasePaperOpen && (
@@ -607,6 +588,37 @@ const PatientProfile = () => {
 
           {/* Tab Content */}
           <div className="pb-10">
+            {activeTab === "overview" && (
+              <PatientOverviewTab
+                patient={patientData}
+                casePapers={casePapers}
+                appointments={appointments}
+                invoices={invoices}
+                outstandingDue={outstandingDue}
+                prescriptions={normalizedPrescriptions}
+                onOpenTab={setActiveTab}
+                onOpenCalendar={() => navigate('/calendar')}
+                onBookAppointment={() => setBookingOpen(true)}
+                onNewPayment={() => setNewInvoiceOpen(true)}
+                onNewPrescription={() => { setRxEditing(null); setRxOpen(true); }}
+                onOpenPrescription={(rx) => { setRxEditing(rx); setRxOpen(true); }}
+                onStartVisit={() => setActiveTab('case-papers')}
+                onQuickAction={(key) => {
+                  // Every tile does the thing rather than pointing at the tab
+                  // that could. The three that open a drawer do it here; the
+                  // two that are genuinely a different screen still navigate,
+                  // and Print reuses the header menu's handler so there is one
+                  // print path and not two.
+                  if (key === 'visit') setActiveTab('case-papers');
+                  if (key === 'prescription') { setRxEditing(null); setRxOpen(true); }
+                  if (key === 'plan') setActiveTab('case-papers');
+                  if (key === 'document') setUploadKind('document');
+                  if (key === 'photo') setUploadKind('xray');
+                  if (key === 'print') handlePrintFile();
+                }}
+              />
+            )}
+
             {activeTab === "case-papers" && (
               <CasePapersTab
                 patientData={patientData}
@@ -638,43 +650,92 @@ const PatientProfile = () => {
               secondaryLoading ? (
                 <TabSkeleton />
               ) : (
-                <PatientBilling
+                <BillingTab
+                  patient={patientData}
                   invoices={invoices}
-                  payments={payments}
+                  casePapers={casePapers}
+                  prescriptions={normalizedPrescriptions}
                   patientId={patientId}
-                  appointments={appointments}
                   refreshInvoices={fetchInvoices}
-                  refreshPayments={fetchPayments}
-                  patientPhone={patientData?.phone}
                 />
               )
             )}
 
-            {activeTab === "xrays" && (
-              <PatientFilesTab patientId={patientId} variant="xray" />
-            )}
+            {activeTab === "imaging" && <ImagingTab patientId={patientId} user={user} />}
 
             {activeTab === "files" && (
-              <PatientFilesTab patientId={patientId} variant="documents" />
+              <DocumentsTab
+                patientId={patientId}
+                prescriptions={normalizedPrescriptions}
+                invoices={invoices}
+                onQuickAction={(key) => {
+                  if (key === 'prescription') { setRxEditing(null); setRxOpen(true); }
+                  if (key === 'invoice') setNewInvoiceOpen(true);
+                  // Consents are authored per clinic, not per patient, so this
+                  // is the one that legitimately leaves the patient file.
+                  if (key === 'consent') navigate('/consent-forms');
+                }}
+              />
             )}
 
-            {activeTab === "profile" && (
+            {activeTab === "visits" && (
               secondaryLoading ? (
                 <TabSkeleton />
               ) : (
-                <PatientInfo
-                  patientData={patientData}
-                  appointments={appointments}
-                  prescriptions={normalizedPrescriptions}
-                  invoices={payments}
+                <VisitsTab
                   casePapers={casePapers}
-                  dailyVisits={dailyVisits}
+                  appointments={appointments}
+                  nextAppointment={nextAppointment}
+                  onOpenVisit={() => setActiveTab('case-papers')}
+                  onBookAppointment={() => setBookingOpen(true)}
+                  onOpenCalendar={() => navigate('/calendar')}
                 />
               )
             )}
           </div>
         </div>
       </div>
+      {/* Overview shortcuts. Each is the same component its own tab uses, so
+          a prescription written here and one written on the tab are the same
+          record through the same code. */}
+      <BookingModal
+        open={bookingOpen}
+        onClose={() => setBookingOpen(false)}
+        onSaved={() => { setBookingOpen(false); loadAppointments(); }}
+        initial={bookingInitial}
+        doctors={doctors || []}
+        treatments={treatmentTypes || []}
+        chairCount={dayShape?.chairs || 1}
+      />
+
+      <PrescriptionDrawer
+        isOpen={rxOpen}
+        onClose={() => { setRxOpen(false); setRxEditing(null); }}
+        onSave={() => { setRxOpen(false); setRxEditing(null); loadPrescriptions(); }}
+        patientId={patientId}
+        patientData={patientData}
+        initialData={rxEditing}
+      />
+
+      <ScanUploadDrawer
+        isOpen={Boolean(uploadKind)}
+        onClose={() => setUploadKind(null)}
+        onUpload={() => setUploadKind(null)}
+        patientId={patientId}
+      />
+
+      {/* camelCase on the prefill: InvoiceEditor reads prefill.patientId, so
+          passing patient_id was silently ignored and the drawer would have
+          opened on an empty patient picker. */}
+      {newInvoiceOpen && (
+        <InvoiceEditor
+          invoiceId="new"
+          prefill={{ patientId: Number(patientId) }}
+          onClose={() => setNewInvoiceOpen(false)}
+          onSave={() => { setNewInvoiceOpen(false); fetchInvoices(); }}
+        />
+      )}
+
       {!isCasePaperOpen && (
         <ToothRightDrawer 
             isOpen={!!selectedTooth}

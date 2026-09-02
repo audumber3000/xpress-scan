@@ -1,7 +1,10 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from database import get_db
-from models import CasePaper, User, Appointment, Clinic, Patient
+from models import (
+    CasePaper, User, Appointment, Clinic, Patient,
+    Invoice, LabOrder, Prescription, CaseCost, InventoryTransaction,
+)
 from schemas import CasePaperCreate, CasePaperUpdate, CasePaperOut
 from core.auth_utils import get_current_user, require_doctor_or_owner
 from typing import List, Optional, Any
@@ -168,15 +171,58 @@ def delete_case_paper(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_doctor_or_owner())
 ):
-    """Delete a clinical case paper."""
+    """Delete a clinical case paper, and say why when it cannot be deleted.
+
+    Five tables point at case_papers, and this used to hand all of them to a
+    bare `db.delete()`. Any paper with so much as one linked row raised a
+    ForeignKeyViolation, which reached the front desk as a 500 with no
+    explanation and no way to tell which record was in the way.
+
+    The children are not equivalent, so they are not treated alike:
+
+      * Invoices and lab orders BLOCK the delete. Both are commitments made
+        outside this record — money a patient owes, work a lab has been asked
+        for — and neither should vanish because somebody tidied up a visit, nor
+        be silently cut loose from the visit that explains it.
+      * Case costs are DELETED with it. A consultant's fee exists only to
+        attribute this visit's work; with the visit gone it attributes nothing.
+      * Prescriptions and stock movements are DETACHED. A prescription was
+        handed to a patient and the stock really did leave the shelf; both
+        outlive the paperwork, so they keep existing and lose the link.
+    """
     db_paper = db.query(CasePaper).filter(
         CasePaper.id == paper_id,
         CasePaper.clinic_id == current_user.clinic_id
     ).first()
-    
+
     if not db_paper:
         raise HTTPException(status_code=404, detail="Case paper not found")
-        
+
+    invoices = db.query(Invoice).filter(Invoice.case_paper_id == paper_id).count()
+    lab_orders = db.query(LabOrder).filter(LabOrder.case_paper_id == paper_id).count()
+
+    if invoices or lab_orders:
+        blockers = []
+        if invoices:
+            blockers.append(f"{invoices} invoice{'s' if invoices != 1 else ''}")
+        if lab_orders:
+            blockers.append(f"{lab_orders} lab order{'s' if lab_orders != 1 else ''}")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"This visit has {' and '.join(blockers)} attached to it. "
+                "Cancel or move those first, then delete the visit."
+            ),
+        )
+
+    db.query(CaseCost).filter(CaseCost.case_paper_id == paper_id).delete(synchronize_session=False)
+    db.query(Prescription).filter(Prescription.case_paper_id == paper_id).update(
+        {Prescription.case_paper_id: None}, synchronize_session=False
+    )
+    db.query(InventoryTransaction).filter(InventoryTransaction.case_paper_id == paper_id).update(
+        {InventoryTransaction.case_paper_id: None}, synchronize_session=False
+    )
+
     db.delete(db_paper)
     db.commit()
     return {"message": "Case paper deleted successfully"}

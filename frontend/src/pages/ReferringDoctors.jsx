@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Spinner from "../components/common/Spinner";
 import { useNavigate } from 'react-router-dom';
 import { useHeader } from '../contexts/HeaderContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -18,6 +19,7 @@ const ReferringDoctors = () => {
   const [loading, setLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
   const [editingDoctor, setEditingDoctor] = useState(null);
   const [formData, setFormData] = useState({ name: '', hospital: '' });
   const [saving, setSaving] = useState(false);
@@ -85,14 +87,19 @@ const ReferringDoctors = () => {
   };
 
   const handleDeleteDoctor = async (id) => {
+    if (deletingId) return;
     if (!window.confirm('Are you sure you want to delete this referring doctor?')) return;
-    
+
+    // The id, not a boolean: only the row being deleted should show it.
+    setDeletingId(id);
     try {
       await api.delete(`/referring-doctors/${id}`);
       fetchReferringDoctors();
     } catch (error) {
       console.error('Error deleting doctor:', error);
       notify.problem('Failed to delete referring doctor');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -173,9 +180,11 @@ const ReferringDoctors = () => {
                       </button>
                       <button
                         onClick={() => handleDeleteDoctor(doctor.id)}
-                        className="text-red-600 hover:text-red-900"
+                        disabled={deletingId === doctor.id}
+                        className="text-red-600 hover:text-red-900 inline-flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                       >
-                        Delete
+                        {deletingId === doctor.id ? 'Deleting' : 'Delete'}
+                        {deletingId === doctor.id && <Spinner className="w-3 h-3" />}
                       </button>
                     </td>
                   </tr>

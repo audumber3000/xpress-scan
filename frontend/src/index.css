@@ -226,11 +226,45 @@
   animation: avatar-pop 0.22s cubic-bezier(0.34, 1.4, 0.5, 1) forwards;
 }
 
+/* Resizable tables clip instead of pushing.
+
+   A `table-fixed` column no longer grows to fit its content, which is the whole
+   point of being able to drag one narrower, but it means anything that does not
+   clip spills into the column beside it. This lives here rather than on several
+   hundred <td> class lists: a table opts in once with `mp-table-fixed` and every
+   cell behaves, and individual cells only need `truncate` where a fading
+   ellipsis reads better than a hard edge.
+
+   Not on <th>: the resize handle deliberately hangs half its width over the
+   column boundary, and clipping the header would cut it to a 6px target. Header
+   labels truncate on their own inner span instead.
+
+   The min-width rule is the one nobody expects. A flex item's automatic minimum
+   size is its content, so a long patient name refuses to shrink and shoves the
+   avatar out of the cell rather than truncating. */
+.mp-table-fixed td { overflow: hidden; }
+.mp-table-fixed td div { min-width: 0; }
+
+/* The help bulb catches the eye now and again rather than sitting grey in the
+   corner forever: two soft pulses, then it goes quiet. It brightens and swells
+   the way a bulb would instead of casting a ring, since nothing in this app
+   wears a shadow. Scheduled at random intervals so it never reads as a
+   metronome, and it stops for good once that section's help has been opened. */
+@keyframes bulb-glow {
+  0%, 100% { background-color: transparent;                transform: scale(1); }
+  12%      { background-color: rgba(245, 158, 11, 0.16);   transform: scale(1.12); }
+  30%      { background-color: rgba(245, 158, 11, 0.06);   transform: scale(1); }
+  48%      { background-color: rgba(245, 158, 11, 0.16);   transform: scale(1.12); }
+  70%      { background-color: transparent;                transform: scale(1); }
+}
+.animate-bulb-glow { animation: bulb-glow 2.6s ease-in-out; }
+
 /* Nobody needs a bubble springing at them if they have asked the OS for less
    movement. The content still appears, it just stops performing. */
 @media (prefers-reduced-motion: reduce) {
   .animate-bubble-pop,
-  .animate-avatar-pop {
+  .animate-avatar-pop,
+  .animate-bulb-glow {
     opacity: 1;
     animation: none;
   }
@@ -265,6 +299,91 @@
 }
 .animate-celebrate-pop {
   animation: celebrate-pop 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Signup onboarding ──────────────────────────────────────────────────
+   One shared motion vocabulary for the wizard, so the three screens feel
+   like one object moving rather than three pages swapping.
+
+   Direction carries meaning here: Continue moves the content left-to-right
+   with the rail, Back reverses it. A wizard where forward and backward look
+   identical is a wizard where people lose their place. */
+
+@keyframes ob-step-in {
+  from { opacity: 0; transform: translateX(14px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes ob-step-in-back {
+  from { opacity: 0; transform: translateX(-14px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.animate-ob-step      { animation: ob-step-in 0.34s cubic-bezier(0.16, 1, 0.3, 1); }
+.animate-ob-step-back { animation: ob-step-in-back 0.34s cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* Fields land one after another instead of all at once. The stagger is small
+   (45ms) — enough to read as sequence, not enough to feel like waiting.
+   Set `--ob-i` per row to place it in the queue. */
+@keyframes ob-rise {
+  from { opacity: 0; transform: translateY(9px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-ob-rise {
+  opacity: 0;
+  animation: ob-rise 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: calc(var(--ob-i, 0) * 45ms + 60ms);
+}
+
+/* The rail's connecting line filling as a step is cleared. Left-to-right,
+   because that is the direction the wizard travels. */
+@keyframes ob-rail-fill {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+.animate-ob-rail {
+  transform-origin: left center;
+  animation: ob-rail-fill 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* A step going green. The overshoot is the point: it should feel banked. */
+@keyframes ob-done-pop {
+  0%   { transform: scale(0.55); opacity: 0; }
+  55%  { transform: scale(1.14); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.animate-ob-done { animation: ob-done-pop 0.34s cubic-bezier(0.34, 1.4, 0.5, 1); }
+
+/* Wrong OTP. Short, small, and only on the input — a whole-card shake reads
+   as an error in the app rather than in the six digits they just typed. */
+@keyframes ob-shake {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-5px); }
+  40%      { transform: translateX(5px); }
+  60%      { transform: translateX(-3px); }
+  80%      { transform: translateX(3px); }
+}
+.animate-ob-shake { animation: ob-shake 0.36s ease-in-out; }
+
+/* The live "sending…" pulse on the delivery chips. */
+@keyframes ob-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+.animate-ob-pulse { animation: ob-pulse 1.3s ease-in-out infinite; }
+
+/* Same bargain as the bubble above: the content still arrives, it just stops
+   performing for anyone who asked the OS for less movement. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-ob-step,
+  .animate-ob-step-back,
+  .animate-ob-rise,
+  .animate-ob-rail,
+  .animate-ob-done,
+  .animate-ob-shake,
+  .animate-ob-pulse {
+    opacity: 1;
+    transform: none;
+    animation: none !important;
+  }
 }
 
 .animate-shine {

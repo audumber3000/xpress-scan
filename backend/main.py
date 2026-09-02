@@ -217,6 +217,16 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_published_at TIMESTAMP"))
             conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_about TEXT"))
             conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS website_show_stats BOOLEAN DEFAULT TRUE"))
+            # Invoice drawer (added 2026-09). These three are mapped on
+            # InvoiceLineItem / InvoicePayment, and SQLAlchemy names every mapped
+            # column in its SELECTs — so if they are missing on the box, it is not
+            # the new fields that break, it is every invoice query behind
+            # Payments, patient billing and case papers. deploy.sh alone does not
+            # reach prod (the server runs its own drifted copy); this block does.
+            conn.execute(text("ALTER TABLE invoice_line_items ADD COLUMN IF NOT EXISTS tooth_number VARCHAR"))
+            conn.execute(text("ALTER TABLE invoice_payments ADD COLUMN IF NOT EXISTS reference VARCHAR"))
+            conn.execute(text("ALTER TABLE invoice_payments ADD COLUMN IF NOT EXISTS recorded_by INTEGER REFERENCES users(id)"))
+
             # In-app notification centre (added 2026-08). create_all makes the
             # table; this is the index the unread badge counts through, and it
             # is polled on every page so it is worth having from day one.

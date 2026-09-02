@@ -7,12 +7,18 @@ import { getCurrencySymbol } from "../../utils/currency";
 import { useAuth } from "../../contexts/AuthContext";
 import { isManualWhatsApp, shareInvoiceManually } from "../../utils/whatsapp";
 import GearLoader from "../GearLoader";
-import InvoiceHeader from "./InvoiceHeader";
+import Spinner from "../common/Spinner";
 import InvoiceLineItems from "./InvoiceLineItems";
 import InvoicePayments from "./InvoicePayments";
-import PartPaymentSummary from "./PartPaymentSummary";
 import InvoiceDiscounts from "./InvoiceDiscounts";
 import InvoiceActions from "./InvoiceActions";
+import InvoiceTitleBlock from "./invoice/InvoiceTitleBlock";
+import InvoiceSummaryStrip from "./invoice/InvoiceSummaryStrip";
+import InvoiceTotals from "./invoice/InvoiceTotals";
+import PartlyPaidBanner from "./invoice/PartlyPaidBanner";
+import InvoiceDrawerHeader from "./invoice/InvoiceDrawerHeader";
+import PaymentTimeline from "./invoice/PaymentTimeline";
+import InvoiceCollectionStats from "./invoice/InvoiceCollectionStats";
 import MarkAsPaidModal from "./MarkAsPaidModal";
 import ConfirmDialog from "../common/ConfirmDialog";
 import MasterPasswordModal from "../common/MasterPasswordModal";
@@ -30,6 +36,10 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
   const [downloadingPDF, setDownloadingPDF] = useState(false);
   const [drawerTab, setDrawerTab] = useState('invoice'); // 'invoice' | 'payments'
   const paymentCount = (invoice?.payments || []).length;
+  // What the timeline refetches on. Derived rather than a counter we remember to
+  // bump: any route that changes the money changes one of these three, and a
+  // route that changes none of them has nothing new to show.
+  const timelineKey = `${paymentCount}:${invoice?.paid_amount ?? ''}:${invoice?.status ?? ''}`;
 
   // A different invoice always opens on its own terms, never on the tab the
   // last one happened to be left on.
@@ -372,6 +382,38 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
     }
   };
 
+  // Print opens the same PDF the download produces, in a tab, and asks the
+  // browser to print it. Deliberately not a window.print() of the drawer: what
+  // would come out is the app chrome, not the invoice the patient gets.
+  const [printing, setPrinting] = useState(false);
+  const handlePrintInvoice = async () => {
+    try {
+      setActionError("");
+      setPrinting(true);
+      const baseURL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      const response = await fetch(`${baseURL}/api/v1/invoices/${currentInvoiceId}/pdf`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+      });
+      if (!response.ok) throw new Error('Failed to build the PDF');
+
+      const url = window.URL.createObjectURL(await response.blob());
+      const w = window.open(url);
+      if (!w) {
+        // Popup blocked. Revoking here would leave the user with nothing, so
+        // say what happened rather than failing silently.
+        window.URL.revokeObjectURL(url);
+        setActionError('Your browser blocked the print window. Allow popups for this site, or use Download.');
+        return;
+      }
+      w.addEventListener('load', () => { w.print(); }, { once: true });
+    } catch (error) {
+      console.error("Error printing invoice:", error);
+      fail(error, "Could not build the PDF to print");
+    } finally {
+      setPrinting(false);
+    }
+  };
+
   const handleDownloadPDF = async () => {
     try {
       setActionError("");
@@ -495,55 +537,32 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
       <div className="fixed inset-0 z-50">
         <div className="absolute inset-0 bg-black/30" onClick={handleClose} />
 
-        <div className="absolute right-0 top-0 h-full w-full max-w-3xl bg-white shadow-2xl z-50 flex flex-col animate-slide-in-right">
+        <div className="absolute right-0 top-0 h-full w-full max-w-4xl bg-white shadow-2xl z-50 flex flex-col animate-slide-in-right">
           {isLoadingDrawer ? (
             <div className="flex-1 flex items-center justify-center">
               <GearLoader size="w-8 h-8" />
             </div>
           ) : (
             <>
-          {/* Tabs sit on the top row with the close button, so the drawer spends
-              no height on a title. "Invoice Details" only repeated what the
-              invoice number below it already says. Same tab shape as the
-              Patients and Payments pages. */}
-          <div className="px-6 border-b border-gray-200 shrink-0 flex items-center justify-between gap-4">
-            {!isCreating && invoice ? (
-              <nav className="-mb-px flex space-x-8">
-                {[
-                  { id: 'invoice', label: 'Invoice' },
-                  { id: 'payments', label: `Part Payments${paymentCount ? ` (${paymentCount})` : ''}` },
-                ].map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => setDrawerTab(t.id)}
-                    className={`${
-                      drawerTab === t.id
-                        ? 'border-[#2a276e] text-[#2a276e]'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </nav>
-            ) : (
-              // Creating: no tabs yet, but the row still carries the close button.
-              <h2 className="py-4 text-sm font-semibold text-gray-900">New Invoice</h2>
-            )}
-
-            <button
-              onClick={handleClose}
-              aria-label="Close"
-              className="p-2 -mr-2 hover:bg-gray-100 rounded-full transition shrink-0"
-            >
-              <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+          <InvoiceDrawerHeader
+            tabs={!isCreating && invoice ? [
+              { id: 'invoice', label: 'Invoice' },
+              { id: 'payments', label: `Part Payments${paymentCount ? ` (${paymentCount})` : ''}` },
+              { id: 'activity', label: 'Activity' },
+            ] : []}
+            activeTab={drawerTab}
+            onTabChange={setDrawerTab}
+            title="New Invoice"
+            showDocActions={!isCreating && !!invoice}
+            onPrint={handlePrintInvoice}
+            printing={printing}
+            onDownload={handleDownloadPDF}
+            downloading={downloadingPDF}
+            onClose={handleClose}
+          />
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-5">
             {isCreating ? (
               <div className="max-w-md mx-auto mt-10">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Create Invoice</h3>
@@ -643,10 +662,28 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
               </div>
             ) : drawerTab === 'payments' ? (
               <InvoicePayments invoice={invoice} onChanged={setInvoice} />
+            ) : drawerTab === 'activity' ? (
+              <>
+                {/* The band spans the drawer — capped, it loses the room the
+                    three stat cards need and squeezes the invoice number.
+                    The timeline is capped instead: stretched to full width it
+                    puts the date a long way from the thing it dates. */}
+                <InvoiceTitleBlock invoice={invoice} stats={<InvoiceCollectionStats invoice={invoice} />} />
+                <div className="max-w-xl">
+                  <PaymentTimeline invoiceId={invoice?.id} reloadKey={timelineKey} />
+                </div>
+              </>
             ) : (
               <>
-                <InvoiceHeader invoice={invoice} />
-                
+                <InvoiceTitleBlock invoice={invoice} />
+
+                <InvoiceSummaryStrip
+                  invoice={invoice}
+                  onRecordPayment={() => setShowMarkPaidModal(true)}
+                  onSendReminder={handleSendWhatsApp}
+                  sendingReminder={sendingWhatsApp}
+                />
+
                 <InvoiceLineItems
                   invoice={invoice}
                   lineItems={invoice?.line_items || []}
@@ -657,31 +694,38 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
                   canEdit={canEdit}
                 />
 
-            {/* Concessions granted after issue — only shown once there's an
-                issued bill to discount (the component hides itself on drafts). */}
-            <InvoiceDiscounts
-              invoice={invoice}
-              onAdd={handleAddDiscount}
-              onRemove={handleRemoveDiscount}
-            />
+                {/* Concession control on the left, arithmetic on the right —
+                    the way the foot of a paper invoice reads. */}
+                <div className="mt-3 flex flex-col-reverse sm:flex-row sm:items-start gap-4">
+                  <div className="flex-1 min-w-0">
+                    <InvoiceDiscounts
+                      invoice={invoice}
+                      onAdd={handleAddDiscount}
+                      onRemove={handleRemoveDiscount}
+                    />
+                  </div>
+                  <InvoiceTotals
+                    invoice={invoice}
+                    canEdit={canEdit}
+                    onUpdateInvoice={handleUpdateInvoiceStats}
+                  />
+                </div>
 
-            {/* Where the money stands, with a way through to the detail. The
-                schedule itself lives in the Part Payments tab. */}
-            <PartPaymentSummary invoice={invoice} onOpen={() => setDrawerTab('payments')} />
+                <PartlyPaidBanner invoice={invoice} />
 
-            {invoice?.notes && (
-              <div className="mt-6">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">Notes:</h3>
-                <p className="text-sm text-gray-600">{invoice.notes}</p>
-              </div>
-            )}
+                {invoice?.notes && (
+                  <div className="mt-4 rounded-lg border border-gray-200 p-3.5">
+                    <h3 className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1.5">Notes</h3>
+                    <p className="text-[13px] text-gray-700 whitespace-pre-wrap">{invoice.notes}</p>
+                  </div>
+                )}
               </>
             )}
           </div>
 
           {/* Footer */}
           {!isCreating && invoice && (
-            <div className="p-6 border-t border-gray-200 bg-gray-50">
+            <div className="px-4 sm:px-5 py-3 sm:py-3.5 border-t border-gray-200 bg-gray-50">
               {/* Sits directly above the buttons that caused it, so the reason
                   and the retry are the same glance. */}
               {actionError && (
@@ -810,7 +854,7 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
                 disabled={deleting}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
               >
-                {deleting && <GearLoader size="w-4 h-4" />}
+                {deleting && <Spinner />}
                 {deleting ? 'Deleting…' : 'Delete'}
               </button>
             </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import Spinner from "../common/Spinner";
 import { api } from '../../utils/api';
 import { Search, Plus } from 'lucide-react';
 
@@ -10,6 +11,7 @@ const ClinicalAutocomplete = ({ category, value, onChange, onSelectFull, placeho
     const [filtered, setFiltered] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [inputValue, setInputValue] = useState(value || '');
+    const [saving, setSaving] = useState(false);
     const wrapperRef = useRef(null);
 
     useEffect(() => {
@@ -69,8 +71,9 @@ const ClinicalAutocomplete = ({ category, value, onChange, onSelectFull, placeho
     };
 
     const handleAddNew = async () => {
-        if (!inputValue.trim()) return;
-        
+        if (saving || !inputValue.trim()) return;
+
+        setSaving(true);
         try {
             const response = await api.post('/clinical/settings/', {
                 category,
@@ -85,6 +88,7 @@ const ClinicalAutocomplete = ({ category, value, onChange, onSelectFull, placeho
             console.error("Failed to auto-save new clinical setting:", err);
             setShowSuggestions(false);
         }
+        setSaving(false);
     };
 
     const isExactMatch = suggestions.some(s => s.name.toLowerCase() === inputValue.toLowerCase());
@@ -116,10 +120,11 @@ const ClinicalAutocomplete = ({ category, value, onChange, onSelectFull, placeho
                     {!isExactMatch && inputValue.trim() && (
                         <button
                             onClick={handleAddNew}
+                            disabled={saving}
                             className="w-full text-left px-4 py-3 hover:bg-[#2a276e]/5 flex items-center gap-3 group transition-colors border-b border-gray-50 mb-1"
                         >
                             <div className="w-8 h-8 bg-[#2a276e]/10 rounded-lg flex items-center justify-center text-[#2a276e]">
-                                <Plus size={16} />
+                                {saving ? <Spinner className="w-4 h-4" /> : <Plus size={16} />}
                             </div>
                             <div>
                                 <span className="text-[13px] font-bold text-[#2a276e]">Add "{inputValue}"</span>

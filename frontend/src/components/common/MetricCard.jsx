@@ -18,6 +18,13 @@ import KpiSparkline from './KpiSparkline';
  * Every variant carries a `story`: one plain sentence naming the figures behind
  * the headline. That sentence is the point — a number with a percentage next to
  * it isn't information.
+ *
+ * A card that opens a drawer says so. Doctors were not finding the detail views
+ * because a card with a hover border reads as decoration, and Tailwind v4 gives
+ * a <button> `cursor: default`, so even the pointer said "not clickable". On
+ * hover the story line swaps for the invitation — same line, same height, so
+ * nothing shifts. A card with no `onClick` now stays inert on hover instead of
+ * lighting up like the ones that do something.
  */
 
 // A rise is good for revenue and patients, bad for outstanding dues. Without
@@ -28,7 +35,7 @@ const deltaTone = (changeType, invert) => {
   return good ? 'good' : 'bad';
 };
 
-const DeltaPill = ({ change, changeType, invert, hero }) => {
+const DeltaPill = ({ change, changeType, invert, hero, label }) => {
   // No comparison available is different from a comparison that came out flat.
   // Payments' summary has no period-over-period figure, so rendering "— 0%" on
   // every card there would be four pills asserting something nobody measured.
@@ -39,7 +46,7 @@ const DeltaPill = ({ change, changeType, invert, hero }) => {
 
   if (hero) {
     return (
-      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white whitespace-nowrap">
+      <span title={label} className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white whitespace-nowrap">
         {flat ? '— 0%' : `${changeType === 'up' ? '▲' : '▼'} ${Math.abs(change)}%`}
       </span>
     );
@@ -52,7 +59,7 @@ const DeltaPill = ({ change, changeType, invert, hero }) => {
       : 'bg-red-50 text-red-600';
 
   return (
-    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${cls}`}>
+    <span title={label} className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${cls}`}>
       {flat ? '— 0%' : `${changeType === 'up' ? '▲' : '▼'} ${Math.abs(change)}%`}
     </span>
   );
@@ -103,6 +110,10 @@ const MetricCard = ({
   display,          // pre-formatted headline string
   change,
   changeType,
+  // What the pill compared, in words. Payments measures its arrows over a
+  // month while the headline covers everything the filters select, so the two
+  // windows differ and the pill has to be able to say so.
+  changeLabel,
   invert = false,
   badge,
   badgeTone,
@@ -118,6 +129,9 @@ const MetricCard = ({
   sparklineHighlight,
   rows,
   onClick,
+  // What the drawer behind this card is called. Shown on hover, so it should
+  // finish the sentence "…" rather than repeat the card's own title.
+  actionLabel = 'See the breakdown',
   className = '',
 }) => {
   const hero = variant === 'hero';
@@ -127,9 +141,11 @@ const MetricCard = ({
       type="button"
       onClick={onClick}
       className={`group relative overflow-hidden rounded-xl p-3.5 md:p-4 flex flex-col gap-2 min-w-0 min-h-[6.5rem] text-left border transition-colors ${
+        onClick ? 'cursor-pointer' : 'cursor-default'
+      } ${
         hero
-          ? 'bg-[#2a276e] border-[#2a276e] text-white hover:bg-[#231f5e]'
-          : 'bg-white border-gray-200 hover:border-[#2a276e]/35'
+          ? `bg-[#2a276e] border-[#2a276e] text-white ${onClick ? 'hover:bg-[#231f5e]' : ''}`
+          : `bg-white border-gray-200 ${onClick ? 'hover:border-[#2a276e]/35' : ''}`
       } ${className}`}
     >
       {/* Soft highlight so the filled card has some depth without a shadow. */}
@@ -161,7 +177,7 @@ const MetricCard = ({
         >
           {display}
         </span>
-        <DeltaPill change={change} changeType={changeType} invert={invert} hero={hero} />
+        <DeltaPill change={change} changeType={changeType} invert={invert} hero={hero} label={changeLabel} />
         {badge && <Badge text={badge} tone={badgeTone} />}
       </div>
 
@@ -171,14 +187,27 @@ const MetricCard = ({
 
       {variant === 'breakdown' && rows?.length > 0 && <Breakdown rows={rows} />}
 
-      {story && (
+      {(story || onClick) && (
         <p className={`relative text-[11px] leading-snug m-0 ${hero ? 'text-white/75' : 'text-gray-500'}`}>
           {/* Cards sit 2-up below `md`, so the long sentence gets swapped for a
               short one rather than wrapping to four lines. Switches at the same
               768px boundary as useBreakpoint, so the text and the chart
               geometry change together rather than at two different widths. */}
-          <span className="md:hidden">{storyShort || story}</span>
-          <span className="hidden md:inline">{story}</span>
+          {story && (
+            <span className={onClick ? 'group-hover:hidden' : undefined}>
+              <span className="md:hidden">{storyShort || story}</span>
+              <span className="hidden md:inline">{story}</span>
+            </span>
+          )}
+          {onClick && (
+            <span
+              className={`${story ? 'hidden group-hover:inline' : 'inline'} font-semibold ${
+                hero ? 'text-white' : 'text-[#2a276e]'
+              }`}
+            >
+              {actionLabel} <span aria-hidden="true">&rarr;</span>
+            </span>
+          )}
         </p>
       )}
 

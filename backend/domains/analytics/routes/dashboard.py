@@ -760,28 +760,104 @@ def get_appointments_today(
 
     return result
 
-@router.get("/today")
-def get_today_overview(
-    clinic_id: Optional[int] = None,
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
-):
-    """Today's schedule + a 'needs attention' action queue for the dashboard.
+def _month_activity(db, clinic_id, month_start, today_date):
+    """One row per day of a month: what is booked, what is due, who registered.
 
-    Combines today's appointments with the most actionable follow-ups:
-    outstanding payments, overdue lab cases, and today's no-shows.
+    Four grouped queries for the whole month rather than four per day. Shared by
+    /today, which ships the current month with the first paint, and by
+    /month-activity, which serves the calendar's arrows without refetching the
+    appointment list beside it.
+
+    Registrations are bucketed the same way the dues above them are, on the UTC
+    day. The clinic-timezone sweep is still outstanding across this endpoint,
+    and bucketing one column differently from the ones beside it would put two
+    conventions in a single calendar cell.
     """
-    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
-    now = datetime.utcnow()
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_end = today_start + timedelta(days=1)
+    next_month = _shift_months(month_start, -1)
+    days_in_month = (next_month - month_start).days
 
-    # ── Today's appointments ──
+    activity = {
+        (month_start + timedelta(days=i)).date().isoformat():
+            {"appointments": 0, "labs": 0, "dues": 0, "patients": 0}
+        for i in range(days_in_month)
+    }
+
+    def _bump(key, when, amount=1):
+        if when is None:
+            return
+        day = (when.date() if hasattr(when, 'date') else when).isoformat()
+        if day in activity:
+            activity[day][key] += amount
+
+    for (appt_date,) in db.query(Appointment.appointment_date).filter(
+        and_(
+            Appointment.clinic_id == clinic_id,
+            Appointment.appointment_date >= month_start,
+            Appointment.appointment_date < next_month,
+        )
+    ).all():
+        _bump("appointments", appt_date)
+
+    for (due_date,) in db.query(LabOrder.due_date).filter(
+        and_(
+            LabOrder.clinic_id == clinic_id,
+            LabOrder.due_date.isnot(None),
+            LabOrder.due_date >= month_start,
+            LabOrder.due_date < next_month,
+        )
+    ).all():
+        _bump("labs", due_date)
+
+    for (inv_date,) in db.query(func.coalesce(Invoice.finalized_at, Invoice.created_at)).filter(
+        and_(
+            Invoice.clinic_id == clinic_id,
+            Invoice.due_amount > 0,
+            Invoice.status.notin_(['draft', 'cancelled']),
+            func.coalesce(Invoice.finalized_at, Invoice.created_at) >= month_start,
+            func.coalesce(Invoice.finalized_at, Invoice.created_at) < next_month,
+        )
+    ).all():
+        _bump("dues", inv_date)
+
+    # New patients, which is what a day of appointments is ultimately for.
+    for (created,) in db.query(Patient.created_at).filter(
+        and_(
+            Patient.clinic_id == clinic_id,
+            Patient.created_at.isnot(None),
+            Patient.created_at >= month_start,
+            Patient.created_at < next_month,
+        )
+    ).all():
+        _bump("patients", created)
+
+    return {
+        "year": month_start.year,
+        "month": month_start.month,
+        "today": today_date.isoformat(),
+        "days": [{"date": day, **counts} for day, counts in sorted(activity.items())],
+    }
+
+
+# A day's list caps here. A bulk import can create hundreds of patients under a
+# single date, and the panel is a glance, not the Patients page. The true count
+# rides along separately so the header never has to lie about it.
+DAY_PEOPLE_LIMIT = 100
+
+
+def _day_appointments(db, clinic_id, day_start, day_end):
+    """One day's appointments, already shaped for the dashboard's day panel.
+
+    Pulled out of /today so any day can be asked for. The panel renders one row
+    component whichever day is selected, which only holds if both endpoints
+    hand it the same shape.
+
+    Returns (appointments, summary, no_shows).
+    """
     appts = db.query(Appointment).filter(
         and_(
-            Appointment.clinic_id == final_clinic_id,
-            Appointment.appointment_date >= today_start,
-            Appointment.appointment_date < today_end,
+            Appointment.clinic_id == clinic_id,
+            Appointment.appointment_date >= day_start,
+            Appointment.appointment_date < day_end,
         )
     ).order_by(Appointment.start_time.asc()).all()
 
@@ -836,6 +912,137 @@ def get_today_overview(
             "visit_started": a.id in started_ids,
         })
 
+    summary = {
+        "total": len(appts),
+        "completed": completed,
+        "remaining": remaining,
+    }
+    return appointments, summary, no_shows
+
+
+def _day_registrations(db, clinic_id, day_start, day_end):
+    """The patients whose record was created on a given day.
+
+    Bucketed on `created_at`, deliberately, so this list can never disagree with
+    the green count on the calendar cell that opened it. That count is the same
+    column, and a dashboard contradicting itself in two adjacent rectangles is
+    worse than one that shows less.
+
+    It does mean a back-dated patient lands under the day they were typed in
+    rather than the day the doctor set, so each row carries its `registered_on`
+    and the panel says so on the ones where the two differ.
+
+    Returns (rows, total) — rows is capped, total is not.
+    """
+    q = db.query(Patient).filter(
+        and_(
+            Patient.clinic_id == clinic_id,
+            Patient.created_at.isnot(None),
+            Patient.created_at >= day_start,
+            Patient.created_at < day_end,
+        )
+    )
+    total = q.count()
+    rows = (
+        q.order_by(Patient.created_at.asc(), Patient.id.asc())
+        .limit(DAY_PEOPLE_LIMIT).all()
+    )
+
+    return [{
+        "id": p.id,
+        "name": p.name,
+        "phone": p.phone,
+        "age": p.age,
+        "gender": p.gender,
+        "treatment": p.treatment_type,
+        "at": p.created_at.isoformat() if p.created_at else None,
+        "registered_on": p.registered_on.isoformat() if p.registered_on else None,
+    } for p in rows], total
+
+
+@router.get("/day")
+def get_day_detail(
+    date: str,
+    clinic_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Everything the dashboard's right-hand panel shows for one selected day.
+
+    Its own endpoint because /today carries the attention queue and the month
+    grid with it, none of which changes when you click the 14th.
+    """
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
+    try:
+        day_start = datetime.strptime(date, "%Y-%m-%d")
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    day_end = day_start + timedelta(days=1)
+
+    appointments, summary, _ = _day_appointments(db, final_clinic_id, day_start, day_end)
+    patients, patients_total = _day_registrations(db, final_clinic_id, day_start, day_end)
+
+    return {
+        "date": date,
+        "summary": summary,
+        "appointments": appointments,
+        "patients": patients,
+        "patients_total": patients_total,
+    }
+
+
+@router.get("/month-activity")
+def get_month_activity(
+    month: Optional[str] = None,   # YYYY-MM; defaults to the current month
+    clinic_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """The calendar grid for one month.
+
+    Its own endpoint so stepping back through the year costs one small query
+    set, rather than refetching today's appointments and the attention queue
+    with every press of an arrow.
+    """
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if month:
+        try:
+            year_s, month_s = month.split("-")
+            month_start = datetime(int(year_s), int(month_s), 1)
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    else:
+        month_start = today_start.replace(day=1)
+
+    return _month_activity(db, final_clinic_id, month_start, today_start.date())
+
+
+@router.get("/today")
+def get_today_overview(
+    clinic_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Today's schedule + a 'needs attention' action queue for the dashboard.
+
+    Combines today's appointments with the most actionable follow-ups:
+    outstanding payments, overdue lab cases, and today's no-shows.
+    """
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = today_start + timedelta(days=1)
+
+    # ── Today's appointments, and who was registered today ──
+    appointments, today_summary, no_shows = _day_appointments(
+        db, final_clinic_id, today_start, today_end
+    )
+    today_patients, today_patients_total = _day_registrations(
+        db, final_clinic_id, today_start, today_end
+    )
+
     # ── Outstanding dues: finalized invoices still carrying a balance ──
     dues = db.query(
         func.count(Invoice.id), func.coalesce(func.sum(Invoice.due_amount), 0.0)
@@ -889,74 +1096,17 @@ def get_today_overview(
         ).scalar() or 0)
     )
 
-    # ── Month activity, for the calendar dots ──
-    # One row per day of the current month carrying what is booked that day, so
-    # the calendar can show at a glance that Thursday is packed and Friday empty.
-    # Three grouped queries for the month, not three per day.
-    month_start = today_start.replace(day=1)
-    next_month = _shift_months(month_start, -1)
-    days_in_month = (next_month - month_start).days
-
-    activity = {
-        (month_start + timedelta(days=i)).date().isoformat(): {"appointments": 0, "labs": 0, "dues": 0}
-        for i in range(days_in_month)
-    }
-
-    def _bump(key, when, amount=1):
-        if when is None:
-            return
-        day = (when.date() if hasattr(when, 'date') else when).isoformat()
-        if day in activity:
-            activity[day][key] += amount
-
-    for (appt_date,) in db.query(Appointment.appointment_date).filter(
-        and_(
-            Appointment.clinic_id == final_clinic_id,
-            Appointment.appointment_date >= month_start,
-            Appointment.appointment_date < next_month,
-        )
-    ).all():
-        _bump("appointments", appt_date)
-
-    for (due_date,) in db.query(LabOrder.due_date).filter(
-        and_(
-            LabOrder.clinic_id == final_clinic_id,
-            LabOrder.due_date.isnot(None),
-            LabOrder.due_date >= month_start,
-            LabOrder.due_date < next_month,
-        )
-    ).all():
-        _bump("labs", due_date)
-
-    for (inv_date,) in db.query(func.coalesce(Invoice.finalized_at, Invoice.created_at)).filter(
-        and_(
-            Invoice.clinic_id == final_clinic_id,
-            Invoice.due_amount > 0,
-            Invoice.status.notin_(['draft', 'cancelled']),
-            func.coalesce(Invoice.finalized_at, Invoice.created_at) >= month_start,
-            func.coalesce(Invoice.finalized_at, Invoice.created_at) < next_month,
-        )
-    ).all():
-        _bump("dues", inv_date)
-
-    month_activity = [
-        {"date": day, **counts}
-        for day, counts in sorted(activity.items())
-    ]
+    # ── Month activity, for the calendar grid ──
+    month_block = _month_activity(
+        db, final_clinic_id, today_start.replace(day=1), today_start.date()
+    )
 
     return {
-        "summary": {
-            "total": len(appts),
-            "completed": completed,
-            "remaining": remaining,
-        },
+        "summary": today_summary,
         "appointments": appointments,
-        "month": {
-            "year": month_start.year,
-            "month": month_start.month,
-            "today": today_start.date().isoformat(),
-            "days": month_activity,
-        },
+        "patients": today_patients,
+        "patients_total": today_patients_total,
+        "month": month_block,
         "attention": {
             "outstanding_dues": {"count": dues_count, "amount": round(dues_amount, 2)},
             "overdue_labs": int(overdue_labs),

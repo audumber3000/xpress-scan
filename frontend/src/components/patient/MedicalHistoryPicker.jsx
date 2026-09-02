@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Spinner from "../common/Spinner";
 import { api } from '../../utils/api';
 import { Check, Plus, AlertCircle } from 'lucide-react';
 
@@ -9,6 +10,7 @@ const MedicalHistoryPicker = ({ selectedConditions, onChange }) => {
     const [available, setAvailable] = useState([]);
     const [isAdding, setIsAdding] = useState(false);
     const [newCondition, setNewCondition] = useState("");
+    const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         const fetchMedicalConditions = async () => {
@@ -30,8 +32,9 @@ const MedicalHistoryPicker = ({ selectedConditions, onChange }) => {
     };
 
     const handleAddNew = async () => {
-        if (!newCondition.trim()) return;
-        
+        if (!newCondition.trim() || saving) return;
+
+        setSaving(true);
         try {
             const response = await api.post('/clinical/settings/', {
                 category: 'medical-condition',
@@ -44,6 +47,8 @@ const MedicalHistoryPicker = ({ selectedConditions, onChange }) => {
             setIsAdding(false);
         } catch (err) {
             console.error("Failed to add medical condition:", err);
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -105,9 +110,11 @@ const MedicalHistoryPicker = ({ selectedConditions, onChange }) => {
                     />
                     <button
                         onClick={handleAddNew}
-                        className="px-4 py-2 bg-[#20b2aa] text-white text-xs font-bold rounded-xl hover:bg-[#1a9a92] transition-colors"
+                        disabled={saving}
+                        className="px-4 py-2 bg-[#20b2aa] text-white text-xs font-bold rounded-xl hover:bg-[#1a9a92] transition-colors inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                        Save
+                        {saving ? 'Saving' : 'Save'}
+                        {saving && <Spinner className="w-3.5 h-3.5" />}
                     </button>
                     <button
                         onClick={() => setIsAdding(false)}

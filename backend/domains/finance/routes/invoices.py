@@ -77,6 +77,27 @@ def post_issue_discount_total(invoice: Invoice) -> float:
     return sum(float(d.amount or 0) for d in getattr(invoice, 'post_issue_discounts', []) or [])
 
 
+def _payment_order(p):
+    """Sort key for "most recent payment first".
+
+    Three parts, because the obvious one-liner has two faults. `paid_on or
+    created_at` mixes a date with a datetime, which raises the moment one row in
+    a bill has no paid_on. And two instalments taken on the same day tie on it
+    entirely, so which one counts as the latest falls to whatever order the
+    relationship happened to load in — fine for a list, not fine for the
+    "Last payment" card that reads the head of it.
+
+    Day the money arrived, then the moment it was entered, then the id.
+    """
+    from datetime import date, datetime
+    day = p.paid_on
+    if isinstance(day, datetime):
+        day = day.date()
+    if day is None:
+        day = p.created_at.date() if p.created_at else date.min
+    return (day, p.created_at or datetime.min, p.id or 0)
+
+
 def enrich_invoice(db: Session, invoice: Invoice):
     """Enrich invoice with related data"""
     total_amount = float(invoice.total or 0)
@@ -102,6 +123,9 @@ def enrich_invoice(db: Session, invoice: Invoice):
         'patient_id': invoice.patient_id,
         'patient_name': invoice.patient.name if invoice.patient else None,
         'patient_phone': invoice.patient.phone if invoice.patient else None,
+        # One free-text line, not a structured address: the column is still
+        # `village` underneath, only the label ever changed.
+        'patient_address': (invoice.patient.village if invoice.patient else None),
         'patient_display_id': invoice.patient.display_id if invoice.patient else None,
         'invoice_number': invoice.invoice_number,
         'status': invoice.status,
@@ -151,6 +175,7 @@ def enrich_invoice(db: Session, invoice: Invoice):
                 'id': item.id,
                 'invoice_id': item.invoice_id,
                 'description': item.description,
+                'tooth_number': getattr(item, 'tooth_number', None),
                 'quantity': item.quantity,
                 'unit_price': item.unit_price,
                 'amount': item.amount,
@@ -173,6 +198,12 @@ def enrich_invoice(db: Session, invoice: Invoice):
                 'amount': float(p.amount or 0),
                 'paid_on': p.paid_on.isoformat() if p.paid_on else None,
                 'method': p.method,
+                # The transaction it arrived on, and who took it. The name is
+                # resolved here rather than left as an id: the timeline reads
+                # "Recorded by Dr Audi", and a bare 6 tells nobody anything.
+                'reference': getattr(p, 'reference', None),
+                'recorded_by': getattr(p, 'recorded_by', None),
+                'recorded_by_name': (p.recorder.name if getattr(p, 'recorder', None) else None),
                 'note': p.note,
                 'created_at': p.created_at.isoformat() if p.created_at else None,
                 # When it was actually entered, and whether that was later than
@@ -189,7 +220,7 @@ def enrich_invoice(db: Session, invoice: Invoice):
                     float(p.receipt_balance_due) if getattr(p, 'receipt_balance_due', None) is not None else None
                 ),
             }
-            for p in sorted(invoice.payments, key=lambda x: (x.paid_on or x.created_at), reverse=True)
+            for p in sorted(invoice.payments, key=_payment_order, reverse=True)
         ]
     }
     return invoice_dict
@@ -551,6 +582,58 @@ def _resolve_date_bounds(db: Session, clinic_id: int, date_from: Optional[str], 
     return clinic_day_bounds_utc(clinic, d_from, d_to)
 
 
+def _comparison_windows(clinic, created_from, created_to):
+    """The two windows the summary's change pills compare, as naive UTC bounds.
+
+    With a date filter on the page, a card compares that range against the
+    equal-length range immediately before it. With no date filter, which is the
+    usual case, it compares this calendar month so far against the same span of
+    last month: on the 5th you are reading 1-5 Sep against 1-5 Aug rather than
+    five days against a whole month, which would report a collapse every time.
+
+    Returns (cur_from, cur_to, prev_from, prev_to, label).
+    """
+    if created_from and created_to:
+        span = created_to - created_from
+        return created_from, created_to, created_from - span, created_from, "vs the previous period"
+
+    today = clinic_today(clinic)
+    month_start = today.replace(day=1)
+    prev_month_end = month_start - timedelta(days=1)
+    prev_month_start = prev_month_end.replace(day=1)
+    # Same span into the previous month, clamped for the months that are shorter
+    # than this one: a 31st has no counterpart in February.
+    prev_to_day = min(prev_month_start + (today - month_start), prev_month_end)
+
+    cur_from, cur_to = clinic_day_bounds_utc(clinic, month_start, today)
+    prev_from, prev_to = clinic_day_bounds_utc(clinic, prev_month_start, prev_to_day)
+    return cur_from, cur_to, prev_from, prev_to, "vs last month"
+
+
+def _trend(current, previous):
+    """Signed percent change plus its direction.
+
+    Deliberately the same shape and the same zero-handling as the dashboard's
+    calculate_trend, so an arrow means the same thing on both screens.
+    """
+    cur = float(current or 0)
+    prev = float(previous or 0)
+    if not cur and not prev:
+        # Nothing in either window. A "0%" pill would assert a measurement that
+        # was never taken, so the card renders no pill at all.
+        return {"current": 0, "previous": 0, "change": None, "change_type": "up"}
+    if not prev:
+        pct = 100.0 if cur > 0 else 0.0
+    else:
+        pct = round(((cur - prev) / prev) * 100, 1)
+    return {
+        "current": round(cur, 2),
+        "previous": round(prev, 2),
+        "change": pct,
+        "change_type": "up" if pct >= 0 else "down",
+    }
+
+
 @router.get("/count")
 async def count_invoices(
     status: Optional[str] = None,
@@ -607,13 +690,16 @@ async def summarise_invoices(
         _ensure_invoice_columns(db)
         created_from, created_to = _resolve_date_bounds(db, current_user.clinic_id, date_from, date_to)
 
-        def _q():
+        def _q_between(window_from, window_to):
             return _filtered_invoices_query(
                 db, current_user.clinic_id,
                 status=status, patient_id=patient_id, appointment_id=appointment_id,
                 case_paper_id=case_paper_id, search=search, payment_mode=payment_mode,
-                created_from=created_from, created_to=created_to,
+                created_from=window_from, created_to=window_to,
             )
+
+        def _q():
+            return _q_between(created_from, created_to)
 
         PAID = ('paid_verified', 'paid_unverified')
         # Draft invoices are unissued, so their balance isn't money anyone owes
@@ -736,6 +822,53 @@ async def summarise_invoices(
         )
         collected_via_payments = cash_amount + digital_amount
 
+        # ── Month-on-month change, for the arrows on the cards ────────────
+        # The headline figures above describe whatever the filters select, which
+        # is all of history by default. A percentage needs two comparable
+        # windows, so these are measured separately: this month so far against
+        # the same span of last month, carrying every filter except the dates.
+        # The card layer labels the pill, so nobody has to guess what it is
+        # measuring.
+        clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+        cur_from, cur_to, prev_from, prev_to, cmp_label = _comparison_windows(
+            clinic, created_from, created_to
+        )
+
+        def _window_figures(window_from, window_to):
+            wq = _q_between(window_from, window_to)
+            w_collected = wq.with_entities(
+                func.coalesce(func.sum(Invoice.paid_amount), 0.0)
+            ).scalar() or 0.0
+            w_outstanding = (
+                wq.filter(Invoice.status.in_(OWING)).with_entities(
+                    func.coalesce(func.sum(
+                        func.coalesce(Invoice.due_amount, Invoice.total)
+                    ), 0.0)
+                ).scalar()
+            ) or 0.0
+            # Same definition as the card above: still owing, and has already
+            # taken at least one instalment.
+            w_owing_ids = wq.filter(
+                Invoice.due_amount > 0, Invoice.status.in_(OWING)
+            ).with_entities(Invoice.id).subquery()
+            w_plans = db.query(
+                func.count(func.distinct(InvoicePayment.invoice_id))
+            ).filter(
+                InvoicePayment.clinic_id == current_user.clinic_id,
+                InvoicePayment.invoice_id.in_(db.query(w_owing_ids.c.id)),
+            ).scalar() or 0
+            return float(w_collected), float(w_outstanding), int(w_plans)
+
+        cur_collected, cur_outstanding, cur_plans = _window_figures(cur_from, cur_to)
+        prev_collected, prev_outstanding, prev_plans = _window_figures(prev_from, prev_to)
+
+        comparison = {
+            "label": cmp_label,
+            "collected": _trend(cur_collected, prev_collected),
+            "outstanding": _trend(cur_outstanding, prev_outstanding),
+            "plans": _trend(cur_plans, prev_plans),
+        }
+
         # Drafts: issued to nobody, owed by nobody, but also money never asked
         # for. Excluded from every figure above; surfaced so it isn't invisible.
         draft_row = (
@@ -752,6 +885,7 @@ async def summarise_invoices(
             "paid_count": int(paid_count or 0),
 
             "billed": round(float(billed), 2),
+            "comparison": comparison,
             "outstanding": {
                 "amount": round(float(pending), 2),
                 "invoices": int(outstanding_invoices),
@@ -1799,6 +1933,11 @@ async def add_invoice_payment(
         invoice_id=invoice.id, clinic_id=current_user.clinic_id,
         amount=float(payload.amount), paid_on=paid_on,
         method=payload.method, note=note,
+        # The transaction it arrived on, and whoever is signed in taking it.
+        # recorded_by is the person, not the timestamp: on a busy desk the
+        # useful question about a part payment is who to ask about it.
+        reference=(payload.reference or "").strip() or None,
+        recorded_by=current_user.id,
     )
     db.add(payment)
     db.flush()
@@ -1824,6 +1963,84 @@ async def add_invoice_payment(
     db.commit()
     db.refresh(invoice)
     return enrich_invoice(db, invoice)
+
+
+@router.get("/{invoice_id}/timeline")
+async def get_invoice_timeline(
+    invoice_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Everything that has happened to this invoice, newest first.
+
+    Two sources, because neither is complete on its own. `invoice_payments` is
+    the money — amount, method, reference, who took it. `invoice_audit_logs` is
+    everything else the bill has been through, and it has quietly recorded the
+    acting user on every action since it was written; nothing has ever read it
+    back.
+
+    Payment rows are matched to their audit entries and the audit copy dropped,
+    so a single instalment does not appear twice under two different labels.
+    """
+    invoice = db.query(Invoice).filter(
+        Invoice.id == invoice_id,
+        Invoice.clinic_id == current_user.clinic_id,
+    ).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    events = []
+
+    for p in invoice.payments:
+        events.append({
+            "at": (p.created_at.isoformat() if p.created_at else None),
+            "on": (p.paid_on.isoformat() if p.paid_on else None),
+            "kind": "payment",
+            "label": "Payment received",
+            "amount": float(p.amount or 0),
+            "method": p.method,
+            "reference": getattr(p, "reference", None),
+            "by": (p.recorder.name if getattr(p, "recorder", None) else None),
+            "note": p.note,
+        })
+
+    # The two payment actions are already covered by the rows above, in more
+    # detail than the log carries.
+    COVERED = {"payment_added", "marked_paid"}
+    LABELS = {
+        "created": "Invoice created",
+        "finalized": "Invoice issued",
+        "updated": "Invoice updated",
+        "line_item_added": "Item added",
+        "line_item_updated": "Item changed",
+        "line_item_deleted": "Item removed",
+        "discount_removed": "Discount removed",
+        "payment_deleted": "Payment removed",
+    }
+
+    logs = db.query(InvoiceAuditLog).filter(
+        InvoiceAuditLog.invoice_id == invoice_id
+    ).all()
+    for log in logs:
+        if log.action in COVERED:
+            continue
+        events.append({
+            "at": (log.created_at.isoformat() if log.created_at else None),
+            "on": None,
+            "kind": log.action,
+            "label": LABELS.get(log.action, log.action.replace("_", " ").capitalize()),
+            "amount": float(invoice.total or 0) if log.action == "created" else None,
+            "method": None,
+            "reference": None,
+            "by": (log.user.name if log.user else None),
+            "note": log.notes,
+        })
+
+    # Newest first, by when the event was entered. A payment imported without a
+    # created_at still knows the day the money arrived, so it falls back to that
+    # rather than sinking to the bottom of a timeline it belongs in the middle of.
+    events.sort(key=lambda e: e["at"] or e["on"] or "", reverse=True)
+    return events
 
 
 @router.delete("/{invoice_id}/payments/{payment_id}", response_model=InvoiceOut)
@@ -2058,6 +2275,7 @@ async def add_line_item(
         line_item = InvoiceLineItem(
             invoice_id=invoice_id,
             description=line_item_data.description,
+            tooth_number=line_item_data.tooth_number,
             quantity=line_item_data.quantity,
             unit_price=line_item_data.unit_price,
             amount=amount
@@ -2194,6 +2412,7 @@ async def update_line_item(
         
         # Update line item
         line_item.description = line_item_data.description
+        line_item.tooth_number = line_item_data.tooth_number
         line_item.quantity = line_item_data.quantity
         line_item.unit_price = line_item_data.unit_price
         
@@ -2473,6 +2692,11 @@ async def mark_invoice_as_paid(
             invoice_id=invoice.id, clinic_id=current_user.clinic_id,
             amount=float(payment_amount), paid_on=paid_on,
             method=payment_data.payment_mode, note=note,
+            # Mark-as-paid collects a UTR for the bill; it belongs on the payment
+            # too, or the timeline shows a settled invoice with no reference
+            # against the one entry that settled it.
+            reference=(payment_data.utr or "").strip() or None,
+            recorded_by=current_user.id,
         )
         db.add(payment)
         db.flush()

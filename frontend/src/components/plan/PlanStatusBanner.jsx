@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Lock, ArrowRight, X } from 'lucide-react';
-import { FaWhatsapp } from 'react-icons/fa6';
+import WhatsAppIcon from '../common/WhatsAppIcon';
 import { useAuth } from '../../contexts/AuthContext';
 import { SUPPORT_PHONE_RAW } from '../../constants/support';
 
@@ -80,7 +80,7 @@ const PlanStatusBanner = () => {
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1.5 rounded-lg border border-current/25 px-2.5 py-1.5 min-h-[2.25rem] text-[11px] font-semibold transition-opacity hover:opacity-75"
         >
-          <FaWhatsapp size={13} /> Support
+          <WhatsAppIcon size={13} /> Support
         </a>
         <button
           onClick={() => navigate('/admin/subscription')}
