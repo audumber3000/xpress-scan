@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { FileSpreadsheet, Send, Check, X, Wand2, Download } from 'lucide-react';
-import { api, getFriendlyErrorMessage } from '../../utils/api';
-import { notify } from '../../utils/notify';
-import { getCurrencySymbol } from '../../utils/currency';
-import { formatDate } from '../../utils/datetime';
-import Spinner from '../common/Spinner';
-import InlineFeedback from '../common/InlineFeedback';
-import InsuranceCard from '../quotations/InsuranceCard';
-import WhatsAppIcon from '../common/WhatsAppIcon';
-import { downloadAuthedFile } from '../../utils/whatsapp';
+import { api, getFriendlyErrorMessage } from '../../../utils/api';
+import { notify } from '../../../utils/notify';
+import { getCurrencySymbol } from '../../../utils/currency';
+import { formatDate } from '../../../utils/datetime';
+import Spinner from '../../common/Spinner';
+import InlineFeedback from '../../common/InlineFeedback';
+import InsuranceCard from '../../quotations/InsuranceCard';
+import WhatsAppIcon from '../../common/WhatsAppIcon';
+import { downloadAuthedFile } from '../../../utils/whatsapp';
 
 const money = (n) => `${getCurrencySymbol()}${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -22,6 +22,10 @@ const STATUS = {
 /**
  * Quotations for this patient, with their cover above them.
  *
+ * Lives inside Billing rather than in a tab of its own: an estimate and the bill
+ * it becomes are the same conversation, and "Create estimate" here used to open
+ * a draft invoice, which was the same idea without the insurance split.
+ *
  * The two are one screen because a quotation without the policy behind it is
  * just a price list — what a patient decides on is their own share, and that
  * cannot be shown without knowing the cover.
@@ -30,7 +34,7 @@ const STATUS = {
  * The total is the clinic's number; the patient's share is the one that
  * decides whether the treatment happens.
  */
-const QuotationsTab = ({ patientId }) => {
+const QuotationsPanel = ({ patientId, onConverted }) => {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -179,7 +183,12 @@ const QuotationsTab = ({ patientId }) => {
                                   <Send size={12} /> Mark sent
                                 </button>
                               )}
-                              <button onClick={() => act(() => api.post(`/quotations/${q.id}/respond`, { accepted: true }), 'Accepted')}
+                              <button onClick={() => act(async () => {
+                                const r = await api.post(`/quotations/${q.id}/respond`, { accepted: true });
+                                // Accepting raises the draft invoice, so the list
+                                // beside this one is now out of date.
+                                if (r?.converted_invoice_id) onConverted?.();
+                              }, 'Accepted — draft invoice created')}
                                 disabled={busy}
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-emerald-300 bg-white text-emerald-700 text-[12px] font-semibold hover:bg-emerald-50 disabled:opacity-50">
                                 <Check size={12} /> Accepted
@@ -205,4 +214,4 @@ const QuotationsTab = ({ patientId }) => {
   );
 };
 
-export default QuotationsTab;
+export default QuotationsPanel;

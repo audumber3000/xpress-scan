@@ -9,10 +9,12 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Quotation, QuotationLineItem, Patient, User, TreatmentType, Clinic
+from models import (Quotation, QuotationLineItem, Patient, User, TreatmentType, Clinic,
+                    Invoice, InvoiceLineItem)
 from core.auth_utils import get_current_user
 from domains.insurance.estimator import estimate_lines, policy_to_dict, normalise_category
 from domains.insurance.routes.insurance import active_policy_for
+from domains.finance.routes.invoices import generate_invoice_number, recalculate_invoice_totals
 from domains.quotations.quotation_pdf import render_quotation
 from domains.infrastructure.services.pdf_service import html_template_to_pdf
 from core.notification_dispatch import notify_event, InsufficientWalletBalance
@@ -285,6 +287,35 @@ async def respond(quotation_id: int, payload: RespondDTO, db: Session = Depends(
         raise HTTPException(400, "This quotation has already been answered.")
     q.status = "accepted" if payload.accepted else "declined"
     q.responded_at = datetime.utcnow()
+
+    # Accepting is what turns a proposal into work the clinic will bill for, so
+    # it raises the draft invoice here rather than leaving somebody to retype
+    # the same lines. Draft, not finalised: the bill is issued when the work is
+    # actually done, and a draft moves no money — verified, revenue and billed
+    # are unchanged by one existing.
+    if payload.accepted and not q.converted_invoice_id:
+        inv = Invoice(
+            clinic_id=q.clinic_id,
+            patient_id=q.patient_id,
+            invoice_number=generate_invoice_number(db, q.clinic_id),
+            status="draft",
+            notes=f"From quotation {q.quotation_number}" + (f" — {q.notes}" if q.notes else ""),
+        )
+        db.add(inv)
+        db.flush()
+        for li in sorted(q.line_items, key=lambda x: (x.sort_order or 0, x.id or 0)):
+            db.add(InvoiceLineItem(
+                invoice_id=inv.id,
+                description=li.description,
+                tooth_number=li.tooth_number,
+                quantity=li.quantity,
+                unit_price=li.unit_price,
+                amount=li.amount,
+            ))
+        db.flush()
+        recalculate_invoice_totals(db, inv)
+        q.converted_invoice_id = inv.id
+
     db.commit()
     db.refresh(q)
     return _serialize(q)

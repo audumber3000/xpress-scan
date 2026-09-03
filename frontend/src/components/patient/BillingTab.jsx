@@ -13,6 +13,7 @@ import InvoiceRow from './billing/InvoiceRow';
 import PaymentSummaryCard from './billing/PaymentSummaryCard';
 import OutstandingCard from './billing/OutstandingCard';
 
+import QuotationsPanel from './billing/QuotationsPanel';
 /**
  * This patient's bills: the list at two thirds, the money at one third.
  *
@@ -92,11 +93,13 @@ const BillingTab = ({ patient, invoices = [], casePapers = [], prescriptions = [
 
   const QUICK = [
     {
-      key: 'estimate',
-      label: 'Create estimate',
+      key: 'invoice',
+      label: 'New invoice',
       icon: FileText,
-      // A draft invoice is exactly an estimate: priced, itemised, issued to
-      // nobody. Rather than a second concept, this opens one and says so.
+      // "Create estimate" used to live here and opened a draft invoice. An
+      // estimate is a quotation now — it carries a validity date, an accept or
+      // decline, and the insurance split, none of which an invoice has a column
+      // for. This is the plain "bill somebody" path.
       onClick: () => setOpenInvoiceId('new'),
     },
     {
@@ -150,6 +153,8 @@ const BillingTab = ({ patient, invoices = [], casePapers = [], prescriptions = [
               ))
             )}
           </div>
+
+          <QuotationsPanel patientId={patientId} onConverted={refreshInvoices} />
         </div>
 
         <div className="space-y-4 min-w-0">
