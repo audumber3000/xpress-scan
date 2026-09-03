@@ -35,7 +35,7 @@ const Calendar = () => {
     weekDates, goToPrevious, goToNext, goToToday,
   } = useCalendarNavigation('week');
   const {
-    clinicData, clinicTimings, treatmentTypes, doctors, doctorsError, dayShape,
+    clinicData, clinicTimings, treatmentTypes, treatmentsError, doctors, doctorsError, dayShape,
     selectedDoctorIds, setSelectedDoctorIds,
   } = useClinicSchedule(currentDate);
   // Declared before useAppointments, which takes both setters: a dependency
@@ -1015,6 +1015,7 @@ const Calendar = () => {
         onSaved={handleBookingSaved}
         doctors={doctors}
         treatments={treatmentTypes}
+        treatmentsError={treatmentsError}
         chairCount={dayShape?.chairs || 1}
       />
 
@@ -1093,6 +1094,7 @@ const Calendar = () => {
         form={patientFormData}
         setForm={setPatientFormData}
         treatments={treatmentTypes}
+        treatmentsError={treatmentsError}
         onSubmit={handlePatientRegistration}
         onClose={() => setShowPatientForm(false)}
       />

@@ -45,6 +45,7 @@ const BookingModal = ({
   initial,          // { date, startTime, endTime, duration, doctorId, chairNumber }
   doctors = [],
   treatments = [],
+  treatmentsError = '',
   chairCount = 1,
 }) => {
   const [form, setForm] = useState(null);
@@ -370,7 +371,14 @@ const BookingModal = ({
             </Field>
           </div>
 
-          <Field label="Treatment" hint="Picking one sets the length from how long it usually takes">
+          <Field
+            label="Treatment"
+            hint={treatmentsError
+              // Says the list failed to load rather than presenting an empty
+              // one as if this clinic offered nothing.
+              ? treatmentsError
+              : 'Picking one sets the length from how long it usually takes'}
+          >
             <select value={form.treatment} onChange={(e) => pickTreatment(e.target.value)} className={inputCls}>
               <option value="">Not specified</option>
               {treatments.map((t) => (

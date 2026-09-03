@@ -26,6 +26,7 @@ export default function useClinicSchedule(currentDate) {
   const [treatmentTypes, setTreatmentTypes] = useState([]);
   const [doctors, setDoctors] = useState([]);
   const [doctorsError, setDoctorsError] = useState('');
+  const [treatmentsError, setTreatmentsError] = useState('');
   const [dayShape, setDayShape] = useState(null);
   const [selectedDoctorIds, setSelectedDoctorIds] = useState(() => new Set());
 
@@ -41,10 +42,16 @@ export default function useClinicSchedule(currentDate) {
 
   const fetchTreatmentTypes = useCallback(async () => {
     try {
-      setTreatmentTypes(await api.get('/treatment-types/'));
+      // /bookable, not the priced list. The latter is gated on billing.view
+      // because it carries `price`, so a receptionist got a 403 and an empty
+      // treatment dropdown. The booking form only ever reads `name` and
+      // `duration_minutes`, and neither is billing data.
+      setTreatmentTypes(await api.get('/treatment-types/bookable'));
+      setTreatmentsError('');
     } catch (error) {
       console.error('Error fetching treatment types:', error);
       setTreatmentTypes([]);
+      setTreatmentsError(getFriendlyErrorMessage(error, "We couldn't load the treatment list."));
     }
   }, []);
 
@@ -101,6 +108,7 @@ export default function useClinicSchedule(currentDate) {
     clinicData,
     clinicTimings,
     treatmentTypes,
+    treatmentsError,
     doctors,
     doctorsError,
     dayShape,

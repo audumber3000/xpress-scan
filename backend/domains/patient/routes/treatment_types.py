@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 from database import get_db
 from models import TreatmentType
@@ -44,6 +44,43 @@ def bulk_create_treatment_types(payload: TreatmentTypeBulkCreate, db: Session = 
             db.rollback()
             errors.append({"row": idx + 1, "message": f"'{name}' could not be added (maybe a duplicate)"})
     return {"created_count": created, "errors": errors}
+
+class BookableTreatment(BaseModel):
+    """A procedure you can book, without what it costs."""
+    id: int
+    name: str
+    duration_minutes: Optional[int] = None
+
+
+@router.get("/bookable", response_model=List[BookableTreatment])
+def list_bookable_treatments(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    """The treatment catalogue for the booking form, for anyone who works here.
+
+    The list below is gated on billing.view because TreatmentTypeOut carries
+    `price`. Booking needs a name to choose and a duration to size the slot,
+    neither of which is billing data — so a receptionist with full appointment
+    rights and no billing rights got a 403 and an empty treatment dropdown.
+
+    Same shape of fix as /clinic-users/bookable, and for the same reason: the
+    permission that protects money was standing in front of a name. The priced
+    endpoint keeps its guard exactly as it was.
+
+    Inactive treatments are left out: they exist for old invoices to reference,
+    not for new bookings.
+    """
+    rows = db.query(TreatmentType).filter(
+        TreatmentType.clinic_id == current_user.clinic_id,
+        TreatmentType.is_active.is_(True),
+    ).all()
+    return [
+        BookableTreatment(
+            id=t.id,
+            name=t.name,
+            duration_minutes=getattr(t, "duration_minutes", None),
+        )
+        for t in rows
+    ]
+
 
 @router.get("", response_model=List[TreatmentTypeOut])
 def list_treatment_types(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
