@@ -35,7 +35,7 @@ const Calendar = () => {
     weekDates, goToPrevious, goToNext, goToToday,
   } = useCalendarNavigation('week');
   const {
-    clinicData, clinicTimings, treatmentTypes, doctors, dayShape,
+    clinicData, clinicTimings, treatmentTypes, doctors, doctorsError, dayShape,
     selectedDoctorIds, setSelectedDoctorIds,
   } = useClinicSchedule(currentDate);
   // Declared before useAppointments, which takes both setters: a dependency
@@ -796,6 +796,7 @@ const Calendar = () => {
     <div className="flex flex-col h-screen p-6 bg-gray-50 overflow-hidden">
         {/* Top toolbar — Today / arrows / date / view toggle / booking link / New */}
         <CalendarToolbar
+          doctorsError={doctorsError}
           title={viewMode === 'today'
             ? getRelativeDateLabel(currentDate)
             : viewMode === 'week'

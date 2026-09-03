@@ -142,6 +142,54 @@ def get_clinic_users(db: Session = Depends(get_db), current_user = Depends(get_c
         logger.error("Failed to list clinic users: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Could not load your staff list.")
 
+class BookableDoctor(BaseModel):
+    """Just enough to put a name in a dropdown and on a card."""
+    id: int
+    name: Optional[str] = None
+    role: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+
+@router.get("/bookable", response_model=List[BookableDoctor])
+def get_bookable_doctors(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    """Who an appointment can be booked with, for anyone who works here.
+
+    Separate from the list above, deliberately. That one answers "show me the
+    staff records" and is gated on users.view because it carries email, phone,
+    permissions, fee terms and salary_amount. Booking an appointment needs none
+    of that — it needs a name to put in a dropdown — and gating the two together
+    is why a receptionist with full appointment rights saw an empty doctor list
+    and every card reading "Unassigned".
+
+    Not an additional disclosure: the appointment list already shows these names
+    to anyone who can open the calendar. This returns the same names without the
+    salaries attached, so the booking form stops depending on a permission that
+    exists to protect payroll.
+
+    Scoped to the caller's own clinic, and inactive staff are left out: someone
+    who has left should not be bookable, but their past appointments still name
+    them correctly because those read the stored doctor_id.
+    """
+    users = db.query(User).filter(
+        User.clinic_id == current_user.clinic_id,
+        User.is_active.is_(True),
+        User.role.in_(["doctor", "clinic_owner", "in_house_doctor", "associate"]),
+    ).all()
+    # `name` is never blank on the way out. Five call sites render
+    # `d.name || d.email`, and email is deliberately not in this payload, so a
+    # nameless row would have rendered an empty option nobody could pick. No
+    # such row exists in prod today; this makes sure one cannot appear later.
+    return [
+        BookableDoctor(
+            id=u.id,
+            name=(u.name or "").strip() or f"Staff #{u.id}",
+            role=u.role,
+            avatar_url=u.avatar_url,
+        )
+        for u in users
+    ]
+
+
 @router.post("", response_model=ClinicUserOut, status_code=status.HTTP_201_CREATED)
 def add_clinic_user(user_in: ClinicUserIn, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Add a new clinic user for current clinic"""

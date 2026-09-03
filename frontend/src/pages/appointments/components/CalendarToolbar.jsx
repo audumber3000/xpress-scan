@@ -48,6 +48,7 @@ const CalendarToolbar = ({
   // one column per doctor; week and month only tinted the cards. focusDoctor
   // is what gives those two an all-doctors and a one-doctor mode.
   doctors = [],
+  doctorsError = '',
   focusDoctorId = "",
   onSetFocusDoctor,
   // Day view only: columns by person or by room.
@@ -165,6 +166,18 @@ const CalendarToolbar = ({
               <Armchair className="w-3.5 h-3.5" />
             </button>
           </div>
+        )}
+
+        {/* Says why the picker is missing rather than just omitting it. An
+            empty doctor list used to render nothing at all, so a failed
+            request and a clinic with no doctors looked identical. */}
+        {doctors.length === 0 && doctorsError && (
+          <span
+            className="inline-flex items-center h-8 px-2.5 rounded-lg bg-amber-50 text-amber-700 text-xs font-medium border border-amber-100"
+            title={doctorsError}
+          >
+            Doctor list unavailable
+          </span>
         )}
 
         {doctors.length > 0 && (

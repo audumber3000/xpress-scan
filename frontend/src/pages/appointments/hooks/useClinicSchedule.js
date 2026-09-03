@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api } from "../../../utils/api";
+import { api, getFriendlyErrorMessage } from "../../../utils/api";
 import { dateKey } from "./useCalendarNavigation";
 
 /**
@@ -25,6 +25,7 @@ export default function useClinicSchedule(currentDate) {
   const [clinicTimings, setClinicTimings] = useState(DEFAULT_TIMINGS);
   const [treatmentTypes, setTreatmentTypes] = useState([]);
   const [doctors, setDoctors] = useState([]);
+  const [doctorsError, setDoctorsError] = useState('');
   const [dayShape, setDayShape] = useState(null);
   const [selectedDoctorIds, setSelectedDoctorIds] = useState(() => new Set());
 
@@ -49,19 +50,32 @@ export default function useClinicSchedule(currentDate) {
 
   const fetchDoctors = useCallback(async () => {
     try {
-      const response = await api.get('/clinic-users');
-      const filtered = response.filter(
-        (u) => u.role === 'doctor' || u.role === 'clinic_owner'
-      );
-      setDoctors(filtered);
+      // /clinic-users/bookable, not /clinic-users. The latter is gated on
+      // users.view because it carries salaries, so every receptionist got a
+      // 403, the catch below turned that into an empty array, and the booking
+      // form rendered an empty doctor dropdown with every card reading
+      // "Unassigned". This one returns names only and is open to anyone who
+      // works at the clinic.
+      //
+      // The role filter that used to live here is gone with it: it kept only
+      // 'doctor' and 'clinic_owner', so in-house doctors and associates were
+      // dropped from the dropdown for everybody, owners included. The server
+      // decides who is bookable now, in one place.
+      const response = await api.get('/clinic-users/bookable');
+      setDoctors(response);
+      setDoctorsError('');
       // Default the visibility filter to "everyone on" the first time we learn
       // who exists. Only when the set is still empty, so a refetch never
       // silently undoes the user's own toggles.
       setSelectedDoctorIds((prev) =>
-        prev.size > 0 ? prev : new Set(filtered.map((d) => d.id))
+        prev.size > 0 ? prev : new Set(response.map((d) => d.id))
       );
     } catch (error) {
+      // Said out loud rather than swallowed. An empty dropdown that explains
+      // nothing is what let this sit broken: the page looked like a clinic
+      // with no doctors instead of a request that failed.
       console.error('Error fetching doctors:', error);
+      setDoctorsError(getFriendlyErrorMessage(error, "We couldn't load the doctor list."));
     }
   }, []);
 
@@ -88,6 +102,7 @@ export default function useClinicSchedule(currentDate) {
     clinicTimings,
     treatmentTypes,
     doctors,
+    doctorsError,
     dayShape,
     selectedDoctorIds,
     setSelectedDoctorIds,
