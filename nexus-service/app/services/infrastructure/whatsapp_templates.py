@@ -182,6 +182,36 @@ def wa_receipt_sent(patient_name: str, clinic_name: str,
     return {"template_name": tpl, "components": components}
 
 
+def wa_quotation_sent(patient_name: str, clinic_name: str,
+                      quotation_number: str = "", patient_portion: str = "",
+                      valid_until: str = "", clinic_phone: str = "",
+                      document_url: str = "", media_id: str = "", **_) -> dict:
+    """
+    A treatment estimate for the patient to accept.
+
+    Header: document (the quotation PDF) — pass media_id (preferred) or
+    document_url.
+    Body params: {{1}} patient_name, {{2}} clinic_name, {{3}} quotation_number,
+                 {{4}} patient_portion, {{5}} valid_until, {{6}} clinic_phone
+
+    `patient_portion` and not the total, deliberately. The total is the clinic's
+    number; what the patient decides on is their own share after cover. The PDF
+    carries the full breakdown, so the message only has to give them the figure
+    that answers "can I afford this".
+
+    Pre-formatted by the caller, currency symbol included — the same reason
+    wa_invoice_sent takes a currency: a hardcoded rupee here would quote a
+    clinic in London in the wrong money.
+    """
+    tpl = _get_tpl("WA_TPL_QUOTATION", "mp_quotation_sent")
+    components = [_body_params(patient_name, clinic_name, quotation_number,
+                               patient_portion, valid_until, clinic_phone)]
+    if media_id or document_url:
+        components.insert(0, _header_document(
+            document_url, f"Quotation_{quotation_number or 'estimate'}.pdf", media_id))
+    return {"template_name": tpl, "components": components}
+
+
 def wa_prescription_sent(patient_name: str, clinic_name: str, doctor_name: str = "",
                          clinic_phone: str = "", document_url: str = "",
                          media_id: str = "") -> dict:
@@ -361,6 +391,7 @@ def build_whatsapp(event_type: str, **kwargs) -> dict:
         "prescription_notification": wa_prescription_sent,
         "consent_form":              wa_consent_form,
         "patient_form":              wa_patient_form,
+        "quotation_sent":            wa_quotation_sent,
         "google_review":             wa_google_review,
         "daily_summary":             wa_daily_summary,
         "lab_order_placed":          wa_lab_order_placed,
@@ -517,6 +548,16 @@ def build_whatsapp_text(event_type: str, **kw) -> str:
                 f"Your receipt is attached.")
     elif event_type == "prescription_notification":
         body = f"Hi {pn}, your prescription from {cn}" + (f" (Dr. {dn})" if dn else "") + " is attached. Get well soon!"
+    elif event_type == "quotation_sent":
+        num = kw.get("quotation_number", "")
+        share = kw.get("patient_portion", "")
+        until = kw.get("valid_until", "")
+        body = (f"Hi {pn}, here is your treatment estimate from {cn}"
+                + (f" ({num})" if num else "") + ".\n"
+                + (f"Your estimated share: {share}\n" if share else "")
+                + (f"Valid until: {until}\n" if until else "")
+                + "\nThe attached PDF lists each procedure and its cost. "
+                  "Reply here if you would like to go ahead or have any questions.")
     elif event_type == "consent_form":
         link = kw.get("consent_link", "")
         body = f"Hi {pn}, please review and sign your consent form for {cn}: {link}"
