@@ -27,6 +27,7 @@ const Meta = ({ icon, children }) => (
 
 const PatientFileHeader = ({
   patient,
+  user,
   lastVisit,
   nextAppointment,
   outstanding,
@@ -60,6 +61,7 @@ const PatientFileHeader = ({
         </button>
         <PatientHeaderActions
           patient={patient}
+          user={user}
           onEdit={onEdit}
           onPrint={onPrint}
           onDelete={onDelete}

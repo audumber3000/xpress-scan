@@ -908,3 +908,114 @@ async def get_patient_stats(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve patient statistics: {str(e)}"
         )
+
+
+# ─── WhatsApp: ask this patient for a Google review ───────────────────────────
+#
+# The automatic ask fires when a payment lands. This is the deliberate one, from
+# the WhatsApp menu on the patient file, for the patient who just said something
+# nice at the desk. Both resolve the link and the cooldown through
+# domains/notification/services/google_review_service.py so they cannot drift.
+
+
+def _load_patient(db: Session, patient_id: int, clinic_id: int):
+    from models import Patient
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.clinic_id == clinic_id,
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return patient
+
+
+@router.get(
+    "/{patient_id}/google-review",
+    summary="Whether this patient can be asked for a Google review",
+)
+async def google_review_status(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_patients_view),
+):
+    """Everything the ask dialog needs to explain itself before it sends.
+
+    It reports rather than refuses. A clinic that asked this patient six weeks
+    ago is told so and can still go ahead: the cooldown exists to stop the
+    automatic ask nagging people, not to overrule somebody standing in front of
+    the patient.
+    """
+    from domains.notification.services import google_review_service as grs
+
+    patient = _load_patient(db, patient_id, current_user.clinic_id)
+    recipient = patient.phone or patient.email or ""
+    link = grs.review_link(db, current_user.clinic_id)
+    asked_at = grs.last_asked_at(db, current_user.clinic_id, recipient)
+
+    return {
+        "listing_connected": bool(link),
+        "review_link": link,
+        "recipient": recipient,
+        "has_phone": bool(patient.phone),
+        "last_asked_at": asked_at.isoformat() if asked_at else None,
+        "within_cooldown": grs.within_cooldown(asked_at),
+        "cooldown_days": grs.COOLDOWN_DAYS,
+    }
+
+
+@router.post(
+    "/{patient_id}/google-review",
+    summary="Ask this patient for a Google review on WhatsApp",
+)
+async def send_google_review_request(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_patients_edit),
+):
+    """Send the review ask now.
+
+    `required=True`: here the message IS the request, so an empty wallet has to
+    surface as the 402 the frontend explains rather than being swallowed the way
+    a side-effect send is.
+    """
+    from core.notification_dispatch import notify_event, InsufficientWalletBalance
+    from domains.notification.services import google_review_service as grs
+    from models import Clinic
+
+    patient = _load_patient(db, patient_id, current_user.clinic_id)
+    if not patient.phone:
+        raise HTTPException(status_code=400, detail="This patient has no phone number on file.")
+
+    link = grs.review_link(db, current_user.clinic_id)
+    if not link:
+        raise HTTPException(
+            status_code=400,
+            detail="No Google listing is connected yet. Connect one in Integrations → Google.",
+        )
+
+    clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+    try:
+        notify_event(
+            "google_review",
+            db=db,
+            clinic_id=current_user.clinic_id,
+            to_phone=patient.phone,
+            to_name=patient.name,
+            template_data={
+                "patient_name": patient.name,
+                "clinic_name": clinic.name if clinic else "",
+                "review_link": link,
+                "clinic_phone": (clinic.phone if clinic else "") or "",
+            },
+            required=True,
+        )
+    except InsufficientWalletBalance:
+        # main.py turns this into the 402 carrying needed/available. Without the
+        # re-raise the blanket handler below reports an empty wallet as a 500.
+        raise
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not send the review request: {exc}")
+
+    return {"sent": True, "recipient": patient.phone}

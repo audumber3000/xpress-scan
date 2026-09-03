@@ -19,11 +19,6 @@ from core.audit import (
     DISCOUNT_ADDED, DISCOUNT_REMOVED,
 )
 
-# How long before the same patient may be asked for a Google review again.
-# Ninety days rather than never, because a patient treated twice a year can
-# reasonably be asked twice; and rather than per-invoice, because a course of
-# treatment billed in three parts is still one experience to review.
-GOOGLE_REVIEW_COOLDOWN_DAYS = 90
 
 
 def get_db():
@@ -2760,67 +2755,25 @@ async def mark_invoice_as_paid(
             patient = db.query(Patient).filter(Patient.id == invoice.patient_id).first()
             clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
             if patient and clinic:
-                review_link = ""
-                try:
-                    from models import ClinicGooglePlace
-                    gp = db.query(ClinicGooglePlace).filter(
-                        ClinicGooglePlace.clinic_id == current_user.clinic_id
-                    ).first()
-                    if gp and gp.place_id:
-                        review_link = f"https://search.google.com/local/writereview?placeid={gp.place_id}"
-                except Exception:
-                    pass  # model may not exist yet
+                # Link resolution and the cooldown both live in
+                # google_review_service now, because the manual ask on the
+                # patient file has to reach exactly the same answers.
+                from domains.notification.services import google_review_service as grs
 
+                review_link = grs.review_link(db, current_user.clinic_id)
                 recipient = patient.phone or patient.email or ""
-
-                # Once per patient per 90 days. Keyed on the recipient because
-                # that is what the log stores, and it is also the thing that
-                # actually receives the message.
-                asked_recently = False
-                if recipient:
-                    from models import NotificationLog
-                    cutoff = datetime.utcnow() - timedelta(days=GOOGLE_REVIEW_COOLDOWN_DAYS)
-                    asked_recently = db.query(NotificationLog).filter(
-                        NotificationLog.clinic_id == current_user.clinic_id,
-                        NotificationLog.event_type == 'google_review',
-                        NotificationLog.recipient == recipient,
-                        NotificationLog.created_at >= cutoff,
-                        # Only a real send counts. Skips are logged too, and
-                        # counting them meant a clinic with no Google listing
-                        # accumulated a phantom "asked" against every patient —
-                        # so the day they connected the listing, everybody was
-                        # already inside a 90-day cooldown for asks that never
-                        # went out.
-                        NotificationLog.status != 'skipped',
-                    ).first() is not None
+                asked_recently = grs.within_cooldown(
+                    grs.last_asked_at(db, current_user.clinic_id, recipient)
+                )
 
                 if not review_link or asked_recently or not recipient:
-                    # Logged rather than dropped. A clinic that never connected
-                    # its Google listing saw nothing happen and nothing recorded,
-                    # which is indistinguishable from the feature being broken.
-                    try:
-                        from models import NotificationLog
-                        db.add(NotificationLog(
-                            clinic_id=current_user.clinic_id,
-                            channel="-",
-                            recipient=recipient,
-                            event_type="google_review",
-                            template_name="google_review",
-                            status="skipped",
-                            error_message=(
-                                "no phone or email for this patient" if not recipient
-                                else "already asked within the last "
-                                     f"{GOOGLE_REVIEW_COOLDOWN_DAYS} days" if asked_recently
-                                else "clinic has no Google listing connected"
-                            ),
-                            cost=0.0,
-                            provider="none",
-                            created_at=datetime.utcnow(),
-                            updated_at=datetime.utcnow(),
-                        ))
-                        db.commit()
-                    except Exception:
-                        db.rollback()
+                    grs.log_skip(
+                        db, current_user.clinic_id, recipient,
+                        "no phone or email for this patient" if not recipient
+                        else f"already asked within the last {grs.COOLDOWN_DAYS} days"
+                        if asked_recently
+                        else "clinic has no Google listing connected",
+                    )
                 else:
                     notify_event(
                         "google_review",

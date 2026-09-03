@@ -1,9 +1,7 @@
 import React from "react";
 import { Phone, Pencil, Printer, Trash2 } from "lucide-react";
 import MoreMenu from "../common/MoreMenu";
-import WhatsAppIcon from "../common/WhatsAppIcon";
-import { openWhatsApp } from "../../utils/whatsapp";
-import { notify } from "../../utils/notify";
+import PatientWhatsAppMenu from "./whatsapp/PatientWhatsAppMenu";
 
 /**
  * Patient-level actions in the file header.
@@ -18,6 +16,11 @@ import { notify } from "../../utils/notify";
  *
  * Print and Delete live behind More. That keeps a destructive action off the
  * top row of a clinical record, one click away from Edit.
+ *
+ * WhatsApp is a single button carrying its mark, its word and a set of dots.
+ * Pressing it anywhere opens one menu: the chat, and the four things you send
+ * rather than type (a bill, a visit summary, a prescription, the review ask).
+ * One press, one place. See ./whatsapp/PatientWhatsAppMenu.
  */
 const Button = ({ onClick, label, children, tone = "ghost" }) => (
   <button
@@ -34,14 +37,9 @@ const Button = ({ onClick, label, children, tone = "ghost" }) => (
   </button>
 );
 
-const PatientHeaderActions = ({ patient, onEdit, onPrint, onDelete }) => {
+const PatientHeaderActions = ({ patient, user, onEdit, onPrint, onDelete }) => {
   if (!patient) return null;
   const phone = patient.phone;
-
-  const handleWhatsApp = () => {
-    const ok = openWhatsApp(phone, `Hello ${patient.name || ""}`.trim());
-    if (!ok) notify.problem("This patient's number can't be opened in WhatsApp.");
-  };
 
   return (
     <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
@@ -51,12 +49,7 @@ const PatientHeaderActions = ({ patient, onEdit, onPrint, onDelete }) => {
             <Phone size={16} className="text-[#2a276e]" />
             <span className="hidden sm:inline">Call</span>
           </Button>
-          {/* Brand green on the mark, because that is what makes it read as
-              WhatsApp rather than as a generic chat bubble. */}
-          <Button onClick={handleWhatsApp} label="Message on WhatsApp">
-            <WhatsAppIcon size={17} brand />
-            <span className="hidden sm:inline">WhatsApp</span>
-          </Button>
+          <PatientWhatsAppMenu patient={patient} user={user} />
         </>
       )}
 

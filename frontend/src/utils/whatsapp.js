@@ -165,3 +165,49 @@ export async function shareReceiptManually(invoice, payment, user) {
     + `Receipt ${payment.receipt_number || ''} is attached.${balanceLine}`;
   return openWhatsApp(phone, msg, user?.clinic?.country || 'IN');
 }
+
+/**
+ * Manually share a prescription: download the PDF (to attach in the chat) and
+ * open WhatsApp with a prefilled message. Same shape as shareInvoiceManually.
+ */
+export async function sharePrescriptionManually(prescription, patient, user) {
+  const phone = patient?.phone;
+  if (!phone) return false;
+  await downloadAuthedFile(
+    `/clinical/prescriptions/${prescription.id}/pdf`,
+    `prescription_${prescription.id}.pdf`
+  );
+  const clinicName = user?.clinic?.name || 'our clinic';
+  const msg = `Hello ${patient.name || ''}, here is your prescription from ${clinicName}. `
+    + `I have attached the PDF. Please follow the dosage as written, and tell us if anything does not suit you.`;
+  return openWhatsApp(phone, msg, user?.clinic?.country || 'IN');
+}
+
+/**
+ * Manually share one visit's summary: download the PDF and open WhatsApp.
+ */
+export async function shareVisitSummaryManually(casePaper, patient, user) {
+  const phone = patient?.phone;
+  if (!phone) return false;
+  await downloadAuthedFile(
+    `/clinical/case-papers/${casePaper.id}/summary-pdf`,
+    `visit_summary_${casePaper.id}.pdf`
+  );
+  const clinicName = user?.clinic?.name || 'our clinic';
+  const msg = `Hello ${patient.name || ''}, here is the summary of your visit to ${clinicName}. `
+    + `I have attached it as a PDF. Do ask us if anything in it is unclear.`;
+  return openWhatsApp(phone, msg, user?.clinic?.country || 'IN');
+}
+
+/**
+ * Manually ask for a Google review. Nothing to download here: the whole message
+ * is the link, so this opens WhatsApp straight away.
+ */
+export function shareReviewRequestManually(patient, reviewLink, user) {
+  const phone = patient?.phone;
+  if (!phone || !reviewLink) return false;
+  const clinicName = user?.clinic?.name || 'our clinic';
+  const msg = `Hello ${patient.name || ''}, thank you for visiting ${clinicName}. `
+    + `If you have a minute, a short Google review would mean a lot to us: ${reviewLink}`;
+  return openWhatsApp(phone, msg, user?.clinic?.country || 'IN');
+}

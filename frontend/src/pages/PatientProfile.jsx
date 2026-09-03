@@ -553,6 +553,7 @@ const PatientProfile = () => {
           {!isCasePaperOpen && (
             <PatientFileHeader
               patient={patientData}
+              user={user}
               lastVisit={latestCasePaper?.date || patientData.last_visit}
               nextAppointment={nextAppointment}
               outstanding={outstandingDue}
