@@ -603,7 +603,6 @@ const PatientProfile = () => {
                 onNewPayment={() => setNewInvoiceOpen(true)}
                 onNewPrescription={() => { setRxEditing(null); setRxOpen(true); }}
                 onOpenPrescription={(rx) => { setRxEditing(rx); setRxOpen(true); }}
-                onStartVisit={() => setActiveTab('case-papers')}
                 onQuickAction={(key) => {
                   // Every tile does the thing rather than pointing at the tab
                   // that could. The three that open a drawer do it here; the

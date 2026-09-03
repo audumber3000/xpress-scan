@@ -8,6 +8,7 @@ from typing import List, Optional, Any
 from datetime import datetime
 import csv
 import io
+import json
 import re
 from sqlalchemy.orm import Session
 from database import get_db
@@ -1025,3 +1026,170 @@ async def send_google_review_request(
         raise HTTPException(status_code=500, detail=f"Could not send the review request: {exc}")
 
     return {"sent": True, "recipient": patient.phone}
+
+
+# ─── The patient's activity feed ──────────────────────────────────────────────
+
+
+def _user_name(user) -> Optional[str]:
+    """A staff member's name for display, or None if the row has no user."""
+    if not user:
+        return None
+    return user.name or f"{user.first_name or ''} {user.last_name or ''}".strip() or None
+
+
+@router.get(
+    "/{patient_id}/activity",
+    summary="Everything that has happened to this patient, newest first",
+)
+async def patient_activity(
+    patient_id: int,
+    limit: int = Query(40, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user = Depends(require_patients_view),
+):
+    """One chronological feed, merged from the tables that each hold a piece.
+
+    There is no per-patient audit trail to read: AuditLog only keeps
+    consequential actions (deletions, money edits) and ActivityLog is a ten-row
+    FIFO for the dashboard. So this is assembled the same way the invoice
+    timeline is, from the source rows themselves, each of which already records
+    who did the thing. Nothing new has to be written for this to work, and
+    nothing here can drift out of step with the records it describes.
+
+    Deliberately read-only and derived. It replaces the two cards on the
+    overview that showed the same visits twice, once as "latest" and once as
+    "recent", and neither of which could say who anything was by.
+    """
+    from models import (
+        Appointment, CasePaper, DailyVisit, Invoice, InvoicePayment,
+        Patient, Prescription, User,
+    )
+
+    patient = _load_patient(db, patient_id, current_user.clinic_id)
+    clinic_id = current_user.clinic_id
+    events = []
+
+    def add(at, kind, label, **rest):
+        if not at:
+            return
+        events.append({
+            "at": at.isoformat(),
+            "kind": kind,
+            "label": label,
+            "amount": rest.get("amount"),
+            "method": rest.get("method"),
+            "reference": rest.get("reference"),
+            "by": rest.get("by"),
+            "detail": rest.get("detail"),
+            "status": rest.get("status"),
+        })
+
+    # ── Where the file starts ────────────────────────────────────────────────
+    add(patient.registered_on or patient.created_at, "registered", "Patient registered")
+
+    # ── Appointments ─────────────────────────────────────────────────────────
+    appts = (
+        db.query(Appointment)
+        .filter(Appointment.patient_id == patient_id, Appointment.clinic_id == clinic_id)
+        .all()
+    )
+    papers = (
+        db.query(CasePaper)
+        .filter(CasePaper.patient_id == patient_id, CasePaper.clinic_id == clinic_id)
+        .all()
+    )
+    visits = (
+        db.query(DailyVisit)
+        .filter(DailyVisit.patient_id == patient_id, DailyVisit.clinic_id == clinic_id)
+        .all()
+    )
+
+    # Every staff name this feed needs, in one query. Resolving them per row is
+    # a lookup per event, and a long-standing patient has plenty of both.
+    staff_ids = {a.doctor_id for a in appts if a.doctor_id}
+    staff_ids |= {cp.dentist_id for cp in papers if cp.dentist_id}
+    staff_ids |= {v.doctor_id for v in visits if v.doctor_id}
+    names = {}
+    if staff_ids:
+        names = {
+            u.id: _user_name(u)
+            for u in db.query(User).filter(User.id.in_(staff_ids)).all()
+        }
+
+    for a in appts:
+        add(
+            a.appointment_date, "appointment", "Appointment",
+            by=names.get(a.doctor_id), status=a.status, detail=a.treatment,
+            reference=a.start_time,
+        )
+
+    # ── Attendance: the walk-in the user calls a direct register ─────────────
+    for v in visits:
+        # 'manual' is somebody typed into the day's register; 'check_in' is an
+        # appointment being marked as arrived. Different events, said differently.
+        walked_in = (v.source or "manual") != "check_in"
+        add(
+            v.visit_date, "walk_in" if walked_in else "check_in",
+            "Walked in" if walked_in else "Checked in",
+            detail=v.reason,
+            by=names.get(v.doctor_id),
+        )
+
+    # ── Case papers, the thing the user actually wanted attributed ───────────
+    for cp in papers:
+        complaint = cp.chief_complaint
+        if isinstance(complaint, str) and complaint.startswith("["):
+            try:
+                complaint = ", ".join(x for x in json.loads(complaint) if x)
+            except Exception:
+                pass
+        add(
+            cp.date, "case_paper", "Case paper created",
+            by=names.get(cp.dentist_id),
+            detail=complaint or cp.diagnosis,
+            status=cp.status,
+        )
+
+    # ── Prescriptions ────────────────────────────────────────────────────────
+    for rx in (
+        db.query(Prescription)
+        .filter(Prescription.patient_id == patient_id, Prescription.clinic_id == clinic_id)
+        .all()
+    ):
+        names = [i.get("medicine_name") for i in (rx.items or []) if isinstance(i, dict)]
+        add(
+            rx.created_at, "prescription", "Prescription written",
+            detail=", ".join(n for n in names if n) or None,
+        )
+
+    # ── Bills and money ──────────────────────────────────────────────────────
+    invoices = (
+        db.query(Invoice)
+        .filter(Invoice.patient_id == patient_id, Invoice.clinic_id == clinic_id)
+        .all()
+    )
+    for inv in invoices:
+        add(
+            inv.created_at, "invoice", "Invoice created",
+            amount=float(inv.total or 0), reference=inv.invoice_number,
+            by=_user_name(inv.creator), status=inv.status,
+        )
+
+    if invoices:
+        for p in (
+            db.query(InvoicePayment)
+            .filter(InvoicePayment.invoice_id.in_([i.id for i in invoices]))
+            .all()
+        ):
+            # created_at is when it was entered; paid_on is the day the money
+            # arrived. An imported payment has only the second, and belongs in
+            # the middle of the timeline rather than sunk to the bottom.
+            add(
+                p.created_at or p.paid_on, "payment", "Payment received",
+                amount=float(p.amount or 0), method=p.method,
+                reference=p.reference, by=_user_name(p.recorder),
+            )
+
+    events.sort(key=lambda e: e["at"], reverse=True)
+    return events[:limit]

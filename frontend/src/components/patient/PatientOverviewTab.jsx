@@ -1,10 +1,9 @@
 import React, { useMemo } from 'react';
 import DentalChartCard from './overview/DentalChartCard';
 import TreatmentPlanCard from './overview/TreatmentPlanCard';
-import LatestVisitCard from './overview/LatestVisitCard';
 import NextAppointmentCard from './overview/NextAppointmentCard';
 import FinancialSummaryCard from './overview/FinancialSummaryCard';
-import RecentVisitsCard from './overview/RecentVisitsCard';
+import PatientActivityCard from './overview/PatientActivityCard';
 import QuickActionsCard from './overview/QuickActionsCard';
 import ToothSummaryCard from './overview/ToothSummaryCard';
 import PrescriptionsCard from './overview/PrescriptionsCard';
@@ -19,8 +18,11 @@ import { clinicToday, formatDate } from '../../utils/datetime';
  *
  * Composition only. Every block is its own file under `overview/`, and this
  * layer does nothing but choose the newest case paper, the soonest appointment
- * and the arrangement. Nothing here fetches: `PatientProfile` already holds all
- * of it, so a second copy would only be a way for the two to disagree.
+ * and the arrangement. Nothing here fetches, with one exception: `PatientProfile`
+ * already holds everything else, so a second copy would only be a way for the
+ * two to disagree, but the activity feed is a merge across six tables that it
+ * holds in no usable shape. That card fetches for itself and is told when to
+ * look again.
  */
 const PatientOverviewTab = ({
   patient,
@@ -36,7 +38,6 @@ const PatientOverviewTab = ({
   onNewPayment,
   onNewPrescription,
   onOpenPrescription,
-  onStartVisit,
 }) => {
   // Which record THIS patient's file keeps: their own setting when they have
   // one, the clinic's otherwise. A general clinic was being shown a tooth chart
@@ -75,6 +76,14 @@ const PatientOverviewTab = ({
     return { text: `Due back ${formatDate(due)}`, overdue: false };
   }, [latestCasePaper]);
 
+  // The feed is derived from records this tab is already holding counts of, so
+  // a change in any of them is the signal to refetch. Cheaper and more honest
+  // than a timer, and it does not need PatientProfile to announce anything.
+  const activityKey = useMemo(
+    () => [casePapers, appointments, invoices, prescriptions].map((a) => a.length).join('-'),
+    [casePapers, appointments, invoices, prescriptions],
+  );
+
   return (
     // Three columns down to `xl`, two at `lg`, one on a phone. The chart needs
     // the width, the clinical column and the money column do not, and at `lg`
@@ -98,20 +107,20 @@ const PatientOverviewTab = ({
             onOpen={() => onOpenTab('case-papers')}
           />
         )}
-      </div>
-
-      <div className="space-y-4 min-w-0">
-        <LatestVisitCard
-          casePaper={latestCasePaper}
-          isDental={isDental}
-          onOpen={() => onOpenTab('case-papers')}
-          onStartVisit={onStartVisit}
-        />
-        <RecentVisitsCard casePapers={casePapers} onOpen={() => onOpenTab('case-papers')} />
+        {/* Under the chart rather than beside the feed. The chart column is the
+            one with height to spare, and the feed wants all of its own. */}
         <PrescriptionsCard
           prescriptions={prescriptions}
           onNew={onNewPrescription}
           onOpen={onOpenPrescription}
+        />
+      </div>
+
+      <div className="space-y-4 min-w-0">
+        <PatientActivityCard
+          patientId={patient?.id}
+          reloadKey={activityKey}
+          onOpen={() => onOpenTab('visits')}
         />
       </div>
 
