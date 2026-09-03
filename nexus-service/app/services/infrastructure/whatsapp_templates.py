@@ -282,6 +282,27 @@ def wa_patient_form(patient_name: str, clinic_name: str, form_link: str,
     }
 
 
+def wa_staff_welcome(staff_name: str = "", clinic_name: str = "", role: str = "",
+                     login_id: str = "", app_url: str = "", clinic_phone: str = "", **_) -> dict:
+    """A new staff member's sign-in details.
+
+    Body params: {{1}} staff_name, {{2}} clinic_name, {{3}} role,
+                 {{4}} login_id, {{5}} app_url
+
+    Deliberately no password. WhatsApp messages sit unlocked on a lock screen and
+    are forwarded without thinking; the username and a link are enough to sign
+    in with, and the password goes by email where the rest of the credentials
+    already are. The backend still passes it — this builder simply does not use
+    it.
+    """
+    tpl = _get_tpl("WA_TPL_STAFF_WELCOME", "mp_staff_welcome")
+    return {
+        "template_name": tpl,
+        "components": [_body_params(staff_name, clinic_name, role or "staff",
+                                    login_id, app_url or clinic_phone)],
+    }
+
+
 def wa_google_review(patient_name: str, clinic_name: str, review_link: str,
                      clinic_phone: str = "", **_) -> dict:
     """
@@ -410,6 +431,7 @@ def build_whatsapp(event_type: str, **kwargs) -> dict:
         "patient_form":              wa_patient_form,
         "quotation_sent":            wa_quotation_sent,
         "treatment_summary":         wa_treatment_summary,
+        "staff_welcome":             wa_staff_welcome,
         "google_review":             wa_google_review,
         "daily_summary":             wa_daily_summary,
         "lab_order_placed":          wa_lab_order_placed,

@@ -454,6 +454,40 @@ def patient_prescription_sent(patient_name: str, clinic_name: str, clinic_logo_u
     }
 
 
+def staff_welcome(staff_name: str = "", clinic_name: str = "", clinic_logo_url: str = "",
+                  role: str = "", login_id: str = "", password: str = "",
+                  app_url: str = "", **_) -> dict:
+    """A new staff member's own sign-in details.
+
+    This event had no builder at all, on either channel, so every send failed
+    with "No WhatsApp template for event_type: staff_welcome" and the person who
+    had just been added never received the credentials somebody had typed in for
+    them.
+
+    The password is shown once here because it is generated for them and there
+    is no other way for them to learn it. The message says to change it, and
+    nothing else in the app ever emails it again.
+    """
+    pw_line = (f"<br/>Password: <strong>{password}</strong>" if password else "")
+    open_line = (f'<p><a href="{app_url}">Open {clinic_name or "the app"}</a></p>' if app_url else "")
+    body = f"""
+<p>Dear <strong>{staff_name}</strong>,</p>
+<p>You have been added to <strong>{clinic_name}</strong>{f" as <strong>{role}</strong>" if role else ""}.</p>
+<div class="info-box">
+  <strong>Your sign-in details</strong>
+  Username: <strong>{login_id}</strong>{pw_line}
+</div>
+{open_line}
+<p style="font-size:13px;color:#6b7280;">
+  Please change your password after signing in for the first time, and do not
+  share these details with anyone.
+</p>"""
+    return {
+        "subject": f"You have been added to {clinic_name}",
+        "html": _base_wrapper(_clinic_header(clinic_name, clinic_logo_url), body, _clinic_footer(clinic_name)),
+    }
+
+
 def patient_consent_form(patient_name: str, clinic_name: str, clinic_logo_url: str,
                           consent_link: str, procedure_name: str = "", **_) -> dict:
     proc_line = f" for <strong>{procedure_name}</strong>" if procedure_name else ""
@@ -701,6 +735,7 @@ def build_email(event_type: str, **kwargs) -> dict:
         "invoice_notification":       patient_invoice_sent,
         "prescription_notification":  patient_prescription_sent,
         "consent_form":               patient_consent_form,
+        "staff_welcome":              staff_welcome,
         "google_review":              patient_google_review,
         "lab_order_placed":           vendor_lab_order_placed,
     }
