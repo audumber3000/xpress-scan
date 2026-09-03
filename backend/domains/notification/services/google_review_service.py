@@ -7,6 +7,7 @@ asked-twice patients and no way to explain why.
 """
 import base64
 import datetime as dt
+import os
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -104,12 +105,22 @@ def share_link(db: Session, clinic_id: int) -> str:
     sent still works, so nothing in a patient's chat history breaks. New sends
     go straight to Google.
 
-    The trade is deliberate and worth writing down: a patient whose in-app
-    browser is signed out now meets Google's sign-in page instead of an escape
-    hatch. The way to have both is a URL button on the template, where the link
-    is never shown at all, and that needs a Meta re-submission.
+    Reverted to the wrapper on 2026-09-03 after prod stopped delivering. Sending
+    the g.page URL in the body was tried and measured: every send after the
+    19:03 deploy sat at 'sent' and none reached 'delivered' or 'read', while the
+    hour before it went to 'read' on the same template and the same number.
+    MSG91 accepted each one and issued a message id, and no FAILED callback ever
+    arrived, so WhatsApp took the message and dropped it rather than rejecting
+    it. A redirect domain in a template body is the only thing that changed.
+
+    The patient still lands on Google's own short link, because /r redirects to
+    review_link() — which is the g.page URL. Only the string in the message body
+    went back to a domain WhatsApp will carry.
     """
-    return review_link(db, clinic_id)
+    if not review_link(db, clinic_id):
+        return ""
+    base = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
+    return f"{base}/r/{clinic_id}"
 
 
 def last_asked_at(db: Session, clinic_id: int, recipient: str) -> Optional[dt.datetime]:

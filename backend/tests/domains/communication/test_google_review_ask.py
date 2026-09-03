@@ -151,31 +151,36 @@ def test_the_cooldown_is_per_recipient(db):
 # tracking and does not get tapped, and an unopened message beats no sign-in
 # prompt by nothing at all.
 
-def test_the_patient_gets_googles_own_url(db, monkeypatch):
-    """Deliberate: the message body shows this link, so it has to look like
-    what it is. The wrapper is no longer generated for new sends."""
+def test_the_patient_gets_the_wrapper_not_the_google_url(db, monkeypatch):
+    """Measured in prod, not a preference: sending the g.page URL in the body
+    left every message at 'sent' with nothing delivered, while the wrapper on
+    our own domain reached 'read'. WhatsApp accepted the redirect domain and
+    dropped it. The patient still ends up on g.page, because /r redirects
+    there."""
     monkeypatch.setenv("BACKEND_URL", "https://api.example.com")
     cid = _clinic_id(db)
     db.add(GooglePlaceLink(clinic_id=cid, place_id="ChIJcd-nDQCx3DsRBltDijTePng"))
     db.commit()
 
-    assert grs.share_link(db, cid) == "https://g.page/r/CQZbQ4o03j54EBM/review"
-    # The clinic's own preview resolves to the same place.
-    assert grs.review_link(db, cid) == grs.share_link(db, cid)
+    assert grs.share_link(db, cid) == f"https://api.example.com/r/{cid}"
+    # And the clinic's own preview is still Google's short link.
+    assert grs.review_link(db, cid) == "https://g.page/r/CQZbQ4o03j54EBM/review"
 
 
 def test_no_listing_means_no_link_to_share(db):
     assert grs.share_link(db, _clinic_id(db)) == ""
 
 
-def test_an_undecodable_place_id_still_shares_a_working_link(db):
-    """The long writereview URL rather than nothing. A clinic whose id will not
-    decode must still be able to ask."""
+def test_an_undecodable_place_id_still_shares_a_working_link(db, monkeypatch):
+    """A clinic whose id will not decode must still be able to ask. The wrapper
+    is the same either way; what changes is where /r sends them."""
+    monkeypatch.setenv("BACKEND_URL", "https://api.example.com")
     cid = _clinic_id(db)
     db.add(GooglePlaceLink(clinic_id=cid, place_id="ChIJabc123"))
     db.commit()
 
-    assert grs.share_link(db, cid) == (
+    assert grs.share_link(db, cid) == f"https://api.example.com/r/{cid}"
+    assert grs.review_link(db, cid) == (
         "https://search.google.com/local/writereview?placeid=ChIJabc123"
     )
 
