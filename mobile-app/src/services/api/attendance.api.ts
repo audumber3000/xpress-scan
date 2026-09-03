@@ -59,7 +59,26 @@ async function detailOf(res: Response, fallback: string): Promise<string> {
   return fallback;
 }
 
+export interface AttendanceDay {
+  id: number;
+  date: string;
+  /** on_time | late | absent | holiday */
+  status: string;
+  check_in_time: string | null;
+  check_out_time: string | null;
+  reason: string | null;
+}
+
 class AttendanceApiService extends BaseApiService {
+  /** This user's own shifts, newest first. */
+  async getHistory(limit = 60): Promise<AttendanceDay[]> {
+    const headers = await this.getAuthHeaders();
+    const res = await this.fetchWithTimeout(
+      `${this.baseURL}/attendance-mobile/history?limit=${limit}`, { headers });
+    if (!res.ok) throw new Error(await detailOf(res, 'Could not load your attendance'));
+    return res.json();
+  }
+
   async getStatus(): Promise<ClockStatus> {
     const headers = await this.getAuthHeaders();
     const res = await this.fetchWithTimeout(`${this.baseURL}/attendance-mobile/status`, { headers });

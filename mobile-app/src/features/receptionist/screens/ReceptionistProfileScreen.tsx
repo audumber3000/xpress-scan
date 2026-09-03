@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StatusBar, StyleSheet, Platform,
+  StatusBar, StyleSheet, Platform, RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,6 +12,9 @@ import { useAuth } from '../../../app/AuthContext';
 import { getCurrencySymbol } from '../../../shared/utils/currency';
 import { UserAvatar } from '../../../shared/components/UserAvatar';
 import { resolveUserPhoto } from '../../../shared/utils/avatar';
+import { attendanceApiService, AttendanceDay } from '../../../services/api/attendance.api';
+import { formatDisplayDate, formatTime } from '../../../shared/utils/datetime';
+import getFriendlyErrorMessage from '../../../shared/utils/friendlyError';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ReceptionistProfile'>;
 
@@ -22,10 +25,44 @@ const VIOLET_LIGHT = '#F3F2F9';
 const VIOLET_MID  = '#e8e7f5';
 
 export const ReceptionistProfileScreen: React.FC<Props> = ({ navigation }) => {
+  const [history, setHistory] = useState<AttendanceDay[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+
+  const loadHistory = useCallback(async () => {
+    setLoadingHistory(true);
+    setHistoryError('');
+    try {
+      setHistory(await attendanceApiService.getHistory());
+    } catch (e: any) {
+      // Said out loud. An empty list and a failed request look identical
+      // otherwise, and this screen is about how much somebody worked.
+      setHistoryError(getFriendlyErrorMessage(e, "We couldn't load your attendance."));
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, []);
+
   const { user, backendUser, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('Profile');
 
-  const TABS: Tab[] = ['Profile', 'Attendance', 'Salary'];
+  // Fetched when the tab is opened rather than on mount. Most visits here are
+  // for the Profile tab, and a request nobody looks at is a request nobody
+  // should pay for.
+  useEffect(() => {
+    if (activeTab === 'Attendance') loadHistory();
+  }, [activeTab, loadHistory]);
+
+  // Salary is hidden, not deleted. Its contents are hardcoded — a net pay of
+  // 18,500 with a PAID badge, a 20,000 base and a 1,500 deduction, the same
+  // for every person who opened it. Telling an employee they have been paid an
+  // amount that was never calculated is worse than showing them nothing, so it
+  // is off until there is a real per-employee figure behind it.
+  //
+  // /clinic-users/salaries/due is NOT that figure: it returns every staff
+  // member's pay to any signed-in caller, so wiring this tab to it would turn
+  // one invented number into a leak of everybody's real ones.
+  const TABS: Tab[] = ['Profile', 'Attendance'];
 
   const renderProfileTab = () => (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
@@ -60,46 +97,96 @@ export const ReceptionistProfileScreen: React.FC<Props> = ({ navigation }) => {
     </ScrollView>
   );
 
-  const renderAttendanceTab = () => (
-    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-      {/* Clocking on lives here rather than in a menu: this is the tab a
-          receptionist already opens to look at their shifts. */}
-      <TouchableOpacity
-        style={styles.clockBtn}
-        onPress={() => navigation.navigate('ClockIn')}
-        activeOpacity={0.85}
+  /* Real shifts, from /attendance-mobile/history. This tab used to render
+     fixed numbers and a hardcoded list of April dates with invented statuses —
+     mock UI that reached production and sat directly under a button that files
+     real attendance. Anything shown here can affect what somebody is paid, so
+     it now shows what is stored or it shows nothing. */
+  const renderAttendanceTab = () => {
+    const monthCounts = { present: 0, late: 0, absent: 0 };
+    const now = new Date();
+    for (const d of history) {
+      const day = new Date(d.date);
+      if (day.getMonth() !== now.getMonth() || day.getFullYear() !== now.getFullYear()) continue;
+      if (d.status === 'late') monthCounts.late += 1;
+      else if (d.status === 'absent') monthCounts.absent += 1;
+      else if (d.status === 'on_time') monthCounts.present += 1;
+    }
+
+    return (
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        refreshControl={<RefreshControl refreshing={loadingHistory} onRefresh={loadHistory} />}
       >
-        <Clock size={18} color="#FFFFFF" strokeWidth={2.5} />
-        <Text style={styles.clockBtnText}>Clock in / Clock out</Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.clockBtn}
+          onPress={() => navigation.navigate('ClockIn')}
+          activeOpacity={0.85}
+        >
+          <Clock size={18} color="#FFFFFF" strokeWidth={2.5} />
+          <Text style={styles.clockBtnText}>Clock in / Clock out</Text>
+        </TouchableOpacity>
 
-      <View style={styles.statRow}>
-        <StatCard label="Present" value="22" color="#10B981" bg="#E6F9F1" />
-        <StatCard label="Absent"  value="2"  color="#EF4444" bg="#FEE2E2" />
-        <StatCard label="Late"    value="3"  color="#F59E0B" bg="#FEF3C7" />
-      </View>
+        <View style={styles.statRow}>
+          <StatCard label="Present" value={String(monthCounts.present)} color="#10B981" bg="#E6F9F1" />
+          <StatCard label="Absent"  value={String(monthCounts.absent)}  color="#EF4444" bg="#FEE2E2" />
+          <StatCard label="Late"    value={String(monthCounts.late)}    color="#F59E0B" bg="#FEF3C7" />
+        </View>
 
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>This Month</Text>
-      </View>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Recent shifts</Text>
+        </View>
 
-      {['Mon 1 Apr', 'Tue 2 Apr', 'Wed 3 Apr', 'Thu 4 Apr', 'Fri 5 Apr', 'Mon 8 Apr'].map((day, i) => {
-        const statuses = ['Present', 'Present', 'Late', 'Present', 'Absent', 'Present'];
-        const status = statuses[i];
-        const color = status === 'Present' ? '#10B981' : status === 'Late' ? '#F59E0B' : '#EF4444';
-        const bg    = status === 'Present' ? '#E6F9F1' : status === 'Late' ? '#FEF3C7' : '#FEE2E2';
-        return (
-          <View key={day} style={styles.attendanceRow}>
-            <View style={styles.attendanceDot} />
-            <Text style={styles.attendanceDay}>{day}</Text>
-            <View style={[styles.statusPill, { backgroundColor: bg }]}>
-              <Text style={[styles.statusPillText, { color }]}>{status.toUpperCase()}</Text>
+        {historyError !== '' && (
+          <Text style={styles.attendanceEmpty}>{historyError}</Text>
+        )}
+
+        {historyError === '' && !loadingHistory && history.length === 0 && (
+          <Text style={styles.attendanceEmpty}>
+            Nothing recorded yet. Your shifts appear here once you start clocking in.
+          </Text>
+        )}
+
+        {history.map(d => {
+          const label =
+            d.status === 'late' ? 'LATE'
+            : d.status === 'absent' ? 'ABSENT'
+            : d.status === 'holiday' ? 'HOLIDAY'
+            : 'PRESENT';
+          const color =
+            d.status === 'late' ? '#F59E0B'
+            : d.status === 'absent' ? '#EF4444'
+            : d.status === 'holiday' ? '#6B7280'
+            : '#10B981';
+          const bg =
+            d.status === 'late' ? '#FEF3C7'
+            : d.status === 'absent' ? '#FEE2E2'
+            : d.status === 'holiday' ? '#F3F4F6'
+            : '#E6F9F1';
+          const inAt = formatTime(d.check_in_time);
+          const outAt = formatTime(d.check_out_time);
+          return (
+            <View key={d.id} style={styles.attendanceRow}>
+              <View style={styles.attendanceDot} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.attendanceDay}>{formatDisplayDate(d.date)}</Text>
+                {(inAt || outAt) !== '' && (
+                  <Text style={styles.attendanceTimes}>
+                    {inAt || '--'} to {outAt || 'still on shift'}
+                  </Text>
+                )}
+                {d.reason ? <Text style={styles.attendanceReason}>{d.reason}</Text> : null}
+              </View>
+              <View style={[styles.statusPill, { backgroundColor: bg }]}>
+                <Text style={[styles.statusPillText, { color }]}>{label}</Text>
+              </View>
             </View>
-          </View>
-        );
-      })}
-    </ScrollView>
-  );
+          );
+        })}
+      </ScrollView>
+    );
+  };
 
   const renderSalaryTab = () => (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
@@ -258,6 +345,9 @@ const styles = StyleSheet.create({
   attendanceRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 12, marginBottom: 8, paddingHorizontal: 14, paddingVertical: 13, ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4 }, android: { elevation: 1 } }) },
   attendanceDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: VIOLET, marginRight: 12 },
   attendanceDay: { flex: 1, fontSize: 14, color: '#374151', fontWeight: '500' },
+  attendanceTimes: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  attendanceReason: { fontSize: 12, color: '#B45309', marginTop: 2, fontStyle: 'italic' },
+  attendanceEmpty: { fontSize: 13, color: '#6B7280', textAlign: 'center', paddingVertical: 24, paddingHorizontal: 12 },
   statusPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   statusPillText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.4 },
   salaryHero: { backgroundColor: VIOLET, borderRadius: 20, padding: 24, alignItems: 'center', marginBottom: 4, ...Platform.select({ ios: { shadowColor: VIOLET, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 }, android: { elevation: 6 } }) },
