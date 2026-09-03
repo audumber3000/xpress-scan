@@ -4,6 +4,7 @@ import { api } from '../../../utils/api';
 import { notify } from '../../../utils/notify';
 import { getCurrencySymbol } from '../../../utils/currency';
 import { invoiceMoney } from './invoiceStatus';
+import { useAuth } from '../../../contexts/AuthContext';
 
 const money = (n) => `${getCurrencySymbol()}${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -30,9 +31,12 @@ const Row = ({ label, value, valueClass = 'text-gray-900', labelClass = 'text-gr
  * onUpdateInvoice, so they are self-contained here.
  */
 const InvoiceTotals = ({ invoice, canEdit, onUpdateInvoice }) => {
+  const { user } = useAuth();
   const [localDiscount, setLocalDiscount] = useState(invoice?.discount || 0);
   const [localDiscountType, setLocalDiscountType] = useState(invoice?.discount_type || 'amount');
   const [editing, setEditing] = useState(false);
+  const [taxEditing, setTaxEditing] = useState(false);
+  const [localRate, setLocalRate] = useState(invoice?.tax_rate ?? '');
   const [activeOffers, setActiveOffers] = useState([]);
 
   useEffect(() => {
@@ -45,6 +49,20 @@ const InvoiceTotals = ({ invoice, canEdit, onUpdateInvoice }) => {
   const isDraft = invoice.status === 'draft';
   const { total, paid, due } = invoiceMoney(invoice);
   const showsCollection = !isDraft;
+
+  // The clinic's own word for it, so an Indian bill says GST and a British one
+  // says VAT. tax_label already exists on the clinic and the PDF already uses
+  // it; the screen was the only place still saying "GST" to everybody.
+  const taxLabel = (user?.clinic?.tax_label || 'Tax').replace(/\s*No\.?$/i, '').trim() || 'Tax';
+  const rate = invoice.tax_rate;
+
+  const applyTax = () => {
+    // Blank clears the rate rather than setting 0: "not configured" and
+    // "deliberately zero-rated" are different answers on a bill.
+    const v = localRate === '' ? null : Math.max(0, Math.min(100, parseFloat(localRate) || 0));
+    onUpdateInvoice({ tax_rate: v });
+    setTaxEditing(false);
+  };
 
   const applyDiscount = () => {
     onUpdateInvoice({ discount: parseFloat(localDiscount) || 0, discount_type: localDiscountType });
@@ -140,7 +158,55 @@ const InvoiceTotals = ({ invoice, canEdit, onUpdateInvoice }) => {
           )
         )}
 
-        <Row label="Tax (GST 0%)" value={money(invoice.tax)} />
+        {/* The label was hardcoded to "Tax (GST 0%)" and the amount was always
+            zero, because nothing ever computed one. The rate is per invoice and
+            editable here the same way the discount is, and it uses the clinic's
+            own word for it — GST in India, VAT elsewhere. */}
+        {canEdit ? (
+          <div className="flex items-center justify-between gap-2 group text-[13px]">
+            <button
+              type="button"
+              onClick={() => setTaxEditing(true)}
+              className="flex items-center gap-1 text-gray-600 hover:text-[#2a276e]"
+            >
+              {taxLabel}{rate ? ` ${rate}%` : ''}
+              {!taxEditing && <Pencil size={11} className="opacity-0 group-hover:opacity-100 transition" />}
+            </button>
+
+            {taxEditing ? (
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="any"
+                  autoFocus
+                  value={localRate}
+                  onChange={(e) => setLocalRate(e.target.value)}
+                  className="w-16 px-1.5 py-1 text-[12px] border border-gray-300 rounded outline-none focus:border-[#2a276e] text-right"
+                />
+                <span className="text-[12px] text-gray-400">%</span>
+                <button
+                  type="button"
+                  onClick={applyTax}
+                  className="text-[11px] bg-[#2a276e] text-white font-semibold px-2 py-1 rounded hover:bg-[#1e1c4f] transition"
+                >
+                  Apply
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setTaxEditing(true)}
+                className="font-medium text-gray-900 tabular-nums hover:underline"
+              >
+                {money(invoice.tax)}
+              </button>
+            )}
+          </div>
+        ) : (
+          <Row label={`${taxLabel}${rate ? ` ${rate}%` : ''}`} value={money(invoice.tax)} />
+        )}
 
         <div className="flex justify-between items-baseline border-t border-gray-200 pt-2 mt-1">
           <span className="text-[13px] font-semibold text-gray-900">Total amount</span>

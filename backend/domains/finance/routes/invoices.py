@@ -19,6 +19,13 @@ from core.audit import (
     DISCOUNT_ADDED, DISCOUNT_REMOVED,
 )
 
+# How long before the same patient may be asked for a Google review again.
+# Ninety days rather than never, because a patient treated twice a year can
+# reasonably be asked twice; and rather than per-invoice, because a course of
+# treatment billed in three parts is still one experience to review.
+GOOGLE_REVIEW_COOLDOWN_DAYS = 90
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -2739,12 +2746,20 @@ async def mark_invoice_as_paid(
         db.commit()
         db.refresh(invoice)
 
-        # ── On full payment: fire google_review automatically ───────
-        if invoice.status == 'paid_unverified':
+        # ── After a payment lands: ask for a Google review ──────────────────
+        # Three guards, because the bare version asked the wrong people twice.
+        #
+        # It fired only on `paid_unverified`, so a patient paying in instalments
+        # was never asked at all while somebody settling in cash at the desk
+        # always was — the trigger tracked payment method rather than whether
+        # anybody had been treated. Any payment counts now.
+        #
+        # And it had no memory: a patient with three invoices was asked three
+        # times, because the ask hung off the bill rather than off the person.
+        if invoice.status in ('paid_unverified', 'paid_verified', 'partially_paid'):
             patient = db.query(Patient).filter(Patient.id == invoice.patient_id).first()
             clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
             if patient and clinic:
-                # Try to fetch the clinic's Google Place review URL
                 review_link = ""
                 try:
                     from models import ClinicGooglePlace
@@ -2754,9 +2769,59 @@ async def mark_invoice_as_paid(
                     if gp and gp.place_id:
                         review_link = f"https://search.google.com/local/writereview?placeid={gp.place_id}"
                 except Exception:
-                    pass  # model may not exist yet — skip silently
+                    pass  # model may not exist yet
 
-                if review_link:
+                recipient = patient.phone or patient.email or ""
+
+                # Once per patient per 90 days. Keyed on the recipient because
+                # that is what the log stores, and it is also the thing that
+                # actually receives the message.
+                asked_recently = False
+                if recipient:
+                    from models import NotificationLog
+                    cutoff = datetime.utcnow() - timedelta(days=GOOGLE_REVIEW_COOLDOWN_DAYS)
+                    asked_recently = db.query(NotificationLog).filter(
+                        NotificationLog.clinic_id == current_user.clinic_id,
+                        NotificationLog.event_type == 'google_review',
+                        NotificationLog.recipient == recipient,
+                        NotificationLog.created_at >= cutoff,
+                        # Only a real send counts. Skips are logged too, and
+                        # counting them meant a clinic with no Google listing
+                        # accumulated a phantom "asked" against every patient —
+                        # so the day they connected the listing, everybody was
+                        # already inside a 90-day cooldown for asks that never
+                        # went out.
+                        NotificationLog.status != 'skipped',
+                    ).first() is not None
+
+                if not review_link or asked_recently or not recipient:
+                    # Logged rather than dropped. A clinic that never connected
+                    # its Google listing saw nothing happen and nothing recorded,
+                    # which is indistinguishable from the feature being broken.
+                    try:
+                        from models import NotificationLog
+                        db.add(NotificationLog(
+                            clinic_id=current_user.clinic_id,
+                            channel="-",
+                            recipient=recipient,
+                            event_type="google_review",
+                            template_name="google_review",
+                            status="skipped",
+                            error_message=(
+                                "no phone or email for this patient" if not recipient
+                                else "already asked within the last "
+                                     f"{GOOGLE_REVIEW_COOLDOWN_DAYS} days" if asked_recently
+                                else "clinic has no Google listing connected"
+                            ),
+                            cost=0.0,
+                            provider="none",
+                            created_at=datetime.utcnow(),
+                            updated_at=datetime.utcnow(),
+                        ))
+                        db.commit()
+                    except Exception:
+                        db.rollback()
+                else:
                     notify_event(
                         "google_review",
                         db=db,
