@@ -35,7 +35,8 @@ const PatientOverviewTab = ({
   onQuickAction,
   onOpenCalendar,
   onBookAppointment,
-  onNewPayment,
+  onRecordPayment,
+  onNewInvoice,
   onNewPrescription,
   onOpenPrescription,
 }) => {
@@ -134,7 +135,8 @@ const PatientOverviewTab = ({
         <FinancialSummaryCard
           invoices={invoices}
           onOpenBilling={() => onOpenTab('billing')}
-          onNewPayment={onNewPayment}
+          onRecordPayment={onRecordPayment}
+          onNewInvoice={onNewInvoice}
         />
         <QuickActionsCard onAction={onQuickAction} />
       </div>

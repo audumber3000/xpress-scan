@@ -19,6 +19,8 @@ import useClinicSchedule from "./appointments/hooks/useClinicSchedule";
 import PrescriptionDrawer from "../components/patient/PrescriptionDrawer";
 import ScanUploadDrawer from "../components/patient/ScanUploadDrawer";
 import InvoiceEditor from "../components/payments/InvoiceEditor";
+import PickInvoiceModal from "../components/patient/billing/PickInvoiceModal";
+import { owingInvoices } from "../components/patient/billing/outstanding";
 import PatientEditModal from "../components/patient/PatientEditModal";
 import MasterPasswordModal from "../components/common/MasterPasswordModal";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
@@ -60,7 +62,11 @@ const PatientProfile = () => {
   const [rxOpen, setRxOpen] = useState(false);
   const [rxEditing, setRxEditing] = useState(null);
   const [uploadKind, setUploadKind] = useState(null);
-  const [newInvoiceOpen, setNewInvoiceOpen] = useState(false);
+  // 'new' for a blank bill, or an invoice id to open that one. It used to be a
+  // boolean, which meant the only thing the overview could do with money was
+  // raise another invoice — including from a button labelled "New Payment".
+  const [invoiceOpenId, setInvoiceOpenId] = useState(null);
+  const [pickingInvoice, setPickingInvoice] = useState(false);
   // Doctors, treatments and the day's chair count, the three things
   // BookingModal needs. Same hook the calendar uses, so the two agree on what
   // the clinic looks like.
@@ -328,6 +334,18 @@ const PatientProfile = () => {
       (sum, inv) => sum + Number(inv.due_amount ?? Math.max(0, (inv.total || 0) - (inv.paid_amount || 0))),
       0
     );
+
+  // Recording a payment needs a bill to record it against. One outstanding bill
+  // is not a guess, so it goes straight through; several is, and putting money
+  // on the wrong invoice needs the master password to undo, so it asks. Same
+  // rule and same modal as the billing tab, from the same module.
+  const owing = useMemo(() => owingInvoices(invoices), [invoices]);
+  const handleRecordPayment = () => {
+    if (owing.length === 1) { setInvoiceOpenId(owing[0].id); return; }
+    if (owing.length > 1) { setPickingInvoice(true); }
+    // Nothing owing: the button is disabled in that state, so there is no
+    // third branch quietly opening something the click did not ask for.
+  };
 
   // Derived once for both the header and the Overview tab. Two copies of
   // "which visit was last" is two chances to disagree.
@@ -600,7 +618,8 @@ const PatientProfile = () => {
                 onOpenTab={setActiveTab}
                 onOpenCalendar={() => navigate('/calendar')}
                 onBookAppointment={() => setBookingOpen(true)}
-                onNewPayment={() => setNewInvoiceOpen(true)}
+                onRecordPayment={handleRecordPayment}
+                onNewInvoice={() => setInvoiceOpenId('new')}
                 onNewPrescription={() => { setRxEditing(null); setRxOpen(true); }}
                 onOpenPrescription={(rx) => { setRxEditing(rx); setRxOpen(true); }}
                 onQuickAction={(key) => {
@@ -673,7 +692,7 @@ const PatientProfile = () => {
                 invoices={invoices}
                 onQuickAction={(key) => {
                   if (key === 'prescription') { setRxEditing(null); setRxOpen(true); }
-                  if (key === 'invoice') setNewInvoiceOpen(true);
+                  if (key === 'invoice') setInvoiceOpenId('new');
                   // Consents are authored per clinic, not per patient, so this
                   // is the one that legitimately leaves the patient file.
                   if (key === 'consent') navigate('/consent-forms');
@@ -730,12 +749,21 @@ const PatientProfile = () => {
       {/* camelCase on the prefill: InvoiceEditor reads prefill.patientId, so
           passing patient_id was silently ignored and the drawer would have
           opened on an empty patient picker. */}
-      {newInvoiceOpen && (
+      {pickingInvoice && (
+        <PickInvoiceModal
+          invoices={owing}
+          onClose={() => setPickingInvoice(false)}
+          onPick={(inv) => { setPickingInvoice(false); setInvoiceOpenId(inv.id); }}
+        />
+      )}
+
+      {invoiceOpenId && (
         <InvoiceEditor
-          invoiceId="new"
-          prefill={{ patientId: Number(patientId) }}
-          onClose={() => setNewInvoiceOpen(false)}
-          onSave={() => { setNewInvoiceOpen(false); fetchInvoices(); }}
+          invoiceId={invoiceOpenId}
+          prefill={invoiceOpenId === 'new' ? { patientId: Number(patientId) } : null}
+          onClose={() => setInvoiceOpenId(null)}
+          onRefresh={fetchInvoices}
+          onSave={() => { setInvoiceOpenId(null); fetchInvoices(); }}
         />
       )}
 

@@ -1072,6 +1072,41 @@ async def patient_activity(
     clinic_id = current_user.clinic_id
     events = []
 
+    def stamp(day, ts):
+        """The clock time, but only when it belongs to the day being described.
+
+        Two tables here keep the same fact twice: a clinic-local calendar day
+        that staff can back-date, and a row timestamp that is always the moment
+        somebody typed. Normally they agree and the timestamp is the better of
+        the two, because a timeline wants an hour. When they disagree the row
+        was back-dated, and the timestamp is then about the typing rather than
+        the event: a 2019 patient entered last Tuesday would otherwise open the
+        file at the top of the feed, above their own case papers.
+
+        So the recorded day wins the position and the timestamp only supplies
+        the hour it is entitled to. A date with no time sorts before every
+        timestamp on that day, which is also where an event of unknown hour
+        honestly belongs.
+        """
+        if day and (ts is None or ts.date() != day):
+            return day
+        return ts
+
+    # Same timestamp, different events: the clock cannot separate them, so the
+    # order they must have happened in does. A bill is raised after the patient
+    # walked in and paid after it was raised, and on a busy front desk all three
+    # can land in the same second. Newest-first, so the later step sorts above.
+    ORDER = {
+        "registered": 0,
+        "appointment": 1,
+        "walk_in": 2,
+        "check_in": 2,
+        "case_paper": 3,
+        "prescription": 4,
+        "invoice": 5,
+        "payment": 6,
+    }
+
     def add(at, kind, label, **rest):
         if not at:
             return
@@ -1094,11 +1129,10 @@ async def patient_activity(
 
     # ── Where the file starts ────────────────────────────────────────────────
     #
-    # created_at, not registered_on: the first is the moment the record was
-    # actually made and carries a time, the second is a clinic-local date staff
-    # can back-date for somebody first seen years ago. When they disagree, both
-    # are worth knowing, so the back-dated one is said out loud rather than
-    # quietly replacing the timestamp.
+    # created_at when it agrees with registered_on, so the row carries an hour;
+    # registered_on when it does not, because a patient first seen in 2019 and
+    # typed in last week belongs at the start of their own file. When the two
+    # disagree, both are worth knowing, so the other is said out loud.
     reg_note = None
     if (
         patient.registered_on
@@ -1107,7 +1141,8 @@ async def patient_activity(
     ):
         reg_note = f"Registration date recorded as {patient.registered_on:%d %b %Y}"
     add(
-        patient.created_at or patient.registered_on, "registered", "Patient registered",
+        stamp(patient.registered_on, patient.created_at) or patient.created_at,
+        "registered", "Patient registered",
         by=_user_name(patient.creator), by_verb="Registered by", detail=reg_note,
     )
 
@@ -1159,11 +1194,11 @@ async def patient_activity(
         # appointment being marked as arrived. Different events, said differently.
         walked_in = (v.source or "manual") != "check_in"
         seen_by = names.get(v.doctor_id)
-        # created_at rather than visit_date, for the same reason as the
-        # registration above: the register stores a bare day, the row knows the
-        # hour. Fall back when an imported row has no timestamp.
+        # The register stores a bare day and the row knows the hour, so stamp()
+        # takes the hour when it belongs to that day. A back-dated entry keeps
+        # the day it is about rather than the afternoon it was typed in.
         add(
-            v.created_at or v.visit_date,
+            stamp(v.visit_date, v.created_at),
             "walk_in" if walked_in else "check_in",
             "Walked in" if walked_in else "Checked in",
             detail=" · ".join(x for x in (v.reason, f"seen by {seen_by}" if seen_by else None) if x) or None,
@@ -1234,5 +1269,5 @@ async def patient_activity(
                 by_verb="Recorded by",
             )
 
-    events.sort(key=lambda e: e["at"], reverse=True)
+    events.sort(key=lambda e: (e["at"], ORDER.get(e["kind"], 9)), reverse=True)
     return events[:limit]

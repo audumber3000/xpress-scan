@@ -135,20 +135,62 @@ def test_the_registration_says_who_and_at_what_time(world):
     assert reg["detail"] is None        # registered_on agrees, nothing to explain
 
 
-def test_a_back_dated_registration_says_so_rather_than_lying(world):
+def test_a_back_dated_registration_opens_the_file_rather_than_topping_it(world):
     """Somebody first seen in 2019 and typed in last week has two true dates.
-    The feed keeps the moment the record was made and says the other out loud,
-    instead of showing one and pretending it is the other."""
+
+    The one that decides where the row sits is the day it is about. Using the
+    typing timestamp would put "Patient registered" above that patient's own
+    2019 case papers, which reads as the file having begun today. The other
+    date is not thrown away, it is said out loud."""
     client, _, db, cid = world
     old = Patient(clinic_id=cid, name="Old", phone="7", created_by=None,
                   registered_on=dt.date(2019, 3, 4),
                   created_at=dt.datetime(2026, 8, 28, 16, 0))
     db.add(old)
     db.commit()
+    db.add(CasePaper(clinic_id=cid, patient_id=old.id,
+                     date=dt.datetime(2019, 6, 1, 10, 0), status="Completed"))
+    db.commit()
 
-    reg = client.get(f"/api/v1/patients/{old.id}/activity").json()[0]
-    assert reg["at"] == "2026-08-28T16:00:00"
+    feed = client.get(f"/api/v1/patients/{old.id}/activity").json()
+    reg = next(e for e in feed if e["kind"] == "registered")
+    assert reg["at"] == "2019-03-04"           # no hour claimed, none is known
     assert reg["detail"] == "Registration date recorded as 04 Mar 2019"
+    assert feed[-1] is reg or feed[-1]["kind"] == "registered"   # oldest, at the foot
+
+
+def test_a_back_dated_register_entry_keeps_the_day_it_is_about(world):
+    """Same rule for the daily register: a Monday visit entered on Wednesday is
+    a Monday event. Otherwise it jumps the queue over that day's own bill."""
+    client, pid, db, cid = world
+    db.add(DailyVisit(clinic_id=cid, patient_id=pid, visit_date=dt.date(2026, 8, 19),
+                      source="manual", reason="Entered late",
+                      created_at=dt.datetime(2026, 8, 25, 11, 0)))
+    db.commit()
+
+    v = next(e for e in _feed(world)
+             if e["kind"] == "walk_in" and e["at"].startswith("2026-08-19"))
+    assert v["at"] == "2026-08-19"
+
+
+def test_events_at_the_same_instant_fall_in_the_order_they_must_have_happened(world):
+    """A busy front desk lands several of these in one second, and the clock
+    cannot separate them. A bill is raised after the patient walked in and paid
+    after it was raised, so that is the order shown."""
+    client, pid, db, cid = world
+    same = dt.datetime(2026, 8, 22, 15, 0)
+    db.add(DailyVisit(clinic_id=cid, patient_id=pid, visit_date=dt.date(2026, 8, 22),
+                      source="manual", created_at=same))
+    inv = Invoice(clinic_id=cid, patient_id=pid, invoice_number="INV-2026-0043",
+                  total=500.0, status="paid_verified", created_at=same)
+    db.add(inv)
+    db.commit()
+    db.add(InvoicePayment(invoice_id=inv.id, clinic_id=cid, amount=500.0,
+                          method="Cash", paid_on=dt.date(2026, 8, 22), created_at=same))
+    db.commit()
+
+    tied = [e["kind"] for e in _feed(world) if e["at"] == same.isoformat()]
+    assert tied == ["payment", "invoice", "walk_in"]     # newest first
 
 
 def test_the_appointment_says_who_booked_it_not_who_it_was_with(world):

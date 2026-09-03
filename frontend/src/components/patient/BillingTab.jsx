@@ -15,6 +15,7 @@ import OutstandingCard from './billing/OutstandingCard';
 
 import QuotationsPanel from './billing/QuotationsPanel';
 import PickInvoiceModal from './billing/PickInvoiceModal';
+import { owingInvoices } from './billing/outstanding';
 /**
  * This patient's bills: the list at two thirds, the money at one third.
  *
@@ -68,9 +69,9 @@ const BillingTab = ({ patient, invoices = [], casePapers = [], prescriptions = [
   // The bill a reminder or a share is about, unless one is picked: the oldest
   // still owing, else the most recent.
   const focusInvoice = useMemo(() => {
-    const owing = invoices.filter((i) => Number(i.due_amount || 0) > 0);
-    if (owing.length) {
-      return [...owing].sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0))[0];
+    const unpaid = invoices.filter((i) => Number(i.due_amount || 0) > 0);
+    if (unpaid.length) {
+      return [...unpaid].sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0))[0];
     }
     return [...invoices].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0] || null;
   }, [invoices]);
@@ -91,20 +92,18 @@ const BillingTab = ({ patient, invoices = [], casePapers = [], prescriptions = [
   // Bills that still owe something, oldest first. Record payment used to open
   // whichever of these was oldest without asking; with more than one that is a
   // guess, and money put against the wrong invoice needs the master password to
-  // undo.
-  const owingInvoices = useMemo(
-    () => invoices
-      .filter((i) => Number(i.due_amount || 0) > 0
-                     && !['draft', 'cancelled'].includes(String(i.status || '').toLowerCase()))
-      .sort((a, b) => new Date(a.finalized_at || a.created_at || 0) - new Date(b.finalized_at || b.created_at || 0)),
+  // undo. The rule itself lives in billing/outstanding so the overview's copy
+  // of this button cannot come to a different answer.
+  const owing = useMemo(
+    () => owingInvoices(invoices),
     [invoices],
   );
 
   const recordPayment = () => {
     // One outstanding bill: the guess is always right, so do not ask.
     // None: there is nothing to pay against, so raise one.
-    if (owingInvoices.length === 1) { setOpenInvoiceId(owingInvoices[0].id); return; }
-    if (owingInvoices.length === 0) { setOpenInvoiceId('new'); return; }
+    if (owing.length === 1) { setOpenInvoiceId(owing[0].id); return; }
+    if (owing.length === 0) { setOpenInvoiceId('new'); return; }
     setPicking(true);
   };
 
@@ -229,7 +228,7 @@ const BillingTab = ({ patient, invoices = [], casePapers = [], prescriptions = [
 
       {picking && (
         <PickInvoiceModal
-          invoices={owingInvoices}
+          invoices={owing}
           onClose={() => setPicking(false)}
           onPick={(inv) => { setPicking(false); setOpenInvoiceId(inv.id); }}
         />
