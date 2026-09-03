@@ -4,7 +4,7 @@ import SetupProgress from '../components/admin/SetupProgress';
 import { api } from '../utils/api';
 import { useHeader } from '../contexts/HeaderContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Building2, Users, FileText, Bell, CreditCard, SlidersHorizontal, ChevronDown, Stethoscope, Shield, History, Plug, Tag, Pill, AlertTriangle } from 'lucide-react';
+import { Building2, Users, FileText, Bell, CreditCard, SlidersHorizontal, ChevronDown, Stethoscope, Shield, History, Plug, Tag, Pill, AlertTriangle, ShieldCheck, ClipboardList} from 'lucide-react';
 import { planLabel } from '../utils/plans';
 
 /**
@@ -41,6 +41,10 @@ const NAV_GROUPS = [
       { id: 'practice_settings', icon: SlidersHorizontal, label: 'Practice Settings', hasChildren: true, activePath: '/admin/practice-settings' },
       { id: 'treatments', icon: Stethoscope, label: 'Treatments & Pricing', path: '/admin/treatments' },
       { id: 'offers', icon: Tag, label: 'Offers & Discounts', path: '/admin/offers' },
+      // Insurers sit with Treatments because both answer "what do we charge and
+      // who pays it"; the patient's own policy lives on their file, where it
+      // differs person to person.
+      { id: 'insurers', icon: ShieldCheck, label: 'Insurers', path: '/admin/insurers' },
     ],
   },
   {
@@ -57,6 +61,7 @@ const NAV_GROUPS = [
     items: [
       { id: 'templates_editor', icon: FileText, label: 'Templates Editor', path: '/admin/templates-editor' },
       { id: 'notifications', icon: Bell, label: 'Notifications', path: '/admin/notifications' },
+      { id: 'patient_forms', icon: ClipboardList, label: 'Patient Forms', path: '/admin/patient-forms' },
     ],
   },
   {

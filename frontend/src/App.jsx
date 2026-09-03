@@ -44,6 +44,8 @@ import Integrations from "./pages/admin/integrations";
 import Activity from "./pages/admin/security/Activity";
 import Security from "./pages/admin/security/Security";
 import Offers from "./pages/admin/Offers";
+import Insurers from "./pages/admin/Insurers";
+import PatientForms from "./pages/admin/PatientForms";
 import Medications from "./pages/admin/Medications";
 import Vendors from "./pages/Vendors";
 import Expenses from "./pages/Expenses";
@@ -343,6 +345,8 @@ function AppContent() {
                 <Route path="security/devices" element={<Activity />} />
                 <Route path="security/audit-log" element={<Activity />} />
                 <Route path="offers" element={<Offers />} />
+                <Route path="insurers" element={<Insurers />} />
+                <Route path="patient-forms" element={<PatientForms />} />
                 <Route path="subscription" element={<Subscription />} />
               </Route>
               <Route path="/subscription" element={<Navigate to="/admin/subscription" replace />} />
