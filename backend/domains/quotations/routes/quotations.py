@@ -1,17 +1,21 @@
 """Quotations: a priced treatment plan the patient accepts before work starts."""
+import os
 from datetime import date, datetime, timedelta
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Quotation, QuotationLineItem, Patient, User, TreatmentType
+from models import Quotation, QuotationLineItem, Patient, User, TreatmentType, Clinic
 from core.auth_utils import get_current_user
 from domains.insurance.estimator import estimate_lines, policy_to_dict, normalise_category
 from domains.insurance.routes.insurance import active_policy_for
+from domains.quotations.quotation_pdf import render_quotation
+from domains.infrastructure.services.pdf_service import html_template_to_pdf
+from core.notification_dispatch import notify_event, InsufficientWalletBalance
 
 router = APIRouter()
 
@@ -295,3 +299,97 @@ async def delete_quotation(quotation_id: int, db: Session = Depends(get_db),
     db.delete(q)
     db.commit()
     return {"deleted": True}
+
+
+def _pdf_bytes(db: Session, q: Quotation) -> bytes:
+    clinic = db.query(Clinic).filter(Clinic.id == q.clinic_id).first()
+    html = render_quotation(q, clinic, getattr(clinic, "currency_symbol", None) or "₹")
+    path = html_template_to_pdf(html)
+    try:
+        with open(path, "rb") as fh:
+            return fh.read()
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+@router.get("/{quotation_id}/pdf")
+async def quotation_pdf(quotation_id: int, db: Session = Depends(get_db),
+                        current_user: User = Depends(get_current_user)):
+    q = _get(db, quotation_id, current_user)
+    return Response(
+        content=_pdf_bytes(db, q),
+        media_type="application/pdf",
+        headers={"Content-Disposition":
+                 f'attachment; filename="Quotation_{q.quotation_number or q.id}.pdf"'},
+    )
+
+
+class SendQuotationDTO(BaseModel):
+    app_origin: Optional[str] = None
+
+
+@router.post("/{quotation_id}/send-whatsapp")
+async def send_quotation_whatsapp(quotation_id: int, payload: SendQuotationDTO = SendQuotationDTO(),
+                                  db: Session = Depends(get_db),
+                                  current_user: User = Depends(get_current_user)):
+    """WhatsApp the estimate to the patient.
+
+    Marks the quotation sent as a side effect, so the status cannot drift from
+    what the patient actually received — the two used to be separate buttons and
+    a clinic could message somebody while the record still said draft.
+    """
+    q = _get(db, quotation_id, current_user)
+    if not q.line_items:
+        raise HTTPException(400, "Add at least one item before sending.")
+    if q.status not in ("draft", "sent"):
+        raise HTTPException(400, "This quotation has already been answered.")
+    if not q.patient or not q.patient.phone:
+        raise HTTPException(400, "This patient has no phone number on file.")
+
+    from models import NotificationPreference
+    pref = db.query(NotificationPreference).filter(
+        NotificationPreference.clinic_id == current_user.clinic_id,
+        NotificationPreference.event_type == "quotation_sent",
+    ).first()
+    if not pref or not pref.is_enabled:
+        # Said plainly rather than answering "sent". notify_event returns
+        # quietly with no preference row, and staff who believe a patient was
+        # messaged stop chasing them.
+        return {"sent": False, "reason": "not_configured",
+                "message": "Quotation messages aren't switched on for this clinic. "
+                           "Download the PDF and send it yourself."}
+
+    clinic = db.query(Clinic).filter(Clinic.id == q.clinic_id).first()
+    cur = getattr(clinic, "currency_symbol", None) or "₹"
+    try:
+        notify_event(
+            "quotation_sent",
+            db=db,
+            clinic_id=current_user.clinic_id,
+            to_phone=q.patient.phone,
+            to_name=q.patient.name,
+            required=True,
+            template_data={
+                "patient_name": q.patient.name,
+                "clinic_name": clinic.name if clinic else "",
+                "quotation_number": q.quotation_number or "",
+                # Pre-formatted with the clinic's own symbol: the builder prints
+                # this verbatim, and a clinic in London must not quote rupees.
+                "patient_portion": f"{cur}{float(q.patient_portion or 0):,.2f}",
+                "valid_until": q.valid_until.strftime("%d %B %Y") if q.valid_until else "",
+                "clinic_phone": getattr(clinic, "phone", "") or "",
+            },
+        )
+    except InsufficientWalletBalance:
+        raise
+
+    if q.status == "draft":
+        _recalculate(db, q)
+        q.status = "sent"
+        q.sent_at = datetime.utcnow()
+        db.commit()
+        db.refresh(q)
+    return {"sent": True, "quotation": _serialize(q)}
