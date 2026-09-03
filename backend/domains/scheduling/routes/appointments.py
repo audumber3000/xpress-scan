@@ -437,6 +437,30 @@ async def create_public_appointment(
             # rather than pushing the rest of the bell off the screen.
             collapse_minutes=60,
         )
+
+        # ── And tell the patient ──────────────────────────────────────────
+        # This route only ever rang the clinic's bell. A patient who booked
+        # through the public link got no confirmation at all, while the same
+        # booking made by staff at the desk sent one — so the people least
+        # likely to be sure they had booked were the ones told nothing.
+        clinic_row = db.query(Clinic).filter(Clinic.id == db_appointment.clinic_id).first()
+        if clinic_row:
+            notify_event(
+                "appointment_booked",
+                db=db,
+                clinic_id=db_appointment.clinic_id,
+                to_phone=db_appointment.patient_phone or "",
+                to_email=db_appointment.patient_email or "",
+                to_name=db_appointment.patient_name,
+                template_data={
+                    "patient_name": db_appointment.patient_name,
+                    "clinic_name": clinic_row.name,
+                    "appointment_date": db_appointment.appointment_date.strftime("%d %b %Y"),
+                    "appointment_time": fmt_appt_time(db_appointment.start_time),
+                    "clinic_phone": clinic_row.phone or "",
+                },
+            )
+
         db.commit()
 
         # Get doctor name if assigned

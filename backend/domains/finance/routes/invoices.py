@@ -139,6 +139,7 @@ def enrich_invoice(db: Session, invoice: Invoice):
         'case_paper_id': getattr(invoice, 'case_paper_id', None),
         'subtotal': invoice.subtotal,
         'tax': invoice.tax,
+        'tax_rate': getattr(invoice, 'tax_rate', None),
         'discount': invoice.discount or 0.0,
         'discount_type': invoice.discount_type or 'amount',
         'discount_amount': invoice.discount_amount or 0.0,
@@ -249,7 +250,12 @@ def recalculate_invoice_totals(db: Session, invoice: Invoice):
     if discount_amount > subtotal:
         discount_amount = subtotal
 
-    tax = 0.0  # Can add tax calculation logic here (e.g., GST)
+    # Tax on the discounted amount, which is the amount actually charged.
+    # `tax_rate` is null on every invoice raised before this existed, so those
+    # keep a tax of 0 and their totals do not move.
+    rate = getattr(invoice, "tax_rate", None)
+    taxable = max(subtotal - discount_amount, 0.0)
+    tax = round(taxable * (float(rate) / 100.0), 2) if rate else 0.0
     total = subtotal - discount_amount + tax
     
     invoice.subtotal = subtotal
@@ -486,6 +492,11 @@ async def create_invoice(
             status='draft',
             subtotal=0.0,
             tax=0.0,
+            # Seeded from the clinic's usual rate so nobody retypes 18 on every
+            # bill, then editable per invoice. Null when the clinic has never
+            # configured tax, which keeps the bill at 0 exactly as before.
+            tax_rate=(db.query(Clinic.default_tax_rate)
+                        .filter(Clinic.id == current_user.clinic_id).scalar()),
             total=0.0,
             paid_amount=0.0,
             due_amount=0.0,
@@ -2808,6 +2819,11 @@ async def update_invoice(
             invoice.discount = float(invoice_update['discount'])
         if 'discount_type' in invoice_update:
             invoice.discount_type = invoice_update['discount_type']
+        # Set per invoice, not read from the clinic at render time: changing the
+        # clinic's rate must never alter a bill a patient has already been given.
+        if 'tax_rate' in invoice_update:
+            rt = invoice_update.get('tax_rate')
+            invoice.tax_rate = None if rt is None else max(0.0, min(100.0, float(rt)))
         # Track which Offer set the discount (for the label on the bill). An offer
         # apply passes applied_offer_id; a manual discount edit (discount without
         # applied_offer_id) clears it so the label doesn't go stale.
@@ -2823,7 +2839,8 @@ async def update_invoice(
             'utr': invoice.utr,
             'notes': invoice.notes,
             'discount': invoice.discount,
-            'discount_type': invoice.discount_type
+            'discount_type': invoice.discount_type,
+            'tax_rate': invoice.tax_rate,
         }
         
         # Audit log

@@ -266,6 +266,8 @@ class InvoiceUpdate(BaseModel):
     notes: Optional[str] = None
     discount: Optional[float] = None
     discount_type: Optional[str] = None
+    # Percentage. 0 is a real answer (zero-rated); null leaves it untouched.
+    tax_rate: Optional[float] = None
 
 class InvoiceOut(InvoiceBase):
     id: int
@@ -274,6 +276,7 @@ class InvoiceOut(InvoiceBase):
     status: str  # draft, paid_unverified, paid_verified, cancelled
     subtotal: float
     tax: float
+    tax_rate: Optional[float] = None
     discount: float = 0.0
     discount_type: str = "amount"
     discount_amount: float = 0.0

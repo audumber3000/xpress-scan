@@ -375,7 +375,16 @@ def initiate_wallet_topup(
     order_id = f"WALLET_{clinic_id}_{int(datetime.utcnow().timestamp())}_{secrets.token_hex(3)}"
 
     frontend_base = os.getenv("FRONTEND_URL", "http://localhost:5173")
-    wallet_return_url = f"{frontend_base}/admin/notifications?wallet_success=1&order_id={order_id}"
+    # The public API origin Cashfree calls back on.
+    api_base = (os.getenv("PUBLIC_API_BASE_URL")
+                or os.getenv("BACKEND_PUBLIC_URL")
+                or "https://api.molarplus.com").rstrip("/")
+
+    # No order_id in the return URL on purpose. The provider appends Cashfree's
+    # own `{order_id}` placeholder when the literal is not already present, so
+    # putting a substituted one here first produced a URL carrying order_id
+    # twice — the real value and an unsubstituted "{order_id}".
+    wallet_return_url = f"{frontend_base}/admin/notifications?wallet_success=1"
 
     try:
         provider = CashfreeProvider()
@@ -390,6 +399,13 @@ def initiate_wallet_topup(
                 "email": clinic.email or "",
                 "user_id": current_user.id,
                 "return_url": wallet_return_url,
+                # THE bug: without this the provider falls back to
+                # CASHFREE_NOTIFY_URL, which points at the subscriptions webhook.
+                # That handler knows nothing about WALLET_ orders, so it
+                # acknowledged the payment and credited nothing — every paid
+                # top-up since this route was written has been taken and lost.
+                # Cashfree must be told to call the wallet's own webhook.
+                "notify_url": f"{api_base}/api/v1/notification-admin/wallet/webhook",
             },
         )
     except Exception as e:

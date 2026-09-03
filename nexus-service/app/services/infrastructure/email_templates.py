@@ -114,7 +114,7 @@ def _clinic_footer(clinic_name: str) -> str:
 
 # ─── Platform → Clinic templates ──────────────────────────────────────────────
 
-def platform_welcome(owner_name: str, clinic_name: str) -> dict:
+def platform_welcome(owner_name: str, clinic_name: str, **_) -> dict:
     body = f"""
 <p>Hi <strong>{owner_name}</strong>,</p>
 <p>Welcome to <strong>MolarPlus</strong>! 🎉 Your clinic <strong>{clinic_name}</strong> is now live on the platform.</p>
@@ -133,7 +133,7 @@ def platform_welcome(owner_name: str, clinic_name: str) -> dict:
     }
 
 
-def platform_branch_added(owner_name: str, branch_name: str) -> dict:
+def platform_branch_added(owner_name: str, branch_name: str, **_) -> dict:
     body = f"""
 <p>Hi <strong>{owner_name}</strong>,</p>
 <p>Your new branch <strong>{branch_name}</strong> has been successfully added to your MolarPlus account.</p>
@@ -150,7 +150,7 @@ def platform_branch_added(owner_name: str, branch_name: str) -> dict:
     }
 
 
-def platform_subscription_purchased(owner_name: str, clinic_name: str, plan_name: str, valid_until: str) -> dict:
+def platform_subscription_purchased(owner_name: str, clinic_name: str, plan_name: str, valid_until: str, **_) -> dict:
     body = f"""
 <p>Hi <strong>{owner_name}</strong>,</p>
 <p>Your subscription for <strong>{clinic_name}</strong> has been activated successfully.</p>
@@ -167,7 +167,7 @@ def platform_subscription_purchased(owner_name: str, clinic_name: str, plan_name
     }
 
 
-def platform_wallet_topup(owner_name: str, clinic_name: str, amount: float, new_balance: float) -> dict:
+def platform_wallet_topup(owner_name: str, clinic_name: str, amount: float, new_balance: float, **_) -> dict:
     body = f"""
 <p>Hi <strong>{owner_name}</strong>,</p>
 <p>Your notification wallet for <strong>{clinic_name}</strong> has been topped up successfully.</p>
@@ -184,7 +184,7 @@ def platform_wallet_topup(owner_name: str, clinic_name: str, amount: float, new_
     }
 
 
-def platform_wallet_low(owner_name: str, clinic_name: str, current_balance: float) -> dict:
+def platform_wallet_low(owner_name: str, clinic_name: str, current_balance: float, **_) -> dict:
     body = f"""
 <p>Hi <strong>{owner_name}</strong>,</p>
 <p>⚠️ The notification wallet balance for <strong>{clinic_name}</strong> is critically low.</p>
@@ -201,7 +201,7 @@ def platform_wallet_low(owner_name: str, clinic_name: str, current_balance: floa
     }
 
 
-def platform_app_welcome(owner_name: str = "there", clinic_name: str = "your clinic") -> dict:
+def platform_app_welcome(owner_name: str = "there", clinic_name: str = "your clinic", **_) -> dict:
     body = f"""
 <p>Hi <strong>{owner_name}</strong>,</p>
 <p>Welcome to <strong>MolarPlus</strong>. Your clinic <strong>{clinic_name}</strong> is ready to go.</p>
@@ -214,7 +214,7 @@ def platform_app_welcome(owner_name: str = "there", clinic_name: str = "your cli
     }
 
 
-def platform_subscription_confirmed(owner_name: str = "there", clinic_name: str = "your clinic", plan_name: str = "Professional", valid_until: str = "") -> dict:
+def platform_subscription_confirmed(owner_name: str = "there", clinic_name: str = "your clinic", plan_name: str = "Professional", valid_until: str = "", **_) -> dict:
     validity = f"Valid until: {valid_until}" if valid_until else "Your plan is now active."
     body = f"""
 <p>Hi <strong>{owner_name}</strong>,</p>
@@ -232,7 +232,7 @@ def platform_subscription_confirmed(owner_name: str = "there", clinic_name: str 
     }
 
 
-def platform_topup_success(owner_name: str = "there", clinic_name: str = "your clinic", amount: str = "", new_balance: str = "") -> dict:
+def platform_topup_success(owner_name: str = "there", clinic_name: str = "your clinic", amount: str = "", new_balance: str = "", **_) -> dict:
     body = f"""
 <p>Hi <strong>{owner_name}</strong>,</p>
 <p>Your MolarPlus wallet top-up for <strong>{clinic_name}</strong> was successful.</p>
@@ -248,7 +248,7 @@ def platform_topup_success(owner_name: str = "there", clinic_name: str = "your c
     }
 
 
-def platform_lab_due_tomorrow(owner_name: str = "there", clinic_name: str = "your clinic", due_date: str = "tomorrow", work_type: str = "lab work") -> dict:
+def platform_lab_due_tomorrow(owner_name: str = "there", clinic_name: str = "your clinic", due_date: str = "tomorrow", work_type: str = "lab work", **_) -> dict:
     body = f"""
 <p>Hi <strong>{owner_name}</strong>,</p>
 <p>This is a reminder that a lab order for <strong>{clinic_name}</strong> is due on <strong>{due_date}</strong>.</p>
@@ -264,7 +264,7 @@ def platform_lab_due_tomorrow(owner_name: str = "there", clinic_name: str = "you
     }
 
 
-def platform_weekly_report(owner_name: str = "there", clinic_name: str = "your clinic") -> dict:
+def platform_weekly_report(owner_name: str = "there", clinic_name: str = "your clinic", **_) -> dict:
     body = f"""
 <p>Hi <strong>{owner_name}</strong>,</p>
 <p>Your weekly MolarPlus business snapshot for <strong>{clinic_name}</strong> is ready.</p>
@@ -277,7 +277,7 @@ def platform_weekly_report(owner_name: str = "there", clinic_name: str = "your c
     }
 
 
-def platform_monthly_report(owner_name: str = "there", clinic_name: str = "your clinic") -> dict:
+def platform_monthly_report(owner_name: str = "there", clinic_name: str = "your clinic", **_) -> dict:
     body = f"""
 <p>Hi <strong>{owner_name}</strong>,</p>
 <p>Your monthly performance summary for <strong>{clinic_name}</strong> is now available in MolarPlus.</p>
@@ -289,7 +289,7 @@ def platform_monthly_report(owner_name: str = "there", clinic_name: str = "your 
     }
 
 
-def platform_review_report(owner_name: str = "there", clinic_name: str = "your clinic") -> dict:
+def platform_review_report(owner_name: str = "there", clinic_name: str = "your clinic", **_) -> dict:
     body = f"""
 <p>Hi <strong>{owner_name}</strong>,</p>
 <p>Your review and reputation summary for <strong>{clinic_name}</strong> is ready.</p>
@@ -302,7 +302,7 @@ def platform_review_report(owner_name: str = "there", clinic_name: str = "your c
     }
 
 
-def platform_trial_message(subject: str, headline: str, owner_name: str = "there", clinic_name: str = "your clinic") -> dict:
+def platform_trial_message(subject: str, headline: str, owner_name: str = "there", clinic_name: str = "your clinic", **_) -> dict:
     body = f"""
 <p>Hi <strong>{owner_name}</strong>,</p>
 <p>{headline} for <strong>{clinic_name}</strong>.</p>
@@ -342,7 +342,7 @@ address, you can safely ignore this email and nothing will change.</p>"""
 # ─── Clinic → Patient templates ───────────────────────────────────────────────
 
 def patient_appointment_booked(patient_name: str, clinic_name: str, clinic_logo_url: str,
-                                 appointment_date: str, appointment_time: str, doctor_name: str = "") -> dict:
+                                 appointment_date: str, appointment_time: str, doctor_name: str = "", **_) -> dict:
     dr_line = f"<p>Your appointment is with <strong>Dr. {doctor_name}</strong>.</p>" if doctor_name else ""
     body = f"""
 <p>Dear <strong>{patient_name}</strong>,</p>
@@ -363,7 +363,7 @@ def patient_appointment_booked(patient_name: str, clinic_name: str, clinic_logo_
 
 
 def patient_appointment_confirmed(patient_name: str, clinic_name: str, clinic_logo_url: str,
-                                   appointment_date: str, appointment_time: str, doctor_name: str = "") -> dict:
+                                   appointment_date: str, appointment_time: str, doctor_name: str = "", **_) -> dict:
     dr_line = f"<p>You will be seen by <strong>Dr. {doctor_name}</strong>.</p>" if doctor_name else ""
     body = f"""
 <p>Dear <strong>{patient_name}</strong>,</p>
@@ -381,7 +381,7 @@ def patient_appointment_confirmed(patient_name: str, clinic_name: str, clinic_lo
 
 
 def patient_checked_in(patient_name: str, clinic_name: str, clinic_logo_url: str,
-                        doctor_name: str = "") -> dict:
+                        doctor_name: str = "", **_) -> dict:
     dr_line = f"<strong>Dr. {doctor_name}</strong> will be with you shortly." if doctor_name else "A doctor will be with you shortly."
     body = f"""
 <p>Dear <strong>{patient_name}</strong>,</p>
@@ -398,7 +398,7 @@ def patient_checked_in(patient_name: str, clinic_name: str, clinic_logo_url: str
 
 
 def patient_appointment_reminder(patient_name: str, clinic_name: str, clinic_logo_url: str,
-                                   appointment_date: str, appointment_time: str, doctor_name: str = "") -> dict:
+                                   appointment_date: str, appointment_time: str, doctor_name: str = "", **_) -> dict:
     dr_line = f"<p>Your appointment is with <strong>Dr. {doctor_name}</strong>.</p>" if doctor_name else ""
     body = f"""
 <p>Dear <strong>{patient_name}</strong>,</p>
@@ -436,7 +436,7 @@ def patient_invoice_sent(patient_name: str, clinic_name: str, clinic_logo_url: s
 
 
 def patient_prescription_sent(patient_name: str, clinic_name: str, clinic_logo_url: str,
-                                doctor_name: str = "", prescription_date: str = "") -> dict:
+                                doctor_name: str = "", prescription_date: str = "", **_) -> dict:
     dr_line = f"Prescribed by <strong>Dr. {doctor_name}</strong>" if doctor_name else ""
     date_line = f" on {prescription_date}" if prescription_date else ""
     body = f"""
@@ -455,7 +455,7 @@ def patient_prescription_sent(patient_name: str, clinic_name: str, clinic_logo_u
 
 
 def patient_consent_form(patient_name: str, clinic_name: str, clinic_logo_url: str,
-                          consent_link: str, procedure_name: str = "") -> dict:
+                          consent_link: str, procedure_name: str = "", **_) -> dict:
     proc_line = f" for <strong>{procedure_name}</strong>" if procedure_name else ""
     body = f"""
 <p>Dear <strong>{patient_name}</strong>,</p>
@@ -474,7 +474,7 @@ def patient_consent_form(patient_name: str, clinic_name: str, clinic_logo_url: s
 
 
 def patient_google_review(patient_name: str, clinic_name: str, clinic_logo_url: str,
-                            review_link: str) -> dict:
+                            review_link: str, **_) -> dict:
     body = f"""
 <p>Dear <strong>{patient_name}</strong>,</p>
 <p>Thank you for visiting <strong>{clinic_name}</strong>! 😊 We hope your experience was great.</p>
@@ -492,7 +492,7 @@ def vendor_lab_order_placed(clinic_name: str, clinic_logo_url: str = "",
                              lab_name: str = "", work_type: str = "",
                              patient_name: str = "", tooth_number: str = "",
                              shade: str = "", due_date: str = "",
-                             instructions: str = "", clinic_phone: str = "") -> dict:
+                             instructions: str = "", clinic_phone: str = "", **_) -> dict:
     """Clinic → dental lab: a new work order was placed.
 
     Clinic-branded (not platform-branded) because the lab is the clinic's

@@ -1232,6 +1232,32 @@ async def complete_onboarding(
             "tax_label": country_cfg["tax_label"],
         }
 
+        # Signup now finds the address on a map instead of asking for it as a
+        # line of text, so the city, state, postcode and pin come back for free.
+        # Every key below is an existing nullable column, and each is added only
+        # when the client actually sends it: an older bundle, or somebody who
+        # typed the address by hand, inserts exactly what it always did.
+        #
+        # Worth keeping even though nothing reads the pin yet — Team → Location
+        # asks owners to drop the same pin a second time for the attendance
+        # geofence, and this is the one moment they have already found it.
+        for _key, _limit in (
+            ("city", 120), ("state", 120), ("postal_code", 20), ("google_place_id", 255),
+        ):
+            _value = str(data.get(_key) or "").strip()
+            if _value:
+                clinic_data[_key] = _value[:_limit]
+
+        for _key in ("latitude", "longitude"):
+            _raw = data.get(_key)
+            if _raw in (None, ""):
+                continue
+            try:
+                clinic_data[_key] = float(_raw)
+            except (TypeError, ValueError):
+                # A pin we cannot parse is not worth failing a signup over.
+                pass
+
         result = user_service.complete_onboarding(user.id, clinic_data)
         clinic = result["clinic"]
         platform_notifications = PlatformNotificationService(db)

@@ -226,6 +226,8 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE patients ADD COLUMN IF NOT EXISTS allergies TEXT"))
             conn.execute(text("ALTER TABLE patients ADD COLUMN IF NOT EXISTS case_paper_type VARCHAR(16)"))
             conn.execute(text("ALTER TABLE treatment_types ADD COLUMN IF NOT EXISTS benefit_category VARCHAR(16)"))
+            conn.execute(text("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS tax_rate DOUBLE PRECISION"))
+            conn.execute(text("ALTER TABLE clinics ADD COLUMN IF NOT EXISTS default_tax_rate DOUBLE PRECISION"))
             conn.execute(text("ALTER TABLE xray_images ADD COLUMN IF NOT EXISTS tooth_area VARCHAR"))
             conn.execute(text("ALTER TABLE patient_documents ADD COLUMN IF NOT EXISTS category VARCHAR"))
 

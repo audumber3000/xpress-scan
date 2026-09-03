@@ -85,7 +85,7 @@ def _footer_component() -> dict:
 
 def wa_appointment_booked(patient_name: str, clinic_name: str,
                            appointment_date: str, appointment_time: str,
-                           clinic_phone: str = "", doctor_name: str = "") -> dict:
+                           clinic_phone: str = "", doctor_name: str = "", **_) -> dict:
     """
     Body params: {{1}} patient_name, {{2}} clinic_name,
                  {{3}} appointment_date, {{4}} appointment_time, {{5}} clinic_phone
@@ -100,7 +100,7 @@ def wa_appointment_booked(patient_name: str, clinic_name: str,
 
 def wa_appointment_confirmed(patient_name: str, clinic_name: str,
                               appointment_date: str, appointment_time: str,
-                              clinic_phone: str = "") -> dict:
+                              clinic_phone: str = "", **_) -> dict:
     """
     Body params: {{1}} patient_name, {{2}} clinic_name,
                  {{3}} appointment_date, {{4}} appointment_time, {{5}} clinic_phone
@@ -114,7 +114,7 @@ def wa_appointment_confirmed(patient_name: str, clinic_name: str,
 
 
 def wa_checked_in(patient_name: str, clinic_name: str, doctor_name: str = "",
-                  clinic_phone: str = "") -> dict:
+                  clinic_phone: str = "", **_) -> dict:
     """
     Body params: {{1}} patient_name, {{2}} clinic_name,
                  {{3}} doctor_name_or_blank, {{4}} clinic_phone
@@ -129,7 +129,7 @@ def wa_checked_in(patient_name: str, clinic_name: str, doctor_name: str = "",
 
 def wa_appointment_reminder(patient_name: str, clinic_name: str,
                              appointment_date: str, appointment_time: str,
-                             clinic_phone: str = "") -> dict:
+                             clinic_phone: str = "", **_) -> dict:
     """
     Body params: {{1}} patient_name, {{2}} clinic_name,
                  {{3}} appointment_date, {{4}} appointment_time, {{5}} clinic_phone
@@ -231,7 +231,7 @@ def wa_treatment_summary(patient_name: str, clinic_name: str,
 
 def wa_prescription_sent(patient_name: str, clinic_name: str, doctor_name: str = "",
                          clinic_phone: str = "", document_url: str = "",
-                         media_id: str = "") -> dict:
+                         media_id: str = "", **_) -> dict:
     """
     Header: document (PDF prescription) — pass media_id (preferred) or document_url.
     Body params: {{1}} patient_name, {{2}} clinic_name,
@@ -248,7 +248,7 @@ def wa_prescription_sent(patient_name: str, clinic_name: str, doctor_name: str =
 
 
 def wa_consent_form(patient_name: str, clinic_name: str, consent_link: str,
-                    procedure_name: str = "", clinic_phone: str = "") -> dict:
+                    procedure_name: str = "", clinic_phone: str = "", **_) -> dict:
     """
     Body params: {{1}} patient_name, {{2}} clinic_name,
                  {{3}} procedure_name, {{4}} consent_link, {{5}} clinic_phone
@@ -283,7 +283,7 @@ def wa_patient_form(patient_name: str, clinic_name: str, form_link: str,
 
 
 def wa_google_review(patient_name: str, clinic_name: str, review_link: str,
-                     clinic_phone: str = "") -> dict:
+                     clinic_phone: str = "", **_) -> dict:
     """
     Body params: {{1}} patient_name, {{2}} clinic_name,
                  {{3}} review_link, {{4}} clinic_phone
@@ -378,7 +378,7 @@ def wa_otp_verification(otp: str = "", code: str = "", **_) -> dict:
     }
 
 
-def wa_passthrough_template(template_name: str, *values) -> dict:
+def wa_passthrough_template(template_name: str, *values, **_) -> dict:
     """Build a passthrough template with optional ordered body params."""
     components = [_body_params(*values)] if values else []
     return {

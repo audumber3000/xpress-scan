@@ -136,6 +136,11 @@ class Clinic(Base):
     timezone = Column(String(50), default='Asia/Kolkata')  # IANA timezone
     tax_label = Column(String(20), default='GST No.')  # GST, VAT, TIN, ABN...
     tax_id = Column(String(50), nullable=True)  # replaces gst_number for intl
+    # The rate this clinic usually charges, as a percentage. Nullable rather
+    # than 0.0 so "never set it up" and "deliberately zero-rated" stay
+    # distinguishable — a clinic that has not configured tax should not have
+    # invoices silently asserting 0% is correct.
+    default_tax_rate = Column(Float, nullable=True)
     # Structured address. `address` above stays the single composed line and is
     # still what invoices, receipts, prescriptions, the website and the mobile
     # app read, so it is kept in sync from these parts on every save rather than
@@ -714,6 +719,10 @@ class Invoice(Base):
     utr = Column(String, nullable=True)  # UTR number for UPI payments
     subtotal = Column(Float, default=0.0)
     tax = Column(Float, default=0.0)
+    # The percentage this invoice was taxed at, frozen on the bill. Kept per
+    # invoice and not read from the clinic at render time: a rate change must
+    # never alter what a patient was already charged.
+    tax_rate = Column(Float, nullable=True)
     discount = Column(Float, default=0.0)
     discount_type = Column(String, default='amount')  # 'amount' or 'percentage'
     discount_amount = Column(Float, default=0.0)  # The finalized deduction value

@@ -70,6 +70,30 @@ def notify_event(
     )
 
     if not pref or not pref.is_enabled:
+        # Logged, not just skipped. A send that never happened used to leave no
+        # trace at all: the row was written after this gate, so Notification
+        # Logs showed nothing and a clinic asking "why didn't the patient get
+        # it" had nothing to look at. The commonest cause is exactly this —
+        # no preference row, or the event switched off.
+        try:
+            db.add(NotificationLog(
+                clinic_id=clinic_id,
+                channel="-",
+                recipient=(to_phone or to_email or ""),
+                event_type=event_type,
+                template_name=event_type,
+                status="skipped",
+                error_message=("event is switched off for this clinic"
+                               if pref else "no preference row for this event"),
+                cost=0.0,
+                provider="none",
+                created_at=datetime.datetime.utcnow(),
+                updated_at=datetime.datetime.utcnow(),
+            ))
+            db.commit()
+        except Exception:
+            # Never let bookkeeping break the caller's request.
+            db.rollback()
         logger.debug(f"notify_event [{event_type}]: disabled or no preference found")
         return
 
