@@ -462,6 +462,12 @@ class TreatmentType(Base):
     # defaulted to 60 minutes whether it was a check-up or a root canal, and
     # anyone planning a real day did the arithmetic in their head.
     duration_minutes = Column(Integer, nullable=True, default=30)
+    # Which benefit band an insurer pays this under: preventive, basic, major or
+    # ortho. Four bands rather than a percentage per treatment because that is
+    # how dental plans are actually written — a plan says "80% of basic", not
+    # "80% of a composite filling". NULL falls back to the clinic's default band
+    # so an existing catalogue keeps working untouched.
+    benefit_category = Column(String(16), nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
@@ -1128,6 +1134,68 @@ class ConsentTemplate(Base):
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     
     clinic = relationship("Clinic")
+
+class InsurancePayer(Base):
+    """An insurer this clinic bills. Clinic-scoped: the same company negotiates
+    different terms with different practices, and one clinic renaming "Star
+    Health (corporate)" must not rename it for everybody."""
+    __tablename__ = 'insurance_payers'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    # Free text on purpose. Payer identifiers are national schemes that differ
+    # per country, and this product is in several — a validated format here
+    # would be wrong somewhere within a week.
+    payer_code = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    clinic = relationship("Clinic")
+
+
+class PatientInsurance(Base):
+    """One patient's cover under one payer.
+
+    The money fields are what an estimate is actually made of: a percentage per
+    benefit band, a deductible the patient pays before the insurer starts, and a
+    ceiling per plan year. All of them optional, because a clinic often knows
+    the percentages long before it knows the annual maximum, and a half-known
+    policy still produces a better estimate than none.
+
+    `deductible_met` and `annual_used` are running totals the clinic maintains.
+    Deliberately not computed from invoices: the patient's other dentist and
+    their GP also draw on the same annual maximum, so this app can only ever
+    know part of it. A figure the clinic types is honest about being an
+    estimate; one this app computed would look authoritative and be wrong.
+    """
+    __tablename__ = 'patient_insurance'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False, index=True)
+    payer_id = Column(Integer, ForeignKey('insurance_payers.id'), nullable=False)
+    policy_number = Column(String, nullable=True)
+    # Whose policy it is, when that is not the patient — a child on a parent's
+    # cover is the common case.
+    subscriber_name = Column(String, nullable=True)
+    subscriber_relation = Column(String(32), nullable=True)  # self | spouse | child | other
+    valid_from = Column(Date, nullable=True)
+    valid_to = Column(Date, nullable=True)
+    # {"preventive": 100, "basic": 80, "major": 50, "ortho": 50}
+    coverage = Column(JSON, nullable=True)
+    deductible = Column(Float, nullable=True)
+    deductible_met = Column(Float, nullable=True, default=0.0)
+    annual_max = Column(Float, nullable=True)
+    annual_used = Column(Float, nullable=True, default=0.0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    clinic = relationship("Clinic")
+    patient = relationship("Patient")
+    payer = relationship("InsurancePayer")
+
 
 class FormTemplate(Base):
     """A questionnaire a clinic sends to a patient to fill in.

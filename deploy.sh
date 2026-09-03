@@ -125,6 +125,8 @@ run_migration "patient_allergies" "ALTER TABLE patients ADD COLUMN IF NOT EXISTS
 #
 # tooth_number: which tooth a billed line is for. Both PDF templates already read
 # this field and have been printing an empty column on every invoice.
+run_migration "treatment_benefit_category" "ALTER TABLE treatment_types ADD COLUMN IF NOT EXISTS benefit_category VARCHAR(16)"
+
 run_migration "patient_case_paper_type" "ALTER TABLE patients ADD COLUMN IF NOT EXISTS case_paper_type VARCHAR(16)"
 
 run_migration "line_item_tooth" "ALTER TABLE invoice_line_items ADD COLUMN IF NOT EXISTS tooth_number VARCHAR"

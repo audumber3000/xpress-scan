@@ -225,6 +225,7 @@ async def lifespan(app: FastAPI):
             # deploy.sh does not reach the box.
             conn.execute(text("ALTER TABLE patients ADD COLUMN IF NOT EXISTS allergies TEXT"))
             conn.execute(text("ALTER TABLE patients ADD COLUMN IF NOT EXISTS case_paper_type VARCHAR(16)"))
+            conn.execute(text("ALTER TABLE treatment_types ADD COLUMN IF NOT EXISTS benefit_category VARCHAR(16)"))
             conn.execute(text("ALTER TABLE xray_images ADD COLUMN IF NOT EXISTS tooth_area VARCHAR"))
             conn.execute(text("ALTER TABLE patient_documents ADD COLUMN IF NOT EXISTS category VARCHAR"))
 
@@ -858,6 +859,10 @@ from domains.forms.routes import forms as patient_forms
 from domains.forms.routes import public_forms
 app.include_router(patient_forms.router, prefix="/api/v1/forms", tags=["forms"])
 app.include_router(public_forms.router, prefix="/api/v1/public/forms", tags=["public-forms"])
+
+# Insurance: who the clinic bills, what a patient is covered for, and the split.
+from domains.insurance.routes import insurance as insurance_routes
+app.include_router(insurance_routes.router, prefix="/api/v1/insurance", tags=["insurance"])
 # Internal service-to-service routes (Nexus calls these). Auth via shared
 # X-Internal-Auth header; never call from public clients.
 app.include_router(consents_internal.router, prefix="/api/v1/internal", tags=["internal"])
