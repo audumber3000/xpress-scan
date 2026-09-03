@@ -24,7 +24,26 @@ import ConfirmDialog from "../common/ConfirmDialog";
 import MasterPasswordModal from "../common/MasterPasswordModal";
 import { generatePatientPersona, generateInitialsAvatar } from "../../utils/avatar";
 
-const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
+/**
+ * `onSave` vs `onRefresh`
+ *
+ * Every parent wires onSave to a function that refreshes its list AND closes
+ * this drawer, so calling it after a payment or a discount shut the drawer on
+ * the user — and a drawer closing is exactly what Cancel does, so there was no
+ * way to tell "recorded" from "abandoned". Worse, the numbers that were the
+ * confirmation (Paid, Balance due, the ring) vanished with it.
+ *
+ * onRefresh updates the list behind without closing, so the result stays on
+ * screen where the app's own feedback rule expects it — tier 1, the value
+ * changed, say nothing. onSave now means what its name says: the task is
+ * finished, close.
+ *
+ * It falls back to onSave when a parent has not been given one, so callers that
+ * were never updated keep their old behaviour rather than silently not
+ * refreshing.
+ */
+const InvoiceEditor = ({ invoiceId, onClose, onSave, onRefresh, prefill = null }) => {
+  const refreshList = () => (onRefresh || onSave)?.();
   const { user } = useAuth();
   const [invoice, setInvoice] = useState(null);
   // For "new", there's nothing to fetch — start in the form view immediately.
@@ -281,7 +300,7 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
     try {
       const updated = await api.post(`/invoices/${currentInvoiceId}/discounts`, payload);
       setInvoice(updated);
-      if (onSave) onSave();
+      refreshList();
     } catch (error) {
       console.error("Error applying discount:", error);
       throw error;
@@ -292,7 +311,7 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
     try {
       const updated = await api.delete(`/invoices/${currentInvoiceId}/discounts/${discountId}`);
       setInvoice(updated);
-      if (onSave) onSave();
+      refreshList();
     } catch (error) {
       console.error("Error removing discount:", error);
       fail(error, "Could not remove that discount");
@@ -356,9 +375,11 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, prefill = null }) => {
       setSaving(true);
       const updated = await api.post(`/invoices/${currentInvoiceId}/mark-as-paid`, paymentData);
       setInvoice(updated);
-      // No message either way: Paid and Balance due are recalculated on screen
-      // the moment this returns, which says it better than a toast could.
-      if (updated.status !== 'partially_paid' && onSave) onSave();
+      // No message either way, and now that is actually true: the drawer stays
+      // open and Paid, Balance due and the ring all recalculate in front of the
+      // user. This used to close on a full payment, which took those numbers
+      // off screen before anyone could read them.
+      refreshList();
     } catch (error) {
       console.error("Error marking invoice as paid:", error);
       fail(error, "Could not record that payment");

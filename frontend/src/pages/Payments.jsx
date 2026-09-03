@@ -380,12 +380,19 @@ const Payments = () => {
     setSelectedInvoiceId(invoiceId);
   }, []);
 
-  const handleInvoiceClose = () => {
-    setSelectedInvoiceId(null);
+  // Everything the page shows about money, re-read. Split out from the close
+  // handler so the drawer can refresh what is behind it without shutting on the
+  // user mid-task.
+  const refreshInvoiceViews = () => {
     fetchInvoices();
     fetchStats();
     fetchTodayCollections();
     if (activeTab === 'ledger') fetchLedger();
+  };
+
+  const handleInvoiceClose = () => {
+    setSelectedInvoiceId(null);
+    refreshInvoiceViews();
   };
 
   const handleExpenseSave = () => {
@@ -880,6 +887,7 @@ const Payments = () => {
           invoiceId={selectedInvoiceId}
           onClose={handleInvoiceClose}
           onSave={handleInvoiceClose}
+          onRefresh={refreshInvoiceViews}
         />
       )}
 

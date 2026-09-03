@@ -210,6 +210,7 @@ const BillingTab = ({ patient, invoices = [], casePapers = [], prescriptions = [
           invoiceId={openInvoiceId}
           prefill={openInvoiceId === 'new' ? { patientId: Number(patientId) } : null}
           onClose={closeEditor}
+          onRefresh={refreshInvoices}
           onSave={closeEditor}
         />
       )}
