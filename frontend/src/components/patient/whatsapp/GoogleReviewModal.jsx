@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { X, Star, ExternalLink } from 'lucide-react';
+import { X, ExternalLink } from 'lucide-react';
 import WhatsAppIcon from '../../common/WhatsAppIcon';
+import GoogleGlyph from '../../common/GoogleGlyph';
 import InlineFeedback from '../../common/InlineFeedback';
 import SectionError from '../../common/SectionError';
 import Spinner from '../../common/Spinner';
@@ -121,8 +122,8 @@ const GoogleReviewModal = ({ open, onClose, patient, user }) => {
           {!loading && !loadError && (
             <>
               <div className="flex items-start gap-3 p-3 rounded-xl border border-gray-200">
-                <span className="w-9 h-9 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center flex-shrink-0">
-                  <Star size={17} />
+                <span className="w-9 h-9 rounded-full bg-gray-50 border border-gray-100 flex items-center justify-center flex-shrink-0">
+                  <GoogleGlyph size={17} />
                 </span>
                 <div className="min-w-0 text-sm">
                   {!connected && (

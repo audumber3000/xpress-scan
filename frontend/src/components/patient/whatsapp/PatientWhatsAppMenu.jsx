@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { MoreVertical, Star, ReceiptText, Stethoscope, Pill, MessageSquare } from 'lucide-react';
+import { MoreVertical, ReceiptText, Stethoscope, Pill } from 'lucide-react';
 import WhatsAppIcon from '../../common/WhatsAppIcon';
+import GoogleGlyph from '../../common/GoogleGlyph';
 import SendListModal from './SendListModal';
 import GoogleReviewModal from './GoogleReviewModal';
 import { api } from '../../../utils/api';
@@ -18,6 +19,12 @@ import {
 /**
  * Everything you might WhatsApp a patient, behind the dots next to the
  * WhatsApp button.
+ *
+ * Two of the items wear a brand mark rather than a lucide glyph, because they
+ * are somebody else's product and the logo is the fastest way to say so: the
+ * WhatsApp mark on the chat, the Google G on the review ask. Neither is tinted;
+ * Google's guidelines only permit the G in its own colours or flat white/black.
+ * The other three are ours, so they take the house indigo.
  *
  * One button in the file header, carrying the mark, the word and the dots. The
  * whole thing opens this menu; opening the chat is the first thing in it rather
@@ -148,7 +155,7 @@ const PatientWhatsAppMenu = ({ patient, user }) => {
           className="absolute right-0 top-full mt-1.5 z-50 w-64 py-1.5 bg-white border border-gray-200 rounded-xl shadow-xl"
         >
           <button type="button" role="menuitem" className={ITEM_CLS} onClick={openChat}>
-            <MessageSquare size={15} className="mt-0.5 text-[#2a276e] flex-shrink-0" />
+            <WhatsAppIcon size={15} brand className="mt-0.5 flex-shrink-0" />
             <span className="min-w-0">
               <span className="block font-medium">Open the chat</span>
               <span className="block text-[11px] text-gray-400 leading-snug">Type something yourself</span>
@@ -158,7 +165,7 @@ const PatientWhatsAppMenu = ({ patient, user }) => {
           <div className="my-1 border-t border-gray-100" />
 
           <button type="button" role="menuitem" className={ITEM_CLS} onClick={() => pick('review')}>
-            <Star size={15} className="mt-0.5 text-[#2a276e] flex-shrink-0" />
+            <GoogleGlyph size={15} className="mt-0.5 flex-shrink-0" />
             <span className="min-w-0">
               <span className="block font-medium">Ask for a Google review</span>
               <span className="block text-[11px] text-gray-400 leading-snug">Your listing, with a one tap link</span>
