@@ -198,8 +198,7 @@ const GoogleReviewModal = ({ open, onClose, patient, user }) => {
                         </a>
                       </div>
                       <p className="mt-1 text-[11px] text-gray-500">
-                        The message sends a short link that opens this outside
-                        WhatsApp, so the patient lands signed in.
+                        This is exactly what the patient receives.
                       </p>
                     </div>
                   )}
