@@ -11,13 +11,13 @@ import { formatDate } from '../../../utils/datetime';
  * happen here: the list is real data and the button opens the same
  * PrescriptionDrawer the Prescriptions tab uses. One drawer, one code path.
  */
-const PrescriptionsCard = ({ prescriptions = [], onNew, onOpen, onDownload }) => {
+const PrescriptionsCard = ({ prescriptions = [], onNew, onOpen, onDownload, className = '' }) => {
   const recent = [...prescriptions]
     .sort((a, b) => new Date(b.created_at || b.date || 0) - new Date(a.created_at || a.date || 0))
     .slice(0, 3);
 
   return (
-    <OverviewCard title="Prescriptions" action="New prescription" onOpen={onNew}>
+    <OverviewCard title="Prescriptions" action="New prescription" onOpen={onNew} className={className}>
       {recent.length === 0 ? (
         <OverviewEmpty action="Write a prescription" onAction={onNew}>
           Nothing prescribed to this patient yet.

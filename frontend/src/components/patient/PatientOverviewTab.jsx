@@ -89,7 +89,11 @@ const PatientOverviewTab = ({
     // Three columns down to `xl`, two at `lg`, one on a phone. The chart needs
     // the width, the clinical column and the money column do not, and at `lg`
     // the money column drops under rather than squeezing all three.
-    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-[1.15fr_1fr_0.95fr] gap-4 items-start">
+    //
+    // No `items-start` any more: the columns stretch so the feed has a row
+    // height to fill. Stretching only affects these three wrappers, not the
+    // cards inside them, which keep their own heights as before.
+    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-[1.15fr_1fr_0.95fr] gap-4">
       <div className="space-y-4 min-w-0">
         {isDental ? (
           <>
@@ -108,21 +112,46 @@ const PatientOverviewTab = ({
             onOpen={() => onOpenTab('case-papers')}
           />
         )}
-        {/* Under the chart rather than beside the feed. The chart column is the
-            one with height to spare, and the feed wants all of its own. */}
-        <PrescriptionsCard
-          prescriptions={prescriptions}
-          onNew={onNewPrescription}
-          onOpen={onOpenPrescription}
-        />
       </div>
 
-      <div className="space-y-4 min-w-0">
-        <PatientActivityCard
-          patientId={patient?.id}
-          reloadKey={activityKey}
-          onOpen={() => onOpenTab('visits')}
-        />
+      {/* The feed is the one card here with no natural length: a patient of ten
+          years has ten years of it. Left to grow it would set the height of the
+          whole row and push the money column's cards, Record payment among
+          them, below the fold on a long-standing patient.
+
+          So the cell owns the height and the column inside it divides it up.
+          `absolute` is what buys that: the column contributes nothing to the
+          row, takes whatever the other two settle on, and shares it out.
+
+          Prescriptions are back under the feed rather than under the chart. A
+          feed running the whole height of the page on its own was a lot of one
+          thing, and it is also what keeps the feed honest: it now has to end
+          somewhere above the bottom of the column, so it can never be the only
+          thing in view.
+
+          The split is by shrink, not by grow. Prescriptions keep their natural
+          height and the feed gives up whatever is left over, scrolling inside
+          rather than pushing anything off. Nothing is stretched to fill: a
+          patient with two events gets a short card, not a tall empty one.
+
+          Only at xl, where the columns are actually side by side. Below that
+          they stack, there is nothing to line up with, and both go back to
+          plain cards with the feed capped on its own. */}
+      <div className="min-w-0 relative">
+        <div className="space-y-4 xl:space-y-0 xl:absolute xl:inset-0 xl:flex xl:flex-col xl:gap-4">
+          <PatientActivityCard
+            patientId={patient?.id}
+            reloadKey={activityKey}
+            onOpen={() => onOpenTab('visits')}
+            className="min-h-0"
+          />
+          <PrescriptionsCard
+            prescriptions={prescriptions}
+            onNew={onNewPrescription}
+            onOpen={onOpenPrescription}
+            className="flex-none"
+          />
+        </div>
       </div>
 
       <div className="space-y-4 min-w-0 lg:col-span-2 xl:col-span-1">

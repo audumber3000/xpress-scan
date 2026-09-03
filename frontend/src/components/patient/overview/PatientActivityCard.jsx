@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Check, CalendarDays, DoorOpen, FileText, Pill, ReceiptText, UserPlus,
 } from 'lucide-react';
@@ -145,7 +145,18 @@ const Event = ({ event, last }) => {
   );
 };
 
-const PatientActivityCard = ({ patientId, reloadKey = 0, onOpen }) => {
+const PatientActivityCard = ({ patientId, reloadKey = 0, onOpen, className = '' }) => {
+  const listRef = useRef(null);
+  // Whether there is feed below the fold. Content hidden with no cue may as
+  // well not exist, and this one hides a lot: a patient of a few years runs to
+  // several times the height of the card. The card's own height is set by the
+  // column beside it rather than by anything here, so it is watched rather
+  // than worked out once.
+  const [more, setMore] = useState(false);
+  const checkMore = useCallback(() => {
+    const el = listRef.current;
+    setMore(!!el && el.scrollHeight - el.scrollTop - el.clientHeight > 4);
+  }, []);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -164,8 +175,17 @@ const PatientActivityCard = ({ patientId, reloadKey = 0, onOpen }) => {
     return () => { cancelled = true; };
   }, [patientId, reloadKey]);
 
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return undefined;
+    checkMore();
+    const ro = new ResizeObserver(checkMore);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [events, checkMore]);
+
   return (
-    <OverviewCard title="Activity" onOpen={onOpen} action="Visits">
+    <OverviewCard title="Activity" onOpen={onOpen} action="Visits" className={`flex flex-col ${className}`}>
       {loading && (
         <div className="flex items-center justify-center gap-2 px-4 py-8 text-xs text-gray-500">
           <Spinner className="w-4 h-4" /> Loading
@@ -184,16 +204,36 @@ const PatientActivityCard = ({ patientId, reloadKey = 0, onOpen }) => {
         <OverviewEmpty>Nothing recorded for this patient yet.</OverviewEmpty>
       )}
 
+      {/* The cap is the column itself at xl, where the card shares a fixed
+          height with the prescriptions below it. A fixed one under that, where
+          there is no column to borrow a height from and an unbounded feed would
+          just make the page longer.
+
+          The fade is the cue that there is more. It is drawn over the scroll
+          edge and goes when you reach the end, so it never suggests content
+          that is not there. Not a shadow: cards here are border-only. */}
       {!loading && !error && events.length > 0 && (
-        <ol className="relative px-4 py-3.5 max-h-[26rem] overflow-y-auto">
-          {events.map((e, i) => (
-            <Event
-              key={`${e.kind}-${e.at}-${i}`}
-              event={e}
-              last={i === events.length - 1}
+        <div className="relative min-h-0 flex flex-col">
+          <ol
+            ref={listRef}
+            onScroll={checkMore}
+            className="relative px-4 py-3.5 min-h-0 overflow-y-auto max-h-[26rem] xl:max-h-none"
+          >
+            {events.map((e, i) => (
+              <Event
+                key={`${e.kind}-${e.at}-${i}`}
+                event={e}
+                last={i === events.length - 1}
+              />
+            ))}
+          </ol>
+          {more && (
+            <div
+              className="pointer-events-none absolute inset-x-px bottom-px h-9 rounded-b-xl bg-gradient-to-t from-white via-white/85 to-transparent"
+              aria-hidden="true"
             />
-          ))}
-        </ol>
+          )}
+        </div>
       )}
     </OverviewCard>
   );
