@@ -5,9 +5,10 @@ import { useHeader } from "../contexts/HeaderContext";
 import {
   Search, X, Menu, Bell, ChevronRight, Keyboard, Headset,
   UserRound, CreditCard, LifeBuoy, LogOut, Settings, BadgeCheck,
-  UserPlus, CalendarDays, Pill, Receipt, ShieldAlert,
+  UserPlus, CalendarDays, Pill, Receipt, ShieldAlert, Clock,
 } from "lucide-react";
 import ShortcutsDrawer from "./ShortcutsDrawer";
+import ClockModal from "./attendance/ClockModal";
 import { canAccess } from "../utils/permissions";
 import {
   ALL_SHORTCUTS, ACTION_HELP, ACTION_SEARCH, matchesCombo, isTypingTarget,
@@ -143,6 +144,7 @@ const Header = ({ onOpenMobileSidebar }) => {
   const location = useLocation();
   const { title, titlePath, refreshFunction, refreshPath, loading, handleRefresh } = useHeader();
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const [showClockModal, setShowClockModal] = useState(false);
   const [showClinicDropdown, setShowClinicDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
@@ -479,6 +481,7 @@ const Header = ({ onOpenMobileSidebar }) => {
        The layers above this, for anything added later: sidebar drawer 45-50,
        inline popovers (FilterPanel, MoreMenu) 50, notifications 60-70, help
        drawer 80, global search 100. */
+    <>
     <header className="bg-white border-b border-gray-200 h-14 flex items-center justify-between px-4 md:px-6 sticky top-0 z-40 shadow-sm">
       {/* Centered command-palette search (opens from the search icon or ⌘K) */}
       <GlobalSearchModal open={showSearch} onClose={() => setShowSearch(false)} />
@@ -774,6 +777,13 @@ const Header = ({ onOpenMobileSidebar }) => {
                 </div>
 
                 <MenuLabel>Profile actions</MenuLabel>
+                {/* First, because clocking on is the thing most staff open this
+                    menu to do, and it is done twice a day. */}
+                <MenuRow
+                  icon={Clock}
+                  label="Clock in / Clock out"
+                  onClick={() => { setShowProfileDropdown(false); setShowClockModal(true); }}
+                />
                 <MenuRow
                   icon={UserRound}
                   label="Profile settings"
@@ -923,6 +933,13 @@ const Header = ({ onOpenMobileSidebar }) => {
         </>
       )}
     </header>
+
+    {/* Outside <header> on purpose. The header is sticky z-40, which makes a
+        stacking context, and the comment above records what that already did
+        to the dropdowns nested in it: they could not climb out. A modal
+        rendered in there would sit under the page's own layers. */}
+    <ClockModal open={showClockModal} onClose={() => setShowClockModal(false)} />
+    </>
   );
 };
 

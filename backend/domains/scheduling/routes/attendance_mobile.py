@@ -6,7 +6,14 @@ from database import get_db
 from models import Attendance, User, Clinic
 from schemas import AttendanceOut
 from core.auth_utils import get_current_user, require_clinic_owner
-from domains.scheduling.services.attendance_view import status_for_check_in
+from core.clinic_time import clinic_tzinfo
+from domains.scheduling.services.attendance_view import (
+    LATE_GRACE_MINUTES,
+    _late_by_minutes,
+    _opening_time_for,
+    _to_clinic_local,
+    status_for_check_in,
+)
 from pydantic import BaseModel, Field
 
 router = APIRouter()
@@ -16,6 +23,11 @@ class ClockInRequest(BaseModel):
     longitude: float
     accuracy: Optional[float] = None
     address: Optional[str] = None
+    # Why they are late, asked for at the moment of clocking in rather than
+    # chased afterwards. Optional on the wire: a punctual clock-in has nothing
+    # to explain, and refusing one without a reason would stop somebody
+    # starting work over a text box.
+    reason: Optional[str] = Field(default=None, max_length=280)
 
 class GeofenceOut(BaseModel):
     latitude: Optional[float] = None
@@ -150,6 +162,12 @@ async def clock_in(
         clock_in_accuracy=request.accuracy,
         clock_in_distance_m=distance,
     )
+    # Kept only when the status actually says late. The column is read by the
+    # owner's grid as "reason for late/absent", so writing an explanation
+    # against an on-time arrival would put an answer next to a question nobody
+    # asked.
+    if attendance.status == "late" and (request.reason or "").strip():
+        attendance.reason = request.reason.strip()
     
     db.add(attendance)
     db.commit()
@@ -246,6 +264,36 @@ async def get_clock_status(
         # rather than implying a geofence that is not actually being enforced.
         "geofence_set": bool(clinic and getattr(clinic, 'latitude', None) is not None),
         "geofence_radius_m": (getattr(clinic, 'geofence_radius_m', None) or 150) if clinic else 150,
+        # Whether clocking in *now* would be recorded as late, so the screen can
+        # ask for the reason before sending rather than after. Asking afterwards
+        # means either a second request or a reason attached to a record that
+        # already says on_time.
+        #
+        # Computed with the same helpers the stored status uses, so the prompt
+        # and the record cannot disagree about who was late.
+        **_late_now(clinic, today),
+    }
+
+
+def _late_now(clinic, day) -> dict:
+    """How late a clock-in at this instant would be.
+
+    All three keys are null when the clinic has no hours set for the day, which
+    the screen shows as no prompt at all: with nothing to be late against, the
+    benefit of the doubt goes to the person who turned up. Same rule as
+    status_for_check_in, deliberately.
+    """
+    if not clinic:
+        return {"late_now": False, "late_by_minutes": None, "opening_time": None,
+                "grace_minutes": LATE_GRACE_MINUTES}
+    opening = _opening_time_for(clinic, day)
+    local_now = _to_clinic_local(datetime.utcnow(), clinic_tzinfo(clinic))
+    late_by = _late_by_minutes(local_now, opening)
+    return {
+        "late_now": bool(late_by is not None and late_by > LATE_GRACE_MINUTES),
+        "late_by_minutes": late_by,
+        "opening_time": opening,
+        "grace_minutes": LATE_GRACE_MINUTES,
     }
 
 @router.get("/history")
