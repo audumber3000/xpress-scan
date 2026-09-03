@@ -2760,7 +2760,9 @@ async def mark_invoice_as_paid(
                 # patient file has to reach exactly the same answers.
                 from domains.notification.services import google_review_service as grs
 
-                review_link = grs.review_link(db, current_user.clinic_id)
+                # The wrapped link, not the Google one: this is read on a
+                # phone inside WhatsApp. See grs.share_link.
+                review_link = grs.share_link(db, current_user.clinic_id)
                 recipient = patient.phone or patient.email or ""
                 asked_recently = grs.within_cooldown(
                     grs.last_asked_at(db, current_user.clinic_id, recipient)

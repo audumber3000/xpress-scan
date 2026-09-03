@@ -16,6 +16,7 @@ import datetime as dt
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from domains.notification.services import google_review_service as grs
 from models import Base, Clinic, GooglePlaceLink, NotificationLog
@@ -23,7 +24,14 @@ from models import Base, Clinic, GooglePlaceLink, NotificationLog
 
 @pytest.fixture()
 def db():
-    engine = create_engine("sqlite:///:memory:")
+    # StaticPool and check_same_thread, because TestClient serves the request on
+    # another thread and the default sqlite pool would hand it a second, empty
+    # in-memory database.
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     Base.metadata.create_all(bind=engine)
     session = sessionmaker(bind=engine)()
     session.add(Clinic(name="Review Clinic", email="r@c.com",
@@ -103,3 +111,76 @@ def test_the_cooldown_is_per_recipient(db):
     _log(db, cid, "9876543210", "sent", days_ago=1)
 
     assert grs.within_cooldown(grs.last_asked_at(db, cid, "9999999999")) is False
+
+
+# ── The link a patient actually taps ─────────────────────────────────────────
+#
+# WhatsApp opens links in its own embedded browser, which carries none of the
+# patient's Google session, so the raw Google URL lands them on a sign-in wall
+# instead of the star picker. Messages point at /r/{clinic_id} instead, which
+# gets them into the browser they are already signed in to.
+
+def test_the_patient_gets_the_wrapper_not_the_google_url(db, monkeypatch):
+    monkeypatch.setenv("BACKEND_URL", "https://api.example.com")
+    cid = _clinic_id(db)
+    db.add(GooglePlaceLink(clinic_id=cid, place_id="ChIJabc123"))
+    db.commit()
+
+    assert grs.share_link(db, cid) == f"https://api.example.com/r/{cid}"
+    # And the raw one is still there, for the clinic's own preview.
+    assert "search.google.com" in grs.review_link(db, cid)
+
+
+def test_no_listing_means_no_wrapper_either(db):
+    assert grs.share_link(db, _clinic_id(db)) == ""
+
+
+def test_the_wrapper_uses_the_public_address(db, monkeypatch):
+    """Not the in-cluster one. This is read off a patient's phone, where
+    http://backend:8000 resolves for nobody. Same lesson as the unsubscribe
+    link, which shipped pointing at localhost."""
+    monkeypatch.setenv("BACKEND_URL", "https://api.example.com/")
+    cid = _clinic_id(db)
+    db.add(GooglePlaceLink(clinic_id=cid, place_id="ChIJabc123"))
+    db.commit()
+
+    assert grs.share_link(db, cid).startswith("https://api.example.com/r/")
+
+
+def test_the_redirect_page_carries_an_escape_and_a_way_out_by_hand(db):
+    """Android is escaped with an intent URL; iOS has no reliable escape left,
+    so it must at least be told what to tap."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from database import get_db
+    from domains.google_business.routes import review_redirect
+
+    cid = _clinic_id(db)
+    db.add(GooglePlaceLink(clinic_id=cid, place_id="ChIJabc123"))
+    db.commit()
+
+    app = FastAPI()
+    app.include_router(review_redirect.router, prefix="/r")
+    app.dependency_overrides[get_db] = lambda: db
+    page = TestClient(app).get(f"/r/{cid}").text
+
+    assert "intent://search.google.com" in page and "scheme=https" in page
+    assert "S.browser_fallback_url=" in page          # a device with no browser
+    assert "Open in Safari" in page                   # the iOS instruction
+    assert "<noscript>" in page                       # and one with no JS at all
+    assert "Review Review Clinic" in page             # says whose listing it is
+
+
+def test_the_redirect_page_does_not_break_when_the_listing_goes_away(db):
+    """Disconnected between sending the message and the patient tapping it."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from database import get_db
+    from domains.google_business.routes import review_redirect
+
+    app = FastAPI()
+    app.include_router(review_redirect.router, prefix="/r")
+    app.dependency_overrides[get_db] = lambda: db
+    res = TestClient(app).get(f"/r/{_clinic_id(db)}", follow_redirects=False)
+
+    assert res.status_code in (302, 307)

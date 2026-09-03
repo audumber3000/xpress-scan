@@ -68,7 +68,7 @@ const GoogleReviewModal = ({ open, onClose, patient, user }) => {
       if (manual) {
         // Own-number mode: no backend send, no wallet charge. The whole message
         // is the link, so WhatsApp opens with it already written.
-        const opened = shareReviewRequestManually(patient, status.review_link, user);
+        const opened = shareReviewRequestManually(patient, status.share_link, user);
         if (!opened) throw new Error("This patient's number can't be opened in WhatsApp.");
         notify.sent(`WhatsApp opened with the review link for ${patient.name}.`);
       } else {
@@ -150,6 +150,9 @@ const GoogleReviewModal = ({ open, onClose, patient, user }) => {
                           keeps. You can still send it.
                         </p>
                       )}
+                      {/* The Google URL itself, not the wrapped one. The
+                          clinic is already in a real browser, so the /r bounce
+                          would be a hop for nothing. */}
                       <a
                         href={status.review_link}
                         target="_blank"

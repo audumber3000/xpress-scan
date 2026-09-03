@@ -6,6 +6,7 @@ have to resolve the same link and honour the same cooldown, or a clinic gets
 asked-twice patients and no way to explain why.
 """
 import datetime as dt
+import os
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -44,6 +45,28 @@ def review_link(db: Session, clinic_id: int) -> str:
     if not place_id:
         return ""
     return f"https://search.google.com/local/writereview?placeid={place_id}"
+
+
+def share_link(db: Session, clinic_id: int) -> str:
+    """The link to put in a message to a patient, or "" if nothing is connected.
+
+    Not the Google URL itself. WhatsApp opens links in its own embedded browser,
+    which carries none of the patient's Google session, so the raw URL lands
+    them on a sign-in wall rather than the star picker and the review does not
+    happen. This points at /r/{clinic_id}, which gets them into the real browser
+    they are already signed in to. See domains/google_business/routes/
+    review_redirect.py for what that page can and cannot do per platform.
+
+    Use review_link() instead for anything the clinic itself opens: they are in
+    a real browser already and the bounce would only be a wasted hop.
+
+    The public address, for the same reason the unsubscribe link uses it: this
+    is read off a phone, so an in-cluster hostname resolves for nobody.
+    """
+    if not review_link(db, clinic_id):
+        return ""
+    base = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
+    return f"{base}/r/{clinic_id}"
 
 
 def last_asked_at(db: Session, clinic_id: int, recipient: str) -> Optional[dt.datetime]:

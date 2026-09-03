@@ -56,7 +56,7 @@ from domains.analytics.routes import dashboard, dashboard_reports, kpi_detail
 from domains.infrastructure.routes import devices, sync, template_configs
 from domains.infrastructure.services.template_service import TemplateService
 from domains.gmail.routes import gmail_routes
-from domains.google_business.routes import google_business_routes, google_places_routes
+from domains.google_business.routes import google_business_routes, google_places_routes, review_redirect
 from domains.notification.routes import notification_center
 from domains.vendor.routes import vendors
 from domains.inventory.routes import inventory
@@ -837,6 +837,10 @@ app.include_router(sync.router, prefix="/api/v1/sync", tags=["sync"])
 app.include_router(gmail_routes.router, prefix="/api/v1/gmail", tags=["gmail"])
 app.include_router(google_business_routes.router, prefix="/api/v1/google-business", tags=["google_business"])
 app.include_router(google_places_routes.router, prefix="/api/v1/google-places", tags=["google_places"])
+# Mounted at the root and kept short on purpose: this URL goes inside a WhatsApp
+# message a patient reads on a phone. No auth, because the person opening it is
+# a patient, not a signed-in user.
+app.include_router(review_redirect.router, prefix="/r", tags=["review-redirect"])
 app.include_router(notification_center.router, prefix="/api/v1/notifications", tags=["notifications"])
 app.include_router(vendors.router, prefix="/api/v1/vendors", tags=["vendors"])
 # Ledger BEFORE the item router so /inventory/transactions isn't parsed as /inventory/{item_id}

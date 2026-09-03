@@ -954,7 +954,13 @@ async def google_review_status(
 
     return {
         "listing_connected": bool(link),
+        # Two links, because they are read by two different people in two
+        # different browsers. `review_link` is the Google URL, for the clinic's
+        # own preview. `share_link` is what goes to the patient: it bounces
+        # through /r so their phone lands in a real browser instead of the
+        # signed-out window inside WhatsApp.
         "review_link": link,
+        "share_link": grs.share_link(db, current_user.clinic_id),
         "recipient": recipient,
         "has_phone": bool(patient.phone),
         "last_asked_at": asked_at.isoformat() if asked_at else None,
@@ -986,7 +992,7 @@ async def send_google_review_request(
     if not patient.phone:
         raise HTTPException(status_code=400, detail="This patient has no phone number on file.")
 
-    link = grs.review_link(db, current_user.clinic_id)
+    link = grs.share_link(db, current_user.clinic_id)
     if not link:
         raise HTTPException(
             status_code=400,
