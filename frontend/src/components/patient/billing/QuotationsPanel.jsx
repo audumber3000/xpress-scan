@@ -70,19 +70,25 @@ const QuotationsPanel = ({ patientId, onConverted }) => {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="mt-4 space-y-3">
       {error && <InlineFeedback tone="error">{error}</InlineFeedback>}
 
-      <InsuranceCard patientId={patientId} onChanged={load} />
-
-      <section className="rounded-xl border border-gray-200 bg-white">
+      <section className="bg-white border border-gray-200 rounded-xl">
+        {/* Same header shape as the invoice list above it — two different
+            heading styles in one column read as two different screens. */}
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100">
-          <h3 className="text-[13px] font-semibold uppercase tracking-wide text-gray-500">Quotations</h3>
+          <h3 className="text-sm font-bold text-gray-800 tracking-tight">
+            Quotations {rows.length > 0 && <span className="text-gray-400">{rows.length}</span>}
+          </h3>
+          {/* Quiet: this sits beside an invoice list whose own actions are
+              links, and a solid navy button here outranked the bill. */}
           <button onClick={fromPlan} disabled={busy}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#2a276e] text-white text-[12px] font-semibold hover:bg-[#1e1c4f] disabled:opacity-50">
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 text-[12px] font-semibold hover:border-[#2a276e]/40 hover:bg-indigo-50/30 transition disabled:opacity-50">
             <Wand2 size={13} /> Build from treatment plan
           </button>
         </div>
+
+        <InsuranceCard patientId={patientId} onChanged={load} compact />
 
         {rows.length === 0 ? (
           <div className="px-4 py-8 text-center">

@@ -17,12 +17,17 @@ const BANDS = [
 /**
  * The patient's cover, and the editor for it.
  *
+ * `compact` renders it as a single line inside the quotations card instead of a
+ * card of its own. Cover is context for a quotation, not a subject in its own
+ * right, and as a separate box it sat between the invoices and the quotations
+ * belonging to neither.
+ *
  * The remaining figures are shown rather than the raw ones, because "600 left
  * of a 1,000 maximum" is what decides a treatment plan and "annual_used: 400"
  * is not. The percentages are per benefit band because that is how a plan is
  * written — a policy says 80% of basic, never 80% of a composite filling.
  */
-const InsuranceCard = ({ patientId, onChanged }) => {
+const InsuranceCard = ({ patientId, onChanged, compact = false }) => {
   const [cover, setCover] = useState([]);
   const [payers, setPayers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -89,15 +94,53 @@ const InsuranceCard = ({ patientId, onChanged }) => {
   const INPUT = 'w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-[13px] outline-none focus:border-[#2a276e]';
 
   if (loading) {
-    return <div className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-2 text-[13px] text-gray-500">
-      <Spinner className="w-4 h-4" /> Loading insurance
-    </div>;
+    return compact
+      ? <div className="px-4 py-2.5 bg-gray-50/70 border-b border-gray-100 flex items-center gap-2 text-[12px] text-gray-500">
+          <Spinner className="w-3.5 h-3.5" /> Loading cover
+        </div>
+      : <div className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-2 text-[13px] text-gray-500">
+          <Spinner className="w-4 h-4" /> Loading insurance
+        </div>;
+  }
+
+  if (compact && !editing) {
+    return (
+      <div className="flex items-center gap-2 flex-wrap px-4 py-2.5 bg-gray-50/70 border-b border-gray-100 text-[12px]">
+        {active ? (
+          <>
+            <ShieldCheck size={13} className="text-emerald-600 flex-shrink-0" />
+            <span className="font-semibold text-gray-900 truncate max-w-[14rem]">{active.payer_name}</span>
+            <span className="text-gray-400">·</span>
+            <span className="text-gray-600">
+              {BANDS.filter(([k]) => Number(active.coverage?.[k])).map(([k, l]) => `${l} ${Number(active.coverage[k])}%`).join(' · ') || 'no percentages set'}
+            </span>
+            {active.remaining_annual != null && (
+              <>
+                <span className="text-gray-400">·</span>
+                <span className="text-gray-600">{money(active.remaining_annual)} cover left</span>
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <ShieldOff size={13} className="text-gray-400 flex-shrink-0" />
+            <span className="text-gray-500">No cover on file, so a quotation shows the whole amount as the patient's.</span>
+          </>
+        )}
+        <button
+          onClick={active ? () => setEditing({ ...active, valid_to: active.valid_to || '' }) : startNew}
+          className="ml-auto font-semibold text-[#2a276e] hover:underline shrink-0"
+        >
+          {active ? 'Edit cover' : 'Add cover'}
+        </button>
+      </div>
+    );
   }
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white">
+    <section className={compact ? 'border-b border-gray-100' : 'rounded-xl border border-gray-200 bg-white'}>
       <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100">
-        <h3 className="text-[13px] font-semibold uppercase tracking-wide text-gray-500">Insurance</h3>
+        <h3 className="text-sm font-bold text-gray-800 tracking-tight">Insurance</h3>
         {!editing && (
           <button onClick={active ? () => setEditing({ ...active, valid_to: active.valid_to || '' }) : startNew}
             className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#2a276e] hover:underline">
