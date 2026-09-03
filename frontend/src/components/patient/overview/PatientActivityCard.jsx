@@ -32,23 +32,59 @@ const money = (n) =>
     minimumFractionDigits: 2, maximumFractionDigits: 2,
   })}`;
 
+/**
+ * A colour per category, not per kind.
+ *
+ * Eight events do not need eight colours. A colour has to earn itself by making
+ * a distinction the words do not already make, and "case paper" versus
+ * "prescription" is a distinction the badge makes perfectly well on its own. So
+ * the eight kinds share five tones, grouped by what the event actually is:
+ *
+ *   slate    the file beginning, a fact rather than something somebody did
+ *   teal     the patient turned up: booked, walked in, checked in
+ *   indigo   the clinic wrote something clinical down
+ *   ochre    money asked for
+ *   green    money received
+ *
+ * Money in and money asked for are the pair that most needs telling apart at a
+ * glance, and they are the two that differ most.
+ *
+ * Muted hex rather than Tailwind's palette. The -50/-600 pairs an earlier pass
+ * used came out neon on a card that sits beside the dental chart all day: seven
+ * fluorescent dots, each reading as an alert. These are mid-tone and
+ * desaturated, close enough in weight to look like one family, with the house
+ * indigo among them rather than beside them.
+ *
+ * Inline styles, not Tailwind classes: arbitrary values have to appear as
+ * literal strings for the JIT to emit them, so a colour looked up from a map
+ * would silently produce no CSS.
+ */
+const SLATE  = '#6b7280';
+const TEAL   = '#29828a';   // the Control Center accent
+const INDIGO = '#2a276e';   // the house colour
+const OCHRE  = '#a86f3d';
+const GREEN  = '#3f8f6f';
+
 const KINDS = {
-  registered:   { Icon: UserPlus,     ring: 'bg-violet-50 text-violet-600 border-violet-200',    badge: 'bg-violet-50 text-violet-700' },
-  appointment:  { Icon: CalendarDays, ring: 'bg-blue-50 text-blue-600 border-blue-200',          badge: 'bg-blue-50 text-blue-700' },
-  walk_in:      { Icon: DoorOpen,     ring: 'bg-sky-50 text-sky-600 border-sky-200',             badge: 'bg-sky-50 text-sky-700' },
-  check_in:     { Icon: DoorOpen,     ring: 'bg-sky-50 text-sky-600 border-sky-200',             badge: 'bg-sky-50 text-sky-700' },
-  case_paper:   { Icon: FileText,     ring: 'bg-indigo-50 text-indigo-600 border-indigo-200',    badge: 'bg-indigo-50 text-indigo-700' },
-  prescription: { Icon: Pill,         ring: 'bg-teal-50 text-teal-600 border-teal-200',          badge: 'bg-teal-50 text-teal-700' },
-  invoice:      { Icon: ReceiptText,  ring: 'bg-indigo-50 text-indigo-600 border-indigo-200',    badge: 'bg-indigo-50 text-indigo-700' },
-  payment:      { Icon: Check,        ring: 'bg-emerald-50 text-emerald-600 border-emerald-200', badge: 'bg-emerald-50 text-emerald-700' },
+  registered:   { Icon: UserPlus,     tone: SLATE },
+  appointment:  { Icon: CalendarDays, tone: TEAL },
+  walk_in:      { Icon: DoorOpen,     tone: TEAL },
+  check_in:     { Icon: DoorOpen,     tone: TEAL },
+  case_paper:   { Icon: FileText,     tone: INDIGO },
+  prescription: { Icon: Pill,         tone: INDIGO },
+  invoice:      { Icon: ReceiptText,  tone: OCHRE },
+  payment:      { Icon: Check,        tone: GREEN },
 };
-const FALLBACK = { Icon: FileText, ring: 'bg-gray-50 text-gray-400 border-gray-200', badge: 'bg-gray-100 text-gray-600' };
+const FALLBACK = { Icon: FileText, tone: SLATE };
+
+// The same hue at 8%, for the badge behind it.
+const tint = (hex) => `${hex}14`;
 
 // A date with no time (a walk-in, a registration) should not claim one.
 const hasTime = (iso) => typeof iso === 'string' && iso.includes('T');
 
 const Event = ({ event, last }) => {
-  const { Icon, ring, badge } = KINDS[event.kind] || FALLBACK;
+  const { Icon, tone } = KINDS[event.kind] || FALLBACK;
   const isPayment = event.kind === 'payment';
 
   const detail = [
@@ -61,7 +97,8 @@ const Event = ({ event, last }) => {
     <li className="relative pl-8 pb-4 last:pb-0">
       {!last && <span className="absolute left-[11px] top-7 bottom-0 w-px bg-gray-200" aria-hidden="true" />}
       <span
-        className={`absolute left-0 top-0 w-6 h-6 rounded-full border flex items-center justify-center ${ring}`}
+        className="absolute left-0 top-0 w-6 h-6 rounded-full flex items-center justify-center text-white"
+        style={{ backgroundColor: tone }}
         aria-hidden="true"
       >
         <Icon size={12} strokeWidth={2.5} />
@@ -74,13 +111,19 @@ const Event = ({ event, last }) => {
             <span className="font-medium text-gray-500">, {formatTime(event.at)}</span>
           )}
         </p>
-        <span className={`text-[10px] font-bold px-2 py-0.5 rounded whitespace-nowrap flex-shrink-0 ${badge}`}>
+        <span
+          className="text-[10px] font-bold px-2 py-0.5 rounded whitespace-nowrap flex-shrink-0"
+          style={{ backgroundColor: tint(tone), color: tone }}
+        >
           {event.label}
         </span>
       </div>
 
       {event.amount != null && (
-        <p className={`text-xs font-bold tabular-nums mt-0.5 ${isPayment ? 'text-emerald-600' : 'text-gray-700'}`}>
+        <p
+          className="text-xs font-bold tabular-nums mt-0.5"
+          style={{ color: isPayment ? GREEN : '#374151' }}
+        >
           {money(event.amount)}
         </p>
       )}
