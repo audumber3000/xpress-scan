@@ -196,8 +196,12 @@ def _send_system_whatsapp(db, clinic_id: int, to_phone: str, event_type: str, te
     db.refresh(log_entry)
     notify(event_type, channel="whatsapp", to_phone=phone,
            template_data=template_data, log_id=log_entry.id)
-    log_entry.status = "sent"
-    db.commit()
+    # Only close a row the Nexus callback has not already resolved — see
+    # core.notification_dispatch for why this is a refresh and not a plain set.
+    db.refresh(log_entry)
+    if log_entry.status == "queued":
+        log_entry.status = "sent"
+        db.commit()
     return True
 
 
@@ -210,7 +214,12 @@ def _build_unsubscribe_url(user_id: int) -> str:
 
     secret = os.getenv("JWT_SECRET", os.getenv("SECRET_KEY", "fallback-secret"))
     token = hmac.new(secret.encode(), str(user_id).encode(), hashlib.sha256).hexdigest()
-    base = os.getenv("MAIN_BACKEND_URL", "http://localhost:8000")
+    # The public address, deliberately not MAIN_BACKEND_URL: this link is
+    # clicked from the recipient's inbox, while MAIN_BACKEND_URL is the
+    # in-cluster address Nexus calls back on (http://backend:8000) and resolves
+    # for nobody outside compose. With MAIN_BACKEND_URL unset every emailed
+    # report has been carrying an unsubscribe link to http://localhost:8000.
+    base = os.getenv("BACKEND_URL", "http://localhost:8000")
     return f"{base}/api/v1/notification-admin/email-reports/unsubscribe?user_id={user_id}&token={token}"
 
 
@@ -440,8 +449,12 @@ def _send_system_email(
         template_data={"subject": subject, "html_content": html_content},
         log_id=log_entry.id,
     )
-    log_entry.status = "sent"
-    db.commit()
+    # Only close a row the Nexus callback has not already resolved — see
+    # core.notification_dispatch for why this is a refresh and not a plain set.
+    db.refresh(log_entry)
+    if log_entry.status == "queued":
+        log_entry.status = "sent"
+        db.commit()
     return True
 
 

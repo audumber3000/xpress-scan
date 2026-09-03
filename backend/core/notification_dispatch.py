@@ -205,9 +205,16 @@ def notify_event(
             elif channel == "sms":
                 notify(event_type, channel="sms", to_phone=phone, template_data=data, log_id=log_entry.id)
 
-            # Update log cost
+            # Nexus patches the real verdict onto this row before it answers
+            # the send, so in a sync context — a scheduled job, where notify()
+            # blocks inside asyncio.run — the row can already read sent or
+            # failed by the time we get here. Refresh and close only a row that
+            # nothing else has: writing "sent" unconditionally turned genuine
+            # provider failures back into successes.
+            db.refresh(log_entry)
             log_entry.cost = cost
-            log_entry.status = "sent"
+            if log_entry.status == "queued":
+                log_entry.status = "sent"
             db.commit()
 
             if channel == "whatsapp":

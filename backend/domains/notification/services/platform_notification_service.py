@@ -83,6 +83,28 @@ class PlatformNotificationService:
         self.db.refresh(log_entry)
         return log_entry
 
+    def _close_log(self, log_entry: NotificationLog) -> None:
+        """Move the row off 'queued' once the send has been handed to Nexus.
+
+        Nexus patches the real verdict onto the row through the callback_url in
+        core.nexus_notify, and in a sync context it has usually done so before
+        notify() even returns — so only close a row nothing else has, and never
+        overwrite a failure with a success.
+
+        Every send in this class used to stop at _queue_log and never come back,
+        which is how 159 messages that had genuinely gone out came to sit at
+        'queued' in the logs (140 of them molarplus_app_welcome). Bookkeeping,
+        so it must never break the signup or payment it hangs off.
+        """
+        try:
+            self.db.refresh(log_entry)
+            if log_entry.status == "queued":
+                log_entry.status = "sent"
+                self.db.commit()
+        except Exception:
+            self.db.rollback()
+            logger.warning("could not close notification log %s", log_entry.id)
+
     def send_whatsapp_event(
         self,
         clinic: Clinic,
@@ -106,6 +128,7 @@ class PlatformNotificationService:
             template_data=template_data or {},
             log_id=log_entry.id,
         )
+        self._close_log(log_entry)
         return SendResult(True)
 
     def send_email_event(
@@ -133,6 +156,7 @@ class PlatformNotificationService:
             template_data=template_data or {},
             log_id=log_entry.id,
         )
+        self._close_log(log_entry)
         return SendResult(True)
 
     def send_welcome_notifications(self, clinic: Clinic, owner: User) -> dict:

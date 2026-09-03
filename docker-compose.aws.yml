@@ -44,6 +44,15 @@ services:
       - BACKEND_URL=${BACKEND_URL}
       - FRONTEND_URL=${FRONTEND_URL}
       - NEXUS_SERVICES_URL=http://nexus:8001
+      # Where Nexus PATCHes the delivery verdict back to. Nexus is the one that
+      # calls it, from its own container, so this has to be the compose service
+      # name. It was never set here, and the code's fallback is localhost:8000 —
+      # which inside the Nexus container is nothing at all. Every callback was
+      # refused and swallowed by the `except: pass` around it, so rows that only
+      # the callback ever closes sat at 'queued' for good, provider_message_id
+      # was never stored (leaving the MSG91 delivery webhook nothing to
+      # correlate on), and no message ever reached 'delivered' or 'read'.
+      - MAIN_BACKEND_URL=http://backend:8000
       - MSG91_AUTH_KEY=${MSG91_AUTH_KEY}
       - MSG91_SMS_SENDER=${MSG91_SMS_SENDER}
       - SENTRY_DSN=${SENTRY_DSN}
