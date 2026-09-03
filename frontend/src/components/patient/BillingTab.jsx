@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { FileText, Printer } from 'lucide-react';
+import { Printer, Plus } from 'lucide-react';
 import EmptyState from '../common/EmptyState';
 import { receipt } from '../../assets/illustrations';
 import { notify } from '../../utils/notify';
@@ -91,17 +91,12 @@ const BillingTab = ({ patient, invoices = [], casePapers = [], prescriptions = [
     refreshInvoices?.();
   };
 
+  // New invoice is not here. It used to be ("Create estimate", which opened a
+  // draft invoice), but a quick-actions list in the right column is the wrong
+  // home for the commonest action on the screen — it is the last thing read and
+  // it disappears entirely below lg. It sits on the invoice list header now, and
+  // repeating it here would be the same button twice on one screen.
   const QUICK = [
-    {
-      key: 'invoice',
-      label: 'New invoice',
-      icon: FileText,
-      // "Create estimate" used to live here and opened a draft invoice. An
-      // estimate is a quotation now — it carries a validity date, an accept or
-      // decline, and the insurance split, none of which an invoice has a column
-      // for. This is the plain "bill somebody" path.
-      onClick: () => setOpenInvoiceId('new'),
-    },
     {
       key: 'send',
       label: 'Send invoice',
@@ -135,6 +130,17 @@ const BillingTab = ({ patient, invoices = [], casePapers = [], prescriptions = [
               <h3 className="text-sm font-bold text-gray-800 tracking-tight">
                 All invoices <span className="text-gray-400">{visible.length}</span>
               </h3>
+              {/* Billing somebody is the commonest thing done on this screen, and
+                  it used to live only in Quick actions — in the right column,
+                  which drops out of view entirely below lg. The prominent button
+                  was Record payment, which needs a bill to exist first. */}
+              <button
+                type="button"
+                onClick={() => setOpenInvoiceId('new')}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#2a276e] text-white text-[12px] font-semibold hover:bg-[#1e1c4f] transition shrink-0"
+              >
+                <Plus size={13} /> New invoice
+              </button>
             </div>
 
             {visible.length === 0 ? (
@@ -145,6 +151,17 @@ const BillingTab = ({ patient, invoices = [], casePapers = [], prescriptions = [
                   subtitle={invoices.length === 0
                     ? 'Bills raised for this patient will show up here.'
                     : 'Try a different status or clear the search.'}
+                  // A patient with no bills yet is exactly who needs one raised,
+                  // so the empty state offers it rather than just describing it.
+                  action={invoices.length === 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setOpenInvoiceId('new')}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#2a276e] text-white text-[13px] font-semibold hover:bg-[#1e1c4f] transition"
+                    >
+                      <Plus size={14} /> New invoice
+                    </button>
+                  ) : null}
                 />
               </div>
             ) : (
