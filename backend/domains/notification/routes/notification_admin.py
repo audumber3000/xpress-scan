@@ -1036,8 +1036,20 @@ async def msg91_delivery_webhook(request: Request, db: Session = Depends(get_db)
     reason = payload.get("reason") or None
 
     if not request_id or not status:
-        logger.debug(f"MSG91 webhook: unrecognised payload — requestId={request_id} eventName={event_name}")
-        return {"ok": True, "updated": 0}
+        # WARNING, not debug, and not "ok". A delivery report arriving in a
+        # shape we do not parse is indistinguishable from one that never
+        # arrived, and both leave the log sitting at 'sent' forever. That is
+        # how 13,000 messages accumulated with no delivery state and nobody
+        # noticed: every path here answered 200 {"ok": true}. The payload keys
+        # are logged rather than the payload itself — enough to see a renamed
+        # field or a nested envelope, without putting recipient numbers in the
+        # container log.
+        logger.warning(
+            "MSG91 webhook not understood: no %s. keys=%s eventName=%r requestId=%r",
+            "requestId" if not request_id else "recognised eventName",
+            sorted(payload.keys()), event_name, request_id,
+        )
+        return {"ok": False, "updated": 0, "reason": "unrecognised_payload"}
 
     log = db.query(NotificationLog).filter(
         NotificationLog.provider_message_id == request_id
@@ -1051,8 +1063,16 @@ async def msg91_delivery_webhook(request: Request, db: Session = Depends(get_db)
         db.commit()
         return {"ok": True, "updated": 1}
 
-    logger.debug(f"MSG91 webhook: no log found for requestId={request_id}")
-    return {"ok": True, "updated": 0}
+    # Also a warning. This one means the report arrived and parsed but nothing
+    # correlated — provider_message_id never stored (the failure mode the
+    # MAIN_BACKEND_URL fix addressed), or a report for a message another
+    # environment sent. Silent here means the next person to ask "why does
+    # nothing say delivered" has nothing to read.
+    logger.warning(
+        "MSG91 webhook matched no log: requestId=%s event=%s status=%s",
+        request_id, event_name, status,
+    )
+    return {"ok": False, "updated": 0, "reason": "no_matching_log"}
 
 
 # ─── Email Report Unsubscribe / Re-subscribe ──────────────────────────────────
