@@ -7,7 +7,6 @@ asked-twice patients and no way to explain why.
 """
 import base64
 import datetime as dt
-import os
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -94,23 +93,23 @@ def review_link(db: Session, clinic_id: int) -> str:
 def share_link(db: Session, clinic_id: int) -> str:
     """The link to put in a message to a patient, or "" if nothing is connected.
 
-    Not the Google URL itself. WhatsApp opens links in its own embedded browser,
-    which carries none of the patient's Google session, so the raw URL lands
-    them on a sign-in wall rather than the star picker and the review does not
-    happen. This points at /r/{clinic_id}, which gets them into the real browser
-    they are already signed in to. See domains/google_business/routes/
-    review_redirect.py for what that page can and cannot do per platform.
+    Google's own URL, sent as-is. The template puts this in the message body as
+    {{3}}, so the patient reads it rather than tapping a button: a link on the
+    clinic's API host looks like tracking and does not get tapped, and a review
+    nobody opens is worth less than one behind a sign-in prompt.
 
-    Use review_link() instead for anything the clinic itself opens: they are in
-    a real browser already and the bounce would only be a wasted hop.
+    This used to point at /r/{clinic_id}, a page that bounces the patient out of
+    WhatsApp's embedded browser into the real one, because that browser may not
+    carry their Google session. That page still exists and every link already
+    sent still works, so nothing in a patient's chat history breaks. New sends
+    go straight to Google.
 
-    The public address, for the same reason the unsubscribe link uses it: this
-    is read off a phone, so an in-cluster hostname resolves for nobody.
+    The trade is deliberate and worth writing down: a patient whose in-app
+    browser is signed out now meets Google's sign-in page instead of an escape
+    hatch. The way to have both is a URL button on the template, where the link
+    is never shown at all, and that needs a Meta re-submission.
     """
-    if not review_link(db, clinic_id):
-        return ""
-    base = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
-    return f"{base}/r/{clinic_id}"
+    return review_link(db, clinic_id)
 
 
 def last_asked_at(db: Session, clinic_id: int, recipient: str) -> Optional[dt.datetime]:

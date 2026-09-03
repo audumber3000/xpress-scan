@@ -145,35 +145,39 @@ def test_the_cooldown_is_per_recipient(db):
 # ── The link a patient actually taps ─────────────────────────────────────────
 #
 # WhatsApp opens links in its own embedded browser, which carries none of the
-# patient's Google session, so the raw Google URL lands them on a sign-in wall
-# instead of the star picker. Messages point at /r/{clinic_id} instead, which
-# gets them into the browser they are already signed in to.
+# patient's Google session. The wrapper at /r/{clinic_id} was built to bounce
+# them out of it, and still exists so links already sent keep working, but new
+# sends carry Google's own URL: a link on the clinic's API host reads as
+# tracking and does not get tapped, and an unopened message beats no sign-in
+# prompt by nothing at all.
 
-def test_the_patient_gets_the_wrapper_not_the_google_url(db, monkeypatch):
+def test_the_patient_gets_googles_own_url(db, monkeypatch):
+    """Deliberate: the message body shows this link, so it has to look like
+    what it is. The wrapper is no longer generated for new sends."""
     monkeypatch.setenv("BACKEND_URL", "https://api.example.com")
     cid = _clinic_id(db)
-    db.add(GooglePlaceLink(clinic_id=cid, place_id="ChIJabc123"))
+    db.add(GooglePlaceLink(clinic_id=cid, place_id="ChIJcd-nDQCx3DsRBltDijTePng"))
     db.commit()
 
-    assert grs.share_link(db, cid) == f"https://api.example.com/r/{cid}"
-    # And the raw one is still there, for the clinic's own preview.
-    assert "search.google.com" in grs.review_link(db, cid)
+    assert grs.share_link(db, cid) == "https://g.page/r/CQZbQ4o03j54EBM/review"
+    # The clinic's own preview resolves to the same place.
+    assert grs.review_link(db, cid) == grs.share_link(db, cid)
 
 
-def test_no_listing_means_no_wrapper_either(db):
+def test_no_listing_means_no_link_to_share(db):
     assert grs.share_link(db, _clinic_id(db)) == ""
 
 
-def test_the_wrapper_uses_the_public_address(db, monkeypatch):
-    """Not the in-cluster one. This is read off a patient's phone, where
-    http://backend:8000 resolves for nobody. Same lesson as the unsubscribe
-    link, which shipped pointing at localhost."""
-    monkeypatch.setenv("BACKEND_URL", "https://api.example.com/")
+def test_an_undecodable_place_id_still_shares_a_working_link(db):
+    """The long writereview URL rather than nothing. A clinic whose id will not
+    decode must still be able to ask."""
     cid = _clinic_id(db)
     db.add(GooglePlaceLink(clinic_id=cid, place_id="ChIJabc123"))
     db.commit()
 
-    assert grs.share_link(db, cid).startswith("https://api.example.com/r/")
+    assert grs.share_link(db, cid) == (
+        "https://search.google.com/local/writereview?placeid=ChIJabc123"
+    )
 
 
 def test_the_redirect_page_carries_an_escape_and_a_way_out_by_hand(db):
