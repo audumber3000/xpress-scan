@@ -863,6 +863,11 @@ app.include_router(public_forms.router, prefix="/api/v1/public/forms", tags=["pu
 # Insurance: who the clinic bills, what a patient is covered for, and the split.
 from domains.insurance.routes import insurance as insurance_routes
 app.include_router(insurance_routes.router, prefix="/api/v1/insurance", tags=["insurance"])
+
+# Quotations. A separate router from invoices on purpose: a quotation must never
+# be reachable by anything that totals revenue.
+from domains.quotations.routes import quotations as quotation_routes
+app.include_router(quotation_routes.router, prefix="/api/v1/quotations", tags=["quotations"])
 # Internal service-to-service routes (Nexus calls these). Auth via shared
 # X-Internal-Auth header; never call from public clients.
 app.include_router(consents_internal.router, prefix="/api/v1/internal", tags=["internal"])

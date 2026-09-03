@@ -1135,6 +1135,75 @@ class ConsentTemplate(Base):
     
     clinic = relationship("Clinic")
 
+class Quotation(Base):
+    """A priced treatment plan, sent to the patient to accept before work starts.
+
+    Its own table rather than an invoice with a different status, deliberately.
+    An invoice moves the books — the Payments KPIs, the collection totals and
+    the daily register all read invoices directly — and a quotation must never
+    be able to count as revenue for work nobody has agreed to yet. Sharing the
+    table would put that one `status != 'quotation'` filter in front of every
+    money query in the app, and the first place it was forgotten would silently
+    overstate what the clinic had earned.
+
+    The insurance split is frozen at send time alongside the prices. A plan's
+    annual maximum moves as the year is used up, so a quotation that recomputed
+    itself would quietly change the patient's number between being sent and
+    being read.
+    """
+    __tablename__ = 'quotations'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False, index=True)
+    quotation_number = Column(String, nullable=True, index=True)
+    # draft | sent | accepted | declined | expired
+    status = Column(String(16), default='draft', index=True)
+    valid_until = Column(Date, nullable=True)
+    notes = Column(Text, nullable=True)
+
+    subtotal = Column(Float, default=0.0)
+    discount = Column(Float, default=0.0)
+    total = Column(Float, default=0.0)
+    # Frozen at send time, from domains.insurance.estimator.
+    insurance_estimate = Column(Float, default=0.0)
+    patient_portion = Column(Float, default=0.0)
+    insurance_snapshot = Column(JSON, nullable=True)
+
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    sent_at = Column(DateTime, nullable=True)
+    responded_at = Column(DateTime, nullable=True)
+    # Set when accepting turns this into a real bill, so the link is traceable
+    # and a quotation cannot be converted twice.
+    converted_invoice_id = Column(Integer, ForeignKey('invoices.id'), nullable=True)
+
+    clinic = relationship("Clinic")
+    patient = relationship("Patient")
+    creator = relationship("User")
+    line_items = relationship("QuotationLineItem", back_populates="quotation",
+                              cascade="all, delete-orphan")
+
+
+class QuotationLineItem(Base):
+    """One proposed procedure. Same shape as an invoice line, plus the benefit
+    band the estimate is computed from."""
+    __tablename__ = 'quotation_line_items'
+    id = Column(Integer, primary_key=True, index=True)
+    quotation_id = Column(Integer, ForeignKey('quotations.id'), nullable=False, index=True)
+    description = Column(String, nullable=False)
+    tooth_number = Column(String, nullable=True)
+    benefit_category = Column(String(16), nullable=True)
+    quantity = Column(Float, default=1.0)
+    unit_price = Column(Float, default=0.0)
+    amount = Column(Float, default=0.0)
+    # Frozen with the quotation, for the same reason the totals are.
+    insurance_estimate = Column(Float, default=0.0)
+    patient_portion = Column(Float, default=0.0)
+    sort_order = Column(Integer, default=0)
+
+    quotation = relationship("Quotation", back_populates="line_items")
+
+
 class InsurancePayer(Base):
     """An insurer this clinic bills. Clinic-scoped: the same company negotiates
     different terms with different practices, and one clinic renaming "Star
