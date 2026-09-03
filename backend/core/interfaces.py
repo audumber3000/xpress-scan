@@ -93,7 +93,9 @@ class BaseServiceProtocol(Protocol):
 class PatientServiceProtocol(BaseServiceProtocol, Protocol):
     """Patient service interface"""
 
-    def create_patient(self, patient_data: Dict[str, Any], clinic_id: int) -> Any:
+    def create_patient(
+        self, patient_data: Dict[str, Any], clinic_id: int, created_by: Optional[int] = None
+    ) -> Any:
         ...
 
     def get_patient(self, patient_id: int, clinic_id: int) -> Optional[Any]:

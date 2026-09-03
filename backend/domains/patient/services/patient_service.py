@@ -28,8 +28,18 @@ class PatientService(PatientServiceProtocol):
         self.clinic_repo = clinic_repo
         self.payment_repo = payment_repo
 
-    def create_patient(self, patient_data: Dict[str, Any], clinic_id: int) -> Patient:
-        """Create a new patient with business validations"""
+    def create_patient(
+        self,
+        patient_data: Dict[str, Any],
+        clinic_id: int,
+        created_by: Optional[int] = None,
+    ) -> Patient:
+        """Create a new patient with business validations.
+
+        `created_by` is the staff member doing the registering, recorded so the
+        patient file's activity feed can say who. Optional because the importers
+        create patients with no one at a keyboard.
+        """
         # Validate clinic exists and is active
         clinic = self.clinic_repo.get_by_id(clinic_id)
         if not clinic or clinic.status != 'active':
@@ -46,6 +56,8 @@ class PatientService(PatientServiceProtocol):
         # Create patient
         patient_dict = patient_data.copy()
         patient_dict['clinic_id'] = clinic_id
+        if created_by:
+            patient_dict['created_by'] = created_by
 
         # Back-date support: `registered_at` (if provided) sets the patient's
         # created_at so historical patients keep their real registration date.

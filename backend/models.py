@@ -288,6 +288,10 @@ class Patient(Base):
     # (a UTC row timestamp): staff can back-date it for a patient first seen
     # earlier, and it is what decides new-vs-repeat in the daily register.
     registered_on = Column(Date, nullable=True, index=True)
+    # Who put this patient on the books. Null for everyone registered before
+    # this column existed, which the activity feed says plainly rather than
+    # guessing a name.
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=True)
     
     # Dental History & Planning data (stored as JSON for flexibility)
     dental_chart = Column(JSON, nullable=True)  # Stores teethData
@@ -300,6 +304,7 @@ class Patient(Base):
     synced_at = Column(DateTime, nullable=True)
     sync_status = Column(String, default='local')  # 'local', 'synced', 'pending'
     clinic = relationship("Clinic")
+    creator = relationship("User", foreign_keys=[created_by])
 
 class Prescription(Base):
     """Dedicated prescription table — one record per prescription (per visit)."""

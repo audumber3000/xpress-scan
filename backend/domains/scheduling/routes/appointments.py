@@ -1177,7 +1177,10 @@ async def update_appointment(
                     logf.write(f"Clinic ID: {appointment.clinic_id}\n")
                 
                 # Use appointment.clinic_id to ensure consistency
-                new_patient = patient_svc.create_patient(patient_data, appointment.clinic_id)
+                new_patient = patient_svc.create_patient(
+                    patient_data, appointment.clinic_id,
+                    created_by=getattr(current_user, 'id', None),
+                )
                 appointment.patient_id = new_patient.id
                 db.flush() # Ensure the ID is linked before commit
                 

@@ -234,7 +234,8 @@ async def create_patient(
     try:
         patient = patient_service.create_patient(
             patient_data.dict(),
-            current_user.clinic_id
+            current_user.clinic_id,
+            created_by=current_user.id,
         )
         try:
             actor = getattr(current_user, 'name', None) or getattr(current_user, 'email', 'Staff')
@@ -359,7 +360,8 @@ async def import_patients(
             if not clean.get("treatment_type"):
                 clean["treatment_type"] = "General Consultation"
 
-            patient_service.create_patient(clean, current_user.clinic_id)
+            patient_service.create_patient(clean, current_user.clinic_id,
+                                           created_by=current_user.id)
             imported_count += 1
         except ValueError as e:
             _rollback_import_session(patient_service)
@@ -1081,12 +1083,33 @@ async def patient_activity(
             "method": rest.get("method"),
             "reference": rest.get("reference"),
             "by": rest.get("by"),
+            # What to put in front of the name. "Recorded by" on a case paper
+            # would be wrong in a way that matters on a clinical record: the
+            # dentist who examined the patient is not the receptionist who typed
+            # it up, and the row has to say which one it means.
+            "by_verb": rest.get("by_verb") or "By",
             "detail": rest.get("detail"),
             "status": rest.get("status"),
         })
 
     # ── Where the file starts ────────────────────────────────────────────────
-    add(patient.registered_on or patient.created_at, "registered", "Patient registered")
+    #
+    # created_at, not registered_on: the first is the moment the record was
+    # actually made and carries a time, the second is a clinic-local date staff
+    # can back-date for somebody first seen years ago. When they disagree, both
+    # are worth knowing, so the back-dated one is said out loud rather than
+    # quietly replacing the timestamp.
+    reg_note = None
+    if (
+        patient.registered_on
+        and patient.created_at
+        and patient.registered_on != patient.created_at.date()
+    ):
+        reg_note = f"Registration date recorded as {patient.registered_on:%d %b %Y}"
+    add(
+        patient.created_at or patient.registered_on, "registered", "Patient registered",
+        by=_user_name(patient.creator), by_verb="Registered by", detail=reg_note,
+    )
 
     # ── Appointments ─────────────────────────────────────────────────────────
     appts = (
@@ -1108,8 +1131,10 @@ async def patient_activity(
     # Every staff name this feed needs, in one query. Resolving them per row is
     # a lookup per event, and a long-standing patient has plenty of both.
     staff_ids = {a.doctor_id for a in appts if a.doctor_id}
+    staff_ids |= {a.created_by for a in appts if a.created_by}
     staff_ids |= {cp.dentist_id for cp in papers if cp.dentist_id}
     staff_ids |= {v.doctor_id for v in visits if v.doctor_id}
+    staff_ids |= {v.created_by for v in visits if v.created_by}
     names = {}
     if staff_ids:
         names = {
@@ -1118,10 +1143,14 @@ async def patient_activity(
         }
 
     for a in appts:
+        # Placed at the time of the appointment, not the time it was booked:
+        # this feed is read as "what happened to this patient", and the visit is
+        # the thing that happened. Who booked it is the actor either way.
+        with_doctor = names.get(a.doctor_id)
         add(
             a.appointment_date, "appointment", "Appointment",
-            by=names.get(a.doctor_id), status=a.status, detail=a.treatment,
-            reference=a.start_time,
+            by=names.get(a.created_by), by_verb="Booked by", status=a.status,
+            detail=" · ".join(x for x in (a.treatment, f"with {with_doctor}" if with_doctor else None) if x) or None,
         )
 
     # ── Attendance: the walk-in the user calls a direct register ─────────────
@@ -1129,11 +1158,16 @@ async def patient_activity(
         # 'manual' is somebody typed into the day's register; 'check_in' is an
         # appointment being marked as arrived. Different events, said differently.
         walked_in = (v.source or "manual") != "check_in"
+        seen_by = names.get(v.doctor_id)
+        # created_at rather than visit_date, for the same reason as the
+        # registration above: the register stores a bare day, the row knows the
+        # hour. Fall back when an imported row has no timestamp.
         add(
-            v.visit_date, "walk_in" if walked_in else "check_in",
+            v.created_at or v.visit_date,
+            "walk_in" if walked_in else "check_in",
             "Walked in" if walked_in else "Checked in",
-            detail=v.reason,
-            by=names.get(v.doctor_id),
+            detail=" · ".join(x for x in (v.reason, f"seen by {seen_by}" if seen_by else None) if x) or None,
+            by=names.get(v.created_by), by_verb="Added by",
         )
 
     # ── Case papers, the thing the user actually wanted attributed ───────────
@@ -1146,21 +1180,29 @@ async def patient_activity(
                 pass
         add(
             cp.date, "case_paper", "Case paper created",
-            by=names.get(cp.dentist_id),
+            by=names.get(cp.dentist_id), by_verb="By",
             detail=complaint or cp.diagnosis,
             status=cp.status,
         )
 
     # ── Prescriptions ────────────────────────────────────────────────────────
+    # A prescription carries no prescriber of its own. It hangs off the case
+    # paper for the visit it was written during, and the dentist on that paper
+    # is the person who wrote it, so that is where the name comes from. No case
+    # paper, no name: an unattributed row is better than a guessed one.
+    paper_dentist = {cp.id: cp.dentist_id for cp in papers}
     for rx in (
         db.query(Prescription)
         .filter(Prescription.patient_id == patient_id, Prescription.clinic_id == clinic_id)
         .all()
     ):
-        names = [i.get("medicine_name") for i in (rx.items or []) if isinstance(i, dict)]
+        # Not `names`: that map is the staff lookup built above, and rebinding
+        # it here would empty every name for whatever ran afterwards.
+        meds = [i.get("medicine_name") for i in (rx.items or []) if isinstance(i, dict)]
         add(
             rx.created_at, "prescription", "Prescription written",
-            detail=", ".join(n for n in names if n) or None,
+            detail=", ".join(n for n in meds if n) or None,
+            by=names.get(paper_dentist.get(rx.case_paper_id)), by_verb="By",
         )
 
     # ── Bills and money ──────────────────────────────────────────────────────
@@ -1173,7 +1215,7 @@ async def patient_activity(
         add(
             inv.created_at, "invoice", "Invoice created",
             amount=float(inv.total or 0), reference=inv.invoice_number,
-            by=_user_name(inv.creator), status=inv.status,
+            by=_user_name(inv.creator), by_verb="Raised by", status=inv.status,
         )
 
     if invoices:
@@ -1189,6 +1231,7 @@ async def patient_activity(
                 p.created_at or p.paid_on, "payment", "Payment received",
                 amount=float(p.amount or 0), method=p.method,
                 reference=p.reference, by=_user_name(p.recorder),
+                by_verb="Recorded by",
             )
 
     events.sort(key=lambda e: e["at"], reverse=True)

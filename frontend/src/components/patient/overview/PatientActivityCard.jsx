@@ -132,9 +132,13 @@ const Event = ({ event, last }) => {
         <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-2" title={detail}>{detail}</p>
       )}
 
+      {/* The verb comes from the server, not from the kind. "Recorded by" on a
+          case paper and "By" on a payment are both wrong, and only the row
+          knows which relationship it is describing: who booked the appointment,
+          who examined the patient, who took the money. */}
       {event.by && (
-        <p className="text-[11px] text-gray-400 mt-0.5 truncate" title={event.by}>
-          {isPayment || event.kind === 'invoice' ? 'Recorded by' : 'By'} {event.by}
+        <p className="text-[11px] text-gray-400 mt-0.5 truncate" title={`${event.by_verb || 'By'} ${event.by}`}>
+          {event.by_verb || 'By'} {event.by}
         </p>
       )}
     </li>

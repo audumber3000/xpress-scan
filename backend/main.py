@@ -130,6 +130,13 @@ async def lifespan(app: FastAPI):
             conn.execute(text(
                 "UPDATE patients SET registered_on = created_at::date WHERE registered_on IS NULL"
             ))
+            # Who registered them (added 2026-09), for the patient file's
+            # activity feed. Deliberately NOT backfilled: there is nothing
+            # truthful to backfill it with, and a guessed name on a clinical
+            # record is worse than an honest blank.
+            conn.execute(text(
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS created_by INTEGER"
+            ))
 
             # Consultant fee terms (added 2026-08). Configured once per person
             # in Staff settings or on the vendor, rather than typed on every
