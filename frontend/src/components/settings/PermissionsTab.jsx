@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Loader2, Check } from 'lucide-react';
+import { Check } from 'lucide-react';
+import LoadingButton from '../LoadingButton';
 import { MODULES, presetFor, permissionsLockReason } from '../../constants/permissions';
 import InlineFeedback from '../common/InlineFeedback';
 import { useAuth } from '../../contexts/AuthContext';
@@ -24,6 +25,11 @@ import { useAuth } from '../../contexts/AuthContext';
  */
 
 const PermissionsTab = ({ user, onSave, isSaving = false, availableRoles = [] }) => {
+  // Saving permissions changes nothing on screen — the toggles already show what
+  // was just picked — so a silent success is indistinguishable from the click
+  // never registering. Tier 2 of the feedback rule: the answer goes on the
+  // button that was pressed, not into a toast in the corner.
+  const [saved, setSaved] = useState(false);
   const { user: me } = useAuth();
   const [perms, setPerms] = useState({});
   const [role, setRole] = useState('receptionist');
@@ -58,6 +64,7 @@ const PermissionsTab = ({ user, onSave, isSaving = false, availableRoles = [] })
     setError('');
     try {
       await onSave(user.id, { role, permissions: perms });
+      setSaved(true);
     } catch (err) {
       setError(err?.detail || err?.message || 'Could not save those permissions.');
     }
@@ -150,14 +157,16 @@ const PermissionsTab = ({ user, onSave, isSaving = false, availableRoles = [] })
 
       {error && <InlineFeedback tone="error">{error}</InlineFeedback>}
 
-      <button
+      <LoadingButton
         type="submit"
-        disabled={isSaving}
+        loading={isSaving}
+        loadingLabel="Saving…"
+        saved={saved}
+        onSaved={() => setSaved(false)}
         className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#29828a] hover:bg-[#216b71] disabled:bg-gray-300 text-white text-sm font-semibold rounded-lg transition-colors"
       >
-        {isSaving && <Loader2 size={15} className="animate-spin" />}
-        {isSaving ? 'Saving…' : 'Save permissions'}
-      </button>
+        Save permissions
+      </LoadingButton>
     </form>
   );
 };

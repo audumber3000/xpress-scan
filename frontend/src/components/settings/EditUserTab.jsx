@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, Camera, Trash2 } from 'lucide-react';
+import { Camera, Trash2 } from 'lucide-react';
 import { resolveUserAvatar } from '../../utils/avatar';
 import InlineFeedback from '../common/InlineFeedback';
+import LoadingButton from '../LoadingButton';
 
 /**
  * Editing one staff member: who they are, how they sign in, and their role.
@@ -41,6 +42,7 @@ const EditUserTab = ({ user, onSave, isSaving = false, availableRoles = [] }) =>
     // knowing her pay day.
     phone: '', salary_amount: '', salary_day: '', joined_on: '',
   });
+  const [saved, setSaved] = useState(false);
   const [avatar, setAvatar] = useState(null);      // base64, unsaved
   const [avatarCleared, setAvatarCleared] = useState(false);
   const [error, setError] = useState('');
@@ -137,6 +139,10 @@ const EditUserTab = ({ user, onSave, isSaving = false, availableRoles = [] }) =>
     try {
       await onSave(user.id, patch);
       setForm((f) => ({ ...f, password: '' }));   // never leave a password sitting in a field
+      // Editing a name or username leaves the field showing exactly what was
+      // typed, so nothing on screen confirms it reached the server. The button
+      // says so instead.
+      setSaved(true);
     } catch (err) {
       setError(err?.detail || err?.message || 'Could not save those changes.');
     }
@@ -269,14 +275,16 @@ const EditUserTab = ({ user, onSave, isSaving = false, availableRoles = [] }) =>
 
       {error && <InlineFeedback tone="error">{error}</InlineFeedback>}
 
-      <button
+      <LoadingButton
         type="submit"
-        disabled={isSaving}
+        loading={isSaving}
+        loadingLabel="Saving…"
+        saved={saved}
+        onSaved={() => setSaved(false)}
         className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#29828a] hover:bg-[#216b71] disabled:bg-gray-300 text-white text-sm font-semibold rounded-lg transition-colors"
       >
-        {isSaving && <Loader2 size={15} className="animate-spin" />}
-        {isSaving ? 'Saving…' : 'Save changes'}
-      </button>
+        Save changes
+      </LoadingButton>
     </form>
   );
 };

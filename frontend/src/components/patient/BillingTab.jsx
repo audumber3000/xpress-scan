@@ -14,6 +14,7 @@ import PaymentSummaryCard from './billing/PaymentSummaryCard';
 import OutstandingCard from './billing/OutstandingCard';
 
 import QuotationsPanel from './billing/QuotationsPanel';
+import PickInvoiceModal from './billing/PickInvoiceModal';
 /**
  * This patient's bills: the list at two thirds, the money at one third.
  *
@@ -46,6 +47,7 @@ const BillingTab = ({ patient, invoices = [], casePapers = [], prescriptions = [
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const [sort, setSort] = useState('newest');
+  const [picking, setPicking] = useState(false);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -84,6 +86,26 @@ const BillingTab = ({ patient, invoices = [], casePapers = [], prescriptions = [
     } finally {
       setSharing(false);
     }
+  };
+
+  // Bills that still owe something, oldest first. Record payment used to open
+  // whichever of these was oldest without asking; with more than one that is a
+  // guess, and money put against the wrong invoice needs the master password to
+  // undo.
+  const owingInvoices = useMemo(
+    () => invoices
+      .filter((i) => Number(i.due_amount || 0) > 0
+                     && !['draft', 'cancelled'].includes(String(i.status || '').toLowerCase()))
+      .sort((a, b) => new Date(a.finalized_at || a.created_at || 0) - new Date(b.finalized_at || b.created_at || 0)),
+    [invoices],
+  );
+
+  const recordPayment = () => {
+    // One outstanding bill: the guess is always right, so do not ask.
+    // None: there is nothing to pay against, so raise one.
+    if (owingInvoices.length === 1) { setOpenInvoiceId(owingInvoices[0].id); return; }
+    if (owingInvoices.length === 0) { setOpenInvoiceId('new'); return; }
+    setPicking(true);
   };
 
   const closeEditor = () => {
@@ -177,7 +199,7 @@ const BillingTab = ({ patient, invoices = [], casePapers = [], prescriptions = [
         <div className="space-y-4 min-w-0">
           <PaymentSummaryCard
             invoices={invoices}
-            onRecordPayment={() => setOpenInvoiceId(focusInvoice?.id ?? 'new')}
+            onRecordPayment={recordPayment}
           />
 
           <OutstandingCard invoices={invoices} onRemind={share} reminding={sharing} />
@@ -204,6 +226,14 @@ const BillingTab = ({ patient, invoices = [], casePapers = [], prescriptions = [
           </section>
         </div>
       </div>
+
+      {picking && (
+        <PickInvoiceModal
+          invoices={owingInvoices}
+          onClose={() => setPicking(false)}
+          onPick={(inv) => { setPicking(false); setOpenInvoiceId(inv.id); }}
+        />
+      )}
 
       {openInvoiceId && (
         <InvoiceEditor
