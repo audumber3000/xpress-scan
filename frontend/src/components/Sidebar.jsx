@@ -179,8 +179,43 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
   // full overlay drawer, so always show the full labels regardless of the saved
   // desktop collapse preference.
   const desktopCollapsed = isCollapsed !== undefined ? isCollapsed : internalCollapsed;
-  const collapsed = isMobile ? false : desktopCollapsed;
   const setCollapsed = onCollapseChange || setInternalCollapsed;
+
+  // Hovering the collapsed rail opens it for as long as the pointer is on it,
+  // so a doctor can read the labels without giving up the space. Deliberately
+  // NOT the same state as the arrow: peeking must never rewrite the saved
+  // preference, or a mouse crossing the screen would silently un-collapse the
+  // sidebar for good.
+  const [peeking, setPeeking] = useState(false);
+
+  // A real mouse, not just a wide screen. `isMobile` is a width check, so a
+  // touch tablet in landscape counts as desktop — and touch fires mouseenter
+  // with no dependable mouseleave, which would leave the sidebar stuck open
+  // over the page with no way to shut it. Pointer-based, so a hybrid laptop
+  // gets the peek when it has a trackpad and not when it is folded into a
+  // tablet.
+  const [canHover, setCanHover] = useState(
+    () => typeof window !== 'undefined'
+      && window.matchMedia?.('(hover: hover) and (pointer: fine)').matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia?.('(hover: hover) and (pointer: fine)');
+    if (!mq) return undefined;
+    const onChange = (e) => setCanHover(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  // Peeking is a pointer affordance and nothing else. Anywhere it cannot work,
+  // the sidebar behaves exactly as it did before this existed.
+  const hoverToPeek = !isMobile && canHover;
+
+  // What the layout reserves: the pinned choice only. If this followed the
+  // hover the whole page would shift left every time the pointer passed the
+  // rail, which is worse than never opening at all.
+  const pinnedCollapsed = isMobile ? false : desktopCollapsed;
+  // What the sidebar draws.
+  const collapsed = pinnedCollapsed && !(peeking && hoverToPeek);
 
   // Check if we're on mobile — initialise immediately to avoid layout flash
   useEffect(() => {
@@ -252,7 +287,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
 
   // Desktop sidebar classes - Gradient background (teal for admin, purple for main)
   const desktopClasses = !isMobile 
-    ? `flex flex-col h-screen transition-all duration-300 ease-in-out ${collapsed ? 'w-20' : 'w-64'} ${collapsed ? 'p-3' : 'p-5'} relative ${
+    ? `flex flex-col h-screen transition-all duration-300 ease-in-out absolute inset-y-0 left-0 z-50 ${collapsed ? 'w-20' : 'w-64'} ${collapsed ? 'p-3' : 'p-5'} ${
         isAdminRoute 
           ? 'bg-gradient-to-b from-[#0d2a2d] via-[#1F6B72] to-[#29828a]' 
           : 'bg-gradient-to-b from-[#0d0a2d] via-[#1a1548] to-[#2a276e]'
@@ -273,7 +308,19 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
         />
       )}
       
-      <aside className={`${mobileClasses} ${desktopClasses} ${collapsed && !isMobile ? 'shadow-2xl' : ''} ${collapsed && !isMobile ? 'overflow-visible' : ''} ${!isMobile ? 'relative' : ''}`}>
+      {/* Holds the rail's width in the flex row so the peek above it overlays
+          the page rather than pushing it. `contents` on mobile removes this
+          from layout entirely, where the sidebar is a fixed drawer already. */}
+      <div
+        className={isMobile
+          ? 'contents'
+          : `relative flex-shrink-0 h-screen transition-all duration-300 ease-in-out ${pinnedCollapsed ? 'w-20' : 'w-64'}`}
+      >
+      <aside
+        onMouseEnter={hoverToPeek ? () => setPeeking(true) : undefined}
+        onMouseLeave={hoverToPeek ? () => setPeeking(false) : undefined}
+        className={`${mobileClasses} ${desktopClasses} ${collapsed && !isMobile ? 'shadow-2xl' : ''} ${collapsed && !isMobile ? 'overflow-visible' : ''} ${peeking && !isMobile ? 'shadow-2xl' : ''}`}
+      >
         {/* Dotted pattern effect at bottom - color changes based on admin/main */}
         <div 
           className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none opacity-30"
@@ -317,7 +364,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
                 />
                 {!isMobile && (
                   <button
-                    onClick={() => setCollapsed(!collapsed)}
+                    onClick={() => { setCollapsed(!pinnedCollapsed); setPeeking(false); }}
                     className="absolute left-full ml-1.5 top-1/2 -translate-y-1/2 flex items-center justify-center w-5 h-7 bg-[#1A1640] hover:bg-[#2A2550] text-white rounded-md ring-1 ring-white/10 shadow-lg transition-colors cursor-pointer z-40"
                     title="Show navigation"
                   >
@@ -345,7 +392,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
                 />
                 {!isMobile && (
                   <button
-                    onClick={() => setCollapsed(!collapsed)}
+                    onClick={() => { setCollapsed(!pinnedCollapsed); setPeeking(false); }}
                     className="bg-[#1A1640] hover:bg-[#2A2550] rounded-lg p-2 transition-colors flex-shrink-0"
                     title="Hide navigation"
                   >
@@ -547,6 +594,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
 
 
       </aside>
+      </div>
     </>
   );
 };
