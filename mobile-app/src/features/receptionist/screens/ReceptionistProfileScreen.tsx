@@ -62,6 +62,17 @@ export const ReceptionistProfileScreen: React.FC<Props> = ({ navigation }) => {
 
   const renderAttendanceTab = () => (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+      {/* Clocking on lives here rather than in a menu: this is the tab a
+          receptionist already opens to look at their shifts. */}
+      <TouchableOpacity
+        style={styles.clockBtn}
+        onPress={() => navigation.navigate('ClockIn')}
+        activeOpacity={0.85}
+      >
+        <Clock size={18} color="#FFFFFF" strokeWidth={2.5} />
+        <Text style={styles.clockBtnText}>Clock in / Clock out</Text>
+      </TouchableOpacity>
+
       <View style={styles.statRow}>
         <StatCard label="Present" value="22" color="#10B981" bg="#E6F9F1" />
         <StatCard label="Absent"  value="2"  color="#EF4444" bg="#FEE2E2" />
@@ -227,6 +238,17 @@ const styles = StyleSheet.create({
   infoRowValue: { flex: 1, fontSize: 14, color: '#111827', fontWeight: '600', textAlign: 'right' },
   logoutBtn: { marginHorizontal: 16, marginTop: 24, backgroundColor: '#FEE2E2', borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
   logoutText: { fontSize: 15, fontWeight: '700', color: '#DC2626' },
+  clockBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: VIOLET,
+    borderRadius: 12,
+    paddingVertical: 14,
+    marginBottom: 16,
+  },
+  clockBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   statRow: { flexDirection: 'row', gap: 10, marginBottom: 4 },
   statCard: { flex: 1, borderRadius: 14, paddingVertical: 14, alignItems: 'center', ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4 }, android: { elevation: 1 } }) },
   statValue: { fontSize: 22, fontWeight: '800', marginBottom: 2 },

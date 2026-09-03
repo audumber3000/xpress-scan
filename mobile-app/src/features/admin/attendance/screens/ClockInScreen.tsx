@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
-  ScrollView, RefreshControl, Linking, Platform, AppState,
+  ScrollView, RefreshControl, Linking, Platform, AppState, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -43,6 +43,7 @@ export const ClockInScreen: React.FC<any> = ({ navigation }) => {
   const [phase, setPhase] = useState<Phase>('loading');
   const [refreshing, setRefreshing] = useState(false);
   const [permissionBlocked, setPermissionBlocked] = useState(false);
+  const [reason, setReason] = useState('');
   // A distance refusal is an answer, not a fault, so it lives in its own panel
   // rather than flashing past as a toast.
   const [refusal, setRefusal] = useState('');
@@ -89,9 +90,10 @@ export const ClockInScreen: React.FC<any> = ({ navigation }) => {
         return;
       }
 
-      if (direction === 'in') await attendanceApiService.clockIn(fix);
+      if (direction === 'in') await attendanceApiService.clockIn(fix, reason);
       else await attendanceApiService.clockOut(fix);
 
+      setReason('');
       setStatus(await attendanceApiService.getStatus());
     } catch (e: any) {
       // "You look about 412 m from the clinic" is the server answering the
@@ -190,6 +192,29 @@ export const ClockInScreen: React.FC<any> = ({ navigation }) => {
           </View>
         )}
 
+        {/* Asked before the clock-in, not after, so the answer lands on the
+            record it explains. Only when the server says today's arrival is
+            already past opening: no configured hours means no prompt, and the
+            benefit of the doubt goes to whoever turned up. */}
+        {!done && !onShift && status?.late_now && (
+          <View style={styles.reasonBox}>
+            <Text style={styles.reasonLabel}>
+              You are {status.late_by_minutes} minutes past opening. What happened?
+            </Text>
+            <TextInput
+              value={reason}
+              onChangeText={setReason}
+              maxLength={280}
+              placeholder="Traffic, a delayed train, anything"
+              placeholderTextColor="#9CA3AF"
+              style={styles.reasonInput}
+            />
+            <Text style={styles.reasonHint}>
+              Saved with today's record. You can clock in without it.
+            </Text>
+          </View>
+        )}
+
         {/* The action */}
         {!done && (
           <TouchableOpacity
@@ -259,6 +284,26 @@ const styles = StyleSheet.create({
   linkBtn: { marginTop: 10, alignSelf: 'flex-start' },
   linkBtnText: { fontSize: 13, fontWeight: '700', color: '#B45309' },
 
+  reasonBox: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 14,
+  },
+  reasonLabel: { fontSize: 13, fontWeight: '700', color: '#92400E', marginBottom: 8 },
+  reasonInput: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E7EB',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#111827',
+  },
+  reasonHint: { fontSize: 11, color: '#B45309', marginTop: 6 },
   cta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 18, borderRadius: 14, marginTop: 24 },
   ctaIn: { backgroundColor: '#29828a' },
   ctaOut: { backgroundColor: '#D97706' },

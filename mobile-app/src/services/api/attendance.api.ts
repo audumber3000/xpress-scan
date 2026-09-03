@@ -12,6 +12,13 @@ import { Fix } from '../../shared/utils/location';
 
 export interface ClockStatus {
   is_clocked_in: boolean;
+  /** Whether clocking in right now would be recorded as late, so the screen can
+   *  ask why before sending instead of after. Null-ish when the clinic has no
+   *  hours set for today, which means no prompt at all. */
+  late_now?: boolean;
+  late_by_minutes?: number | null;
+  opening_time?: string | null;
+  grace_minutes?: number;
   is_done_for_today: boolean;
   attendance_id: number | null;
   clock_in_time: string | null;
@@ -82,13 +89,20 @@ class AttendanceApiService extends BaseApiService {
   }
 
   /** 403 here means "too far away", which is a normal answer, not a fault. */
-  async clockIn(fix: Fix): Promise<any> {
+  /**
+   * `reason` explains a late arrival, asked for at the moment it happens rather
+   * than chased afterwards. The server keeps it only when it independently
+   * decides the arrival was late, so sending one on a punctual clock-in is
+   * harmless and never lands on the owner's grid.
+   */
+  async clockIn(fix: Fix, reason?: string): Promise<any> {
     const headers = await this.getAuthHeaders();
     const res = await this.fetchWithTimeout(`${this.baseURL}/attendance-mobile/clock-in`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
         latitude: fix.latitude, longitude: fix.longitude, accuracy: fix.accuracy,
+        ...(reason && reason.trim() ? { reason: reason.trim() } : {}),
       }),
     });
     if (res.status === 403) throw new OutsideGeofenceError(await detailOf(res, 'You are too far from the clinic to clock in'));

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
 import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MoreVertical, Building2, Bell, CreditCard, LogOut, BellRing, User } from 'lucide-react-native';
+import { MoreVertical, Building2, Bell, CreditCard, LogOut, BellRing, User, Clock } from 'lucide-react-native';
 import { useAuth } from '../../../../app/AuthContext';
 import {
   sendLocalNotification,
@@ -144,8 +144,21 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
           </View>
         ) : (
           <View style={styles.settingsCard}>
+            {/* Owners work shifts too, and the clinic's own attendance grid is
+                a hole with the owner missing from it. Same screen the rest of
+                the staff use. */}
+            <Text style={styles.sectionTitle}>MY SHIFT</Text>
+            <SettingsMenuItem
+              icon={Clock}
+              iconColor={colors.primary}
+              iconBgColor={colors.primaryBg}
+              title="Clock In / Clock Out"
+              subtitle="Start or end your day at the clinic"
+              onPress={() => navigation.navigate('ClockIn')}
+            />
+
             {/* Clinic Management */}
-            <Text style={styles.sectionTitle}>CLINIC MANAGEMENT</Text>
+            <Text style={[styles.sectionTitle, styles.sectionTitleSpacing]}>CLINIC MANAGEMENT</Text>
              <SettingsMenuItem
               icon={Building2}
               iconColor={colors.primary}

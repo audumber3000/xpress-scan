@@ -208,6 +208,12 @@ export const AppNavigator = () => {
               <>
                 <Stack.Screen name="ReceptionistHome" component={ReceptionistHomeScreen} />
                 <Stack.Screen name="ReceptionistProfile" component={ReceptionistProfileScreen} />
+                {/* Registered here as well as in the owner stack. Clocking on is
+                    for everybody who works a shift, and a receptionist is the
+                    likeliest person to do it, but this stack did not carry the
+                    screen — so the profile row would have thrown rather than
+                    navigated. */}
+                <Stack.Screen name="ClockIn" component={ClockInScreen} />
                 <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
                 <Stack.Screen name="Notifications" component={NotificationsScreen} />
                 {/* The inbox proper. NotificationsScreen above is the
