@@ -23,6 +23,7 @@ export const CATEGORIES = [
   { key: 'prescription', label: 'Prescriptions' },
   { key: 'report', label: 'Reports' },
   { key: 'invoice', label: 'Invoices' },
+  { key: 'form', label: 'Patient Forms' },
   { key: 'upload', label: 'Uploads' },
 ];
 
@@ -33,13 +34,14 @@ export const CATEGORY_STYLE = {
   prescription: 'bg-emerald-50 text-emerald-700',
   report: 'bg-blue-50 text-blue-700',
   invoice: 'bg-amber-50 text-amber-700',
+  form: 'bg-violet-50 text-violet-700',
   upload: 'bg-gray-100 text-gray-600',
 };
 
 const safe = (promise) => promise.then((r) => (Array.isArray(r) ? r : [])).catch(() => []);
 
 /** The one row shape the tab renders, whatever table it came from. */
-const row = ({ id, category, title, date, url, route, download, size, fileType, addedBy, source }) => ({
+const row = ({ id, category, title, date, url, route, download, size, fileType, addedBy, source, needsReview = false }) => ({
   key: `${category}-${id}`,
   id,
   category,
@@ -56,18 +58,21 @@ const row = ({ id, category, title, date, url, route, download, size, fileType, 
   download: download || '',
   size: size ?? null,
   fileType: (fileType || 'pdf').toLowerCase(),
+  // Only a patient form sets this; every other source leaves it false.
+  needsReview,
   addedBy: addedBy || null,
   source,
 });
 
 export async function fetchPatientDocuments(patientId, { prescriptions = [], invoices = [] } = {}) {
-  const [uploads, consents, reports] = await Promise.all([
+  const [uploads, consents, reports, forms] = await Promise.all([
     safe(api.get(`/documents/patient/${patientId}`)),
     safe(api.get(`/consents/patient/${patientId}`)),
     // `?patient_id=` — the endpoint is clinic-wide, and without the filter
     // this pulled every report in the clinic and had nothing but the patient's
     // name to match them by.
     safe(api.get('/reports', { params: { patient_id: patientId } })),
+    safe(api.get(`/forms/patient/${patientId}`)),
   ]);
 
   const docs = [
@@ -96,6 +101,24 @@ export async function fetchPatientDocuments(patientId, { prescriptions = [], inv
       fileType: 'form',
       source: 'consent',
     })),
+
+    // A form the patient has actually answered is paperwork and belongs with
+    // the rest of it. One still waiting to be filled in is not — same rule that
+    // keeps a draft invoice out of this list.
+    ...forms
+      .filter((f) => ['submitted', 'applied'].includes(String(f.status || '').toLowerCase()))
+      .map((f) => row({
+        id: f.id,
+        category: 'form',
+        title: f.form_name || 'Patient form',
+        date: f.submitted_at || f.sent_at,
+        // No stored PDF: the answers are data, and the row opens the review
+        // panel where they can be read against what is on file.
+        fileType: 'form',
+        source: 'form',
+        // Carried through so the list can show which ones still want a look.
+        needsReview: String(f.status || '').toLowerCase() === 'submitted',
+      })),
 
     ...reports.map((r) => row({
       id: r.id,

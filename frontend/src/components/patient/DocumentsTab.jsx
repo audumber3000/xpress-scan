@@ -13,6 +13,8 @@ import FileFilterBar from './files/FileFilterBar';
 import {
   CATEGORIES, CATEGORY_STYLE, fetchPatientDocuments, countByCategory,
 } from './files/documentSources';
+import FormReviewModal from '../forms/FormReviewModal';
+import SendFormBar from './files/SendFormBar';
 import {
   ACCEPT, MAX_FILE_MB, humanSize, uploadDocumentWithProgress,
 } from './files/fileHelpers';
@@ -52,12 +54,19 @@ const DATE_WINDOWS = [
 
 const DocumentRow = ({ doc, onOpen }) => {
   const Icon = CATEGORY_ICON[doc.category] || FileText;
-  const openable = Boolean(doc.url || doc.route || doc.download);
+  // A form has no file: its answers are data, and the row opens the review
+  // panel instead. Without this it rendered as an un-openable dead row.
+  const openable = Boolean(doc.url || doc.route || doc.download || doc.source === 'form');
   return (
     <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0">
       <span className={`w-10 h-10 rounded-lg grid place-items-center flex-shrink-0 ${CATEGORY_STYLE[doc.category] || 'bg-gray-100 text-gray-500'}`}>
         <Icon size={17} />
       </span>
+      {doc.needsReview && (
+        <span className="px-2 py-0.5 rounded text-[11px] font-semibold border border-amber-200 bg-amber-50 text-amber-700 shrink-0 order-last">
+          Needs review
+        </span>
+      )}
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 min-w-0">
@@ -96,12 +105,13 @@ const DocumentRow = ({ doc, onOpen }) => {
   );
 };
 
-const DocumentsTab = ({ patientId, prescriptions = [], invoices = [], onQuickAction }) => {
+const DocumentsTab = ({ patientId, patient, prescriptions = [], invoices = [], onQuickAction }) => {
   const navigate = useNavigate();
   const [docs, setDocs] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [reviewing, setReviewing] = useState(null);
 
   const [category, setCategory] = useState('all');
   const [query, setQuery] = useState('');
@@ -149,6 +159,7 @@ const DocumentsTab = ({ patientId, prescriptions = [], invoices = [], onQuickAct
   }, [docs, category, query, window_, sort]);
 
   const openDoc = async (doc) => {
+    if (doc.source === 'form') { setReviewing(doc.id); return; }
     if (doc.route) { navigate(doc.route); return; }
     if (doc.url) { window.open(doc.url, '_blank', 'noopener'); return; }
     // Behind auth, so it cannot simply be opened in a tab.
@@ -217,6 +228,8 @@ const DocumentsTab = ({ patientId, prescriptions = [], invoices = [], onQuickAct
           />
         </label>
       </div>
+
+      <SendFormBar patientId={patientId} patient={patient} onSent={load} />
 
       <FileFilterBar
         query={query}
@@ -312,6 +325,17 @@ const DocumentsTab = ({ patientId, prescriptions = [], invoices = [], onQuickAct
           )}
         </div>
       </div>
+      {reviewing && (
+        <FormReviewModal
+          submissionId={reviewing}
+          onClose={() => setReviewing(null)}
+          onApplied={(res) => {
+            load();
+            notify.done(res?.count ? `${res.count} field${res.count === 1 ? '' : 's'} updated` : 'Marked reviewed');
+          }}
+        />
+      )}
+
     </div>
   );
 };
