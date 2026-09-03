@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { X, ExternalLink } from 'lucide-react';
+import { X, ExternalLink, Copy, Check } from 'lucide-react';
 import WhatsAppIcon from '../../common/WhatsAppIcon';
 import GoogleGlyph from '../../common/GoogleGlyph';
 import InlineFeedback from '../../common/InlineFeedback';
@@ -30,6 +30,7 @@ const GoogleReviewModal = ({ open, onClose, patient, user }) => {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const [sent, setSent] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     setLoading(true);
@@ -47,6 +48,7 @@ const GoogleReviewModal = ({ open, onClose, patient, user }) => {
     if (!open) return;
     setSent(false);
     setSendError('');
+    setCopied(false);
     fetchStatus();
   }, [open, fetchStatus]);
 
@@ -58,6 +60,14 @@ const GoogleReviewModal = ({ open, onClose, patient, user }) => {
   }, [open, onClose]);
 
   if (!open) return null;
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(status?.review_link || '');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch { notify.problem('Could not copy the link'); }
+  };
 
   const manual = isManualWhatsApp(user);
 
@@ -150,18 +160,48 @@ const GoogleReviewModal = ({ open, onClose, patient, user }) => {
                           keeps. You can still send it.
                         </p>
                       )}
-                      {/* The Google URL itself, not the wrapped one. The
-                          clinic is already in a real browser, so the /r bounce
-                          would be a hop for nothing. */}
-                      <a
-                        href={status.review_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs font-medium text-[#2a276e] hover:underline mt-2"
-                      >
-                        Preview the link <ExternalLink size={12} />
-                      </a>
                     </>
+                  )}
+
+                  {/* The Google URL itself, not the wrapped one. Shown rather
+                      than hidden behind a "preview" link because it is short
+                      enough to read now, and because a clinic wants it for a
+                      card, a poster or its own website, not only for this
+                      send. Outside `canSend` on purpose: a patient with no
+                      phone still has a clinic that wants the link. */}
+                  {status.review_link && (
+                    <div className="mt-2.5">
+                      <p className="text-[11px] font-semibold text-gray-500 mb-1">
+                        Your Google review link
+                      </p>
+                      <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2">
+                        <span className="min-w-0 flex-1 font-mono text-[11px] leading-snug text-gray-700 break-all">
+                          {status.review_link}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={copyLink}
+                          className="inline-flex items-center gap-1 flex-shrink-0 text-[11px] font-semibold text-[#2a276e] hover:underline cursor-pointer"
+                        >
+                          {copied ? <Check size={12} /> : <Copy size={12} />}
+                          {copied ? 'Copied' : 'Copy'}
+                        </button>
+                        <a
+                          href={status.review_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Open the review page"
+                          title="Open the review page"
+                          className="flex-shrink-0 text-gray-400 hover:text-[#2a276e]"
+                        >
+                          <ExternalLink size={12} />
+                        </a>
+                      </div>
+                      <p className="mt-1 text-[11px] text-gray-500">
+                        The message sends a version that opens outside WhatsApp,
+                        so the patient lands signed in.
+                      </p>
+                    </div>
                   )}
                 </div>
               </div>
