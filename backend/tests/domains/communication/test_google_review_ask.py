@@ -69,6 +69,35 @@ def test_no_listing_means_no_link(db):
     assert grs.review_link(db, _clinic_id(db)) == ""
 
 
+def test_a_real_place_id_becomes_googles_own_short_link(db):
+    """The pair below is verified against Google: the short code and the place
+    id are two encodings of one listing, and g.page resolves it to the review
+    form. Both carry the same CID, which is the whole reason this is derivable.
+    """
+    cid = _clinic_id(db)
+    db.add(GooglePlaceLink(clinic_id=cid, place_id="ChIJcd-nDQCx3DsRBltDijTePng"))
+    db.commit()
+
+    assert grs.review_link(db, cid) == "https://g.page/r/CQZbQ4o03j54EBM/review"
+
+
+def test_the_short_code_is_not_the_place_id(db):
+    """Guards the mistake this replaced. Substituting the place id straight into
+    the g.page path gives a dead link that redirects to a blank google.com, so
+    the code must be re-encoded rather than swapped in.
+    """
+    assert grs.gpage_code("ChIJcd-nDQCx3DsRBltDijTePng") != "ChIJcd-nDQCx3DsRBltDijTePng"
+
+
+@pytest.mark.parametrize("place_id", ["ChIJabc123", "not-base64!!", "", "ChIJ"])
+def test_an_undecodable_place_id_keeps_the_long_url(db, place_id):
+    """A truncated, hand-typed or future-format id must not lose the clinic its
+    link. gpage_code returns None and the caller falls back to writereview,
+    which has always worked.
+    """
+    assert grs.gpage_code(place_id) is None
+
+
 # ── The memory ───────────────────────────────────────────────────────────────
 
 def _log(db, cid, recipient, status, days_ago):

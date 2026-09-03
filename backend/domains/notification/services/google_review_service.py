@@ -5,6 +5,7 @@ lands, and the manual one behind the WhatsApp menu on the patient file. They
 have to resolve the same link and honour the same cooldown, or a clinic gets
 asked-twice patients and no way to explain why.
 """
+import base64
 import datetime as dt
 import os
 from typing import Optional
@@ -16,6 +17,42 @@ from sqlalchemy.orm import Session
 # reasonably be asked twice; and rather than per-invoice, because a course of
 # treatment billed in three parts is still one experience to review.
 COOLDOWN_DAYS = 90
+
+
+def gpage_code(place_id: str) -> Optional[str]:
+    """The g.page short code for a Places API place id, or None if it will not
+    decode.
+
+    A place id is base64url over a small protobuf holding the listing's two
+    64-bit feature ids:
+
+        0a <len> 09 <fid-high:8> 11 <cid:8>
+
+    The g.page short link carries only the second of those, the CID, wrapped in
+    its own two-field message:
+
+        09 <cid:8> 10 13
+
+    So the short code is not the place id and cannot be substituted for it —
+    g.page/r/<place id>/review resolves to a blank google.com — but it is
+    derivable from it, because both encode the same CID. Verified byte-exact
+    against a known pair, and the five oldest linked clinics in prod all
+    resolve to a real review form.
+
+    Returns None rather than raising on anything that does not match the shape:
+    a truncated id, a hand-typed one, or a future format change. Every caller
+    falls back to the long writereview URL, which has always worked.
+    """
+    if not place_id:
+        return None
+    try:
+        raw = base64.urlsafe_b64decode(place_id + "=" * (-len(place_id) % 4))
+    except Exception:
+        return None
+    if len(raw) < 20 or raw[0] != 0x0A or raw[2] != 0x09 or raw[11] != 0x11:
+        return None
+    body = bytes([0x09]) + raw[12:20] + bytes([0x10, 0x13])
+    return base64.urlsafe_b64encode(body).decode().rstrip("=")
 
 
 def review_link(db: Session, clinic_id: int) -> str:
@@ -44,6 +81,13 @@ def review_link(db: Session, clinic_id: int) -> str:
         )
     if not place_id:
         return ""
+    # Google's own short form when we can build it: it is what a clinic sees in
+    # its Business Profile, it is short enough to read in a WhatsApp message,
+    # and it carries Google's review-solicitation attribution. It resolves to
+    # the same writereview form, so nothing downstream changes behaviour.
+    code = gpage_code(place_id)
+    if code:
+        return f"https://g.page/r/{code}/review"
     return f"https://search.google.com/local/writereview?placeid={place_id}"
 
 
