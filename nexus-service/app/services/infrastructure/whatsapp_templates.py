@@ -212,6 +212,23 @@ def wa_quotation_sent(patient_name: str, clinic_name: str,
     return {"template_name": tpl, "components": components}
 
 
+def wa_treatment_summary(patient_name: str, clinic_name: str,
+                         visit_date: str = "", clinic_phone: str = "",
+                         document_url: str = "", media_id: str = "", **_) -> dict:
+    """
+    A summary of the visit, for the patient to keep.
+
+    Header: document (the summary PDF).
+    Body params: {{1}} patient_name, {{2}} clinic_name, {{3}} visit_date,
+                 {{4}} clinic_phone
+    """
+    tpl = _get_tpl("WA_TPL_TREATMENT_SUMMARY", "mp_treatment_summary")
+    components = [_body_params(patient_name, clinic_name, visit_date, clinic_phone)]
+    if media_id or document_url:
+        components.insert(0, _header_document(document_url, "Visit_summary.pdf", media_id))
+    return {"template_name": tpl, "components": components}
+
+
 def wa_prescription_sent(patient_name: str, clinic_name: str, doctor_name: str = "",
                          clinic_phone: str = "", document_url: str = "",
                          media_id: str = "") -> dict:
@@ -392,6 +409,7 @@ def build_whatsapp(event_type: str, **kwargs) -> dict:
         "consent_form":              wa_consent_form,
         "patient_form":              wa_patient_form,
         "quotation_sent":            wa_quotation_sent,
+        "treatment_summary":         wa_treatment_summary,
         "google_review":             wa_google_review,
         "daily_summary":             wa_daily_summary,
         "lab_order_placed":          wa_lab_order_placed,
@@ -548,6 +566,12 @@ def build_whatsapp_text(event_type: str, **kw) -> str:
                 f"Your receipt is attached.")
     elif event_type == "prescription_notification":
         body = f"Hi {pn}, your prescription from {cn}" + (f" (Dr. {dn})" if dn else "") + " is attached. Get well soon!"
+    elif event_type == "treatment_summary":
+        vd = kw.get("visit_date", "")
+        body = (f"Hi {pn}, thank you for visiting {cn}"
+                + (f" on {vd}" if vd else "") + ". "
+                "A summary of your visit is attached. "
+                "Please call us if anything changes or you are unsure about something.")
     elif event_type == "quotation_sent":
         num = kw.get("quotation_number", "")
         share = kw.get("patient_portion", "")

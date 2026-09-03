@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FileSpreadsheet, Plus, Send, Check, X, Wand2 } from 'lucide-react';
+import { FileSpreadsheet, Send, Check, X, Wand2, Download } from 'lucide-react';
 import { api, getFriendlyErrorMessage } from '../../utils/api';
 import { notify } from '../../utils/notify';
 import { getCurrencySymbol } from '../../utils/currency';
@@ -7,6 +7,8 @@ import { formatDate } from '../../utils/datetime';
 import Spinner from '../common/Spinner';
 import InlineFeedback from '../common/InlineFeedback';
 import InsuranceCard from '../quotations/InsuranceCard';
+import WhatsAppIcon from '../common/WhatsAppIcon';
+import { downloadAuthedFile } from '../../utils/whatsapp';
 
 const money = (n) => `${getCurrencySymbol()}${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -148,8 +150,28 @@ const QuotationsTab = ({ patientId }) => {
                             : 'No cover on file — the whole amount is the patient’s.'}
                         </p>
                         <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => act(() => downloadAuthedFile(
+                              `/quotations/${q.id}/pdf`, `Quotation_${q.quotation_number}.pdf`))}
+                            disabled={busy}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 text-[12px] font-semibold hover:bg-gray-50 disabled:opacity-50">
+                            <Download size={12} /> PDF
+                          </button>
                           {(q.status === 'draft' || q.status === 'sent') && (
                             <>
+                              {/* Sending marks it sent, so there is no separate
+                                  "mark sent" to forget. The manual one stays for
+                                  a clinic that hands the PDF over at the desk. */}
+                              <button
+                                onClick={() => act(async () => {
+                                  const r = await api.post(`/quotations/${q.id}/send-whatsapp`, {});
+                                  if (r && r.sent === false) notify.problem(r.message);
+                                }, null)}
+                                disabled={busy || !q.patient_phone}
+                                title={q.patient_phone ? 'Send on WhatsApp' : 'No phone number on file'}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 text-[12px] font-semibold hover:bg-gray-50 disabled:opacity-50">
+                                <WhatsAppIcon size={12} brand /> Send
+                              </button>
                               {q.status === 'draft' && (
                                 <button onClick={() => act(() => api.post(`/quotations/${q.id}/send`), 'Marked as sent')}
                                   disabled={busy}

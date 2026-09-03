@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Response
 from sqlalchemy.orm import Session
 from database import get_db
 from models import (
@@ -226,3 +226,98 @@ def delete_case_paper(
     db.delete(db_paper)
     db.commit()
     return {"message": "Case paper deleted successfully"}
+
+
+# ── Visit summary ────────────────────────────────────────────────────────────
+# The visit told to the patient rather than to the file. Lives here because it
+# is a view of a case paper, not a thing of its own.
+
+def _summary_pdf(db: Session, cp) -> bytes:
+    import os
+    from models import Clinic, User as U
+    from domains.clinical.summary_pdf import render_summary
+    from domains.infrastructure.services.pdf_service import html_template_to_pdf
+
+    clinic = db.query(Clinic).filter(Clinic.id == cp.clinic_id).first()
+    dentist = db.query(U).filter(U.id == cp.dentist_id).first() if cp.dentist_id else None
+    # A clinic on the general case paper does not employ a "Dentist", and the
+    # summary is signed off with a role the patient will recognise.
+    is_dental = (getattr(clinic, "case_paper_type", None) or "dental") != "general"
+    html = render_summary(cp, clinic, dentist.name if dentist else "", is_dental)
+    path = html_template_to_pdf(html)
+    try:
+        with open(path, "rb") as fh:
+            return fh.read()
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def _load_paper(db: Session, paper_id: int, current_user):
+    cp = db.query(CasePaper).filter(
+        CasePaper.id == paper_id,
+        CasePaper.clinic_id == current_user.clinic_id,
+    ).first()
+    if not cp:
+        raise HTTPException(status_code=404, detail="Case paper not found")
+    return cp
+
+
+@router.get("/{paper_id}/summary-pdf")
+async def visit_summary_pdf(paper_id: int, db: Session = Depends(get_db),
+                            current_user=Depends(get_current_user)):
+    cp = _load_paper(db, paper_id, current_user)
+    return Response(
+        content=_summary_pdf(db, cp),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="Visit_summary_{paper_id}.pdf"'},
+    )
+
+
+@router.post("/{paper_id}/send-summary")
+async def send_visit_summary(paper_id: int, db: Session = Depends(get_db),
+                             current_user=Depends(get_current_user)):
+    """WhatsApp the visit summary to the patient.
+
+    Manual rather than automatic on completion. A case paper is marked complete
+    while the patient is still in the chair and often edited afterwards, so
+    firing on that would send half-written summaries — and every send costs
+    wallet credit. The clinic presses this when the note is actually finished.
+    """
+    from models import Clinic, NotificationPreference
+    from core.notification_dispatch import notify_event, InsufficientWalletBalance
+
+    cp = _load_paper(db, paper_id, current_user)
+    if not cp.patient or not cp.patient.phone:
+        raise HTTPException(status_code=400, detail="This patient has no phone number on file.")
+
+    pref = db.query(NotificationPreference).filter(
+        NotificationPreference.clinic_id == current_user.clinic_id,
+        NotificationPreference.event_type == "treatment_summary",
+    ).first()
+    if not pref or not pref.is_enabled:
+        return {"sent": False, "reason": "not_configured",
+                "message": "Visit summaries aren't switched on for this clinic. "
+                           "Download the PDF and send it yourself."}
+
+    clinic = db.query(Clinic).filter(Clinic.id == cp.clinic_id).first()
+    try:
+        notify_event(
+            "treatment_summary",
+            db=db,
+            clinic_id=current_user.clinic_id,
+            to_phone=cp.patient.phone,
+            to_name=cp.patient.name,
+            required=True,
+            template_data={
+                "patient_name": cp.patient.name,
+                "clinic_name": clinic.name if clinic else "",
+                "visit_date": cp.date.strftime("%d %B %Y") if cp.date else "",
+                "clinic_phone": getattr(clinic, "phone", "") or "",
+            },
+        )
+    except InsufficientWalletBalance:
+        raise
+    return {"sent": True}
