@@ -264,9 +264,10 @@ class PlatformNotificationService:
             else:
                 continue
 
-            owner = _get_owner_for_clinic(self.db, clinic.id)
+            # Same correction as t1: {{1}} is the end date. t4 fires the day
+            # after access ended and takes no parameters at all.
             data = {} if event == "molarplus_account_update_t4" else {
-                "owner_name": _owner_name(owner, clinic)
+                "valid_until": end.strftime("%d %b %Y")
             }
             sent_trial = self.send_whatsapp_event(
                 clinic,

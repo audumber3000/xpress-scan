@@ -527,18 +527,28 @@ def build_whatsapp(event_type: str, **kwargs) -> dict:
             "components": [_header_text(kw.get("owner_name", ""))],
         },
         # ── Trial lifecycle (current one-click trial) ──
-        # t1/t2/t3: body {{1}} = owner_name. t4: no parameters.
+        # t1/t2/t3: body {{1}} = the date access runs to. t4: no parameters.
+        #
+        # This said owner_name and passed one, which is how a doctor received
+        # "The current access is valid until Riya." The approved template has no
+        # placeholder for a name at all — "Hello Doctor ," is literal text, which
+        # is also why it renders with that gap before the comma. {{1}} sits in
+        # the validity sentence and has always been a date.
+        #
+        # `or "soon"` rather than an empty string: Meta rejects a blank body
+        # parameter outright, so a missing end date would turn a slightly vague
+        # message into no message at all.
         "molarplus_account_update_t1": lambda **kw: {
             "template_name": "molarplus_account_update_t1",
-            "components": [_body_params(kw.get("owner_name", ""))],
+            "components": [_body_params(kw.get("valid_until") or "soon")],
         },
         "molarplus_account_update_t2": lambda **kw: {
             "template_name": "molarplus_account_update_t2",
-            "components": [_body_params(kw.get("owner_name", ""))],
+            "components": [_body_params(kw.get("valid_until") or "soon")],
         },
         "molarplus_account_update_t3": lambda **kw: {
             "template_name": "molarplus_account_update_t3",
-            "components": [_body_params(kw.get("owner_name", ""))],
+            "components": [_body_params(kw.get("valid_until") or "soon")],
         },
         "molarplus_account_update_t4": lambda **kw: {
             "template_name": "molarplus_account_update_t4",

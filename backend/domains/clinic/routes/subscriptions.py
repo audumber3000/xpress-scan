@@ -252,11 +252,17 @@ async def start_free_trial(
     if clinic:
         try:
             from domains.notification.services.platform_notification_service import PlatformNotificationService
-            owner_name = getattr(current_user, "first_name", None) or getattr(current_user, "name", None) or (clinic.name or "there")
+            # {{1}} is the date the trial runs to, not the owner's name. It
+            # used to be sent the name, which reached doctors as "The current
+            # access is valid until Riya."
+            valid_until = (
+                subscription.current_end.strftime("%d %b %Y")
+                if subscription.current_end else ""
+            )
             PlatformNotificationService(db).send_whatsapp_event(
                 clinic,
                 "molarplus_account_update_t1",
-                template_data={"owner_name": owner_name},
+                template_data={"valid_until": valid_until},
             )
         except Exception:
             pass
