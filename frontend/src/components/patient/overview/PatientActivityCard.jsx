@@ -7,6 +7,7 @@ import Spinner from '../../common/Spinner';
 import { api, getFriendlyErrorMessage } from '../../../utils/api';
 import { getCurrencySymbol } from '../../../utils/currency';
 import { formatDate, formatTime } from '../../../utils/datetime';
+import { SLATE, TEAL, INDIGO, OCHRE, GREEN, tint } from '../../common/timelineTones';
 
 /**
  * Everything that has happened to this patient, newest first.
@@ -33,38 +34,10 @@ const money = (n) =>
   })}`;
 
 /**
- * A colour per category, not per kind.
- *
- * Eight events do not need eight colours. A colour has to earn itself by making
- * a distinction the words do not already make, and "case paper" versus
- * "prescription" is a distinction the badge makes perfectly well on its own. So
- * the eight kinds share five tones, grouped by what the event actually is:
- *
- *   slate    the file beginning, a fact rather than something somebody did
- *   teal     the patient turned up: booked, walked in, checked in
- *   indigo   the clinic wrote something clinical down
- *   ochre    money asked for
- *   green    money received
- *
- * Money in and money asked for are the pair that most needs telling apart at a
- * glance, and they are the two that differ most.
- *
- * Muted hex rather than Tailwind's palette. The -50/-600 pairs an earlier pass
- * used came out neon on a card that sits beside the dental chart all day: seven
- * fluorescent dots, each reading as an alert. These are mid-tone and
- * desaturated, close enough in weight to look like one family, with the house
- * indigo among them rather than beside them.
- *
- * Inline styles, not Tailwind classes: arbitrary values have to appear as
- * literal strings for the JIT to emit them, so a colour looked up from a map
- * would silently produce no CSS.
+ * Tones, and the reasoning behind choosing one per category rather than one
+ * per kind, now live in common/timelineTones.js — so the invoice history
+ * draws the same element rather than its own reading of it.
  */
-const SLATE  = '#6b7280';
-const TEAL   = '#29828a';   // the Control Center accent
-const INDIGO = '#2a276e';   // the house colour
-const OCHRE  = '#a86f3d';
-const GREEN  = '#3f8f6f';
-
 const KINDS = {
   registered:   { Icon: UserPlus,     tone: SLATE },
   appointment:  { Icon: CalendarDays, tone: TEAL },
@@ -76,9 +49,6 @@ const KINDS = {
   payment:      { Icon: Check,        tone: GREEN },
 };
 const FALLBACK = { Icon: FileText, tone: SLATE };
-
-// The same hue at 8%, for the badge behind it.
-const tint = (hex) => `${hex}14`;
 
 // A date with no time (a walk-in, a registration) should not claim one.
 const hasTime = (iso) => typeof iso === 'string' && iso.includes('T');

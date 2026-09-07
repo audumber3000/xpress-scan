@@ -2018,6 +2018,10 @@ async def get_invoice_timeline(
             "method": p.method,
             "reference": getattr(p, "reference", None),
             "by": (p.recorder.name if getattr(p, "recorder", None) else None),
+            # The verb belongs to the relationship, not to the reader. Only this
+            # row knows whether the person took the money, raised the bill or
+            # changed a line, and "By" on all three is wrong on two of them.
+            "by_verb": "Recorded by",
             "note": p.note,
         })
 
@@ -2033,6 +2037,16 @@ async def get_invoice_timeline(
         "line_item_deleted": "Item removed",
         "discount_removed": "Discount removed",
         "payment_deleted": "Payment removed",
+    }
+    BY_VERBS = {
+        "created": "Raised by",
+        "finalized": "Issued by",
+        "updated": "Changed by",
+        "line_item_added": "Added by",
+        "line_item_updated": "Changed by",
+        "line_item_deleted": "Removed by",
+        "discount_removed": "Removed by",
+        "payment_deleted": "Removed by",
     }
 
     logs = db.query(InvoiceAuditLog).filter(
@@ -2050,6 +2064,7 @@ async def get_invoice_timeline(
             "method": None,
             "reference": None,
             "by": (log.user.name if log.user else None),
+            "by_verb": BY_VERBS.get(log.action, "By"),
             "note": log.notes,
         })
 
