@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<!--
+  Letterhead prescription variant.
+
+  A printed doctor's pad: the name large at the top left, a tinted panel down
+  the right edge, the patient's details on ruled lines, and the Rx mark opening
+  the medication list. It is the layout most patients already recognise as a
+  prescription, which matters when they take it to a chemist.
+
+  The decorative panels are flat blocks in tints of the clinic's own colour, so
+  a practice that sets its brand gets its brand rather than a stock blue.
+
+  Consumes exactly the placeholder set in prescription_service.render_prescription_html.
+  Those values arrive with their own wrapper tags, so the classes they carry
+  (.doc-name, .tagline, .signature-box, .signature-line, .clinical-notes,
+  .advice-section, .med-name, .med-composition, .text-left) must all be styled
+  here or the block renders unstyled rather than missing, which is worse.
+
+  WeasyPrint-safe CSS only: no grid, no gap, no :has().
+-->
+<style>
+  /* The footer is fixed, so it repeats on every page — and `padding-bottom` on
+     the flowing .page only applies once, at the very end. On page 1 of a long
+     prescription the medicine rows therefore ran straight underneath it, which
+     on this document means illegible medicine names.
+
+     The reserved band is on @page instead: every page stops short by the
+     footer's height, and the footer is pushed down into that margin where no
+     content is ever laid out. */
+  @page { size: A4; margin: 0 0 74px 0; }
+  :root { --accent: {{primary_color}}; }
+  body {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    margin: 0; padding: 0; color: #26364a; font-size: 12px; line-height: 1.5;
+    background: #fff;
+  }
+  /* Tinted furniture. Fixed so it repeats on a prescription that runs to a
+     second page, the way a real pad does. */
+  .edge-top    { position: fixed; top: 0; right: 0; width: 78px; height: 470px;
+                 /* The literal colour, not var(--accent): WeasyPrint cannot
+                    resolve a custom property inside a gradient and throws. */
+                 background: linear-gradient(to bottom, {{primary_color}} 0%, rgba(255,255,255,0) 100%);
+                 opacity: .20; }
+  .edge-bottom { position: fixed; bottom: 96px; left: 0; width: 26px; height: 190px; background: var(--accent); opacity: .55; }
+  .edge-bottom2{ position: fixed; bottom: 286px; left: 0; width: 26px; height: 60px;  background: var(--accent); opacity: .18; }
+
+  .page { padding: 46px 60px 18px 60px; position: relative; }
+
+  .head { width: 100%; border-collapse: collapse; margin-bottom: 34px; }
+  .head td { vertical-align: top; }
+  .doc-name {
+    font-size: 27px; font-weight: 700; color: #1f3350; letter-spacing: -.4px; line-height: 1.15;
+  }
+  .clinic-line { font-size: 20px; font-weight: 300; color: #55677f; margin-top: 2px; }
+  .tagline {
+    font-size: 10px; letter-spacing: 3px; text-transform: uppercase;
+    color: #8496ab; margin-top: 6px;
+  }
+  .badge {
+    width: 78px; height: 78px; background: var(--accent); opacity: .85;
+    text-align: center; line-height: 78px; color: #fff; font-size: 30px; font-weight: 300;
+  }
+
+  /* Patient block: label, then the value sitting on a ruled line, exactly as a
+     printed pad has it. */
+  .pt { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+  .pt td { padding: 0 0 13px 0; font-size: 12px; vertical-align: bottom; }
+  .pt .lbl { color: #1f3350; font-weight: 600; white-space: nowrap; padding-right: 8px; width: 1%; }
+  .pt .val {
+    border-bottom: 1px solid #b9c6d6; color: #33465e; padding-right: 22px; padding-bottom: 2px;
+  }
+
+  .rx {
+    font-size: 46px; font-weight: 700; color: #1f3350; line-height: .9;
+    margin: 0 0 14px 0; font-family: Georgia, 'Times New Roman', serif;
+  }
+  .rx span { font-size: 30px; }
+
+  table.meds { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+  table.meds thead th {
+    font-size: 9.5px; letter-spacing: 1px; text-transform: uppercase; color: var(--accent);
+    text-align: center; padding: 0 6px 7px 6px; border-bottom: 1.5px solid var(--accent);
+    font-weight: 700;
+  }
+  table.meds thead th.text-left, table.meds td.text-left { text-align: left; }
+  table.meds td {
+    padding: 9px 6px; font-size: 11.5px; text-align: center; border-bottom: 1px solid #e7edf3;
+    vertical-align: top;
+  }
+  .med-name { font-weight: 600; color: #1f3350; }
+  .med-composition { display: block; font-size: 10px; color: #7d8fa6; margin-top: 1px; }
+
+  .clinical-notes { margin-bottom: 14px; }
+  .clinical-notes h4 {
+    margin: 0 0 3px 0; font-size: 10px; letter-spacing: .8px; text-transform: uppercase; color: var(--accent);
+  }
+  .clinical-notes p { margin: 0; font-size: 11.5px; color: #33465e; }
+  .advice-section { margin-top: 16px; }
+  .advice-section h4 {
+    margin: 0 0 4px 0; font-size: 10px; letter-spacing: .8px; text-transform: uppercase; color: var(--accent);
+  }
+  .advice-section ul { margin: 0; padding-left: 16px; }
+  .advice-section li { font-size: 11.5px; color: #33465e; margin-bottom: 2px; }
+  .follow-up { margin-top: 14px; font-size: 11.5px; font-weight: 600; color: #1f3350; }
+
+  .signature-box { text-align: right; margin-top: 46px; }
+  .signature-line {
+    display: inline-block; min-width: 190px; border-top: 1px solid #1f3350;
+    padding-top: 5px; font-size: 11px; font-weight: 600; color: #1f3350;
+  }
+
+  /* A real letterhead's footer sits at the foot of the sheet, not after the
+     last line of text. */
+  .foot {
+    position: fixed; left: 0; right: 0; bottom: -74px; height: 74px;
+    border-top: 1px solid #dde5ee; padding: 0 60px;
+  }
+  .foot table { width: 100%; height: 74px; border-collapse: collapse; }
+  .foot td { font-size: 10px; color: #55677f; vertical-align: middle; }
+  .foot .name { font-size: 13px; letter-spacing: 3px; color: #1f3350; text-transform: uppercase; }
+  .foot p { margin: 0; display: inline; }
+  .foot p + p::before { content: '  ·  '; color: #b9c6d6; }
+</style>
+</head>
+<body>
+
+<div class="edge-top"></div>
+<div class="edge-bottom"></div>
+<div class="edge-bottom2"></div>
+
+<div class="page">
+
+  <table class="head"><tr>
+    <td>
+      {{doctor_name_html}}
+      <div class="clinic-line">{{clinic_name}}</div>
+      {{clinic_tagline_html}}
+    </td>
+    <td style="width:90px;text-align:right;">
+      <div class="badge">&#9877;</div>
+    </td>
+  </tr></table>
+
+  <table class="pt">
+    <tr>
+      <td class="lbl">Patient Name:</td>
+      <td class="val" colspan="3">{{patient_name}}</td>
+    </tr>
+    <tr>
+      <td class="lbl">Age:</td><td class="val" style="width:26%;">{{patient_age}}</td>
+      <td class="lbl">Gender:</td><td class="val">{{patient_gender}}</td>
+    </tr>
+    <tr>
+      <td class="lbl">Patient ID:</td><td class="val">{{patient_id}}</td>
+      <td class="lbl">Date:</td><td class="val">{{current_date}}</td>
+    </tr>
+  </table>
+
+  {{clinical_notes_html}}
+
+  <div class="rx">R<span>x</span></div>
+
+  <table class="meds">
+    <thead><tr>
+      <th style="width:32px;">#</th>
+      <th class="text-left" style="width:42%;">Medicine</th>
+      <th style="width:88px;">Dosage</th>
+      <th style="width:78px;">Duration</th>
+      <th>Qty</th>
+    </tr></thead>
+    <tbody>{{prescription_items}}</tbody>
+  </table>
+
+  {{advice_html}}
+
+  <div class="follow-up">{{follow_up_html}}</div>
+
+  {{signature_box_html}}
+
+  {{footer_text_html}}
+</div>
+
+<div class="foot">
+  <table><tr>
+    <td class="name">{{clinic_name}}</td>
+    <td style="text-align:right;">
+      {{clinic_address_html}}
+      {{clinic_phone_html}}
+      {{clinic_email_html}}
+      {{clinic_reg_html}}
+    </td>
+  </tr></table>
+</div>
+
+</body></html>

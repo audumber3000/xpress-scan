@@ -11,7 +11,7 @@ To add a new variant:
 2. Register it in `INVOICE_VARIANTS` below with name, description, and thumbnail path.
 3. Add a golden test in `tests/domains/finance/`.
 """
-from domains.finance.invoice_templates import classic, modern
+from domains.finance.invoice_templates import classic, modern, banded, bold, mono, corporate
 
 
 INVOICE_VARIANTS = {
@@ -28,6 +28,34 @@ INVOICE_VARIANTS = {
         'description': 'Minimal letterhead, prominent invoice number and total, single-line item rows. Saves a third of the vertical space.',
         'thumbnail': '/static/template-thumbnails/invoice-modern.png',
         'render': modern.render_invoice,
+    },
+    'banded': {
+        'id': 'banded',
+        'name': 'Banded',
+        'description': 'A full-width band in your brand colour carries the title and the invoice details. Everything below is white and unruled.',
+        'thumbnail': '/static/template-thumbnails/invoice-banded.png',
+        'render': banded.render_invoice,
+    },
+    'bold': {
+        'id': 'bold',
+        'name': 'Bold',
+        'description': 'Oversized title, an accent rule down the left edge, and the total set large. Confident on a letterhead with a logo.',
+        'thumbnail': '/static/template-thumbnails/invoice-bold.png',
+        'render': bold.render_invoice,
+    },
+    'corporate': {
+        'id': 'corporate',
+        'name': 'Corporate',
+        'description': 'Solid Bill To bar, striped item rows and a boxed notes panel. The layout an accountant is used to receiving.',
+        'thumbnail': '/static/template-thumbnails/invoice-corporate.png',
+        'render': corporate.render_invoice,
+    },
+    'mono': {
+        'id': 'mono',
+        'name': 'Minimal Mono',
+        'description': 'Black and white with a fully ruled table. Ignores your brand colour on purpose, so it survives photocopying and faxing.',
+        'thumbnail': '/static/template-thumbnails/invoice-mono.png',
+        'render': mono.render_invoice,
     },
 }
 

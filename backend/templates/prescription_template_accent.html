@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<!--
+  Accent Header prescription variant.
+
+  A solid header band in the clinic's colour with the doctor's name reversed out
+  of it, the patient's details in a two-column grid beneath, and an oversized Rx
+  watermark behind the medication list.
+
+  The watermark is set very light on purpose. It is there to make the sheet read
+  as a prescription at a glance across a counter, and anything darker starts
+  competing with the medicine names printed over it — which is the one thing on
+  this page that must never be hard to read.
+
+  Consumes exactly the placeholder set in prescription_service.render_prescription_html;
+  see the note in prescription_template_letterhead.html about the classes those
+  values arrive wrapped in.
+
+  WeasyPrint-safe CSS only: no grid, no gap, no :has(), no transforms.
+-->
+<style>
+  /* The footer is fixed, so it repeats on every page — and `padding-bottom` on
+     the flowing .page only applies once, at the very end. On page 1 of a long
+     prescription the medicine rows therefore ran straight underneath it, which
+     on this document means illegible medicine names.
+
+     The reserved band is on @page instead: every page stops short by the
+     footer's height, and the footer is pushed down into that margin where no
+     content is ever laid out. */
+  @page { size: A4; margin: 0 0 76px 0; }
+  :root { --accent: {{primary_color}}; }
+  body {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    margin: 0; padding: 0; color: #2b3d4f; font-size: 12px; line-height: 1.5; background: #fff;
+  }
+
+  .band { width: 100%; border-collapse: collapse; }
+  .band td { vertical-align: middle; padding: 0; }
+  .band td { height: 104px; }
+  .band .main { background: var(--accent); padding: 22px 46px; }
+  /* The second cell is the same colour at a lower strength, which gives the
+     header its two-tone step without a transform WeasyPrint may not honour. */
+  .band .step { background: var(--accent); opacity: .45; width: 150px; }
+  .band .step2 { background: var(--accent); opacity: .18; width: 60px; }
+  .doc-name { font-size: 26px; font-weight: 700; color: #fff; letter-spacing: -.3px; line-height: 1.15; }
+  .tagline {
+    font-size: 10px; letter-spacing: 3.5px; text-transform: uppercase;
+    color: #fff; opacity: .82; margin-top: 5px;
+  }
+  .clinic-line { font-size: 12px; color: #fff; opacity: .9; margin-top: 3px; }
+
+  .page { padding: 26px 46px 18px 46px; position: relative; }
+
+  .pt { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+  .pt td { padding: 4px 0; font-size: 11.5px; vertical-align: top; }
+  .pt .lbl { font-weight: 700; color: #2b3d4f; width: 84px; white-space: nowrap; }
+  .pt .val { color: #55697d; padding-right: 26px; }
+  .rule { border-bottom: 1px solid #e2e9ef; margin: 12px 0 0 0; }
+
+  /* Behind the list, never over it: the medication names are painted after
+     this in document order, so they stay fully opaque. */
+  .rxmark {
+    position: absolute; left: 0; right: 0; top: 190px; height: 300px; text-align: center;
+    font-family: Georgia, 'Times New Roman', serif; font-size: 190px; font-weight: 700;
+    /* A flat light grey, not the accent at low opacity. WeasyPrint composites
+       an `opacity` element as a group and paints that group's box, which drew a
+       hard grey rectangle around the glyph. A plain colour has no group. */
+    color: #eff1f5; line-height: 300px; letter-spacing: -6px;
+  }
+
+  .content { position: relative; padding-top: 20px; }
+
+  table.meds { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  table.meds thead th {
+    font-size: 9.5px; letter-spacing: 1px; text-transform: uppercase; color: var(--accent);
+    text-align: center; padding: 0 6px 7px 6px; border-bottom: 2px solid var(--accent); font-weight: 700;
+  }
+  table.meds thead th.text-left, table.meds td.text-left { text-align: left; }
+  table.meds td {
+    padding: 9px 6px; font-size: 11.5px; text-align: center;
+    border-bottom: 1px solid #e8eef3; vertical-align: top;
+  }
+  .med-name { font-weight: 600; color: #22323f; }
+  .med-composition { display: block; font-size: 10px; color: #7f92a3; margin-top: 1px; }
+
+  .clinical-notes { margin: 14px 0; }
+  .clinical-notes h4 {
+    margin: 0 0 3px 0; font-size: 10px; letter-spacing: .8px; text-transform: uppercase; color: var(--accent);
+  }
+  .clinical-notes p { margin: 0; font-size: 11.5px; color: #45596c; }
+  .advice-section { margin-top: 16px; }
+  .advice-section h4 {
+    margin: 0 0 4px 0; font-size: 10px; letter-spacing: .8px; text-transform: uppercase; color: var(--accent);
+  }
+  .advice-section ul { margin: 0; padding-left: 16px; }
+  .advice-section li { font-size: 11.5px; color: #45596c; margin-bottom: 2px; }
+  .follow-up { margin-top: 14px; font-size: 11.5px; font-weight: 600; color: var(--accent); }
+
+  .signature-box { text-align: right; margin-top: 52px; }
+  .signature-line {
+    display: inline-block; min-width: 190px; border-top: 1px solid #2b3d4f;
+    padding-top: 5px; font-size: 11px; font-weight: 600; color: #2b3d4f;
+  }
+
+  .foot {
+    position: fixed; left: 0; right: 0; bottom: -76px; height: 76px;
+    border-top: 1px solid #e2e9ef; padding: 0 46px;
+  }
+  .foot table { width: 100%; height: 76px; border-collapse: collapse; }
+  .foot td { font-size: 10px; color: #55697d; vertical-align: middle; }
+  .foot .name { font-size: 13px; letter-spacing: 3px; color: var(--accent); text-transform: uppercase; }
+  .foot p { margin: 0; display: inline; }
+  .foot p + p::before { content: '  ·  '; color: #c3d0da; }
+</style>
+</head>
+<body>
+
+<table class="band"><tr>
+  <td class="main">
+    {{doctor_name_html}}
+    {{clinic_tagline_html}}
+    <div class="clinic-line">{{clinic_name}}</div>
+  </td>
+  <td class="step"></td>
+  <td class="step2"></td>
+</tr></table>
+
+<div class="page">
+  <div class="rxmark">Rx</div>
+
+  <table class="pt">
+    <tr>
+      <td class="lbl">Name:</td><td class="val">{{patient_name}}</td>
+      <td class="lbl">Patient ID:</td><td class="val">{{patient_id}}</td>
+    </tr>
+    <tr>
+      <td class="lbl">Age:</td><td class="val">{{patient_age}}</td>
+      <td class="lbl">Contact:</td><td class="val">{{patient_phone}}</td>
+    </tr>
+    <tr>
+      <td class="lbl">Gender:</td><td class="val">{{patient_gender}}</td>
+      <td class="lbl">Date:</td><td class="val">{{current_date}}</td>
+    </tr>
+  </table>
+  <div class="rule"></div>
+
+  <div class="content">
+    {{clinical_notes_html}}
+
+    <table class="meds">
+      <thead><tr>
+        <th style="width:32px;">#</th>
+        <th class="text-left" style="width:42%;">Medicine</th>
+        <th style="width:88px;">Dosage</th>
+        <th style="width:78px;">Duration</th>
+        <th>Qty</th>
+      </tr></thead>
+      <tbody>{{prescription_items}}</tbody>
+    </table>
+
+    {{advice_html}}
+
+    <div class="follow-up">{{follow_up_html}}</div>
+
+    {{signature_box_html}}
+
+    {{footer_text_html}}
+  </div>
+</div>
+
+<div class="foot">
+  <table><tr>
+    <td class="name">{{clinic_name}}</td>
+    <td style="text-align:right;">
+      {{clinic_address_html}}
+      {{clinic_phone_html}}
+      {{clinic_email_html}}
+      {{clinic_reg_html}}
+    </td>
+  </tr></table>
+</div>
+
+</body></html>

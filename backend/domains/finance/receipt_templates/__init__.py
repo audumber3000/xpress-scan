@@ -12,7 +12,7 @@ receipt module here under the same id — the fallback below means a missing
 counterpart degrades to Classic rather than 500-ing.
 """
 from domains.finance.invoice_templates import LEGACY_ALIASES
-from domains.finance.receipt_templates import classic, modern
+from domains.finance.receipt_templates import classic, modern, styled
 
 
 RECEIPT_VARIANTS = {
@@ -26,6 +26,13 @@ RECEIPT_VARIANTS = {
         'name': 'Modern Compact',
         'render': modern.render_receipt,
     },
+    # These four share one parameterised renderer — a receipt carries far less
+    # than an invoice, so what differs between them is the header treatment and
+    # the ruling of one table. See receipt_templates/styled.py.
+    'banded':    {'id': 'banded',    'name': 'Banded',       'render': styled.render_for('banded')},
+    'bold':      {'id': 'bold',      'name': 'Bold',         'render': styled.render_for('bold')},
+    'corporate': {'id': 'corporate', 'name': 'Corporate',    'render': styled.render_for('corporate')},
+    'mono':      {'id': 'mono',      'name': 'Minimal Mono', 'render': styled.render_for('mono')},
 }
 
 

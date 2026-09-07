@@ -84,6 +84,20 @@ const TemplatesEditor = () => {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [zoomVariant, setZoomVariant] = useState(null); // variant being viewed full-size
 
+  // Escape closes whichever of the two is on top, the way every other modal in
+  // the app behaves. The full-size view sits above the gallery, so it goes
+  // first rather than both closing at once and losing the user's place.
+  useEffect(() => {
+    if (!pickerOpen && !zoomVariant) return undefined;
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      if (zoomVariant) setZoomVariant(null);
+      else setPickerOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   // Resolve a backend-relative thumbnail path to a fully-qualified URL.
   // The backend mounts /static — frontend is on a different origin
   // (app.molarplus.com), so prefix with the backend host. VITE_BACKEND_URL is
@@ -474,83 +488,100 @@ const TemplatesEditor = () => {
         </main>
       </div>
 
-      {/* ── Template picker ─────────────────────────────────────────────────
-          A drawer rather than a strip in the sidebar: comparing layouts wants
-          room, and the sidebar is where you tune the one you already chose. */}
+      {/* ── Template gallery ────────────────────────────────────────────────
+          A centred modal, not a side drawer. Choosing a layout is comparing
+          pictures, and a 448px drawer could show one column of stamp-sized
+          thumbnails — so the choice was made from the description rather than
+          from the page, which is the one thing a template picker exists to
+          show. The grid gives every layout the same width and puts three of
+          them side by side, which is how you actually tell them apart. */}
       {pickerOpen && (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setPickerOpen(false)} />
-          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl flex flex-col animate-slide-in-right">
-            <div className="flex items-start justify-between p-5 border-b border-gray-200">
-              <div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setPickerOpen(false)} />
+
+          <div className="relative w-full max-w-5xl max-h-full bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-start justify-between gap-3 px-6 py-4 border-b border-gray-200 shrink-0">
+              <div className="min-w-0">
                 <h3 className="font-bold text-gray-900">Choose a layout</h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  For {TABS.find((t) => t.id === activeTab)?.label.toLowerCase()}. Applies straight away; save to keep it.
+                  For {TABS.find((t) => t.id === activeTab)?.label.toLowerCase()}. Shown in the app's
+                  colours so you are comparing layouts, not palettes — your own accent is applied
+                  the moment you pick one. Applies straight away; save to keep it.
                 </p>
               </div>
               <button
                 onClick={() => setPickerOpen(false)}
-                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                aria-label="Close"
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors shrink-0"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 space-y-3">
-              {tabVariants.map((v) => {
-                const isActive = cfg.template_id === v.id;
-                return (
-                  <div
-                    key={v.id}
-                    className={`rounded-xl border-2 transition-all overflow-hidden ${
-                      isActive ? 'border-[#29828a] bg-[#29828a]/5' : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => { updateField('template_id', v.id); setPickerOpen(false); }}
-                      className="w-full text-left p-3 flex gap-3"
-                    >
-                      <div className="w-20 shrink-0 aspect-[210/297] bg-white border border-gray-200 rounded overflow-hidden">
-                        <img
-                          src={thumbUrl(v.thumbnail)}
-                          alt=""
-                          className="w-full h-full object-cover"
-                          onError={(e) => { e.currentTarget.style.opacity = '0.15'; }}
-                        />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-semibold text-gray-900">{v.name}</span>
-                          {isActive && (
-                            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-[#29828a]">
-                              <Check size={11} /> In use
-                            </span>
+            <div className="flex-1 overflow-y-auto p-5 sm:p-6 bg-gray-50">
+              {tabVariants.length === 0 ? (
+                <p className="text-sm text-gray-400 italic text-center py-12">No layouts available.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {tabVariants.map((v) => {
+                    const isActive = cfg.template_id === v.id;
+                    return (
+                      <div
+                        key={v.id}
+                        className={`group rounded-xl border bg-white overflow-hidden transition-colors ${
+                          isActive ? 'border-[#29828a]' : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        {/* The page itself, at a size you can read the shape of.
+                            Clicking it picks the layout. */}
+                        <button
+                          type="button"
+                          onClick={() => { updateField('template_id', v.id); setPickerOpen(false); }}
+                          className="block w-full text-left cursor-pointer"
+                          title={`Use the ${v.name} layout`}
+                        >
+                          <div className="relative aspect-[210/297] bg-white border-b border-gray-100 overflow-hidden">
+                            <img
+                              src={thumbUrl(v.thumbnail)}
+                              alt={`${v.name} layout`}
+                              loading="lazy"
+                              className="w-full h-full object-cover object-top"
+                              onError={(e) => { e.currentTarget.style.opacity = '0.15'; }}
+                            />
+                            {isActive && (
+                              <span className="absolute top-2 right-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#29828a] text-white text-[10px] font-bold shadow-sm">
+                                <Check size={11} /> In use
+                              </span>
+                            )}
+                          </div>
+                          <div className="p-3">
+                            <p className="text-sm font-semibold text-gray-900">{v.name}</p>
+                            <p className="text-xs text-gray-500 leading-snug mt-1">{v.description}</p>
+                          </div>
+                        </button>
+
+                        <div className="px-3 pb-3 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setZoomVariant(v)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-gray-600 border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
+                          >
+                            <Eye size={13} /> Full size
+                          </button>
+                          {!isActive && (
+                            <button
+                              type="button"
+                              onClick={() => { updateField('template_id', v.id); setPickerOpen(false); }}
+                              className="flex-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#29828a] hover:bg-[#216b71] transition-colors"
+                            >
+                              Use this
+                            </button>
                           )}
                         </div>
-                        <p className="text-xs text-gray-500 leading-snug mt-1">{v.description}</p>
                       </div>
-                    </button>
-                    <div className="px-3 pb-3">
-                      <button
-                        type="button"
-                        onClick={() => setZoomVariant(v)}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-gray-600 border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
-                      >
-                        <Eye size={13} /> View full size
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {tabVariants.length === 1 && (
-                <p className="text-xs text-gray-400 italic text-center pt-2">
-                  This is the only layout available for this document so far.
-                </p>
-              )}
-              {tabVariants.length === 0 && (
-                <p className="text-sm text-gray-400 italic text-center py-8">No layouts available.</p>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>

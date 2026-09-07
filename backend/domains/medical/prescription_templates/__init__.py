@@ -27,6 +27,20 @@ PRESCRIPTION_VARIANTS = {
         'thumbnail': '/static/template-thumbnails/prescription-compact.png',
         'template_file': 'prescription_template_compact.html',
     },
+    'letterhead': {
+        'id': 'letterhead',
+        'name': 'Letterhead',
+        'description': 'A printed doctor\'s pad: name set large, tinted side panels, patient details on ruled lines and a serif Rx mark.',
+        'thumbnail': '/static/template-thumbnails/prescription-letterhead.png',
+        'template_file': 'prescription_template_letterhead.html',
+    },
+    'accent': {
+        'id': 'accent',
+        'name': 'Accent Header',
+        'description': 'A solid header band in your colour with the doctor\'s name reversed out of it, over a large watermarked Rx.',
+        'thumbnail': '/static/template-thumbnails/prescription-accent.png',
+        'template_file': 'prescription_template_accent.html',
+    },
 }
 
 LEGACY_ALIASES = {
