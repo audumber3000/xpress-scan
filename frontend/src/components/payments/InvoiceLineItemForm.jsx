@@ -55,8 +55,13 @@ const InvoiceLineItemForm = ({ lineItem, onSave, onCancel, patient = null }) => 
   useEffect(() => {
     const fetchOptions = async () => {
       try {
+        // Every catalogue catches its own failure. Without the first one,
+        // Promise.all rejected on a single 403 and the handler below left all
+        // three lists empty — so a staff member without billing rights got no
+        // treatments, and also no medications and no products, with nothing on
+        // screen to say why. One missing catalogue must not take the others.
         const [treatmentData, inventoryData, medicationData] = await Promise.all([
-          api.get("/treatment-types"),
+          api.get("/treatment-types").catch(() => []),
           api.get("/inventory").catch(() => []),
           api.get("/medications/").catch(() => []),
         ]);

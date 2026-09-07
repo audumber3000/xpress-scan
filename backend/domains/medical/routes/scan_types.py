@@ -4,7 +4,7 @@ from typing import List
 from database import get_db
 from models import ScanType
 from schemas import ScanTypeCreate, ScanTypeUpdate, ScanTypeOut
-from core.auth_utils import get_current_user
+from core.auth_utils import get_current_user, has_permission
 
 router = APIRouter()
 
@@ -12,11 +12,8 @@ router = APIRouter()
 def list_scan_types(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Get all scan types for current clinic"""
     # Check if user has permission to view billing
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        billing_permissions = permissions.get("billing", {})
-        if not billing_permissions.get("view", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to view billing information")
+    if not has_permission(current_user, "view", "billing"):
+        raise HTTPException(status_code=403, detail="You don't have permission to view billing information")
     
     return db.query(ScanType).filter(ScanType.clinic_id == current_user.clinic_id).all()
 
@@ -24,11 +21,8 @@ def list_scan_types(db: Session = Depends(get_db), current_user = Depends(get_cu
 def create_scan_type(scan_type: ScanTypeCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Create a new scan type for current clinic"""
     # Check if user has permission to edit billing
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        billing_permissions = permissions.get("billing", {})
-        if not billing_permissions.get("edit", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to edit billing information")
+    if not has_permission(current_user, "edit", "billing"):
+        raise HTTPException(status_code=403, detail="You don't have permission to edit billing information")
     
     scan_type_data = scan_type.dict()
     scan_type_data['clinic_id'] = current_user.clinic_id
@@ -47,11 +41,8 @@ def create_scan_type(scan_type: ScanTypeCreate, db: Session = Depends(get_db), c
 def update_scan_type(scan_type_id: int, scan_type: ScanTypeUpdate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Update scan type - scoped by clinic"""
     # Check if user has permission to edit billing
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        billing_permissions = permissions.get("billing", {})
-        if not billing_permissions.get("edit", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to edit billing information")
+    if not has_permission(current_user, "edit", "billing"):
+        raise HTTPException(status_code=403, detail="You don't have permission to edit billing information")
     
     db_scan_type = db.query(ScanType).filter(
         ScanType.id == scan_type_id,
@@ -73,11 +64,8 @@ def update_scan_type(scan_type_id: int, scan_type: ScanTypeUpdate, db: Session =
 def delete_scan_type(scan_type_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Delete scan type - scoped by clinic"""
     # Check if user has permission to edit billing
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        billing_permissions = permissions.get("billing", {})
-        if not billing_permissions.get("edit", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to edit billing information")
+    if not has_permission(current_user, "edit", "billing"):
+        raise HTTPException(status_code=403, detail="You don't have permission to edit billing information")
     
     db_scan_type = db.query(ScanType).filter(
         ScanType.id == scan_type_id,

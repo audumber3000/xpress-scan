@@ -5,16 +5,14 @@ from pydantic import BaseModel
 from database import get_db
 from models import TreatmentType
 from schemas import TreatmentTypeCreate, TreatmentTypeUpdate, TreatmentTypeOut
-from core.auth_utils import get_current_user
+from core.auth_utils import get_current_user, has_permission
 
 router = APIRouter()
 
 
 def _ensure_billing_edit(current_user):
-    if current_user.role != "clinic_owner":
-        perms = (current_user.permissions or {}).get("billing", {})
-        if not perms.get("edit", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to edit billing information")
+    if not has_permission(current_user, "edit", "billing"):
+        raise HTTPException(status_code=403, detail="You don't have permission to edit billing information")
 
 
 class TreatmentTypeBulkItem(BaseModel):
@@ -86,11 +84,8 @@ def list_bookable_treatments(db: Session = Depends(get_db), current_user = Depen
 def list_treatment_types(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Get all treatment types for current clinic"""
     # Check if user has permission to view billing
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        billing_permissions = permissions.get("billing", {})
-        if not billing_permissions.get("view", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to view billing information")
+    if not has_permission(current_user, "view", "billing"):
+        raise HTTPException(status_code=403, detail="You don't have permission to view billing information")
     
     return db.query(TreatmentType).filter(TreatmentType.clinic_id == current_user.clinic_id).all()
 
@@ -98,11 +93,8 @@ def list_treatment_types(db: Session = Depends(get_db), current_user = Depends(g
 def create_treatment_type(treatment_type: TreatmentTypeCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Create a new treatment type for current clinic"""
     # Check if user has permission to edit billing
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        billing_permissions = permissions.get("billing", {})
-        if not billing_permissions.get("edit", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to edit billing information")
+    if not has_permission(current_user, "edit", "billing"):
+        raise HTTPException(status_code=403, detail="You don't have permission to edit billing information")
     
     treatment_type_data = treatment_type.dict()
     treatment_type_data['clinic_id'] = current_user.clinic_id
@@ -121,11 +113,8 @@ def create_treatment_type(treatment_type: TreatmentTypeCreate, db: Session = Dep
 def update_treatment_type(treatment_type_id: int, treatment_type: TreatmentTypeUpdate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Update treatment type - scoped by clinic"""
     # Check if user has permission to edit billing
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        billing_permissions = permissions.get("billing", {})
-        if not billing_permissions.get("edit", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to edit billing information")
+    if not has_permission(current_user, "edit", "billing"):
+        raise HTTPException(status_code=403, detail="You don't have permission to edit billing information")
     
     db_treatment_type = db.query(TreatmentType).filter(
         TreatmentType.id == treatment_type_id,
@@ -147,11 +136,8 @@ def update_treatment_type(treatment_type_id: int, treatment_type: TreatmentTypeU
 def delete_treatment_type(treatment_type_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Delete treatment type - scoped by clinic"""
     # Check if user has permission to edit billing
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        billing_permissions = permissions.get("billing", {})
-        if not billing_permissions.get("edit", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to edit billing information")
+    if not has_permission(current_user, "edit", "billing"):
+        raise HTTPException(status_code=403, detail="You don't have permission to edit billing information")
     
     db_treatment_type = db.query(TreatmentType).filter(
         TreatmentType.id == treatment_type_id,

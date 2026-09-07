@@ -95,33 +95,65 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Optiona
         )
 
 
+# Two names for one action. Written at different times by different screens, so
+# a stored `write` has to satisfy a required `edit` or half the app 403s.
+ACTION_SYNONYMS = {
+    "view": ["view", "read"],
+    "read": ["view", "read"],
+    "edit": ["edit", "write", "update"],
+    "update": ["edit", "write", "update"],
+    "delete": ["delete", "remove"],
+}
+
+# Two names for one module, and this one was worse than a nuisance.
+#
+# The role presets in domains/auth/role_presets.py write `finance`; the
+# Permissions screen and several route guards ask for `billing`. Nothing
+# translated between them, so a check for `billing.view` read a key that no
+# staff account has ever had — verified against the database: of seven staff
+# users, six carry `finance` and zero carry `billing`. Every such guard was
+# therefore a 403 for every non-owner, whatever the owner had configured.
+#
+# Aliased rather than renamed: rows in the wild use both spellings, and a
+# migration that rewrote them would still leave old clients sending the other.
+RESOURCE_ALIASES = {
+    "billing": ["billing", "finance"],
+    "finance": ["finance", "billing"],
+    "users": ["users", "staff"],
+    "staff": ["staff", "users"],
+}
+
+
+def has_permission(user, action: str, resource: str) -> bool:
+    """Whether this user may do `action` on `resource`.
+
+    The imperative twin of `check_permission`, for routes that test inside the
+    handler rather than through Depends. It exists because those routes were
+    each hand-rolling `permissions.get("billing", {}).get("view", False)` —
+    which skips both the action synonyms and the resource aliases, and so was
+    wrong in two separate ways at once.
+    """
+    if not user:
+        return False
+    if getattr(user, "role", None) == "clinic_owner":
+        return True
+
+    permissions = user.permissions or {}
+    actions = ACTION_SYNONYMS.get(action, [action])
+    for name in RESOURCE_ALIASES.get(resource, [resource]):
+        block = permissions.get(name) or {}
+        if any(block.get(a, False) for a in actions):
+            return True
+    return False
+
+
 def check_permission(required_permission: str, resource: str = None):
     """Decorator to check user permissions"""
     def permission_checker(current_user: User = Depends(get_current_user)):
         if not current_user:
             raise HTTPException(status_code=401, detail="Authentication required")
 
-        # Clinic owners have all permissions
-        if current_user.role == "clinic_owner":
-            return current_user
-
-        # Check if user has the required permission
-        permissions = current_user.permissions or {}
-        resource_permissions = permissions.get(resource, {})
-
-        # Handle synonyms for common actions (to prevent 403 errors due to naming mismatch)
-        synonyms = {
-            "view": ["view", "read"],
-            "read": ["view", "read"],
-            "edit": ["edit", "write", "update"],
-            "update": ["edit", "write", "update"],
-            "delete": ["delete", "remove"]
-        }
-
-        search_keys = synonyms.get(required_permission, [required_permission])
-        has_perm = any(resource_permissions.get(key, False) for key in search_keys)
-
-        if not has_perm:
+        if not has_permission(current_user, required_permission, resource):
             raise HTTPException(
                 status_code=403,
                 detail=f"Insufficient permissions. Required: {resource}.{required_permission}"
