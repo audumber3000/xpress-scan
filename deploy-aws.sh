@@ -395,6 +395,27 @@ run_migration "subpay_discount_amount" "ALTER TABLE subscription_payments ADD CO
 # Defaults FALSE so shipping this feature does not start advertising an old code.
 run_migration "coupon_is_featured"    "ALTER TABLE subscription_coupons ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE"
 
+# ── Medical form: the signed history that files itself as a document ─────────
+# form_templates / form_submissions already exist (create_all made them), so
+# these are ALTERs on live tables rather than new-table creation. `kind` splits
+# a questionnaire from a legal record; the rest is what makes a signature hold
+# up — where it came from and a checksum of the exact bytes the patient saw.
+run_migration "form_tpl_kind"      "ALTER TABLE form_templates ADD COLUMN IF NOT EXISTS kind VARCHAR(24) DEFAULT 'questionnaire'"
+run_migration "form_sub_pdf_key"   "ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS pdf_key VARCHAR"
+run_migration "form_sub_doc_id"    "ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS document_id INTEGER"
+run_migration "form_sub_sig"       "ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS signature_data TEXT"
+run_migration "form_sub_ip"        "ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS signed_ip VARCHAR(64)"
+run_migration "form_sub_agent"     "ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS signed_user_agent VARCHAR(400)"
+run_migration "form_sub_sha"       "ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS pdf_sha256 VARCHAR(64)"
+
+# ── Consent audit trail: parity with a signed medical history ────────────────
+# Written by Nexus when the patient submits. Nullable throughout — every consent
+# signed before this shipped has none, and a missing trail must read as
+# "unknown" rather than break the Signed tab.
+run_migration "consent_signed_ip"    "ALTER TABLE patient_consents ADD COLUMN IF NOT EXISTS signed_ip VARCHAR(64)"
+run_migration "consent_signed_agent" "ALTER TABLE patient_consents ADD COLUMN IF NOT EXISTS signed_user_agent VARCHAR(400)"
+run_migration "consent_pdf_sha"      "ALTER TABLE patient_consents ADD COLUMN IF NOT EXISTS pdf_sha256 VARCHAR(64)"
+
 # ── One-shot data migrations ────────────────────────────────────────────────
 # Everything above is idempotent DDL that can safely run on every deploy. The
 # two below CHANGE DATA, and re-running them would undo decisions clinics made

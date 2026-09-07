@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { MoreVertical, ReceiptText, Stethoscope, Pill } from 'lucide-react';
+import { MoreVertical, ReceiptText, Stethoscope, Pill, ClipboardList } from 'lucide-react';
 import WhatsAppIcon from '../../common/WhatsAppIcon';
 import GoogleGlyph from '../../common/GoogleGlyph';
 import SendListModal from './SendListModal';
 import GoogleReviewModal from './GoogleReviewModal';
+import SendMedicalFormModal from './SendMedicalFormModal';
 import { api } from '../../../utils/api';
 import { notify } from '../../../utils/notify';
 import { formatDate } from '../../../utils/datetime';
@@ -36,6 +37,11 @@ import {
  * three bills is the normal case, and picking for them is how the wrong one
  * goes out.
  *
+ * The medical form is the one item that asks for something rather than sending
+ * something the patient already has, so it sits first, above the rule. It is
+ * also the only one that can be answered on the clinic's own tablet, which is
+ * why its dialog offers three ways out instead of a Send per row.
+ *
  * Own-number clinics (Integrations → WhatsApp) never touch the send endpoints:
  * those rows download the PDF and open a chat with the message written, so the
  * dentist presses send from their own account and nothing is billed.
@@ -45,7 +51,7 @@ const ITEM_CLS =
 
 const PatientWhatsAppMenu = ({ patient, user }) => {
   const [open, setOpen] = useState(false);
-  const [modal, setModal] = useState(null); // 'review' | 'invoice' | 'summary' | 'prescription'
+  const [modal, setModal] = useState(null); // 'review' | 'invoice' | 'summary' | 'prescription' | 'medical'
 
   const manual = isManualWhatsApp(user);
   const cur = getCurrencySymbol();
@@ -162,6 +168,14 @@ const PatientWhatsAppMenu = ({ patient, user }) => {
             </span>
           </button>
 
+          <button type="button" role="menuitem" className={ITEM_CLS} onClick={() => pick('medical')}>
+            <ClipboardList size={15} className="mt-0.5 text-[#2a276e] flex-shrink-0" />
+            <span className="min-w-0">
+              <span className="block font-medium">Send the medical form</span>
+              <span className="block text-[11px] text-gray-400 leading-snug">They fill it in and sign on their phone</span>
+            </span>
+          </button>
+
           <div className="my-1 border-t border-gray-100" />
 
           <button type="button" role="menuitem" className={ITEM_CLS} onClick={() => pick('review')}>
@@ -197,6 +211,12 @@ const PatientWhatsAppMenu = ({ patient, user }) => {
           </button>
         </div>
       )}
+
+      <SendMedicalFormModal
+        open={modal === 'medical'}
+        onClose={() => setModal(null)}
+        patient={patient}
+      />
 
       <GoogleReviewModal
         open={modal === 'review'}

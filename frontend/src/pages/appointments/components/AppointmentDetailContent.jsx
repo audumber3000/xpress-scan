@@ -9,6 +9,7 @@ import { api } from "../../../utils/api";
 import { notify } from "../../../utils/notify";
 import { openWhatsApp } from "../../../utils/whatsapp";
 import { formatMoney } from "../../../utils/currency";
+import SendMedicalForm from "../../../components/forms/SendMedicalForm";
 
 /**
  * Everything about one appointment, without leaving the calendar.
@@ -265,6 +266,21 @@ const AppointmentDetailContent = ({
             >
               Bill and collect
             </button>
+          </div>
+        )}
+
+        {/* ── The medical history, asked for while the visit is still ahead
+               of them. This is the moment it is worth sending: the patient has
+               a reason to fill it in and days to do it, where at the chair it
+               is a clipboard slowing the appointment down. The component hides
+               itself when the clinic has no medical form set up. ─────────── */}
+        {patientId && (
+          <div className="px-4 py-2.5 border-b border-gray-200">
+            <SendMedicalForm
+              patientId={patientId}
+              patientName={appointment.patientName}
+              patientPhone={appointment.patientPhone}
+            />
           </div>
         )}
 

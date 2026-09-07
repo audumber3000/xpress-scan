@@ -695,7 +695,7 @@ const PatientProfile = () => {
                   if (key === 'invoice') setInvoiceOpenId('new');
                   // Consents are authored per clinic, not per patient, so this
                   // is the one that legitimately leaves the patient file.
-                  if (key === 'consent') navigate('/consent-forms');
+                  if (key === 'consent') navigate('/paperwork');
                 }}
               />
             )}

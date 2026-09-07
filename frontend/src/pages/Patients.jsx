@@ -30,6 +30,7 @@ import DailyRegisterTab from "../components/patient/DailyRegisterTab";
 import { useAuth } from "../contexts/AuthContext";
 import { useHeader } from "../contexts/HeaderContext";
 import { track, EVENTS } from '../analytics/track';
+import SendMedicalForm from '../components/forms/SendMedicalForm';
 
 const PATIENTS_PER_PAGE = 20;
 
@@ -592,7 +593,11 @@ const Patients = () => {
       // into a flow rather than a dead end. Skipped when the register is
       // driving, so the front desk isn't pulled out of the day's list.
       if (created?.id && !addToRegisterAfterCreate && !andAnother) {
-        setCasePaperPrompt({ id: created.id, name: created.name || editFormData.name });
+        setCasePaperPrompt({
+          id: created.id,
+          name: created.name || editFormData.name,
+          phone: created.phone || editFormData.phone,
+        });
       }
       if (activeTab !== 'today') fetchPatients();
     } catch (e) {
@@ -1498,6 +1503,19 @@ const Patients = () => {
             <p className="text-sm text-gray-500 mt-1">
               Start a case paper for <span className="font-semibold text-gray-700">{casePaperPrompt.name}</span> now?
             </p>
+
+            {/* The one moment worth asking for a medical history. Every patient
+                passes through this dialog exactly once, they are still at the
+                desk, and the alternative is chasing them for it at the chair.
+                Hides itself when the clinic has no medical form set up. */}
+            <div className="mt-4 text-left">
+              <SendMedicalForm
+                patientId={casePaperPrompt.id}
+                patientName={casePaperPrompt.name}
+                patientPhone={casePaperPrompt.phone}
+              />
+            </div>
+
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => setCasePaperPrompt(null)}

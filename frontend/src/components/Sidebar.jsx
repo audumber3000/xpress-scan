@@ -74,8 +74,8 @@ const mainNavItems = [
     ),
   },
   {
-    name: "Consent Forms",
-    path: "/consent-forms",
+    name: "Paperwork",
+    path: "/paperwork",
     permissionKey: "consent",
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">

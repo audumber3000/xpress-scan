@@ -1,24 +1,36 @@
 import React, { useState, useEffect, useMemo } from "react";
-import WhatsAppIcon from '../components/common/WhatsAppIcon';
-import { api, getPermissionAwareErrorMessage } from "../utils/api";
-import { useHeader } from "../contexts/HeaderContext";
-import { useAuth } from "../contexts/AuthContext";
-import { notify } from '../utils/notify';
-import Card from "../components/Card";
+import WhatsAppIcon from '../../components/common/WhatsAppIcon';
+import { api, getPermissionAwareErrorMessage } from "../../utils/api";
+import { useHeader } from "../../contexts/HeaderContext";
+import { useAuth } from "../../contexts/AuthContext";
+import { notify } from '../../utils/notify';
+import Card from "../../components/Card";
 import axios from "axios";
-import { Layout, Share2, CheckCircle, Clock, XCircle, Printer, ExternalLink, Search, Eye, Download, FileCheck, BookOpen } from 'lucide-react';
-import ConsentRecentLinks from "../components/consents/ConsentRecentLinks";
-import Pagination from "../components/Pagination";
-import FilterDropdown from "../components/FilterDropdown";
-import StarterLibrary from '../components/consents/StarterLibrary';
-import SignedConsents from '../components/consents/SignedConsents';
-import { generatePatientPersona, generateInitialsAvatar } from "../utils/avatar";
-import EmptyState from "../components/common/EmptyState";
-import { noData } from "../assets/illustrations";
+import { Layout, Share2, CheckCircle, Clock, XCircle, Printer, ExternalLink, Search, Eye, Download, FileCheck, BookOpen, HeartPulse } from 'lucide-react';
+import ConsentRecentLinks from "../../components/consents/ConsentRecentLinks";
+import Pagination from "../../components/Pagination";
+import FilterDropdown from "../../components/FilterDropdown";
+import StarterLibrary from '../../components/consents/StarterLibrary';
+import SignedConsents from '../../components/consents/SignedConsents';
+import MedicalFormTab from './MedicalFormTab';
+import { generatePatientPersona, generateInitialsAvatar } from "../../utils/avatar";
+import EmptyState from "../../components/common/EmptyState";
+import { noData } from "../../assets/illustrations";
 
 const CONSENT_PAGE_SIZE = 10;
 
-const ConsentForms = () => {
+/**
+ * Paperwork: everything the clinic sends a patient to read, sign and send back.
+ *
+ * Was "Consent Forms". The medical history lived in the Control Center, which
+ * is where you go to configure something rather than where you go to send it,
+ * so it sat unused beside the consent flow it duplicates. Both documents are
+ * now tabs of one section and share the same letterhead.
+ *
+ * New work belongs in its own file under this folder, not in here — this file
+ * is already long enough that adding to it is how it becomes unmaintainable.
+ */
+const Paperwork = () => {
     const { setTitle } = useHeader();
     const { user } = useAuth();
     const [templates, setTemplates] = useState([]);
@@ -58,7 +70,7 @@ const ConsentForms = () => {
     const NEXUS_API_URL = import.meta.env.VITE_NEXUS_API_URL || `http://${window.location.hostname}:8001/api/v1`;
 
     useEffect(() => {
-        setTitle("Consent Forms");
+        setTitle("Paperwork");
         fetchTemplates();
         // Patients are loaded by the debounced effect below, which also fires
         // once on mount — calling it here too would double the request.
@@ -254,7 +266,8 @@ const ConsentForms = () => {
                 <div className="flex justify-between items-end border-b border-gray-200 mb-6">
                     <div className="flex gap-10">
                         {[
-                            { id: 'templates', label: 'Forms', icon: Layout },
+                            { id: 'templates', label: 'Consent forms', icon: Layout },
+                            { id: 'medical', label: 'Medical form', icon: HeartPulse },
                             { id: 'signed', label: 'Signed', icon: FileCheck },
                             { id: 'links', label: 'Sent links', icon: Share2 }
                         ].map(tab => (
@@ -272,7 +285,7 @@ const ConsentForms = () => {
                             </button>
                         ))}
                     </div>
-                    <div className="pb-3 flex gap-3">
+                    <div className={`pb-3 gap-3 ${activeTab === 'medical' ? 'hidden' : 'flex'}`}>
                         {activeTab === 'links' ? (
                             <button
                                 onClick={fetchSentLinks}
@@ -317,7 +330,7 @@ const ConsentForms = () => {
                 {/* Search & Filters toolbar. Hidden on Signed, which carries
                     its own search: a filter bar that does nothing is worse
                     than no filter bar. */}
-                <div className={`items-center gap-3 mb-4 ${activeTab === 'signed' ? 'hidden' : 'flex'}`}>
+                <div className={`items-center gap-3 mb-4 ${activeTab === 'signed' || activeTab === 'medical' ? 'hidden' : 'flex'}`}>
                     <div className="w-full max-w-sm relative">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                             <Search className="h-4 w-4 text-gray-400" />
@@ -347,7 +360,9 @@ const ConsentForms = () => {
                     ) : null}
                 </div>
 
-                {loading ? (
+                {activeTab === 'medical' ? (
+                    <MedicalFormTab />
+                ) : loading ? (
                     <div className="flex justify-center items-center h-64">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2a276e]"></div>
                     </div>
@@ -841,4 +856,4 @@ const ConsentForms = () => {
     );
 };
 
-export default ConsentForms;
+export default Paperwork;

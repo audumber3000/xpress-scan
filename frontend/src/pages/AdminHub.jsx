@@ -4,7 +4,7 @@ import SetupProgress from '../components/admin/SetupProgress';
 import { api } from '../utils/api';
 import { useHeader } from '../contexts/HeaderContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Building2, Users, FileText, Bell, CreditCard, SlidersHorizontal, ChevronDown, Stethoscope, Shield, History, Plug, Tag, Pill, AlertTriangle, ShieldCheck, ClipboardList} from 'lucide-react';
+import { Building2, Users, FileText, Bell, CreditCard, SlidersHorizontal, ChevronDown, Stethoscope, Shield, History, Plug, Tag, Pill, AlertTriangle, ShieldCheck} from 'lucide-react';
 import { planLabel } from '../utils/plans';
 
 /**
@@ -61,7 +61,8 @@ const NAV_GROUPS = [
     items: [
       { id: 'templates_editor', icon: FileText, label: 'Templates Editor', path: '/admin/templates-editor' },
       { id: 'notifications', icon: Bell, label: 'Notifications', path: '/admin/notifications' },
-      { id: 'patient_forms', icon: ClipboardList, label: 'Patient Forms', path: '/admin/patient-forms' },
+      // Patient Forms moved out to the Paperwork section. It is a document you
+      // send a patient, not a setting, and it belongs beside consents.
     ],
   },
   {

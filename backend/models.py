@@ -1311,6 +1311,12 @@ class FormTemplate(Base):
     # both. Matches patients.case_paper_type so a skin clinic is not offered a
     # form asking about bleeding gums.
     case_paper_type = Column(String(16), nullable=True)
+    # 'questionnaire' | 'medical_history'. A medical history is a legal record:
+    # it renders to a signed PDF that files itself in the patient's documents,
+    # where a questionnaire's answers just come back as data. Same table because
+    # the schema, the sending and the token are identical; the kind decides what
+    # happens after the patient presses submit.
+    kind = Column(String(24), nullable=True, default='questionnaire', index=True)
     schema = Column(JSON, nullable=False, default=list)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -1349,10 +1355,26 @@ class FormSubmission(Base):
     applied_at = Column(DateTime, nullable=True)
     reviewed_by = Column(Integer, ForeignKey('users.id'), nullable=True)
 
+    # ── The signed record, for a medical_history form ────────────────────────
+    # The R2 key of the PDF the patient saw and approved, and the document row
+    # it files itself as. Both null for a questionnaire, which produces no PDF.
+    pdf_key = Column(String, nullable=True)
+    document_id = Column(Integer, ForeignKey('patient_documents.id'), nullable=True)
+    # Kept apart from `answers` so a signature can never be widened, retyped or
+    # mapped onto a patient column by the review step.
+    signature_data = Column(Text, nullable=True)
+    # What makes the signature defensible rather than decorative: where it came
+    # from, and a fingerprint of the exact bytes the patient approved. Without
+    # these a signature image is only a picture somebody could have drawn.
+    signed_ip = Column(String(64), nullable=True)
+    signed_user_agent = Column(String(400), nullable=True)
+    pdf_sha256 = Column(String(64), nullable=True)
+
     clinic = relationship("Clinic")
     patient = relationship("Patient")
     template = relationship("FormTemplate")
     reviewer = relationship("User")
+    document = relationship("PatientDocument")
 
 
 class PatientConsent(Base):
@@ -1366,6 +1388,11 @@ class PatientConsent(Base):
     signed_content = Column(Text)  # Final content when signed
     signature_url = Column(String)  # Path to signature image
     signed_at = Column(DateTime)
+    # Written by Nexus when the patient submits. Nullable: consents signed
+    # before this existed carry none, and that has to read as unknown.
+    signed_ip = Column(String(64), nullable=True)
+    signed_user_agent = Column(String(400), nullable=True)
+    pdf_sha256 = Column(String(64), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     
     patient = relationship("Patient")

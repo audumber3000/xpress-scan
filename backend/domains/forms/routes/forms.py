@@ -32,8 +32,22 @@ router = APIRouter()
 # enough that a forwarded link is not a permanent way into a patient's record.
 LINK_TTL = timedelta(hours=24)
 
-FIELD_TYPES = {"text", "textarea", "boolean", "single_select",
-               "multi_select", "date", "signature"}
+# Answer-carrying types, plus the layout types a long legal form needs. The
+# split matters: a `section` is a heading, so it can never be required, never
+# writes to a patient column, and is skipped when counting what is unanswered.
+ANSWER_TYPES = {"text", "textarea", "boolean", "single_select", "multi_select",
+                "date", "signature", "email", "phone", "checkbox_grid",
+                "yes_no_explain", "declaration"}
+LAYOUT_TYPES = {"section"}
+FIELD_TYPES = ANSWER_TYPES | LAYOUT_TYPES
+
+# Types whose answer is a fixed list the patient picks from. A template that
+# offers no options here renders as a question with nothing to answer.
+NEEDS_OPTIONS = {"single_select", "multi_select", "checkbox_grid"}
+
+# A medical history renders to a signed PDF and files itself in the patient's
+# documents; a questionnaire's answers only come back as data.
+FORM_KINDS = {"questionnaire", "medical_history"}
 
 
 # ── DTOs ──────────────────────────────────────────────────────────────────────
@@ -52,6 +66,7 @@ class FormTemplateCreateDTO(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     category: Optional[str] = None
     case_paper_type: Optional[str] = Field(None, pattern="^(dental|general)$")
+    kind: str = "questionnaire"
     schema: List[FormFieldDTO] = []
     is_active: bool = True
 
@@ -61,6 +76,9 @@ class FormTemplateResponseDTO(BaseModel):
     name: str
     category: Optional[str] = None
     case_paper_type: Optional[str] = None
+    # Older rows pre-date the column and read back NULL. Defaulted rather than
+    # made optional so the frontend never has to test for None.
+    kind: Optional[str] = "questionnaire"
     schema: list = []
     is_active: bool = True
 
@@ -85,20 +103,52 @@ def _validate_schema(fields) -> list:
     A bad `type` renders as nothing on the phone and a bad `maps_to` would aim
     an answer at a column the clinic never intended, so both are closed sets and
     both are checked here rather than at render time.
+
+    The question editor made this stricter. It lets a clinic build the schema by
+    hand, so the shapes that used to be guaranteed by the starter library are
+    now things somebody can get wrong: a select with no options, a heading
+    marked required that nobody can ever satisfy, a signature aimed at the
+    allergies column. Each of those produces a form that cannot be completed,
+    and the only place to catch it is before it is saved.
     """
     out = []
     seen = set()
     for f in fields:
         d = f.model_dump() if hasattr(f, "model_dump") else dict(f)
-        if d["type"] not in FIELD_TYPES:
-            raise HTTPException(400, f"Unknown field type: {d['type']}")
-        if d.get("maps_to") and d["maps_to"] not in MAPPABLE_FIELDS:
-            raise HTTPException(400, f"Field cannot write to: {d['maps_to']}")
+        ftype = d["type"]
+        if ftype not in FIELD_TYPES:
+            raise HTTPException(400, f"Unknown field type: {ftype}")
         if d["key"] in seen:
             raise HTTPException(400, f"Duplicate field key: {d['key']}")
         seen.add(d["key"])
+
+        if ftype in LAYOUT_TYPES:
+            # A heading has nothing to answer. Silently corrected rather than
+            # refused: the editor should not be able to build one of these, and
+            # a clinic seeing "section cannot be required" learns nothing.
+            d["required"] = False
+            d["maps_to"] = None
+        elif ftype in NEEDS_OPTIONS and not (d.get("options") or []):
+            raise HTTPException(
+                400, f"\"{d['label']}\" is a choice question with no options to choose from."
+            )
+
+        if d.get("maps_to"):
+            if d["maps_to"] not in MAPPABLE_FIELDS:
+                raise HTTPException(400, f"Field cannot write to: {d['maps_to']}")
+            # A signature or a tick has no text to put in a clinical column, and
+            # writing one there would fill the chart with a data URI.
+            if ftype in ("signature", "declaration", "boolean"):
+                raise HTTPException(
+                    400, f"\"{d['label']}\" cannot update a field on the patient's file."
+                )
+
         out.append(d)
     return out
+
+
+def _is_medical(template) -> bool:
+    return (getattr(template, "kind", None) or "questionnaire") == "medical_history"
 
 
 # ── Templates ─────────────────────────────────────────────────────────────────
@@ -112,7 +162,11 @@ async def starter_library(current_user: User = Depends(get_current_user)):
         "forms": [
             {"name": f["name"], "category": f["category"],
              "case_paper_type": f["case_paper_type"],
-             "field_count": len(f["schema"]), "schema": f["schema"]}
+             "kind": f.get("kind") or "questionnaire",
+             # Headings are not questions. Counting them made the medical
+             # history advertise 43 questions when it asks 38.
+             "field_count": len([x for x in f["schema"] if x["type"] not in LAYOUT_TYPES]),
+             "schema": f["schema"]}
             for f in STARTER_FORMS
         ],
     }
@@ -152,6 +206,7 @@ async def adopt_starters(
             name=starter["name"],
             category=starter["category"],
             case_paper_type=starter["case_paper_type"],
+            kind=starter.get("kind") or "questionnaire",
             schema=starter["schema"],
         )
         db.add(t)
@@ -168,11 +223,14 @@ async def create_template(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if payload.kind not in FORM_KINDS:
+        raise HTTPException(400, f"Unknown form kind: {payload.kind}")
     t = FormTemplate(
         clinic_id=current_user.clinic_id,
         name=payload.name,
         category=payload.category,
         case_paper_type=payload.case_paper_type,
+        kind=payload.kind,
         schema=_validate_schema(payload.schema),
         is_active=payload.is_active,
     )
@@ -195,9 +253,15 @@ async def update_template(
     ).first()
     if not t:
         raise HTTPException(404, "Form not found")
+    if payload.kind not in FORM_KINDS:
+        raise HTTPException(400, f"Unknown form kind: {payload.kind}")
+    # Editing the questions of a form already out with patients is allowed —
+    # each submission froze its own schema_snapshot, so nothing already sent
+    # changes underneath anybody.
     t.name = payload.name
     t.category = payload.category
     t.case_paper_type = payload.case_paper_type
+    t.kind = payload.kind
     t.schema = _validate_schema(payload.schema)
     t.is_active = payload.is_active
     db.commit()
@@ -272,7 +336,9 @@ async def send_form(
     db.commit()
     db.refresh(sub)
     return {"id": sub.id, "token": sub.token, "patient_name": patient.name,
-            "form_name": template.name, "expires_in_hours": int(LINK_TTL.total_seconds() // 3600)}
+            "form_name": template.name,
+            "kind": template.kind or "questionnaire",
+            "expires_in_hours": int(LINK_TTL.total_seconds() // 3600)}
 
 
 @router.get("/patient/{patient_id}")
@@ -295,6 +361,9 @@ async def list_for_patient(
             "id": s.id,
             "template_id": s.template_id,
             "form_name": s.template.name if s.template else None,
+            "kind": (s.template.kind if s.template else None) or "questionnaire",
+            "has_pdf": bool(s.pdf_key),
+            "document_id": s.document_id,
             "status": s.status,
             "sent_at": s.sent_at.isoformat() if s.sent_at else None,
             "submitted_at": s.submitted_at.isoformat() if s.submitted_at else None,
@@ -303,6 +372,81 @@ async def list_for_patient(
         }
         for s in subs
     ]
+
+
+@router.get("/signed")
+async def list_signed_forms(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Every medical history signed at this clinic.
+
+    The clinic-wide counterpart to /consents/signed, and the reason the
+    Paperwork section can answer "did this patient ever give us a history?"
+    without opening files one at a time. Questionnaires are left out: they have
+    no signature and no document, so listing them beside signed records would
+    misrepresent what is on file.
+    """
+    rows = (
+        db.query(FormSubmission)
+        .join(FormTemplate, FormSubmission.template_id == FormTemplate.id)
+        .filter(
+            FormSubmission.clinic_id == current_user.clinic_id,
+            FormSubmission.status.in_(("submitted", "applied")),
+            FormTemplate.kind == "medical_history",
+        )
+        .order_by(FormSubmission.submitted_at.desc().nullslast())
+        .all()
+    )
+    return [
+        {
+            "id": r.id,
+            "patient_id": r.patient_id,
+            "patient_name": r.patient.name if r.patient else None,
+            "form_name": r.template.name if r.template else None,
+            "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
+            "has_pdf": bool(r.pdf_key),
+            "document_id": r.document_id,
+            "reviewed": r.status == "applied",
+        }
+        for r in rows
+    ]
+
+
+@router.get("/submissions/{submission_id}/pdf")
+async def get_submission_pdf(
+    submission_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """A link to the signed PDF the patient actually approved.
+
+    Returns a URL rather than the bytes so the browser can open it in a viewer
+    the way it opens any other document on the file. Clinic-scoped: the key
+    alone is enough to read the object, so it is never handed out by id.
+    """
+    sub = db.query(FormSubmission).filter(
+        FormSubmission.id == submission_id,
+        FormSubmission.clinic_id == current_user.clinic_id,
+    ).first()
+    if not sub:
+        raise HTTPException(404, "Submission not found")
+    if not sub.pdf_key:
+        raise HTTPException(404, "This form has no signed copy.")
+
+    from domains.infrastructure.services.r2_storage import get_presigned_url
+    url = get_presigned_url(sub.pdf_key)
+    if not url:
+        raise HTTPException(503, "Document storage is not reachable right now.")
+    return {
+        "url": url,
+        "document_id": sub.document_id,
+        # Shown beside the document so staff can see what was captured with the
+        # signature, which is the half that makes it hold up.
+        "signed_at": sub.submitted_at.isoformat() if sub.submitted_at else None,
+        "signed_ip": sub.signed_ip,
+        "checksum": sub.pdf_sha256,
+    }
 
 
 def _is_expired(sub: FormSubmission) -> bool:

@@ -1,7 +1,8 @@
-import React from "react";
-import { Phone, Pencil, Printer, Trash2 } from "lucide-react";
+import React, { useState } from "react";
+import { Phone, Pencil, Printer, Trash2, ClipboardList } from "lucide-react";
 import MoreMenu from "../common/MoreMenu";
 import PatientWhatsAppMenu from "./whatsapp/PatientWhatsAppMenu";
+import SendMedicalFormModal from "./whatsapp/SendMedicalFormModal";
 
 /**
  * Patient-level actions in the file header.
@@ -18,9 +19,15 @@ import PatientWhatsAppMenu from "./whatsapp/PatientWhatsAppMenu";
  * top row of a clinical record, one click away from Edit.
  *
  * WhatsApp is a single button carrying its mark, its word and a set of dots.
- * Pressing it anywhere opens one menu: the chat, and the four things you send
- * rather than type (a bill, a visit summary, a prescription, the review ask).
- * One press, one place. See ./whatsapp/PatientWhatsAppMenu.
+ * Pressing it anywhere opens one menu: the chat, the medical form, and the four
+ * things you send rather than type (a bill, a visit summary, a prescription,
+ * the review ask). One press, one place. See ./whatsapp/PatientWhatsAppMenu.
+ *
+ * That whole button is hidden for a patient with no phone number, which would
+ * leave a walk-in registered from a name alone with no way to be handed the
+ * medical form from this header — even though the tablet and the copy-link
+ * routes need no phone at all. So in that one case it appears under More
+ * instead. Two homes for one action is worth less than a dead end.
  */
 const Button = ({ onClick, label, children, tone = "ghost" }) => (
   <button
@@ -38,8 +45,34 @@ const Button = ({ onClick, label, children, tone = "ghost" }) => (
 );
 
 const PatientHeaderActions = ({ patient, user, onEdit, onPrint, onDelete }) => {
+  const [medicalFormOpen, setMedicalFormOpen] = useState(false);
   if (!patient) return null;
   const phone = patient.phone;
+
+  const moreItems = [
+    ...(phone ? [] : [{
+      key: 'medical-form',
+      label: 'Send the medical form',
+      icon: <ClipboardList size={15} />,
+      hint: 'Fill it in on a tablet here, or copy the link',
+      onClick: () => setMedicalFormOpen(true),
+    }]),
+    {
+      key: 'print',
+      label: 'Print patient file',
+      icon: <Printer size={15} />,
+      hint: 'Everything on record, as one document',
+      onClick: onPrint,
+    },
+    {
+      key: 'delete',
+      label: 'Delete patient',
+      icon: <Trash2 size={15} />,
+      hint: 'Removes the record and its history',
+      danger: true,
+      onClick: onDelete,
+    },
+  ];
 
   return (
     <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
@@ -58,25 +91,15 @@ const PatientHeaderActions = ({ patient, user, onEdit, onPrint, onDelete }) => {
         <span className="hidden sm:inline">Edit Patient</span>
       </Button>
 
-      <MoreMenu
-        items={[
-          {
-            key: 'print',
-            label: 'Print patient file',
-            icon: <Printer size={15} />,
-            hint: 'Everything on record, as one document',
-            onClick: onPrint,
-          },
-          {
-            key: 'delete',
-            label: 'Delete patient',
-            icon: <Trash2 size={15} />,
-            hint: 'Removes the record and its history',
-            danger: true,
-            onClick: onDelete,
-          },
-        ]}
-      />
+      <MoreMenu items={moreItems} />
+
+      {!phone && (
+        <SendMedicalFormModal
+          open={medicalFormOpen}
+          onClose={() => setMedicalFormOpen(false)}
+          patient={patient}
+        />
+      )}
     </div>
   );
 };

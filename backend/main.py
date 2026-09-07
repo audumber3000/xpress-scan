@@ -377,6 +377,51 @@ async def lifespan(app: FastAPI):
             # scalp/hair, severity scores). Null on every dental case paper.
             conn.execute(text("ALTER TABLE case_papers ADD COLUMN IF NOT EXISTS derm_findings JSON"))
 
+            # ── Signed paperwork: the medical history and the consent ────────
+            #
+            # These live here rather than in deploy-aws.sh for the reason spelled
+            # out below the reminder seed: the server's copy of that script has
+            # drifted and repo-side migrations never reach prod, while this block
+            # travels inside backend/.
+            #
+            # It matters more than a missing feature would. SQLAlchemy names
+            # every mapped column in its SELECTs, so one absent column here does
+            # not break the medical form — it breaks every query that touches
+            # form_templates, form_submissions or patient_consents, which
+            # includes the appointment popover and the patient file.
+            #
+            # `kind` separates a questionnaire from a medical history: the
+            # history renders to a signed PDF and files itself in the patient's
+            # documents, where a questionnaire's answers only come back as data.
+            conn.execute(text(
+                "ALTER TABLE form_templates ADD COLUMN IF NOT EXISTS kind VARCHAR(24) DEFAULT 'questionnaire'"
+            ))
+            # The signed record, and what makes the signature defensible rather
+            # than decorative: where it came from, on what, and a checksum of the
+            # exact bytes the patient approved.
+            for _col, _type in (
+                ("pdf_key", "VARCHAR"),
+                ("document_id", "INTEGER"),
+                ("signature_data", "TEXT"),
+                ("signed_ip", "VARCHAR(64)"),
+                ("signed_user_agent", "VARCHAR(400)"),
+                ("pdf_sha256", "VARCHAR(64)"),
+            ):
+                conn.execute(text(
+                    f"ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS {_col} {_type}"
+                ))
+            # The same trail on a signed consent, written by Nexus on submit.
+            # Nullable throughout: every consent signed before this has none, and
+            # that has to read as unknown rather than break the Signed tab.
+            for _col, _type in (
+                ("signed_ip", "VARCHAR(64)"),
+                ("signed_user_agent", "VARCHAR(400)"),
+                ("pdf_sha256", "VARCHAR(64)"),
+            ):
+                conn.execute(text(
+                    f"ALTER TABLE patient_consents ADD COLUMN IF NOT EXISTS {_col} {_type}"
+                ))
+
             # The 2-hour appointment reminder needs a preference row per clinic
             # or notify_event sends nothing at all, and rows are seeded lazily
             # (only when somebody opens Notifications -> Preferences).
@@ -800,6 +845,17 @@ else:
 static_path = os.path.join(BASE_PATH, "static")
 if os.path.exists(static_path):
     app.mount("/static", StaticFiles(directory=static_path), name="static")
+
+# The CRM contract (docs/INTEGRATION_API.md in the clinohealth-crm repo), kept
+# entirely inside backend/integration/ so it never mixes with the product's own
+# routes. It reads this application's own database, which is the point: the
+# support console used to reach production over an SSH tunnel and read these
+# same tables from outside. Serving the contract from here removes that second
+# reader, and the tunnel with it.
+from integration.mount import mount_integration_api  # noqa: E402
+
+mount_integration_api(app)
+
 
 # Register domain routers with clean architecture
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])

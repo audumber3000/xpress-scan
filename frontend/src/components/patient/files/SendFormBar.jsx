@@ -33,8 +33,16 @@ const SendFormBar = ({ patientId, patient, onSent }) => {
 
   // A form written for the other case paper is hidden, not greyed out:
   // offering a dental history to a skin patient is noise, not a choice.
+  //
+  // The medical history is not here. It is the one document every patient
+  // signs, it comes back as a PDF rather than as answers, and it needs WhatsApp
+  // and the front-desk tablet as ways to send it — so it lives in Quick actions
+  // beside the other things you start from this tab, not in a bar above the
+  // list. A clinic with no other questionnaires therefore sees nothing here.
   const usable = templates.filter(
-    (t) => t.is_active && (!t.case_paper_type || t.case_paper_type === (isDental ? 'dental' : 'general'))
+    (t) => t.is_active
+      && t.kind !== 'medical_history'
+      && (!t.case_paper_type || t.case_paper_type === (isDental ? 'dental' : 'general'))
   );
   if (!usable.length) return null;
 
