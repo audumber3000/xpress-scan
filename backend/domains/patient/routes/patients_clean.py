@@ -463,7 +463,11 @@ async def extract_register(
     except ImportError:
         raise HTTPException(status_code=503, detail="Handwriting extraction dependency is not installed.")
 
-    model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+    # `or`, not getenv's default: docker-compose.aws.yml passes
+    # ANTHROPIC_MODEL=${ANTHROPIC_MODEL} through, so when the host env does not
+    # set it the container gets the key present and empty. getenv's default only
+    # fires on a missing key, so that shipped model="" straight to the API.
+    model = os.getenv("ANTHROPIC_MODEL") or "claude-haiku-4-5"
     client = AsyncAnthropic(api_key=api_key)
 
     # Claude vision only accepts these; anything else (e.g. iOS HEIC) is sent as jpeg.

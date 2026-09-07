@@ -306,3 +306,23 @@ def get_currency_config(currency_code: str) -> Optional[dict]:
 def get_all_currencies() -> list:
     """Currencies for the clinic's currency picker, sorted by code."""
     return [CURRENCIES[code] for code in sorted(CURRENCIES)]
+
+
+def apply_to_clinic(clinic, country_code):
+    """Cascade a country's locale defaults onto a clinic.
+
+    Changing the country changes what the clinic is billed in, so this is not a
+    cosmetic edit — `currency_code` drives `core.plans.billing_currency`, and
+    the Integration API reports the result as `Subscription.mrr`. An
+    admin-edited `tax_id` is preserved; only `tax_label` follows the country.
+
+    Lives here rather than in a route because the clinic screens and the
+    Integration API both do this, and two copies of a cascade drift.
+    """
+    cfg = get_country_config(country_code)
+    clinic.country = country_code.upper()
+    clinic.currency_code = cfg["currency_code"]
+    clinic.currency_symbol = cfg["currency_symbol"]
+    clinic.timezone = cfg["timezone"]
+    clinic.tax_label = cfg["tax_label"]
+    return clinic
