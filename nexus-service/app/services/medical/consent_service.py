@@ -1,3 +1,4 @@
+import hashlib
 import redis
 import json
 import secrets
@@ -89,13 +90,17 @@ class ConsentService:
         return sorted(results, key=lambda x: x['timeLeft'], reverse=True)
 
     @staticmethod
-    def process_signature(db: Session, token: str, signature_base64: str):
-        """
-        Process the signature submission.
-        1. Get data from token
-        2. Generate PDF
-        3. Upload to Cloud (R2)
-        4. Save to DB
+    def render_pdf(db: Session, token: str, signature_base64: str):
+        """Render the signed consent and return (data, patient, template, clinic, pdf_bytes).
+
+        Extracted so the patient's preview and the copy that gets filed come out
+        of exactly one code path. The whole point of showing somebody the
+        document before they submit it is that it is the document — a preview
+        rendered by a second route would eventually drift from the real one, and
+        the drift would be invisible until a dispute.
+
+        Stores nothing and burns nothing. `process_signature` does that after
+        calling this; the preview endpoint just returns the bytes.
         """
         data = ConsentService.validate_token(token)
         if not data:
@@ -145,8 +150,42 @@ class ConsentService:
         if resp.status_code != 200:
             raise ValueError(f"Main backend consent render failed: {resp.status_code} {resp.text[:200]}")
 
+        return data, patient, template, clinic, resp.content
+
+    @staticmethod
+    def preview_signature(db: Session, token: str, signature_base64: str) -> bytes:
+        """The document the patient is about to sign off on, rendered not filed.
+
+        Nothing is written, not even the signature: a patient who looks at the
+        consent and closes the tab has agreed to nothing, which is what the
+        button promises them.
+        """
+        _, _, _, _, pdf_bytes = ConsentService.render_pdf(db, token, signature_base64)
+        return pdf_bytes
+
+    @staticmethod
+    def process_signature(db: Session, token: str, signature_base64: str,
+                          signed_ip: str = None, signed_user_agent: str = None):
+        """
+        Process the signature submission.
+        1. Render the PDF (same path the preview used)
+        2. Upload to Cloud (R2)
+        3. Save to DB
+        """
+        data, patient, template, clinic, pdf_bytes = ConsentService.render_pdf(
+            db, token, signature_base64
+        )
+        patient_id = data.get('patientId')
+        template_id = data.get('templateId')
+        clinic_id = data.get('clinicId')
+
+        # A fingerprint of the exact bytes the patient approved. Without it a
+        # signature image is only a picture; with it the clinic can show the
+        # document has not changed since it was signed.
+        pdf_sha256 = hashlib.sha256(pdf_bytes).hexdigest()
+
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-            tmp_file.write(resp.content)
+            tmp_file.write(pdf_bytes)
             pdf_path = tmp_file.name
 
         # Upload to R2 Storage via Nexus Storage Service
@@ -171,6 +210,12 @@ class ConsentService:
             signed_content=data.get('content', template.content),
             signed_at=datetime.utcnow(),
             signature_url=pdf_url,
+            # What makes an electronic signature defensible rather than
+            # decorative: where it came from, on what, and a checksum of the
+            # exact document. Matches what a signed medical history records.
+            signed_ip=signed_ip,
+            signed_user_agent=(signed_user_agent or '')[:400] or None,
+            pdf_sha256=pdf_sha256,
         )
         db.add(consent_record)
 

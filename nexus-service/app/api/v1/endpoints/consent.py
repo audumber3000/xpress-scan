@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Request, Response
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Clinic
@@ -104,17 +104,55 @@ async def send_consent_whatsapp(
     return {"success": True, "token": token}
 
 
+@router.post("/preview/{token}")
+async def preview_consent_signature(
+    token: str,
+    payload: SignatureSubmitRequest,
+    db: Session = Depends(get_db),
+):
+    """The consent as it will be filed, with the patient's signature on it.
+
+    Returns the PDF and stores nothing — no record, no upload, and the token is
+    not burned, so a patient who reads it and decides to change something can go
+    back. Asking somebody to sign a legal document they have not seen in its
+    final form is the thing this exists to stop.
+
+    Same renderer as /submit, deliberately: see ConsentService.render_pdf.
+    """
+    try:
+        pdf_bytes = ConsentService.preview_signature(db, token, payload.signature)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not prepare the document: {e}")
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'inline; filename="consent-preview.pdf"'},
+    )
+
+
 @router.post("/submit/{token}")
 async def submit_consent_signature(
     token: str, 
     payload: SignatureSubmitRequest,
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """
     Process the signature submission and generate the final PDF.
     """
     try:
-        result = ConsentService.process_signature(db, token, payload.signature)
+        # The client, not whatever proxy sits in front of us — an X-Forwarded-For
+        # is a chain and the first entry is the browser that signed.
+        forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+        signed_ip = forwarded or (request.client.host if request.client else None)
+        result = ConsentService.process_signature(
+            db, token, payload.signature,
+            signed_ip=signed_ip,
+            signed_user_agent=request.headers.get("user-agent"),
+        )
         return {
             "success": True,
             "message": "Signature processed successfully.",

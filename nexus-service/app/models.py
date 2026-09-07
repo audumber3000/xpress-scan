@@ -34,6 +34,12 @@ class PatientConsent(Base):
     signature_url = Column(String, nullable=True) # Name matches DB, was Text before
     signed_at = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow) # Added to match DB, removed file_path
+    # The audit trail, matching form_submissions on a signed medical history.
+    # Nullable throughout: every consent signed before this existed has none,
+    # and a missing trail must read as "unknown", never as a failure to load.
+    signed_ip = Column(String(64), nullable=True)
+    signed_user_agent = Column(String(400), nullable=True)
+    pdf_sha256 = Column(String(64), nullable=True)
 
 class User(Base):
     __tablename__ = 'users'
