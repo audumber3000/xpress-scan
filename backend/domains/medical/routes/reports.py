@@ -663,3 +663,43 @@ def delete_prescription(
     db.delete(rx)
     db.commit()
     return {"status": "success", "message": "Prescription deleted"}
+
+@router.get("/{report_id}/raw")
+def get_report_raw(
+    report_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    """Stream a report's PDF through our own CORS-enabled origin.
+
+    Same reason as the prescription and document proxies: an R2 presigned URL
+    displays but cannot be fetched cross-origin, and the in-app viewer has to
+    read the bytes. Falls back to the DOCX only for the download path — there is
+    nothing a browser can render for it, so the viewer shows its download card.
+    """
+    from fastapi import Response
+    from domains.infrastructure.services.r2_storage import download_bytes_from_r2
+
+    report = db.query(Report).filter(
+        Report.id == report_id,
+        Report.clinic_id == current_user.clinic_id,
+    ).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    key = report.pdf_url or report.docx_url
+    if not key:
+        raise HTTPException(status_code=404, detail="This report has no file yet.")
+
+    data = download_bytes_from_r2(key)
+    if data is None:
+        raise HTTPException(status_code=404, detail="File not found in storage")
+
+    is_pdf = bool(report.pdf_url)
+    return Response(
+        content=data,
+        media_type=("application/pdf" if is_pdf
+                    else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+        headers={"Content-Disposition":
+                 f'inline; filename="report_{report.id}.{"pdf" if is_pdf else "docx"}"'},
+    )

@@ -10,11 +10,14 @@ import CategoryChips from './files/CategoryChips';
 import RvgCaptureModal from './files/RvgCaptureModal';
 import FileFilterBar from './files/FileFilterBar';
 import {
-  ACCEPT, MAX_FILE_MB, humanSize, fileUrl, canOpen, isDicom, uploadDocumentWithProgress,
+  ACCEPT, MAX_FILE_MB, humanSize, fileUrl, canOpen, uploadDocumentWithProgress,
 } from './files/fileHelpers';
 import { useIsDentalPatient } from '../../utils/casePaper';
 
-const DicomViewerModal = lazy(() => import('./DicomViewerModal'));
+// One viewer for every kind of file. Was a DICOM-only overlay, with every
+// other image sent to a new browser tab — so opening two files in a row
+// behaved differently depending on what the sensor had produced.
+const FileViewerModal = lazy(() => import('../common/viewer/FileViewerModal'));
 
 /**
  * Imaging: films, photos and scans for one patient.
@@ -81,7 +84,7 @@ const ImagingTab = ({ patientId, patient, user }) => {
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [dicomView, setDicomView] = useState(null);
+  const [viewerAt, setViewerAt] = useState(null);
   const [captureOpen, setCaptureOpen] = useState(false);
 
   const [type, setType] = useState('all');
@@ -124,10 +127,33 @@ const ImagingTab = ({ patientId, patient, user }) => {
     });
   }, [images, type, query, sort]);
 
+  /**
+   * The list as the viewer wants it: the same rows, in the order on screen, so
+   * the arrows walk the patient's imaging in the order the clinician is
+   * already reading it rather than in upload order.
+   */
+  const viewable = useMemo(
+    () => visible.filter(canOpen).map((i) => ({
+      key: `xray-${i.id}`,
+      id: i.id,
+      source: 'xray',
+      name: i.file_name || `${i.image_type || 'Image'} ${i.id}`,
+      url: fileUrl(i),
+      fileType: i.image_type,
+      subtitle: [i.image_type, i.tooth_area, i.capture_date ? formatDate(i.capture_date) : null]
+        .filter(Boolean).join(' · '),
+    })),
+    [visible],
+  );
+
   const open = (image) => {
-    if (isDicom(image)) { setDicomView(image); return; }
-    if (canOpen(image)) window.open(fileUrl(image), '_blank', 'noopener');
-    else notify.problem('This image has no file that can be opened in the browser.');
+    if (!canOpen(image)) {
+      notify.problem('This image has no file that can be opened in the browser.');
+      return;
+    }
+    const at = viewable.findIndex((v) => v.id === image.id);
+    if (at < 0) { notify.problem('This image could not be opened.'); return; }
+    setViewerAt(at);
   };
 
   const upload = async (fileList) => {
@@ -284,16 +310,13 @@ const ImagingTab = ({ patientId, patient, user }) => {
 
       <RvgCaptureModal open={captureOpen} onClose={() => setCaptureOpen(false)} user={user} />
 
-      {dicomView && (
-        <Suspense fallback={<div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 text-white text-sm">Loading viewer…</div>}>
-          {/* fileId / downloadUrl / fileName, matching the viewer's actual
-              props. A single `file` object would have rendered an empty
-              viewer with no error. */}
-          <DicomViewerModal
-            fileId={dicomView.id}
-            downloadUrl={fileUrl(dicomView)}
-            fileName={dicomView.file_name}
-            onClose={() => setDicomView(null)}
+      {viewerAt !== null && viewable[viewerAt] && (
+        <Suspense fallback={<div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/95 text-white text-sm">Loading viewer…</div>}>
+          <FileViewerModal
+            files={viewable}
+            index={viewerAt}
+            onIndex={setViewerAt}
+            onClose={() => setViewerAt(null)}
           />
         </Suspense>
       )}

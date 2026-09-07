@@ -1,23 +1,28 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Plus, FileText, Download, ExternalLink, FileSignature, Receipt, ClipboardList } from 'lucide-react';
+import { Upload, Plus, FileText, Download, ExternalLink, FileSignature, Receipt, ClipboardList, Eye, Loader2, HeartPulse } from 'lucide-react';
 import Spinner from '../common/Spinner';
 import EmptyState from '../common/EmptyState';
 import { noData } from '../../assets/illustrations';
 import { api } from '../../utils/api';
 import { notify } from '../../utils/notify';
 import { downloadAuthedFile } from '../../utils/whatsapp';
+import { rawPathFor, fetchBlobUrl } from '../../utils/fileBytes';
 import { formatDate } from '../../utils/datetime';
 import CategoryChips from './files/CategoryChips';
 import FileFilterBar from './files/FileFilterBar';
 import {
-  CATEGORIES, CATEGORY_STYLE, fetchPatientDocuments, countByCategory,
+  CATEGORIES, CATEGORY_STYLE, fetchPatientDocuments, countByCategory, isFileRow,
 } from './files/documentSources';
 import FormReviewModal from '../forms/FormReviewModal';
 import SendFormBar from './files/SendFormBar';
+import SendMedicalFormModal from './whatsapp/SendMedicalFormModal';
 import {
   ACCEPT, MAX_FILE_MB, humanSize, uploadDocumentWithProgress,
 } from './files/fileHelpers';
+
+// Heavy decoders behind a lazy boundary; see common/viewer/FileViewerModal.
+const FileViewerModal = lazy(() => import('../common/viewer/FileViewerModal'));
 
 /**
  * Every document this patient has, from wherever it was made.
@@ -52,13 +57,41 @@ const DATE_WINDOWS = [
   { value: '365', label: 'Last year' },
 ];
 
-const DocumentRow = ({ doc, onOpen }) => {
+/**
+ * What pressing this row does, and the glyph that says so.
+ *
+ * The icon was a download arrow on every row, which was already only half true
+ * and became wrong once files opened in the app: it promised a file on disk and
+ * delivered a viewer. An eye means you will see it here, an arrow means it
+ * leaves as a file, and the two are no longer the same button.
+ */
+const rowAction = (doc) => {
+  if (doc.source === 'form') return { verb: 'Review', Icon: ClipboardList };
+  if (doc.route) return { verb: 'Open', Icon: ExternalLink };
+  if (isFileRow(doc)) return { verb: 'View', Icon: Eye };
+  return { verb: 'Download', Icon: Download };
+};
+
+const DocumentRow = ({ doc, onOpen, onDownload, downloading }) => {
   const Icon = CATEGORY_ICON[doc.category] || FileText;
   // A form has no file: its answers are data, and the row opens the review
   // panel instead. Without this it rendered as an un-openable dead row.
   const openable = Boolean(doc.url || doc.route || doc.download || doc.source === 'form');
+  const { verb, Icon: ActionIcon } = rowAction(doc);
   return (
-    <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0">
+    <div
+      // The whole row is the target, not a 32px glyph at the end of it. The
+      // icon stays as the affordance that says what will happen.
+      onClick={openable ? () => onOpen(doc) : undefined}
+      role={openable ? 'button' : undefined}
+      tabIndex={openable ? 0 : undefined}
+      onKeyDown={openable ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(doc); }
+      } : undefined}
+      className={`flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 transition-colors ${
+        openable ? 'cursor-pointer hover:bg-gray-50/80 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#2a276e]' : ''
+      }`}
+    >
       <span className={`w-10 h-10 rounded-lg grid place-items-center flex-shrink-0 ${CATEGORY_STYLE[doc.category] || 'bg-gray-100 text-gray-500'}`}>
         <Icon size={17} />
       </span>
@@ -86,14 +119,32 @@ const DocumentRow = ({ doc, onOpen }) => {
       </div>
 
       {openable ? (
-        <button
-          type="button"
-          onClick={() => onOpen(doc)}
-          aria-label={`Open ${doc.title}`}
-          className="p-2 rounded-lg text-gray-400 hover:text-[#2a276e] hover:bg-gray-50 transition-colors flex-shrink-0 cursor-pointer"
-        >
-          {doc.route ? <ExternalLink size={16} /> : <Download size={16} />}
-        </button>
+        <div className="flex items-center gap-0.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+          {/* Viewing and saving are different intentions, so they are different
+              buttons. Before, the one control did whichever the file type
+              happened to imply. */}
+          {isFileRow(doc) && (
+            <button
+              type="button"
+              onClick={() => onDownload(doc)}
+              disabled={downloading}
+              title={`Download ${doc.title}`}
+              aria-label={`Download ${doc.title}`}
+              className="p-2 rounded-lg text-gray-400 hover:text-[#2a276e] hover:bg-gray-100 transition-colors cursor-pointer disabled:opacity-40"
+            >
+              {downloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => onOpen(doc)}
+            title={`${verb} ${doc.title}`}
+            aria-label={`${verb} ${doc.title}`}
+            className="p-2 rounded-lg text-gray-400 hover:text-[#2a276e] hover:bg-gray-100 transition-colors cursor-pointer"
+          >
+            <ActionIcon size={16} />
+          </button>
+        </div>
       ) : (
         // Say why rather than showing a button that does nothing. Older rows
         // predate cloud storage and have no reachable file.
@@ -112,6 +163,9 @@ const DocumentsTab = ({ patientId, patient, prescriptions = [], invoices = [], o
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [reviewing, setReviewing] = useState(null);
+  const [viewerAt, setViewerAt] = useState(null);
+  const [downloadingKey, setDownloadingKey] = useState(null);
+  const [medicalFormOpen, setMedicalFormOpen] = useState(false);
 
   const [category, setCategory] = useState('all');
   const [query, setQuery] = useState('');
@@ -158,11 +212,72 @@ const DocumentsTab = ({ patientId, patient, prescriptions = [], invoices = [], o
     return out.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
   }, [docs, category, query, window_, sort]);
 
+  /**
+   * The rows the viewer can show, in the order on screen.
+   *
+   * A consent and an answered form are excluded: neither is a stored file. A
+   * consent is rendered in the app from its content and a form's answers are
+   * data, so both keep their existing destinations rather than being forced
+   * through a file viewer with nothing to display.
+   */
+  const viewable = useMemo(
+    () => visible
+      .filter(isFileRow)
+      .map((d) => ({
+        key: d.key,
+        id: d.id,
+        source: d.source,
+        name: d.title,
+        url: d.url,
+        fileType: d.fileType,
+        subtitle: [CATEGORIES.find((c) => c.key === d.category)?.label,
+                   d.date ? formatDate(d.date) : null].filter(Boolean).join(' · '),
+      })),
+    [visible],
+  );
+
+  /**
+   * Save the file without opening it.
+   *
+   * Goes through our own origin for the same reason the viewer does: a plain
+   * `<a download>` aimed at a presigned R2 URL is cross-origin, so the browser
+   * ignores the download attribute and navigates to it instead — the file
+   * replaces the page you were on.
+   */
+  const downloadDoc = async (doc) => {
+    setDownloadingKey(doc.key);
+    try {
+      const path = rawPathFor({ source: doc.source, id: doc.id });
+      if (path) {
+        const { url, revoke } = await fetchBlobUrl(path);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = doc.title || 'file';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(revoke, 10_000);
+      } else if (doc.download) {
+        await downloadAuthedFile(doc.download, `${doc.title.replace(/\s+/g, '_')}.pdf`);
+      } else if (doc.url) {
+        window.open(doc.url, '_blank', 'noopener');
+      }
+    } catch {
+      notify.problem('Could not download that file.');
+    } finally { setDownloadingKey(null); }
+  };
+
   const openDoc = async (doc) => {
     if (doc.source === 'form') { setReviewing(doc.id); return; }
     if (doc.route) { navigate(doc.route); return; }
-    if (doc.url) { window.open(doc.url, '_blank', 'noopener'); return; }
-    // Behind auth, so it cannot simply be opened in a tab.
+
+    // Everything with a file behind it now opens in the app. It used to be a
+    // new browser tab, which lost the patient you were reading and handed the
+    // file to whatever the OS does with it.
+    const at = viewable.findIndex((v) => v.key === doc.key);
+    if (at >= 0) { setViewerAt(at); return; }
+
+    // Nothing viewable and no route: the last resort is still a download.
     if (doc.download) {
       try {
         await downloadAuthedFile(doc.download, `${doc.title.replace(/\s+/g, '_')}.pdf`);
@@ -192,11 +307,23 @@ const DocumentsTab = ({ patientId, patient, prescriptions = [], invoices = [], o
     }
   };
 
+  // The four things you start from this tab. The medical form joins them
+  // rather than sitting in a bar above the list: it is the same kind of act as
+  // the other three — begin a document for this patient — and a permanent bar
+  // for it pushed the list itself down the screen on every visit.
   const QUICK = [
+    { key: 'medical-form', label: 'Create Medical Form', icon: HeartPulse },
     { key: 'consent', label: 'Create Consent Form', icon: FileSignature },
     { key: 'prescription', label: 'Create Prescription', icon: ClipboardList },
     { key: 'invoice', label: 'Create Invoice', icon: Receipt },
   ];
+
+  // Handled here rather than passed up: the dialog needs only the patient, and
+  // the parent's handler exists to open drawers that live on the page.
+  const runQuick = (key) => {
+    if (key === 'medical-form') { setMedicalFormOpen(true); return; }
+    onQuickAction?.(key);
+  };
 
   return (
     <div>
@@ -229,6 +356,8 @@ const DocumentsTab = ({ patientId, patient, prescriptions = [], invoices = [], o
         </label>
       </div>
 
+      {/* Other questionnaires only. The medical form moved to Quick
+          actions, and this renders nothing when a clinic has no others. */}
       <SendFormBar patientId={patientId} patient={patient} onSent={load} />
 
       <FileFilterBar
@@ -265,7 +394,15 @@ const DocumentsTab = ({ patientId, patient, prescriptions = [], invoices = [], o
               />
             </div>
           ) : (
-            visible.map((doc) => <DocumentRow key={doc.key} doc={doc} onOpen={openDoc} />)
+            visible.map((doc) => (
+              <DocumentRow
+                key={doc.key}
+                doc={doc}
+                onOpen={openDoc}
+                onDownload={downloadDoc}
+                downloading={downloadingKey === doc.key}
+              />
+            ))
           )}
         </section>
 
@@ -279,7 +416,7 @@ const DocumentsTab = ({ patientId, patient, prescriptions = [], invoices = [], o
                 <button
                   key={key}
                   type="button"
-                  onClick={() => onQuickAction?.(key)}
+                  onClick={() => runQuick(key)}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left hover:bg-gray-50 transition-colors cursor-pointer"
                 >
                   <span className="w-8 h-8 rounded-lg bg-[#2a276e]/[0.07] text-[#2a276e] grid place-items-center flex-shrink-0">
@@ -336,6 +473,22 @@ const DocumentsTab = ({ patientId, patient, prescriptions = [], invoices = [], o
         />
       )}
 
+      <SendMedicalFormModal
+        open={medicalFormOpen}
+        onClose={() => { setMedicalFormOpen(false); load(); }}
+        patient={patient}
+      />
+
+      {viewerAt !== null && viewable[viewerAt] && (
+        <Suspense fallback={<div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/95 text-white text-sm">Loading viewer…</div>}>
+          <FileViewerModal
+            files={viewable}
+            index={viewerAt}
+            onIndex={setViewerAt}
+            onClose={() => setViewerAt(null)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };

@@ -12,7 +12,14 @@ const API_BASE = `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}
 
 // R2 presigned URLs block cross-origin XHR (no CORS headers), so DICOM is fetched
 // through our own API, which is CORS-enabled. This builds that proxy URL.
-export const dicomProxyUrl = (documentId) => `${API_BASE}/documents/${documentId}/raw`;
+//
+// Takes the path rather than an id. It used to take a document id and always
+// build `/documents/{id}/raw`, but the Imaging tab passes rows from
+// `xray_images` — a different table with its own id sequence — so a radiograph
+// either 404'd or, where a document happened to share the number, streamed an
+// unrelated file. The caller now says which route the file lives on; see
+// utils/pdfLoader.js rawPathFor, which is the single place that mapping lives.
+export const dicomProxyUrl = (rawPath) => `${API_BASE}${rawPath}`;
 
 let configured = false;
 const configure = () => {

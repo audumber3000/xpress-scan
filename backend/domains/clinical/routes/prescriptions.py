@@ -251,3 +251,37 @@ async def send_prescription_via_whatsapp(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"WhatsApp Error: {str(e)}")
+
+
+@router.get("/{prescription_id}/raw")
+def get_prescription_raw(
+    prescription_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Stream a prescription PDF through our own CORS-enabled origin.
+
+    The stored `pdf_url` is an R2 presigned link, which a browser will happily
+    put in an <img> but refuses to `fetch` — R2 sends no Access-Control-Allow-Origin
+    (verified against the live bucket), so pdf.js is blocked before it reads a
+    byte and the failure looks like a corrupt file. The in-app viewer therefore
+    reads every PDF through a route like this one.
+    """
+    rx = db.query(Prescription).filter(
+        Prescription.id == prescription_id,
+        Prescription.clinic_id == current_user.clinic_id,
+    ).first()
+    if not rx:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+    if not rx.pdf_url:
+        raise HTTPException(status_code=404, detail="This prescription has no PDF yet.")
+
+    from domains.infrastructure.services.r2_storage import download_bytes_from_r2
+    data = download_bytes_from_r2(rx.pdf_url)
+    if data is None:
+        raise HTTPException(status_code=404, detail="File not found in storage")
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="prescription_{rx.id}.pdf"'},
+    )

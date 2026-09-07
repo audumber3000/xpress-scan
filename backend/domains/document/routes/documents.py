@@ -379,8 +379,12 @@ async def get_document_raw(
     if data is None:
         raise HTTPException(status_code=404, detail="File not found in storage")
 
-    ext = (document.file_type or "").lower()
-    media_type = "application/dicom" if ext in ("dcm", "dicom") else "application/octet-stream"
+    # The in-app viewer streams PDFs through here too now, so the real type has
+    # to be sent rather than octet-stream for everything that is not DICOM.
+    # pdf.js copes either way; the browser's own fallbacks do not.
+    from domains.medical.routes.xray import _XRAY_MEDIA_TYPES
+    ext = (document.file_type or "").lower().lstrip(".")
+    media_type = _XRAY_MEDIA_TYPES.get(ext) or "application/octet-stream"
     return Response(
         content=data,
         media_type=media_type,

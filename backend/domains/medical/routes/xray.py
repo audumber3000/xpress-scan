@@ -302,3 +302,62 @@ def get_xray_image(
         created_at=xray_image.created_at,
         patient_name=patient.name if patient else None
     )
+
+
+# ── Streaming the bytes for the in-app viewer ────────────────────────────────
+
+# Extension -> what the browser should be told it is. A viewer that receives
+# application/octet-stream for a PDF will still parse it, but the browser's own
+# fallbacks (and any future <embed>) need the real type, and a wrong type is the
+# kind of thing that works in Chrome and not in Safari.
+_XRAY_MEDIA_TYPES = {
+    "dcm": "application/dicom", "dicom": "application/dicom",
+    "pdf": "application/pdf",
+    "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+    "webp": "image/webp", "gif": "image/gif", "bmp": "image/bmp",
+    "tif": "image/tiff", "tiff": "image/tiff",
+}
+
+
+@router.get("/{xray_id}/raw")
+def get_xray_raw(
+    xray_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    """Stream an X-ray's bytes through our own CORS-enabled origin.
+
+    The counterpart to /documents/{id}/raw, and it has to exist separately
+    because X-rays are their own table. The DICOM viewer was passing an
+    `xray_images.id` to the documents proxy, which reads `patient_documents` —
+    two different id spaces, so it either 404'd or, where a document happened to
+    share the number, streamed an unrelated patient's file.
+
+    Presigned R2 URLs carry no CORS headers, so anything the browser has to
+    *fetch* rather than merely display — DICOM through Cornerstone, a PDF
+    through pdf.js — has to come through here. An <img> needs no such help and
+    still goes straight to R2.
+    """
+    xray = db.query(XrayImage).filter(
+        XrayImage.id == xray_id,
+        # Clinic-scoped for the same reason the documents proxy is: without it
+        # the id alone is enough to read any radiograph in the system.
+        XrayImage.clinic_id == current_user.clinic_id,
+    ).first()
+    if not xray:
+        raise HTTPException(status_code=404, detail="X-ray not found")
+
+    from domains.infrastructure.services.r2_storage import download_bytes_from_r2
+    from fastapi import Response
+
+    data = download_bytes_from_r2(xray.file_path)
+    if data is None:
+        raise HTTPException(status_code=404, detail="File not found in storage")
+
+    ext = (xray.file_name or "").rsplit(".", 1)[-1].lower() if "." in (xray.file_name or "") else ""
+    media_type = _XRAY_MEDIA_TYPES.get(ext) or "application/octet-stream"
+    return Response(
+        content=data,
+        media_type=media_type,
+        headers={"Content-Disposition": f'inline; filename="{xray.file_name or "xray"}"'},
+    )

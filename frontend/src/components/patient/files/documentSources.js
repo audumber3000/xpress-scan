@@ -162,6 +162,21 @@ export async function fetchPatientDocuments(patientId, { prescriptions = [], inv
   return docs.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 }
 
+/**
+ * Whether this row is a stored file the viewer can open.
+ *
+ * One definition, used by both the list (to pick the right icon and make the
+ * row clickable) and the tab (to build the viewer's prev/next list). When these
+ * were two separate predicates the row could offer to open something the viewer
+ * did not have, and the click did nothing.
+ *
+ * A consent and an answered form are excluded because neither is a file: a
+ * consent is rendered in the app from its stored content and a form's answers
+ * are data. Both keep their own destinations.
+ */
+export const isFileRow = (doc) =>
+  doc.source !== 'form' && !doc.route && Boolean(doc.url || doc.download);
+
 /** Counts for the category chips, including the zeroes. */
 export const countByCategory = (docs) =>
   CATEGORIES.reduce((acc, c) => {

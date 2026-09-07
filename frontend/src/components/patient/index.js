@@ -9,7 +9,9 @@ export { default as PatientTimeline } from './PatientTimeline';
 export { default as PatientBilling } from './PatientBilling';
 export { default as PatientInfo } from './PatientInfo';
 export { default as PatientPrescriptions } from './PatientPrescriptions';
-export { default as PatientFilesTab } from './PatientFilesTab';
+// PatientFilesTab was split into ImagingTab and DocumentsTab; the page has
+// imported those two directly ever since, so the component was dead and only
+// this line kept it in the bundle.
 export { default as CasePapersTab } from './CasePapersTab';
 export { default as ToothRightDrawer } from './ToothRightDrawer';
 export { default as PatientVisitHistory } from './PatientVisitHistory';
