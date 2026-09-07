@@ -13,7 +13,6 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import Patients from "./pages/Patients";
-import PatientIntake from "./pages/PatientIntake";
 import Payments from "./pages/Payments";
 import DoctorProfile from "./pages/DoctorProfile";
 import ClinicOnboarding from "./pages/ClinicOnboarding";
@@ -45,11 +44,10 @@ import Activity from "./pages/admin/security/Activity";
 import Security from "./pages/admin/security/Security";
 import Offers from "./pages/admin/Offers";
 import Insurers from "./pages/admin/Insurers";
-import PatientForms from "./pages/admin/PatientForms";
 import Medications from "./pages/admin/Medications";
 import Vendors from "./pages/Vendors";
 import Expenses from "./pages/Expenses";
-import ConsentForms from "./pages/ConsentForms";
+import Paperwork from "./pages/paperwork";
 import Reports from "./pages/Reports";
 import AddClinic from "./pages/AddClinic";
 import ConsentSign from "./pages/ConsentSign";
@@ -305,7 +303,9 @@ function AppContent() {
               <Route path="/patients" element={<ProtectedRoute><Patients /></ProtectedRoute>} />
               <Route path="/patient-files" element={<ProtectedRoute><Patients /></ProtectedRoute>} />
               <Route path="/patient-profile/:patientId" element={<ProtectedRoute><PatientProfile /></ProtectedRoute>} />
-              <Route path="/patient-intake" element={<ProtectedRoute><PatientIntake /></ProtectedRoute>} />
+              {/* Retired: a second full-page registration form that duplicated
+                  the Patients create drawer. Old bookmarks land on the drawer. */}
+              <Route path="/patient-intake" element={<Navigate to="/patients?new=1" replace />} />
               <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
               <Route path="/mail" element={<ProtectedRoute><Mail /></ProtectedRoute>} />
               <Route path="/mail/callback" element={<ProtectedRoute><MailCallback /></ProtectedRoute>} />
@@ -346,14 +346,17 @@ function AppContent() {
                 <Route path="security/audit-log" element={<Activity />} />
                 <Route path="offers" element={<Offers />} />
                 <Route path="insurers" element={<Insurers />} />
-                <Route path="patient-forms" element={<PatientForms />} />
+                <Route path="patient-forms" element={<Navigate to="/paperwork" replace />} />
                 <Route path="subscription" element={<Subscription />} />
               </Route>
               <Route path="/subscription" element={<Navigate to="/admin/subscription" replace />} />
               <Route path="/support-tickets" element={<ProtectedRoute><SupportTickets /></ProtectedRoute>} />
               <Route path="/vendors" element={<ProtectedRoute><Vendors /></ProtectedRoute>} />
               <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
-              <Route path="/consent-forms" element={<ProtectedRoute><ConsentForms /></ProtectedRoute>} />
+              <Route path="/paperwork" element={<ProtectedRoute><Paperwork /></ProtectedRoute>} />
+              {/* Was its own section called Consent Forms. Kept so existing
+                  links, bookmarks and the patient file's consent shortcut land. */}
+              <Route path="/consent-forms" element={<Navigate to="/paperwork" replace />} />
               <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
               <Route path="/add-clinic" element={<ProtectedRoute><AddClinic /></ProtectedRoute>} />
               <Route path="/doctor-profile" element={<ProtectedRoute><DoctorProfile /></ProtectedRoute>} />

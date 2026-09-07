@@ -7,15 +7,16 @@ import { UserPlus, CalendarPlus, ReceiptText } from 'lucide-react';
  *
  * Each one lands on its section *with the panel already open* rather than
  * dropping you on the list to hunt for the button. `?new=1` is the convention
- * both target pages already use for this (Calendar.jsx and Payments.jsx each
- * strip the param once applied, so a refresh doesn't reopen the panel) — worth
- * reusing rather than adding a second router-state mechanism alongside it.
+ * all three target pages already use for this (each strips the param once
+ * applied, so a refresh doesn't reopen the panel) — worth reusing rather than
+ * adding a second router-state mechanism alongside it.
  *
- * Add patient goes to the intake screen, which is a full page rather than a
- * drawer, so it needs no param.
+ * Add patient used to open /patient-intake, a second full-page registration
+ * form that duplicated the Patients drawer and had fewer fields than it. One
+ * way to register a patient, and this is the shortcut to it.
  */
 const ACTIONS = [
-  { label: 'Add patient', icon: UserPlus, to: '/patient-intake' },
+  { label: 'Add patient', icon: UserPlus, to: '/patients?new=1' },
   { label: 'New appointment', icon: CalendarPlus, to: '/calendar?new=1' },
   { label: 'Create invoice', icon: ReceiptText, to: '/payments?new=1' },
 ];

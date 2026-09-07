@@ -178,7 +178,7 @@ const Header = ({ onOpenMobileSidebar }) => {
       '/patient-files': 'Patient Files',
       '/payments': 'Payments',
       '/vendors': 'Inventory',
-      '/consent-forms': 'Consent Forms',
+      '/paperwork': 'Paperwork',
       '/lab': 'Laboratory',
       '/reports': 'Reports',
       '/marketing/reviews': 'Google Reviews',
@@ -209,7 +209,6 @@ const Header = ({ onOpenMobileSidebar }) => {
       '/checkout': 'Checkout',
       '/mail': 'Mail',
       '/mail/callback': 'Mail',
-      '/patient-intake': 'Patient Intake',
     };
 
     if (staticTitles[pathname]) return staticTitles[pathname];
