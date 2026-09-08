@@ -5,7 +5,7 @@ import {
     CONDITION_LABELS,
     STATUS_COLORS,
     STATUS_LABELS,
-    SURFACES
+    surfacesFor
 } from './dentalConstants';
 
 /**
@@ -72,7 +72,9 @@ const SurfaceSelectionModal = ({
                     <div className="mb-6">
                         <h4 className="text-sm font-semibold text-gray-700 mb-3">Select Surface:</h4>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                            {SURFACES.map(({ key, label, desc }) => (
+                            {/* Named for this tooth: an incisor has an incisal
+                                edge, an upper tooth faces the palate. */}
+                            {surfacesFor(toothNum).map(({ key, short, label, desc }) => (
                                 <button
                                     key={key}
                                     onClick={() => setSelectedSurface(key)}
@@ -85,7 +87,7 @@ const SurfaceSelectionModal = ({
                                 >
                                     <div className="flex items-center justify-between">
                                         <div>
-                                            <div className="font-semibold text-gray-900">{label} ({key})</div>
+                                            <div className="font-semibold text-gray-900">{label} ({short})</div>
                                             <div className="text-xs text-gray-500">{desc}</div>
                                         </div>
                                         {currentSurfaces[key] && currentSurfaces[key] !== 'none' && (

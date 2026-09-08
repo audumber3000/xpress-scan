@@ -25,6 +25,10 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - ANTHROPIC_MODEL=${ANTHROPIC_MODEL}
+      # Separate from ANTHROPIC_MODEL, which is pinned small for reading
+      # handwriting. Drafting a clinical note is a judgement task. Unset is
+      # fine — the route defaults to claude-opus-5.
+      - ANTHROPIC_NOTES_MODEL=${ANTHROPIC_NOTES_MODEL}
       - REDIS_URL=redis://redis:6379/0
       - JWT_SECRET=${JWT_SECRET}
       - INTERNAL_API_KEY=${INTERNAL_API_KEY}

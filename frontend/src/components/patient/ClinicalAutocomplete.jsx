@@ -110,12 +110,12 @@ const ClinicalAutocomplete = ({ category, value, onChange, onSelectFull, placeho
                     onChange={handleInputChange}
                     onFocus={() => inputValue.trim() && setShowSuggestions(true)}
                     placeholder={placeholder}
-                    className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#2a276e] focus:ring-4 focus:ring-[#2a276e]/5 outline-none text-sm transition-all shadow-sm group-hover:border-gray-300"
+                    className="w-full h-10 pl-10 pr-4 bg-white border border-gray-200 rounded-lg outline-none text-sm transition-[border-color,box-shadow] duration-150 ease-out focus:border-[#2a276e] focus:ring-2 focus:ring-[#2a276e]/15 group-hover:border-gray-300"
                 />
             </div>
 
             {showSuggestions && (
-                <div className="absolute z-[60] mt-2 w-full bg-white rounded-2xl border border-gray-100 shadow-2xl py-2 animate-in fade-in slide-in-from-top-2 duration-200 max-h-64 overflow-y-auto scrollbar-hide">
+                <div className="absolute z-[60] mt-1.5 w-full bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 max-h-64 overflow-y-auto scrollbar-hide">
                     {/* Add New Option (if not exact match) */}
                     {!isExactMatch && inputValue.trim() && (
                         <button

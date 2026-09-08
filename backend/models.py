@@ -368,6 +368,20 @@ class CasePaper(Base):
     treatment_plan_snapshot = Column(JSON, nullable=True)
     tooth_notes_snapshot = Column(JSON, nullable=True)
 
+    # Periodontal charting for this visit: the BPE sextant scores, and the full
+    # six-site chart where one was taken (probing depth, recession, bleeding,
+    # plaque, mobility, furcation). Attachment loss is NOT stored — it is depth
+    # plus recession by definition, and a column for it is a column that will
+    # eventually disagree with the two it is derived from.
+    #
+    # Per visit rather than per patient, deliberately. A pocket depth means
+    # little on its own; it means something next to the same site three months
+    # ago. Storing it on the case paper dates every reading for free.
+    #
+    # Shape is owned by the frontend (components/patient/perio/perioUtils.js).
+    # Null on any case paper where no perio charting was done, which is most.
+    perio_chart_snapshot = Column(JSON, nullable=True)
+
     # Everything the dermatology case paper records that the dental one has no
     # column for: skin profile, the lesion list, scalp and hair findings,
     # severity scores, investigations, differential diagnosis.

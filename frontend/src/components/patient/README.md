@@ -56,7 +56,27 @@ Contains all shared constants and data:
 - `CONDITION_LABELS`: Labels for conditions
 - `STATUS_COLORS`: Colors for tooth status
 - `STATUS_LABELS`: Labels for tooth status
-- `SURFACES`: Surface definitions with descriptions
+- `SURFACES`: the neutral five, for when no specific tooth is in hand
+
+Surfaces are a property of the tooth, not a fixed list. Prefer these over
+`SURFACES` wherever a tooth is known:
+- `surfacesFor(tooth)`: the five, named for that tooth. Anteriors (canine to
+  canine) carry an **incisal** edge rather than an occlusal surface; upper teeth
+  face the **palate** rather than the tongue. The stored key never changes —
+  `M O D B L` are written exactly as before, and only `short`/`label` vary.
+- `surfacesForMany(teeth)`: the same for a selection, judging each axis
+  separately. A quadrant is certainly all upper (so palatal) while mixing front
+  and back teeth (so the biting surface has no single name).
+- `formatSurfaces(tooth, keys)`: `['O','D']` on #10 reads `"ID"`.
+- `normaliseSurfaces(surfaces)`: folds the retired `F` key into `B`.
+
+Condition and work are two axes, not one status:
+- `TOOTH_CONDITIONS` / `WORK_TYPES_BY_STAGE`: what can be chosen. Extraction is
+  planned-only — an extracted tooth is *missing*, not "existing extraction work".
+- `deriveStatus({condition, work, workType})`: the legacy single `status`, which
+  is still written so the chart, the PDFs and the mobile app need no changes.
+- `readToothState(toothData)`: the two axes back out, reconstructed from a
+  legacy `status` when the newer fields are absent.
 
 ## Usage
 

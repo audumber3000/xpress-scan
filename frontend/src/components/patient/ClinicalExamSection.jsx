@@ -18,7 +18,11 @@ const ClinicalExamSection = ({ form, onFormChange }) => {
         <h3 className="text-lg font-bold text-gray-900">Clinical Examination</h3>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      {/* All four on one line from xl up. They are read together — a doctor
+          scanning for "diabetic, allergic to penicillin" should not have to
+          travel down a 2x2 block to find it — and it keeps the tooth chart
+          above the fold on a laptop. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
         <ClinicalMultiSelect 
           category="complaint"
           label="Chief Complaints"

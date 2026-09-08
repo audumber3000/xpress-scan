@@ -6,7 +6,7 @@ import {
     CONDITION_LABELS,
     STATUS_COLORS,
     STATUS_LABELS,
-    SURFACES
+    surfacesFor
 } from './dentalConstants';
 
 const ALL_STATUSES = [
@@ -142,7 +142,7 @@ const ToothEditPopover = ({
                     <div className="space-y-2">
                         <p className="text-[9px] font-bold text-gray-400 uppercase">1. Surfaces</p>
                         <div className="grid grid-cols-2 gap-1.5 bg-gray-50 p-2 rounded-xl">
-                            {SURFACES.map(({ key, label }) => (
+                            {surfacesFor(toothNum).map(({ key, short, label }) => (
                                 <button
                                     key={key}
                                     onClick={() => setSelectedSurface(key)}
@@ -153,7 +153,7 @@ const ToothEditPopover = ({
                                             : 'bg-white text-gray-500 border-gray-100 hover:border-gray-300'
                                         }`}
                                 >
-                                    <span className="text-xs font-bold">{key}</span>
+                                    <span className="text-xs font-bold">{short}</span>
                                     <span className="text-[7px] uppercase tracking-tighter font-bold opacity-60">{label.slice(0, 3)}</span>
                                 </button>
                             ))}

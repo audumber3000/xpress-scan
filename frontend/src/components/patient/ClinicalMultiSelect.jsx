@@ -120,11 +120,19 @@ const ClinicalMultiSelect = ({ category, selectedValues = [], onChange, placehol
             )}
             
             <div className="relative group">
-                <div className="flex flex-wrap gap-2 p-2.5 bg-white border border-gray-200 rounded-2xl focus-within:border-[#2a276e] focus-within:ring-4 focus-within:ring-[#2a276e]/5 transition-all shadow-sm group-hover:border-gray-300">
+                {/* min-h keeps the four boxes level when one has pills and its
+                    neighbour is empty, instead of the row jumping as you type.
+                    Border-only: the shadow went with the rest of the app's. */}
+                <div className="flex flex-wrap content-start gap-2 p-2.5 min-h-[86px] bg-white border border-gray-200 rounded-lg focus-within:border-[#2a276e] focus-within:ring-2 focus-within:ring-[#2a276e]/15 transition-[border-color,box-shadow] duration-150 ease-out group-hover:border-gray-300">
                     {selectedValues.map((val, idx) => (
                         <div 
                             key={idx}
-                            className="flex items-center gap-1.5 px-3 py-1 bg-[#2a276e]/5 text-[#2a276e] border border-[#2a276e]/10 rounded-full text-sm font-semibold animate-in zoom-in-95 duration-200"
+                            /* A small radius, not a capsule. `rounded-full` on a
+                               text pill reads as a tag on a consumer app; a clinical
+                               record wants the squarer, quieter shape. 6px against
+                               the box's 8px also keeps the two concentric instead of
+                               a round pill sitting inside a squared-off container. */
+                            className="flex items-center gap-1.5 px-2.5 py-1 bg-[#2a276e]/5 text-[#2a276e] border border-[#2a276e]/10 rounded-md text-sm font-semibold"
                         >
                             <span>{val}</span>
                             <button 
@@ -147,7 +155,7 @@ const ClinicalMultiSelect = ({ category, selectedValues = [], onChange, placehol
                 </div>
 
                 {showSuggestions && (
-                    <div className="absolute z-[60] mt-2 w-full bg-white rounded-2xl border border-gray-100 shadow-2xl py-2 animate-in fade-in slide-in-from-top-2 duration-200 max-h-64 overflow-y-auto scrollbar-hide">
+                    <div className="absolute z-[60] mt-1.5 w-full bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 max-h-64 overflow-y-auto scrollbar-hide">
                         {!isExactMatch && inputValue.trim() && (
                             <button
                                 onClick={handleAddNew}

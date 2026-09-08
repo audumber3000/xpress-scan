@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import PatientTimeline from './PatientTimeline';
+import TreatmentPlanSection from './treatmentPlan';
 import ToothRightDrawer from './ToothRightDrawer';
 import PrescriptionDrawer from './PrescriptionDrawer';
 import ScanUploadDrawer from './ScanUploadDrawer';
@@ -7,8 +7,8 @@ import LabOrderDrawer from './LabOrderDrawer';
 import CasePaperList from './CasePaperList';
 import ClinicalExamSection from './ClinicalExamSection';
 import DentalChartSection from './DentalChartSection';
-import DiagnosticsGrid from './DiagnosticsGrid';
-import DocumentsNotesGrid from './DocumentsNotesGrid';
+import CaseWorkPanel from './caseWork';
+import ClinicalSummaryModal from './ClinicalSummaryModal';
 import CasePaperActionBar from './CasePaperActionBar';
 import InvoiceEditor from '../payments/InvoiceEditor';
 import CasePaperInvoicesPanel from './CasePaperInvoicesPanel';
@@ -16,12 +16,15 @@ import NextVisitModal from './NextVisitModal';
 import { notify } from '../../utils/notify';
 import { api } from "../../utils/api";
 import { universalToFDI } from "../../utils/toothNumbering";
+import { deriveStatus, formatSurfaces } from './dentalConstants';
 import { Clock, ChevronLeft, Activity } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigationGuard } from '../../contexts/NavigationGuardContext';
 import { getUserDisplayName } from '../../utils/userName';
 import { useCasePaperLabels } from '../../utils/casePaper';
 import DermClinicalSections from './derm/DermClinicalSections';
+import { useToothSelection } from './useToothSelection';
+import { normaliseChart } from './perio/perioUtils';
 
 const CasePapersTab = ({
   patientData,
@@ -70,6 +73,22 @@ const CasePapersTab = ({
   const [sessionTeethData, setSessionTeethData] = useState({});
   const [sessionToothNotes, setSessionToothNotes] = useState({});
   const [sessionTreatmentPlan, setSessionTreatmentPlan] = useState([]);
+  const [sessionPerioChart, setSessionPerioChart] = useState(() => normaliseChart(null));
+
+  /* Tooth selection lives here rather than on the patient page, because the
+     editable chart only exists inside an open case paper — the Overview card is
+     read-only and the page's own drawer is mounted only while no paper is open.
+     `primary` is what every single-tooth consumer already reads. */
+  const selection = useToothSelection();
+  /* While picking a group, ticking a tooth must NOT throw the drawer open — the
+     whole point of the mode is to choose several first and chart them once. The
+     drawer waits for Done. Outside the mode a single click opens it straight
+     away, exactly as it always has. */
+  const [selectionOpen, setSelectionOpen] = useState(false);
+  const selectedTeethNumeric = useMemo(
+    () => selection.selectedTeeth.filter((t) => Number.isFinite(Number(t))).map(Number),
+    [selection.selectedTeeth]
+  );
 
   // Draft Billing State (Local to Case Paper session)
   const [draftCharges, setDraftCharges] = useState([]);
@@ -85,6 +104,7 @@ const CasePapersTab = ({
   // Tracks if an invoice already exists for this case paper
   const [existingCasePaperInvoiceId, setExistingCasePaperInvoiceId] = useState(null);
   const [nextVisitOpen, setNextVisitOpen] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);
 
   // Unsaved-changes guard: flips true on any edit, resets after save/load.
   const [dirty, setDirty] = useState(false);
@@ -220,11 +240,14 @@ const CasePapersTab = ({
         setSessionTeethData({});
         setSessionToothNotes({});
         setSessionTreatmentPlan([]);
+        setSessionPerioChart(normaliseChart(null));
       } else {
         setSessionTeethData(selectedCasePaper.dental_chart_snapshot || {});
         setSessionToothNotes(selectedCasePaper.tooth_notes_snapshot || {});
         setSessionTreatmentPlan(selectedCasePaper.treatment_plan_snapshot || []);
+        setSessionPerioChart(normaliseChart(selectedCasePaper.perio_chart_snapshot));
       }
+      selection.clear();
     }
   }, [selectedCasePaper]);
 
@@ -322,7 +345,8 @@ const CasePapersTab = ({
       status: 'In Progress',
       dental_chart_snapshot: sessionTeethData,
       treatment_plan_snapshot: sessionTreatmentPlan,
-      tooth_notes_snapshot: sessionToothNotes
+      tooth_notes_snapshot: sessionToothNotes,
+      perio_chart_snapshot: sessionPerioChart
     };
     const saved = await api.post('/clinical/case-papers', payload);
     setSelectedCasePaper(saved);
@@ -512,6 +536,8 @@ const CasePapersTab = ({
           derm_findings: null
       });
       setSelectedCasePaper(newPaper);
+      setSessionPerioChart(normaliseChart(null));
+      selection.clear();
       setLabOrders([]);
       setVisitPrescriptions([]);
       setDraftCharges([]);
@@ -551,7 +577,8 @@ const CasePapersTab = ({
               // Clinical Snapshots
               dental_chart_snapshot: sessionTeethData,
               treatment_plan_snapshot: sessionTreatmentPlan,
-              tooth_notes_snapshot: sessionToothNotes
+              tooth_notes_snapshot: sessionToothNotes,
+              perio_chart_snapshot: sessionPerioChart
           };
 
           if (selectedCasePaper?.isNew) {
@@ -610,8 +637,18 @@ const CasePapersTab = ({
 
   // Billing description for a procedure line — kept identical across add/update
   // so we can detect real detail changes on an already-completed procedure.
-  const procedureChargeDesc = (item) =>
-    `${item.procedure} (Tooth #${item.tooth ? universalToFDI(item.tooth) : 'General'})`;
+  const procedureChargeDesc = (item) => {
+    // Surfaces are named for the tooth they are on, so an anterior composite
+    // bills as "ID" and not "OD". A three-surface filling and a one-surface
+    // filling were previously the same line at the same fee.
+    const surfaces = Array.isArray(item.surfaces) && item.surfaces.length
+      ? `, ${formatSurfaces(item.tooth ?? item.teeth?.[0], item.surfaces)}`
+      : '';
+    if (Array.isArray(item.teeth) && item.teeth.length) {
+      return `${item.procedure} (Teeth #${item.teeth.map(universalToFDI).join(', ')}${surfaces})`;
+    }
+    return `${item.procedure} (Tooth #${item.tooth ? universalToFDI(item.tooth) : 'General'}${surfaces})`;
+  };
   const isCompleted = (item) => (item?.status || '').toLowerCase() === 'completed';
 
   // Auto-bill a newly completed procedure straight to the case paper's draft
@@ -731,24 +768,89 @@ const CasePapersTab = ({
     }
   };
 
-  const handleAddTreatment = (treatmentDetails) => {
+  /**
+   * Edit an existing procedure.
+   *
+   * Both views route here, and both land in the tooth drawer rather than an
+   * inline form. The drawer is the same editor used to add a procedure and it
+   * carries the diagnosis and procedure autocompletes and the price list, none
+   * of which four bare text inputs had. The board used to open the drawer AND
+   * an inline form at once, which meant two editors for one procedure and no
+   * rule about which one won.
+   */
+  /* The chart's click handler. Keeps the patient page's own state in step so
+     closing the case paper does not leave a stale tooth highlighted there. */
+  const handleToothSelect = (tooth, modifiers) => {
+    selection.select(tooth, modifiers);
+    onToothSelect?.(tooth);
+  };
+
+  const handleEditTreatment = (item) => {
+    setEditingTreatment(item);
+    setSelectionOpen(true);
+    selection.setOnly(item?.tooth ? Number(item.tooth) : 'GENERAL');
+  };
+
+  /** Sharing renders from a stored case paper, so persist a new one first. */
+  const handleRequestShare = async () => {
+    try {
+      await ensureCasePaperSaved();
+      return true;
+    } catch (err) {
+      console.error('Could not save the case paper before sharing:', err);
+      notify.problem('Save the case paper first, then share the plan');
+      return false;
+    }
+  };
+
+  /**
+   * Add or update a procedure.
+   *
+   * A selection of several teeth becomes one plan row PER TOOTH by default —
+   * four composites are four procedures, four fees and four invoice lines, and
+   * that is how Open Dental and Dentrix behave too. `combined` collapses them
+   * into a single row carrying every tooth, which is the honest shape for work
+   * that is genuinely one job over a quadrant, like a scaling.
+   */
+  const handleAddTreatment = ({ teeth, combined, ...details }) => {
+      const stamp = {
+          date: new Date().toISOString().split('T')[0],
+          time: '10:00',
+      };
       let newPlan;
+
       if (editingTreatment) {
-          // Update existing item
-          newPlan = sessionTreatmentPlan.map(item => 
-              item.id === editingTreatment.id ? { ...item, ...treatmentDetails } : item
+          newPlan = sessionTreatmentPlan.map(item =>
+              item.id === editingTreatment.id ? { ...item, ...details } : item
           );
+      } else if (Array.isArray(teeth) && teeth.length > 1) {
+          newPlan = combined
+              ? [...sessionTreatmentPlan, {
+                  id: Date.now() + Math.random(),
+                  ...stamp,
+                  ...details,
+                  tooth: null,
+                  teeth: [...teeth],
+                }]
+              : [...sessionTreatmentPlan, ...teeth.map((tooth, i) => ({
+                  // The offset keeps ids distinct: Date.now() does not move
+                  // between iterations of a synchronous loop.
+                  id: Date.now() + Math.random() + i,
+                  ...stamp,
+                  ...details,
+                  tooth,
+                }))];
       } else {
-          // Create new item
           newPlan = [...sessionTreatmentPlan, {
               id: Date.now() + Math.random(),
-              date: new Date().toISOString().split('T')[0],
-              time: '10:00',
-              ...treatmentDetails
+              ...stamp,
+              ...details,
           }];
       }
+
       onUpdatePlan(newPlan);
       setEditingTreatment(null);
+      selection.clear();
   };
 
   const handleSendLabOrder = () => {
@@ -796,9 +898,50 @@ const CasePapersTab = ({
     });
   };
 
+  /**
+   * Condition and work, written together with the legacy `status` derived from
+   * them. Writing `status` too is what keeps this change contained: the chart,
+   * the Overview mini-chart, the summary PDF and the mobile app all keep
+   * reading exactly the field they always did.
+   */
+  const handleToothStateChange = (toothId, state) => {
+    setDirty(true);
+    setSessionTeethData((prev) => {
+      const tooth = prev[toothId] || { surfaces: {} };
+      return {
+        ...prev,
+        [toothId]: { ...tooth, ...state, status: deriveStatus(state) },
+      };
+    });
+  };
+
+  /** Chart overlays — sealant, abscess, drifting, diastema. They stack on top of
+   *  whatever status the tooth carries, so they are their own list. */
+  const handleMarksChange = (toothId, marks) => {
+    setDirty(true);
+    setSessionTeethData((prev) => {
+      const tooth = prev[toothId] || { surfaces: {} };
+      return { ...prev, [toothId]: { ...tooth, marks } };
+    });
+  };
+
+  /** Several findings per tooth — a tooth can have caries AND demineralisation. */
+  const handleFindingsChange = (toothId, findings) => {
+    setDirty(true);
+    setSessionTeethData((prev) => {
+      const tooth = prev[toothId] || { surfaces: {} };
+      return { ...prev, [toothId]: { ...tooth, findings } };
+    });
+  };
+
   const handleNotesChange = (toothId, notes) => {
     setDirty(true);
     setSessionToothNotes(prev => ({ ...prev, [toothId]: notes }));
+  };
+
+  const handlePerioChange = (next) => {
+    setDirty(true);
+    setSessionPerioChart(next);
   };
 
   // Form edits from the clinical sections — mark the session dirty.
@@ -885,7 +1028,7 @@ const CasePapersTab = ({
         </div>
       </div>
 
-      <div className="space-y-12 pb-32">
+      <div className="flex-1 space-y-12 pb-8">
         {/* 2. The clinical middle.
              Dental gets the pill exam plus the tooth chart plus the treatment
              timeline. Dermatology gets its own case paper: skin profile,
@@ -915,11 +1058,20 @@ const CasePapersTab = ({
             onTabChange={setActiveChartTab}
             sessionTeethData={sessionTeethData}
             sessionToothNotes={sessionToothNotes}
-            selectedTooth={selectedTooth}
-            onToothSelect={onToothSelect}
-            onSurfaceConditionChange={handleSurfaceConditionChange}
-            onToothStatusChange={handleToothStatusChange}
-            onNotesChange={handleNotesChange}
+            selectedTooth={selection.primary}
+            selectedTeeth={selection.selectedTeeth}
+            multiMode={selection.multiMode}
+            onMultiModeChange={selection.setMultiMode}
+            onToothSelect={handleToothSelect}
+            onToothDragEnter={selection.dragOver}
+            onSelectionDragEnd={selection.endDrag}
+            onQuadrantSelect={selection.selectQuadrant}
+            onArchSelect={selection.selectArch}
+            onToothRemove={selection.toggle}
+            onSelectionClear={selection.clear}
+            onOpenSelection={() => { setEditingTreatment(null); setSelectionOpen(true); }}
+            perioChart={sessionPerioChart}
+            onPerioChange={handlePerioChange}
           />
         )}
 
@@ -929,86 +1081,67 @@ const CasePapersTab = ({
              dermatology equivalent is "Procedures planned" in the assessment
              section above. */}
         {isDental && (
-        <section className="pt-8 border-t border-gray-100 timeline-kanban-fixed">
-            <style>{`
-                .timeline-kanban-fixed [onDragOver] { 
-                    max-height: 500px;
-                    overflow-y: auto;
-                }
-            `}</style>
-            <PatientTimeline
-                upcomingAppointments={upcomingAppointments}
-                treatmentHistory={treatmentHistory}
-                treatmentPlan={sessionTreatmentPlan}
-                onUpdatePlan={onUpdatePlan}
-                onGeneratePlan={onGeneratePlan}
-                onToothSelect={(toothNum, treatmentToEdit) => {
-                    onToothSelect(toothNum);
-                    if (treatmentToEdit) {
-                        setEditingTreatment(treatmentToEdit);
-                    } else {
-                        setEditingTreatment(null);
-                    }
-                }}
-                teethData={sessionTeethData}
-            />
-        </section>
+          <TreatmentPlanSection
+            treatmentPlan={sessionTreatmentPlan}
+            treatmentHistory={treatmentHistory}
+            teethData={sessionTeethData}
+            currentUserName={currentUserName}
+            onUpdatePlan={onUpdatePlan}
+            onEditTreatment={handleEditTreatment}
+            casePaper={selectedCasePaper}
+            patient={patientData}
+            user={user}
+            onRequestShare={handleRequestShare}
+          />
         )}
 
-        {/* 5. Diagnostics Grid Row 1: Lab Orders & Prescriptions */}
-        <DiagnosticsGrid
+        {/* 5. Everything else the visit produced, plus the note written
+             while reading it. Four stacked full-width sections became one
+             tabbed card: three of them are empty on a typical visit, so the
+             page was mostly headings announcing that nothing had happened. */}
+        <CaseWorkPanel
           labOrders={labOrders}
+          onNewLabOrder={() => handleAutoSaveForDrawer(() => {
+            setSelectedLabOrder(null);
+            setIsLabDrawerOpen(true);
+          })}
+          onEditLabOrder={(order) => { setSelectedLabOrder(order); setIsLabDrawerOpen(true); }}
           visitPrescriptions={visitPrescriptions}
           selectedCasePaper={selectedCasePaper}
           isNewCasePaper={selectedCasePaper?.isNew}
-          onNewLabOrder={() => {
-            handleAutoSaveForDrawer(() => {
-              setSelectedLabOrder(null);
-              setIsLabDrawerOpen(true);
-            });
-          }}
-          onEditLabOrder={(order) => { setSelectedLabOrder(order); setIsLabDrawerOpen(true); }}
-          onNewPrescription={() => {
-            handleAutoSaveForDrawer(() => setPrescriptionOpen(true));
-          }}
-        />
-
-        {/* 6. Grid Row 2: Documents & Inventory Used */}
-        <DocumentsNotesGrid
+          onNewPrescription={() => handleAutoSaveForDrawer(() => setPrescriptionOpen(true))}
           patientDocuments={patientDocuments}
-          onUploadClick={() => {
-            handleAutoSaveForDrawer(() => setScanOpen(true));
-          }}
+          onUploadClick={() => handleAutoSaveForDrawer(() => setScanOpen(true))}
           consumptions={inventoryConsumptions}
           inventoryItems={inventoryItems}
           medicationItems={medicationStock}
           onAddConsumption={handleAddConsumption}
           onDeleteConsumption={handleDeleteConsumption}
           onBillConsumption={handleBillConsumption}
+          notes={form.notes}
+          onNotesChange={(value) => handleFormChange({ ...form, notes: value })}
         />
-
-        {/* 7. Clinical Notes — full width, below the grid */}
-        <section className="pt-8 border-t border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <Activity size={20} className="text-[#2a276e]" />
-            Clinical Notes
-          </h3>
-          <textarea
-            value={form.notes}
-            onChange={(e) => handleFormChange({ ...form, notes: e.target.value })}
-            placeholder="Refined observations for this session..."
-            className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#2a276e] focus:ring-2 focus:ring-[#2a276e]/20 outline-none text-sm font-medium min-h-[120px] resize-none transition-all"
-          />
-        </section>
       </div>
 
-      {/* 7. Sticky Bottom Action Bar */}
+      {/* 6. The action bar. Not positioned here — it portals into a slot
+           after the scroll area on the patient page, so it is the last row of
+           the page rather than something floating over this one. */}
       <CasePaperActionBar
         form={form}
         onSave={handleSaveCasePaper}
         onNextVisit={() => setNextVisitOpen(true)}
         onPrescription={() => {
           handleAutoSaveForDrawer(() => setPrescriptionOpen(true));
+        }}
+        onClinicalSummary={async () => {
+          // The PDF renders from the stored paper, so a brand-new one is saved
+          // first — the same guard the drawers and Share plan use.
+          try {
+            await ensureCasePaperSaved();
+            setSummaryOpen(true);
+          } catch {
+            notify.problem('Save the case paper first, then build the summary');
+          }
         }}
         prescriptionCount={prescribedMedicineCount}
         invoiceCount={casePaperInvoices.length}
@@ -1033,6 +1166,16 @@ const CasePapersTab = ({
           });
         }}
       />
+
+      {summaryOpen && selectedCasePaper && !selectedCasePaper.isNew && (
+        <ClinicalSummaryModal
+          open={summaryOpen}
+          onClose={() => setSummaryOpen(false)}
+          casePaper={selectedCasePaper}
+          patient={patientData}
+          user={user}
+        />
+      )}
 
       <NextVisitModal
         open={nextVisitOpen}
@@ -1156,17 +1299,36 @@ const CasePapersTab = ({
         />
       )}
 
-      <ToothRightDrawer 
-          isOpen={isDental && !!selectedTooth}
-          onClose={() => onToothSelect(null)}
-          selectedTooth={selectedTooth}
+      <ToothRightDrawer
+          isOpen={isDental && selection.selectedTeeth.length > 0
+            && (!selection.multiMode || selectionOpen)}
+          onClose={() => {
+            setSelectionOpen(false);
+            setEditingTreatment(null);
+            // In pick-a-group mode the selection survives a close, so shutting
+            // the drawer to check something on the chart does not throw away
+            // eight ticked teeth. Otherwise closing means done with this tooth.
+            if (!selection.multiMode) { selection.clear(); onToothSelect?.(null); }
+          }}
+          selectedTooth={selection.primary}
+          selectedTeeth={selectedTeethNumeric}
           teethData={sessionTeethData}
           toothNotes={sessionToothNotes}
           onSurfaceConditionChange={handleSurfaceConditionChange}
           onToothStatusChange={handleToothStatusChange}
+          onToothStateChange={handleToothStateChange}
+          onFindingsChange={handleFindingsChange}
+          onMarksChange={handleMarksChange}
           onNotesChange={handleNotesChange}
           onAddTreatment={handleAddTreatment}
           editingTreatment={editingTreatment}
+          /* Walk the arch without closing: charting is sequential, and a
+             close-and-reopen per tooth is two clicks times thirty-two. */
+          onNavigate={(tooth) => {
+            setEditingTreatment(null);
+            selection.setOnly(tooth);
+            onToothSelect?.(tooth);
+          }}
       />
 
     </div>

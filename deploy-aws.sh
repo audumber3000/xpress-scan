@@ -150,6 +150,7 @@ run_migration "default_medications_seeded" "ALTER TABLE clinics ADD COLUMN IF NO
 run_migration "manual_whatsapp" "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS manual_whatsapp BOOLEAN DEFAULT FALSE"
 run_migration "case_paper_type" "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS case_paper_type VARCHAR(16) DEFAULT 'dental'"
 run_migration "derm_findings" "ALTER TABLE case_papers ADD COLUMN IF NOT EXISTS derm_findings JSON"
+run_migration "perio_chart"   "ALTER TABLE case_papers ADD COLUMN IF NOT EXISTS perio_chart_snapshot JSON"
 run_migration "inv_txn_action" "ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS action VARCHAR"
 run_migration "inv_txn_med_id" "ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS medication_stock_id INTEGER REFERENCES medication_stock(id)"
 run_migration "medstock_pack_unit" "ALTER TABLE medication_stock ADD COLUMN IF NOT EXISTS pack_unit VARCHAR"

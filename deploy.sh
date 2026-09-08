@@ -95,6 +95,7 @@ run_migration "tax_label"        "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS t
 run_migration "tax_id"           "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS tax_id VARCHAR(50)"
 run_migration "case_paper_type" "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS case_paper_type VARCHAR(16) DEFAULT 'dental'"
 run_migration "derm_findings" "ALTER TABLE case_papers ADD COLUMN IF NOT EXISTS derm_findings JSON"
+run_migration "perio_chart"   "ALTER TABLE case_papers ADD COLUMN IF NOT EXISTS perio_chart_snapshot JSON"
 run_migration "email_report_unsubscribed" "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_report_unsubscribed BOOLEAN DEFAULT FALSE"
 run_migration "trial_used"        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_used BOOLEAN DEFAULT FALSE"
 

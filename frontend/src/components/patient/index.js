@@ -5,7 +5,7 @@ export { default as ToothUnit } from './ToothUnit';
 export { default as CleanToothSVG } from './CleanToothSVG';
 export { default as SurfaceSelectionModal } from './SurfaceSelectionModal';
 export { default as ToothEditPopover } from './ToothEditPopover';
-export { default as PatientTimeline } from './PatientTimeline';
+export { default as TreatmentPlanSection } from './treatmentPlan';
 export { default as PatientBilling } from './PatientBilling';
 export { default as PatientInfo } from './PatientInfo';
 export { default as PatientPrescriptions } from './PatientPrescriptions';

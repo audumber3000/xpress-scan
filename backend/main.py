@@ -376,6 +376,19 @@ async def lifespan(app: FastAPI):
             # The dermatology case paper's findings (skin profile, lesions,
             # scalp/hair, severity scores). Null on every dental case paper.
             conn.execute(text("ALTER TABLE case_papers ADD COLUMN IF NOT EXISTS derm_findings JSON"))
+            # Periodontal charting for the visit: BPE sextant scores, and the
+            # full six-site chart where one was taken.
+            #
+            # It is here as well as in deploy-aws.sh because the deploy script
+            # in this repo is NOT the one prod runs — the workflow rsyncs
+            # backend/ and then executes the server's own copy, which has
+            # drifted well behind. This block is inside backend/, so it travels.
+            #
+            # Getting that wrong is not a missing feature, it is an outage:
+            # SQLAlchemy names every mapped column in its SELECTs, so a
+            # case_papers row could not be read at all without this column and
+            # the whole patient file would 500.
+            conn.execute(text("ALTER TABLE case_papers ADD COLUMN IF NOT EXISTS perio_chart_snapshot JSON"))
 
             # ── Signed paperwork: the medical history and the consent ────────
             #

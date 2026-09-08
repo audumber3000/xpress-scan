@@ -8,6 +8,8 @@ from models import (
 from schemas import CasePaperCreate, CasePaperUpdate, CasePaperOut
 from core.auth_utils import get_current_user, require_doctor_or_owner
 from typing import List, Optional, Any
+from pydantic import BaseModel
+import re
 from datetime import datetime
 import json
 
@@ -273,6 +275,312 @@ async def visit_summary_pdf(paper_id: int, db: Session = Depends(get_db),
         content=_summary_pdf(db, cp),
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="Visit_summary_{paper_id}.pdf"'},
+    )
+
+
+def _treatment_plan_pdf(db: Session, cp) -> bytes:
+    import os
+    from models import Clinic, User as U
+    from domains.clinical.treatment_plan_pdf import render_treatment_plan
+    from domains.infrastructure.services.pdf_service import html_template_to_pdf
+
+    clinic = db.query(Clinic).filter(Clinic.id == cp.clinic_id).first()
+    dentist = db.query(U).filter(U.id == cp.dentist_id).first() if cp.dentist_id else None
+    html = render_treatment_plan(
+        cp, clinic, cp.patient,
+        dentist.name if dentist else "",
+        getattr(clinic, "currency_symbol", None) or "₹",
+    )
+    path = html_template_to_pdf(html)
+    try:
+        with open(path, "rb") as fh:
+            return fh.read()
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+@router.get("/{paper_id}/treatment-plan-pdf")
+async def treatment_plan_pdf(paper_id: int, db: Session = Depends(get_db),
+                             current_user=Depends(get_current_user)):
+    """The visit's treatment plan as a PDF the patient can be handed.
+
+    Rendered from treatment_plan_snapshot, which is the plan as it stood on this
+    case paper — not the patient's live plan. Sharing a document that quietly
+    changes after it was sent is worse than not sharing one.
+
+    No automated WhatsApp counterpart on purpose: that path bills wallet credit
+    and needs a template approved before it delivers anything, so it would work
+    for some clinics and silently fail for the rest. The frontend downloads this
+    and opens WhatsApp for the clinic to attach it themselves.
+    """
+    cp = _load_paper(db, paper_id, current_user)
+    return Response(
+        content=_treatment_plan_pdf(db, cp),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="Treatment_plan_{paper_id}.pdf"'},
+    )
+
+
+# ── AI-drafted clinical notes ────────────────────────────────────────────────
+
+_NOTES_SYSTEM = """You write the clinical note for a dental visit, from the \
+record the dentist has already entered.
+
+Rules, in order of importance:
+
+1. Never state a finding, tooth, medicine, measurement or diagnosis that is not \
+   in the input. If something is not recorded, it did not happen. Do not infer, \
+   do not complete a pattern, do not add the "obvious" next step.
+2. Write what a colleague reading this file in two years needs: what was found, \
+   what was decided, what was done, what happens next. Plain clinical prose.
+3. Tooth numbers are given in FDI. Use them exactly as given.
+4. No headings, no bullet points, no preamble. Three short paragraphs at most.
+5. Do not give the patient advice or a prognosis the dentist has not recorded.
+
+You are drafting, not deciding. The dentist reads and edits every word before it \
+is saved."""
+
+_NOTES_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "note": {"type": "string", "description": "The clinical note, plain prose."},
+        "omitted": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Anything a complete note would normally carry that "
+                           "the record does not contain, so the dentist can fill it in.",
+        },
+    },
+    "required": ["note", "omitted"],
+    "additionalProperties": False,
+}
+
+
+def _notes_input(cp, prescriptions) -> str:
+    """Only what is recorded. Nothing derived, nothing assumed."""
+    import json
+    from domains.clinical.clinical_summary_pdf import (
+        _as_list, _json_obj, CONDITION_WORDS, WORK_WORDS, TYPE_WORDS,
+    )
+    from domains.clinical.tooth_notation import universal_to_fdi, format_surfaces
+
+    chart = _json_obj(getattr(cp, "dental_chart_snapshot", None), {}) or {}
+    plan = _json_obj(getattr(cp, "treatment_plan_snapshot", None), []) or []
+    notes_by_tooth = _json_obj(getattr(cp, "tooth_notes_snapshot", None), {}) or {}
+    perio = _json_obj(getattr(cp, "perio_chart_snapshot", None), {}) or {}
+
+    teeth = []
+    for key, data in chart.items():
+        if not isinstance(data, dict):
+            continue
+        marked = [k for k, v in (data.get("surfaces") or {}).items() if v and v != "none"]
+        entry = {
+            "tooth_fdi": universal_to_fdi(key),
+            "condition": CONDITION_WORDS.get(data.get("condition")),
+            "work": (f"{TYPE_WORDS.get(data.get('workType'), 'work')} "
+                     f"({WORK_WORDS.get(data.get('work'), '')})") if data.get("work") else None,
+            "surfaces": format_surfaces(key, marked) or None,
+            "findings": data.get("findings") or None,
+            "note": notes_by_tooth.get(str(key)) or None,
+        }
+        if any(v for k, v in entry.items() if k != "tooth_fdi"):
+            teeth.append({k: v for k, v in entry.items() if v})
+
+    procedures = [{
+        "tooth_fdi": universal_to_fdi(i["tooth"]) if i.get("tooth") else
+                     ([universal_to_fdi(t) for t in i["teeth"]] if i.get("teeth") else "general"),
+        "procedure": i.get("procedure"),
+        "diagnosis": i.get("diagnosis") or None,
+        "status": i.get("status") or "planned",
+    } for i in plan if isinstance(i, dict) and i.get("procedure")]
+
+    medicines = [
+        {k: it.get(k) for k in ("medicine_name", "dosage", "frequency", "duration") if it.get(k)}
+        for rx in (prescriptions or []) for it in (rx.items or []) if (it or {}).get("medicine_name")
+    ]
+
+    record = {
+        "visit_date": cp.date.strftime("%d %B %Y") if cp.date else None,
+        "chief_complaint": _as_list(cp.chief_complaint) or None,
+        "medical_history": _as_list(cp.medical_history) or None,
+        "allergies": _as_list(cp.allergies) or None,
+        "dental_history": _as_list(cp.dental_history) or None,
+        "examination": cp.clinical_examination or None,
+        "diagnosis": cp.diagnosis or None,
+        "teeth": teeth or None,
+        "procedures": procedures or None,
+        "medicines_prescribed": medicines or None,
+        "periodontal": {"bpe": perio.get("bpe"), "notes": perio.get("notes")} if perio else None,
+        "next_visit": cp.next_visit_recommendation or None,
+        "dentist_existing_note": cp.notes or None,
+    }
+    return json.dumps({k: v for k, v in record.items() if v}, indent=1, default=str)
+
+
+@router.post("/{paper_id}/draft-notes")
+async def draft_clinical_notes(paper_id: int, db: Session = Depends(get_db),
+                               current_user=Depends(require_doctor_or_owner())):
+    """Draft the visit's clinical note from what is already on the record.
+
+    Returns a draft and never saves it. The dentist reads, edits and saves it
+    themselves — a clinical record that writes itself unattended is a liability,
+    not a feature, and the note is what a court or a colleague reads later.
+    """
+    import os
+    import json
+    from models import Prescription
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Note drafting isn't switched on for this server yet (missing ANTHROPIC_API_KEY).",
+        )
+    try:
+        from anthropic import AsyncAnthropic
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Note drafting dependency is not installed.")
+
+    cp = _load_paper(db, paper_id, current_user)
+    prescriptions = db.query(Prescription).filter(Prescription.case_paper_id == cp.id).all()
+    record = _notes_input(cp, prescriptions)
+
+    if len(record) < 40:
+        raise HTTPException(
+            status_code=400,
+            detail="There isn't enough on this case paper yet to draft a note from.",
+        )
+
+    # Its own variable, not the shared ANTHROPIC_MODEL: that one is pinned to a
+    # small model for reading handwriting, and a clinical note is a judgement
+    # task, not a transcription. `or` rather than getenv's default because
+    # docker-compose passes the name through and it arrives empty when unset.
+    model = os.getenv("ANTHROPIC_NOTES_MODEL") or "claude-opus-5"
+    client = AsyncAnthropic(api_key=api_key)
+
+    try:
+        resp = await client.messages.create(
+            model=model,
+            max_tokens=16000,
+            system=_NOTES_SYSTEM,
+            output_config={
+                "format": {"type": "json_schema", "schema": _NOTES_SCHEMA},
+                "effort": "medium",
+            },
+            messages=[{"role": "user", "content":
+                       f"The record for this visit:\n\n{record}\n\nWrite the clinical note."}],
+        )
+    except Exception as e:  # noqa: BLE001 — the drawer shows this, so it must read
+        print(f"⚠️ Clinical note drafting failed for case paper {paper_id}: {e}")
+        raise HTTPException(status_code=502, detail="Could not draft a note just now. Try again.")
+
+    if getattr(resp, "stop_reason", None) == "refusal":
+        raise HTTPException(status_code=502, detail="Could not draft a note for this record.")
+
+    text = "".join(getattr(b, "text", "") for b in resp.content
+                   if getattr(b, "type", None) == "text")
+    try:
+        parsed = json.loads(text) if text.strip() else {}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=502, detail="Could not draft a note just now. Try again.")
+
+    return {
+        "note": parsed.get("note", ""),
+        "omitted": parsed.get("omitted", []),
+        "model": model,
+    }
+
+
+# ── Clinical summary ─────────────────────────────────────────────────────────
+# The whole visit, for the file rather than for the patient: chart, findings,
+# plan, medicines, perio. See domains/clinical/clinical_summary_pdf.py.
+
+_SVG_MAX_BYTES = 3_000_000
+
+# Anything that could make the PDF renderer reach outside this request. The SVG
+# arrives from the browser, and WeasyPrint will happily follow an <image href>
+# or resolve an entity — so a chart from a tampered client could read a file off
+# the server or call out to a URL. Strip the lot; the chart needs none of it.
+_SVG_FORBIDDEN = re.compile(
+    r"<\s*(script|foreignObject|image|use|iframe|object|embed|a)\b"
+    r"|<!DOCTYPE|<!ENTITY|xlink:href\s*=|(?<!fill:url\(#)href\s*=|\bon[a-z]+\s*=",
+    re.IGNORECASE,
+)
+
+
+def _safe_svg(svg: str) -> str:
+    """The posted chart, or nothing. Never a half-cleaned version: a chart we
+    cannot vouch for is worse than a page that says the chart is missing."""
+    if not svg:
+        return ""
+    svg = svg.strip()
+    if len(svg.encode("utf-8")) > _SVG_MAX_BYTES:
+        return ""
+    if not svg.startswith("<svg") or not svg.endswith("</svg>"):
+        return ""
+    if _SVG_FORBIDDEN.search(svg):
+        return ""
+    return svg
+
+
+class ClinicalSummaryRequest(BaseModel):
+    # The live chart, serialised by the browser. Optional: the endpoint still
+    # produces a document without it, saying so rather than leaving a hole.
+    chart_svg: Optional[str] = None
+
+
+def _clinical_summary_pdf(db: Session, cp, chart_svg: str) -> bytes:
+    import os
+    from models import Clinic, User as U, Prescription, LabOrder, InventoryTransaction
+    from domains.clinical.clinical_summary_pdf import render_clinical_summary
+    from domains.infrastructure.services.pdf_service import html_template_to_pdf
+
+    clinic = db.query(Clinic).filter(Clinic.id == cp.clinic_id).first()
+    dentist = db.query(U).filter(U.id == cp.dentist_id).first() if cp.dentist_id else None
+
+    prescriptions = db.query(Prescription).filter(Prescription.case_paper_id == cp.id).all()
+    lab_orders = db.query(LabOrder).filter(LabOrder.case_paper_id == cp.id).all()
+    consumptions = db.query(InventoryTransaction).filter(
+        InventoryTransaction.case_paper_id == cp.id).all()
+
+    html = render_clinical_summary(
+        cp, clinic, cp.patient,
+        dentist.name if dentist else "",
+        getattr(clinic, "currency_symbol", None) or "₹",
+        chart_svg=chart_svg,
+        prescriptions=prescriptions,
+        lab_orders=lab_orders,
+        consumptions=consumptions,
+    )
+    path = html_template_to_pdf(html)
+    try:
+        with open(path, "rb") as fh:
+            return fh.read()
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+@router.post("/{paper_id}/clinical-summary-pdf")
+async def clinical_summary_pdf(paper_id: int, payload: ClinicalSummaryRequest,
+                               db: Session = Depends(get_db),
+                               current_user=Depends(get_current_user)):
+    """The full clinical record for this visit, as a PDF.
+
+    POST rather than GET because the browser hands over the chart it is
+    currently drawing. Rendering the chart a second time server-side would mean
+    maintaining every one of its symbols twice, and the two would drift.
+    """
+    cp = _load_paper(db, paper_id, current_user)
+    return Response(
+        content=_clinical_summary_pdf(db, cp, _safe_svg(payload.chart_svg or "")),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="Clinical_summary_{paper_id}.pdf"'},
     )
 
 

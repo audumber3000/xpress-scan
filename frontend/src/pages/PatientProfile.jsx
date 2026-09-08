@@ -28,6 +28,7 @@ import { notify } from '../utils/notify';
 import { patientService, appointmentService, paymentService } from '../services/patientService';
 import { useAuth } from '../contexts/AuthContext';
 import { clinicToday } from '../utils/datetime';
+import { deriveStatus } from '../components/patient/dentalConstants';
 import { printPatientFile } from '../utils/patientPrint';
 
 const PatientProfile = () => {
@@ -488,6 +489,20 @@ const PatientProfile = () => {
     });
   };
 
+  const handleToothStateChange = (toothNum, state) => {
+    setTeethData((prev) => {
+      const tooth = prev[toothNum] || { status: 'present', surfaces: {} };
+      return { ...prev, [toothNum]: { ...tooth, ...state, status: deriveStatus(state) } };
+    });
+  };
+
+  const handleFindingsChange = (toothNum, findings) => {
+    setTeethData((prev) => {
+      const tooth = prev[toothNum] || { status: 'present', surfaces: {} };
+      return { ...prev, [toothNum]: { ...tooth, findings } };
+    });
+  };
+
   const handleToothStatusChange = (toothNum, status) => {
     setTeethData(prev => {
       const toothData = prev[toothNum] || { status: 'present', surfaces: {} };
@@ -717,6 +732,20 @@ const PatientProfile = () => {
           </div>
         </div>
       </div>
+
+      {/* Where the case paper's action bar lands.
+
+          It portals in here rather than living inside the scroll area, because
+          a bar that must sit at the bottom of the work area should not depend
+          on the overflow and height of all five ancestors between it and the
+          window. As a sibling of the scroller it is simply the last row of the
+          page's flex column: always flush to the bottom, never over content,
+          and it follows the sidebar for free because it is inside the same
+          column the sidebar sits beside.
+
+          `empty:hidden` keeps it out of the layout entirely when no case paper
+          is open, so it costs nothing on the other tabs. */}
+      <div id="case-paper-dock" className="shrink-0 empty:hidden" />
       {/* Overview shortcuts. Each is the same component its own tab uses, so
           a prescription written here and one written on the tab are the same
           record through the same code. */}
@@ -776,7 +805,10 @@ const PatientProfile = () => {
             toothNotes={toothNotes}
             onSurfaceConditionChange={handleSurfaceConditionChange}
             onToothStatusChange={handleToothStatusChange}
+            onToothStateChange={handleToothStateChange}
+            onFindingsChange={handleFindingsChange}
             onNotesChange={handleNotesChange}
+            onNavigate={(tooth) => setSelectedTooth(tooth)}
             onAddTreatment={(details) => {
                 const newPlanItem = {
                     id: Date.now() + Math.random(),

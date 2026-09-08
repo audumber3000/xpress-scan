@@ -200,6 +200,65 @@ export async function shareVisitSummaryManually(casePaper, patient, user) {
 }
 
 /**
+ * Manually share the treatment plan: download the PDF and open WhatsApp.
+ *
+ * Manual only, on purpose. The automated path costs wallet credit and needs a
+ * template registered and approved before it sends anything at all, so a plan
+ * shared that way would work for some clinics and silently fail for the rest.
+ * This works for every clinic on the day it ships.
+ *
+ * The message deliberately says "estimate": a plan is what was agreed in the
+ * chair, not a bill, and the fees move if the treatment does.
+ */
+export async function shareTreatmentPlanManually(casePaper, patient, user) {
+  const phone = patient?.phone;
+  if (!phone) return false;
+  await downloadAuthedFile(
+    `/clinical/case-papers/${casePaper.id}/treatment-plan-pdf`,
+    `treatment_plan_${casePaper.id}.pdf`
+  );
+  const clinicName = user?.clinic?.name || 'our clinic';
+  const msg = `Hello ${patient.name || ''}, here is the treatment plan we discussed at ${clinicName}. `
+    + `I have attached it as a PDF. The fees in it are an estimate and we will tell you before anything changes. `
+    + `Do ask us if anything is unclear.`;
+  return openWhatsApp(phone, msg, user?.clinic?.country || 'IN');
+}
+
+/**
+ * Fetch a PDF that has to be POSTed for, as a Blob.
+ *
+ * The clinical summary sends the chart the browser is drawing, so it cannot be
+ * a GET. Returning the Blob rather than saving it straight away is what lets
+ * the caller show the document before deciding what to do with it — and means
+ * the PDF is built once even if you preview it, then download it, then send it.
+ */
+export async function postForBlob(path, body) {
+  const baseURL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+  const res = await fetch(`${baseURL}/api/v1${path}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body || {}),
+  });
+  if (!res.ok) throw new Error('Could not build the document');
+  return res.blob();
+}
+
+/** Save a Blob we already hold to the user's machine. */
+export function saveBlob(blob, filename) {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
+/**
  * Manually ask for a Google review. Nothing to download here: the whole message
  * is the link, so this opens WhatsApp straight away.
  */

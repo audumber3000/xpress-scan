@@ -47,6 +47,23 @@ export const STATUS_COLORS: Record<string, string> = {
     rootCanal: '#ef4444',
     impacted: '#94a3b8',
     planned: '#ef4444',
+
+    // Written by the web case paper, which can now record what KIND of existing
+    // work a tooth carries rather than calling all of it an implant. Mobile
+    // cannot set these yet, but it reads the same snapshots — and the lookup
+    // below falls back to red, so without these rows a tooth with an old crown
+    // would show on a phone in the colour this palette uses for "extracted".
+    existing: '#64748b',
+    crown_porcelain: '#64748b',
+    crown_gold: '#64748b',
+    crown_ss: '#64748b',
+    veneer: '#64748b',
+    bridge: '#64748b',
+    post_core: '#64748b',
+
+    // Both are genuinely urgent, so red is right for them.
+    to_extract: '#ef4444',
+    fractured: '#ef4444',
 };
 
 // Status labels

@@ -1,96 +1,95 @@
 import React from 'react';
+import { surfacesFor } from './dentalConstants';
 
+/**
+ * The five surfaces of one tooth: four around a centre.
+ *
+ * There used to be a sixth region — a detached arch above the donut emitting
+ * 'F' for facial. Facial and buccal are the same surface, and the constants
+ * only ever defined five with no 'F' in them, so anything marked on that arch
+ * was written to a key nothing else read and disappeared on the next open. The
+ * arch is gone; the donut's four-around-a-centre is the standard chart form and
+ * the one the surface letters actually correspond to.
+ *
+ * The letters come from `surfacesFor(toothNum)`, so an incisor shows I rather
+ * than O, and an upper tooth shows P rather than L. The stored key behind each
+ * region never changes.
+ */
 const ToothSurfaceMap = ({
     toothNum,
     surfaces = {},
     onSurfaceSelect,
+    readOnly = false,
     transform = "",
     className = ""
 }) => {
-    // Determine the color of each surface based on selection/condition.
-    // The user requested dark purple for selected state.
-    const getFill = (surface) => {
-        const cond = surfaces[surface];
-        if (cond && cond !== 'none') {
-            return '#2a276e'; // App's dark purple
-        }
-        return 'white';
+    const marked = (key) => {
+        const cond = surfaces[key];
+        return !!cond && cond !== 'none';
     };
 
-    const getStroke = (surface) => {
-        return '#8a8a8a'; // Neutral gray outline from the screenshot
+    const shortOf = (key) =>
+        surfacesFor(toothNum).find((s) => s.key === key)?.short || key;
+
+    // Centre of each region, for its letter.
+    const CENTRES = {
+        M: [29, 90], B: [71, 90], D: [71, 122], L: [29, 122], O: [50, 106],
     };
+
+    const REGIONS = [
+        { key: 'M', d: 'M 50 65 A 40 40 0 0 0 10 105 L 30 105 A 20 20 0 0 1 50 85 Z' },
+        { key: 'B', d: 'M 50 65 A 40 40 0 0 1 90 105 L 70 105 A 20 20 0 0 0 50 85 Z' },
+        { key: 'D', d: 'M 90 105 A 40 40 0 0 1 50 145 L 50 125 A 20 20 0 0 0 70 105 Z' },
+        { key: 'L', d: 'M 10 105 A 40 40 0 0 0 50 145 L 50 125 A 20 20 0 0 1 30 105 Z' },
+    ];
+
+    const pick = (e, key) => {
+        if (readOnly || !onSurfaceSelect) return;
+        e.stopPropagation();
+        onSurfaceSelect(key);
+    };
+
+    const cursor = readOnly ? '' : 'cursor-pointer';
 
     return (
         <g transform={transform} className={`select-none ${className}`}>
-            <svg viewBox="0 0 100 160" className="w-full h-full overflow-visible">
-                {/* 
-                    The new UI layout requires:
-                    - 1 detached arch on top
-                    - 1 donut divided into 4 quadrants
-                */}
+            <svg viewBox="0 58 100 94" className="w-full h-full overflow-visible">
+                {REGIONS.map(({ key, d }) => (
+                    <path
+                        key={key}
+                        d={d}
+                        fill={marked(key) ? '#2a276e' : 'white'}
+                        stroke="#8a8a8a"
+                        strokeWidth="2"
+                        onClick={(e) => pick(e, key)}
+                        className={`${cursor} transition-[fill] duration-150 ease-out ${readOnly ? '' : 'hover:brightness-95'}`}
+                    />
+                ))}
 
-                {/* Detached Arch (F - Facial/Labial) */}
-                <path
-                    d="M 15 45 A 35 35 0 0 1 85 45 L 65 45 A 15 15 0 0 0 35 45 Z"
-                    fill={getFill('F')}
-                    stroke={getStroke('F')}
-                    strokeWidth="2"
-                    className="cursor-pointer hover:brightness-95 transition-all"
-                    onClick={(e) => { e.stopPropagation(); onSurfaceSelect('F'); }}
-                />
-
-                {/* Donut - Top Left (M) */}
-                <path
-                    d="M 50 65 A 40 40 0 0 0 10 105 L 30 105 A 20 20 0 0 1 50 85 Z"
-                    fill={getFill('M')}
-                    stroke={getStroke('M')}
-                    strokeWidth="2"
-                    className="cursor-pointer hover:brightness-95 transition-all"
-                    onClick={(e) => { e.stopPropagation(); onSurfaceSelect('M'); }}
-                />
-
-                {/* Donut - Top Right (B) */}
-                <path
-                    d="M 50 65 A 40 40 0 0 1 90 105 L 70 105 A 20 20 0 0 0 50 85 Z"
-                    fill={getFill('B')}
-                    stroke={getStroke('B')}
-                    strokeWidth="2"
-                    className="cursor-pointer hover:brightness-95 transition-all"
-                    onClick={(e) => { e.stopPropagation(); onSurfaceSelect('B'); }}
-                />
-
-                {/* Donut - Bottom Right (D) */}
-                <path
-                    d="M 90 105 A 40 40 0 0 1 50 145 L 50 125 A 20 20 0 0 0 70 105 Z"
-                    fill={getFill('D')}
-                    stroke={getStroke('D')}
-                    strokeWidth="2"
-                    className="cursor-pointer hover:brightness-95 transition-all"
-                    onClick={(e) => { e.stopPropagation(); onSurfaceSelect('D'); }}
-                />
-
-                {/* Donut - Bottom Left (L) */}
-                <path
-                    d="M 10 105 A 40 40 0 0 0 50 145 L 50 125 A 20 20 0 0 1 30 105 Z"
-                    fill={getFill('L')}
-                    stroke={getStroke('L')}
-                    strokeWidth="2"
-                    className="cursor-pointer hover:brightness-95 transition-all"
-                    onClick={(e) => { e.stopPropagation(); onSurfaceSelect('L'); }}
-                />
-
-                {/* Center Circle (O - Occlusal) */}
                 <circle
-                    cx="50"
-                    cy="105"
-                    r="15"
-                    fill={getFill('O')}
-                    stroke={getStroke('O')}
+                    cx="50" cy="105" r="15"
+                    fill={marked('O') ? '#2a276e' : 'white'}
+                    stroke="#8a8a8a"
                     strokeWidth="2"
-                    className="cursor-pointer hover:brightness-95 transition-all"
-                    onClick={(e) => { e.stopPropagation(); onSurfaceSelect('O'); }}
+                    onClick={(e) => pick(e, 'O')}
+                    className={`${cursor} transition-[fill] duration-150 ease-out ${readOnly ? '' : 'hover:brightness-95'}`}
                 />
+
+                {/* Letters last so they sit over every fill. Not clickable: the
+                    region beneath already is, and a letter that swallowed the
+                    click would make the middle of each surface dead. */}
+                {Object.entries(CENTRES).map(([key, [x, y]]) => (
+                    <text
+                        key={`t-${key}`}
+                        x={x} y={y}
+                        textAnchor="middle" dominantBaseline="middle"
+                        pointerEvents="none"
+                        className="text-[13px] font-bold"
+                        fill={marked(key) ? '#ffffff' : '#94a3b8'}
+                    >
+                        {shortOf(key)}
+                    </text>
+                ))}
             </svg>
         </g>
     );

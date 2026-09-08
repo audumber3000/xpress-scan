@@ -24,7 +24,7 @@ const isLocked = (c) => !!c.invoice_number && !!c.invoice_status && c.invoice_st
  *
  * onAdd(kind, id, qty, addToBilling) · onDelete(id, mode) · onBill(id)
  */
-const InventoryUsedSection = ({ consumptions = [], inventoryItems = [], medicationItems = [], onAdd, onDelete, onBill }) => {
+const InventoryUsedSection = ({ consumptions = [], inventoryItems = [], medicationItems = [], onAdd, onDelete, onBill, showHeader = true }) => {
   const [selected, setSelected] = useState(''); // "inv:<id>" | "med:<id>"
   const [qty, setQty] = useState('');
   const [saving, setSaving] = useState(false);
@@ -79,10 +79,13 @@ const InventoryUsedSection = ({ consumptions = [], inventoryItems = [], medicati
 
   return (
     <div>
-      <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-        <Package size={20} className="text-[#2a276e]" />
-        Inventory & Medicines Used
-      </h3>
+      {/* Off inside the tabbed card, where the tab already names it. */}
+      {showHeader && (
+        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+          <Package size={20} className="text-[#2a276e]" />
+          Inventory &amp; Medicines Used
+        </h3>
+      )}
 
       {/* Add row */}
       <div className="flex flex-col sm:flex-row gap-2 mb-4">
@@ -144,7 +147,7 @@ const InventoryUsedSection = ({ consumptions = [], inventoryItems = [], medicati
                     <p className="text-[11px] mt-0.5 flex items-center gap-1 flex-wrap">
                       <span className="text-gray-400">Added to bill</span>
                       <span className="font-semibold text-[#2a276e]">{c.invoice_number}</span>
-                      <span className={`px-1.5 py-0.5 rounded-full border ${cls}`}>{lbl}</span>
+                      <span className={`px-1.5 py-0.5 rounded border ${cls}`}>{lbl}</span>
                     </p>
                   );
                 })() : (

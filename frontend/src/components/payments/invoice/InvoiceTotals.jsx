@@ -119,7 +119,11 @@ const InvoiceTotals = ({ invoice, canEdit, onUpdateInvoice }) => {
               className="flex items-center gap-1 text-gray-600 hover:text-[#2a276e]"
             >
               Discount{offerSuffix}
-              {!editing && <Pencil size={11} className="opacity-0 group-hover:opacity-100 transition" />}
+              {/* Always visible, not revealed on hover. A control nobody can
+                  see is a control nobody uses, and on a tablet — which is what
+                  half of these invoices are raised on — there is no hover at
+                  all, so it could never be found. Muted until hover instead. */}
+              {!editing && <Pencil size={11} className="text-gray-400 group-hover:text-[#2a276e] transition-colors duration-150" />}
             </button>
 
             {editing ? (
@@ -170,7 +174,7 @@ const InvoiceTotals = ({ invoice, canEdit, onUpdateInvoice }) => {
               className="flex items-center gap-1 text-gray-600 hover:text-[#2a276e]"
             >
               {taxLabel}{rate ? ` ${rate}%` : ''}
-              {!taxEditing && <Pencil size={11} className="opacity-0 group-hover:opacity-100 transition" />}
+              {!taxEditing && <Pencil size={11} className="text-gray-400 group-hover:text-[#2a276e] transition-colors duration-150" />}
             </button>
 
             {taxEditing ? (

@@ -2173,9 +2173,12 @@ async def add_post_issue_discount(
     if invoice.status == 'cancelled':
         raise HTTPException(status_code=400, detail="This invoice is cancelled")
 
+    # Optional. A reason is genuinely useful on a concession and worth asking
+    # for, but refusing the discount without one just means "Discount" gets
+    # typed into the box to get past the check — which records nothing and
+    # costs the clinic a step every time. Stored as an empty string rather than
+    # NULL because the column is NOT NULL; readers treat both as "not given".
     reason = (payload.reason or "").strip()
-    if not reason:
-        raise HTTPException(status_code=400, detail="Please give a reason for this discount")
 
     value = float(payload.value or 0)
     if value <= 0:
@@ -2230,10 +2233,11 @@ async def add_post_issue_discount(
         db, invoice_id, current_user.id, 'discount_applied',
         {'total': old_total},
         {'total': float(invoice.total or 0), 'discount': amount, 'reason': reason},
-        notes=reason,
+        notes=reason or None,
     )
     record_audit(db, current_user, DISCOUNT_ADDED,
-                 f"Granted a {amount:,.2f} discount on invoice {invoice.invoice_number} — {reason}",
+                 f"Granted a {amount:,.2f} discount on invoice {invoice.invoice_number}"
+                 + (f" — {reason}" if reason else ""),
                  request=request, entity_type='invoice', entity_id=invoice_id)
     db.commit()
     db.refresh(invoice)

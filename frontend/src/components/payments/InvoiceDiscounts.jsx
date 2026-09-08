@@ -56,10 +56,6 @@ const InvoiceDiscounts = ({ invoice, onAdd, onRemove }) => {
       setError("Enter a discount greater than zero.");
       return;
     }
-    if (!reason.trim()) {
-      setError("Please give a reason for this discount.");
-      return;
-    }
     if (exceedsDue) {
       setError(`You can discount up to ${formatAmount(outstanding)} on this invoice.`);
       return;
@@ -138,7 +134,7 @@ const InvoiceDiscounts = ({ invoice, onAdd, onRemove }) => {
             </div>
             <div className="flex-1">
               <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
-                Reason <span className="text-red-500">*</span>
+                Reason <span className="font-medium normal-case tracking-normal text-gray-400">(optional)</span>
               </label>
               <input
                 type="text"
@@ -192,7 +188,9 @@ const InvoiceDiscounts = ({ invoice, onAdd, onRemove }) => {
                     <span className="text-xs font-medium text-gray-400">({d.value}% of subtotal)</span>
                   )}
                 </div>
-                <p className="text-sm text-gray-700 mt-0.5 break-words">{d.reason}</p>
+                {d.reason
+                  ? <p className="text-sm text-gray-700 mt-0.5 break-words">{d.reason}</p>
+                  : <p className="text-sm text-gray-400 italic mt-0.5">No reason given</p>}
                 <p className="text-xs text-gray-400 mt-0.5">
                   {formatDateTime(d.applied_at)}
                   {d.applied_by_name ? ` · by ${d.applied_by_name}` : ""}

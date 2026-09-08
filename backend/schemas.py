@@ -331,7 +331,11 @@ class InvoiceDiscountOut(BaseModel):
 class InvoiceDiscountCreate(BaseModel):
     value: float
     discount_type: str = "amount"  # 'amount' | 'percentage'
-    reason: str
+    # Optional. Worth asking for and not worth blocking a concession over —
+    # a required reason just gets "Discount" typed into it. Absent and empty
+    # both mean "not given"; the route normalises them to an empty string,
+    # since the column is NOT NULL.
+    reason: Optional[str] = None
 
 
 class InvoicePaymentOut(BaseModel):
@@ -831,6 +835,7 @@ class CasePaperBase(BaseModel):
     dental_chart_snapshot: Optional[Any] = None
     treatment_plan_snapshot: Optional[Any] = None
     tooth_notes_snapshot: Optional[Any] = None
+    perio_chart_snapshot: Optional[Any] = None
     # The dermatology case paper's findings. Null on a dental paper.
     derm_findings: Optional[Any] = None
 
@@ -851,6 +856,7 @@ class CasePaperUpdate(BaseModel):
     dental_chart_snapshot: Optional[Any] = None
     treatment_plan_snapshot: Optional[Any] = None
     tooth_notes_snapshot: Optional[Any] = None
+    perio_chart_snapshot: Optional[Any] = None
     derm_findings: Optional[Any] = None
 
 import json as _json
@@ -911,6 +917,10 @@ class CasePaperOut(CasePaperBase):
             data['dental_chart_snapshot'] = _parse_json_auto(data.get('dental_chart_snapshot'), {})
             data['tooth_notes_snapshot'] = _parse_json_auto(data.get('tooth_notes_snapshot'), {})
             data['treatment_plan_snapshot'] = _parse_json_auto(data.get('treatment_plan_snapshot'), [])
+            # None, not {}: "no perio charting was done" and "a chart with
+            # nothing in it" are different claims, and the frontend decides
+            # which empty state to show from that difference.
+            data['perio_chart_snapshot'] = _parse_json_auto(data.get('perio_chart_snapshot'), None)
             
             return super().model_validate(data, **kwargs)
         return super().model_validate(obj, **kwargs)

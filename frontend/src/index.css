@@ -19,6 +19,17 @@
   --color-primary-hover: #1A1640;       /* Slightly lighter for hover states */
   --color-primary-active: #2a276e;      /* Same as accent for active states */
   --color-primary-border: rgba(155, 140, 255, 0.2);  /* Subtle border color */
+
+  /* Easing.
+     The built-in CSS easings are too weak to read as intentional — `ease-out`
+     is nearly linear over a 150ms UI transition. These are the stronger
+     variants, kept in one place so motion across the app agrees with itself.
+     `ease-in` is deliberately absent: it starts slow, which delays the exact
+     moment the user is watching hardest, and makes a 200ms transition feel
+     like 400ms. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);          /* entering, exiting */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);      /* moving on screen */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);       /* sheets and drawers */
 }
 
 /* Tailwind CSS Variable Integration */
@@ -521,4 +532,25 @@
     animation: none !important;
     transition: none !important;
   }
+}
+
+
+/* ── Motion utilities ────────────────────────────────────────────────────────
+   Companions to the easing tokens above, for the handful of places that want
+   a named curve rather than an arbitrary-value Tailwind class. */
+.ease-out-strong  { transition-timing-function: var(--ease-out); }
+.ease-in-out-strong { transition-timing-function: var(--ease-in-out); }
+
+/* A view swapping for another in the same slot (board <-> table). Opacity only,
+   no movement: the two views occupy the same box, so sliding one in would imply
+   a spatial relationship that is not there. Short, because this is a control
+   the doctor may flip repeatedly. */
+@keyframes view-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-view-fade-in { animation: view-fade-in 140ms var(--ease-out); }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-view-fade-in { animation: none; }
 }

@@ -46,7 +46,8 @@ export const CONDITION_LABELS = {
 export const STATUS_COLORS = {
     present: null,       // healthy — keep natural anatomy
     planned: '#f59e0b',  // amber — planned procedure
-    implant: '#3b82f6',  // blue — existing work / implant
+    existing: '#3b82f6', // blue — existing work with no symbol of its own
+    implant: '#3b82f6',  // blue — an actual implant, drawn with a screw
     rootCanal: '#3b82f6',// blue — existing endodontic work
     missing: '#ef4444',  // red — extracted
     impacted: null,      // slate hatch overlay handles this
@@ -72,3 +73,347 @@ export const SURFACES = [
     { key: 'L', label: 'Lingual', desc: 'Tongue side' },
 ];
 
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Surfaces are a property of the tooth, not a fixed list
+   ──────────────────────────────────────────────────────────────────────────
+
+   `SURFACES` above is the neutral five and stays exported for the cases with
+   no single tooth to speak of (a multi-tooth selection). Everywhere a specific
+   tooth is in hand, use `surfacesFor(tooth)` instead: an incisor has no
+   occlusal surface, and an upper tooth faces the palate rather than the tongue.
+
+   THE STORED KEY NEVER VARIES. `M O D B L` are written to teethData exactly as
+   they always have been; only `short` (the letter drawn) and `label` (the word
+   read) change per tooth. Same discipline as tooth numbering — store Universal,
+   display FDI — so no existing chart data means anything different than it did.
+*/
+
+/** Canine to canine, upper and lower. These carry an incisal edge. */
+export const ANTERIOR_TEETH = new Set([6, 7, 8, 9, 10, 11, 22, 23, 24, 25, 26, 27]);
+
+/** Primary anteriors are the x1/x2/x3 of each quadrant (FDI 51–85). */
+const PRIMARY_ANTERIOR = new Set([51, 52, 53, 61, 62, 63, 71, 72, 73, 81, 82, 83]);
+
+export const isAnteriorTooth = (tooth) => {
+    const n = Number(tooth);
+    return ANTERIOR_TEETH.has(n) || PRIMARY_ANTERIOR.has(n);
+};
+
+export const isUpperTooth = (tooth) => {
+    const n = Number(tooth);
+    return (n >= 1 && n <= 16) || (n >= 51 && n <= 65);
+};
+
+/**
+ * The five surfaces of one tooth, correctly named for it.
+ * `key` is storage, `short` is the button, `label` is the word.
+ */
+export const surfacesFor = (tooth) => {
+    const anterior = isAnteriorTooth(tooth);
+    const upper = isUpperTooth(tooth);
+    return [
+        { key: 'M', short: 'M', label: 'Mesial', desc: 'Side toward the midline' },
+        anterior
+            ? { key: 'O', short: 'I', label: 'Incisal', desc: 'Biting edge' }
+            : { key: 'O', short: 'O', label: 'Occlusal', desc: 'Biting surface' },
+        { key: 'D', short: 'D', label: 'Distal', desc: 'Side away from the midline' },
+        anterior
+            ? { key: 'B', short: 'B', label: 'Labial', desc: 'Lip side' }
+            : { key: 'B', short: 'B', label: 'Buccal', desc: 'Cheek side' },
+        upper
+            ? { key: 'L', short: 'P', label: 'Palatal', desc: 'Palate side' }
+            : { key: 'L', short: 'L', label: 'Lingual', desc: 'Tongue side' },
+    ];
+};
+
+/**
+ * The surfaces to offer for a whole selection.
+ *
+ * The two axes are independent and must be judged separately. Select the upper
+ * right quadrant and every tooth is upper — so the palatal surface is certainly
+ * P — while 1-5 are posterior and 6-8 anterior, so the biting surface has no
+ * single right name. Falling back to the neutral five for any group, as this
+ * did, got BOTH wrong: it printed L on teeth that have no lingual surface.
+ */
+export const surfacesForMany = (teeth = []) => {
+    const list = [...new Set(teeth.map(Number).filter(Number.isFinite))];
+    if (!list.length) return SURFACES;
+    if (list.length === 1) return surfacesFor(list[0]);
+
+    const anteriorAgrees = list.every(isAnteriorTooth) || !list.some(isAnteriorTooth);
+    const upperAgrees = list.every(isUpperTooth) || !list.some(isUpperTooth);
+    const anterior = anteriorAgrees && isAnteriorTooth(list[0]);
+    const upper = upperAgrees && isUpperTooth(list[0]);
+
+    return [
+        { key: 'M', short: 'M', label: 'Mesial', desc: 'Side toward the midline' },
+        !anteriorAgrees
+            ? { key: 'O', short: 'O', label: 'Occlusal / incisal', desc: 'Biting surface — this selection mixes front and back teeth' }
+            : anterior
+                ? { key: 'O', short: 'I', label: 'Incisal', desc: 'Biting edge' }
+                : { key: 'O', short: 'O', label: 'Occlusal', desc: 'Biting surface' },
+        { key: 'D', short: 'D', label: 'Distal', desc: 'Side away from the midline' },
+        !anteriorAgrees
+            ? { key: 'B', short: 'B', label: 'Buccal / labial', desc: 'Cheek or lip side' }
+            : anterior
+                ? { key: 'B', short: 'B', label: 'Labial', desc: 'Lip side' }
+                : { key: 'B', short: 'B', label: 'Buccal', desc: 'Cheek side' },
+        !upperAgrees
+            ? { key: 'L', short: 'L', label: 'Lingual / palatal', desc: 'This selection mixes upper and lower teeth' }
+            : upper
+                ? { key: 'L', short: 'P', label: 'Palatal', desc: 'Palate side' }
+                : { key: 'L', short: 'L', label: 'Lingual', desc: 'Tongue side' },
+    ];
+};
+
+/** One surface's word, for saying out loud which one is selected. */
+export const surfaceLabel = (tooth, key) =>
+    surfacesFor(tooth).find((s) => s.key === key)?.label || key;
+
+/** A set of surface keys as a doctor writes them: ['O','D'] on #22 -> "ID". */
+export const formatSurfaces = (tooth, keys = []) =>
+    surfacesFor(tooth)
+        .filter((s) => keys.includes(s.key))
+        .map((s) => s.short)
+        .join('');
+
+/**
+ * The surface map used to draw a separate facial arch and emit 'F' for it,
+ * while the constants only ever defined five surfaces and no 'F'. Facial and
+ * buccal are the same surface, so anything recorded on that arch was written to
+ * a key nothing else read and quietly vanished.
+ *
+ * The map emits 'B' now. This folds the old key in on read, which is the right
+ * place for it: chart snapshots are JSON blobs spread across every case paper
+ * ever saved, and a migration would have to rewrite all of them.
+ */
+export const normaliseSurfaces = (surfaces) => {
+    if (!surfaces || typeof surfaces !== 'object') return {};
+    if (!('F' in surfaces)) return surfaces;
+    const { F, ...rest } = surfaces;
+    const bIsSet = rest.B && rest.B !== 'none';
+    return { ...rest, ...(bIsSet ? {} : { B: F }) };
+};
+
+/* ── Tooth names, written out ─────────────────────────────────────────────
+   "UL" is a code you decode; "Upper Left" is a name you read. */
+
+const QUADRANT_WORDS = {
+    UR: 'Upper Right', UL: 'Upper Left', LL: 'Lower Left', LR: 'Lower Right',
+};
+
+export const TOOTH_NAMES_FULL = Object.fromEntries(
+    Object.entries(TOOTH_NAMES).map(([num, name]) => {
+        const [quadrant, ...rest] = name.split(' ');
+        return [num, `${QUADRANT_WORDS[quadrant] || quadrant} ${rest.join(' ')}`];
+    })
+);
+
+const PRIMARY_QUADRANT = { 5: 'Upper Right', 6: 'Upper Left', 7: 'Lower Left', 8: 'Lower Right' };
+const PRIMARY_TYPE = { 1: 'Central Incisor', 2: 'Lateral Incisor', 3: 'Canine', 4: '1st Molar', 5: '2nd Molar' };
+
+/** Full name for any tooth we can draw, permanent or primary. */
+export const toothFullName = (tooth) => {
+    const n = Number(tooth);
+    if (TOOTH_NAMES_FULL[n]) return TOOTH_NAMES_FULL[n];
+    if (n >= 51 && n <= 85) {
+        const q = PRIMARY_QUADRANT[Math.floor(n / 10)];
+        const t = PRIMARY_TYPE[n % 10];
+        if (q && t) return `${q} Primary ${t}`;
+    }
+    return '';
+};
+
+/* ── Condition and work are two different questions ───────────────────────
+
+   `status` mixed them: `planned` says WHEN, `implant` and `rootCanal` say
+   WHAT, and being one list made them mutually exclusive. So "an implant is
+   planned for this tooth" could not be recorded, and neither could "root canal
+   done elsewhere, last year" as distinct from one we are about to do. Both are
+   everyday charting.
+
+   Condition is what the tooth IS. Work is what has been, or will be, done to
+   it — `existing` is already in the mouth and bills nothing; `planned` goes on
+   the treatment plan.
+
+   Decay is deliberately NOT a condition: it is a finding, and findings have
+   their own field. Two places to record the same fact is where they start to
+   disagree.
+
+   `status` is still written from these, so the chart, the Overview card, the
+   summary PDF and the mobile app read exactly what they always did.
+*/
+
+/**
+ * The exceptions only.
+ *
+ * There is no "Sound" button, and there should not be: a healthy tooth is the
+ * absence of a mark, not a mark of its own. Charts have always worked that way
+ * — an unmarked tooth is a normal tooth — and asking a doctor to affirm the
+ * default on all 32 is asking 32 questions whose answer we already have.
+ * `'sound'` is still the stored value; nothing writes it by hand.
+ *
+ * "Sound" was also the wrong word. It is the textbook term for an intact tooth
+ * and means nothing to anyone who is not a dentist. Healthy is the word.
+ */
+export const TOOTH_CONDITIONS = [
+    // Impacted leads because it is the one reached most often — a wisdom tooth
+    // is the usual reason to touch this control at all. Order only: the default
+    // is still no condition, which is a healthy tooth.
+    { value: 'impacted', label: 'Impacted' },
+    { value: 'missing', label: 'Missing / extracted' },
+    // The chart has drawn a zigzag for `fractured` since long before this, and
+    // STATUS_LABELS names it — but nothing could ever set it. Dead render code
+    // in exactly the way the phantom 'F' surface was.
+    { value: 'fractured', label: 'Fractured' },
+];
+
+/**
+ * What kind of work, and it is NOT the same list for both stages.
+ *
+ * Extraction can only ever be planned. Once it has happened the tooth is not
+ * "a tooth with an existing extraction on it" — it is Missing, which is a
+ * condition. Offering it as existing work invites a record that contradicts
+ * itself: a tooth both present and extracted.
+ */
+const SHARED_WORK_TYPES = [
+    { value: 'filling', label: 'Filling' },
+    // Crowns are split by material because the standard chart draws each one
+    // differently: gold hatched, porcelain outlined, stainless steel lettered.
+    { value: 'crown_porcelain', label: 'Porcelain crown' },
+    { value: 'crown_gold', label: 'Gold crown' },
+    { value: 'crown_ss', label: 'Stainless steel crown' },
+    { value: 'veneer', label: 'Veneer' },
+    { value: 'bridge', label: 'Bridge' },
+    { value: 'root_canal', label: 'Root canal' },
+    { value: 'post_core', label: 'Post and core' },
+    { value: 'implant', label: 'Implant' },
+];
+
+export const WORK_TYPES_BY_STAGE = {
+    existing: SHARED_WORK_TYPES,
+    planned: [...SHARED_WORK_TYPES, { value: 'extraction', label: 'Extraction' }],
+};
+
+/** Every type, for reading a stored value back regardless of stage. */
+export const WORK_TYPES = WORK_TYPES_BY_STAGE.planned;
+
+export const workTypeLabel = (value) =>
+    WORK_TYPES.find((t) => t.value === value)?.label || '';
+
+/**
+ * Existing work, mapped to the symbol the chart actually draws for it.
+ *
+ * This used to be `workType === 'root_canal' ? 'rootCanal' : 'implant'`, which
+ * meant a crown, a veneer, a bridge and a filling all rendered as an IMPLANT —
+ * screw and all. A chart that draws a screw where the doctor recorded a crown
+ * is not a slightly-wrong chart, it is a false record.
+ *
+ * Anything with no symbol of its own falls to the plain blue `existing` fill,
+ * which says "work already here" without claiming which kind.
+ */
+const EXISTING_STATUS = {
+    root_canal: 'rootCanal',
+    post_core: 'post_core',
+    implant: 'implant',
+    crown_porcelain: 'crown_porcelain',
+    crown_gold: 'crown_gold',
+    crown_ss: 'crown_ss',
+    veneer: 'veneer',
+    bridge: 'bridge',
+    filling: 'existing',
+    // Legacy: 'crown' was one type before materials were split out.
+    crown: 'crown_porcelain',
+};
+
+/** The legacy single status, derived. Never stored by hand. */
+export const deriveStatus = ({ condition, work, workType } = {}) => {
+    if (condition === 'missing') return 'missing';
+    if (condition === 'impacted') return 'impacted';
+    // Work outranks a fracture on purpose. Amber "there is work to do" is the
+    // signal a doctor scans the chart for; once a crown is planned for the
+    // fractured tooth, the plan is the more useful thing to see. The fracture
+    // shows while it is still just an observation.
+    // A tooth marked for extraction gets the diagonal line every paper chart
+    // uses for it, rather than the same amber as any other planned work.
+    if (work === 'planned' && workType === 'extraction') return 'to_extract';
+    if (work === 'planned') return 'planned';
+    if (work === 'existing') return EXISTING_STATUS[workType] || 'existing';
+    if (condition === 'fractured') return 'fractured';
+    return 'present';
+};
+
+/**
+ * The two axes for a tooth, reconstructed from a legacy record when it has
+ * only a `status`. Every chart saved before this existed still reads correctly.
+ */
+export const readToothState = (toothData = {}) => {
+    if (toothData.condition || toothData.work) {
+        return {
+            condition: toothData.condition || 'sound',
+            work: toothData.work || null,
+            workType: toothData.workType || null,
+        };
+    }
+    switch (toothData.status) {
+        case 'missing':   return { condition: 'missing', work: null, workType: null };
+        case 'impacted':  return { condition: 'impacted', work: null, workType: null };
+        case 'fractured': return { condition: 'fractured', work: null, workType: null };
+        case 'planned':   return { condition: 'sound', work: 'planned', workType: null };
+        case 'implant':   return { condition: 'sound', work: 'existing', workType: 'implant' };
+        case 'rootCanal': return { condition: 'sound', work: 'existing', workType: 'root_canal' };
+        case 'to_extract': return { condition: 'sound', work: 'planned', workType: 'extraction' };
+        case 'existing':   return { condition: 'sound', work: 'existing', workType: 'filling' };
+        default: {
+            // Every status that is simply the name of its work type.
+            const type = Object.keys(EXISTING_STATUS)
+                .find((k) => EXISTING_STATUS[k] === toothData.status && k !== 'crown');
+            if (type) return { condition: 'sound', work: 'existing', workType: type };
+            return { condition: 'sound', work: null, workType: null };
+        }
+    }
+};
+
+/**
+ * Marks that coexist with everything else.
+ *
+ * A tooth can carry a crown AND a root canal AND an abscess at the same time,
+ * and `status` can only ever say one thing. These are separate: they stack as
+ * overlays on the chart and are stored as a list on the tooth.
+ *
+ * Diastema is held per side rather than as a gap between two teeth, so it fits
+ * the per-tooth record and needs no new structure — it draws on that edge.
+ */
+export const TOOTH_MARKS = [
+    { value: 'sealant', label: 'Sealant', hint: 'Drawn as S on the biting surface' },
+    { value: 'abscess', label: 'Periapical abscess', hint: 'A ring at the root apex' },
+    { value: 'drifting', label: 'Drifting', hint: 'An arrow showing which way it has moved' },
+    { value: 'diastema_mesial', label: 'Diastema (mesial)', hint: 'A gap on the midline side' },
+    { value: 'diastema_distal', label: 'Diastema (distal)', hint: 'A gap on the far side' },
+];
+
+export const marksOf = (toothData = {}) =>
+    Array.isArray(toothData.marks) ? toothData.marks : [];
+
+export const hasMark = (toothData, mark) => marksOf(toothData).includes(mark);
+
+/* ── Walking the arch ─────────────────────────────────────────────────────
+   Charting is sequential: you work along an arch. Upper right to upper left,
+   then lower right to lower left, which is the order the chart draws them. */
+
+/* The lower arch is REVERSED here relative to how it is drawn. Drawn order
+   would send you from #16 — the far left of the upper arch on screen — clear
+   across the mouth to #32 on the far right of the lower one. Reversed, #16
+   hands over to #17 directly below it and you walk back the other way: the
+   serpentine path a dentist actually charts, and the FDI quadrant order
+   (1 -> 2 -> 3 -> 4) besides. */
+export const FULL_MOUTH_ORDER = [...UNIVERSAL_UPPER, ...[...UNIVERSAL_LOWER].reverse()];
+
+/** The next or previous tooth, or null at either end. No wrapping: arriving
+ *  back at #1 after #17 would be a jump across the mouth, not a step. */
+export const stepTooth = (tooth, delta) => {
+    const i = FULL_MOUTH_ORDER.indexOf(Number(tooth));
+    if (i === -1) return null;
+    return FULL_MOUTH_ORDER[i + delta] ?? null;
+};

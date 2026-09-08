@@ -242,9 +242,27 @@ async def from_treatment_plan(patient_id: int, db: Session = Depends(get_db),
         desc = (item.get("procedure") or "").strip()
         if not desc:
             continue
+        # A combined procedure (one quadrant scaling rather than eight
+        # separate ones) carries `teeth` and a null `tooth`. Reading only
+        # `tooth` would quote it as general work with no teeth named at all.
+        teeth = item.get("teeth")
+        if isinstance(teeth, list) and teeth:
+            tooth_number = ", ".join(str(t) for t in teeth)
+        else:
+            tooth_number = str(item.get("tooth") or "") or None
+
+        # Which surfaces the work is on. A three-surface filling and a
+        # one-surface one are different jobs at different fees, and a quotation
+        # that cannot tell them apart is one the patient can dispute later.
+        from domains.clinical.tooth_notation import format_surfaces
+        written = format_surfaces(item.get("tooth") or (teeth[0] if isinstance(teeth, list) and teeth else None),
+                                  item.get("surfaces"))
+        if written and tooth_number:
+            tooth_number = f"{tooth_number} ({written})"
+
         lines.append(LineDTO(
             description=desc,
-            tooth_number=str(item.get("tooth") or "") or None,
+            tooth_number=tooth_number,
             benefit_category=bands.get(desc.lower()),
             quantity=float(item.get("qty") or 1),
             unit_price=float(item.get("cost") or 0),
