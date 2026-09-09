@@ -234,7 +234,7 @@ def test_verifying_before_anything_was_sent_says_so(db, owner):
     assert "no active code" in e.value.detail.lower()
 
 
-def test_the_response_carries_the_cooldown_and_the_ttl(db, owner):
+def test_the_response_carries_the_cooldown_and_the_ttl(db, owner, outbox):
     res = send(db, owner)
     assert res["resend_in"] == sec.RESEND_COOLDOWN_SEC
     assert res["expires_in"] == sec.OTP_TTL_MIN * 60

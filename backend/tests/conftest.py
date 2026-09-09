@@ -3,7 +3,7 @@ Test configuration and fixtures
 """
 import pytest
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
 # Set environment variables for testing (use local database)
@@ -38,12 +38,36 @@ def test_db():
 
 @pytest.fixture(scope="function")
 def db_session(test_db):
-    """Create a test database session"""
-    session = TestingSessionLocal()
+    """
+    Test database session, isolated per test.
+
+    Each test runs inside an outer transaction that is rolled back on
+    teardown, and any `session.commit()` the app code under test performs is
+    absorbed into a SAVEPOINT that gets restarted immediately after (the
+    standard SQLAlchemy "join a session into an external transaction"
+    pattern). Without this, commits from one test stay in the database and
+    leak into every test that runs after it in the same session — tests then
+    pass in isolation but fail (or silently pass for the wrong reason) when
+    the full suite runs, depending on execution order.
+    """
+    connection = test_engine.connect()
+    outer_transaction = connection.begin()
+    session = TestingSessionLocal(bind=connection)
+
+    nested = connection.begin_nested()
+
+    @event.listens_for(session, "after_transaction_end")
+    def _restart_savepoint(sess, trans):
+        nonlocal nested
+        if not nested.is_active:
+            nested = connection.begin_nested()
+
     try:
         yield session
     finally:
         session.close()
+        outer_transaction.rollback()
+        connection.close()
 
 
 @pytest.fixture(scope="function")
