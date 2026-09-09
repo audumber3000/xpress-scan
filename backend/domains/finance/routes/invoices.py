@@ -11,22 +11,13 @@ import io
 import requests
 import re
 
-from database import SessionLocal
+from database import get_db
 from core.notification_dispatch import notify_event, InsufficientWalletBalance
 from core.posthog_client import track_event, EVENTS
 from core.audit import (
     record_audit, INVOICE_DELETED, PAYMENT_DELETED, PAYMENT_ADDED,
     DISCOUNT_ADDED, DISCOUNT_REMOVED,
 )
-
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 from models import Invoice, InvoiceLineItem, InvoiceAuditLog, InvoiceDiscount, InvoicePayment, Patient, User, Clinic, Appointment
 from core.auth_utils import get_current_user
 import logging as _logging

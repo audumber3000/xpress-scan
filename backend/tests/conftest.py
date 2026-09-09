@@ -53,14 +53,22 @@ def db_session(test_db):
     connection = test_engine.connect()
     outer_transaction = connection.begin()
     session = TestingSessionLocal(bind=connection)
+    session.begin_nested()
 
-    nested = connection.begin_nested()
-
+    # SQLAlchemy's documented "join a session into an external transaction"
+    # recipe: ask the CONNECTION whether a SAVEPOINT is still active, not a
+    # locally-tracked reference to the last one — a handler that flushes
+    # more than once and commits within a single request (as
+    # quotations.respond() does: two flushes, then one commit) ends more
+    # than one transaction per request, and a locally-tracked "is this
+    # object still active" check falls out of sync with which SAVEPOINT the
+    # connection is actually in, silently writing outside of any tracked
+    # transaction from that point on — which the outer rollback below then
+    # never rolls back, and the row is simply absent afterward, no error.
     @event.listens_for(session, "after_transaction_end")
     def _restart_savepoint(sess, trans):
-        nonlocal nested
-        if not nested.is_active:
-            nested = connection.begin_nested()
+        if not connection.in_nested_transaction():
+            sess.begin_nested()
 
     try:
         yield session
