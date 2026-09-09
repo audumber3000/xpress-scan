@@ -143,8 +143,11 @@ REQUIRED_COLUMNS = {
         "id", "email", "name", "first_name", "last_name",
         "role", "is_active", "permissions", "created_at", "updated_at",
     },
+    # No "id": user_clinics is an association Table (models.py) whose primary
+    # key is the composite (user_id, clinic_id). It has never had an id column,
+    # so requiring one could only ever fail.
     "user_clinics": {
-        "id", "user_id", "clinic_id",
+        "user_id", "clinic_id",
     },
     "patients": {
         "id", "clinic_id", "name", "phone", "created_at", "updated_at",

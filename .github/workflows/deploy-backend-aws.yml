@@ -244,7 +244,13 @@ jobs:
           # deliberately with no reverse proxy, so that one test structurally
           # can't pass here. It still runs for real against the live URL when
           # test_smoke.py is run manually before a deploy.
+          # --confcutdir stops pytest loading backend/tests/conftest.py, which
+          # imports the whole app and would need backend/ on sys.path plus
+          # every app dependency (this job installs only the four packages
+          # above). The smoke tests talk to the stack over HTTP and define
+          # their own fixtures, so they need none of it.
           python -m pytest backend/tests/smoke/test_smoke.py backend/tests/smoke/test_ephemeral_stack_smoke.py \
+            --confcutdir=backend/tests/smoke \
             --deselect backend/tests/smoke/test_smoke.py::test_nexus_reachable_through_nginx_consent_routing \
             -v
 

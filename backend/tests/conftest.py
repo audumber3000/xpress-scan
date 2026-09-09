@@ -6,13 +6,18 @@ import os
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
-# Set environment variables for testing (use local database)
-os.environ["USE_LOCAL_DB"] = "true"
-os.environ["LOCAL_DB_HOST"] = "localhost"
-os.environ["LOCAL_DB_PORT"] = "5432"
-os.environ["LOCAL_DB_NAME"] = "xpress_scan_test"
-os.environ["LOCAL_DB_USER"] = "postgres"
-os.environ["LOCAL_DB_PASSWORD"] = "postgres"
+# Point the app at a local test database. setdefault, not plain assignment:
+# CI supplies these itself (the postgres service maps 5432), but a developer
+# Mac usually already has something on 5432 whose roles don't match, and
+# overwriting the env made the suite impossible to redirect at a throwaway
+# container. Defaults below are exactly what CI uses, so behaviour there is
+# unchanged.
+os.environ.setdefault("USE_LOCAL_DB", "true")
+os.environ.setdefault("LOCAL_DB_HOST", "localhost")
+os.environ.setdefault("LOCAL_DB_PORT", "5432")
+os.environ.setdefault("LOCAL_DB_NAME", "xpress_scan_test")
+os.environ.setdefault("LOCAL_DB_USER", "postgres")
+os.environ.setdefault("LOCAL_DB_PASSWORD", "postgres")
 
 # Now import after setting environment variables
 from models import Base
