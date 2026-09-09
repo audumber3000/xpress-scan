@@ -66,13 +66,11 @@ def _with_vendor(db: Session, item: MedicationStock) -> MedicationStockResponseD
 async def list_medications(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    clinic_id: Optional[int] = None,
 ):
     ensure_inventory_permission(current_user, "read")
-    target = clinic_id or current_user.clinic_id
     items = (
         db.query(MedicationStock)
-        .filter(MedicationStock.clinic_id == target)
+        .filter(MedicationStock.clinic_id == current_user.clinic_id)
         .order_by(MedicationStock.name.asc())
         .all()
     )

@@ -22,14 +22,9 @@ def ensure_inventory_permission(current_user: User, action: str):
 async def list_inventory(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user),
-    clinic_id: Optional[int] = None
 ):
     ensure_inventory_permission(current_user, "read")
-    query = db.query(InventoryItem)
-    target_clinic_id = clinic_id or current_user.clinic_id
-    query = query.filter(InventoryItem.clinic_id == target_clinic_id)
-    
-    items = query.all()
+    items = db.query(InventoryItem).filter(InventoryItem.clinic_id == current_user.clinic_id).all()
     # Enrich with vendor name
     result = []
     for item in items:
@@ -48,7 +43,7 @@ async def create_inventory_item(
     current_user = Depends(get_current_user)
 ):
     ensure_inventory_permission(current_user, "write")
-    clinic_id = getattr(item_data, "clinic_id", None) or getattr(current_user, "clinic_id", 1)
+    clinic_id = current_user.clinic_id
     item = InventoryItem(**item_data.dict())
     item.clinic_id = clinic_id
     db.add(item)
@@ -372,7 +367,9 @@ async def inventory_kpi_detail(
 @router.get("/{item_id}", response_model=InventoryItemResponseDTO)
 async def get_inventory_item(item_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     ensure_inventory_permission(current_user, "read")
-    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    item = db.query(InventoryItem).filter(
+        InventoryItem.id == item_id, InventoryItem.clinic_id == current_user.clinic_id
+    ).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     return InventoryItemResponseDTO.from_orm(item)
@@ -385,7 +382,9 @@ async def update_inventory_item(
     current_user = Depends(get_current_user)
 ):
     ensure_inventory_permission(current_user, "edit")
-    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    item = db.query(InventoryItem).filter(
+        InventoryItem.id == item_id, InventoryItem.clinic_id == current_user.clinic_id
+    ).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
@@ -425,7 +424,9 @@ async def update_inventory_item(
 @router.delete("/{item_id}")
 async def delete_inventory_item(item_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     ensure_inventory_permission(current_user, "delete")
-    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    item = db.query(InventoryItem).filter(
+        InventoryItem.id == item_id, InventoryItem.clinic_id == current_user.clinic_id
+    ).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
