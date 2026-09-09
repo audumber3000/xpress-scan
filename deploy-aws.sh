@@ -517,6 +517,15 @@ else
   exit 1
 fi
 
+NEXUS_HEALTH=$(curl -s --max-time 10 "http://localhost:8001/health" 2>/dev/null || echo "FAILED")
+if echo "$NEXUS_HEALTH" | grep -q "healthy"; then
+  echo "  ✅ Nexus health check passed"
+else
+  echo "  ❌ Nexus health check failed — check logs:"
+  echo "     docker logs molarplus-nexus-1 --tail 30"
+  exit 1
+fi
+
 # ── Seed the feature-request board (idempotent) ───────────────────────────────
 echo ""
 echo "▶ Seeding feature-request board (idempotent)..."

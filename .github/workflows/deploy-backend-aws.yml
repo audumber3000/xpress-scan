@@ -1,8 +1,19 @@
 name: Deploy Backend to AWS
 
-# Auto-deploys the FastAPI backend to the EC2 prod box whenever backend code is
-# pushed to main. (The web frontend is auto-deployed separately by Vercel; the
-# mobile app ships via EAS — neither is handled here.)
+# Auto-deploys the FastAPI backend AND nexus-service to the EC2 prod box
+# whenever either changes on main. (The web frontend is auto-deployed
+# separately by Vercel; the mobile app ships via EAS — neither is handled
+# here.)
+#
+# The `test` job below is a hard gate: `deploy` only runs if it passes. This
+# exists because of a real incident — a bug in nexus-service's WhatsApp
+# invoice-sending code (a guessed R2 URL that pointed at the wrong bucket)
+# reached prod with zero automated tests catching it, and nexus-service
+# wasn't even being synced to the server by this workflow (paths only
+# covered backend/**, so a nexus-only fix could be pushed to main and never
+# reach the EC2 box at all). Both gaps are fixed here: nexus-service now has
+# its own test suite that must pass, and its source is rsynced alongside
+# backend's.
 #
 # ── One-time setup ────────────────────────────────────────────────────────────
 # Repo → Settings → Secrets and variables → Actions → "New repository secret":
@@ -17,7 +28,10 @@ on:
   push:
     branches: [main]
     paths:
-      - 'backend/**'          # only redeploy when backend code actually changes
+      - 'backend/**'
+      - 'nexus-service/**'
+      - 'docker-compose.aws.yml'
+      - 'deploy-aws.sh'
   workflow_dispatch:           # manual "Run workflow" button
 
 # Never run two deploys at once (they both rebuild the same containers).
@@ -26,7 +40,71 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: xpress_scan_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      USE_LOCAL_DB: "true"
+      LOCAL_DB_HOST: localhost
+      LOCAL_DB_PORT: "5432"
+      LOCAL_DB_NAME: xpress_scan_test
+      LOCAL_DB_USER: postgres
+      LOCAL_DB_PASSWORD: postgres
+      JWT_SECRET: test-jwt-secret-for-testing-only
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'  # matches backend/Dockerfile and nexus-service/Dockerfile
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          pip install -r config/requirements.txt -r config/requirements-dev.txt
+
+      - name: Run backend tests
+        working-directory: backend
+        run: |
+          python -m pytest tests/domains tests/test_integration_contract.py -q -c config/pytest.ini --no-cov
+
+      - name: Install nexus-service dependencies
+        working-directory: nexus-service
+        run: |
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run nexus-service tests
+        working-directory: nexus-service
+        run: |
+          python -m pytest tests -q --no-cov
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -46,6 +124,15 @@ jobs:
             --exclude '.pytest_cache/' --exclude 'uploads/' --exclude '.git/' \
             -e "ssh -i ~/.ssh/ec2.pem -o StrictHostKeyChecking=no" \
             backend/ "ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/molarplus/backend/"
+
+      - name: Rsync nexus-service to EC2
+        run: |
+          rsync -avz \
+            --exclude '.venv/' --exclude 'venv/' --exclude '__pycache__/' \
+            --exclude '*.pyc' --exclude '.env' --exclude '.env.*' \
+            --exclude '.pytest_cache/' --exclude '.git/' \
+            -e "ssh -i ~/.ssh/ec2.pem -o StrictHostKeyChecking=no" \
+            nexus-service/ "ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/molarplus/nexus-service/"
 
       - name: Run deploy script (RDS migrations + rebuild + health check)
         run: |
