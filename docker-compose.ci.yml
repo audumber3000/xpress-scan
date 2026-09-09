@@ -1,0 +1,15 @@
+# CI-only override for the ephemeral staging job in
+# .github/workflows/deploy-backend-aws.yml. Adds a host port mapping for `db`
+# so the smoke tests (running directly on the GitHub Actions runner, not
+# inside a container) can connect and check the real schema — without
+# touching docker-compose.prod.yml's "no host port exposed" posture, which
+# is deliberate there for the actual prod deployment.
+#
+# Usage: docker compose -f docker-compose.prod.yml -f docker-compose.ci.yml ...
+# Never used in a real deploy — deploy-aws.sh only ever references
+# docker-compose.prod.yml / docker-compose.aws.yml directly.
+
+services:
+  db:
+    ports:
+      - "5432:5432"
