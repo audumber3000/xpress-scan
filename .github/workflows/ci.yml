@@ -1,0 +1,98 @@
+name: CI
+
+# Runs on every push/PR so a broken change is visible before it reaches main,
+# not just at deploy time. deploy-backend-aws.yml runs backend + nexus-service
+# tests again as a hard gate right before it deploys — this workflow is the
+# fast feedback loop; that one is the safety gate.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: xpress_scan_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      USE_LOCAL_DB: "true"
+      LOCAL_DB_HOST: localhost
+      LOCAL_DB_PORT: "5432"
+      LOCAL_DB_NAME: xpress_scan_test
+      LOCAL_DB_USER: postgres
+      LOCAL_DB_PASSWORD: postgres
+      JWT_SECRET: test-jwt-secret-for-testing-only
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r config/requirements.txt -r config/requirements-dev.txt
+      - name: Run tests
+        working-directory: backend
+        run: python -m pytest tests/domains tests/test_integration_contract.py -q -c config/pytest.ini --no-cov
+
+  nexus-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        working-directory: nexus-service
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run tests
+        working-directory: nexus-service
+        run: python -m pytest tests -q --no-cov
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Run tests
+        working-directory: frontend
+        run: npm test
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+      - name: Lint (informational — pre-existing debt not yet gated)
+        working-directory: frontend
+        run: npm run lint || true

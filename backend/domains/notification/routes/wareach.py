@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
-from database import SessionLocal
+from database import get_db
 from models import Clinic, User, WhatsAppIntegration, NotificationLog
 from core.auth_utils import get_current_user
 from domains.notification.services import wareach_service
@@ -21,14 +21,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 WEBHOOK_SECRET = os.getenv("WAREACH_WEBHOOK_SECRET", "")
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def _require_pro_clinic(current_user: User, db: Session) -> Clinic:
@@ -156,10 +148,18 @@ class WebhookBody(BaseModel):
 @router.post("/webhook")
 def webhook(body: WebhookBody, request: Request, db: Session = Depends(get_db)):
     """Signed callback from WA Reach for session status + delivery receipts.
-    Called server-to-server (no user auth) — verified by shared secret header."""
-    if WEBHOOK_SECRET:
-        if request.headers.get("X-WAReach-Secret") != WEBHOOK_SECRET:
-            raise HTTPException(status_code=401, detail="Invalid signature")
+    Called server-to-server (no user auth) — verified by shared secret header.
+
+    Fails closed when WAREACH_WEBHOOK_SECRET isn't set, rather than
+    accepting anything: this endpoint takes no user auth at all, so an
+    unset secret used to mean anyone who found the URL could flip any
+    clinic's WhatsApp status or forge delivery receipts on any
+    NotificationLog by id.
+    """
+    if not WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Webhook not configured")
+    if request.headers.get("X-WAReach-Secret") != WEBHOOK_SECRET:
+        raise HTTPException(status_code=401, detail="Invalid signature")
 
     # Locate the clinic's integration row by session_id or clinic_id.
     row = None

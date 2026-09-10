@@ -64,19 +64,29 @@ def test_protected_endpoint_requires_auth(base, path):
 
 
 # ── 4. Nexus service reachable via Nginx routing ──────────────────────────────
+#
+# Per config/nginx.conf, ONLY /api/v1/consent/ is proxied to nexus (:8001) —
+# everything else, /api/v1/notifications/* and /api/v1/reports/* included,
+# falls through to `location /` and is answered by backend itself (backend
+# has its own routers mounted at those same-looking prefixes). This test used
+# to hit /api/v1/notifications/status and /api/v1/reports/generate expecting
+# nexus's response — routes that don't exist and a stub respectively — which
+# would have failed the moment anything ran this file for the first time.
+#
+# A bogus token on /api/v1/consent/validate is nexus-only (backend has no
+# matching route) and returns a body only nexus produces, which is what
+# actually proves the Nginx routing rule works — not just that *some* 404
+# came back, which a route simply not existing would also produce.
 
-def test_nexus_notifications_status(base):
-    r = requests.get(f"{base}/api/v1/notifications/status", timeout=TIMEOUT)
-    assert r.status_code == 200
-    data = r.json()
-    assert "whatsapp" in data or "email" in data, \
-        f"Unexpected notifications/status response: {data}"
-
-
-def test_nexus_reports_endpoint_reachable(base):
-    r = requests.post(f"{base}/api/v1/reports/generate", json={}, timeout=TIMEOUT)
-    assert r.status_code in (401, 403, 422), \
-        f"Nexus /reports/generate returned unexpected status {r.status_code}"
+def test_nexus_reachable_through_nginx_consent_routing(base):
+    r = requests.get(f"{base}/api/v1/consent/validate/smoke-test-bogus-token", timeout=TIMEOUT)
+    assert r.status_code == 404
+    assert "expired or invalid" in r.json().get("detail", "").lower(), (
+        "Expected nexus's own 'Link expired or invalid' response — got "
+        f"{r.json()!r}. If this is FastAPI's generic 'Not Found', the "
+        "request never reached nexus at all (Nginx routing or nexus itself "
+        "is broken)."
+    )
 
 
 # ── 5. CORS headers present ───────────────────────────────────────────────────
@@ -133,8 +143,11 @@ REQUIRED_COLUMNS = {
         "id", "email", "name", "first_name", "last_name",
         "role", "is_active", "permissions", "created_at", "updated_at",
     },
+    # No "id": user_clinics is an association Table (models.py) whose primary
+    # key is the composite (user_id, clinic_id). It has never had an id column,
+    # so requiring one could only ever fail.
     "user_clinics": {
-        "id", "user_id", "clinic_id",
+        "user_id", "clinic_id",
     },
     "patients": {
         "id", "clinic_id", "name", "phone", "created_at", "updated_at",

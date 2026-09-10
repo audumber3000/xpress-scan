@@ -83,12 +83,11 @@ class NotificationService:
                         elif param.get("type") == "document":
                             doc = param.get("document", {})
                             doc_val = doc.get("link") or doc.get("id") or ""
-                            
-                            # If they passed a relative R2 path directly instead of a full link, convert it
+
+                            # If they passed a relative R2 key instead of a full link, resolve it
                             if doc_val and not doc_val.startswith("http"):
-                                public_r2_domain = os.getenv("PUBLIC_R2_URL", "https://pub-dffc1ddb83334a5d876764f248e780d7.r2.dev")
-                                doc_val = f"{public_r2_domain.rstrip('/')}/{doc_val.lstrip('/')}"
-                                
+                                doc_val = self._resolve_r2_url(doc_val)
+
                             msg91_components["header_1"] = {
                                 "type": "document",
                                 "value": doc_val,
@@ -196,28 +195,16 @@ class NotificationService:
             logger.error(f"Meta WhatsApp text error: {e}")
             return {"success": False, "error": str(e)}
 
-    async def upload_media_to_meta(
-        self, pdf_bytes: bytes, filename: str = "document.pdf",
-        clinic_id: Optional[str] = None, patient_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        Uploads a PDF directly to Cloudflare R2 and returns its public URL for MSG91.
-        (Method name kept for backward compatibility with calling endpoints).
-        """
-        import uuid
+    @staticmethod
+    def _r2_client():
         import boto3
         from botocore.config import Config
         access_key_id = os.getenv("R2_ACCESS_KEY_ID")
         secret_access_key = os.getenv("R2_SECRET_ACCESS_KEY")
         endpoint_url = os.getenv("R2_ENDPOINT_URL")
         bucket_name = os.getenv("R2_BUCKET_NAME")
-        
-        # New public URL provided by user
-        public_r2_domain = os.getenv("PUBLIC_R2_URL", "https://pub-dffc1ddb83334a5d876764f248e780d7.r2.dev")
-
         if not all([access_key_id, secret_access_key, endpoint_url, bucket_name]):
-            return {"success": False, "error": "R2 credentials not configured"}
-            
+            return None, None
         client = boto3.client(
             's3',
             endpoint_url=endpoint_url,
@@ -226,17 +213,58 @@ class NotificationService:
             region_name='auto',
             config=Config(signature_version='s3v4')
         )
-        
+        return client, bucket_name
+
+    def _resolve_r2_url(self, storage_key: str, expires_in: int = 604800) -> str:
+        """
+        Turn an R2 object key into a URL MSG91/Meta can actually fetch.
+
+        Prefers R2_PUBLIC_URL (the same var backend/r2_storage.py uses) when a
+        public bucket domain is configured. Otherwise falls back to a presigned
+        GET URL — this works regardless of whether the bucket has public
+        (r2.dev) access enabled, so it doesn't depend on guessing a domain.
+        """
+        r2_public_url = os.getenv("R2_PUBLIC_URL")
+        if r2_public_url:
+            return f"{r2_public_url.rstrip('/')}/{storage_key.lstrip('/')}"
+
+        client, bucket_name = self._r2_client()
+        if not client:
+            return storage_key
+        try:
+            return client.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': bucket_name, 'Key': storage_key},
+                ExpiresIn=expires_in,
+            )
+        except Exception as e:
+            logger.error(f"R2 presigned URL error: {e}")
+            return storage_key
+
+    async def upload_media_to_meta(
+        self, pdf_bytes: bytes, filename: str = "document.pdf",
+        clinic_id: Optional[str] = None, patient_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Uploads a PDF directly to Cloudflare R2 and returns a URL MSG91 can fetch.
+        (Method name kept for backward compatibility with calling endpoints).
+        """
+        import uuid
+
+        client, bucket_name = self._r2_client()
+        if not client:
+            return {"success": False, "error": "R2 credentials not configured"}
+
         unique_id = str(uuid.uuid4())[:8]
         safe_filename = filename.replace(' ', '_')
-        
+
         if clinic_id and patient_id:
             storage_path = f"clinics/{clinic_id}/patients/{patient_id}/whatsapp/{unique_id}/{safe_filename}"
         elif clinic_id:
             storage_path = f"clinics/{clinic_id}/whatsapp/{unique_id}/{safe_filename}"
         else:
             storage_path = f"tmp/whatsapp/{unique_id}/{safe_filename}"
-        
+
         try:
             client.put_object(
                 Bucket=bucket_name,
@@ -244,9 +272,8 @@ class NotificationService:
                 Body=pdf_bytes,
                 ContentType='application/pdf'
             )
-            public_url = f"{public_r2_domain.rstrip('/')}/{storage_path}"
             # Return as media_id to keep compatibility with send_event
-            return {"success": True, "media_id": public_url}
+            return {"success": True, "media_id": self._resolve_r2_url(storage_path)}
         except Exception as e:
             logger.error(f"R2 WhatsApp media upload error: {e}")
             return {"success": False, "error": str(e)}

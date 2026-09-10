@@ -4,14 +4,14 @@ import httpx
 import logging
 from datetime import datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, Query, Header
 
 logger = logging.getLogger(__name__)
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel, EmailStr
 
-from database import SessionLocal
+from database import get_db
 from models import (
     Clinic, User,
     NotificationPreference, NotificationLog,
@@ -80,14 +80,6 @@ _SEED_OVERRIDES = {
     # seeded so the switch exists on the Preferences screen to be turned on.
     "appointment_reminder_2h": {"channels": ["whatsapp"], "is_enabled": False},
 }
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
 
 def _get_or_create_wallet(clinic_id: int, db: Session) -> NotificationWallet:
     return wallet_service.get_or_create_wallet(db, clinic_id)
@@ -962,13 +954,27 @@ class LogUpdateRequest(BaseModel):
 async def update_notification_log(
     log_id: int,
     body: LogUpdateRequest,
+    x_internal_auth: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
 ):
     """
     Internal endpoint — called by Nexus after dispatching to update the log
     entry status and provider_message_id (MSG91 request_id).
-    No auth required: only reachable from within the private network.
+
+    Despite the docstring this used to carry ("only reachable from within
+    the private network"), config/nginx.conf only carves out
+    /api/v1/consent/ for nexus — everything else, this route included,
+    falls through to backend and is reachable from the public internet.
+    Guarded the same way domains/consent/routes/consents_internal.py
+    guards its own internal-only endpoint: a shared secret header, fail
+    closed if it isn't configured. nexus-service's callback sends it.
     """
+    expected = os.environ.get("INTERNAL_API_KEY")
+    if not expected:
+        raise HTTPException(status_code=503, detail="internal API not configured")
+    if not x_internal_auth or x_internal_auth != expected:
+        raise HTTPException(status_code=403, detail="invalid internal auth")
+
     import datetime as dt
     log = db.query(NotificationLog).filter(NotificationLog.id == log_id).first()
     if not log:

@@ -106,20 +106,28 @@ export class AdminApiService extends BaseApiService {
         }
     }
 
+    /**
+     * Throws rather than returning []. An empty array is a real answer — this
+     * clinic has no staff — and using it for "the request failed" meant a 403
+     * or a dropped connection rendered as "No staff members found", which is
+     * both wrong and unactionable. The screen has a catch; let it say something
+     * true.
+     */
     async getStaff(): Promise<StaffMember[]> {
-        try {
-            const headers = await this.getAuthHeaders();
-            const response = await this.fetchWithTimeout(`${this.baseURL}/clinic-users/`, {
-                method: 'GET',
-                headers,
-            });
+        const headers = await this.getAuthHeaders();
+        const response = await this.fetchWithTimeout(`${this.baseURL}/clinic-users/`, {
+            method: 'GET',
+            headers,
+        });
 
-            if (!response.ok) return [];
-            return await response.json();
-        } catch (error) {
-            console.error('❌ [API] Error fetching staff:', error);
-            return [];
+        if (!response.ok) {
+            throw new Error(
+                response.status === 403
+                    ? "You don't have permission to view staff."
+                    : 'Could not load the staff list.',
+            );
         }
+        return await response.json();
     }
 
     async addStaffMember(data: any): Promise<boolean> {

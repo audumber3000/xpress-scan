@@ -381,7 +381,9 @@ const VerifyContactStep = ({ phone: initialPhone, email: initialEmail, onVerifie
         {editing ? (
           <div className="space-y-3">
             <div>
-              <label htmlFor="vp" className="mb-1 block text-xs font-semibold text-gray-500">WhatsApp number</label>
+              <label htmlFor="vp" className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-gray-500">
+                <WhatsAppIcon className="w-3.5 h-3.5 text-[#25D366]" /> WhatsApp number
+              </label>
               <input
                 id="vp"
                 value={draft.phone}

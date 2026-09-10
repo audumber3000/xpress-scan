@@ -62,11 +62,21 @@ async def send_event(request: SendEventRequest):
             )
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                await client.patch(request.callback_url, json={
-                    "status": "sent" if success else "failed",
-                    "provider_message_id": provider_id,
-                    "error_message": result.get("error") if not success else None,
-                })
+                await client.patch(
+                    request.callback_url,
+                    json={
+                        "status": "sent" if success else "failed",
+                        "provider_message_id": provider_id,
+                        "error_message": result.get("error") if not success else None,
+                    },
+                    # Backend's /notification-admin/logs/{id} requires this —
+                    # it's reachable from the public internet (nginx only
+                    # carves out /api/v1/consent/, everything else including
+                    # this falls through to backend), so it can no longer be
+                    # unauthenticated. Same shared secret both services
+                    # already get via INTERNAL_API_KEY.
+                    headers={"X-Internal-Auth": os.getenv("INTERNAL_API_KEY", "")},
+                )
         except Exception:
             pass  # callback failure must never break the send response
 

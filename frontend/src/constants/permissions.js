@@ -25,6 +25,55 @@ export const MODULES = [
 ];
 
 /**
+ * Two names for one action, and two names for one module.
+ *
+ * Mirrors core/auth_utils.py exactly — ACTION_SYNONYMS and RESOURCE_ALIASES
+ * there, these here. They have to agree: a screen that hides a button the
+ * server would have allowed is as wrong as one that shows a button the server
+ * refuses, and the second is how this bug was found.
+ */
+const ACTION_SYNONYMS = {
+  view:   ['view', 'read'],
+  read:   ['view', 'read'],
+  edit:   ['edit', 'write', 'update'],
+  write:  ['edit', 'write', 'update'],
+  update: ['edit', 'write', 'update'],
+  delete: ['delete', 'remove'],
+};
+
+const RESOURCE_ALIASES = {
+  billing: ['billing', 'finance'],
+  finance: ['finance', 'billing'],
+  users:   ['users', 'staff'],
+  staff:   ['staff', 'users'],
+};
+
+/**
+ * Whether this user may do `action` on `module`.
+ *
+ * The one place a screen should ask. Staff Management used to ask its own way —
+ * `permissions.users.view` — and the grid above writes `staff.read`. Neither
+ * half matched, so an owner could grant a manager full Staff/Admin access and
+ * the manager still got "You don't have permission to view staff management".
+ * The identical mistake, with `billing` against `finance`, had already been
+ * found once on the server.
+ *
+ * Owners pass unconditionally. That is what being the owner means, and the
+ * server agrees.
+ */
+export const can = (user, module, action) => {
+  if (!user) return false;
+  if (user.role === 'clinic_owner') return true;
+
+  const permissions = user.permissions || {};
+  const actions = ACTION_SYNONYMS[action] || [action];
+  return (RESOURCE_ALIASES[module] || [module]).some((name) => {
+    const block = permissions[name] || {};
+    return actions.some((a) => block[a] === true);
+  });
+};
+
+/**
  * A user's permissions map, guarded. Older rows stored a flat shape rather than
  * `{ module: { action: bool } }`, so anything that isn't nested is treated as
  * "nothing granted" instead of throwing halfway down a table row.
@@ -141,3 +190,50 @@ export const ROLE_PRESETS = {
 
 /** The least access of any preset — the safe direction for an unknown role. */
 export const presetFor = (role) => ROLE_PRESETS[role] || ROLE_PRESETS.receptionist;
+
+
+/**
+ * What a permission set means, in words.
+ *
+ * A thirteen-by-four grid of tickboxes is an accurate answer to a question
+ * nobody asked. What the person adding a receptionist wants to know before they
+ * press the button is "so what will she be able to do", and reading that off a
+ * grid is work. This says it.
+ *
+ * Returns { can, cannot } as short phrases, so the caller can lay them out.
+ * Modules the person cannot even open are listed by name alone — there is no
+ * useful verb for absence.
+ */
+const ACCESS_NOUNS = {
+  dashboard:    'the dashboard',
+  appointments: 'appointments',
+  patients:     'patient records',
+  finance:      'billing and payments',
+  vendors:      'vendors',
+  inventory:    'stock',
+  inbox:        'the inbox',
+  reports:      'reports',
+  marketing:    'marketing',
+  staff:        'staff and their access',
+  lab:          'lab work',
+  settings:     'clinic settings',
+  consent:      'consent forms',
+};
+
+export const describeAccess = (permissions) => {
+  const perms = normalizePermissions(permissions);
+  const granted = [];
+  const withheld = [];
+
+  MODULES.forEach((m) => {
+    const block = perms[m.key] || {};
+    const noun = ACCESS_NOUNS[m.key] || m.label.toLowerCase();
+    if (block.read !== true) { withheld.push(noun); return; }
+
+    if (block.delete === true) granted.push(`manage and delete ${noun}`);
+    else if (block.write === true || block.edit === true) granted.push(`manage ${noun}`);
+    else granted.push(`view ${noun}`);
+  });
+
+  return { can: granted, cannot: withheld };
+};

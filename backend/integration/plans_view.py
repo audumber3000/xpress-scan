@@ -10,7 +10,9 @@ reason everything else here does: the CRM contract is a separate concern from
 the product's own APIs, and mixing them makes it unclear which callers a change
 would break.
 """
-from typing import Optional
+from typing import Any, Dict, Optional
+
+from sqlalchemy import case
 
 from core import plans
 
@@ -60,3 +62,65 @@ def monthly_mrr_micros(plan_name: Optional[str], currency: str = plans.INR) -> i
     if cycle == "annual":
         return int(round(table["annual"] * MICROS / 12.0))
     return int(table["monthly"]) * MICROS
+
+
+# ── The catalogue, as SQL ────────────────────────────────────────────────────
+#
+# Sorting a list of subscriptions by MRR and grouping one by tier are questions
+# a database has to answer, because the alternative is loading every row to sort
+# it in Python — the thing the CRM stopped doing when these lists moved here.
+#
+# Every expression below is *built from the catalogue* rather than written out,
+# so a price change or a new tier moves the sort with it. A hand-written CASE
+# would be one more copy of the price list, which is the mistake this whole
+# change exists to undo.
+
+
+def _cases(column, value_of) -> Any:
+    """A CASE over every name the catalogue knows, retired aliases included.
+
+    Aliases matter: production has written `professional_annual` and rows still
+    say so. Leaving them out would sort every legacy subscription into the same
+    null bucket at one end of the list.
+    """
+    mapping: Dict[str, Any] = {}
+    for key in plans.PLANS:
+        for cycle in ("monthly", "annual"):
+            mapping[plans.stored_name(key, cycle)] = value_of(key, cycle)
+    for alias, target in plans.LEGACY_ALIASES.items():
+        resolved_key, resolved_cycle = plans.resolve(target)
+        mapping.setdefault(alias, value_of(resolved_key, resolved_cycle))
+        mapping.setdefault(alias + _ANNUAL, value_of(resolved_key, "annual"))
+    return case(mapping, value=column, else_=value_of(plans.DEFAULT_PLAN, "monthly"))
+
+
+def tier_expression(column):
+    """`plan_name` → `plus` / `pro` / `growth`, for GROUP BY."""
+    return _cases(column, lambda key, _cycle: key)
+
+
+def cycle_expression(column):
+    """`plan_name` → `monthly` / `annual`, for GROUP BY."""
+    return _cases(column, lambda _key, cycle: cycle)
+
+
+def rank_expression(column):
+    """`plan_name` → the tier's position on the ladder, for ORDER BY.
+
+    Sorting on the tier *name* puts growth before plus, alphabetically, which
+    is the opposite of what anybody reading a list of plans expects.
+    """
+    return _cases(column, lambda key, _cycle: plans.PLANS[key]["rank"])
+
+
+def mrr_expression(column, currency: str = plans.INR):
+    """`plan_name` → list-price MRR in micros, for ORDER BY and SUM.
+
+    The same normalisation `monthly_mrr_micros` does, in SQL. List price: what
+    an account is actually charged, after coupons and part periods, is
+    `/payments`, and a revenue figure should be built from that.
+    """
+    return _cases(
+        column,
+        lambda key, cycle: monthly_mrr_micros(plans.stored_name(key, cycle), currency),
+    )

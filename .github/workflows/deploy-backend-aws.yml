@@ -1,8 +1,19 @@
 name: Deploy Backend to AWS
 
-# Auto-deploys the FastAPI backend to the EC2 prod box whenever backend code is
-# pushed to main. (The web frontend is auto-deployed separately by Vercel; the
-# mobile app ships via EAS — neither is handled here.)
+# Auto-deploys the FastAPI backend AND nexus-service to the EC2 prod box
+# whenever either changes on main. (The web frontend is auto-deployed
+# separately by Vercel; the mobile app ships via EAS — neither is handled
+# here.)
+#
+# The `test` job below is a hard gate: `deploy` only runs if it passes. This
+# exists because of a real incident — a bug in nexus-service's WhatsApp
+# invoice-sending code (a guessed R2 URL that pointed at the wrong bucket)
+# reached prod with zero automated tests catching it, and nexus-service
+# wasn't even being synced to the server by this workflow (paths only
+# covered backend/**, so a nexus-only fix could be pushed to main and never
+# reach the EC2 box at all). Both gaps are fixed here: nexus-service now has
+# its own test suite that must pass, and its source is rsynced alongside
+# backend's.
 #
 # ── One-time setup ────────────────────────────────────────────────────────────
 # Repo → Settings → Secrets and variables → Actions → "New repository secret":
@@ -17,7 +28,10 @@ on:
   push:
     branches: [main]
     paths:
-      - 'backend/**'          # only redeploy when backend code actually changes
+      - 'backend/**'
+      - 'nexus-service/**'
+      - 'docker-compose.aws.yml'
+      - 'deploy-aws.sh'
   workflow_dispatch:           # manual "Run workflow" button
 
 # Never run two deploys at once (they both rebuild the same containers).
@@ -26,7 +40,233 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: xpress_scan_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      USE_LOCAL_DB: "true"
+      LOCAL_DB_HOST: localhost
+      LOCAL_DB_PORT: "5432"
+      LOCAL_DB_NAME: xpress_scan_test
+      LOCAL_DB_USER: postgres
+      LOCAL_DB_PASSWORD: postgres
+      JWT_SECRET: test-jwt-secret-for-testing-only
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'  # matches backend/Dockerfile and nexus-service/Dockerfile
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          pip install -r config/requirements.txt -r config/requirements-dev.txt
+
+      - name: Run backend tests
+        working-directory: backend
+        run: |
+          python -m pytest tests/domains tests/test_integration_contract.py -q -c config/pytest.ini --no-cov
+
+      - name: Install nexus-service dependencies
+        working-directory: nexus-service
+        run: |
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run nexus-service tests
+        working-directory: nexus-service
+        run: |
+          python -m pytest tests -q --no-cov
+
+  # Builds the REAL Docker images from docker-compose.prod.yml — same
+  # Dockerfiles as prod — and boots the full stack (its own db + redis, no
+  # RDS needed) inside this runner, then runs the smoke suite against real
+  # HTTP endpoints. `test` above runs the app code directly (fast, no
+  # Docker); this catches what that structurally can't: a Docker build
+  # failure, an env var that never made it into a container's
+  # `environment:` block, or backend and nexus being unable to reach each
+  # other over the compose network — the exact shape of the bug that
+  # started this whole effort. Zero extra infrastructure cost: everything
+  # here lives only for the duration of this job.
+  staging-smoke:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate CI-only secrets and env file
+        run: |
+          mkdir -p /tmp/ci-staging
+          # preflight.py only checks these are present and well-formed, never
+          # that they're real — dummy values are fine, and deliberately never
+          # touch a real third party.
+          cat > /tmp/ci-staging/firebase-service-account.json <<'JSON'
+          {
+            "type": "service_account",
+            "project_id": "ci-staging-dummy",
+            "private_key": "-----BEGIN PRIVATE KEY-----\nZHVtbXk=\n-----END PRIVATE KEY-----\n",
+            "client_email": "ci-staging@ci-staging-dummy.iam.gserviceaccount.com"
+          }
+          JSON
+
+          cat > /tmp/ci-staging/.env <<EOF
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=postgres
+          POSTGRES_DB=molarplus_ci
+          JWT_SECRET=ci-staging-only-secret-not-used-anywhere-real-32chars
+          INTERNAL_API_KEY=ci-staging-internal-key
+          FIREBASE_JSON_PATH=/tmp/ci-staging/firebase-service-account.json
+          DATABASE_URL=postgresql://postgres:postgres@db:5432/molarplus_ci
+          R2_ACCESS_KEY_ID=ci-dummy-access-key
+          R2_SECRET_ACCESS_KEY=ci-dummy-secret-key
+          R2_ENDPOINT_URL=https://ci-dummy.r2.cloudflarestorage.com
+          R2_BUCKET_NAME=ci-dummy-bucket
+          BACKEND_URL=http://localhost:8000
+          FRONTEND_URL=http://localhost:5173
+          CASHFREE_APP_ID=ci-dummy
+          CASHFREE_SECRET_KEY=ci-dummy
+          CASHFREE_ENV=sandbox
+          SUBSCRIPTION_PROVIDER=cashfree
+          CASHFREE_RETURN_URL=http://localhost:8000/subscription
+          CASHFREE_NOTIFY_URL=http://localhost:8000/api/v1/subscriptions/webhook/cashfree
+          OPENAI_API_KEY=
+          GOOGLE_PLACES_API_KEY=
+          META_ACCESS_TOKEN=ci-dummy
+          META_PHONE_NUMBER_ID=ci-dummy
+          META_WHATSAPP_BUSINESS_ACCOUNT_ID=ci-dummy
+          META_API_VERSION=v19.0
+          ZEPTO_MAIL_TOKEN=ci-dummy
+          ZEPTO_API_URL=https://api.zeptomail.in/v1.1/email
+          ZEPTO_PLATFORM_FROM_EMAIL=clinic@example.test
+          ZEPTO_PLATFORM_FROM_NAME=CI Staging
+          ZEPTO_PATIENT_FROM_EMAIL=care@example.test
+          ZEPTO_PATIENT_FROM_NAME=CI Staging Care
+          ZEPTO_FROM_EMAIL=clinic@example.test
+          ZEPTO_FROM_NAME=CI Staging
+          WA_TPL_APPOINTMENT_BOOKED=mp_appointment_booked
+          WA_TPL_APPOINTMENT_CONFIRMED=mp_appointment_confirmed
+          WA_TPL_CHECKED_IN=mp_checked_in
+          WA_TPL_APPOINTMENT_REMINDER=mp_appointment_reminder
+          WA_TPL_INVOICE=mp_invoice_sent
+          WA_TPL_PRESCRIPTION=mp_prescription_sent
+          WA_TPL_CONSENT_FORM=mp_consent_form
+          WA_TPL_GOOGLE_REVIEW=mp_google_review
+          MSG91_AUTH_KEY=ci-dummy-msg91-key
+          MSG91_SMS_SENDER=CISTAGING
+          EOF
+
+      - name: Build images
+        run: |
+          docker compose -f docker-compose.prod.yml -f docker-compose.ci.yml \
+            --env-file /tmp/ci-staging/.env build backend nexus
+
+      - name: Start database and redis
+        run: |
+          docker compose -f docker-compose.prod.yml -f docker-compose.ci.yml \
+            --env-file /tmp/ci-staging/.env up -d --wait db redis
+
+      - name: Create schema (fresh DB — no RDS/existing schema to migrate here)
+        run: |
+          docker compose -f docker-compose.prod.yml -f docker-compose.ci.yml \
+            --env-file /tmp/ci-staging/.env run --rm backend \
+            python -c "from database import engine; from models import Base; Base.metadata.create_all(bind=engine); print('schema created')"
+
+      - name: Start backend and nexus
+        run: |
+          docker compose -f docker-compose.prod.yml -f docker-compose.ci.yml \
+            --env-file /tmp/ci-staging/.env up -d backend nexus
+
+      - name: Wait for both services to answer /health
+        run: |
+          for service in "backend:8000" "nexus:8001"; do
+            name="${service%%:*}"; port="${service##*:}"
+            echo "waiting for $name on :$port..."
+            for i in $(seq 1 30); do
+              if curl -sf "http://localhost:$port/health" >/dev/null 2>&1; then
+                echo "$name is up"
+                break
+              fi
+              if [ "$i" = "30" ]; then
+                echo "$name never became healthy"
+                docker compose -f docker-compose.prod.yml -f docker-compose.ci.yml logs "$name" --tail 100
+                exit 1
+              fi
+              sleep 2
+            done
+          done
+
+      - name: Set up Python for the smoke tests
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install smoke test dependencies
+        run: pip install requests sqlalchemy psycopg2-binary pytest
+
+      - name: Run smoke tests against the ephemeral stack
+        env:
+          SMOKE_URL: http://localhost:8000
+          NEXUS_SMOKE_URL: http://localhost:8001
+          # Runner-side URL — reaches `db` via the host port docker-compose.ci.yml
+          # publishes, distinct from the containers' own DATABASE_URL (which
+          # uses the `db` hostname over the compose network).
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/molarplus_ci
+        run: |
+          # test_nexus_reachable_through_nginx_consent_routing needs a real Nginx
+          # in front (see config/nginx.conf) doing path-based routing — this
+          # ephemeral stack talks to backend/nexus on their own ports directly,
+          # deliberately with no reverse proxy, so that one test structurally
+          # can't pass here. It still runs for real against the live URL when
+          # test_smoke.py is run manually before a deploy.
+          # --confcutdir stops pytest loading backend/tests/conftest.py, which
+          # imports the whole app and would need backend/ on sys.path plus
+          # every app dependency (this job installs only the four packages
+          # above). The smoke tests talk to the stack over HTTP and define
+          # their own fixtures, so they need none of it.
+          python -m pytest backend/tests/smoke/test_smoke.py backend/tests/smoke/test_ephemeral_stack_smoke.py \
+            --confcutdir=backend/tests/smoke \
+            --deselect backend/tests/smoke/test_smoke.py::test_nexus_reachable_through_nginx_consent_routing \
+            -v
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker-compose.prod.yml -f docker-compose.ci.yml logs --tail 200
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker compose -f docker-compose.prod.yml -f docker-compose.ci.yml \
+            --env-file /tmp/ci-staging/.env down -v
+
   deploy:
+    needs: [test, staging-smoke]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -46,6 +286,15 @@ jobs:
             --exclude '.pytest_cache/' --exclude 'uploads/' --exclude '.git/' \
             -e "ssh -i ~/.ssh/ec2.pem -o StrictHostKeyChecking=no" \
             backend/ "ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/molarplus/backend/"
+
+      - name: Rsync nexus-service to EC2
+        run: |
+          rsync -avz \
+            --exclude '.venv/' --exclude 'venv/' --exclude '__pycache__/' \
+            --exclude '*.pyc' --exclude '.env' --exclude '.env.*' \
+            --exclude '.pytest_cache/' --exclude '.git/' \
+            -e "ssh -i ~/.ssh/ec2.pem -o StrictHostKeyChecking=no" \
+            nexus-service/ "ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/molarplus/nexus-service/"
 
       - name: Run deploy script (RDS migrations + rebuild + health check)
         run: |

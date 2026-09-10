@@ -23,12 +23,9 @@ async def list_vendors(
     category: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user),
-    clinic_id: Optional[int] = None
 ):
     ensure_vendor_permission(current_user, "read")
-    query = db.query(Vendor)
-    target_clinic_id = clinic_id or current_user.clinic_id
-    query = query.filter(Vendor.clinic_id == target_clinic_id)
+    query = db.query(Vendor).filter(Vendor.clinic_id == current_user.clinic_id)
     if category:
         query = query.filter(Vendor.category == category)
     return query.all()
@@ -40,11 +37,8 @@ async def create_vendor(
     current_user = Depends(get_current_user)
 ):
     ensure_vendor_permission(current_user, "write")
-    # Ensure clinic_id is provided or inferred from context
-    clinic_id = getattr(vendor_data, "clinic_id", None) or getattr(current_user, "clinic_id", 1)
-         
     vendor = Vendor(**vendor_data.dict())
-    vendor.clinic_id = clinic_id
+    vendor.clinic_id = current_user.clinic_id
     db.add(vendor)
     db.commit()
     db.refresh(vendor)
@@ -53,7 +47,9 @@ async def create_vendor(
 @router.get("/{vendor_id}", response_model=VendorResponseDTO)
 async def get_vendor(vendor_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     ensure_vendor_permission(current_user, "read")
-    vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
+    vendor = db.query(Vendor).filter(
+        Vendor.id == vendor_id, Vendor.clinic_id == current_user.clinic_id
+    ).first()
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
     return vendor
@@ -66,13 +62,15 @@ async def update_vendor(
     current_user = Depends(get_current_user)
 ):
     ensure_vendor_permission(current_user, "edit")
-    vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
+    vendor = db.query(Vendor).filter(
+        Vendor.id == vendor_id, Vendor.clinic_id == current_user.clinic_id
+    ).first()
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
-    
+
     for key, value in vendor_data.dict(exclude_unset=True).items():
         setattr(vendor, key, value)
-    
+
     db.commit()
     db.refresh(vendor)
     return vendor
@@ -80,10 +78,12 @@ async def update_vendor(
 @router.delete("/{vendor_id}")
 async def delete_vendor(vendor_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     ensure_vendor_permission(current_user, "delete")
-    vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
+    vendor = db.query(Vendor).filter(
+        Vendor.id == vendor_id, Vendor.clinic_id == current_user.clinic_id
+    ).first()
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
-    
+
     vendor.is_active = False
     db.commit()
     return {"message": "Vendor deactivated successfully"}

@@ -4,7 +4,7 @@ from typing import List, Optional
 from database import get_db
 from models import UserDevice, User
 from schemas import UserOut
-from core.auth_utils import get_current_user
+from core.auth_utils import get_current_user, has_permission
 from datetime import datetime
 from core.audit import record_audit, DEVICE_REMOVED, DEVICE_BLOCKED
 
@@ -18,11 +18,16 @@ def get_user_devices(
 ):
     """Get all devices for a user or all users in clinic"""
     # Check permissions
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        users_permissions = permissions.get("users", {})
-        if not users_permissions.get("view", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to view devices")
+# The permission grid writes this module as `staff` with the action `read`;
+# these routes asked for `users`/`view`, and nothing translated — which is why
+# the staff list showed "Never signed in" for everybody whenever a non-owner
+# opened it. The shared helper knows both spellings; see
+# core.auth_utils.RESOURCE_ALIASES and the identical billing/finance bug.
+    if not has_permission(current_user, "view", "users"):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to view devices.",
+        )
     
     # If user_id is provided, get devices for that user
     # Otherwise, get devices for all users in the clinic
@@ -118,11 +123,11 @@ def update_device(
 ):
     """Update device settings (access restrictions, name, etc.)"""
     # Check permissions
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        users_permissions = permissions.get("users", {})
-        if not users_permissions.get("edit", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to edit devices")
+    if not has_permission(current_user, "edit", "users"):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to edit devices.",
+        )
     
     device = db.query(UserDevice).filter(UserDevice.id == device_id).first()
     if not device:
@@ -195,11 +200,11 @@ def delete_device(
 ):
     """Delete/unenroll a device"""
     # Check permissions
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        users_permissions = permissions.get("users", {})
-        if not users_permissions.get("edit", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to delete devices")
+    if not has_permission(current_user, "edit", "users"):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to delete devices.",
+        )
     
     device = db.query(UserDevice).filter(UserDevice.id == device_id).first()
     if not device:

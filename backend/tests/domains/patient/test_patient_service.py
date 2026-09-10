@@ -13,6 +13,25 @@ def mock_patient_repo():
     """Mock patient repository"""
     repo = Mock()
     repo.db = Mock()  # Mock database session
+    # create_patient runs db.query(func.max(...)).filter(...).scalar() directly
+    # against this session (bypassing the repo) to allocate the next display_id.
+    # Left unstubbed, .scalar() returns a Mock, which is truthy, so the `or
+    # 100000` fallback never kicks in and `mock + 1` blows up with a TypeError
+    # unrelated to whatever the test is actually checking.
+    repo.db.query.return_value.filter.return_value.scalar.return_value = None
+    # _attach_last_visit runs two more raw queries (appointments, invoices) to
+    # enrich returned patients and iterates the rows. Same story: an unstubbed
+    # .all() returns a Mock, which isn't iterable.
+    repo.db.query.return_value.filter.return_value.group_by.return_value.all.return_value = []
+    # delete_patient's cascade (invoices, case costs, lab orders, ...) runs a
+    # long chain of db.query(X).filter(...).all()/.delete()/.update() calls
+    # directly against this session. Mock() doesn't vary return_value by call
+    # args, so db.query(anything).filter(...) is the same mock every time —
+    # one stub here covers the whole cascade for the "nothing to cascade"
+    # happy path.
+    repo.db.query.return_value.filter.return_value.all.return_value = []
+    repo.db.query.return_value.filter.return_value.delete.return_value = 0
+    repo.db.query.return_value.filter.return_value.update.return_value = 0
     return repo
 
 
@@ -68,11 +87,12 @@ class TestPatientService:
         assert result.name == "John Doe"
         assert result.clinic_id == clinic_id
         mock_clinic_repo.get_by_id.assert_called_once_with(clinic_id)
-        mock_patient_repo.get_by_phone.assert_called_once_with(clinic_id, "1234567890")
         mock_patient_repo.create.assert_called_once()
 
     def test_create_patient_duplicate_phone(self, patient_service, mock_patient_repo, mock_clinic_repo):
-        """Test patient creation with duplicate phone number"""
+        """Same phone across patients is allowed (needed for the appointment
+        workflow, where duplicates on the same number are handled separately —
+        see the comment on PatientService.create_patient)."""
         # Arrange
         clinic_id = 1
         patient_data = {
@@ -89,12 +109,15 @@ class TestPatientService:
         mock_clinic.status = "active"
         mock_clinic_repo.get_by_id.return_value = mock_clinic
 
-        existing_patient = Mock()
-        mock_patient_repo.get_by_phone.return_value = existing_patient
+        expected_patient = Patient(id=1, clinic_id=clinic_id, **patient_data)
+        mock_patient_repo.create.return_value = expected_patient
 
-        # Act & Assert
-        with pytest.raises(ValueError, match="Patient with phone number 1234567890 already exists"):
-            patient_service.create_patient(patient_data, clinic_id)
+        # Act
+        result = patient_service.create_patient(patient_data, clinic_id)
+
+        # Assert — no ValueError, patient is created despite the shared phone
+        assert result.phone == "1234567890"
+        mock_patient_repo.create.assert_called_once()
 
     def test_create_patient_invalid_clinic(self, patient_service, mock_clinic_repo):
         """Test patient creation with invalid clinic"""
@@ -226,6 +249,7 @@ class TestPatientService:
         patient = Mock()
         patient.id = patient_id
         patient.clinic_id = clinic_id
+        patient.reports = []  # delete_patient also refuses when patient.reports is truthy
 
         mock_patient_repo.get_by_id.return_value = patient
         mock_payment_repo.get_by_patient_id.return_value = []  # No payments

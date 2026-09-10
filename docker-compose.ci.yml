@@ -1,0 +1,29 @@
+# CI-only override for the ephemeral staging job in
+# .github/workflows/deploy-backend-aws.yml, and for ./scripts/pretest.sh
+# locally. Never used in a real deploy — deploy-aws.sh only ever references
+# docker-compose.prod.yml / docker-compose.aws.yml directly.
+#
+# Usage: docker compose -f docker-compose.prod.yml -f docker-compose.ci.yml ...
+
+services:
+  db:
+    # Host port so smoke tests running on the runner (not in a container) can
+    # connect and check the real schema — without touching
+    # docker-compose.prod.yml's deliberate "no host port exposed" posture.
+    # Defaults to 5432 so CI is unchanged; overridable because a dev Mac
+    # usually already has a native Postgres bound there.
+    ports:
+      - "${CI_DB_HOST_PORT:-5432}:5432"
+    # prod's healthcheck is `pg_isready`, which reports the server as ready
+    # during the postgres image's init phase — while its temporary server is
+    # up but POSTGRES_DB has not been created yet. `up --wait` then returns
+    # and the very next step dies with `database "..." does not exist`.
+    # Actually querying the target database is the only check that waits for
+    # the thing we depend on. Left out of prod on purpose: there the database
+    # already exists and this would just be slower.
+    healthcheck:
+      test: ["CMD-SHELL", "psql -U $${POSTGRES_USER} -d $${POSTGRES_DB} -c 'select 1' > /dev/null 2>&1"]
+      interval: 2s
+      timeout: 5s
+      retries: 45
+      start_period: 3s

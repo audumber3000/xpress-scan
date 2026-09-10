@@ -3,16 +3,21 @@ Test configuration and fixtures
 """
 import pytest
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
-# Set environment variables for testing (use local database)
-os.environ["USE_LOCAL_DB"] = "true"
-os.environ["LOCAL_DB_HOST"] = "localhost"
-os.environ["LOCAL_DB_PORT"] = "5432"
-os.environ["LOCAL_DB_NAME"] = "xpress_scan_test"
-os.environ["LOCAL_DB_USER"] = "postgres"
-os.environ["LOCAL_DB_PASSWORD"] = "postgres"
+# Point the app at a local test database. setdefault, not plain assignment:
+# CI supplies these itself (the postgres service maps 5432), but a developer
+# Mac usually already has something on 5432 whose roles don't match, and
+# overwriting the env made the suite impossible to redirect at a throwaway
+# container. Defaults below are exactly what CI uses, so behaviour there is
+# unchanged.
+os.environ.setdefault("USE_LOCAL_DB", "true")
+os.environ.setdefault("LOCAL_DB_HOST", "localhost")
+os.environ.setdefault("LOCAL_DB_PORT", "5432")
+os.environ.setdefault("LOCAL_DB_NAME", "xpress_scan_test")
+os.environ.setdefault("LOCAL_DB_USER", "postgres")
+os.environ.setdefault("LOCAL_DB_PASSWORD", "postgres")
 
 # Now import after setting environment variables
 from models import Base
@@ -38,12 +43,44 @@ def test_db():
 
 @pytest.fixture(scope="function")
 def db_session(test_db):
-    """Create a test database session"""
-    session = TestingSessionLocal()
+    """
+    Test database session, isolated per test.
+
+    Each test runs inside an outer transaction that is rolled back on
+    teardown, and any `session.commit()` the app code under test performs is
+    absorbed into a SAVEPOINT that gets restarted immediately after (the
+    standard SQLAlchemy "join a session into an external transaction"
+    pattern). Without this, commits from one test stay in the database and
+    leak into every test that runs after it in the same session — tests then
+    pass in isolation but fail (or silently pass for the wrong reason) when
+    the full suite runs, depending on execution order.
+    """
+    connection = test_engine.connect()
+    outer_transaction = connection.begin()
+    session = TestingSessionLocal(bind=connection)
+    session.begin_nested()
+
+    # SQLAlchemy's documented "join a session into an external transaction"
+    # recipe: ask the CONNECTION whether a SAVEPOINT is still active, not a
+    # locally-tracked reference to the last one — a handler that flushes
+    # more than once and commits within a single request (as
+    # quotations.respond() does: two flushes, then one commit) ends more
+    # than one transaction per request, and a locally-tracked "is this
+    # object still active" check falls out of sync with which SAVEPOINT the
+    # connection is actually in, silently writing outside of any tracked
+    # transaction from that point on — which the outer rollback below then
+    # never rolls back, and the row is simply absent afterward, no error.
+    @event.listens_for(session, "after_transaction_end")
+    def _restart_savepoint(sess, trans):
+        if not connection.in_nested_transaction():
+            sess.begin_nested()
+
     try:
         yield session
     finally:
         session.close()
+        outer_transaction.rollback()
+        connection.close()
 
 
 @pytest.fixture(scope="function")

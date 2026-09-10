@@ -104,7 +104,7 @@ class TestAuthEndpoints:
 
         assert response.status_code == 401
         data = response.json()
-        assert "invalid" in data["detail"].lower()
+        assert "sign in again" in data["detail"].lower()
 
     def test_change_password_success(self, client, test_user, auth_headers):
         """Test successful password change"""
@@ -132,9 +132,9 @@ class TestAuthEndpoints:
         data = response.json()
         assert "incorrect" in data["detail"].lower()
 
-    def test_logout(self, client):
+    def test_logout(self, client, auth_headers):
         """Test user logout"""
-        response = client.post("/api/v1/auth/logout")
+        response = client.post("/api/v1/auth/logout", headers=auth_headers)
 
         assert response.status_code == 200
         data = response.json()
@@ -155,9 +155,12 @@ class TestAuthEndpoints:
 
         assert response.status_code == 401
 
-    # Test different user roles and permissions
+    # Public self-signup always creates a clinic owner regardless of the
+    # requested role — see the comment on register_user in auth_clean.py.
+    # Staff roles (doctor, receptionist, ...) are only ever created by an
+    # existing owner via /clinic-users, never through public /register.
     def test_register_doctor_role(self, client):
-        """Test registering a user with doctor role"""
+        """Requesting role=doctor on public signup still yields clinic_owner"""
         user_data = {
             "email": "doctor@example.com",
             "password": "securepass123",
@@ -170,10 +173,10 @@ class TestAuthEndpoints:
 
         assert response.status_code == 201
         data = response.json()
-        assert data["user"]["role"] == "doctor"
+        assert data["user"]["role"] == "clinic_owner"
 
     def test_register_receptionist_role(self, client):
-        """Test registering a user with receptionist role"""
+        """Requesting role=receptionist on public signup still yields clinic_owner"""
         user_data = {
             "email": "receptionist@example.com",
             "password": "securepass123",
@@ -186,7 +189,7 @@ class TestAuthEndpoints:
 
         assert response.status_code == 201
         data = response.json()
-        assert data["user"]["role"] == "receptionist"
+        assert data["user"]["role"] == "clinic_owner"
 
     # Test device registration
     def test_device_registration_on_login(self, client, test_user):

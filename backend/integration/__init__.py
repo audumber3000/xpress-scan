@@ -22,6 +22,8 @@ on different versions during a migration.
     aggregates.py  counts and sums, never the rows beneath them
     shapes.py      rows -> the shapes the OpenAPI spec declares
     reads.py       the bulk pull
+    panels.py      the four per-account support panels, rendered not synced
+    marketing.py   discount codes and broadcast history
     actions.py     the writes, idempotent and audited
     store.py       the idempotency and audit tables
 
@@ -32,12 +34,14 @@ on, and they have different reasons to change.
 """
 from fastapi import APIRouter
 
-from . import actions, reads
+from . import actions, marketing, panels, reads
 
 PREFIX = "/integration/v1"
 
 router = APIRouter()
 router.include_router(reads.router)
+router.include_router(panels.router)
+router.include_router(marketing.router)
 router.include_router(actions.router)
 
 __all__ = ["router", "PREFIX"]

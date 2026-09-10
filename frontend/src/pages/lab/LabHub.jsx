@@ -17,6 +17,8 @@ import useColumnWidths from '../../utils/useColumnWidths';
 import MoreMenu from '../../components/common/MoreMenu';
 import { ColGroup, ResizableHead } from '../../components/common/ColumnResizer';
 import { generatePatientPersona, generateInitialsAvatar } from '../../utils/avatar';
+import EmptyState from '../../components/common/EmptyState';
+import { medicalCare, takeOutBoxes } from '../../assets/illustrations';
 
 // Matches the other list pages. Ten was a page of table and half a page of
 // nothing once the summary cards scroll away.
@@ -465,12 +467,17 @@ const LabHub = () => {
                                     />
                                 </div>
                             ) : (
-                                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-12 flex flex-col items-center justify-center text-center">
-                                    <div className="w-16 h-16 bg-gray-50 rounded-lg flex items-center justify-center text-gray-300 mb-4">
-                                        <Beaker size={32} />
-                                    </div>
-                                    <h3 className="text-lg font-bold text-gray-900">No Lab Orders</h3>
-                                    <p className="text-sm text-gray-500 max-w-sm mt-2">Create lab orders from patient case papers to track clinical work.</p>
+                                /* Same illustrated empty state Expenses uses.
+                                   A grey outline icon in a grey box reads as a
+                                   thing that failed to load; the illustration
+                                   reads as a screen that is simply waiting for
+                                   its first entry. */
+                                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8">
+                                    <EmptyState
+                                        image={medicalCare}
+                                        title="No lab work yet"
+                                        subtitle="Send a crown, denture or aligner to your lab from a patient's case paper and it appears here, with its due date."
+                                    />
                                 </div>
                             )}
                         </div>
@@ -532,12 +539,12 @@ const LabHub = () => {
                                     />
                                 </div>
                             ) : (
-                                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-12 flex flex-col items-center justify-center text-center">
-                                    <div className="w-16 h-16 bg-gray-50 rounded-lg flex items-center justify-center text-gray-300 mb-4">
-                                        <Building2 size={32} />
-                                    </div>
-                                    <h3 className="text-lg font-bold text-gray-900">No Lab Partners</h3>
-                                    <p className="text-sm text-gray-500 max-w-sm mt-2">Add lab partners to manage external laboratory work.</p>
+                                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8">
+                                    <EmptyState
+                                        image={takeOutBoxes}
+                                        title="No labs added yet"
+                                        subtitle="Add the labs you already send work to. Once they are here you can pick one on every order and track what each is holding."
+                                    />
                                 </div>
                             )}
                         </div>

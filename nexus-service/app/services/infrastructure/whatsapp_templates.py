@@ -283,23 +283,48 @@ def wa_patient_form(patient_name: str, clinic_name: str, form_link: str,
 
 
 def wa_staff_welcome(staff_name: str = "", clinic_name: str = "", role: str = "",
-                     login_id: str = "", app_url: str = "", clinic_phone: str = "", **_) -> dict:
-    """A new staff member's sign-in details.
+                     login_id: str = "", email: str = "", username: str = "",
+                     password: str = "", app_url: str = "", clinic_phone: str = "", **_) -> dict:
+    """A new staff member's invitation.
 
     Body params: {{1}} staff_name, {{2}} clinic_name, {{3}} role,
                  {{4}} login_id, {{5}} app_url
 
-    Deliberately no password. WhatsApp messages sit unlocked on a lock screen and
-    are forwarded without thinking; the username and a link are enough to sign
-    in with, and the password goes by email where the rest of the credentials
-    already are. The backend still passes it — this builder simply does not use
-    it.
+    Back to the five params the LIVE, ALREADY-APPROVED `mp_staff_welcome`
+    expects. Do not change this count without a new approved template.
+
+    ─── Two rejections, and what they taught us ────────────────────────────
+
+    A seven-param version carrying email + username + password was rejected on
+    10 Sep 2026: Meta classified it as an Authentication template. A six-param
+    retry with the password removed was rejected the same way — the classifier
+    reads "sign-in details", "password", "Sign in here" as authentication
+    whatever the parameters are, so it was never about the credential alone.
+
+    Both rejections cost a day each, so this stops guessing at the classifier
+    and uses the template that is already approved and already working.
+
+    That costs nothing real. Every staff member now has to have an email
+    address, so the full credentials go there, and the owner is holding them on
+    screen to hand over in person. WhatsApp's job is to tell the person they
+    have been added and where to go, which is what the approved template says.
+
+    `email`, `username` and `password` are accepted and deliberately unused:
+    one payload feeds both channels and the email builder needs all three.
+
+    Absent values get a non-empty stand-in, because Meta rejects a body
+    parameter that is blank or whitespace-only and that kills the whole message.
     """
     tpl = _get_tpl("WA_TPL_STAFF_WELCOME", "mp_staff_welcome")
     return {
         "template_name": tpl,
-        "components": [_body_params(staff_name, clinic_name, role or "staff",
-                                    login_id, app_url or clinic_phone)],
+        "components": [_body_params(
+            staff_name or "there",
+            clinic_name or "your clinic",
+            role or "staff",
+            login_id or email or username or "your email address",
+            app_url or clinic_phone or "https://app.molarplus.com",
+        )],
     }
 
 

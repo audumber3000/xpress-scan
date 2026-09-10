@@ -87,13 +87,25 @@ def label_for(role: str | None) -> str:
 
 
 def assignable_by(role: str | None) -> list[dict]:
-    """What roles this user is allowed to hand out.
+    """What roles this person is allowed to hand out.
 
-    An owner can create anyone. A dentist can only add front-desk staff, which
-    stops a non-owner quietly minting themselves a second owner account.
+    Seniority only. Whether they may add staff at all is a separate question,
+    answered by the staff permission on their account — keeping the two apart is
+    what lets an owner delegate hiring to a practice manager without also
+    handing over the ability to create dentists.
+
+    An owner can hand out anything except another owner: ownership is
+    transferred, not issued, and a second owner is a second person who bypasses
+    every permission check in the app. Everybody else can hand out the
+    non-clinical roles — front desk and chairside — and nothing higher.
+
+    The last line used to be a bare `return []`, which read as "only clinical
+    staff can be trusted to hire". In practice the person doing the hiring in a
+    small practice is the receptionist who runs the front desk, and the owner
+    grants them Staff access precisely so they can. Returning nothing meant the
+    role dropdown came back empty for exactly that person, and — once the roles
+    were actually enforced on write — that their grant did nothing at all.
     """
     if role == CLINIC_OWNER:
         return [r for r in ROLES if r["value"] != CLINIC_OWNER]
-    if is_clinical(role):
-        return [r for r in ROLES if not r["clinical"]]
-    return []
+    return [r for r in ROLES if not r["clinical"]]

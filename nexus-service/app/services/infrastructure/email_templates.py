@@ -6,11 +6,32 @@ Two sender streams:
   - Clinic   → Patient (care@molarplus.com)      — clinical events, charged to clinic wallet
 """
 
+import os
 from datetime import datetime
 
-MOLARPLUS_LOGO_URL   = "https://molarplus.com/molarplus-logo-transparent.svg"
-BRAND_COLOR          = "#29828a"
-DARK_COLOR           = "#1a1548"
+# The logo, and why there usually isn't one.
+#
+# This pointed at https://molarplus.com/molarplus-logo-transparent.svg, which
+# fails twice over: the URL does not resolve at all, and it is an SVG — Gmail,
+# Outlook, Yahoo and Apple Mail all strip SVG from email. The header was a
+# solid dark rectangle with nothing in it. The `filter:brightness(0) invert(1)`
+# that was meant to whiten it is a CSS filter, which no mail client supports
+# either, so even a working PNG would have arrived in its original colours.
+#
+# So the wordmark below is TEXT, and it is always what renders. Text cannot be
+# blocked, cannot 404, and is white on the dark header by definition. If a real
+# PNG is ever published, set MOLARPLUS_EMAIL_LOGO_URL and it is used instead,
+# with white alt text behind it so a recipient with images off still reads the
+# name. Deliberately no SVG fallback: it would be a silent blank again.
+MOLARPLUS_LOGO_URL   = os.getenv("MOLARPLUS_EMAIL_LOGO_URL", "").strip()
+
+# The app's own palette. #2a276e is the primary — it is used 1426 times in the
+# frontend against 323 for the teal — so the email led with the wrong one: every
+# button and link was the accent colour the app reserves for Control Center.
+BRAND_COLOR          = "#2a276e"   # primary: buttons, links
+BRAND_DARK           = "#1a1548"   # its pressed shade: the header band
+ACCENT_COLOR         = "#29828a"   # teal accent, kept for support/help surfaces
+DARK_COLOR           = BRAND_DARK  # retained: other modules import this name
 SUPPORT_PHONE        = "+91 9594078777"
 SUPPORT_EMAIL        = "support@molarplus.com"
 
@@ -18,10 +39,10 @@ _SUPPORT_BLOCK = (
     f'<div style="margin-top:18px;padding:12px 16px;background:#f0fafa;border-radius:8px;'
     f'font-size:13px;color:#4b5563;text-align:center;">'
     f'Need help? Reach us on '
-    f'<a href="https://wa.me/919594078777" style="color:{BRAND_COLOR};font-weight:700;text-decoration:none;">'
+    f'<a href="https://wa.me/919594078777" style="color:{ACCENT_COLOR};font-weight:700;text-decoration:none;">'
     f'WhatsApp {SUPPORT_PHONE}</a>'
     f' &nbsp;·&nbsp; '
-    f'<a href="mailto:{SUPPORT_EMAIL}" style="color:{BRAND_COLOR};font-weight:700;text-decoration:none;">'
+    f'<a href="mailto:{SUPPORT_EMAIL}" style="color:{ACCENT_COLOR};font-weight:700;text-decoration:none;">'
     f'{SUPPORT_EMAIL}</a>'
     f'</div>'
 )
@@ -42,9 +63,10 @@ def _base_wrapper(header_html: str, body_html: str, footer_html: str) -> str:
     .content{{padding:32px 36px;font-size:15px;line-height:1.75;}}
     .content p{{margin-bottom:14px;}}
     .content strong{{color:#111827;}}
-    .btn{{display:inline-block;margin:18px 0 6px;padding:13px 28px;background:{BRAND_COLOR};color:#fff;border-radius:8px;font-weight:700;font-size:14px;text-decoration:none;letter-spacing:.3px;}}
+    .btn{{display:inline-block;margin:18px 0 6px;padding:13px 28px;background:{BRAND_COLOR};color:#ffffff !important;border-radius:8px;font-weight:700;font-size:14px;text-decoration:none;letter-spacing:.3px;}}
+    .btn:link,.btn:visited,.btn:hover,.btn:active{{color:#ffffff !important;}}
     .divider{{border:none;border-top:1px solid #f0f0f0;margin:20px 0;}}
-    .info-box{{background:#f9fafb;border-left:4px solid {BRAND_COLOR};border-radius:0 8px 8px 0;padding:14px 18px;margin:16px 0;font-size:14px;color:#4b5563;}}
+    .info-box{{background:#f9fafb;border-left:4px solid {ACCENT_COLOR};border-radius:0 8px 8px 0;padding:14px 18px;margin:16px 0;font-size:14px;color:#4b5563;}}
     .info-box strong{{display:block;color:#111827;margin-bottom:4px;font-size:15px;}}
     .footer{{background:#f9fafb;padding:20px 36px;text-align:center;border-top:1px solid #f0f0f0;}}
     .footer-logo{{height:22px;opacity:.7;margin-bottom:8px;}}
@@ -65,10 +87,38 @@ def _base_wrapper(header_html: str, body_html: str, footer_html: str) -> str:
 </html>"""
 
 
+def _wordmark(color: str, size: int = 22) -> str:
+    """The MolarPlus name as text, in whatever colour the surface needs.
+
+    Text rather than an image on purpose. Images in email are blocked by default
+    in Outlook and by many Gmail users, so an image-only header is blank for a
+    large share of recipients even when the file is perfectly good — and ours
+    was not: the URL 404'd and the format was SVG, which mail clients strip.
+    """
+    return (
+        f'<span style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Arial,sans-serif;'
+        f'font-size:{size}px;font-weight:800;letter-spacing:.3px;color:{color};'
+        f'line-height:1;white-space:nowrap;">MolarPlus</span>'
+    )
+
+
 def _platform_header() -> str:
-    """MolarPlus-branded header for platform→clinic emails."""
-    return f"""<div class="header" style="background:{DARK_COLOR};text-align:center;">
-      <img src="{MOLARPLUS_LOGO_URL}" alt="MolarPlus" style="height:36px;filter:brightness(0) invert(1);" />
+    """MolarPlus-branded header for platform→clinic emails.
+
+    White on the app's dark primary. If a real PNG is configured the image leads
+    and the wordmark is its alt text — styled white, so a blocked image still
+    reads as the brand rather than as a broken-image icon on a dark band.
+    """
+    if MOLARPLUS_LOGO_URL:
+        mark = (
+            f'<img src="{MOLARPLUS_LOGO_URL}" alt="MolarPlus" height="30" '
+            f'style="height:30px;width:auto;border:0;display:inline-block;'
+            f'font-family:Arial,sans-serif;font-size:22px;font-weight:800;color:#ffffff;" />'
+        )
+    else:
+        mark = _wordmark("#ffffff")
+    return f"""<div class="header" style="background:{BRAND_DARK};text-align:center;">
+      {mark}
     </div>"""
 
 
@@ -80,21 +130,29 @@ def _clinic_header(clinic_name: str, clinic_logo_url: str = "") -> str:
         initial = clinic_name[0].upper() if clinic_name else "C"
         logo_html = (
             f'<div style="width:48px;height:48px;border-radius:12px;background:{BRAND_COLOR};'
-            f'display:inline-flex;align-items:center;justify-content:center;'
-            f'font-size:24px;font-weight:900;color:#fff;">{initial}</div>'
+            f'text-align:center;line-height:48px;'
+            f'font-size:24px;font-weight:900;color:#ffffff;">{initial}</div>'
         )
-    return f"""<div class="header" style="background:#fff;border-bottom:3px solid {BRAND_COLOR};display:flex;align-items:center;gap:14px;">
-      {logo_html}
-      <div>
-        <div style="font-size:18px;font-weight:800;color:#111827;">{clinic_name}</div>
-        <div style="font-size:12px;color:#6b7280;margin-top:2px;">Dental &amp; Healthcare</div>
-      </div>
+    # A table, not flexbox. Outlook's rendering engine is Word, which supports
+    # neither `display:flex` nor `gap`, so the logo and the clinic name stacked
+    # awkwardly instead of sitting side by side. A two-cell table is the only
+    # horizontal layout every client agrees on.
+    return f"""<div class="header" style="background:#fff;border-bottom:3px solid {BRAND_COLOR};">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+        <tr>
+          <td style="vertical-align:middle;padding-right:14px;">{logo_html}</td>
+          <td style="vertical-align:middle;">
+            <div style="font-size:18px;font-weight:800;color:#111827;">{clinic_name}</div>
+            <div style="font-size:12px;color:#6b7280;margin-top:2px;">Dental &amp; Healthcare</div>
+          </td>
+        </tr>
+      </table>
     </div>"""
 
 
 def _platform_footer() -> str:
     return (
-        f'<img src="{MOLARPLUS_LOGO_URL}" alt="MolarPlus" class="footer-logo" /><br/>'
+        f'{_wordmark("#9ca3af", 15)}<br/>'
         f'<p style="font-size:12px;color:#6b7280;margin:6px 0;">'
         f'Need help? '
         f'<a href="https://wa.me/919594078777" style="color:{BRAND_COLOR};font-weight:700;text-decoration:none;">WhatsApp {SUPPORT_PHONE}</a>'
@@ -107,7 +165,7 @@ def _platform_footer() -> str:
 def _clinic_footer(clinic_name: str) -> str:
     return (
         f'<p style="font-size:13px;color:#6b7280;margin-bottom:6px;">Sent by <strong style="color:#111827;">{clinic_name}</strong></p>'
-        f'<img src="{MOLARPLUS_LOGO_URL}" alt="MolarPlus" class="footer-logo" />'
+        f'{_wordmark("#9ca3af", 14)}'
         f'<p style="font-size:11px;color:#9ca3af;">Powered by MolarPlus</p>'
     )
 
@@ -124,7 +182,7 @@ def platform_welcome(owner_name: str, clinic_name: str, **_) -> dict:
   Complete your clinic profile, add your team members, and set up your first treatment types.
 </div>
 <p>If you have any questions, our support team is always here to help.</p>
-<a href="https://app.molarplus.com/dashboard" class="btn">Go to Dashboard →</a>
+<a href="https://app.molarplus.com/dashboard" class="btn" style="color:#ffffff;">Go to Dashboard →</a>
 <p style="font-size:13px;color:#9ca3af;">Happy practising,<br/>The MolarPlus Team</p>"""
     body += _SUPPORT_BLOCK
     return {
@@ -142,7 +200,7 @@ def platform_branch_added(owner_name: str, branch_name: str, **_) -> dict:
   {branch_name} is now accessible from your clinic switcher. You can manage its staff, settings, and data independently.
 </div>
 <p>You can switch between branches anytime from the top navigation bar in your dashboard.</p>
-<a href="https://app.molarplus.com/admin/clinic" class="btn">Manage Branches →</a>"""
+<a href="https://app.molarplus.com/admin/clinic" class="btn" style="color:#ffffff;">Manage Branches →</a>"""
     body += _SUPPORT_BLOCK
     return {
         "subject": f"New branch added: {branch_name}",
@@ -159,7 +217,7 @@ def platform_subscription_purchased(owner_name: str, clinic_name: str, plan_name
   Valid until: {valid_until}
 </div>
 <p>You now have access to all features included in the <strong>{plan_name}</strong> plan. Thank you for choosing MolarPlus!</p>
-<a href="https://app.molarplus.com/admin/subscription" class="btn">View Subscription →</a>"""
+<a href="https://app.molarplus.com/admin/subscription" class="btn" style="color:#ffffff;">View Subscription →</a>"""
     body += _SUPPORT_BLOCK
     return {
         "subject": f"Subscription activated — {plan_name} plan",
@@ -176,7 +234,7 @@ def platform_wallet_topup(owner_name: str, clinic_name: str, amount: float, new_
   New balance: ₹{new_balance:.2f}
 </div>
 <p>You can use this balance to send WhatsApp, Email, and SMS notifications to your patients.</p>
-<a href="https://app.molarplus.com/admin/notifications" class="btn">View Wallet →</a>"""
+<a href="https://app.molarplus.com/admin/notifications" class="btn" style="color:#ffffff;">View Wallet →</a>"""
     body += _SUPPORT_BLOCK
     return {
         "subject": f"Wallet topped up: ₹{amount:.2f} added",
@@ -193,7 +251,7 @@ def platform_wallet_low(owner_name: str, clinic_name: str, current_balance: floa
   Notifications to your patients may fail until the wallet is recharged.
 </div>
 <p>Please top up your wallet to continue sending appointment reminders, invoices, and other important patient communications.</p>
-<a href="https://app.molarplus.com/admin/notifications" class="btn" style="background:#ef4444;">Top Up Now →</a>"""
+<a href="https://app.molarplus.com/admin/notifications" class="btn" style="background:#ef4444;color:#ffffff;">Top Up Now →</a>"""
     body += _SUPPORT_BLOCK
     return {
         "subject": f"⚠️ Low wallet balance — notifications may fail",
@@ -206,7 +264,7 @@ def platform_app_welcome(owner_name: str = "there", clinic_name: str = "your cli
 <p>Hi <strong>{owner_name}</strong>,</p>
 <p>Welcome to <strong>MolarPlus</strong>. Your clinic <strong>{clinic_name}</strong> is ready to go.</p>
 <p>You can now start setting up your workflows, team, and patient communication.</p>
-<a href="https://app.molarplus.com/dashboard" class="btn">Open MolarPlus →</a>"""
+<a href="https://app.molarplus.com/dashboard" class="btn" style="color:#ffffff;">Open MolarPlus →</a>"""
     body += _SUPPORT_BLOCK
     return {
         "subject": f"Welcome to MolarPlus, {owner_name}",
@@ -224,7 +282,7 @@ def platform_subscription_confirmed(owner_name: str = "there", clinic_name: str 
   {validity}
 </div>
 <p>Thank you for upgrading with MolarPlus.</p>
-<a href="https://app.molarplus.com/admin/subscription" class="btn">View Subscription →</a>"""
+<a href="https://app.molarplus.com/admin/subscription" class="btn" style="color:#ffffff;">View Subscription →</a>"""
     body += _SUPPORT_BLOCK
     return {
         "subject": f"Subscription confirmed for {clinic_name}",
@@ -240,7 +298,7 @@ def platform_topup_success(owner_name: str = "there", clinic_name: str = "your c
   <strong>Top-up successful</strong>
   Amount added: ₹{amount or "0.00"}<br/>New balance: ₹{new_balance or "0.00"}
 </div>
-<a href="https://app.molarplus.com/admin/notifications" class="btn">View Wallet →</a>"""
+<a href="https://app.molarplus.com/admin/notifications" class="btn" style="color:#ffffff;">View Wallet →</a>"""
     body += _SUPPORT_BLOCK
     return {
         "subject": f"Wallet top-up successful for {clinic_name}",
@@ -269,7 +327,7 @@ def platform_weekly_report(owner_name: str = "there", clinic_name: str = "your c
 <p>Hi <strong>{owner_name}</strong>,</p>
 <p>Your weekly MolarPlus business snapshot for <strong>{clinic_name}</strong> is ready.</p>
 <p>Open the dashboard to review appointments, collections, and team activity for the last 7 days.</p>
-<a href="https://app.molarplus.com/reports" class="btn">Review Weekly Report →</a>"""
+<a href="https://app.molarplus.com/reports" class="btn" style="color:#ffffff;">Review Weekly Report →</a>"""
     body += _SUPPORT_BLOCK
     return {
         "subject": f"Your weekly MolarPlus report is ready",
@@ -281,7 +339,7 @@ def platform_monthly_report(owner_name: str = "there", clinic_name: str = "your 
     body = f"""
 <p>Hi <strong>{owner_name}</strong>,</p>
 <p>Your monthly performance summary for <strong>{clinic_name}</strong> is now available in MolarPlus.</p>
-<a href="https://app.molarplus.com/reports" class="btn">Open Monthly Report →</a>"""
+<a href="https://app.molarplus.com/reports" class="btn" style="color:#ffffff;">Open Monthly Report →</a>"""
     body += _SUPPORT_BLOCK
     return {
         "subject": f"Monthly MolarPlus report for {clinic_name}",
@@ -294,7 +352,7 @@ def platform_review_report(owner_name: str = "there", clinic_name: str = "your c
 <p>Hi <strong>{owner_name}</strong>,</p>
 <p>Your review and reputation summary for <strong>{clinic_name}</strong> is ready.</p>
 <p>Check your recent patient feedback and overall review momentum inside MolarPlus.</p>
-<a href="https://app.molarplus.com/reports" class="btn">Open Review Insights →</a>"""
+<a href="https://app.molarplus.com/reports" class="btn" style="color:#ffffff;">Open Review Insights →</a>"""
     body += _SUPPORT_BLOCK
     return {
         "subject": f"Review insights ready for {clinic_name}",
@@ -306,7 +364,7 @@ def platform_trial_message(subject: str, headline: str, owner_name: str = "there
     body = f"""
 <p>Hi <strong>{owner_name}</strong>,</p>
 <p>{headline} for <strong>{clinic_name}</strong>.</p>
-<a href="https://app.molarplus.com/subscription" class="btn">Open MolarPlus →</a>"""
+<a href="https://app.molarplus.com/subscription" class="btn" style="color:#ffffff;">Open MolarPlus →</a>"""
     body += _SUPPORT_BLOCK
     return {
         "subject": subject,
@@ -498,7 +556,7 @@ def patient_consent_form(patient_name: str, clinic_name: str, clinic_logo_url: s
   <strong>📋 Action Required</strong>
   Please complete this before your appointment to avoid delays.
 </div>
-<a href="{consent_link}" class="btn">Review &amp; Sign Consent Form →</a>
+<a href="{consent_link}" class="btn" style="color:#ffffff;">Review &amp; Sign Consent Form →</a>
 <p style="font-size:13px;color:#9ca3af;margin-top:8px;">Or copy this link: <br/>{consent_link}</p>
 <p>If you have any questions about the procedure, please don't hesitate to ask your doctor.</p>"""
     return {
@@ -513,7 +571,7 @@ def patient_google_review(patient_name: str, clinic_name: str, clinic_logo_url: 
 <p>Dear <strong>{patient_name}</strong>,</p>
 <p>Thank you for visiting <strong>{clinic_name}</strong>! 😊 We hope your experience was great.</p>
 <p>We'd love to hear your feedback. Your review helps us improve and helps other patients find quality dental care.</p>
-<a href="{review_link}" class="btn">⭐ Leave a Google Review →</a>
+<a href="{review_link}" class="btn" style="color:#ffffff;">⭐ Leave a Google Review →</a>
 <p style="font-size:13px;color:#9ca3af;margin-top:8px;">It only takes 30 seconds!</p>
 <p>Thank you for trusting us with your dental health.</p>"""
     return {
@@ -584,7 +642,7 @@ def platform_password_reset(reset_url: str = "", user_name: str = "",
 <p>{greeting}</p>
 <p>We received a request to set a new password for your <strong>MolarPlus</strong> account.
    Use the button below to choose one.</p>
-<a href="{reset_url}" class="btn">Set a new password &rarr;</a>
+<a href="{reset_url}" class="btn" style="color:#ffffff;">Set a new password &rarr;</a>
 <p style="font-size:13px;color:#6b7280;margin-top:18px;">
   If the button does not work, copy this link into your browser:<br>
   <a href="{reset_url}" style="word-break:break-all;">{reset_url}</a>
@@ -603,6 +661,7 @@ def platform_password_reset(reset_url: str = "", user_name: str = "",
 
 def platform_staff_invitation(staff_name: str = "", clinic_name: str = "your clinic",
                               role: str = "", inviter_name: str = "", login_id: str = "",
+                              email: str = "", username: str = "",
                               password: str = "", login_url: str = "", **_) -> dict:
     """The account details a new staff member needs to sign in for the first time.
 
@@ -617,46 +676,66 @@ def platform_staff_invitation(staff_name: str = "", clinic_name: str = "your cli
     invitation since that code was written failed on the first line and was
     logged as a warning. Nobody has ever received one.
 
-    The password is included when the caller supplies it, matching the existing
-    behaviour. That is a real trade: a password sitting in an inbox forever is a
-    standing risk, which is why the sign-in prompt below tells them to change it.
+    The password is included when the caller supplies it. That is a real trade:
+    a password sitting in an inbox forever is a standing risk, which is why the
+    sign-in prompt below tells them to change it. The clinic asked for it
+    explicitly, and the alternative in practice was a staff member holding an
+    invitation they could not act on.
+
+    Email AND username are both listed when both exist. Only one composite
+    `login_id` used to go out, so somebody set up with both was never told about
+    the second — a working credential nobody knew they had.
     """
     inviter_text = f" by {inviter_name}" if inviter_name else ""
     role_text = (role or "team member").replace("_", " ")
 
-    if login_id:
-        password_row = (
+    # Whichever identifiers actually exist, each on its own line and labelled,
+    # so there is no guessing about what goes in the sign-in box.
+    rows = []
+    if email:
+        rows.append(f'<p style="margin:4px 0;"><strong>Email:</strong> {email}</p>')
+    if username:
+        rows.append(f'<p style="margin:4px 0;"><strong>Username:</strong> {username}</p>')
+    if not rows and login_id:
+        rows.append(f'<p style="margin:4px 0;"><strong>Login ID:</strong> {login_id}</p>')
+
+    if rows:
+        rows.append(
             f'<p style="margin:4px 0;"><strong>Password:</strong> '
             f'<code style="background:#fff;padding:2px 6px;border-radius:4px;">{password}</code></p>'
             if password else
             '<p style="margin:4px 0;">Your password has been shared with you separately.</p>'
         )
+        rows.append(f'<p style="margin:4px 0;"><strong>Role:</strong> {role_text}</p>')
+        joined = "\n  ".join(rows)
         credentials = f"""
 <div class="info-box">
-  <p style="margin:4px 0;"><strong>Login ID:</strong> {login_id}</p>
-  {password_row}
-  <p style="margin:4px 0;"><strong>Role:</strong> {role_text}</p>
+  {joined}
 </div>
 <p style="font-size:13px;color:#6b7280;">Please change your password once you have signed in.</p>"""
     else:
         credentials = ""
 
     button = (
-        f'<a href="{login_url}" class="btn">Sign in &rarr;</a>'
+        f'<a href="{login_url}" class="btn" style="color:#ffffff;">Sign in &rarr;</a>'
         if login_url else
-        '<a href="https://app.molarplus.com/login" class="btn">Sign in &rarr;</a>'
+        '<a href="https://app.molarplus.com/login" class="btn" style="color:#ffffff;">Sign in &rarr;</a>'
     )
 
     greeting = f"Hi <strong>{staff_name}</strong>," if staff_name else "Hi,"
+    # "X has invited you" rather than "you have been added". The second is what
+    # happened to a database row; the first is what happened to a person, and it
+    # names the clinic in the first four words, which is what makes the message
+    # recognisable in a crowded inbox.
     body = f"""
 <p>{greeting}</p>
-<p>You have been added to <strong>{clinic_name}</strong> on MolarPlus as a
+<p><strong>{clinic_name}</strong> has invited you to join them on MolarPlus as a
    <strong>{role_text}</strong>{inviter_text}.</p>
 {credentials}
 {button}"""
     body += _SUPPORT_BLOCK
     return {
-        "subject": f"You have been added to {clinic_name} on MolarPlus",
+        "subject": f"{clinic_name} has invited you to join them on MolarPlus",
         "html": _base_wrapper(_platform_header(), body, _platform_footer()),
     }
 

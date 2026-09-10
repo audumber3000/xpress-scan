@@ -21,7 +21,7 @@ import datetime
 import logging
 from typing import Dict, Iterable, List, Optional
 
-from sqlalchemy import func
+from sqlalchemy import case, func, select
 
 from models import Appointment, Invoice, Patient
 
@@ -159,3 +159,48 @@ def roll_up(metrics: Dict[int, SiteMetrics], clinic_ids: List[int],
             "currency other than %s", account_id or "?", skipped, account_currency,
         )
     return total
+
+
+def _greatest(*values):
+    """The largest of several nullable timestamps, portably.
+
+    `GREATEST` is Postgres and does not exist in SQLite; SQLite's multi-argument
+    `max()` is scalar while Postgres's `max()` is an aggregate. Production runs
+    on one and the conformance suite on the other, so neither spelling can be
+    used. A CASE ladder is the same thing in both, and it lets NULL lose rather
+    than poison the comparison — a branch with no invoices has still seen
+    patients.
+    """
+    result = values[0]
+    for candidate in values[1:]:
+        result = case(
+            (result.is_(None), candidate),
+            (candidate.is_(None), result),
+            (result >= candidate, result),
+            else_=candidate,
+        )
+    return result
+
+
+def last_activity_expression(clinic_model):
+    """The same `last_activity_at`, as SQL, so a database can sort on it.
+
+    "Which branches have gone quiet" is the question the CRM asks most often
+    about sites, and answering it means ordering every branch by this value —
+    not computing it for whichever page happened to load. The Python path above
+    still serves the page's own numbers; this exists so the ORDER BY can see
+    rows the page has not fetched.
+
+    Still an aggregate, and still nothing below it: three correlated MAXes over
+    a foreign key. No row from any of the three tables is selected, which is the
+    invariant this module exists to hold.
+    """
+    def newest(model):
+        return (
+            select(func.max(model.created_at))
+            .where(model.clinic_id == clinic_model.id)
+            .correlate(clinic_model)
+            .scalar_subquery()
+        )
+
+    return _greatest(newest(Patient), newest(Appointment), newest(Invoice))

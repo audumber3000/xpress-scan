@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileCheck, Loader2, Search, ChevronRight, FileText, ShieldCheck } from 'lucide-react';
+import { Loader2, Search, ChevronRight, FileText, ShieldCheck } from 'lucide-react';
 import { api } from '../../utils/api';
 import { notify } from '../../utils/notify';
 import { generatePatientPersona, generateInitialsAvatar } from '../../utils/avatar';
 import { formatDate } from '../../utils/datetime';
+import EmptyState from '../../components/common/EmptyState';
+import { onlineCalendar } from '../../assets/illustrations';
 
 /**
  * The histories patients have actually signed.
@@ -51,14 +53,11 @@ const SignedMedicalForms = () => {
 
   if (rows.length === 0) {
     return (
-      <div className="py-10 text-center">
-        <FileCheck size={26} className="mx-auto text-gray-300 mb-2.5" />
-        <p className="text-[13px] font-semibold text-gray-700">Nothing signed yet</p>
-        <p className="text-[12px] text-gray-500 mt-1 max-w-sm mx-auto">
-          Send the medical form from a patient's file, from their appointment, or
-          right after you register them. Once they sign it, it appears here and on their file.
-        </p>
-      </div>
+      <EmptyState
+        image={onlineCalendar}
+        title="Nothing signed yet"
+        subtitle="Send the medical form from a patient's file, from their appointment, or right after you register them. Once they sign it, it appears here and on their file."
+      />
     );
   }
 

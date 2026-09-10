@@ -244,7 +244,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
     const isActive = location.pathname === path;
     const baseClasses = collapsed 
       ? "flex items-center justify-center py-3.5 px-2 rounded-xl transition-all font-semibold whitespace-nowrap relative"
-      : "flex items-center gap-3.5 py-3 px-4 rounded-xl transition-all font-semibold whitespace-nowrap";
+      : "flex items-center mp-row-lg py-3 px-4 rounded-xl transition-all font-semibold whitespace-nowrap";
     // White background for active tab, transparent for inactive
     const activeClasses = isActive 
       ? "bg-white text-gray-900 shadow-lg"
@@ -285,18 +285,39 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
   const visibleMainNav = mainNavItems.filter((item) => canAccess(user, item));
   const visibleAdminNav = adminNavItems.filter((item) => canAccess(user, item));
 
-  // Desktop sidebar classes - Gradient background (teal for admin, purple for main)
-  const desktopClasses = !isMobile 
-    ? `flex flex-col h-screen transition-all duration-300 ease-in-out absolute inset-y-0 left-0 z-50 ${collapsed ? 'w-20' : 'w-64'} ${collapsed ? 'p-3' : 'p-5'} ${
-        isAdminRoute 
-          ? 'bg-gradient-to-b from-[#0d2a2d] via-[#1F6B72] to-[#29828a]' 
-          : 'bg-gradient-to-b from-[#0d0a2d] via-[#1a1548] to-[#2a276e]'
-      }`
-    : `flex flex-col h-full w-[82%] max-w-[320px] p-5 shadow-2xl ${
-        isAdminRoute
-          ? 'bg-gradient-to-b from-[#0d2a2d] via-[#1F6B72] to-[#29828a]'
-          : 'bg-gradient-to-b from-[#0d0a2d] via-[#1a1548] to-[#2a276e]'
-      }`;
+  /**
+   * The sidebar's background, as a plain inline gradient.
+   *
+   * Not `bg-gradient-to-b from-… via-… to-…`. Tailwind v4 compiles those into
+   * `--tw-gradient-position: to bottom in oklab` plus a var() chain, and the
+   * `in oklab` interpolation keyword is Chrome 111+. On Chrome 109 — the last
+   * Chrome that Windows 7 and 8 can ever run, since Google capped it in
+   * January 2023 — the substituted background-image is invalid at
+   * computed-value time, so the element gets NO background at all. White text
+   * on nothing. That was the reported bug, and it hit the sidebar alone
+   * because it is the one surface built entirely on a dark ground.
+   *
+   * A build step now strips that keyword behind an @supports block, but this
+   * does not rely on it. Two plain hex stops in a style attribute is the one
+   * construction no browser in question can get wrong, it needs no build
+   * tooling to stay correct, and nobody can reintroduce the bug by editing a
+   * className. Three stops rather than Tailwind's from/via/to, which is the
+   * same thing written shorter.
+   */
+  const SIDEBAR_BG = {
+    admin: 'linear-gradient(to bottom, #0d2a2d 0%, #1F6B72 50%, #29828a 100%)',
+    main: 'linear-gradient(to bottom, #0d0a2d 0%, #1a1548 50%, #2a276e 100%)',
+  };
+  const sidebarStyle = {
+    backgroundImage: isAdminRoute ? SIDEBAR_BG.admin : SIDEBAR_BG.main,
+    // A solid colour underneath, so even a browser that somehow fails the
+    // gradient still gets a dark panel instead of an unreadable one.
+    backgroundColor: isAdminRoute ? '#1F6B72' : '#1a1548',
+  };
+
+  const desktopClasses = !isMobile
+    ? `flex flex-col h-screen transition-all duration-300 ease-in-out absolute inset-y-0 left-0 z-50 ${collapsed ? 'w-20' : 'w-64'} ${collapsed ? 'p-3' : 'p-5'}`
+    : 'flex flex-col h-full w-[82%] max-w-[320px] p-5 shadow-2xl';
 
   return (
     <>
@@ -320,6 +341,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
         onMouseEnter={hoverToPeek ? () => setPeeking(true) : undefined}
         onMouseLeave={hoverToPeek ? () => setPeeking(false) : undefined}
         className={`${mobileClasses} ${desktopClasses} ${collapsed && !isMobile ? 'shadow-2xl' : ''} ${collapsed && !isMobile ? 'overflow-visible' : ''} ${peeking && !isMobile ? 'shadow-2xl' : ''}`}
+        style={sidebarStyle}
       >
         {/* Dotted pattern effect at bottom - color changes based on admin/main */}
         <div 
@@ -418,7 +440,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
         <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
 
         {/* Main Nav */}
-        <nav className="flex flex-col gap-1.5">
+        <nav className="flex flex-col mp-stack-sm">
           {visibleMainNav.length === 0 && !collapsed && (
             <div className="mx-3 px-4 py-4 rounded-xl bg-white/5 border border-white/10 text-center">
               <p className="text-white/40 text-xs font-medium">No access configured</p>
@@ -476,7 +498,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
                               key={subItem.name}
                               to={subItem.path}
                               onClick={() => isMobile && onMobileClose?.()}
-                              className="flex items-center gap-2 px-3 py-2 text-sm text-white/90 hover:bg-white/10 transition-colors whitespace-nowrap"
+                              className="flex items-center mp-row-sm px-3 py-2 text-sm text-white/90 hover:bg-white/10 transition-colors whitespace-nowrap"
                             >
                               <span className="w-5 h-5 flex items-center justify-center">{subItem.icon}</span>
                               {subItem.name}
@@ -508,7 +530,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
                 
                 {/* Submenu items — same styling as main nav, just indented */}
                 {item.hasSubmenu && expandedMenus[item.name] && !collapsed && (
-                  <div className="ml-4 mt-1 flex flex-col gap-1.5">
+                  <div className="ml-4 mt-1 flex flex-col mp-stack-sm">
                     {item.submenu.map((subItem) => {
                       const isSubActive = location.pathname === subItem.path;
                       return (
@@ -540,7 +562,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
         )}
 
         {/* Admin Nav */}
-        <nav className="flex flex-col gap-1.5">
+        <nav className="flex flex-col mp-stack-sm">
           {visibleAdminNav.map((item) => {
             const isActive = location.pathname === item.path;
             return (
@@ -578,7 +600,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose, isCollapsed, onCollapseChange })
             className={`${
               collapsed
                 ? 'flex items-center justify-center w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors group relative'
-                : 'flex items-center gap-3 w-full py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors text-sm font-semibold'
+                : 'flex items-center mp-row-md w-full py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors text-sm font-semibold'
             }`}
             title={collapsed ? 'Support Center' : ''}
           >

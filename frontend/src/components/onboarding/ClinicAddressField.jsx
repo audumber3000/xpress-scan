@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { MapPin, Search, Loader2, Pencil, Check } from 'lucide-react';
+import { MapPin, Loader2, Pencil, Check } from 'lucide-react';
 import { loadGoogleMaps, mapsApiKey } from '../../utils/googleMaps';
+import GoogleGlyph from '../common/GoogleGlyph';
 
 /**
  * The clinic's address, found on a map instead of typed into a box.
@@ -187,9 +188,16 @@ const ClinicAddressField = ({
               className="absolute left-3.5 top-1/2 -translate-y-1/2 animate-spin text-gray-300"
             />
           ) : (
-            <Search
+            /* Google's own mark, not a magnifier.
+               These results ARE Google Places, and the grey magnifier made the
+               field look like it searched our database — so people typed their
+               clinic's name, saw nothing they recognised, and gave up on it to
+               type the address by hand. The mark says whose index this is
+               before they type a character, which is the whole reason the field
+               is worth using. */
+            <GoogleGlyph
               size={16}
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
             />
           )}
           <input
@@ -198,7 +206,7 @@ const ClinicAddressField = ({
             type="text"
             disabled={status === 'loading'}
             placeholder={
-              status === 'loading' ? 'Loading map…' : 'Search your clinic by name or address'
+              status === 'loading' ? 'Loading map…' : 'Search Google for your clinic'
             }
             className={`${FIELD} pl-10 disabled:bg-gray-50 disabled:text-gray-400`}
             // Enter would otherwise submit the step out from under the

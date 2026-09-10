@@ -809,6 +809,60 @@ The MolarPlus Team
 
 ---
 
+---
+
+## T-STAFF — Staff Invitation
+
+**Template name:** `mp_staff_welcome`
+**Status:** ✅ live and approved. Five body params. **Nothing to submit.**
+
+Sent when an owner adds somebody in Control Center → Team → Staff.
+Body params: `{{1}}` staff_name, `{{2}}` clinic_name, `{{3}}` role,
+`{{4}}` login_id, `{{5}}` app_url.
+
+### ⚠️ Do not try to put credentials in this template
+
+Two attempts, two rejections, on 10 Sep 2026:
+
+1. **Seven params** with email + username + password → rejected, Meta
+   classified it as an **Authentication** template. Credentials force that
+   category, and Authentication templates take a fixed one-code body that
+   cannot also carry an email, a username and a link.
+2. **Six params** with the password removed → rejected the same way. The
+   classifier reads "sign-in details", "password" and "Sign in here" as
+   authentication regardless of the parameters, so it was never the credential
+   alone.
+
+The code is back on the approved five-param shape. This costs nothing real:
+an email address is now required to create a staff member, so the full
+credentials go by email, and the owner is holding them on screen to hand over
+in person. WhatsApp's job is to say "you have been added, here is where to go".
+
+If the wording is ever revisited, avoid: *sign in, log in, password, code,
+verify, verification, OTP, credentials, account access.*
+
+### Email — the channel that carries the credentials
+**Subject:** `{{clinic_name}} has invited you to join them on MolarPlus`
+```
+Hi {{staff_name}},
+
+{{clinic_name}} has invited you to join them on MolarPlus as a {{role}},
+invited by {{inviter_name}}.
+
+Email:    {{email}}
+Username: {{username}}
+Password: {{password}}
+Role:     {{role}}
+
+[Sign in →]
+
+Please change your password once you have signed in.
+```
+Built in `nexus-service/app/services/infrastructure/email_templates.py`
+(`platform_staff_invitation`) — rendered in code, never registered with Meta,
+so it is not subject to any of the above and works today.
+
+
 > **Meta submission notes:**
 > - All marketing templates need a creative image uploaded in Meta Business Manager
 > - For buttons: URL buttons support dynamic links; WhatsApp buttons use phone number

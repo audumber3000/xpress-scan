@@ -422,7 +422,11 @@ class DailyVisit(Base):
     is_repeat = Column(Boolean, nullable=False, default=False)
     doctor_id = Column(Integer, ForeignKey('users.id'), nullable=True)
     reason = Column(String, nullable=True)          # free-text reason for visit
-    source = Column(String, nullable=False, default='manual')  # 'manual' | 'check_in'
+    # How the entry got here. Every path that means "this patient was in
+    # today" writes one: 'registration' (added at the front desk),
+    # 'check_in' (arrived for an appointment), 'case_paper', 'invoice',
+    # 'manual' (typed straight into the register).
+    source = Column(String, nullable=False, default='manual')
     appointment_id = Column(Integer, ForeignKey('appointments.id'), nullable=True)
     notes = Column(Text, nullable=True)
     created_by = Column(Integer, ForeignKey('users.id'), nullable=True)

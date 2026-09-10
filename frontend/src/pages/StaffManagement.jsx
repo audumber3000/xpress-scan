@@ -4,8 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useHeader } from "../contexts/HeaderContext";
 import { useAuth } from "../contexts/AuthContext";
 import { api, getPermissionAwareErrorMessage } from "../utils/api";
-import { formatDate, formatRelative } from "../utils/datetime";
-import { canEditPermissions, permissionsLockReason } from "../constants/permissions";
+import { can, canEditPermissions, permissionsLockReason } from "../constants/permissions";
 import { ChevronLeft, UserPlus } from 'lucide-react';
 
 
@@ -21,6 +20,7 @@ import WorkingHoursDrawer from "../components/settings/WorkingHoursDrawer";
 import EditUserTab from "../components/settings/EditUserTab";
 import PermissionsTab from "../components/settings/PermissionsTab";
 import AddStaffDrawer from "../components/settings/AddStaffDrawer";
+import StaffAddedModal from "../components/settings/StaffAddedModal";
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import GearLoader from "../components/GearLoader";
 
@@ -36,7 +36,6 @@ const StaffManagement = () => {
   const [userDevices, setUserDevices] = useState({});
   const [loadingUserDevices, setLoadingUserDevices] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
   
   // Right panel state
   const [selectedUser, setSelectedUser] = useState(null);
@@ -49,9 +48,13 @@ const StaffManagement = () => {
   const [savingEditUser, setSavingEditUser] = useState(false);
   const [savingPermissions, setSavingPermissions] = useState(false);
   
-  // Add User state
+  // Add User state. The drawer owns its own saving flag — it is the thing with
+  // a button to disable — so there is none kept here.
   const [showAddModal, setShowAddModal] = useState(false);
-  const [addingUser, setAddingUser] = useState(false);
+  // Who was just added, and what to hand them. Held here rather than in the
+  // drawer so the drawer can close the moment the row exists — see
+  // StaffAddedModal for why the old in-drawer version read as a failure.
+  const [addedStaff, setAddedStaff] = useState(null);
   const [deactivateTarget, setDeactivateTarget] = useState(null);
   
   // Role + status, applied together by the shared FilterPanel. Replaces the row
@@ -63,6 +66,15 @@ const StaffManagement = () => {
   // them by default is what makes deactivating feel like an answer instead of
   // a half-measure.
   const [staffFilters, setStaffFilters] = useState({ role: '', status: 'Active' });
+
+  // What this person may do here, asked the one way the server also asks it.
+  //
+  // This screen used to check `permissions.users.view` itself. The grid writes
+  // `staff.read`, so the check read a key nobody has ever had and the page
+  // refused everyone but the owner — however much access the owner had
+  // deliberately granted. See `can` in constants/permissions.
+  const mayView = can(user, 'staff', 'read');
+  const mayManage = can(user, 'staff', 'write');
 
   useEffect(() => {
     setTitle(
@@ -76,21 +88,13 @@ const StaffManagement = () => {
         </button>
       </div>
     );
+    // Guarded, so somebody without access gets the explanation on its own
+    // rather than three failed requests and a toast behind it.
+    if (!mayView) return;
     fetchUsers();
     fetchAvailableRoles();
     fetchUserDevices();
-  }, [setTitle, navigate]);
-
-  const hasPermission = (permission) => {
-    if (!user) return false;
-    // Clinic owners have all permissions
-    if (user.role === "clinic_owner") return true;
-    
-    // Check specific permission
-    if (!user.permissions) return false;
-    const [section, action] = permission.split(":");
-    return user.permissions[section]?.[action] === true;
-  };
+  }, [setTitle, navigate, mayView]);
 
   // One call for the whole clinic, then grouped here — a request per staff row
   // would turn a ten-person list into ten round trips.
@@ -112,9 +116,24 @@ const StaffManagement = () => {
     }
   };
 
-  const fetchUsers = async () => {
+  /**
+   * `silent` matters more than it looks.
+   *
+   * `loading` swaps the ENTIRE page for a GearLoader. So every refresh after a
+   * save — adding somebody, changing their permissions, deactivating them —
+   * unmounted the drawer that was open, and when the fetch came back the page
+   * re-rendered with `showAddModal` still true. React mounted a brand new
+   * AddStaffDrawer with brand new state: step one, empty fields.
+   *
+   * From the doctor's side that read as "I pressed Add and it threw me back
+   * into a blank form", with nothing on screen saying the person had in fact
+   * been created. Same mechanism closed the Permissions tab mid-edit.
+   *
+   * A refetch after a save is not a page load and must not be dressed as one.
+   */
+  const fetchUsers = async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const data = await api.get("/clinic-users");
       setUsers(data);
     } catch (error) {
@@ -125,7 +144,7 @@ const StaffManagement = () => {
         "You don't have permission to view staff users."
       ));
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -138,24 +157,37 @@ const StaffManagement = () => {
     }
   };
 
+  /**
+   * Returns the created staff member so the drawer can show their sign-in
+   * details and say what is on its way to them. Errors are left to propagate:
+   * the reason belongs on the form that caused it, next to the field to change.
+   */
   const handleAddUser = async (payload) => {
-    setAddingUser(true);
-    try {
-      await api.post("/clinic-users", payload);
-      await fetchUsers();
-    } finally {
-      setAddingUser(false);
-    }
+    const created = await api.post("/clinic-users", payload);
+    await fetchUsers({ silent: true });
+    return created;
   };
 
+  /**
+   * Open somebody, on the tab the click was asking about.
+   *
+   * This used to navigate to /admin/permissions, a separate page that rendered
+   * the same Team tabs, the same toolbar and the same teal chrome around a
+   * second copy of the staff list — no Add button, different columns, search
+   * and filters reset. Clicking a row therefore looked like the page had
+   * glitched, and the permissions editor already living in this drawer was
+   * reachable only by opening Edit and clicking across. One question, one
+   * place.
+   */
   const handleUserClick = (clickedUser) => {
-    // Sending someone to a permissions screen they can't act on is a dead end;
-    // say why here instead.
+    // Opening a permissions grid that cannot be saved is a dead end; say why.
     if (!canEditPermissions(user, clickedUser)) {
       notify.done(permissionsLockReason(user, clickedUser));
       return;
     }
-    navigate(`/admin/permissions?user=${clickedUser.id}`);
+    setSelectedUser(clickedUser);
+    setUserPanelTab("permissions");
+    setShowUserPanel(true);
   };
 
   // Working hours, straight from the row. Deliberately not behind the
@@ -215,7 +247,7 @@ const StaffManagement = () => {
     setDeactivateTarget(null);
     try {
       await api.put(`/clinic-users/${targetUser.id}`, { is_active: nextState });
-      await fetchUsers();
+      await fetchUsers({ silent: true });
     } catch (err) {
       notify.problem(getPermissionAwareErrorMessage(
         err,
@@ -233,7 +265,7 @@ const StaffManagement = () => {
       // an endpoint that has never existed — so a save that worked perfectly
       // was followed by a 405 and the words "Failed to update user".
       const updated = await api.put(`/clinic-users/${userId}`, updateData);
-      await fetchUsers();
+      await fetchUsers({ silent: true });
       if (selectedUser?.id === userId && updated) setSelectedUser(updated);
     } catch (error) {
       console.error("Error updating user:", error);
@@ -263,7 +295,7 @@ const StaffManagement = () => {
     setSavingPermissions(true);
     try {
       const updated = await api.put(`/clinic-users/${userId}`, payload);
-      await fetchUsers();
+      await fetchUsers({ silent: true });
       if (selectedUser?.id === userId && updated) setSelectedUser(updated);
     } catch (error) {
       console.error("Error updating permissions:", error);
@@ -281,7 +313,7 @@ const StaffManagement = () => {
     );
   }
 
-  if (!hasPermission("users:view")) {
+  if (!mayView) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
@@ -308,12 +340,16 @@ const StaffManagement = () => {
             { key: 'status', label: 'Status', options: ['Active', 'Inactive'] },
           ]}
         />
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-[#29828a] text-white text-sm font-semibold rounded-lg hover:bg-[#216b71] transition-colors whitespace-nowrap"
-        >
-          <UserPlus size={18} /> Add Staff
-        </button>
+        {/* Only for somebody the server will actually let add a person.
+            Otherwise this offered a two-step form that ended in a 403. */}
+        {mayManage && (
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-[#29828a] text-white text-sm font-semibold rounded-lg hover:bg-[#216b71] transition-colors whitespace-nowrap"
+          >
+            <UserPlus size={18} /> Add Staff
+          </button>
+        )}
       </TableToolbar>
 
       <WorkingHoursDrawer
@@ -341,13 +377,14 @@ const StaffManagement = () => {
 
       <StaffTable
         users={filteredUsers}
+        totalStaff={users.length}
+        isSearching={!!searchQuery.trim()}
         userDevices={userDevices}
         loadingUserDevices={loadingUserDevices}
         onUserClick={handleUserClick}
         onEditUser={handleEditUser}
         onEditHours={handleEditHours}
         onToggleActive={handleToggleActive}
-        currentUserId={user?.id}
       />
 
       <>
@@ -401,6 +438,19 @@ const StaffManagement = () => {
         onClose={() => setShowAddModal(false)}
         availableRoles={availableRoles}
         onCreate={handleAddUser}
+        onAdded={(details) => {
+          setAddedStaff(details);
+          // Tier 4. Normally the confirmation would sit on the control that was
+          // pressed, but that control is inside a drawer that has just closed,
+          // so there is nowhere on the page left to put it.
+          notify.done(`${details.name} was added to your staff.`);
+        }}
+      />
+
+      <StaffAddedModal
+        staff={addedStaff}
+        onClose={() => setAddedStaff(null)}
+        onAddAnother={() => { setAddedStaff(null); setShowAddModal(true); }}
       />
       </>
     </TeamTabs>

@@ -237,6 +237,47 @@ async def create_patient(
             current_user.clinic_id,
             created_by=current_user.id,
         )
+        # Registering somebody IS a visit. They are standing at the desk.
+        #
+        # The register was fed by check-in, by a case paper, and by an invoice —
+        # every path except the one the front desk actually uses first. So a
+        # receptionist registered a patient, opened Today's Patients, and did
+        # not find the person they had just typed in. Nothing was broken; the
+        # day book simply had no idea the registration had happened.
+        #
+        # Recorded against registered_on rather than today, so catching up
+        # yesterday's paperwork this morning lands on the right day. The entry
+        # is idempotent per (clinic, patient, day), so a same-day check-in or
+        # case paper afterwards still counts once.
+        try:
+            from domains.patient.routes.daily_register import record_daily_visit
+            from models import Clinic
+            clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+            if clinic:
+                # A SAVEPOINT, not a bare try/except.
+                #
+                # The first version of this caught the failure and called
+                # db.rollback(), which unwound the transaction the patient was
+                # created in — so a broken day book took the patient record with
+                # it and the caller got a 500. Exactly the outcome the comment
+                # above claimed to prevent; the test below is what found it.
+                #
+                # begin_nested unwinds only what happens inside it, and leaves
+                # the session usable, so the worst case is a missing register
+                # row on a patient who is otherwise saved and returned.
+                with db.begin_nested():
+                    record_daily_visit(
+                        db, clinic, patient,
+                        source='registration',
+                        created_by=current_user.id,
+                        visit_date=getattr(patient, 'registered_on', None),
+                    )
+                db.commit()
+        except Exception:
+            # Deliberately no db.rollback(): the savepoint has already undone
+            # the only thing that should be undone.
+            logger.exception("daily register entry failed for patient %s", patient.id)
+
         try:
             actor = getattr(current_user, 'name', None) or getattr(current_user, 'email', 'Staff')
             push_activity(db, current_user.clinic_id, 'patient_added',
