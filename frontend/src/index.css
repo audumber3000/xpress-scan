@@ -554,3 +554,26 @@
 @media (prefers-reduced-motion: reduce) {
   .animate-view-fade-in { animation: none; }
 }
+
+/* ── Spacing that works before Safari 14.1 ───────────────────────────────────
+
+   Flexbox `gap` did not ship in Safari until 14.1, and an iPad or a Mac on
+   macOS 10.14 cannot get there. On those devices every `gap-*` collapses to
+   zero and a flex column becomes a solid block of touching rows, which is what
+   the sidebar looked like.
+
+   Tailwind's own `space-y-*` is not the escape hatch it appears to be: v4
+   compiles it to `:where(.space-y-2 > :not(:last-child))`, and `:where()` is
+   itself Safari 14. So it swaps one 14+ feature for another.
+
+   `> * + *` is the one construction every browser in question already
+   understands, and it needs no feature detection, no @supports probe (flex gap
+   cannot be probed reliably anyway — Safari 13 answers yes to `gap` because it
+   supports it in grid) and no runtime class on <html>.
+
+   Used INSTEAD of gap-*, never alongside it: with both, a modern browser adds
+   the two together and the spacing doubles. */
+.mp-stack-sm > * + * { margin-top: 0.375rem; }   /* was gap-1.5 */
+.mp-row-sm   > * + * { margin-left: 0.5rem; }    /* was gap-2   */
+.mp-row-md   > * + * { margin-left: 0.75rem; }   /* was gap-3   */
+.mp-row-lg   > * + * { margin-left: 0.875rem; }  /* was gap-3.5 */

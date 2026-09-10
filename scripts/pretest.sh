@@ -49,7 +49,7 @@ step "Backend tests"
   USE_LOCAL_DB=true LOCAL_DB_HOST=localhost LOCAL_DB_PORT="$PG_PORT" \
   LOCAL_DB_NAME=xpress_scan_test LOCAL_DB_USER=postgres LOCAL_DB_PASSWORD=postgres \
   JWT_SECRET=test-jwt-secret-for-testing-only \
-  ./venv/bin/python -m pytest tests/domains tests/test_integration_contract.py -q -c config/pytest.ini --no-cov )
+  ./venv/bin/python -m pytest tests/domains tests/test_integration_contract.py tests/test_platform_outreach.py -q -c config/pytest.ini --no-cov )
 
 step "Nexus-service tests"
 ( cd nexus-service && ./venv/bin/python -m pytest tests -q --no-cov )

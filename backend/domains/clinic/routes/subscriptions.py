@@ -26,6 +26,31 @@ def get_db():
 
 router = APIRouter()
 
+
+def _require_owner(current_user: User) -> None:
+    """Billing is the owner's, and only the owner's.
+
+    Not a permission in the grid on purpose. Every other module is something an
+    owner might reasonably delegate; the card the clinic is charged on is not,
+    and a tickbox for it would invite exactly the delegation that should never
+    happen. Role, not permission, is the right shape for "there is one person
+    who pays".
+
+    Nothing in this router checked anything beyond "is signed in", so any staff
+    member could read what the clinic pays, pull the full payment history, and
+    POST /checkout or /start-trial against the owner's account. The frontend
+    hid the buttons; a hidden button is not a closed door.
+
+    Deliberately NOT applied to /plans, /usage or /featured-promo: those are the
+    plan catalogue and the clinic's own usage counters, which the whole app
+    reads to label features and draw meters, and none of them is billing.
+    """
+    if getattr(current_user, "role", None) != "clinic_owner":
+        raise HTTPException(
+            status_code=403,
+            detail="Only the clinic owner can manage the plan and billing.",
+        )
+
 @router.get("/plans")
 async def get_available_plans(
     db: Session = Depends(get_db),
@@ -73,6 +98,7 @@ async def get_current_subscription(
     current_user: User = Depends(get_current_user)
 ):
     """Get current subscription for the user/owner"""
+    _require_owner(current_user)
     # Check for subscription by user_id first (Global Owner Subscription)
     subscription = db.query(Subscription).filter(
         Subscription.user_id == current_user.id
@@ -193,6 +219,7 @@ async def start_free_trial(
     No payment required. A clinic can only ever start a trial once — eligibility
     is tracked via Subscription.trial_used.
     """
+    _require_owner(current_user)
     if not current_user.clinic_id:
         raise HTTPException(status_code=400, detail="User not in clinic")
 
@@ -306,6 +333,7 @@ async def get_billing_history(
     current_user: User = Depends(get_current_user)
 ):
     """Return billing history for the current user."""
+    _require_owner(current_user)
     from models import SubscriptionPayment
 
     # Real payment records
@@ -431,6 +459,7 @@ async def validate_subscription_coupon(
     current_user: User = Depends(get_current_user)
 ):
     """Validate a coupon for subscription"""
+    _require_owner(current_user)
     subscription_service = SubscriptionService(db)
     clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
     price = plans.price(request.plan_name, plans.billing_currency(clinic))
@@ -467,6 +496,7 @@ async def create_checkout(
     current_user: User = Depends(get_current_user)
 ):
     """Initiate a checkout session for a plan linked to the current user"""
+    _require_owner(current_user)
     if not current_user.clinic_id:
         raise HTTPException(status_code=400, detail="User not in clinic")
         
@@ -499,6 +529,7 @@ async def verify_subscription_status(
     current_user: User = Depends(get_current_user)
 ):
     """Verify the status of a specific order for the current user"""
+    _require_owner(current_user)
     subscription_service = SubscriptionService(db)
     result = subscription_service.verify_payment(current_user.id, order_id)
     

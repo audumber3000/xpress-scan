@@ -1,12 +1,13 @@
 from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, time as dtime
 from database import get_db
 from models import Attendance, User, Clinic
 from schemas import AttendanceOut
 from core.auth_utils import get_current_user, require_clinic_owner
-from core.clinic_time import clinic_tzinfo
+from core.clinic_time import clinic_tzinfo, clinic_today, clinic_day_bounds_utc
 from domains.scheduling.services.attendance_view import (
     LATE_GRACE_MINUTES,
     _late_by_minutes,
@@ -52,6 +53,9 @@ class ClockOutRequest(BaseModel):
     longitude: float
     accuracy: Optional[float] = None
     address: Optional[str] = None
+    # What happened on the shift, in their words. Optional by design: a note
+    # that blocks the end of a shift is a note people learn to type "." into.
+    notes: Optional[str] = None
 
 def calculate_distance(lat1, lon1, lat2, lon2):
     """Calculate distance between two coordinates in meters using Haversine formula"""
@@ -215,6 +219,8 @@ async def clock_out(
     attendance.clock_out_address = request.address
     attendance.clock_out_accuracy = request.accuracy
     attendance.clock_out_distance_m = distance
+    if request.notes and request.notes.strip():
+        attendance.notes = request.notes.strip()[:2000]
     
     # Hours worked are deliberately NOT stored. There is no hours_worked
     # column, so the assignment that used to live here set a throwaway Python
@@ -264,6 +270,14 @@ async def get_clock_status(
         # rather than implying a geofence that is not actually being enforced.
         "geofence_set": bool(clinic and getattr(clinic, 'latitude', None) is not None),
         "geofence_radius_m": (getattr(clinic, 'geofence_radius_m', None) or 150) if clinic else 150,
+        # The pin itself, so the clock screen can draw the map and the radius in
+        # one request. It used to have a bare `geofence_set` boolean and had to
+        # call /geofence again just to find out where "here" was.
+        "clinic_name": clinic.name if clinic else None,
+        "clinic_latitude": getattr(clinic, 'latitude', None) if clinic else None,
+        "clinic_longitude": getattr(clinic, 'longitude', None) if clinic else None,
+        # What they actually did today, for the clock-out summary.
+        "today": _today_activity(db, current_user, clinic, clinic_today(clinic) if clinic else today),
         # Whether clocking in *now* would be recorded as late, so the screen can
         # ask for the reason before sending rather than after. Asking afterwards
         # means either a second request or a reason attached to a record that
@@ -272,6 +286,93 @@ async def get_clock_status(
         # Computed with the same helpers the stored status uses, so the prompt
         # and the record cannot disagree about who was late.
         **_late_now(clinic, today),
+    }
+
+
+def _today_activity(db: Session, user: User, clinic, day) -> dict:
+    """What this person has to show for the day, counted from real records.
+
+    Three numbers rather than one, because "patients seen" means different
+    things to different people and a single figure would be zero for half the
+    staff. A dentist is measured on who they treated; a receptionist on who they
+    put on the books. The screen shows whichever are non-zero, so neither is
+    told their shift was empty.
+
+    Distinct patients, not rows: somebody registered in the morning and given a
+    case paper in the afternoon is one patient, not two.
+
+    ─── Three different notions of "today" ─────────────────────────────────
+
+    This looked like one filter and is really three, because the columns are
+    not stored the same way:
+
+      * `Patient.registered_on` and `DailyVisit.visit_date` are clinic-LOCAL
+        Date columns, so they compare against the clinic's own calendar day.
+      * `CasePaper.date` is a UTC timestamp, so it needs the local day
+        converted into UTC bounds first.
+      * `Appointment.appointment_date` is a local naive datetime — the calendar
+        compares it against `datetime.combine(day, ...)` with no conversion —
+        so it takes local bounds.
+
+    The first version used `datetime.now()` bounds against all of them. In IST
+    that is wrong for five and a half hours a day: at 00:45 local it is still
+    19:15 UTC on the previous date, so a patient registered "just now" fell
+    outside "today" and the shift summary read zero. The test caught it at
+    exactly that hour.
+
+    Deliberately no "breaks" figure, however much the design asks for one. There
+    is no break column on Attendance and nothing anywhere records one, so any
+    number here would be invented.
+    """
+    from models import CasePaper, DailyVisit, Appointment, Patient
+
+    day_date = day.date() if hasattr(day, "date") else day
+    utc_start, utc_end = clinic_day_bounds_utc(clinic, day_date, day_date)
+    local_start = datetime.combine(day_date, dtime.min)
+    local_end = datetime.combine(day_date, dtime.max)
+
+    def _count(q):
+        try:
+            return int(q.scalar() or 0)
+        except Exception:  # noqa: BLE001 - a missing column must not break the clock
+            return 0
+
+    seen = set()
+    try:
+        cp = db.query(CasePaper.patient_id).filter(
+            CasePaper.clinic_id == user.clinic_id,
+            CasePaper.dentist_id == user.id,
+        )
+        if utc_start and utc_end:
+            cp = cp.filter(CasePaper.date >= utc_start, CasePaper.date < utc_end)
+        seen.update(pid for (pid,) in cp.all())
+
+        seen.update(
+            pid for (pid,) in db.query(DailyVisit.patient_id).filter(
+                DailyVisit.clinic_id == user.clinic_id,
+                DailyVisit.doctor_id == user.id,
+                DailyVisit.visit_date == day_date,
+            ).all()
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+    registered = _count(db.query(func.count(Patient.id)).filter(
+        Patient.clinic_id == user.clinic_id,
+        Patient.created_by == user.id,
+        Patient.registered_on == day_date,
+    ))
+    appointments = _count(db.query(func.count(Appointment.id)).filter(
+        Appointment.clinic_id == user.clinic_id,
+        Appointment.doctor_id == user.id,
+        Appointment.appointment_date >= local_start,
+        Appointment.appointment_date <= local_end,
+    ))
+
+    return {
+        "patients_seen": len(seen),
+        "patients_registered": registered,
+        "appointments": appointments,
     }
 
 

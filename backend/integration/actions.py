@@ -44,12 +44,12 @@ from core import plans
 from . import plans_view
 from core.countries import apply_to_clinic
 from database import get_db
-from models import Clinic, Subscription
+from models import Clinic, Subscription, User
 
 from . import org, reads, shapes, store
 from .auth import Caller, require_write
 from .store import IntegrationIdempotency
-from .wire import ContractError
+from .wire import ContractError, to_rfc3339
 
 log = logging.getLogger("integration.actions")
 
@@ -77,6 +77,10 @@ class AccountPatch(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     address: Optional[AddressPatch] = None
+    # The console's edit form has always carried this, and a wrong GST number
+    # is one of the commonest things an agent is asked to fix — it is on every
+    # invoice the clinic issues.
+    tax_id: Optional[str] = None
 
 
 class PlanChange(BaseModel):
@@ -86,6 +90,13 @@ class PlanChange(BaseModel):
 
 
 class SuspendBody(BaseModel):
+    reason: Optional[str] = None
+
+
+class TrialRequest(BaseModel):
+    plan_code: Optional[str] = None
+    days: Optional[int] = None
+    notify: bool = True
     reason: Optional[str] = None
 
 
@@ -232,6 +243,12 @@ def update_account(account_id: str, body: AccountPatch,
     for field in ("name", "email", "phone"):
         if field in sent:
             assign(field, getattr(body, field))
+
+    if "tax_id" in sent:
+        # Writes the international column, never the retired `gst_number`.
+        # Both are read (the Account shape falls back), but only one is
+        # written, or a clinic ends up with two tax numbers that disagree.
+        assign("tax_id", body.tax_id)
 
     if "address" in sent and body.address is not None:
         parts = _explicit(body.address)
@@ -460,3 +477,157 @@ def activate_account(account_id: str, body: Optional[SuspendBody] = None,
 
     result = _account_response(db, account_id)
     return _commit(db, idempotency_key, "POST /accounts/activate", payload, caller, result)
+
+# What a MolarPlus trial is, when the caller does not say.
+#
+# Pro rather than the entry tier: a trial exists to show somebody what they are
+# not currently paying for, and trialling the plan they already have shows them
+# nothing. Seven days is what the retired console used and what the WhatsApp
+# template still says, so changing it here would make the product contradict
+# its own message.
+DEFAULT_TRIAL_PLAN = "pro"
+DEFAULT_TRIAL_DAYS = 7
+
+
+@router.post("/accounts/{account_id}/trial", tags=["actions"], operation_id="startTrial")
+def start_trial(account_id: str, body: Optional[TrialRequest] = None,
+                idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+                db: Session = Depends(get_db),
+                caller: Caller = Depends(require_write)):
+    """Put the account on a time-limited trial of a tier.
+
+    Deliberately a separate endpoint from `changePlan`, not a flag on it. A
+    sale creates a recurring charge and never ends; a trial creates neither and
+    expires. With one endpoint the difference lives in a boolean, and the day
+    somebody omits that boolean the CRM starts billing a prospect.
+
+    Refuses an account that is already paying. The mandate would keep
+    collecting while the record said trial, so the customer would be charged
+    for something the CRM believes is free — worse than the request failing.
+    """
+    body = body or TrialRequest()
+    payload = _body(body)
+    replayed = _replayed(db, idempotency_key, "POST /accounts/trial", payload)
+    if replayed is not None:
+        return replayed
+
+    clinic = _account_clinic(db, account_id)
+    plan_code = (body.plan_code or DEFAULT_TRIAL_PLAN).strip()
+    days = body.days or DEFAULT_TRIAL_DAYS
+
+    if not plans_view.is_known(plan_code):
+        raise ContractError(
+            422, "unknown_plan_code",
+            "MolarPlus does not offer the plan {!r}.".format(plan_code),
+            {"plan_code": plan_code, "offered": sorted(plans.PLANS)},
+        )
+
+    now = datetime.datetime.utcnow()
+    ends_at = now + datetime.timedelta(days=days)
+
+    subscription = (
+        db.query(Subscription)
+        .filter(Subscription.clinic_id == clinic.id)
+        .order_by(Subscription.created_at.desc())
+        .first()
+    )
+
+    if subscription is not None:
+        status = (subscription.status or "").lower()
+        if subscription.is_trial and status == "active" and \
+                subscription.current_end and subscription.current_end > now:
+            raise ContractError(
+                409, "already_on_trial",
+                "Account {} is already on a trial until {}.".format(
+                    account_id, subscription.current_end.date().isoformat()),
+                {"ends_at": to_rfc3339(subscription.current_end)},
+            )
+        # A live mandate is the thing that makes this dangerous: it keeps
+        # collecting whatever the plan row says, so a "trial" here would be a
+        # customer paying full price for something the CRM shows as free.
+        if not subscription.is_trial and status in ("active", "pending") and \
+                (subscription.provider or "").lower() in LIVE_MANDATE_PROVIDERS:
+            raise ContractError(
+                409, "already_paying",
+                "Account {} is paying for {} through {}. Cancel that mandate "
+                "before starting a trial, or the customer is charged for a "
+                "plan the CRM shows as free.".format(
+                    account_id, subscription.plan_name, subscription.provider),
+                {"plan_name": subscription.plan_name, "provider": subscription.provider},
+            )
+
+    before = {
+        "plan_name": subscription.plan_name if subscription else None,
+        "clinic_plan": clinic.subscription_plan,
+        "is_trial": bool(subscription.is_trial) if subscription else False,
+    }
+
+    if subscription is None:
+        subscription = Subscription(clinic_id=clinic.id, quantity=1, created_at=now)
+        db.add(subscription)
+    subscription.plan_name = plan_code
+    subscription.status = "active"
+    # No gateway is involved in a trial, and leaving the previous provider on
+    # the row would make it look like a mandate exists.
+    subscription.provider = "none"
+    subscription.is_trial = True
+    subscription.trial_ends_at = ends_at
+    subscription.current_start = now
+    subscription.current_end = ends_at
+    subscription.updated_at = now
+
+    # The denormalised column the product gates features on. Both move, or the
+    # customer is on a trial that grants them nothing.
+    clinic.subscription_plan = plan_code
+    clinic.updated_at = now
+
+    notified = None
+    if body.notify:
+        notified = _notify_trial_started(db, clinic, plan_code, ends_at)
+
+    store.record(db, caller, "trial", account_id, clinic.id, reason=body.reason,
+                 before=before,
+                 after={"plan_name": plan_code, "is_trial": True,
+                        "ends_at": to_rfc3339(ends_at), "days": days,
+                        "notified": notified})
+    db.flush()
+
+    result = _account_response(db, account_id)
+    return _commit(db, idempotency_key, "POST /accounts/trial", payload, caller, result)
+
+
+def _notify_trial_started(db: Session, clinic: Clinic, plan_code: str, ends_at) -> dict:
+    """Tell the customer their trial started, and never fail the action for it.
+
+    A trial that was granted but whose confirmation bounced is still granted.
+    Raising here would roll back the grant over a failed WhatsApp send, so the
+    outcome is recorded on the audit row instead and the caller can see which
+    channel worked.
+
+    Goes through the product's own `PlatformNotificationService` rather than
+    calling a gateway. That service dedupes inside a window, and it writes a
+    `NotificationLog` row — which is what the CRM's Messaging panel reads, so
+    the send shows up there like every other message the product sends. A
+    bespoke sender here would be invisible to the panel one tab away.
+    """
+    result = {"whatsapp": False, "email": False}
+    try:
+        from domains.notification.services.platform_notification_service import (
+            PlatformNotificationService, _get_owner_for_clinic,
+        )
+    except ImportError as error:                        # pragma: no cover
+        log.warning("trial notification unavailable: %s", error)
+        return result
+
+    try:
+        service = PlatformNotificationService(db)
+        owner = _get_owner_for_clinic(db, clinic.id)
+        sent = service.send_subscription_confirmed_notifications(
+            clinic, owner, plans.label(plan_code), ends_at,
+        )
+        result.update((channel, bool(value)) for channel, value in sent.items())
+    except Exception as error:                          # pragma: no cover
+        # Every failure mode here — no phone on the clinic, a gateway timeout,
+        # a template the provider rejected — leaves the trial granted.
+        log.warning("trial notification failed for clinic %s: %s", clinic.id, error)
+    return result

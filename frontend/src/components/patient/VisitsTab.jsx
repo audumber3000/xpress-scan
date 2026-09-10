@@ -13,11 +13,31 @@ import VisitRow from './visits/VisitRow';
  * summary and the next booking are what you check on the way past, and neither
  * deserves half the screen.
  *
- * Built from case papers, which is where a visit is actually recorded. The
- * linked appointment supplies the two things a case paper has no column for —
- * what the visit was booked as, and how long it ran — and both are simply
+ * Built from two sources, and it needs both.
+ *
+ * A case paper is where a visit is *clinically* recorded, and for a long time
+ * it was the only thing this tab read. That left a real hole: a patient
+ * registered at the desk, or a walk-in seen briefly and sent away, had no case
+ * paper — so their file said they had never been in. The profile was already
+ * fetching the daily register for exactly this reason and then dropping it on
+ * the floor; the state went nowhere.
+ *
+ * So register days are folded in as visits in their own right, and any day that
+ * also has a case paper is shown once, as the case paper — that is the richer
+ * record of the same visit.
+ *
+ * The linked appointment supplies the two things a case paper has no column for
+ * — what the visit was booked as, and how long it ran — and both are simply
  * absent on a walk-in that never had one.
  */
+/** What a register entry was, in words, when there is no case paper to name it. */
+const REGISTER_LABEL = {
+  registration: 'Registered at the front desk',
+  check_in: 'Arrived for an appointment',
+  invoice: 'Billed',
+  manual: 'Added to the day register',
+};
+
 const SORTS = [
   { value: 'newest', label: 'Sort: Newest first' },
   { value: 'oldest', label: 'Sort: Oldest first' },
@@ -26,6 +46,7 @@ const SORTS = [
 const VisitsTab = ({
   casePapers = [],
   appointments = [],
+  registerVisits = [],
   nextAppointment,
   onOpenVisit,
   onBookAppointment,
@@ -61,18 +82,51 @@ const VisitsTab = ({
     });
   }, [casePapers, appointments]);
 
+  /**
+   * Days the patient was on the register with nothing clinical written up.
+   *
+   * Keyed by calendar day so a registration and the case paper raised half an
+   * hour later are one visit, not two. When both exist the case paper wins: it
+   * is the same visit, described better.
+   */
+  const registerOnly = useMemo(() => {
+    const clinicalDays = new Set(
+      visits.map((v) => (v.date ? String(v.date).slice(0, 10) : null)).filter(Boolean),
+    );
+    return (registerVisits || [])
+      .filter((r) => r.visit_date && !clinicalDays.has(String(r.visit_date).slice(0, 10)))
+      .map((r) => ({
+        id: `reg-${r.id}`,
+        date: r.visit_date,
+        title: r.reason || REGISTER_LABEL[r.source] || 'Visit',
+        type: null,
+        doctor: r.doctor_name || null,
+        duration: null,
+        // Never "In Progress": there is no clinical record left half-written.
+        // This is a day they were here, and that day is over.
+        status: 'Recorded',
+        note: r.notes || '',
+        registerOnly: true,
+      }));
+  }, [visits, registerVisits]);
+
+  const allVisits = useMemo(
+    () => [...visits, ...registerOnly],
+    [visits, registerOnly],
+  );
+
   const doctors = useMemo(
-    () => [...new Set(visits.map((v) => v.doctor).filter(Boolean))].sort(),
-    [visits],
+    () => [...new Set(allVisits.map((v) => v.doctor).filter(Boolean))].sort(),
+    [allVisits],
   );
   const types = useMemo(
-    () => [...new Set(visits.map((v) => v.type).filter(Boolean))].sort(),
-    [visits],
+    () => [...new Set(allVisits.map((v) => v.type).filter(Boolean))].sort(),
+    [allVisits],
   );
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const out = visits.filter((v) => {
+    const out = allVisits.filter((v) => {
       if (doctor !== 'all' && v.doctor !== doctor) return false;
       if (type !== 'all' && v.type !== type) return false;
       if (!q) return true;
@@ -82,7 +136,7 @@ const VisitsTab = ({
     return out.sort((a, b) => (sort === 'oldest'
       ? new Date(a.date || 0) - new Date(b.date || 0)
       : new Date(b.date || 0) - new Date(a.date || 0)));
-  }, [visits, query, doctor, type, sort]);
+  }, [allVisits, query, doctor, type, sort]);
 
   // Only offered when there is something to choose between. A "All Doctors"
   // select on a single-dentist clinic is a control that can never do anything.
@@ -118,9 +172,9 @@ const VisitsTab = ({
             <div className="px-4 py-10">
               <EmptyState
                 image={noData}
-                title={visits.length === 0 ? 'No visits recorded yet' : 'Nothing matches that'}
-                subtitle={visits.length === 0
-                  ? 'Every case paper you start shows up here as a visit.'
+                title={allVisits.length === 0 ? 'No visits recorded yet' : 'Nothing matches that'}
+                subtitle={allVisits.length === 0
+                  ? 'Every day this patient is on the register, and every case paper you start, shows up here.'
                   : 'Try a different filter or clear the search.'}
               />
             </div>
@@ -143,6 +197,10 @@ const VisitsTab = ({
           onBook={onBookAppointment}
           onOpenCalendar={onOpenCalendar}
         />
+        {/* Case papers only, deliberately. This card totals treatment and
+            spend; a day the patient was merely on the register carries neither,
+            and folding those in would inflate "visits" against unchanged
+            figures beside it. */}
         <VisitSummaryCard visits={visits} appointments={appointments} />
       </div>
     </div>

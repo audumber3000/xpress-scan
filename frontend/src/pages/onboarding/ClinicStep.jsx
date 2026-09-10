@@ -1,5 +1,6 @@
 import React from 'react';
-import { Building2, Globe, MessageCircle, AlertTriangle, Info } from 'lucide-react';
+import { Building2, Globe, AlertTriangle, Info } from 'lucide-react';
+import WhatsAppIcon from '../../components/common/WhatsAppIcon';
 import ValidatedInput from '../../components/forms/ValidatedInput';
 import ClinicAddressField from '../../components/onboarding/ClinicAddressField';
 import { flagEmoji } from '../../utils/detectCountry';
@@ -106,7 +107,11 @@ const ClinicStep = ({ data, onChange, countries, onAddressPlace, onAddressManual
         <ValidatedInput
           label={
             <span className="flex items-center gap-1.5">
-              <MessageCircle className="h-4 w-4 text-green-600" /> WhatsApp number *
+              {/* The actual WhatsApp mark. A generic green speech bubble reads
+                  as "messages" — this field is specifically the number that
+                  will receive the verification code and send patient
+                  reminders, and the brand mark says that at a glance. */}
+              <WhatsAppIcon size={16} brand /> WhatsApp number *
             </span>
           }
           labelClassName={labelCls}

@@ -1,3 +1,6 @@
+// First, before React and before anything a dependency might call at import
+// time. See the file for what it covers and what it deliberately does not.
+import './legacy-polyfills'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HelmetProvider } from 'react-helmet-async'

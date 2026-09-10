@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException, Depends, status, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends, status, Request
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from database import get_db
+from database import get_db, SessionLocal
 from models import User, Clinic
 from core.login_identifier import (
     email_matches,
@@ -12,14 +13,15 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 import datetime
 from datetime import date
-from core.auth_utils import get_current_user
+from core.auth_utils import get_current_user, has_permission
 from core.audit import (record_audit, STAFF_CREATED, STAFF_UPDATED,
                         STAFF_DEACTIVATED, PERMISSIONS_CHANGED, PASSWORD_CHANGED)
 import hashlib
 import logging
 import os
+import re
 import requests
-from core.roles import assignable_by, ROLE_VALUES
+from core.roles import assignable_by, label_for, ROLE_VALUES
 
 # Staff passwords go through the same scheme as everybody else's.
 from core.passwords import hash_password
@@ -28,13 +30,82 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+
+# Who may touch staff records.
+#
+# Every handler below used to read the raw permission dict itself, asking for
+# the module `users` and the action `view`. That is wrong twice over: the
+# permission grid writes the module as `staff` and the action as `read`, and
+# nothing translated between them. So the check read a key no staff account has
+# ever carried, and every route here was a 403 for every non-owner however much
+# access the owner had granted. The reported symptom was exactly that — an owner
+# ticks Staff/Admin for their manager, and the manager still sees "You don't
+# have permission to view staff management".
+#
+# core.auth_utils.has_permission already knows that `users` and `staff` name one
+# module and that `view` and `read` name one action; it is the same helper that
+# fixed the identical billing/finance bug. Routed through one function here so
+# the next handler cannot quietly go back to reading the dict.
+_ACTION_WORDING = {
+    "view": "view staff",
+    "edit": "add or change staff",
+    "delete": "remove staff",
+}
+
+
+def _require_staff(current_user, action: str) -> None:
+    if has_permission(current_user, action, "users"):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail=f"You don't have permission to {_ACTION_WORDING.get(action, action)}.",
+    )
+
+
+def _validate_role(current_user, role: str) -> str:
+    """The role being handed out, checked — or a refusal naming what is allowed.
+
+    `role` arrived as a free string and went straight to the column, while
+    core.roles.assignable_by — which exists for precisely this question — was
+    only ever used to fill the dropdown. Two things followed from that.
+
+    A non-owner with staff-edit could mint a second clinic_owner, and the owner
+    role bypasses every permission check in the app, so that is a takeover
+    rather than an over-grant. And any typo went in: somebody stored as "Doctor"
+    rather than "doctor" never appears on the calendar, cannot be given working
+    hours, and is quietly seeded with a receptionist's access.
+
+    A dropdown is not a guard.
+    """
+    role = (role or "").strip()
+    if role not in ROLE_VALUES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"\u201c{role}\u201d is not a role in this clinic.",
+        )
+    allowed = {r["value"] for r in assignable_by(getattr(current_user, "role", None))}
+    if role not in allowed:
+        offer = ", ".join(sorted(label_for(r) for r in allowed))
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"You can't give somebody the {label_for(role)} role. "
+                + (f"You can assign: {offer}." if offer
+                   else "Ask the clinic owner to set their role.")
+            ),
+        )
+    return role
+
 class ClinicUserIn(BaseModel):
     email: Optional[str] = None  # Required for owners; optional for staff
     username: Optional[str] = None  # Login identifier for staff (no email required)
     name: str
     role: str = "receptionist"
     permissions: Optional[dict] = {}
-    password: Optional[str] = None  # Password for desktop / mobile login
+    # Optional in the schema, required by the handler. Deliberate: leaving it
+    # nullable here means a missing password comes back as a sentence somebody
+    # can act on rather than a 422 about a field name.
+    password: Optional[str] = None
     phone: Optional[str] = None     # so the welcome can also go out on WhatsApp
     # What this person is paid per case, if anything. Set once here rather than
     # typed on every case paper.
@@ -90,6 +161,20 @@ class ClinicUserOut(BaseModel):
         from_attributes = True
 
 
+class ClinicUserCreated(ClinicUserOut):
+    """A freshly added staff member, plus what is on its way to them.
+
+    Separate from ClinicUserOut so the list endpoint stays the plain record.
+    The create handler used to work out exactly this and then drop it on the
+    floor — a local `delivery` dict that was never returned — so the screen that
+    had just added somebody could not say whether the invitation went out, and
+    guessed. `invitation` is deliberately about intent, not outcome: the sends
+    now happen after the response, so the honest word is "sending". Whether each
+    one landed is recorded in the notification log.
+    """
+    invitation: dict = {}
+
+
 def _serialize_user(user: User) -> ClinicUserOut:
     """One shape for a staff member, used by every handler that returns one.
 
@@ -125,11 +210,7 @@ def _serialize_user(user: User) -> ClinicUserOut:
 def get_clinic_users(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Get all clinic users for current clinic"""
     # Check if user has permission to view users
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        users_permissions = permissions.get("users", {})
-        if not users_permissions.get("view", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to view users")
+    _require_staff(current_user, "view")
     
     try:
         users = db.query(User).filter(
@@ -190,52 +271,241 @@ def get_bookable_doctors(db: Session = Depends(get_db), current_user = Depends(g
     ]
 
 
-@router.post("", response_model=ClinicUserOut, status_code=status.HTTP_201_CREATED)
-def add_clinic_user(user_in: ClinicUserIn, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    """Add a new clinic user for current clinic"""
-    # Check if user has permission to edit users
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        users_permissions = permissions.get("users", {})
-        if not users_permissions.get("edit", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to edit users")
-    
+def _suggest_username(db: Session, wanted: str, clinic) -> Optional[str]:
+    """A username close to the one they asked for that is actually free."""
+    base = normalize_username(wanted) or "staff"
+    # The clinic's first word, not the first twelve characters of its name:
+    # "Live Test Clinic" should suggest "…​.live", not "…​.livetestclin".
+    words = re.findall(r"[a-z0-9]+", (getattr(clinic, "name", "") or "").lower())
+    slug = (words[0] if words else "")[:12]
+    for candidate in ([f"{base}.{slug}"] if slug else []) + [f"{base}{n}" for n in range(2, 8)]:
+        if not db.query(User).filter(username_matches(candidate)).first():
+            return candidate
+    return None
+
+
+def _send_staff_welcome(
+    user_id: int,
+    clinic_id: int,
+    name: str,
+    email: Optional[str],
+    username: Optional[str],
+    phone: Optional[str],
+    role: str,
+    password: str,
+    inviter_name: str,
+) -> None:
+    """Hand the new staff member their sign-in details, after the response.
+
+    This used to run inside the POST, between the commit and the return: an
+    HTTP call to Nexus with a ten-second timeout, then the WhatsApp send. The
+    client gives up at thirty. So adding somebody hung for ten seconds on a good
+    day, and on a bad one the browser abandoned a request whose row had already
+    been committed — the owner saw "Could not add this person", pressed Add
+    again, and was told the email already exists, for somebody who did exist.
+    Creating the account and telling them about it are two jobs, and only the
+    first is what the owner is waiting on.
+
+    Its own session: the request's is closed by the time this runs.
+
+    Nothing in here may raise. The account exists either way, and the owner is
+    already holding the sign-in details on screen — every send here is a
+    convenience on top of that, never the only copy.
+    """
+    db = SessionLocal()
+    try:
+        clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
+        if not clinic:
+            return
+        # Both identifiers travel, not just whichever one we happened to pick.
+        # A staff member given an email AND a username was only ever told about
+        # one of them, so the other was a credential nobody knew existed.
+        login_id = email or username or ""
+
+        if email:
+            # Through Nexus, which is the only thing in this system that can
+            # send email. This called EmailService directly, which talks to
+            # Zoho, and no ZOHO_* variables reach the backend container in
+            # production — so every staff invitation ever created failed on the
+            # first line and was logged as a warning nobody was reading.
+            try:
+                resp = requests.post(
+                    f"{os.getenv('NEXUS_SERVICES_URL', 'http://localhost:8001')}"
+                    f"/api/v1/notifications/send-event",
+                    json={
+                        "event_type": "staff_invitation",
+                        "channel": "email",
+                        "to_email": email,
+                        "to_name": name,
+                        "template_data": {
+                            "staff_name": name,
+                            "clinic_name": clinic.name or "",
+                            "role": label_for(role),
+                            "inviter_name": inviter_name,
+                            "login_id": login_id,
+                            "email": email or "",
+                            "username": username or "",
+                            "password": password,
+                            "login_url": os.environ.get("APP_URL") or "",
+                        },
+                    },
+                    timeout=10,
+                )
+                if resp.status_code >= 400:
+                    # Deliberately not logging the body: template_data carries
+                    # the new staff member's password.
+                    logger.warning(
+                        "staff invitation email refused for user %s: HTTP %s",
+                        user_id, resp.status_code,
+                    )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("staff welcome email failed for user %s: %s",
+                               user_id, type(exc).__name__)
+
+        if phone:
+            try:
+                from core.notification_dispatch import notify_event
+                notify_event(
+                    "staff_welcome",
+                    db=db,
+                    clinic_id=clinic_id,
+                    to_phone=phone,
+                    to_email=email or "",
+                    to_name=name,
+                    template_data={
+                        "clinic_name": clinic.name or "",
+                        "staff_name": name,
+                        "role": label_for(role),
+                        "inviter_name": inviter_name,
+                        "login_id": login_id,
+                        "email": email or "",
+                        "username": username or "",
+                        "password": password,
+                        "app_url": os.environ.get("APP_URL", ""),
+                    },
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("staff welcome whatsapp failed for user %s: %s",
+                               user_id, type(exc).__name__)
+    except Exception:  # noqa: BLE001
+        logger.exception("staff welcome failed for user %s", user_id)
+    finally:
+        db.close()
+
+
+@router.post("", response_model=ClinicUserCreated, status_code=status.HTTP_201_CREATED)
+def add_clinic_user(
+    user_in: ClinicUserIn,
+    request: Request,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    """Add somebody to this clinic and hand them a way in.
+
+    The whole job is: check they may be added, write the row, and return. The
+    welcome email and the WhatsApp message are queued behind the response, not
+    waited on — see _send_staff_welcome for why that mattered.
+    """
+    _require_staff(current_user, "edit")
+
+    role = _validate_role(current_user, user_in.role)
+
     # Normalise inputs — treat empty strings as missing
     email = normalize_email(user_in.email) or None
     username = normalize_username(user_in.username) or None
 
-    if not email and not username:
+    # Both, not either.
+    #
+    # This accepted one or the other, and the form explained the choice in a
+    # line under the fields. Two costs: the commonest screen in staff setup
+    # became a small decision instead of a small form, and a staff member added
+    # with only a username had no address the invitation could reach — so the
+    # email half of the welcome silently did nothing.
+    #
+    # Only enforced on creation. Existing rows that predate this carry one or
+    # the other and must stay editable, so update_clinic_user is deliberately
+    # left permissive.
+    if not email:
+        raise HTTPException(status_code=400, detail="Add their email address.")
+    if not username:
         raise HTTPException(
             status_code=400,
-            detail="Either an email or a username is required"
+            detail="Give them a username to sign in with.",
         )
 
-    if email:
-        existing_email = db.query(User).filter(email_matches(email)).first()
-        if existing_email:
-            raise HTTPException(status_code=400, detail="A user with this email already exists")
+    # Both identifiers are global, because signing in is: nobody types which
+    # clinic they belong to. So a clash is usually with a stranger's account,
+    # not with somebody down the corridor, and "already taken" on its own reads
+    # as a bug. Say which of the two it is, why, and what to do instead.
+    clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
 
-    if username:
-        existing_username = db.query(User).filter(username_matches(username)).first()
-        if existing_username:
-            raise HTTPException(status_code=400, detail="This username is already taken")
+    if email and db.query(User).filter(email_matches(email)).first():
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "That email address already has a MolarPlus account. If they work "
+                "at another clinic too, use a different address for them here."
+            ),
+        )
+
+    if username and db.query(User).filter(username_matches(username)).first():
+        hint = _suggest_username(db, username, clinic)
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"The username \u201c{username}\u201d is taken. Usernames are shared "
+                f"across every clinic on MolarPlus, so the short ones went early."
+                + (f" \u201c{hint}\u201d is free." if hint else "")
+            ),
+        )
 
     # Split name into first_name and last_name
     name_parts = user_in.name.strip().split(maxsplit=1)
     first_name = name_parts[0] if name_parts else user_in.name
     last_name = name_parts[1] if len(name_parts) > 1 else ""
 
-    # Hash password if provided
-    password_hash = None
-    if user_in.password:
-        if len(user_in.password) < 8:
-            raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
-        password_hash = hash_password(user_in.password)
+    # A WhatsApp number is required, for the same reason the password is.
+    #
+    # It is the channel the sign-in details actually arrive on. Front-desk staff
+    # frequently have no work email, so when the phone was optional the only
+    # delivery that would have reached them simply did not happen, and the owner
+    # had no way of knowing. Enforced here and not only on the form, because a
+    # required field in the UI stops a slip, not a direct call.
+    phone = (user_in.phone or "").strip()
+    phone_digits = re.sub(r"\D", "", phone)
+    if not phone_digits:
+        raise HTTPException(
+            status_code=400,
+            detail="Add their WhatsApp number. Their sign-in details are sent there.",
+        )
+    if len(phone_digits) < 10:
+        raise HTTPException(
+            status_code=400,
+            detail="That WhatsApp number looks too short. Check it and try again.",
+        )
+
+    # A password is required, where it used to be optional.
+    #
+    # Optional sounds harmless and was not. The form said "leave blank and they
+    # can be given one later", owners left it blank, and the invitation went out
+    # with an empty password field — so the new staff member got a welcome with
+    # no way in, and the clinic found out days later when they tried to work.
+    # An account that cannot be signed into is not a staff member, it is a row.
+    password = (user_in.password or "").strip()
+    if not password:
+        raise HTTPException(
+            status_code=400,
+            detail="Set a password for them, otherwise they have no way to sign in.",
+        )
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="A password needs at least 8 characters.")
+    password_hash = hash_password(password)
 
     # Seed sensible role defaults when none are supplied, so a new staff member
     # is immediately usable rather than locked out with an empty permission set.
     from domains.auth.role_presets import default_permissions_for
-    permissions = user_in.permissions or default_permissions_for(user_in.role)
+    permissions = user_in.permissions or default_permissions_for(role)
 
     user = User(
         email=email,
@@ -243,12 +513,12 @@ def add_clinic_user(user_in: ClinicUserIn, request: Request, db: Session = Depen
         first_name=first_name,
         last_name=last_name,
         name=user_in.name,
-        role=user_in.role,
+        role=role,
         clinic_id=current_user.clinic_id,
         created_by=current_user.id,
         permissions=permissions,
         password_hash=password_hash,
-        phone=(user_in.phone or "").strip() or None,
+        phone=phone,
         fee_basis=(user_in.fee_basis or None),
         fee_value=user_in.fee_value,
     )
@@ -258,91 +528,45 @@ def add_clinic_user(user_in: ClinicUserIn, request: Request, db: Session = Depen
     # belongs in the log next to the permission changes that follow it.
     record_audit(
         db, current_user, STAFF_CREATED,
-        f"Added {user.name or user.email} as {user.role}",
+        f"Added {user.name or user.email} as {label_for(user.role)}",
         request=request, entity_type='user', entity_id=user.id,
     )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # The checks above are a read followed by a write, so two owners adding
+        # the same person at the same moment both pass them and the database
+        # settles it. That used to surface as a bare 500. It is the same
+        # situation the pre-check describes, so it gets the same words.
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Somebody just took that email address or username. "
+                "Try a different one."
+            ),
+        )
     db.refresh(user)
 
-    # ── Welcome the new member on every channel we have for them ───────────
-    #
-    # This used to send an email that said "you've been added" and nothing else:
-    # no login id, no password, no way in. The credentials go out here at the
-    # clinic's explicit request. They are sent once, at creation, and never
-    # re-sent, and the password is never written to a log.
-    #
-    # Neither send can fail the creation. The account exists either way, and an
-    # owner who sees a warning can hand the details over in person.
-    clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
-    login_id = email or username
-    delivery = {"email": False, "whatsapp": False}
-
-    if email and clinic:
-        # Through Nexus, which is the only thing in this system that can send
-        # email. This called EmailService directly, which talks to Zoho, and no
-        # ZOHO_* variables reach the backend container in production — so every
-        # staff invitation ever created failed on the first line, was caught
-        # here, and logged as a warning nobody was reading. No staff member has
-        # ever received one of these.
-        #
-        # `delivery["email"]` is set from the ACTUAL response rather than from
-        # reaching the next line, so the owner's screen stops claiming an
-        # invitation went out when it did not.
-        try:
-            resp = requests.post(
-                f"{os.getenv('NEXUS_SERVICES_URL', 'http://localhost:8001')}"
-                f"/api/v1/notifications/send-event",
-                json={
-                    "event_type": "staff_invitation",
-                    "channel": "email",
-                    "to_email": email,
-                    "to_name": user_in.name or "",
-                    "template_data": {
-                        "staff_name": user_in.name or "",
-                        "clinic_name": clinic.name or "",
-                        "role": user_in.role or "",
-                        "inviter_name": current_user.name or "",
-                        "login_id": login_id or "",
-                        "password": user_in.password or "",
-                        "login_url": os.environ.get("APP_URL") or "",
-                    },
-                },
-                timeout=10,
-            )
-            delivery["email"] = resp.status_code < 400
-            if resp.status_code >= 400:
-                # Deliberately not logging the body: the template_data above
-                # carries the new staff member's password.
-                logger.warning(
-                    "staff invitation email refused for user %s: HTTP %s",
-                    user.id, resp.status_code,
-                )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("staff welcome email failed for user %s: %s", user.id, type(exc).__name__)
-
-    phone = (user_in.phone or "").strip()
-    if phone and clinic:
-        try:
-            from core.notification_dispatch import notify_event
-            notify_event(
-                "staff_welcome",
-                db=db,
-                clinic_id=current_user.clinic_id,
-                to_phone=phone,
-                to_email=email or "",
-                to_name=user_in.name,
-                template_data={
-                    "clinic_name": clinic.name or "",
-                    "staff_name": user_in.name or "",
-                    "role": user_in.role or "",
-                    "login_id": login_id or "",
-                    "password": user_in.password or "",
-                    "app_url": os.environ.get("APP_URL", ""),
-                },
-            )
-            delivery["whatsapp"] = True
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("staff welcome whatsapp failed for user %s: %s", user.id, type(exc).__name__)
+    # Their sign-in details, on every channel we have. Queued rather than
+    # awaited: see _send_staff_welcome. The owner is not kept waiting on Nexus,
+    # and is holding the same details on screen regardless.
+    invitation = {
+        "email": "sending" if email else "none",
+        "whatsapp": "sending" if (user.phone or "") else "none",
+    }
+    background.add_task(
+        _send_staff_welcome,
+        user_id=user.id,
+        clinic_id=current_user.clinic_id,
+        name=user.name or "",
+        email=email,
+        username=username,
+        phone=user.phone,
+        role=user.role,
+        password=password,
+        inviter_name=current_user.name or current_user.email or "",
+    )
 
     # Who can get into the clinic's records is the owner's business, even when
     # the owner is the one adding them. Excluded as actor so an owner adding
@@ -360,7 +584,7 @@ def add_clinic_user(user_in: ClinicUserIn, request: Request, db: Session = Depen
             audience=OWNER,
             actor_user_id=current_user.id,
             title="Staff member added",
-            body=f"{user_in.name} joined as {user_in.role or 'staff'}, "
+            body=f"{user.name} joined as {label_for(user.role)}, "
                  f"added by {current_user.name or current_user.email}",
             link="/admin/staff",
             entity_type="user",
@@ -370,10 +594,9 @@ def add_clinic_user(user_in: ClinicUserIn, request: Request, db: Session = Depen
     except Exception:
         db.rollback()
 
-    # Same reason as the update handler: has_password is derived, so returning
-    # the ORM row would tell a freshly-created user they have no password even
-    # when one was supplied at creation.
-    return _serialize_user(user)
+    # has_password is derived rather than stored, so returning the ORM row would
+    # tell a freshly-created user they have no password when one was just set.
+    return ClinicUserCreated(**_serialize_user(user).model_dump(), invitation=invitation)
 
 # Every table that would be orphaned or would block a hard delete. Forty-three
 # columns reference users.id and twelve of them are NOT NULL, so removing a
@@ -418,11 +641,7 @@ def delete_clinic_user(user_id: int, request: Request, db: Session = Depends(get
     which is what the UI offers anyway and what the rest of this app means by
     "remove a person".
     """
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        users_permissions = permissions.get("users", {})
-        if not users_permissions.get("delete", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to delete users")
+    _require_staff(current_user, "delete")
 
     user = db.query(User).filter(
         User.id == user_id,
@@ -498,11 +717,7 @@ def delete_clinic_user(user_id: int, request: Request, db: Session = Depends(get
 def update_clinic_user(user_id: int, user_update: ClinicUserUpdate, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Update clinic user - scoped by clinic"""
     # Check if user has permission to edit users
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        users_permissions = permissions.get("users", {})
-        if not users_permissions.get("edit", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to edit users")
+    _require_staff(current_user, "edit")
     
     user = db.query(User).filter(
         User.id == user_id,
@@ -529,15 +744,25 @@ def update_clinic_user(user_id: int, user_update: ClinicUserUpdate, request: Req
             if clash:
                 raise HTTPException(status_code=400, detail="This username is already taken")
         user.username = new_username
-    if user_update.role is not None:
-        # Demoting yourself out of clinic_owner is the same trap as editing your
-        # own permissions: the screen that would undo it is the one you just lost.
-        if user.id == current_user.id and user.role == 'clinic_owner' and user_update.role != 'clinic_owner':
+    if user_update.role is not None and (user_update.role or "").strip() != user.role:
+        # Nobody changes their own role, in either direction.
+        #
+        # The downward half was already guarded: an owner who demotes themselves
+        # loses the screen that would undo it. The upward half was not, and it
+        # was the more serious of the two — a receptionist with staff-edit could
+        # PUT their own row with role "clinic_owner", and clinic_owner bypasses
+        # every permission check in this application. That is not an over-grant,
+        # it is the clinic.
+        if user.id == current_user.id:
             raise HTTPException(
                 status_code=400,
                 detail="You can't change your own role. Ask another owner to do it.",
             )
-        user.role = user_update.role
+        # Same guard as creation: a role has to be a real one, and one this
+        # person is allowed to hand out. Skipped when the role is unchanged,
+        # because the permissions tab posts the current role alongside the grid
+        # on every save and that must not start failing.
+        user.role = _validate_role(current_user, user_update.role)
     if user_update.permissions is not None:
         # Nobody edits their own permissions. An owner who switches off their own
         # access loses the very screen that could restore it, and there is no
@@ -618,11 +843,7 @@ def set_staff_password(
 ):
     """Set or reset password for a staff member - only doctors/clinic owners can do this"""
     # Check if user has permission to edit users
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        users_permissions = permissions.get("users", {})
-        if not users_permissions.get("edit", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to set passwords for users")
+    _require_staff(current_user, "edit")
     
     # Find the user
     user = db.query(User).filter(

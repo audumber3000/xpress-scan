@@ -18,17 +18,25 @@ export const StaffManagementScreen: React.FC<StaffManagementScreenProps> = ({ na
   const [searchQuery, setSearchQuery] = useState('');
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
+  // Why the list is empty, when it is empty for a reason other than "nobody
+  // works here". getStaff used to answer a failed request with [], so a 403 or
+  // a dropped connection read as "No staff members found" and there was nothing
+  // to act on.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
 
   const filters = ['All', 'Dentists', 'Receptionist', 'Inactive'];
 
   const loadStaff = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await adminApiService.getStaff();
       setStaffMembers(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error('❌ [STAFF] Load error:', err);
+      setStaffMembers([]);
+      setLoadError(err?.message || 'Could not load the staff list.');
     } finally {
       setLoading(false);
     }
@@ -133,11 +141,19 @@ export const StaffManagementScreen: React.FC<StaffManagementScreenProps> = ({ na
                 </View>
               )}
               ListEmptyComponent={
-                <EmptyState 
-                  icon={Users}
-                  title="No staff members found"
-                  description="Try adjusting your search or filters."
-                />
+                loadError ? (
+                  <EmptyState
+                    icon={Users}
+                    title="Couldn't load your staff"
+                    description={`${loadError} Leave this screen and come back to try again.`}
+                  />
+                ) : (
+                  <EmptyState
+                    icon={Users}
+                    title="No staff members found"
+                    description="Try adjusting your search or filters."
+                  />
+                )
               }
             />
           )}

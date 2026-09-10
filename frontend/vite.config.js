@@ -22,6 +22,16 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  build: {
+    // Without this, Vite targets whatever supports native ES modules and emits
+    // `?.` and `??` untouched — 9,000 of them. Both are SYNTAX errors before
+    // Safari 13.1, so the bundle does not merely misbehave on an older iPad,
+    // it fails to parse and the screen stays white.
+    //
+    // esbuild lowers syntax only. Runtime APIs it cannot invent are polyfilled
+    // in src/legacy-polyfills.js, imported first in main.jsx.
+    target: ['es2019', 'safari13', 'chrome80', 'firefox78', 'edge88'],
+  },
   test: {
     environment: 'jsdom',
     globals: true,

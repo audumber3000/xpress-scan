@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ClipboardList, Plus, Trash2, ChevronUp, ChevronDown, Pencil,
+  Plus, Trash2, ChevronUp, ChevronDown, Pencil,
   ArrowLeft, Save, Send, FileCheck, Loader2, Heading, Asterisk,
 } from 'lucide-react';
 import { api, getFriendlyErrorMessage } from '../../utils/api';
@@ -10,6 +10,8 @@ import InlineFeedback from '../../components/common/InlineFeedback';
 import QuestionModal from './QuestionModal';
 import SignedMedicalForms from './SignedMedicalForms';
 import { TYPE_MAP, isLayout, keyFor } from './fieldTypes';
+import EmptyState from '../../components/common/EmptyState';
+import { noData } from '../../assets/illustrations';
 
 /**
  * The medical history a clinic sends its patients, and the editor for it.
@@ -123,14 +125,12 @@ const MedicalFormTab = () => {
         </div>
 
         {forms.length === 0 ? (
-          <div className="px-5 py-10 text-center">
-            <ClipboardList size={24} className="mx-auto text-gray-300" />
-            <p className="mt-2.5 text-sm font-semibold text-gray-700">No medical form yet</p>
-            <p className="mt-1 text-[13px] text-gray-500 max-w-md mx-auto">
-              Start from the ready-made one. It asks what a practice actually asks:
-              who the patient is, who pays, the condition list, and a declaration
-              they sign. Every question is yours to change.
-            </p>
+          <div className="px-5 py-4 text-center">
+            <EmptyState
+              image={noData}
+              title="No medical form yet"
+              subtitle="Start from the ready-made one. It asks what a practice actually asks: who the patient is, who pays, the condition list, and a declaration they sign. Every question is yours to change."
+            />
             {starter && (
               <button onClick={adopt} disabled={busy === 'adopt'}
                 className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#2a276e] text-white text-[13px] font-semibold hover:bg-[#1a1548] disabled:opacity-50">

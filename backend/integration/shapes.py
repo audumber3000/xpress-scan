@@ -13,6 +13,7 @@ way the contract's `deleted: true` expects. `GET /meta` declares
 account by reconciling against a full snapshot instead. It is a real gap, and
 closing it means a `deleted_at` column in the product.
 """
+import datetime
 from typing import Any, Dict, Optional
 
 from core import plans
@@ -35,6 +36,11 @@ PRODUCT_LABEL = "MolarPlus"
 # ends up on a revenue chart. `past_due` keeps its price: that money is owed,
 # not gone.
 BILLING_STATUSES = ("active", "past_due")
+
+# What `GET /meta` declares, and the currency every comparable figure is
+# reported in. One constant, because a total in a different currency from the
+# one the response says it is in is the worst kind of wrong.
+REPORTING_CURRENCY = plans.INR
 
 
 def address(clinic) -> Optional[Dict[str, Any]]:
@@ -167,6 +173,20 @@ def subscription(row, account_clinic_id: int, clinic) -> Dict[str, Any]:
         "billing_cycle": cycle,
         "status": status,
         "mrr": micros(mrr_micros, currency),
+        # The same figure in the product's reporting currency, so a total means
+        # something. `mrr` is native and must stay native — a clinic billed in
+        # dollars is billed in dollars — but summing native amounts adds rupees
+        # to dollars and produces a number that is wrong in a direction nobody
+        # notices. Every chart and every sort reads this one.
+        #
+        # Not an FX conversion: the catalogue publishes each plan's price in
+        # every currency it sells in, so this is the same plan's list price
+        # looked up in the reporting currency. A rate nobody maintains cannot
+        # go stale.
+        "mrr_base": micros(
+            plans_view.monthly_mrr_micros(row.plan_name, REPORTING_CURRENCY)
+            if status in BILLING_STATUSES else 0,
+            REPORTING_CURRENCY),
         "branch_limit": plans.limit(row.plan_name, "branches"),
         "staff_limit": plans.limit(row.plan_name, "staff"),
         "quantity": int(row.quantity or 1),
@@ -265,5 +285,328 @@ def lead(row, account_clinic_id: Optional[int]) -> Dict[str, Any]:
         "notes": row.notes,
         "created_at": to_rfc3339(row.created_at),
         "updated_at": to_rfc3339(row.updated_at or row.created_at),
+        "deleted": False,
+    }
+
+
+# ── Support panels ───────────────────────────────────────────────────────────
+#
+# docs/INTEGRATION_API.md § Support panels. These are rendered on demand and
+# stored nowhere, which is what lets them carry staff contact details at all —
+# so the rule they each have to keep is the one about what they leave out.
+# Read the omissions here as deliberate; every one of them is a field the
+# retired console's payload carried.
+
+# Sorting sentinel for "no device ever reported in". Only ever compared
+# against, never formatted.
+_NEVER = datetime.datetime.min
+
+# MolarPlus's own event keys, given the wording the clinic sees in its
+# settings screen. Display only: `event_code` is what the panel groups on, and
+# a key with no label here still renders — as the key.
+_EVENT_LABELS = {
+    "appointment_confirmation": "Appointment Confirmation",
+    "appointment_reminder": "Appointment Reminder",
+    "invoice_notification": "Invoice",
+    "prescription_notification": "Prescription",
+    "google_review": "Google Review Request",
+    "consent_form": "Consent Form",
+    "daily_report": "Daily Report",
+}
+
+
+def operator_device(device) -> Dict[str, Any]:
+    """One enrolled device.
+
+    No `ip_address` and no coordinates, though `user_devices` stores all three.
+    `location` is the coarse place name, which answers the question support
+    actually has — is this sign-in from somewhere they have never worked? — and
+    stops there.
+    """
+    return {
+        "id": ext_id(device.id),
+        "label": device.device_name or None,
+        "form_factor": vocab.form_factor(device.device_type, device.device_platform),
+        "platform": device.device_platform or None,
+        "os": device.device_os or None,
+        "is_online": bool(device.is_online),
+        "last_seen_at": to_rfc3339(device.last_seen),
+        "enrolled_at": to_rfc3339(device.enrolled_at or device.created_at),
+        "location": device.location or None,
+    }
+
+
+def operator_session(log, kind: str, factor: str) -> Dict[str, Any]:
+    return {
+        "id": ext_id(log.id),
+        "kind": kind,
+        "at": to_rfc3339(log.created_at),
+        "form_factor": factor,
+    }
+
+
+def operator(user, devices, sessions, branch_clinic_id=None) -> Dict[str, Any]:
+    """One person with a login.
+
+    `last_seen_at` is the newest across their devices rather than a column:
+    MolarPlus has no `users.last_login_at`, and the honest answer to "when were
+    they last here" is the freshest thing any of their devices reported.
+    """
+    last_seen = max(
+        [d.last_seen for d in devices if d.last_seen] or [None],
+        key=lambda value: value or _NEVER,
+    )
+    return {
+        "id": ext_id(user.id),
+        "name": user.name or " ".join(p for p in (user.first_name, user.last_name) if p) or "",
+        "contact": contact(user),
+        "role": vocab.operator_role(user.role, user.id),
+        # The product's own word, kept beside the normalised one because
+        # "receptionist" reads better on a call than "staff" — but only `role`
+        # can be grouped on, and only `role` crosses products.
+        "role_label": user.role or None,
+        "is_active": bool(user.is_active),
+        "branch_id": ext_id(branch_clinic_id) if branch_clinic_id else None,
+        "joined_at": to_rfc3339(user.created_at),
+        "last_seen_at": to_rfc3339(last_seen),
+        "devices": [operator_device(d) for d in devices],
+        "sessions": sessions,
+    }
+
+
+def account_operators(account_id: str, operators, device_totals,
+                      seat_limit, as_of) -> Dict[str, Any]:
+    return {
+        "account_id": account_id,
+        "as_of": to_rfc3339(as_of),
+        # None means unlimited, not zero — the same rule the plan limits keep
+        # everywhere else, and the panel renders the two differently.
+        "seat_limit": seat_limit,
+        "device_totals": device_totals,
+        "operators": operators,
+    }
+
+
+def messaging_channel_stats(channel: str, sent: int, failed: int,
+                            cost, currency: str) -> Dict[str, Any]:
+    return {
+        "channel": channel,
+        "sent": int(sent),
+        "failed": int(failed),
+        "cost": money(cost, currency),
+    }
+
+
+def messaging_preference(row) -> Dict[str, Any]:
+    """One event the account can switch on or off.
+
+    `channels` is the JSON column, with the legacy singular `channel` folded in
+    for rows written before the multi-select landed. A preference showing no
+    channels reads as "sends nothing", which is exactly what such a row means.
+    """
+    channels = list(row.channels or ([row.channel] if row.channel else []))
+    return {
+        "event_code": row.event_type,
+        "label": _EVENT_LABELS.get(row.event_type),
+        "channels": [vocab.message_channel(c, row.id) for c in channels],
+        "is_enabled": bool(row.is_enabled),
+    }
+
+
+def message_record(row, currency: str) -> Dict[str, Any]:
+    """One send, without its recipient.
+
+    `notification_logs.recipient` holds a patient's phone number or email. It
+    is the single field on this endpoint that would turn a diagnostic panel
+    into an end-customer feed, so it is not read, not shaped and not sent.
+    """
+    return {
+        "id": ext_id(row.id),
+        "channel": vocab.message_channel(row.channel, row.id),
+        "event_code": row.event_type or None,
+        "status": vocab.message_status(row.status, row.id),
+        "cost": money(row.cost, currency) if row.cost is not None else None,
+        "error": row.error_message or None,
+        "at": to_rfc3339(row.created_at),
+    }
+
+
+def account_messaging(account_id: str, window_days: int, totals, by_channel,
+                      wallet, preferences, recent, currency: str,
+                      as_of) -> Dict[str, Any]:
+    sent, failed, cost = totals
+    return {
+        "account_id": account_id,
+        "as_of": to_rfc3339(as_of),
+        "window_days": int(window_days),
+        "total_sent": int(sent),
+        "total_failed": int(failed),
+        "total_cost": money(cost, currency),
+        "by_channel": by_channel,
+        # None where the account has no wallet row at all. Distinct from a
+        # balance of zero: one has never topped up, the other has run out, and
+        # only the second is why their reminders stopped.
+        "wallet": None if wallet is None else {
+            "balance": money(wallet.balance or 0.0, currency),
+            "last_topped_up_at": to_rfc3339(wallet.last_topup_at),
+        },
+        "preferences": preferences,
+        "recent": recent,
+    }
+
+
+def reputation(place) -> Optional[Dict[str, Any]]:
+    if place is None:
+        return None
+    return {
+        "source": "google",
+        "place_name": place.place_name or None,
+        "rating": place.current_rating,
+        "review_count": place.total_review_count,
+        "last_synced_at": to_rfc3339(place.last_synced_at),
+    }
+
+
+def account_profile(account_id: str, clinic, completeness, capacity,
+                    place, as_of) -> Dict[str, Any]:
+    """The account's own setup, and how it is seen.
+
+    `billing_customer_ids` is keyed by provider rather than flattened into one
+    `customer_id`, because a clinic that migrated from Razorpay to Cashfree has
+    both and somebody chasing an old refund needs the one that is no longer
+    current.
+    """
+    billing_ids = dict(
+        (provider, value)
+        for provider, value in (
+            ("cashfree", clinic.cashfree_customer_id),
+            ("razorpay", clinic.razorpay_customer_id),
+        )
+        if value
+    )
+    return {
+        "account_id": account_id,
+        "as_of": to_rfc3339(as_of),
+        "completeness": completeness,
+        "logo_url": clinic.logo_url or None,
+        "tagline": clinic.tagline or None,
+        "categories": [clinic.specialization] if clinic.specialization else [],
+        "capacity": capacity,
+        "registration": {
+            "external_code": clinic.clinic_code or None,
+            "tax_id": clinic.tax_id or clinic.gst_number or None,
+            "tax_label": clinic.tax_label or None,
+            "licence_number": clinic.license_number or None,
+            "licence_authority": clinic.license_authority or None,
+            "licence_expires_at": (
+                clinic.license_expiry.isoformat() if clinic.license_expiry else None
+            ),
+        },
+        "timezone": clinic.timezone or None,
+        "billing_customer_ids": billing_ids,
+        "reputation": reputation(place),
+        "created_at": to_rfc3339(clinic.created_at),
+        "updated_at": to_rfc3339(clinic.updated_at),
+    }
+
+
+def account_event(event_id: str, at, code: str, category: str, summary: str,
+                  actor_name=None, actor_role=None,
+                  branch_clinic_id=None) -> Dict[str, Any]:
+    return {
+        "id": event_id,
+        "at": to_rfc3339(at),
+        "code": code,
+        "category": category,
+        "summary": summary,
+        "actor_name": actor_name or None,
+        "actor_role": actor_role,
+        "branch_id": ext_id(branch_clinic_id) if branch_clinic_id else None,
+    }
+
+
+def account_events(account_id: str, events, has_more: bool, as_of) -> Dict[str, Any]:
+    return {
+        "account_id": account_id,
+        "as_of": to_rfc3339(as_of),
+        "events": events,
+        "has_more": bool(has_more),
+    }
+
+
+# ── Marketing ────────────────────────────────────────────────────────────────
+
+_CAMPAIGN_AUDIENCE = {
+    "clinics": "accounts",
+    "accounts": "accounts",
+    "leads": "leads",
+    "numbers": "numbers",
+    "test": "test",
+    "push": "accounts",
+}
+
+
+def promotion(kind: str, row) -> Dict[str, Any]:
+    """A coupon or a referral code, as one shape.
+
+    The id is namespaced by kind because the two tables have independent
+    primary keys: coupon 7 and referral 7 both exist, and an unnamespaced id
+    would make the CRM treat them as one record and overwrite whichever synced
+    second.
+
+    `discount_amount` is money and `discount_percent` is not. A code carrying
+    both is a product-side mistake; nothing here reconciles them, because
+    guessing which the customer actually got is worse than showing both.
+    """
+    referral = kind == "referral"
+    amount = None if referral else getattr(row, "discount_amount", None)
+    return {
+        "id": "{}:{}".format(kind, row.id),
+        "code": (row.code or "").upper(),
+        "kind": kind,
+        "partner_name": row.creator_name if referral else None,
+        "discount_percent": row.discount_percent,
+        "discount_amount": money(amount, "INR"),
+        # None is unlimited, not zero. A referral code has no limit column at
+        # all, which is the same fact and reported the same way.
+        "usage_limit": None if referral else getattr(row, "usage_limit", None),
+        "usage_count": int(
+            (getattr(row, "usage_count", None) if referral
+             else getattr(row, "used_count", None)) or 0
+        ),
+        "is_active": bool(row.is_active),
+        "is_featured": bool(getattr(row, "is_featured", False)),
+        "expires_at": to_rfc3339(getattr(row, "expiry_date", None)),
+        "reward": getattr(row, "reward_details", None) if referral else None,
+        "created_at": to_rfc3339(row.created_at),
+        # Neither table has an updated_at. Reporting created_at as though it
+        # were one would tell the CRM a stale record is fresh, so this is null
+        # and the CRM reconciles against a full snapshot instead.
+        "updated_at": None,
+        "deleted": False,
+    }
+
+
+def campaign(row) -> Dict[str, Any]:
+    """One broadcast that has already gone out.
+
+    `skipped` and `failed` stay separate: skipped was never attempted — no
+    number on file, a duplicate, an opt-out — and failed was attempted and
+    rejected. Only one of the two is worth retrying, and summing them loses
+    exactly that.
+    """
+    return {
+        "id": ext_id(row.id),
+        "channel": vocab.message_channel(row.channel, row.id),
+        "template_name": row.template_name or None,
+        "subject": row.subject or None,
+        "audience": _CAMPAIGN_AUDIENCE.get((row.target_kind or "").lower(), "other"),
+        "audience_filter": row.target_filter or None,
+        "total_recipients": int(row.total_recipients or 0),
+        "sent_count": int(row.sent_count or 0),
+        "failed_count": int(row.failed_count or 0),
+        "skipped_count": int(row.skipped_count or 0),
+        "sent_by": row.sent_by or None,
+        "sent_at": to_rfc3339(row.created_at),
         "deleted": False,
     }

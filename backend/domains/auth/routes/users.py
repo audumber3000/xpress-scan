@@ -5,7 +5,7 @@ from models import User, Clinic
 from core.login_identifier import email_matches
 from schemas import UserCreate, UserOut
 from typing import List
-from core.auth_utils import get_current_user, require_clinic_owner, require_doctor_or_owner
+from core.auth_utils import get_current_user, has_permission, require_clinic_owner, require_doctor_or_owner
 import datetime
 
 router = APIRouter()
@@ -17,11 +17,15 @@ def get_users(
 ):
     """Get all users for current clinic"""
     # Check if user has permission to view users
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        users_permissions = permissions.get("users", {})
-        if not users_permissions.get("view", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to view users")
+# The permission grid writes this module as `staff` with the action `read`;
+# these routes asked for `users`/`view`, and nothing translated. The shared
+# helper knows both spellings — see core.auth_utils.RESOURCE_ALIASES, and the
+# identical billing/finance bug it was written for.
+    if not has_permission(current_user, "view", "users"):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to view users.",
+        )
     
     try:
         users = db.query(User).filter(User.clinic_id == current_user.clinic_id).all()
@@ -38,11 +42,11 @@ def create_user(
 ):
     """Create a new user for current clinic (only clinic owners and doctors can create users)"""
     # Check if user has permission to edit users
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        users_permissions = permissions.get("users", {})
-        if not users_permissions.get("edit", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to edit users")
+    if not has_permission(current_user, "edit", "users"):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to edit users.",
+        )
     try:
         # Check if user already exists
         existing = db.query(User).filter(email_matches(user_in.email)).first()
@@ -92,11 +96,11 @@ def update_user(
 ):
     """Update user (only clinic owners and doctors can update users)"""
     # Check if user has permission to edit users
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        users_permissions = permissions.get("users", {})
-        if not users_permissions.get("edit", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to edit users")
+    if not has_permission(current_user, "edit", "users"):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to edit users.",
+        )
     user = db.query(User).filter(
         User.id == user_id,
         User.clinic_id == current_user.clinic_id
@@ -126,11 +130,11 @@ def delete_user(
 ):
     """Delete user (only clinic owners can delete users)"""
     # Check if user has permission to delete users
-    if current_user.role != "clinic_owner":
-        permissions = current_user.permissions or {}
-        users_permissions = permissions.get("users", {})
-        if not users_permissions.get("delete", False):
-            raise HTTPException(status_code=403, detail="You don't have permission to delete users")
+    if not has_permission(current_user, "delete", "users"):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to delete users.",
+        )
     user = db.query(User).filter(
         User.id == user_id,
         User.clinic_id == current_user.clinic_id

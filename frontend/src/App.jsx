@@ -29,10 +29,25 @@ import BookingPage from "./pages/BookingPage";
 import PatientProfile from "./pages/PatientProfile";
 import DentalChartDemo from "./pages/DentalChartDemo";
 import Subscription from "./pages/admin/subscription";
+
+/**
+ * Billing is the owner's, and only the owner's.
+ *
+ * The header hides the entry points for everybody else, but a hidden link is
+ * not a closed door: /admin/subscription was reachable by typing it, by a
+ * bookmark, or by a back button after an ownership change. This is the door.
+ *
+ * Role rather than a permission on purpose — see the note beside
+ * canManageBilling in Header.jsx.
+ */
+const OwnerOnlyRoute = ({ children }) => {
+  const { user } = useAuth();
+  if (!user) return null;
+  return user.role === 'clinic_owner' ? children : <Navigate to="/dashboard" replace />;
+};
 import AdminHub from "./pages/AdminHub";
 import StaffManagement from "./pages/StaffManagement";
 import TreatmentsPricing from "./pages/TreatmentsPricing";
-import PermissionsManagement from "./pages/PermissionsManagement";
 import ClinicInfo from "./pages/ClinicInfo";
 import MessageTemplates from "./pages/MessageTemplates";
 import ReferringDoctors from "./pages/ReferringDoctors";
@@ -326,7 +341,13 @@ function AppContent() {
                 {/* Retired menu item, live route: existing links and bookmarks
                     land on the Prescription Sets tab of Medications. */}
                 <Route path="prescription-sets" element={<Medications />} />
-                <Route path="permissions" element={<PermissionsManagement />} />
+                {/* Retired screen, live route. Permissions were a whole page
+                    that rendered the Team tabs, the toolbar and a second copy of
+                    the staff list around a drawer — so clicking a staff member
+                    looked like the Staff page had glitched. They are edited on
+                    the staff member themselves now, which is where the question
+                    is asked. Existing links and bookmarks land there. */}
+                <Route path="permissions" element={<Navigate to="/admin/staff" replace />} />
                 <Route path="clinic" element={<ClinicInfo />} />
                 <Route path="templates" element={<MessageTemplates />} />
                 <Route path="doctors" element={<ReferringDoctors />} />
@@ -347,7 +368,7 @@ function AppContent() {
                 <Route path="offers" element={<Offers />} />
                 <Route path="insurers" element={<Insurers />} />
                 <Route path="patient-forms" element={<Navigate to="/paperwork" replace />} />
-                <Route path="subscription" element={<Subscription />} />
+                <Route path="subscription" element={<OwnerOnlyRoute><Subscription /></OwnerOnlyRoute>} />
               </Route>
               <Route path="/subscription" element={<Navigate to="/admin/subscription" replace />} />
               <Route path="/support-tickets" element={<ProtectedRoute><SupportTickets /></ProtectedRoute>} />

@@ -1288,6 +1288,25 @@ async def complete_onboarding(
         except Exception as notification_error:
             print(f"Failed to queue onboarding notifications: {notification_error}")
 
+        # And a person says hello, from our own number.
+        #
+        # Separate from the welcome above on purpose: that one is the product
+        # confirming the account, templated and sent through MSG91 on the
+        # clinic's channel. This is support introducing themselves so the clinic
+        # has somebody to reply to. See integration/outreach.py for why the two
+        # paths share nothing.
+        #
+        # Guarded the same way as everything else on this line: signing up must
+        # not be able to fail because an outreach message did not go out, and
+        # the module is a no-op unless PLATFORM_WA_URL and PLATFORM_WA_KEY are
+        # both set — so a developer running locally cannot message a real
+        # dentist by accident.
+        try:
+            from integration.outreach import greet_new_signup
+            greet_new_signup(db, clinic, result["user"])
+        except Exception as outreach_error:  # noqa: BLE001
+            print(f"Platform outreach failed (non-fatal): {outreach_error}")
+
         return {
             "message": "Onboarding completed successfully",
             "user": UserResponseDTO.from_orm(result["user"]),

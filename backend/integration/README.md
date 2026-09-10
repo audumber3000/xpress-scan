@@ -51,13 +51,15 @@ Absent tokens mean the API refuses every request rather than running open.
 | `GET /subscriptions`, `/payments` | what the customer pays ClinoHealth |
 | `GET /leads` | the pipeline, out of `growth_leads` |
 | `GET /tickets` | declared `false` in `/meta` — not built yet |
+| `GET /accounts/{id}/operators`, `/messaging`, `/profile`, `/events` | the support panels — read on open, stored nowhere |
 | `PATCH /accounts/{id}`, `POST /accounts/{id}/plan`, `/suspend`, `/activate` | the write actions, all idempotency-keyed |
 
 ## Layout
 
 ```
 mount.py        the only thing main.py touches
-reads.py        the GET endpoints
+reads.py        the bulk GETs the sync pulls
+panels.py       the four per-account support panels the CRM renders live
 actions.py      the writes, with the idempotency ledger
 shapes.py       rows -> the shapes the spec declares
 aggregates.py   patient/appointment/invoice counts — never rows
@@ -75,17 +77,30 @@ wire.py         money, timestamps, cursors, the error envelope
 ./venv/bin/python -m pytest tests/test_integration_contract.py -q
 ```
 
-61 tests against a seeded SQLite database — no tunnel, no production, no
+83 tests against a seeded SQLite database — no tunnel, no production, no
 network. They are the contract's conformance suite: cursor pagination that is
 stable under concurrent writes, money as integer micros, unknown amounts as
 null rather than zero, `mrr` normalised to a month, retired plan names mapped
 onto the current three, and every action idempotent under replay.
+
+The panel tests are mostly about what does *not* come back. The seed carries
+the rows each panel has to refuse — an audit entry naming a patient, a
+notification addressed to one, a sign-in belonging to nobody — and the
+assertions are that none of them appear in the response.
 
 ## Two rules that are easy to break
 
 **No endpoint may return a patient record.** The aggregates module counts rows
 and sums invoice totals; it never selects a name, a phone number or a clinical
 field. The CRM is a business system and has no lawful need for health data.
+
+The support panels are where this is easiest to break, because they are the
+only endpoints that legitimately carry personal data at all — staff names,
+staff emails, device history. Two guards do the work, and both are in
+`panels.py`: `notification_logs.recipient` is never read (every value in it is
+a patient's phone or email), and the events feed filters `audit_logs` through
+an **allowlist** of account-level action prefixes. A denylist would leak the
+first end-customer event type somebody adds, and nobody would be looking.
 
 **`mrr` is what the customer pays ClinoHealth**, normalised to one month. It is
 not what the clinic bills its own patients — that is `monthly_gmv` on

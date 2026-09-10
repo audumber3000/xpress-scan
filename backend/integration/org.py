@@ -113,6 +113,17 @@ def group_ids(db, account_clinic_id: int) -> List[int]:
     return [row[0] for row in rows]
 
 
+def branch_count(db, clinic: Clinic) -> int:
+    """How many sites the account this clinic belongs to actually has.
+
+    Used to decide `at_branch_limit`, which the CRM's sync used to compute for
+    itself from whatever branches happened to be in that run's payload — so a
+    partial run could report an account as under its limit when it was not.
+    Counted here, against the product's own rows, it is simply true.
+    """
+    return db.query(Clinic).filter(belongs_to(Clinic, account_of(db, clinic).id)).count()
+
+
 def account_of(db, clinic: Clinic) -> Clinic:
     """The account a clinic belongs to — itself, or its parent."""
     if clinic.parent_clinic_id and clinic.parent_clinic_id != clinic.id:

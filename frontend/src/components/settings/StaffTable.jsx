@@ -1,9 +1,35 @@
 import React from 'react';
-import { Pencil, Clock } from 'lucide-react';
+import { Pencil, Clock, Users } from 'lucide-react';
 import { isClinical } from '../../constants/roles';
 import { resolveUserAvatar } from '../../utils/avatar';
 import { accessSummary } from '../../constants/permissions';
 import { formatDate, formatRelative } from '../../utils/datetime';
+
+/**
+ * Nothing to show, and why.
+ *
+ * The table used to map straight over `users` with no fallback, so filtering to
+ * Inactive in a clinic where nobody is inactive left a header row above blank
+ * space — indistinguishable from a list that failed to load. Which of the three
+ * it is matters: "nobody yet" wants the Add button, a search that matched
+ * nothing wants different words typed, and a filter that matched nothing wants
+ * clearing.
+ */
+const EmptyStaff = ({ hasAnyone, isSearching }) => {
+  const [title, line] = !hasAnyone
+    ? ["Nobody here yet", "Add your first staff member and they can sign in straight away."]
+    : isSearching
+      ? ["No staff match that search", "Try part of a name, an email address or a role."]
+      : ["Nobody matches these filters", "Change the role or status above to see more people."];
+
+  return (
+    <div className="px-6 py-14 text-center">
+      <Users size={22} className="mx-auto text-gray-300" />
+      <p className="mt-3 text-sm font-semibold text-gray-700">{title}</p>
+      <p className="mt-1 text-sm text-gray-500">{line}</p>
+    </div>
+  );
+};
 
 const StaffTable = ({
   users,
@@ -13,10 +39,22 @@ const StaffTable = ({
   onEditUser,
   onEditHours,
   onToggleActive,
-  currentUserId,
-  getUserInitials = (name) => name?.split(' ').map(n => n[0]).join('').toUpperCase() || '??',
-  getDeviceIcon = () => null
+  // Whether the clinic has any staff at all, as opposed to none matching right
+  // now. The table only ever sees the filtered list, so it cannot tell.
+  totalStaff = null,
+  isSearching = false,
 }) => {
+  if (!users.length) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <EmptyStaff
+          hasAnyone={totalStaff === null ? false : totalStaff > 0}
+          isSearching={isSearching}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
@@ -48,6 +86,10 @@ const StaffTable = ({
                 .sort((a, b) => new Date(b.last_seen || 0) - new Date(a.last_seen || 0))[0] || null;
               const lastActive = lastActiveDevice?.last_seen ? formatRelative(lastActiveDevice.last_seen) : null;
               const isOnline = devices.some((d) => d.is_online);
+              // Green used to be painted on every active row, so it said
+              // "their account is switched on" while looking like "they are
+              // here". A dot that is always green is not a signal.
+              const hasEverSignedIn = devices.length > 0;
               
               const access = accessSummary(u);
               
@@ -67,11 +109,13 @@ const StaffTable = ({
                           alt={u.name}
                           className="h-10 w-10 rounded-full object-cover bg-gray-100"
                         />
-                        {isInactive && (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-gray-400 border-2 border-white rounded-full" />
-                        )}
-                        {!isInactive && (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 border-2 border-white rounded-full" />
+                        {(isInactive || hasEverSignedIn) && (
+                          <span
+                            title={isInactive ? 'Deactivated' : isOnline ? 'Online now' : 'Signed in before'}
+                            className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 border-2 border-white rounded-full ${
+                              isInactive ? 'bg-gray-400' : isOnline ? 'bg-emerald-400' : 'bg-gray-300'
+                            }`}
+                          />
                         )}
                       </div>
                       <div className="ml-4">

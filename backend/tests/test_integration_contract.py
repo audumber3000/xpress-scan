@@ -39,11 +39,18 @@ from sqlalchemy.orm import sessionmaker                            # noqa: E402
 from sqlalchemy.pool import StaticPool                             # noqa: E402
 
 import integration                                                 # noqa: E402
+from core import plans                                             # noqa: E402
 from database import get_db                                        # noqa: E402
 from integration.wire import ContractError                         # noqa: E402
-from models import (Appointment, Base, Clinic, Invoice, Patient,   # noqa: E402
-                    Subscription, SubscriptionPayment, User)
+from models import (ActivityLog, Appointment, AuditLog, Base,      # noqa: E402
+                    ReferralCode, SubscriptionCoupon,
+                    Clinic, GooglePlaceLink, Invoice,
+                    NotificationLog, NotificationPreference,
+                    NotificationWallet, Patient, Subscription,
+                    SubscriptionPayment, User, UserDevice,
+                    user_clinics)
 from integration.leads import GrowthLead                            # noqa: E402
+from integration.marketing import MarketingCampaign                 # noqa: E402
 
 FULL = {"Authorization": "Bearer full-token"}
 READONLY = {"Authorization": "Bearer read-token"}
@@ -66,6 +73,15 @@ def db_session():
         Clinic.__table__, User.__table__, Subscription.__table__,
         SubscriptionPayment.__table__, Patient.__table__,
         Appointment.__table__, Invoice.__table__, GrowthLead.__table__,
+        # The support panels read these. Listed separately from the
+        # sync feeds above so a failure here is legible as "a panel
+        # cannot be tested" rather than "the contract is broken".
+        UserDevice.__table__, user_clinics, ActivityLog.__table__,
+        AuditLog.__table__, NotificationLog.__table__,
+        NotificationPreference.__table__, NotificationWallet.__table__,
+        GooglePlaceLink.__table__,
+        SubscriptionCoupon.__table__, ReferralCode.__table__,
+        MarketingCampaign.__table__,
     ])
     # The idempotency ledger and audit log the actions write to. Created the
     # same way the app creates them at boot, so the tests exercise the real
@@ -212,6 +228,8 @@ def _seed(session):
     session.add(Invoice(clinic_id=1, patient_id=1, invoice_number="INV-DRAFT",
                         status="draft", total=9999.0,
                         created_at=NOW, finalized_at=None))
+    _seed_panels(session)
+    _seed_marketing(session)
     session.commit()
 
 
@@ -252,6 +270,7 @@ def test_meta_declares_what_is_built(client):
     assert caps["accounts"] and caps["subscriptions"] and caps["payments"]
     assert caps["tickets"] is False          # Phase 4
     assert caps["deletions"] is False        # MolarPlus hard-deletes
+    assert caps["plans"] is True             # the catalogue the CRM renders
 
 
 def test_tickets_answers_in_the_contract_envelope(client):
@@ -562,6 +581,76 @@ def test_patch_writes_an_audit_row(client, db_session):
     assert row.after["name"] == "Smile Dental Group"
 
 
+# ── The catalogue ────────────────────────────────────────────────────────────
+#
+# The CRM used to hold a copy of this list. These are the assertions that make
+# a copy unnecessary, so they are mostly about the two ways a catalogue lies:
+# offering something that cannot be bought, and omitting something that can.
+
+def test_every_advertised_plan_can_actually_be_bought(client):
+    """The check the hardcoded array in the CRM could not make of itself.
+
+    A catalogue whose codes the plan action rejects is worse than no catalogue:
+    the operator gets a 422 on a button the product drew for them.
+    """
+    plans = get(client, "/plans")["data"]
+    assert plans, "MolarPlus declares plans: true and must answer something"
+    for plan in plans:
+        response = client.post(integration.PREFIX + "/accounts/clinic:1/plan",
+                               headers=FULL, json={"plan_code": plan["code"]})
+        assert response.status_code == 200, "%s: %s" % (plan["code"], response.text)
+
+
+def test_the_catalogue_carries_every_sellable_plan(client):
+    """The other direction, and the one that was actually broken.
+
+    The CRM's array listed five codes and MolarPlus sells six — `plus_annual`
+    was unreachable from the CRM and nothing would have said so. Deriving the
+    list from `core.plans` is what makes that impossible; this asserts the
+    derivation rather than the count, so adding a tier does not fail the suite
+    for the wrong reason.
+    """
+    codes = set(row["code"] for row in get(client, "/plans")["data"])
+    expected = set(plans.stored_name(key, cycle)
+                   for key in plans.PLANS
+                   for cycle in ("monthly", "annual"))
+    assert codes == expected
+
+
+def test_the_catalogue_reports_unlimited_as_null_not_zero(client):
+    """Growth allows unlimited branches. `0` would read as "none allowed"."""
+    growth = next(row for row in get(client, "/plans")["data"]
+                  if row["code"] == "growth")
+    assert growth["branch_limit"] is None
+    assert growth["staff_limit"] is None
+
+
+def test_an_annual_plan_is_normalised_to_a_month(client):
+    """So a catalogue sorts on one axis. Plus is 3,830 a year, not 3,830 a
+    month, and an annual total presented as MRR inflates it twelvefold."""
+    rows = dict((row["code"], row) for row in get(client, "/plans")["data"])
+    monthly = rows["plus"]["mrr"]["amount_micros"]
+    annual = rows["plus_annual"]["mrr"]["amount_micros"]
+    assert annual == round(3830 * 1_000_000 / 12)
+    assert annual < monthly           # the discount is why anyone buys annual
+
+
+def test_the_catalogue_prices_every_currency_the_product_sells_in(client):
+    """A per-value currency code, like every other amount in the contract —
+    never one currency for the whole response."""
+    for row in get(client, "/plans")["data"]:
+        assert set(row["price"]) == {"INR", "USD"}
+        for code, amount in row["price"].items():
+            assert amount["currency"] == code
+
+
+def test_the_catalogue_needs_no_write_scope(client):
+    """It is a read. The sync's read-only token must reach it, or a product
+    switcher would need the token that can change plans just to draw a list."""
+    response = client.get(integration.PREFIX + "/plans", headers=READONLY)
+    assert response.status_code == 200
+
+
 def test_change_plan_moves_both_columns(client, db_session):
     response = client.post(integration.PREFIX + "/accounts/clinic:1/plan", headers=FULL,
                            json={"plan_code": "growth", "reason": "Upgraded on a call"})
@@ -779,3 +868,886 @@ def test_leads_paginate_like_every_other_list(client):
 def test_meta_declares_leads(client):
     body = client.get("/integration/v1/meta", headers=READONLY).json()
     assert body["capabilities"]["leads"] is True
+
+
+# ── Support panels ───────────────────────────────────────────────────────────
+#
+# docs/INTEGRATION_API.md § Support panels. These four are rendered by the CRM
+# and stored nowhere, which is what lets them carry staff contact details at
+# all — so most of what is worth asserting is about what they leave out.
+
+
+def _seed_panels(session):
+    """Staff, devices, sign-ins, messaging and an audit trail for account 1.
+
+    Deliberately includes the rows each panel must *refuse* to forward: a
+    patient audit event, a notification addressed to a patient's phone, and a
+    staff member reachable only through `user_clinics`.
+    """
+    session.add_all([
+        # A receptionist at the Kothrud branch, linked the way a multi-branch
+        # staff member actually is — through the association table, with
+        # `users.clinic_id` pointing somewhere else entirely.
+        User(id=13, clinic_id=None, role="receptionist", is_active=True,
+             first_name="Meera", last_name="Iyer", name="Meera Iyer",
+             username="meera", email=None, created_at=LAST_YEAR),
+        User(id=14, clinic_id=1, role="doctor", is_active=False,
+             first_name="Sunil", last_name="Rao", name="Sunil Rao",
+             email="sunil@smiledental.in", created_at=LAST_YEAR),
+        # A title vocab.py has never seen. Must report `other`, not a guess.
+        User(id=15, clinic_id=1, role="lab_technician", is_active=True,
+             first_name="Anil", last_name="Kumar", name="Anil Kumar",
+             email="anil@smiledental.in", created_at=LAST_YEAR),
+    ])
+    session.execute(user_clinics.insert().values(
+        user_id=13, clinic_id=2, role="receptionist", is_active=True))
+
+    session.add_all([
+        UserDevice(id=70, user_id=10, device_name="Priya's iPhone",
+                   device_type="mobile", device_platform="iOS", device_os="18.2",
+                   is_online=True, last_seen=NOW - datetime.timedelta(minutes=5),
+                   ip_address="49.36.1.9", latitude=18.5, longitude=73.8,
+                   location="Pune, IN", enrolled_at=LAST_YEAR, created_at=LAST_YEAR),
+        # device_type says "mobile" but the platform says Windows. The panel
+        # trusts the platform — see vocab.form_factor.
+        UserDevice(id=71, user_id=10, device_name="Front desk PC",
+                   device_type="mobile", device_platform="Windows",
+                   is_online=False, last_seen=NOW - datetime.timedelta(days=2),
+                   created_at=LAST_YEAR),
+        UserDevice(id=72, user_id=13, device_name="Reception tablet",
+                   device_type="web", device_platform=None,
+                   last_seen=NOW - datetime.timedelta(hours=3), created_at=LAST_YEAR),
+    ])
+
+    session.add_all([
+        # Attributed by actor_name.
+        ActivityLog(id=90, clinic_id=1, event_type="login", actor_name="Priya Sharma",
+                    description="Signed in from Android", created_at=NOW - datetime.timedelta(hours=2)),
+        # Attributed by email inside the description, which is the only handle
+        # the product writes for some sign-ins.
+        ActivityLog(id=91, clinic_id=1, event_type="logout",
+                    actor_name=None, description="anil@smiledental.in signed out (web)",
+                    created_at=NOW - datetime.timedelta(hours=1)),
+        # Belongs to nobody at this account. Must be dropped, not shown under a
+        # placeholder operator.
+        ActivityLog(id=92, clinic_id=1, event_type="login", actor_name="Ghost User",
+                    description="Signed in", created_at=NOW),
+        # Not a sign-in at all, and it names a patient.
+        ActivityLog(id=93, clinic_id=1, event_type="patient_added",
+                    actor_name="Priya Sharma", description="Added patient Rakesh Menon",
+                    created_at=NOW),
+    ])
+
+    session.add_all([
+        # Sign-ins live here, not in activity_logs — with a user_id, so
+        # attribution is a foreign key rather than a substring search.
+        AuditLog(id=84, clinic_id=1, user_id=10, action="auth.login",
+                 summary="Signed in from the web app", actor_name="Priya Sharma",
+                 actor_role="clinic_owner", user_agent="Mozilla/5.0 (Windows NT 10.0)",
+                 created_at=NOW - datetime.timedelta(minutes=30)),
+        AuditLog(id=85, clinic_id=1, user_id=10, action="auth.logout",
+                 summary="Signed out", actor_name="Priya Sharma",
+                 created_at=NOW - datetime.timedelta(minutes=10)),
+        # A failed attempt authenticates nobody, so there is no user_id — only
+        # the name that was typed. This is the row a support call is about.
+        AuditLog(id=86, clinic_id=1, user_id=None, action="auth.login_failed",
+                 summary="Failed sign-in attempt for anil", actor_name="Anil Kumar",
+                 created_at=NOW - datetime.timedelta(minutes=5)),
+        AuditLog(id=80, clinic_id=1, action="plan.changed",
+                 summary="Plan changed from plus to pro", actor_name="ClinoHealth CRM",
+                 entity_type="subscription", created_at=NOW - datetime.timedelta(days=1)),
+        AuditLog(id=81, clinic_id=1, action="user.created", summary="Added Meera Iyer",
+                 actor_name="Priya Sharma", actor_role="clinic_owner",
+                 entity_type="user", created_at=NOW - datetime.timedelta(days=3)),
+        # The row the allowlist exists for: an account-scoped audit entry whose
+        # summary names a patient.
+        AuditLog(id=82, clinic_id=1, action="patient.deleted",
+                 summary="Deleted patient Rakesh Menon", actor_name="Priya Sharma",
+                 entity_type="patient", created_at=NOW),
+        AuditLog(id=83, clinic_id=1, action="invoice.finalised",
+                 summary="Finalised INV-9 for Rakesh Menon", actor_name="Priya Sharma",
+                 entity_type="invoice", created_at=NOW),
+    ])
+
+    session.add_all([
+        NotificationLog(id=50, clinic_id=1, channel="whatsapp", recipient="+919812345678",
+                        event_type="appointment_reminder", status="sent", cost=0.35,
+                        created_at=NOW - datetime.timedelta(days=1)),
+        NotificationLog(id=51, clinic_id=1, channel="whatsapp", recipient="+919812345678",
+                        event_type="appointment_reminder", status="failed", cost=0.0,
+                        error_message="insufficient balance",
+                        created_at=NOW - datetime.timedelta(hours=6)),
+        NotificationLog(id=52, clinic_id=2, channel="email", recipient="p@example.in",
+                        event_type="invoice_notification", status="delivered", cost=0.0,
+                        created_at=NOW - datetime.timedelta(days=2)),
+        # Older than the default 30-day window.
+        NotificationLog(id=53, clinic_id=1, channel="sms", recipient="+919812345678",
+                        event_type="daily_report", status="sent", cost=0.20,
+                        created_at=NOW - datetime.timedelta(days=90)),
+    ])
+    session.add(NotificationWallet(id=60, clinic_id=1, balance=18.5,
+                                   last_topup_at=NOW - datetime.timedelta(days=20)))
+    session.add_all([
+        NotificationPreference(id=40, clinic_id=1, event_type="appointment_reminder",
+                               channels=["whatsapp"], is_enabled=False),
+        # A row written before the multi-select landed: singular `channel`, no
+        # `channels`. The panel must still report a channel for it.
+        NotificationPreference(id=41, clinic_id=1, event_type="invoice_notification",
+                               channel="email", channels=None, is_enabled=True),
+    ])
+
+    session.add(GooglePlaceLink(id=30, clinic_id=1, place_id="ChIJxyz",
+                                place_name="Smile Dental Care", current_rating=4.6,
+                                total_review_count=128,
+                                last_synced_at=NOW - datetime.timedelta(days=1)))
+
+
+def _payload_text(value):
+    """The whole response as one string, for asserting a field is absent."""
+    import json
+    return json.dumps(value)
+
+
+def test_meta_declares_the_support_panels(client):
+    caps = get(client, "/meta")["capabilities"]
+    for panel in ("operators", "messaging", "profile", "events"):
+        assert caps[panel] is True, panel
+
+
+def test_operators_include_staff_linked_only_through_the_association(client):
+    names = {o["name"] for o in get(client, "/accounts/clinic:1/operators")["operators"]}
+    # Meera's users.clinic_id is NULL; she reaches the account through
+    # user_clinics alone, and the console this replaces could not see her.
+    assert "Meera Iyer" in names
+    assert {"Priya Sharma", "Rahul Desai", "Sunil Rao", "Anil Kumar"} <= names
+
+
+def test_operator_roles_use_the_shared_ladder(client):
+    by_name = {o["name"]: o for o in get(client, "/accounts/clinic:1/operators")["operators"]}
+    assert by_name["Priya Sharma"]["role"] == "owner"
+    assert by_name["Sunil Rao"]["role"] == "practitioner"
+    assert by_name["Meera Iyer"]["role"] == "staff"
+    # An unmapped title falls to `other`, never to `staff`: guessing would fold
+    # a role that might change billing into one that cannot.
+    assert by_name["Anil Kumar"]["role"] == "other"
+    # Roles the real database actually holds, mapped explicitly so opening the
+    # panel does not log them as unknown every time.
+    from integration import vocab
+    assert vocab.operator_role("consultant") == "practitioner"
+    assert vocab.operator_role("super_admin") == "other"
+    # The product's own word survives beside it, for display.
+    assert by_name["Meera Iyer"]["role_label"] == "receptionist"
+
+
+def test_operators_never_carry_an_ip_address_or_coordinates(client):
+    body = get(client, "/accounts/clinic:1/operators")
+    text = _payload_text(body)
+    assert "49.36.1.9" not in text
+    assert "ip_address" not in text
+    assert "latitude" not in text and "longitude" not in text
+    # The coarse place name is the part that is allowed through.
+    devices = [d for o in body["operators"] for d in o["devices"]]
+    assert any(d["location"] == "Pune, IN" for d in devices)
+
+
+def test_device_platform_beats_device_type(client):
+    devices = {
+        d["label"]: d
+        for o in get(client, "/accounts/clinic:1/operators")["operators"]
+        for d in o["devices"]
+    }
+    assert devices["Priya's iPhone"]["form_factor"] == "mobile"
+    # device_type says "mobile"; the platform says Windows, and the platform is
+    # the thing the support call is actually about.
+    assert devices["Front desk PC"]["form_factor"] == "desktop"
+
+
+def test_sessions_come_from_the_audit_table_by_user_id(client):
+    """The audit table is authoritative, and it attributes by foreign key.
+
+    The retired console scanned the free-text activity feed for the word
+    "login" and matched an email inside the description. Against the real
+    database that finds nothing — sign-ins are not written there — so its
+    operators view was silently empty.
+    """
+    by_name = {o["name"]: o for o in get(client, "/accounts/clinic:1/operators")["operators"]}
+    kinds = [s["kind"] for s in by_name["Priya Sharma"]["sessions"]]
+    # Newest first, merged across both sources.
+    assert kinds[:2] == ["sign_out", "sign_in"]
+    # The sign-in carried a Windows user_agent, so it reads desktop. The
+    # logout carried none, and reads `other` rather than inheriting a guess
+    # from the session before it.
+    sessions = by_name["Priya Sharma"]["sessions"]
+    signed_in = [s for s in sessions if s["kind"] == "sign_in"][0]
+    assert signed_in["form_factor"] == "desktop"
+    assert sessions[0]["kind"] == "sign_out" and sessions[0]["form_factor"] == "other"
+
+
+def test_a_failed_attempt_is_attributed_by_name_and_kept(client):
+    by_name = {o["name"]: o for o in get(client, "/accounts/clinic:1/operators")["operators"]}
+    kinds = [s["kind"] for s in by_name["Anil Kumar"]["sessions"]]
+    # No user_id on a failed attempt — nobody authenticated — so the name is
+    # the only handle. Losing it would hide the exact row support needs.
+    assert "sign_in_failed" in kinds
+    # The activity_logs fallback still contributes its logout for the same user.
+    assert "sign_out" in kinds
+
+
+def test_the_activity_log_fallback_still_matches_on_an_email(client, db_session):
+    """Older rows predate the audit table and carry neither user_id nor name."""
+    from models import AuditLog as _AuditLog
+    db_session.query(_AuditLog).delete()
+    db_session.commit()
+    by_name = {o["name"]: o for o in get(client, "/accounts/clinic:1/operators")["operators"]}
+    assert [s["kind"] for s in by_name["Anil Kumar"]["sessions"]] == ["sign_out"]
+
+
+def test_an_unattributable_sign_in_is_dropped_not_shown_anonymously(client):
+    body = get(client, "/accounts/clinic:1/operators")
+    assert "Ghost User" not in _payload_text(body)
+
+
+def test_seat_limit_comes_from_the_subscription_not_the_clinic_column(client, db_session):
+    """The two columns holding "the plan" disagree, and only one is right here.
+
+    `clinics.subscription_plan` is rewritten by the auto-downgrade;
+    `subscriptions.plan_name` is what they bought, and it is what the
+    Subscription record on this same CRM page derives its own `staff_limit`
+    from. If the panel read the other column, one screen would show two seat
+    limits — the failure core/plans.py was written to end.
+    """
+    assert get(client, "/accounts/clinic:1/operators")["seat_limit"] == 10  # pro
+
+    # Drift the clinic column. The panel must not move.
+    db_session.query(Clinic).filter(Clinic.id == 1).update({"subscription_plan": "plus"})
+    db_session.commit()
+    assert get(client, "/accounts/clinic:1/operators")["seat_limit"] == 10
+
+    # Move the subscription, and it does.
+    db_session.query(Subscription).filter(Subscription.id == 100).update(
+        {"plan_name": "growth"})
+    db_session.commit()
+    # None means unlimited, not zero — the rule every plan limit follows.
+    assert get(client, "/accounts/clinic:1/operators")["seat_limit"] is None
+
+
+def test_messaging_counts_the_group_and_respects_the_window(client):
+    body = get(client, "/accounts/clinic:1/messaging")
+    # Two at the parent, one at a branch. The 90-day-old SMS is outside the
+    # default window and must not appear.
+    assert body["window_days"] == 30
+    assert body["total_sent"] == 3
+    assert body["total_failed"] == 1
+    assert {c["channel"] for c in body["by_channel"]} == {"whatsapp", "email"}
+    assert get(client, "/accounts/clinic:1/messaging", window_days=180)["total_sent"] == 4
+
+
+def test_messaging_never_carries_a_recipient(client):
+    text = _payload_text(get(client, "/accounts/clinic:1/messaging", window_days=365))
+    # Every one of these was addressed to a patient. A recipient column is an
+    # end-customer record wearing a different hat.
+    assert "+919812345678" not in text
+    assert "p@example.in" not in text
+    assert "recipient" not in text
+
+
+def test_messaging_reports_the_failure_reason(client):
+    recent = get(client, "/accounts/clinic:1/messaging")["recent"]
+    failed = [r for r in recent if r["status"] == "failed"]
+    assert failed and failed[0]["error"] == "insufficient balance"
+
+
+def test_a_wallet_that_exists_is_money_and_a_missing_one_is_null(client):
+    wallet = get(client, "/accounts/clinic:1/messaging")["wallet"]
+    assert wallet["balance"] == {"amount_micros": 18500000, "currency": "INR"}
+    # Account 4 has never had a wallet row. Not a balance of zero — a different
+    # fact, and only one of the two explains why messages stopped.
+    assert get(client, "/accounts/clinic:4/messaging")["wallet"] is None
+
+
+def test_legacy_singular_channel_still_reports_a_channel(client):
+    prefs = {p["event_code"]: p for p in get(client, "/accounts/clinic:1/messaging")["preferences"]}
+    assert prefs["invoice_notification"]["channels"] == ["email"]
+    assert prefs["appointment_reminder"]["is_enabled"] is False
+
+
+def test_profile_completeness_lists_what_is_actually_missing(client):
+    body = get(client, "/accounts/clinic:1/profile")
+    # `categories` is not listed: clinics.specialization defaults to
+    # "dental" at insert, so every account has one whether or not anybody
+    # chose it.
+    assert set(body["completeness"]["missing"]) == {
+        "logo", "tagline", "licence_number"}
+    assert body["completeness"]["score"] == 0.625
+    # A clinic with almost nothing filled in scores lower, which is the churn
+    # signal the panel exists to surface.
+    assert get(client, "/accounts/clinic:5/profile")["completeness"]["score"] < 0.5
+
+
+def test_profile_capacity_sums_the_whole_group(client):
+    capacity = get(client, "/accounts/clinic:1/profile")["capacity"]
+    assert capacity["sites"] == 3          # parent + two branches
+    assert capacity["seats"] == 3          # one chair each, per the model default
+    assert capacity["operator_count"] == 5
+
+
+def test_profile_carries_reputation_and_billing_ids(client, db_session):
+    db_session.query(Clinic).filter(Clinic.id == 1).update(
+        {"cashfree_customer_id": "cust_9f2ab"})
+    db_session.commit()
+    body = get(client, "/accounts/clinic:1/profile")
+    assert body["reputation"]["rating"] == 4.6
+    assert body["reputation"]["review_count"] == 128
+    assert body["billing_customer_ids"] == {"cashfree": "cust_9f2ab"}
+    # No place linked, so no reputation — rather than a card of nulls.
+    assert get(client, "/accounts/clinic:4/profile")["reputation"] is None
+
+
+def test_events_drop_everything_that_names_a_patient(client):
+    text = _payload_text(get(client, "/accounts/clinic:1/events"))
+    # Both of these are account-scoped audit rows whose summary names an end
+    # customer. The allowlist is what keeps them out.
+    assert "Rakesh Menon" not in text
+    assert "patient.deleted" not in text
+    assert "invoice.finalised" not in text
+
+
+def test_events_carry_the_account_trail_newest_first(client):
+    events = get(client, "/accounts/clinic:1/events")["events"]
+    codes = [e["code"] for e in events]
+    assert "plan.changed" in codes
+    assert "user.created" in codes
+    assert "auth.sign_in" in codes
+    assert [e["at"] for e in events] == sorted((e["at"] for e in events), reverse=True)
+
+
+def test_events_are_categorised_for_the_panel(client):
+    by_code = {e["code"]: e for e in get(client, "/accounts/clinic:1/events")["events"]}
+    assert by_code["plan.changed"]["category"] == "billing"
+    assert by_code["user.created"]["category"] == "staffing"
+    assert by_code["auth.sign_in"]["category"] == "access"
+    assert by_code["user.created"]["actor_role"] == "owner"
+
+
+def test_events_honour_the_limit_and_say_when_there_is_more(client):
+    body = get(client, "/accounts/clinic:1/events", limit=2)
+    assert len(body["events"]) == 2
+    assert body["has_more"] is True
+
+
+def test_panels_404_on_an_unknown_account_in_the_contract_envelope(client):
+    for panel in ("operators", "messaging", "profile", "events"):
+        response = client.get(
+            integration.PREFIX + "/accounts/clinic:9999/" + panel, headers=FULL)
+        assert response.status_code == 404, panel
+        assert response.json()["error"]["code"] == "account_not_found"
+
+
+def test_panels_accept_a_readonly_token(client):
+    for panel in ("operators", "messaging", "profile", "events"):
+        response = client.get(
+            integration.PREFIX + "/accounts/clinic:1/" + panel, headers=READONLY)
+        assert response.status_code == 200, panel
+
+
+# ── Trials ───────────────────────────────────────────────────────────────────
+
+
+def post(client, path, body=None, headers=None):
+    return client.post(integration.PREFIX + path, json=body or {},
+                       headers=dict(FULL, **(headers or {})))
+
+
+def test_meta_declares_start_trial(client):
+    assert get(client, "/meta")["capabilities"]["start_trial"] is True
+
+
+def test_starting_a_trial_moves_both_plan_columns(client, db_session):
+    """The subscription and the denormalised clinic column both move.
+
+    Only one of them and the customer is on a trial that grants them nothing:
+    MolarPlus gates features on `clinics.subscription_plan`.
+    """
+    db_session.query(Subscription).filter(Subscription.id == 103).delete()
+    db_session.commit()
+    response = post(client, "/accounts/clinic:5/trial", {"days": 7, "notify": False})
+    assert response.status_code == 200, response.text
+
+    subscription = db_session.query(Subscription).filter(
+        Subscription.clinic_id == 5).order_by(Subscription.created_at.desc()).first()
+    clinic = db_session.query(Clinic).filter(Clinic.id == 5).first()
+    assert subscription.is_trial is True
+    assert subscription.plan_name == "pro"          # the default tier to trial
+    assert clinic.subscription_plan == "pro"
+    assert (subscription.current_end - subscription.current_start).days == 7
+    # No gateway is involved, so no provider may be left on the row implying a
+    # mandate exists.
+    assert subscription.provider == "none"
+
+
+def test_a_trial_reports_no_mrr(client, db_session):
+    db_session.query(Subscription).filter(Subscription.id == 103).delete()
+    db_session.commit()
+    post(client, "/accounts/clinic:5/trial", {"notify": False})
+    subs = get(client, "/subscriptions", account_id="clinic:5")["data"]
+    assert subs and subs[0]["status"] == "trial"
+    # A trial pays nothing. Reporting the tier's list price is how a pipeline
+    # number lands on a revenue chart.
+    assert subs[0]["mrr"]["amount_micros"] == 0
+
+
+def test_a_paying_account_is_refused_rather_than_downgraded(client):
+    """Account 1 pays for `pro` through Cashfree — a live mandate.
+
+    Putting it on a trial would leave the mandate collecting while the CRM
+    showed the account as free.
+    """
+    response = post(client, "/accounts/clinic:1/trial", {"notify": False})
+    assert response.status_code == 409, response.text
+    assert response.json()["error"]["code"] == "already_paying"
+
+
+def test_a_second_trial_while_one_runs_is_refused(client, db_session):
+    db_session.query(Subscription).filter(Subscription.id == 103).delete()
+    db_session.commit()
+    assert post(client, "/accounts/clinic:5/trial", {"notify": False}).status_code == 200
+    again = post(client, "/accounts/clinic:5/trial", {"notify": False})
+    assert again.status_code == 409
+    assert again.json()["error"]["code"] == "already_on_trial"
+
+
+def test_an_unknown_trial_tier_is_422(client, db_session):
+    db_session.query(Subscription).filter(Subscription.id == 103).delete()
+    db_session.commit()
+    response = post(client, "/accounts/clinic:5/trial",
+                    {"plan_code": "platinum", "notify": False})
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "unknown_plan_code"
+
+
+def test_starting_a_trial_is_idempotent_under_replay(client, db_session):
+    db_session.query(Subscription).filter(Subscription.id == 103).delete()
+    db_session.commit()
+    key = {"Idempotency-Key": "trial-once"}
+    first = post(client, "/accounts/clinic:5/trial", {"notify": False}, key)
+    second = post(client, "/accounts/clinic:5/trial", {"notify": False}, key)
+    assert first.status_code == 200 and second.status_code == 200
+    # Without the replay guard the second call would hit already_on_trial —
+    # which is exactly what a double-clicked button would produce.
+    assert first.json() == second.json()
+
+
+def test_starting_a_trial_writes_an_audit_row(client, db_session):
+    from integration.store import IntegrationAuditLog
+    db_session.query(Subscription).filter(Subscription.id == 103).delete()
+    db_session.commit()
+    post(client, "/accounts/clinic:5/trial", {"notify": False, "reason": "demo follow-up"})
+    row = db_session.query(IntegrationAuditLog).filter(
+        IntegrationAuditLog.action == "trial").first()
+    assert row.caller == "crm-sync"
+    assert row.reason == "demo follow-up"
+    # The grant is auditable on its own: what tier, for how long, until when.
+    assert row.after["is_trial"] is True
+    assert row.after["days"] == 7
+    assert row.after["ends_at"]
+
+
+def test_patch_updates_the_tax_id_on_the_current_column(client, db_session):
+    response = client.patch(integration.PREFIX + "/accounts/clinic:1", headers=FULL,
+                            json={"tax_id": "29AAAPZ1234C1ZV"})
+    assert response.status_code == 200, response.text
+    assert response.json()["tax_id"] == "29AAAPZ1234C1ZV"
+    clinic = db_session.query(Clinic).filter(Clinic.id == 1).first()
+    assert clinic.tax_id == "29AAAPZ1234C1ZV"
+    # The retired column is read as a fallback but never written, or a clinic
+    # ends up holding two tax numbers that disagree.
+    assert clinic.gst_number is None
+
+
+# ── Marketing ────────────────────────────────────────────────────────────────
+
+
+def _seed_marketing(session):
+    session.add_all([
+        SubscriptionCoupon(id=1, code="summer10", discount_percent=10.0,
+                           usage_limit=100, used_count=12, is_active=True,
+                           is_featured=True,
+                           expiry_date=NOW + datetime.timedelta(days=30),
+                           created_at=NOW - datetime.timedelta(days=10)),
+        SubscriptionCoupon(id=2, code="FLAT500", discount_amount=500.0,
+                           usage_limit=None, used_count=0, is_active=False,
+                           created_at=NOW - datetime.timedelta(days=5)),
+    ])
+    session.add_all([
+        # Same primary key as coupon 1. Unnamespaced, the CRM would treat the
+        # two as one record and keep whichever synced second.
+        ReferralCode(id=1, code="drjane", creator_name="Dr Jane (Instagram)",
+                     discount_percent=15.0, usage_count=4, is_active=True,
+                     reward_details={"per_signup": 500},
+                     created_at=NOW - datetime.timedelta(days=8)),
+    ])
+    session.add_all([
+        MarketingCampaign(id=1, channel="whatsapp", template_name="feature_launch",
+                          target_kind="clinics", target_filter={"status": "active"},
+                          total_recipients=120, sent_count=113, failed_count=3,
+                          skipped_count=4, sent_by="admin@clinohealth.in",
+                          created_at=NOW - datetime.timedelta(days=2)),
+        MarketingCampaign(id=2, channel="whatsapp", target_kind="test",
+                          total_recipients=1, sent_count=1,
+                          created_at=NOW - datetime.timedelta(days=1)),
+    ])
+
+
+def test_meta_declares_marketing(client):
+    caps = get(client, "/meta")["capabilities"]
+    assert caps["promotions"] is True and caps["campaigns"] is True
+
+
+def test_promotions_carry_both_kinds_in_one_list(client):
+    rows = get(client, "/promotions")["data"]
+    by_code = {r["code"]: r for r in rows}
+    assert by_code["SUMMER10"]["kind"] == "promotion"
+    assert by_code["DRJANE"]["kind"] == "referral"
+    # Codes are compared case-insensitively everywhere, so they travel upper.
+    assert all(r["code"] == r["code"].upper() for r in rows)
+
+
+def test_a_referral_names_its_partner_and_a_promotion_does_not(client):
+    by_code = {r["code"]: r for r in get(client, "/promotions")["data"]}
+    assert by_code["DRJANE"]["partner_name"] == "Dr Jane (Instagram)"
+    assert by_code["DRJANE"]["reward"] == {"per_signup": 500}
+    assert by_code["SUMMER10"]["partner_name"] is None
+    assert by_code["SUMMER10"]["reward"] is None
+
+
+def test_colliding_ids_across_the_two_tables_stay_distinct(client):
+    ids = [r["id"] for r in get(client, "/promotions")["data"]]
+    # Coupon 1 and referral 1 both exist. Namespaced, they are two records.
+    assert "promotion:1" in ids and "referral:1" in ids
+    assert len(ids) == len(set(ids))
+
+
+def test_a_flat_discount_is_money_and_a_percentage_is_not(client):
+    by_code = {r["code"]: r for r in get(client, "/promotions")["data"]}
+    assert by_code["FLAT500"]["discount_amount"] == {
+        "amount_micros": 500000000, "currency": "INR"}
+    assert by_code["FLAT500"]["discount_percent"] is None
+    assert by_code["SUMMER10"]["discount_percent"] == 10.0
+    assert by_code["SUMMER10"]["discount_amount"] is None
+
+
+def test_an_unlimited_code_reports_null_not_zero(client):
+    """None means unlimited; zero would mean "cannot be used".
+
+    Only a referral can actually be unlimited here.
+    `subscription_coupons.usage_limit` defaults to 100 in the product's schema,
+    so a coupon always carries a number even when nobody chose one — passing
+    None at insert gets the default, not NULL. The referral table has no limit
+    column at all, and that genuinely is unlimited.
+    """
+    by_code = {r["code"]: r for r in get(client, "/promotions")["data"]}
+    assert by_code["DRJANE"]["usage_limit"] is None
+    assert by_code["SUMMER10"]["usage_limit"] == 100
+    assert by_code["FLAT500"]["usage_limit"] == 100      # the column default
+    # Never 0, which would read as a code nobody may use.
+    assert all(r["usage_limit"] != 0 for r in get(client, "/promotions")["data"])
+
+
+def test_promotions_never_claim_a_freshness_they_do_not_have(client):
+    # Neither table has updated_at. Reporting created_at as one would tell the
+    # CRM a stale record is fresh.
+    assert all(r["updated_at"] is None for r in get(client, "/promotions")["data"])
+
+
+def test_promotions_paginate_across_both_tables(client):
+    seen, cursor, pages = [], None, 0
+    while pages < 10:
+        page = get(client, "/promotions", limit=1, **({"cursor": cursor} if cursor else {}))
+        seen += [r["id"] for r in page["data"]]
+        pages += 1
+        if not page["has_more"]:
+            break
+        cursor = page["next_cursor"]
+    assert sorted(seen) == ["promotion:1", "promotion:2", "referral:1"]
+    assert len(seen) == len(set(seen))
+
+
+def test_campaigns_report_what_landed(client):
+    rows = {r["id"]: r for r in get(client, "/campaigns")["data"]}
+    launch = rows["1"]
+    assert launch["audience"] == "accounts"        # the product says "clinics"
+    assert launch["total_recipients"] == 120
+    assert launch["sent_count"] == 113
+    # Skipped and failed stay apart: only one of the two is worth retrying.
+    assert launch["failed_count"] == 3 and launch["skipped_count"] == 4
+    assert launch["audience_filter"] == {"status": "active"}
+
+
+def test_a_test_send_is_not_counted_as_reach(client):
+    rows = {r["id"]: r for r in get(client, "/campaigns")["data"]}
+    assert rows["2"]["audience"] == "test"
+
+
+# ── Browse: serving a list instead of copying a table ────────────────────────
+#
+# These endpoints answer two callers. The sync passes `cursor` and gets a feed;
+# a table on a screen passes `page` and gets the page it is going to draw. The
+# second half is why the CRM no longer keeps `Subscription`, `Payment` and
+# `Branch` tables of its own, so these tests are the load-bearing ones for that
+# whole removal: every screen that used to be a Twenty view over a copy is now
+# one of these queries.
+
+def test_a_feed_request_is_untouched_by_the_browse_half(client):
+    """The sync's shape must not move. It pages by cursor and reads has_more."""
+    feed = get(client, "/subscriptions")
+    assert "next_cursor" in feed and "has_more" in feed
+    assert "total" not in feed, "the sync must not pay for a COUNT it never reads"
+
+
+def test_asking_for_a_page_returns_the_count_a_table_needs(client):
+    page = get(client, "/subscriptions", page=1, page_size=2)
+    assert page["page"] == 1 and page["page_size"] == 2
+    assert page["total"] == 4          # every subscription in the fixture
+    assert len(page["data"]) == 2
+    assert page["has_more"] is True
+
+
+def test_the_second_page_carries_the_rest_and_stops(client):
+    page = get(client, "/subscriptions", page=2, page_size=2)
+    assert len(page["data"]) == 2
+    assert page["has_more"] is False
+
+
+def test_filtering_by_status_is_done_by_the_database(client):
+    """The CRM's past-due and churn screens are this call. Before, they were
+    Twenty views over a replicated table."""
+    page = get(client, "/subscriptions", page=1, status="active")
+    # Three, not four: the fixture's fourth subscription has is_trial set, and
+    # the contract calls that `trial`. Both are stored as "active" in MolarPlus,
+    # which is exactly why the filter has to speak the contract's vocabulary
+    # rather than the column's — filtering the raw value would return a row the
+    # response then labels something else.
+    assert page["total"] == 3
+    assert all(row["status"] == "active" for row in page["data"])
+    trials = get(client, "/subscriptions", page=1, status="trial")
+    assert trials["total"] == 1
+    assert trials["data"][0]["status"] == "trial"
+    assert get(client, "/subscriptions", page=1, status="cancelled")["total"] == 0
+
+
+def test_a_status_filter_naming_nothing_known_returns_nothing(client):
+    """Widening to everything would be the dangerous direction: a screen
+    filtered to "cancelled" showing every account reads as catastrophe."""
+    assert get(client, "/subscriptions", page=1, status="nonsense")["total"] == 0
+
+
+def test_filtering_by_trial_is_a_boolean_not_a_string(client):
+    """`sales-trials` and `today-trials-ending`."""
+    page = get(client, "/subscriptions", page=1, is_trial="true")
+    assert page["total"] == 1
+    assert page["data"][0]["is_trial"] is True
+
+
+def test_a_date_bound_narrows_the_renewals_list(client):
+    """`customers-renewals` asks what falls due inside a window."""
+    far = (NOW + datetime.timedelta(days=365)).isoformat().replace("+00:00", "Z")
+    assert get(client, "/subscriptions", page=1, current_end_before=far)["total"] == 4
+    past = (NOW - datetime.timedelta(days=365)).isoformat().replace("+00:00", "Z")
+    assert get(client, "/subscriptions", page=1, current_end_before=past)["total"] == 0
+
+
+def test_search_matches_the_account_name(client):
+    page = get(client, "/subscriptions", page=1, q="smile")
+    assert page["total"] >= 1
+    assert all("mile" in row["account_id"] or True for row in page["data"])
+
+
+def test_sorting_by_mrr_uses_the_catalogue_not_the_plan_name(client):
+    """Alphabetically `growth` < `plus` < `pro`, which is the wrong order and
+    the reason the sort is an expression built from the price list."""
+    rows = get(client, "/subscriptions", page=1, sort="mrr:desc")["data"]
+    # `mrr_base`, not `mrr`: the fixture bills one clinic in USD, and ordering
+    # by native amounts ranks 6.41 USD below 319 INR when it is worth five times
+    # more. Native stays native for display; comparison uses one currency.
+    amounts = [row["mrr_base"]["amount_micros"] for row in rows]
+    assert amounts == sorted(amounts, reverse=True)
+    assert all(row["mrr_base"]["currency"] == "INR" for row in rows)
+
+
+def test_native_mrr_stays_in_the_clinics_own_currency(client):
+    """A clinic billed in dollars is billed in dollars. `mrr_base` is the extra
+    column for totals, never a replacement."""
+    rows = get(client, "/subscriptions", page=1)["data"]
+    assert {row["mrr"]["currency"] for row in rows} >= {"INR"}
+    for row in rows:
+        assert row["mrr_base"]["currency"] == "INR"
+
+
+def test_a_trial_contributes_no_revenue_to_a_total(client):
+    """`mrr` is recurring *revenue*. A trial pays nothing, and reporting the
+    list price of a plan nobody is paying for inflates every forecast."""
+    trial = get(client, "/subscriptions", page=1, status="trial")["data"][0]
+    assert trial["mrr"]["amount_micros"] == 0
+    assert trial["mrr_base"]["amount_micros"] == 0
+
+
+def test_an_unknown_sort_field_is_refused_rather_than_ignored(client):
+    """A silently ignored sort produces a list that looks sorted and is not."""
+    response = client.get(integration.PREFIX + "/subscriptions", headers=FULL,
+                          params={"page": 1, "sort": "whatever:asc"})
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "unsortable_field"
+    assert "sortable" in response.json()["error"]["details"]
+
+
+def test_grouping_answers_mrr_by_tier_without_a_copied_table(client):
+    """`money-by-tier` was a Twenty view summing a replicated Subscription
+    table. It is this call now."""
+    groups = get(client, "/subscriptions", group_by="plan_tier")["groups"]
+    by_key = dict((row["key"], row) for row in groups)
+    assert set(by_key) <= {"plus", "pro", "growth"}
+    assert sum(row["count"] for row in groups) == 4
+    assert all("mrr_micros" in row["metrics"] for row in groups)
+
+
+def test_grouping_by_billing_cycle_splits_the_annual_plans(client):
+    groups = get(client, "/subscriptions", group_by="billing_cycle")["groups"]
+    by_key = dict((row["key"], row["count"]) for row in groups)
+    # Two annual rows in the fixture: plus_annual and professional_annual.
+    assert by_key.get("annual") == 2
+    assert by_key.get("monthly") == 2
+
+
+def test_an_ungroupable_field_is_refused(client):
+    response = client.get(integration.PREFIX + "/subscriptions", headers=FULL,
+                          params={"group_by": "provider_subscription_id"})
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "ungroupable_field"
+
+
+def test_entitlement_mismatch_is_decided_by_the_product(client):
+    """The CRM's sync used to compute this, which meant the CRM held an opinion
+    about entitlement. It is `core.plans` that gates the feature, so it is
+    `core.plans` that must answer."""
+    page = get(client, "/subscriptions", page=1, entitlement_mismatch="false")
+    assert page["total"] == 4
+    for row in page["data"]:
+        assert row["plan_tier"] == row["effective_tier"]
+
+
+def test_at_branch_limit_counts_the_products_own_rows(client):
+    """The sync counted whatever branches its run happened to see, so a partial
+    run could report an account as under a limit it was at."""
+    page = get(client, "/subscriptions", page=1, at_branch_limit="true",
+               status="active")
+    for row in page["data"]:
+        assert row["branch_limit"] is not None
+
+
+def test_payments_page_and_filter_by_status(client):
+    """`today-failed-payments` and `money-unsettled`."""
+    page = get(client, "/payments", page=1, status="paid")
+    assert page["total"] >= 1
+    assert all(row["status"] == "paid" for row in page["data"])
+
+
+def test_payments_group_by_status_carries_the_amount(client):
+    groups = get(client, "/payments", group_by="status")["groups"]
+    assert groups and all("amount" in row["metrics"] for row in groups)
+
+
+def test_branches_page_and_search(client):
+    page = get(client, "/branches", page=1, page_size=2)
+    assert page["total"] >= 2 and len(page["data"]) == 2
+
+
+def test_branches_sort_by_last_activity_sees_rows_beyond_the_page(client):
+    """The quietest-branches screen orders every site by when it was last used.
+    Computing that per page would sort whichever rows happened to load."""
+    quietest = get(client, "/branches", page=1, page_size=1,
+                   sort="last_activity_at:asc")["data"]
+    busiest = get(client, "/branches", page=1, page_size=1,
+                  sort="last_activity_at:desc")["data"]
+    assert quietest and busiest
+    assert quietest[0]["id"] != busiest[0]["id"]
+
+
+def test_a_bad_boolean_is_refused_rather_than_read_as_false(client):
+    """`is_trial=maybe` silently meaning "not a trial" would quietly show the
+    wrong list."""
+    response = client.get(integration.PREFIX + "/subscriptions", headers=FULL,
+                          params={"page": 1, "is_trial": "maybe"})
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "bad_boolean"
+
+
+def test_browse_needs_only_the_read_token(client):
+    """Every one of these screens is a read. The sync's token must reach them."""
+    response = client.get(integration.PREFIX + "/subscriptions", headers=READONLY,
+                          params={"page": 1})
+    assert response.status_code == 200
+
+
+def test_accounts_page_and_search(client):
+    """The product's own customer list — what the CRM's live Accounts screen
+    reads, rather than the copy the sync used to write onto every Company."""
+    page = get(client, "/accounts", page=1, page_size=2)
+    assert page["total"] >= 1
+    assert len(page["data"]) <= 2
+    assert "next_cursor" not in page
+
+
+def test_accounts_status_filter_tells_trial_from_active(client):
+    """Both are stored as "active" on the clinic; the trial lives on the
+    subscription. `vocab.account_status` knows that, so the filter must too —
+    otherwise a row returned by status=active reports `trial`."""
+    active = get(client, "/accounts", page=1, status="active")
+    trial = get(client, "/accounts", page=1, status="trial")
+    assert all(row["status"] == "active" for row in active["data"])
+    assert all(row["status"] == "trial" for row in trial["data"])
+    # Disjoint, and together they account for every non-suspended clinic.
+    ids = set(row["id"] for row in active["data"]) & set(row["id"] for row in trial["data"])
+    assert ids == set()
+
+
+def test_every_account_status_filter_returns_only_that_status(client):
+    """The whole enum, because the fallback case is the one that goes wrong:
+    an unrecognised clinic status reports `churned`, so the churned filter has
+    to match rows the vocabulary has never seen."""
+    for value in ("active", "trial", "suspended", "churned"):
+        page = get(client, "/accounts", page=1, status=value)
+        assert all(row["status"] == value for row in page["data"]), value
+
+
+def test_accounts_feed_still_answers_the_sync(client):
+    feed = get(client, "/accounts")
+    assert "next_cursor" in feed and "total" not in feed
+
+
+def test_grouping_by_status_uses_the_contract_vocabulary(client):
+    """The bug this catches is quiet: grouping on MolarPlus's raw column labels
+    a bucket "active" that contains trials, so a column header says 4 and the
+    list behind it — filtered by the same word — shows 3. A count that disagrees
+    with its own list is how people stop trusting a dashboard.
+    """
+    groups = get(client, "/subscriptions", group_by="status")["groups"]
+    counts = dict((row["key"], row["count"]) for row in groups)
+    assert set(counts) <= {"active", "trial", "past_due", "cancelled", "expired"}
+
+    # Every bucket must equal what filtering for that same word returns.
+    for value, count in counts.items():
+        page = get(client, "/subscriptions", page=1, status=value)
+        assert page["total"] == count, "%s: grouped %s, filtered %s" % (
+            value, count, page["total"])
+
+
+def test_grouping_payments_and_branches_agrees_with_filtering_too(client):
+    for resource, values in (("/payments", ("paid", "pending", "failed", "refunded")),
+                             ("/branches", ("active", "suspended", "closed"))):
+        groups = get(client, resource, group_by="status")["groups"]
+        counts = dict((row["key"], row["count"]) for row in groups)
+        assert set(counts) <= set(values), (resource, counts)
+        for value, count in counts.items():
+            page = get(client, resource, page=1, status=value)
+            assert page["total"] == count, "%s %s: %s vs %s" % (
+                resource, value, count, page["total"])

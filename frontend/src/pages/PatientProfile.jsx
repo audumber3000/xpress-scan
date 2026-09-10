@@ -722,6 +722,7 @@ const PatientProfile = () => {
                 <VisitsTab
                   casePapers={casePapers}
                   appointments={appointments}
+                  registerVisits={dailyVisits}
                   nextAppointment={nextAppointment}
                   onOpenVisit={() => setActiveTab('case-papers')}
                   onBookAppointment={() => setBookingOpen(true)}

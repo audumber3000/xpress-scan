@@ -23,6 +23,7 @@ import GlobalSearchModal from "./GlobalSearchModal";
 import { useNavigationGuard } from "../contexts/NavigationGuardContext";
 import { planRank, planLabel, planAllowsBranches } from '../utils/plans';
 import { parseServerDate } from "../utils/datetime";
+import ConfirmDialog from './common/ConfirmDialog';
 
 /**
  * One row in the profile menu: icon, label, an optional right-hand value or
@@ -191,7 +192,6 @@ const Header = ({ onOpenMobileSidebar }) => {
       '/admin/medications': 'Medications',
       '/admin/prescription-sets': 'Prescription Sets',
       '/expenses': 'Expenses',
-      '/admin/permissions': 'Permissions',
       '/admin/clinic': 'Clinic Info',
       '/admin/templates': 'Message Templates',
       '/admin/doctors': 'Referring Doctors',
@@ -341,6 +341,22 @@ const Header = ({ onOpenMobileSidebar }) => {
   const searchHint = isMac ? '⌘K' : 'Ctrl K';
 
   const canSeeAdminHub = userRole === 'clinic_owner' || user?.permissions?.staff?.read === true;
+
+  /**
+   * Billing is the owner's, and only the owner's.
+   *
+   * Not a permission in the grid on purpose. Every other module is something an
+   * owner might reasonably delegate; the card the clinic is charged on is not,
+   * and adding a tickbox for it would invite exactly the delegation that should
+   * never happen. Role, not permission, is the right shape for "there is one
+   * person who pays".
+   *
+   * A receptionist could previously open Subscription & billing from their own
+   * profile menu and from the plan button in this header — seeing what the
+   * clinic pays, and reaching the upgrade and cancel flows.
+   */
+  const canManageBilling = userRole === 'clinic_owner';
+  const [billingBlocked, setBillingBlocked] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
@@ -629,10 +645,69 @@ const Header = ({ onOpenMobileSidebar }) => {
       {/* Right side — quick actions stay in the header; the avatar collapses to
           just the cartoon and opens the account menu. */}
       <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-        {/* Current plan — hidden on mobile, where it can't fit alongside the
-            icons; the profile menu's "Subscription & billing" covers it there. */}
+        {/*
+          Search: a field, not an icon.
+          ────────────────────────────
+          It was a 40px circle sitting between two other 40px circles, which
+          made the single most-used control in the app indistinguishable from
+          "keyboard shortcuts". A search box that looks like a search box needs
+          no discovering.
+
+          It is a <button> dressed as an input rather than a real <input>. The
+          actual search is GlobalSearchModal — it does patients, invoices, lab
+          orders and appointments, with keyboard nav — so typing here would mean
+          either a second search implementation or a field that steals the first
+          keystroke and hands it on. A button opens the real thing on the first
+          click, and stays honest to screen readers about being a button.
+
+          Three widths, because the header has three very different budgets:
+            < md   the circle, unchanged — a bar cannot fit next to the avatar
+            md–lg  a compact bar, no shortcut hint (a tablet rarely has a key
+                   to press), sharing the row with three icons and the avatar
+            lg+    the full bar with the ⌘K hint, left of the plan card
+
+          The bar starts at md rather than sm on purpose: at 640px a 176px bar
+          plus three 40px circles plus the avatar leaves the page title nothing
+          to truncate into.
+        */}
         <button
-          onClick={() => gnav("/subscription")}
+          onClick={() => setShowSearch(true)}
+          className={`${ICON_BUTTON} md:hidden`}
+          title={`Search patients (${searchHint})`}
+          aria-label="Search"
+        >
+          <Search size={20} />
+        </button>
+
+        <button
+          onClick={() => setShowSearch(true)}
+          className="hidden md:flex items-center gap-2 h-10 pl-3 pr-2.5 w-48 lg:w-64 xl:w-80
+                     rounded-lg border border-gray-200 bg-gray-50 text-gray-500
+                     hover:bg-white hover:border-gray-300 focus:outline-none
+                     focus:ring-2 focus:ring-[#2a276e]/30 focus:border-[#2a276e]
+                     transition-colors text-left"
+          title={`Search (${searchHint})`}
+          aria-label="Search patients, invoices, lab orders and appointments"
+        >
+          <Search size={17} className="shrink-0 text-gray-400" />
+          <span className="flex-1 truncate text-sm">
+            <span className="lg:hidden">Search</span>
+            <span className="hidden lg:inline">Search patients, bills, lab work…</span>
+          </span>
+          {/* The shortcut only exists where there is a keyboard to press it on. */}
+          <kbd className="hidden lg:inline-flex items-center shrink-0 rounded border border-gray-200
+                          bg-white px-1.5 py-0.5 text-[10px] font-semibold text-gray-400">
+            {searchHint}
+          </kbd>
+        </button>
+
+        <div className="hidden lg:block w-px h-6 bg-gray-200 mx-1"></div>
+
+        {/* Current plan — hidden below lg, where it can't fit alongside the
+            search bar and the icons; the profile menu's "Subscription &
+            billing" covers it there. */}
+        <button
+          onClick={() => (canManageBilling ? gnav("/subscription") : setBillingBlocked(true))}
           className={`hidden lg:flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-lg bg-gradient-to-r hover:brightness-110 shadow-sm transition-all ${
             PLAN_BUTTON_TONES[planInfo.tone] || PLAN_BUTTON_TONES.ok
           }`}
@@ -645,23 +720,13 @@ const Header = ({ onOpenMobileSidebar }) => {
           <ChevronRight size={16} className="text-white/80 flex-shrink-0" />
         </button>
 
-        <div className="hidden lg:block w-px h-6 bg-gray-200 mx-1"></div>
-
-        {/* Search */}
-        <button
-          onClick={() => setShowSearch(true)}
-          className={ICON_BUTTON}
-          title={`Search patients (${searchHint})`}
-          aria-label="Search patients"
-        >
-          <Search size={20} className="sm:w-[22px] sm:h-[22px]" />
-        </button>
-
         {/* Keyboard shortcuts — pointless without a physical keyboard, so it
-            doesn't earn space on mobile. */}
+            doesn't earn space on mobile. Raised from sm to lg when the search
+            bar moved in beside it: a tablet has no more keyboard than a phone,
+            and the 40px it was taking is better spent on the search field. */}
         <button
           onClick={() => setShowShortcuts(true)}
-          className={`${ICON_BUTTON} hidden sm:flex`}
+          className={`${ICON_BUTTON} hidden lg:flex`}
           title="Keyboard shortcuts (F9)"
           aria-label="Keyboard shortcuts"
         >
@@ -795,11 +860,15 @@ const Header = ({ onOpenMobileSidebar }) => {
                     onClick={() => { setShowProfileDropdown(false); gnav("/admin"); }}
                   />
                 )}
-                <MenuRow
-                  icon={CreditCard}
-                  label="Subscription & billing"
-                  onClick={() => { setShowProfileDropdown(false); gnav("/subscription"); }}
-                />
+                {/* Owner only. Hidden rather than shown-and-refused: a staff
+                    member has no use for a door that never opens. */}
+                {canManageBilling && (
+                  <MenuRow
+                    icon={CreditCard}
+                    label="Subscription & billing"
+                    onClick={() => { setShowProfileDropdown(false); gnav("/subscription"); }}
+                  />
+                )}
                 <MenuRow
                   icon={LifeBuoy}
                   label="Support Center"
@@ -938,6 +1007,19 @@ const Header = ({ onOpenMobileSidebar }) => {
         to the dropdowns nested in it: they could not climb out. A modal
         rendered in there would sit under the page's own layers. */}
     <ClockModal open={showClockModal} onClose={() => setShowClockModal(false)} />
+
+    {/* The plan button is the one billing entry point staff can still see, and
+        it stays visible on purpose: knowing which plan the clinic is on is
+        useful, and a button that vanishes for some people makes the header
+        look broken. What it does is explain, not navigate. */}
+    <ConfirmDialog
+      open={billingBlocked}
+      onClose={() => setBillingBlocked(false)}
+      title="Only the clinic owner can manage the plan"
+      message="Ask them to change the plan or update billing. Everything else in the app works the same for you."
+      actions={[]}
+      cancelLabel="Got it"
+    />
     </>
   );
 };
