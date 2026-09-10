@@ -87,6 +87,36 @@ def create_case_paper(
     except Exception as e:
         print(f"⚠️ Could not add case paper {db_paper.id} to the daily register: {e}")
 
+    # A case paper against an appointment is proof the patient was seen, so the
+    # appointment is finished. Nothing used to write that: `completed` was read
+    # by the stats and set only by somebody remembering to press it, so
+    # appointments sat in `arrived` and the no-show rate had no denominator.
+    #
+    # Only ever moves an OPEN appointment to completed, and never marks anything
+    # missed — see domains/scheduling/services/appointment_completion.py for why
+    # that distinction is the whole design.
+    #
+    # Best-effort, same as the register above: recording clinical work must not
+    # fail because a scheduling row would not update.
+    try:
+        if db_paper.appointment_id:
+            # NB: no `from models import Appointment` here. Appointment is
+            # already imported at module scope and used earlier in this
+            # function; a local import rebinds the name for the WHOLE function,
+            # so the earlier use becomes an unbound local and every case paper
+            # 500s. It did, until this comment existed.
+            from domains.scheduling.services.appointment_completion import (
+                complete_appointment_if_open, SOURCE_CASE_PAPER,
+            )
+            appt = db.query(Appointment).filter(
+                Appointment.id == db_paper.appointment_id,
+                Appointment.clinic_id == current_user.clinic_id,
+                Appointment.patient_id == db_paper.patient_id,
+            ).first()
+            complete_appointment_if_open(db, appt, current_user, SOURCE_CASE_PAPER)
+    except Exception as e:
+        print(f"⚠️ Could not complete appointment for case paper {db_paper.id}: {e}")
+
     db.commit()
     db.refresh(db_paper)
     return db_paper

@@ -406,6 +406,54 @@ class CasePaper(Base):
     dentist = relationship("User")
 
 
+class TreatmentSession(Base):
+    """A course of treatment sold as a fixed number of sittings.
+
+    A skin clinic sells "laser hair reduction, 6 sittings" and needs to know how
+    many are left. Nothing else in this product counts sittings, so the clinic
+    was keeping it on paper.
+
+    ─── Deliberately isolated ────────────────────────────────────────────────
+
+    This is a temporary accommodation for one clinic that will move to a
+    different platform. So it is one table that nothing else references, rather
+    than counters bolted onto Patient.treatment_plan or CasePaper.derm_findings.
+    Both of those were tempting — neither needs a migration — and both are
+    snapshotted into every case paper, which is precisely how a temporary thing
+    becomes permanent. Removing this feature is DROP TABLE plus deleting one
+    router and one card.
+
+    No price and no invoice link, on purpose. The moment a package knows what it
+    cost, it belongs to billing and can no longer be pulled out cleanly.
+
+    `ledger` records each sitting as it is used ({used_at, used_by, note}) so a
+    decrement is answerable later. JSON rather than a second table is a trade
+    made for a temporary, low-volume feature: one clinic, a few writes a day,
+    and both halves drop together. It would be the wrong shape for anything that
+    has to last.
+    """
+    __tablename__ = 'treatment_sessions'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False, index=True)
+    # The paper it was agreed on, where there was one. Nullable: a course can be
+    # sold at the desk without a clinical record being written that day.
+    case_paper_id = Column(Integer, ForeignKey('case_papers.id'), nullable=True)
+    label = Column(String, nullable=False)
+    total_sessions = Column(Integer, nullable=False, default=1)
+    used_sessions = Column(Integer, nullable=False, default=0)
+    ledger = Column(JSON, nullable=True, default=list)
+    notes = Column(Text, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow,
+                        onupdate=datetime.datetime.utcnow)
+
+    clinic = relationship("Clinic")
+    patient = relationship("Patient")
+
+
 class DailyVisit(Base):
     """One row per patient per clinic-local day — the daily register the front
     desk keeps. Deliberately lighter than CasePaper: a walk-in who is registered
@@ -590,6 +638,10 @@ class Appointment(Base):
     # is what finally makes a no-show rate computable.
     outcome_at = Column(DateTime, nullable=True)
     outcome_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    # Whether the outcome was somebody's decision or read off evidence.
+    # 'manual' (the /outcome endpoint), 'case_paper' or 'invoice'. Null on every
+    # row written before this existed, which is most of them.
+    outcome_source = Column(String, nullable=True)
     cancel_reason = Column(String, nullable=True)
 
     # Groups the visits of one course of treatment (a root canal is three).

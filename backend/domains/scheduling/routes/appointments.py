@@ -1,6 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from database import SessionLocal
+# One get_db, from database.py. This module used to define its own — a
+# byte-identical copy — which quietly made every route here untestable: the
+# test client overrides database.get_db, and an override is keyed on the
+# function object, so the local copy was never replaced and endpoints read a
+# different session than the test had written to. /needs-outcome came back
+# empty against data that was plainly there. Same fix invoices.py already had.
+from database import SessionLocal, get_db
 from models import Appointment, Patient, User, Clinic, CasePaper
 from sqlalchemy import and_, or_, cast, Date
 from datetime import datetime, timedelta
@@ -20,13 +26,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 # Pydantic schemas
 class AppointmentCreate(BaseModel):

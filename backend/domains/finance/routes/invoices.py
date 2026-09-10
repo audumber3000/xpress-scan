@@ -511,6 +511,23 @@ async def create_invoice(
         except Exception as e:
             print(f"⚠️ Could not add invoice {invoice.id} to the daily register: {e}")
 
+        # Billing against an appointment is proof the patient was seen, so the
+        # appointment is finished. Same rule and same guard rails as a case
+        # paper — see domains/scheduling/services/appointment_completion.py.
+        #
+        # Resolving WHICH appointment is the delicate part: an invoice carries
+        # both appointment_id and case_paper_id, and older case-paper invoices
+        # overload appointment_id to hold a case paper id. appointment_for_invoice
+        # untangles that and patient-guards the result.
+        try:
+            from domains.scheduling.services.appointment_completion import (
+                appointment_for_invoice, complete_appointment_if_open, SOURCE_INVOICE,
+            )
+            appt = appointment_for_invoice(db, invoice)
+            complete_appointment_if_open(db, appt, current_user, SOURCE_INVOICE)
+        except Exception as e:
+            print(f"⚠️ Could not complete appointment for invoice {invoice.id}: {e}")
+
         db.commit()
         db.refresh(invoice)
         return enrich_invoice(db, invoice)

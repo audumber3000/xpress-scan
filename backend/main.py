@@ -65,7 +65,7 @@ from domains.inventory.routes import transactions as inventory_transactions
 from domains.inventory.routes import medication_groups
 from domains.consent.routes import consents, consents_internal
 from domains.document.routes import documents
-from domains.clinical.routes import settings_router, case_papers_router, prescriptions_router, lab_orders_router, inventory_consumption_router, case_costs_router
+from domains.clinical.routes import settings_router, case_papers_router, treatment_sessions_router, prescriptions_router, lab_orders_router, inventory_consumption_router, case_costs_router
 from domains.notification.routes import notification_admin, push_notifications
 from domains.notification.routes import wareach as wareach_routes
 from domains.activity.routes import activity_log
@@ -152,6 +152,16 @@ async def lifespan(app: FastAPI):
             # never which consultant, so no per-consultant split is possible.
             conn.execute(text(
                 "ALTER TABLE expenses ADD COLUMN IF NOT EXISTS paid_to_user_id INTEGER REFERENCES users(id)"
+            ))
+
+            # Where an appointment's outcome came from (added 2026-09):
+            # 'manual' when somebody pressed it, 'case_paper' or 'invoice' when
+            # it was concluded from evidence the patient was seen. Deliberately
+            # NOT backfilled — every existing outcome was manual by definition,
+            # but writing that in retrospect would state something we did not
+            # actually record.
+            conn.execute(text(
+                "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS outcome_source VARCHAR"
             ))
 
             # The patient's usual dentist, used to pre-select the doctor on a
@@ -970,6 +980,11 @@ app.include_router(feature_requests.router, prefix="/api/v1/feature-requests", t
 # Clinical Domain
 app.include_router(settings_router, prefix="/api/v1/clinical", tags=["clinical-settings"])
 app.include_router(case_papers_router, prefix="/api/v1/clinical", tags=["case-papers"])
+# Courses of treatment sold as a fixed number of sittings. Its own prefix and
+# its own module because it is a temporary accommodation for one skin clinic —
+# see the TreatmentSession model. Removing the feature is this line, that
+# module, and one card on the patient profile.
+app.include_router(treatment_sessions_router, prefix="/api/v1/treatment-sessions", tags=["treatment-sessions"])
 app.include_router(prescriptions_router, prefix="/api/v1/clinical", tags=["prescriptions"])
 app.include_router(lab_orders_router, prefix="/api/v1/clinical", tags=["lab-orders"])
 app.include_router(inventory_consumption_router, prefix="/api/v1/clinical", tags=["inventory-consumption"])

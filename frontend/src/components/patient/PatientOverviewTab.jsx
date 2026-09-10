@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import DentalChartCard from './overview/DentalChartCard';
 import TreatmentPlanCard from './overview/TreatmentPlanCard';
+import SessionsCard from './overview/SessionsCard';
 import NextAppointmentCard from './overview/NextAppointmentCard';
 import FinancialSummaryCard from './overview/FinancialSummaryCard';
 import PatientActivityCard from './overview/PatientActivityCard';
@@ -168,6 +169,10 @@ const PatientOverviewTab = ({
           onNewInvoice={onNewInvoice}
         />
         <QuickActionsCard onAction={onQuickAction} />
+        {/* Treatment sold as a set number of sittings. Self-contained and
+            renders nothing until a course exists, so a dental practice never
+            meets it — see SessionsCard for why it fetches its own data. */}
+        <SessionsCard patientId={patient?.id} />
       </div>
 
       {/* The plan is a table, so it takes the full width rather than being

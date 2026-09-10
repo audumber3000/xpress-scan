@@ -54,6 +54,10 @@ export const CATEGORY_GROUPS = [
       'Dental materials',
       'Lab charges',
       'Medicines & pharmacy',
+      // Stock bought to sell on, not to use: the cosmeceuticals a skin clinic
+      // keeps on the shelf. Filed under clinical rather than business because
+      // it moves with the treatment volume, which is how a clinic reads it.
+      'Retail',
       'Sterilisation supplies',
       'Imaging & X-ray',
       'Equipment purchase',
