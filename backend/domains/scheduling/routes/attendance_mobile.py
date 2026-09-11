@@ -105,6 +105,58 @@ def is_within_clinic_radius(clinic: Clinic, latitude: float, longitude: float, a
     slack = min(float(accuracy or 0), 200.0)
     return distance <= (radius + slack), distance
 
+# ── breaks ────────────────────────────────────────────────────────────────
+# Stored on the shift as [{"start": iso, "end": iso or null}]. See the column in
+# models.py. Server time, like check_in_time and check_out_time, so the three
+# can be compared without a conversion.
+
+def _is_time(value) -> bool:
+    try:
+        datetime.fromisoformat(value)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def _breaks(attendance) -> list:
+    """The shift's breaks, keeping only entries with a real start time. A row
+    edited by hand into nonsense must not read as a break that never ends."""
+    raw = getattr(attendance, "breaks", None)
+    if not isinstance(raw, list):
+        return []
+    return [b for b in raw if isinstance(b, dict) and _is_time(b.get("start"))]
+
+
+def _open_break(attendance):
+    for b in reversed(_breaks(attendance)):
+        if not b.get("end"):
+            return b
+    return None
+
+
+def _break_minutes(attendance, now: datetime) -> int:
+    """Minutes on break so far. An open break counts up to now, or to the
+    clock-out when the shift has ended with it open."""
+    total = 0.0
+    cap = getattr(attendance, "check_out_time", None) or now
+    for b in _breaks(attendance):
+        try:
+            start = datetime.fromisoformat(b["start"])
+            end = datetime.fromisoformat(b["end"]) if b.get("end") else cap
+        except (TypeError, ValueError):
+            continue
+        total += max(0.0, (end - start).total_seconds())
+    return int(total // 60)
+
+
+def _todays_open_shift(db: Session, user: User):
+    return db.query(Attendance).filter(
+        Attendance.user_id == user.id,
+        Attendance.date == datetime.now().date(),
+        Attendance.check_out_time == None,  # noqa: E711 - SQL NULL comparison
+    ).first()
+
+
 @router.post("/clock-in", response_model=AttendanceOut)
 async def clock_in(
     request: ClockInRequest,
@@ -214,6 +266,13 @@ async def clock_out(
     
     # Update attendance record
     attendance.check_out_time = datetime.now()
+    # A shift ended mid-break ends the break with it. Left open, it would keep
+    # counting in every later read of the day.
+    if _open_break(attendance):
+        attendance.breaks = [
+            {**b, "end": b.get("end") or attendance.check_out_time.isoformat()}
+            for b in _breaks(attendance)
+        ]
     attendance.clock_out_latitude = request.latitude
     attendance.clock_out_longitude = request.longitude
     attendance.clock_out_address = request.address
@@ -266,6 +325,10 @@ async def get_clock_status(
         "clock_in_time": attendance.check_in_time.isoformat() if attendance and attendance.check_in_time else None,
         "clock_out_time": attendance.check_out_time.isoformat() if attendance and attendance.check_out_time else None,
         "clock_in_distance_m": getattr(attendance, 'clock_in_distance_m', None) if attendance else None,
+        # Breaks, so the screen can show "On break since 13:05" and a total.
+        "on_break": bool(open_shift and _open_break(attendance)),
+        "break_started_at": (_open_break(attendance) or {}).get("start") if open_shift else None,
+        "break_minutes": _break_minutes(attendance, datetime.now()) if attendance else 0,
         # So the screen can say "your clinic has not set its location yet"
         # rather than implying a geofence that is not actually being enforced.
         "geofence_set": bool(clinic and getattr(clinic, 'latitude', None) is not None),
@@ -396,6 +459,41 @@ def _late_now(clinic, day) -> dict:
         "opening_time": opening,
         "grace_minutes": LATE_GRACE_MINUTES,
     }
+
+@router.post("/break/start")
+async def start_break(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Step away. No location: a break is taken wherever the person goes, and
+    asking for a fix to go and buy a coffee is surveillance, not attendance."""
+    attendance = _todays_open_shift(db, current_user)
+    if not attendance:
+        raise HTTPException(status_code=400, detail="You are not clocked in.")
+    if _open_break(attendance):
+        raise HTTPException(status_code=400, detail="You are already on a break.")
+    # A new list, not an append: SQLAlchemy only notices a JSON column change
+    # when the value is reassigned.
+    attendance.breaks = _breaks(attendance) + [{"start": datetime.now().isoformat(), "end": None}]
+    db.commit()
+    return {"on_break": True, "break_minutes": _break_minutes(attendance, datetime.now())}
+
+
+@router.post("/break/end")
+async def end_break(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    attendance = _todays_open_shift(db, current_user)
+    if not attendance:
+        raise HTTPException(status_code=400, detail="You are not clocked in.")
+    if not _open_break(attendance):
+        raise HTTPException(status_code=400, detail="You are not on a break.")
+    now = datetime.now().isoformat()
+    attendance.breaks = [{**b, "end": b.get("end") or now} for b in _breaks(attendance)]
+    db.commit()
+    return {"on_break": False, "break_minutes": _break_minutes(attendance, datetime.now())}
+
 
 @router.get("/history")
 async def get_attendance_history(

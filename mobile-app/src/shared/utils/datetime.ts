@@ -42,6 +42,23 @@ export function formatDisplayDate(value?: string | null): string {
   });
 }
 
+/** A server timestamp as a Date. Naive values are UTC, as the server writes them. */
+export function parseServerTime(value?: string | null): Date | null {
+  if (!value) return null;
+  const s = String(value).trim();
+  const hasTz = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(s);
+  const d = new Date(hasTz ? s : s + 'Z');
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/** 495 -> "8h 15m", 540 -> "9h", 45 -> "45m". */
+export function formatMinutes(total: number): string {
+  const m = Math.max(0, Math.floor(total));
+  const h = Math.floor(m / 60);
+  if (!h) return `${m}m`;
+  return m % 60 ? `${h}h ${m % 60}m` : `${h}h`;
+}
+
 /** A server timestamp shown as clock time in the device timezone, e.g. "2:30 PM". */
 export function formatTime(value?: string | null): string {
   if (!value) return '';

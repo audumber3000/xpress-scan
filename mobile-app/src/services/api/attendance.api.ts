@@ -26,6 +26,14 @@ export interface ClockStatus {
   clock_in_distance_m: number | null;
   geofence_set: boolean;
   geofence_radius_m: number;
+  /** The pin, so the screen can show where you are against it before you tap. */
+  clinic_name?: string | null;
+  clinic_latitude?: number | null;
+  clinic_longitude?: number | null;
+  /** Breaks within today's shift. */
+  on_break?: boolean;
+  break_started_at?: string | null;
+  break_minutes?: number;
 }
 
 export interface Geofence {
@@ -129,18 +137,36 @@ class AttendanceApiService extends BaseApiService {
     return res.json();
   }
 
-  /** Never refused on distance — see the server. */
-  async clockOut(fix: Fix): Promise<any> {
+  /**
+   * Never refused on distance; see the server. `notes` is the shift summary in
+   * their own words, saved on the day's record; optional, because a note that
+   * blocks the end of a shift is a note people learn to type "." into.
+   */
+  async clockOut(fix: Fix, notes?: string): Promise<any> {
     const headers = await this.getAuthHeaders();
     const res = await this.fetchWithTimeout(`${this.baseURL}/attendance-mobile/clock-out`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
         latitude: fix.latitude, longitude: fix.longitude, accuracy: fix.accuracy,
+        ...(notes && notes.trim() ? { notes: notes.trim() } : {}),
       }),
     });
     if (!res.ok) throw new Error(await detailOf(res, 'Could not clock you out'));
     return res.json();
+  }
+
+  /** Step away mid-shift. No location: a break is taken wherever you go. */
+  async startBreak(): Promise<void> {
+    const headers = await this.getAuthHeaders();
+    const res = await this.fetchWithTimeout(`${this.baseURL}/attendance-mobile/break/start`, { method: 'POST', headers });
+    if (!res.ok) throw new Error(await detailOf(res, 'Could not start your break'));
+  }
+
+  async endBreak(): Promise<void> {
+    const headers = await this.getAuthHeaders();
+    const res = await this.fetchWithTimeout(`${this.baseURL}/attendance-mobile/break/end`, { method: 'POST', headers });
+    if (!res.ok) throw new Error(await detailOf(res, 'Could not end your break'));
   }
 }
 

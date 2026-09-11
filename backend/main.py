@@ -376,6 +376,8 @@ async def lifespan(app: FastAPI):
                 "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_out_accuracy DOUBLE PRECISION",
                 "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_out_distance_m DOUBLE PRECISION",
                 "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS clock_out_address VARCHAR",
+                # Breaks within a shift: [{"start": iso, "end": iso or null}].
+                "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS breaks JSON",
                 # Where a device enrolled, so an owner can see who signed in from where.
                 "ALTER TABLE user_devices ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION",
                 "ALTER TABLE user_devices ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION",

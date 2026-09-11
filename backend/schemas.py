@@ -572,6 +572,7 @@ class AttendanceOut(AttendanceBase):
     clock_out_accuracy: Optional[float] = None
     clock_out_address: Optional[str] = None
     clock_out_distance_m: Optional[float] = None
+    breaks: Optional[List[Dict[str, Any]]] = None
     
     class Config:
         from_attributes = True

@@ -1040,6 +1040,14 @@ class Attendance(Base):
     clock_out_address = Column(String, nullable=True)
     clock_out_distance_m = Column(Float, nullable=True)
 
+    # Breaks taken during the shift, in order: [{"start": iso, "end": iso or
+    # null}]. A list on the row rather than a table, because a break only ever
+    # belongs to the one shift it was taken in and is read with it. An open
+    # break has a null end and is closed at clock-out. Break time is NOT taken
+    # off the hours the grid and exports derive from the two timestamps; that
+    # is a payroll decision, not something to slip in with a button.
+    breaks = Column(JSON, nullable=True)
+
 class XrayImage(Base):
     __tablename__ = 'xray_images'
     id = Column(Integer, primary_key=True, index=True)
