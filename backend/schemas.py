@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from typing import Optional, Dict, Any, List
 from datetime import datetime, date
 
@@ -258,7 +258,10 @@ class InvoiceBase(BaseModel):
     notes: Optional[str] = None
 
 class InvoiceCreate(InvoiceBase):
-    pass
+    # Lines raised with the invoice in one call. The phone's case paper has
+    # always sent its completed procedures here; until this field existed they
+    # were dropped as an unknown key, and every invoice it created started empty.
+    line_items: Optional[List[InvoiceLineItemBase]] = None
 
 class InvoiceUpdate(BaseModel):
     payment_mode: Optional[str] = None
@@ -957,6 +960,23 @@ class PrescriptionItem(BaseModel):
             return str(int(v)) if float(v).is_integer() else str(v)
         return str(v)
 
+def _phone_medicine(item):
+    """One medicine as the phone writes it, in the shape this API stores.
+
+    The mobile case paper has always sent `medicines: [{name, dosage, duration,
+    notes}]`, while this schema reads `items: [{medicine_name, ...}]`. Pydantic
+    drops keys it does not know, so every prescription written on a phone was
+    saved with no medicines at all: forty of them in production before this was
+    found. Translating here, rather than only in the app, is what repairs the
+    builds already installed on people's phones.
+    """
+    if not isinstance(item, dict) or item.get('medicine_name'):
+        return item
+    out = {k: v for k, v in item.items() if k != 'name'}
+    out['medicine_name'] = item.get('name')
+    return out
+
+
 class PrescriptionBase(BaseModel):
     patient_id: int
     appointment_id: Optional[int] = None
@@ -964,6 +984,22 @@ class PrescriptionBase(BaseModel):
     visit_number: Optional[int] = None
     items: List[PrescriptionItem] = []
     notes: Optional[str] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def _accept_the_phones_shape(cls, data):
+        """`medicines` from the phone becomes `items`. See _phone_medicine.
+
+        Only when `items` is absent or empty, so a client that sends the real
+        field is never second-guessed, and rows with no name are dropped rather
+        than failing the whole save on a blank line the doctor never filled in.
+        """
+        if isinstance(data, dict) and not data.get('items') and isinstance(data.get('medicines'), list):
+            data = {**data, 'items': [
+                _phone_medicine(m) for m in data['medicines']
+                if isinstance(m, dict) and (m.get('medicine_name') or m.get('name'))
+            ]}
+        return data
 
 class PrescriptionCreate(PrescriptionBase):
     clinic_id: Optional[int] = None
@@ -974,6 +1010,26 @@ class PrescriptionOut(PrescriptionBase):
     pdf_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+    # The same medicines again, in the shape the phone reads (`name`, `dosage`,
+    # `duration`, `notes`). Installed builds look for `rx.medicines` and find
+    # nothing in `items`, so without this every prescription shows on a phone as
+    # a bare "Prescription #12". Derived, never stored. Remove once no build
+    # older than the one that reads `items` can still sign in.
+    medicines: List[Dict[str, Any]] = []
+
+    @model_validator(mode='after')
+    def _medicines_for_older_phones(self):
+        self.medicines = [
+            {
+                'name': i.medicine_name,
+                'dosage': i.dosage,
+                'frequency': i.frequency,
+                'duration': i.duration,
+                'notes': i.notes or i.instructions,
+            }
+            for i in self.items
+        ]
+        return self
 
     class Config:
         from_attributes = True

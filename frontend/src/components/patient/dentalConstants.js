@@ -462,11 +462,17 @@ export const deriveStatus = ({ condition, work, workType } = {}) => {
  */
 export const readToothState = (toothData = {}) => {
     if (toothData.condition || toothData.work) {
-        return {
+        const axes = {
             condition: toothData.condition || 'sound',
             work: toothData.work || null,
             workType: toothData.workType || null,
         };
+        // This app always writes `status` as deriveStatus(axes), so the two
+        // agree on anything saved here. A status that disagrees was changed by a
+        // client that only knows `status` (the phone app writes nothing else),
+        // after the axes were written, and is the newer fact. Ignoring it made a
+        // tooth edited once on the web impossible to change from a phone.
+        if (!toothData.status || toothData.status === deriveStatus(axes)) return axes;
     }
     switch (toothData.status) {
         case 'missing':   return { condition: 'missing', work: null, workType: null };

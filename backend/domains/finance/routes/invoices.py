@@ -445,18 +445,16 @@ async def create_invoice(
         if not patient:
             raise HTTPException(status_code=404, detail="Patient not found")
 
-        # Resolve the appointment link, drop it silently if stale.
-        # The FK is nullable — invoice ↔ appointment is optional — so a deleted
-        # or wrong-clinic appointment_id should produce an unlinked invoice
-        # rather than a 500 ForeignKeyViolation.
-        appointment_id = invoice_data.appointment_id
-        if appointment_id is not None:
-            exists = db.query(Appointment.id).filter(
-                Appointment.id == appointment_id,
-                Appointment.clinic_id == current_user.clinic_id
-            ).first()
-            if not exists:
-                appointment_id = None
+        # Resolve both visit links, patient-guarded. A stale id still produces
+        # an unlinked invoice rather than a 500 ForeignKeyViolation; and the
+        # phone app, which sends its case paper's id as `appointment_id`, now
+        # gets the invoice attached to that case paper instead of to nothing.
+        # See core/visit_links.py.
+        from core.visit_links import resolve_visit_links
+        appointment_id, case_paper_id = resolve_visit_links(
+            db, current_user.clinic_id, invoice_data.patient_id,
+            invoice_data.appointment_id, invoice_data.case_paper_id,
+        )
 
         # Generate generic invoice number
         year = datetime.utcnow().year
@@ -480,7 +478,7 @@ async def create_invoice(
             clinic_id=current_user.clinic_id,
             patient_id=invoice_data.patient_id,
             appointment_id=appointment_id,
-            case_paper_id=invoice_data.case_paper_id,
+            case_paper_id=case_paper_id,
             invoice_number=invoice_number,
             status='draft',
             subtotal=0.0,
@@ -499,6 +497,20 @@ async def create_invoice(
         db.flush()
         
         create_audit_log(db, invoice.id, current_user.id, 'created')
+
+        # Lines sent with the invoice itself (see InvoiceCreate.line_items).
+        for li in (invoice_data.line_items or []):
+            qty = li.quantity or 1.0
+            invoice.line_items.append(InvoiceLineItem(
+                description=li.description,
+                tooth_number=li.tooth_number,
+                quantity=qty,
+                unit_price=li.unit_price,
+                amount=li.amount if li.amount is not None else qty * li.unit_price,
+            ))
+        if invoice_data.line_items:
+            db.flush()
+            recalculate_invoice_totals(db, invoice)
 
         # Billing a patient means they were in the clinic, so they belong in the
         # day's register even when reception never entered them. Idempotent per
@@ -569,7 +581,24 @@ def _filtered_invoices_query(
     if patient_id:
         query = query.filter(Invoice.patient_id == patient_id)
     if appointment_id:
-        query = query.filter(Invoice.appointment_id == appointment_id)
+        # The phone app looks a visit's invoice up by passing its CASE PAPER id
+        # as `appointment_id`. When the id is not one of this patient's
+        # appointments, read it as the case paper it was meant to be, so the
+        # phone finds the visit's invoice instead of creating a second one.
+        # Patient-guarded: only with patient_id, and only when no appointment of
+        # that patient carries the id. See core/visit_links.py.
+        is_patients_appointment = bool(patient_id) and db.query(Appointment.id).filter(
+            Appointment.id == appointment_id,
+            Appointment.clinic_id == clinic_id,
+            Appointment.patient_id == patient_id,
+        ).first() is not None
+        if patient_id and not case_paper_id and not is_patients_appointment:
+            query = query.filter(or_(
+                Invoice.appointment_id == appointment_id,
+                Invoice.case_paper_id == appointment_id,
+            ))
+        else:
+            query = query.filter(Invoice.appointment_id == appointment_id)
     if case_paper_id:
         query = query.filter(Invoice.case_paper_id == case_paper_id)
     if payment_mode:

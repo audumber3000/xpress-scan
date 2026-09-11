@@ -174,6 +174,64 @@ TYPE_WORDS = {
 }
 
 
+# ── reading a tooth ───────────────────────────────────────────────────────
+# Mirrors deriveStatus / readToothState in
+# frontend/src/components/patient/dentalConstants.js. The chart stores a tooth
+# two ways: the legacy single `status`, and since Sep 2026 the `condition`,
+# `work` and `workType` axes. The web writes both, always in agreement. The
+# phone writes only `status`, so when the two disagree the status is the newer
+# fact and the tooth is read from it.
+
+EXISTING_STATUS = {
+    "root_canal": "rootCanal", "post_core": "post_core", "implant": "implant",
+    "crown_porcelain": "crown_porcelain", "crown_gold": "crown_gold", "crown_ss": "crown_ss",
+    "veneer": "veneer", "bridge": "bridge", "filling": "existing", "crown": "crown_porcelain",
+}
+
+LEGACY_STATUS_AXES = {
+    "missing": ("missing", None, None),
+    "impacted": ("impacted", None, None),
+    "fractured": ("fractured", None, None),
+    "planned": ("sound", "planned", None),
+    "implant": ("sound", "existing", "implant"),
+    "rootCanal": ("sound", "existing", "root_canal"),
+    "to_extract": ("sound", "planned", "extraction"),
+    "existing": ("sound", "existing", "filling"),
+    "post_core": ("sound", "existing", "post_core"),
+    "crown_porcelain": ("sound", "existing", "crown_porcelain"),
+    "crown_gold": ("sound", "existing", "crown_gold"),
+    "crown_ss": ("sound", "existing", "crown_ss"),
+    "veneer": ("sound", "existing", "veneer"),
+    "bridge": ("sound", "existing", "bridge"),
+}
+
+
+def derive_status(condition, work, work_type) -> str:
+    if condition == "missing":
+        return "missing"
+    if condition == "impacted":
+        return "impacted"
+    if work == "planned" and work_type == "extraction":
+        return "to_extract"
+    if work == "planned":
+        return "planned"
+    if work == "existing":
+        return EXISTING_STATUS.get(work_type, "existing")
+    if condition == "fractured":
+        return "fractured"
+    return "present"
+
+
+def tooth_state(data: dict):
+    """(condition, work, work type) for one tooth, as the chart reads it."""
+    if data.get("condition") or data.get("work"):
+        axes = (data.get("condition") or "sound", data.get("work") or None, data.get("workType") or None)
+        status = data.get("status")
+        if not status or status == derive_status(*axes):
+            return axes
+    return LEGACY_STATUS_AXES.get(data.get("status"), ("sound", None, None))
+
+
 def _chart_legend(chart: dict) -> str:
     """Only the symbols this chart actually uses."""
     seen, rows = set(), []
@@ -203,13 +261,13 @@ def _tooth_rows(chart: dict, tooth_notes: dict) -> str:
         if not isinstance(data, dict):
             continue
 
+        state_condition, work, work_type = tooth_state(data)
         condition = ", ".join(x for x in (
-            [CONDITION_WORDS.get(data.get("condition"), "")] + clinical_conditions(data)
+            [CONDITION_WORDS.get(state_condition, "")] + clinical_conditions(data)
         ) if x)
-        work = data.get("work")
         work_text = ""
         if work:
-            work_text = f"{TYPE_WORDS.get(data.get('workType'), 'Work')} — {WORK_WORDS.get(work, work)}"
+            work_text = f"{TYPE_WORDS.get(work_type, 'Work')} — {WORK_WORDS.get(work, work)}"
 
         marked = [s for s, cond in (data.get("surfaces") or {}).items() if cond and cond != "none"]
         surfaces = format_surfaces(key, marked)

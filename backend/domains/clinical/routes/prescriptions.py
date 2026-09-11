@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, status, Response
 from sqlalchemy.orm import Session
 from database import get_db
-from models import Prescription, User, Patient, Appointment, CasePaper
+from models import Prescription, User, Patient
 from schemas import PrescriptionCreate, PrescriptionOut
 from core.auth_utils import get_current_user, require_doctor_or_owner
 from typing import List, Optional
@@ -116,27 +116,16 @@ def create_prescription(
     # Convert item models to dicts for JSON storage
     items_data = [item.model_dump() for item in prescription.items]
 
-    # Drop a stale appointment link silently — FK is nullable, so a deleted
-    # or wrong-clinic appointment_id should produce an unlinked prescription
-    # rather than a 500 ForeignKeyViolation.
+    # Both links resolved and patient-guarded in one place. A stale id becomes
+    # an unlinked prescription rather than a 500 ForeignKeyViolation, and a case
+    # paper id sent in the appointment slot (what the phone app does) lands on
+    # the case paper it meant. See core/visit_links.py.
+    from core.visit_links import resolve_visit_links
     payload = prescription.model_dump(exclude={"clinic_id", "items"})
-    if payload.get("appointment_id") is not None:
-        exists = db.query(Appointment.id).filter(
-            Appointment.id == payload["appointment_id"],
-            Appointment.clinic_id == current_user.clinic_id
-        ).first()
-        if not exists:
-            payload["appointment_id"] = None
-
-    # Same guard for the case-paper link (this is what the case-paper UI sends and
-    # then filters on, so it must round-trip).
-    if payload.get("case_paper_id") is not None:
-        cp_exists = db.query(CasePaper.id).filter(
-            CasePaper.id == payload["case_paper_id"],
-            CasePaper.clinic_id == current_user.clinic_id
-        ).first()
-        if not cp_exists:
-            payload["case_paper_id"] = None
+    payload["appointment_id"], payload["case_paper_id"] = resolve_visit_links(
+        db, current_user.clinic_id, payload["patient_id"],
+        payload.get("appointment_id"), payload.get("case_paper_id"),
+    )
 
     db_prescription = Prescription(
         **payload,

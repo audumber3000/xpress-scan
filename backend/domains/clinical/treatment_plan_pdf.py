@@ -36,7 +36,7 @@ import datetime as _dt
 from core.clinic_time import clinic_tzinfo
 from domains.clinical.clinical_summary_pdf import (
     BPE_MEANING, CONDITION_WORDS, MARK_LEGEND, STATUS_LEGEND, TYPE_WORDS,
-    _as_text, _json_obj, clinical_conditions,
+    _as_text, _json_obj, clinical_conditions, tooth_state,
 )
 from domains.clinical.tooth_notation import format_surfaces, universal_to_fdi
 from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
@@ -68,27 +68,6 @@ _SURFACE_WORK = {
 # Marks that are a finding rather than work. Sealant is the odd one out: it is
 # something already on the tooth, so it is listed with the work.
 _WORK_MARKS = {"sealant"}
-
-# The legacy single `status` and the work it stands for. Mirrors readToothState
-# in frontend/src/components/patient/dentalConstants.js, so a chart saved before
-# condition and work were split still reads the same on paper as on screen.
-_LEGACY_STATUS = {
-    "missing": ("missing", None, None),
-    "impacted": ("impacted", None, None),
-    "fractured": ("fractured", None, None),
-    "planned": ("sound", "planned", None),
-    "implant": ("sound", "existing", "implant"),
-    "rootCanal": ("sound", "existing", "root_canal"),
-    "to_extract": ("sound", "planned", "extraction"),
-    "existing": ("sound", "existing", "filling"),
-    "post_core": ("sound", "existing", "post_core"),
-    "crown_porcelain": ("sound", "existing", "crown_porcelain"),
-    "crown_gold": ("sound", "existing", "crown_gold"),
-    "crown_ss": ("sound", "existing", "crown_ss"),
-    "veneer": ("sound", "existing", "veneer"),
-    "bridge": ("sound", "existing", "bridge"),
-}
-
 
 # ── plumbing ──────────────────────────────────────────────────────────────
 
@@ -223,17 +202,9 @@ def _age_sex(patient) -> str:
 
 # ── what was found ────────────────────────────────────────────────────────
 
-def _tooth_state(data: dict):
-    """(condition, work, work type), reading a legacy status-only tooth the
-    way the chart does."""
-    if data.get("condition") or data.get("work"):
-        return data.get("condition") or "sound", data.get("work"), data.get("workType")
-    return _LEGACY_STATUS.get(data.get("status"), ("sound", None, None))
-
-
 def _tooth_findings(key, data: dict, note: str):
     """(what we found, work on the tooth, notes) for one tooth, in words."""
-    condition, work, work_type = _tooth_state(data)
+    condition, work, work_type = tooth_state(data)
 
     surfaces = data.get("surfaces") if isinstance(data.get("surfaces"), dict) else {}
     by_state = {}

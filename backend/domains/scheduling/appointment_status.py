@@ -60,6 +60,14 @@ LEGACY_STATUS_MAP = {
     "no-show": NO_SHOW,
     "no_show": NO_SHOW,
     "noshow": NO_SHOW,
+    # What mobile builds up to 3.18.0 send. "Registered" goes up when a patient
+    # file is created for a checked-in appointment; falling through to
+    # `scheduled` put the patient back on the books after they had arrived.
+    "registered": ARRIVED,
+    "checked in": ARRIVED,
+    "checked_in": ARRIVED,
+    "encounter": ARRIVED,
+    "finished": COMPLETED,
 }
 
 

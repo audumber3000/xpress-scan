@@ -7,8 +7,41 @@ from models import TemplateConfiguration, Clinic, User
 from core.auth_utils import get_current_user
 from core.dtos import TemplateConfigResponse, TemplateConfigCreate, TemplateConfigUpdate
 from domains.infrastructure.services.pdf_fields import (
-    resolve_letterhead, sanitize_config_json,
+    FIELD_KEYS, resolve_letterhead, sanitize_config_json,
 )
+
+
+def merge_config_json(current, raw):
+    """What a save leaves in config_json: the sections it sent, over the ones it did not.
+
+    Each top-level section belongs to the screen that edits it. The web editor
+    sends `show` and `letterhead` together; the phone's Templates screen sends
+    only `show` and has never heard of `letterhead`. Replacing the whole blob
+    with what arrived meant a clinic's letterhead printing switched itself off
+    the next time somebody changed a colour from their phone. So a section is
+    replaced when the caller sent it, removed when the caller sent it empty, and
+    otherwise left exactly as it was.
+
+    An explicit `config_json: null` still clears everything, as before.
+    """
+    if not isinstance(raw, dict):
+        return sanitize_config_json(raw)
+    incoming = sanitize_config_json(raw) or {}
+    merged = dict(current) if isinstance(current, dict) else {}
+    sent = {
+        # sanitize_visibility tolerates a bare flag map, so a top-level flag
+        # counts as sending `show`.
+        'show': 'show' in raw or any(k in raw for k in FIELD_KEYS),
+        'letterhead': 'letterhead' in raw,
+    }
+    for section, was_sent in sent.items():
+        if not was_sent:
+            continue
+        if section in incoming:
+            merged[section] = incoming[section]
+        else:
+            merged.pop(section, None)
+    return merged or None
 from domains.infrastructure.services.r2_storage import (
     StorageCategory,
     get_presigned_url,
@@ -80,12 +113,12 @@ def upsert_template_config(
     if existing:
         # Only the fields the caller actually sent. Assigning every field
         # unconditionally is what made `config_json` and `secondary_color`
-        # unsavable, and a blanket overwrite would be worse now that the field
-        # toggles live in config_json: the mobile app never sends that key, so
-        # a save from the phone would wipe every toggle set on the web.
+        # unsavable. config_json is merged by section rather than replaced: the
+        # phone sends `show` alone, and replacing would drop the letterhead set
+        # on the web. See merge_config_json.
         patch = config_in.model_dump(exclude_unset=True)
         if 'config_json' in patch:
-            patch['config_json'] = sanitize_config_json(patch['config_json'])
+            patch['config_json'] = merge_config_json(existing.config_json, patch['config_json'])
         for field in ('template_id', 'logo_url', 'primary_color',
                       'secondary_color', 'footer_text', 'config_json'):
             if field in patch:
