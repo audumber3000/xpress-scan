@@ -29,6 +29,8 @@ RECEIPT_VARIANTS = {
     # These four share one parameterised renderer — a receipt carries far less
     # than an invoice, so what differs between them is the header treatment and
     # the ruling of one table. See receipt_templates/styled.py.
+    'plain':     {'id': 'plain',     'name': 'Plain (for letterhead)',
+                  'render': styled.render_for('plain')},
     'banded':    {'id': 'banded',    'name': 'Banded',       'render': styled.render_for('banded')},
     'bold':      {'id': 'bold',      'name': 'Bold',         'render': styled.render_for('bold')},
     'corporate': {'id': 'corporate', 'name': 'Corporate',    'render': styled.render_for('corporate')},

@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from "react";
-import Spinner from '../common/Spinner';
-import { api } from "../../utils/api";
+import React, { useState, useEffect, useRef } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 import InvoiceLineItemForm from "./InvoiceLineItemForm";
 import { getCurrencySymbol } from "../../utils/currency";
 import { useIsDentalPatient } from '../../utils/casePaper';
@@ -102,220 +101,215 @@ const GSTInfoPopover = () => {
   );
 };
 
-const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, onUpdateInvoice, canEdit }) => {
+const InvoiceLineItems = ({ invoice, lineItems, onAdd, onEdit, onDelete, canEdit }) => {
   const isDental = useIsDentalPatient({ case_paper_type: invoice?.patient_case_paper_type });
   const [editingId, setEditingId] = useState(null);
-  const [showAddForm, setShowAddForm] = useState(false);
 
-  // Add-from-stock: pick a medication, bill it AND deduct from stock.
-  const [medStock, setMedStock] = useState([]);
-  const [showStock, setShowStock] = useState(false);
-  const [addingStock, setAddingStock] = useState(false);
-  const [stockSel, setStockSel] = useState('');
-  const [stockQty, setStockQty] = useState('');
+  const items = lineItems || [];
+  const editingItem = items.find((i) => i.id === editingId) || null;
+
+  // Rows that just arrived or just changed get a soft tint for a moment, so the
+  // eye finds the line it has just added in a list of eight without reading
+  // every row. Worked out by comparing ids across renders rather than by
+  // listening for the save: a line added by a preset, by the keyboard or by
+  // anything else lands the same way. Nothing flashes on first load — every
+  // row would be "new" and the highlight would mean nothing.
+  const [fresh, setFresh] = useState(() => new Set());
+  const seenIds = useRef(null);
+  const flashTimer = useRef(null);
+  const flash = (ids) => {
+    if (!ids.length) return;
+    setFresh(new Set(ids));
+    clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFresh(new Set()), 1600);
+  };
+  const idKey = items.map((i) => i.id).join(',');
   useEffect(() => {
-    if (!canEdit) return;
-    api.get('/medication-stock').then((d) => setMedStock(Array.isArray(d) ? d : [])).catch(() => {});
-  }, [canEdit]);
-
-  const addFromStock = async () => {
-    if (addingStock) return;
-    const med = medStock.find((m) => String(m.id) === String(stockSel));
-    const q = parseFloat(stockQty);
-    if (!med || !q || q <= 0) return;
-    setAddingStock(true);
-    try {
-      await onAdd({
-      description: med.name + (med.strength ? ` ${med.strength}` : ''),
-      quantity: q,
-      unit_price: Number(med.price_per_unit || 0),
-        medication_stock_id: med.id,
-      });
-      setShowStock(false); setStockSel(''); setStockQty('');
-    } finally {
-      setAddingStock(false);
-    }
-  };
-
-  const handleEdit = (lineItem) => {
-    setEditingId(lineItem.id);
-    setShowAddForm(false);
-  };
-
-  const handleCancel = () => {
-    setEditingId(null);
-    setShowAddForm(false);
-  };
+    const ids = idKey ? idKey.split(',') : [];
+    if (seenIds.current) flash(ids.filter((id) => !seenIds.current.includes(id)));
+    seenIds.current = ids;
+  }, [idKey]);
+  useEffect(() => () => clearTimeout(flashTimer.current), []);
 
   const handleSave = async (lineItemData) => {
     if (editingId) {
-      await onEdit(editingId, lineItemData);
+      const id = editingId;
+      await onEdit(id, lineItemData);
       setEditingId(null);
+      // An edit keeps its id, so the comparison above cannot see it.
+      flash([String(id)]);
     } else {
       await onAdd(lineItemData);
-      setShowAddForm(false);
     }
   };
 
+  const rowTone = (id, editing) => (
+    editing ? 'bg-[#2a276e]/[0.04]'
+      : fresh.has(String(id)) ? 'bg-[#29828a]/10'
+        : 'hover:bg-gray-50/70'
+  );
+
   // Currency symbol comes from the clinic (same source as the rest of the app).
   const formatAmount = (amount) =>
-    `${getCurrencySymbol()}${Number(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    `${getCurrencySymbol()}${Number(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <h3 className="text-[13px] font-semibold uppercase tracking-wide text-gray-500">Line items</h3>
+    // One card: the lines, and the bar that adds the next one docked beneath
+    // them. There used to be an "Add Item" button that opened a tall form above
+    // the table and closed it again after every save, plus a separate panel
+    // for adding from stock. The bar is simply always there now.
+    <div className="border border-gray-200 rounded-xl bg-white">
+      <div className="flex items-center justify-between gap-3 px-3 sm:px-4 py-3 border-b border-gray-100">
+        <div className="flex items-center gap-2 min-w-0">
+          <h3 className="text-sm font-bold text-gray-900">Procedures &amp; line items</h3>
+          <span className="px-2 py-0.5 rounded-full bg-gray-100 text-[11px] font-semibold text-gray-600 tabular-nums">
+            {items.length} {items.length === 1 ? 'item' : 'items'}
+          </span>
           <GSTInfoPopover />
         </div>
-        <div className="flex items-center gap-2">
-          {canEdit && (
-          <>
-            {medStock.length > 0 && (
-              <button
-                onClick={() => { setShowStock((v) => !v); setShowAddForm(false); setEditingId(null); }}
-                className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-[12px] font-medium"
-              >
-                + From stock
-              </button>
-            )}
-            <button
-              onClick={() => { setShowAddForm(true); setEditingId(null); setShowStock(false); }}
-              className="px-3 py-1.5 bg-[#2a276e] text-white rounded-lg hover:bg-[#1a1548] transition text-[12px] font-medium"
-            >
-              + Add Item
-            </button>
-          </>
-          )}
-        </div>
+        {canEdit && (
+          <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-gray-400">
+            <kbd className="px-1.5 py-0.5 rounded border border-gray-200 bg-white font-sans text-gray-500">Tab</kbd>
+            <span>to move</span>
+            <span className="text-gray-300">·</span>
+            <kbd className="px-1.5 py-0.5 rounded border border-gray-200 bg-white font-sans text-gray-500">↵</kbd>
+            <span>to add</span>
+          </div>
+        )}
       </div>
 
-      {canEdit && showStock && (
-        <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end bg-emerald-50/60 border border-emerald-100 rounded-xl p-3">
-          <div className="flex-1">
-            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Medication (from stock)</label>
-            <select value={stockSel} onChange={(e) => setStockSel(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2a276e]">
-              <option value="">Select a medicine…</option>
-              {medStock.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}{m.strength ? ` ${m.strength}` : ''} — {m.quantity} {m.unit || 'left'} left
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="w-full sm:w-24">
-            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Qty</label>
-            <input type="number" min="0" step="any" value={stockQty} onChange={(e) => setStockQty(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-[#2a276e]" />
-          </div>
-          <button onClick={addFromStock} disabled={!stockSel || !stockQty || addingStock} className="px-4 py-2 bg-[#2a276e] text-white rounded-lg text-sm font-semibold hover:bg-[#1a1548] transition inline-flex items-center gap-2 disabled:opacity-50">
-            {addingStock ? 'Adding' : 'Add & deduct'}
-            {addingStock && <Spinner className="w-3.5 h-3.5" />}
-          </button>
+      {items.length > 0 ? (
+        <>
+        {/* Phones get the same lines as stacked cards. Seven columns have no
+            honest layout at 375px — the description came out three words wide
+            and the money scrolled off the side — so below `md` each line is one
+            block: what, where, how many at what, and the total. */}
+        <ul className="md:hidden divide-y divide-gray-100">
+          {items.map((item, idx) => {
+            const editing = editingId === item.id;
+            return (
+              <li key={item.id} className={`px-3 py-3 flex items-start gap-3 transition-colors duration-700 ${rowTone(item.id, editing)}`}>
+                <span className="text-[11px] font-mono text-gray-400 tabular-nums pt-0.5 w-5 shrink-0">
+                  {String(idx + 1).padStart(2, '0')}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-gray-900 break-words">{item.description}</div>
+                  <div className="text-xs text-gray-500 mt-0.5 tabular-nums">
+                    {item.tooth_number ? <span className="font-mono">{item.tooth_number} · </span> : null}
+                    {item.quantity} × {formatAmount(item.unit_price)}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-sm font-bold text-gray-900 tabular-nums">{formatAmount(item.amount)}</div>
+                  {canEdit && (
+                    <div className="flex justify-end gap-0.5 mt-1 -mr-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setEditingId(editing ? null : item.id)}
+                        className={`p-2 rounded-md transition-colors ${editing ? 'text-[#2a276e] bg-[#2a276e]/10' : 'text-gray-400 hover:text-[#2a276e]'}`}
+                        title={editing ? 'Stop editing' : 'Edit'}
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDelete(item)}
+                        className="p-2 rounded-md text-gray-400 hover:text-red-600"
+                        title="Delete"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full min-w-[560px]">
+            <thead className="bg-[#f8fafc]">
+              <tr className="border-b border-gray-100">
+                <th className="pl-4 pr-2 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider w-10">#</th>
+                <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Description</th>
+                <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                  {isDental ? 'Tooth / area' : 'Area / site'}
+                </th>
+                <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-gray-500 uppercase tracking-wider w-14">Qty</th>
+                <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Unit price</th>
+                <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Total</th>
+                {canEdit && <th className="pr-4 pl-2 py-2.5 w-20" />}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {items.map((item, idx) => {
+                const editing = editingId === item.id;
+                return (
+                  <tr
+                    key={item.id}
+                    className={`transition-colors duration-700 ${rowTone(item.id, editing)}`}
+                  >
+                    <td className="pl-4 pr-2 py-3 text-xs font-mono text-gray-400 tabular-nums">
+                      {String(idx + 1).padStart(2, '0')}
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="text-sm font-semibold text-gray-900 break-words">{item.description}</div>
+                    </td>
+                    <td className="px-3 py-3 text-sm text-gray-600 font-mono">
+                      {item.tooth_number || <span className="text-gray-300 font-sans">&mdash;</span>}
+                    </td>
+                    <td className="px-3 py-3 text-sm text-center text-gray-900 tabular-nums">{item.quantity}</td>
+                    <td className="px-3 py-3 text-sm text-right text-gray-700 tabular-nums">{formatAmount(item.unit_price)}</td>
+                    <td className="px-3 py-3 text-sm text-right font-bold text-gray-900 tabular-nums">{formatAmount(item.amount)}</td>
+                    {canEdit && (
+                      <td className="pr-4 pl-2 py-3">
+                        <div className="flex justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setEditingId(editing ? null : item.id)}
+                            className={`p-1.5 rounded-md transition-colors ${editing ? 'text-[#2a276e] bg-[#2a276e]/10' : 'text-gray-400 hover:text-[#2a276e] hover:bg-[#2a276e]/5'}`}
+                            title={editing ? 'Stop editing' : 'Edit'}
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onDelete(item)}
+                            className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        </>
+      ) : (
+        <div className="px-4 py-8 text-center text-sm text-gray-500">
+          No line items yet.{canEdit && ' Add the first one below.'}
         </div>
       )}
 
-
-      {showAddForm && !editingId && (
+      {/* Editing reuses the same bar: the row being changed is highlighted
+          above, and its values load into the bar below — no second form
+          squeezed inside the table. `key` remounts it per row so switching
+          between rows loads each one cleanly. */}
+      {canEdit && (
         <InvoiceLineItemForm
+          key={editingItem ? `edit-${editingItem.id}` : 'add'}
+          lineItem={editingItem}
           onSave={handleSave}
-          onCancel={handleCancel}
+          onCancel={() => setEditingId(null)}
           patient={{ case_paper_type: invoice?.patient_case_paper_type }}
         />
       )}
-
-      {lineItems && lineItems.length > 0 ? (
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px]">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Description
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {isDental ? 'Tooth / Area' : 'Area / Site'}
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Qty
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Unit Price
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Amount
-                </th>
-                {canEdit && (
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {lineItems.map((item) => (
-                <tr key={item.id}>
-                  {editingId === item.id ? (
-                    <td colSpan={canEdit ? 6 : 5} className="p-0">
-                      <div className="p-2 border-2 border-blue-400 m-1 rounded-lg">
-                        <InvoiceLineItemForm
-                          lineItem={item}
-                          onSave={handleSave}
-                          onCancel={handleCancel}
-                          patient={{ case_paper_type: invoice?.patient_case_paper_type }}
-                        />
-                      </div>
-                    </td>
-                  ) : (
-                    <>
-                      <td className="px-4 py-3 text-sm text-gray-900">{item.description}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {item.tooth_number || <span className="text-gray-300">&mdash;</span>}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-center text-gray-900">{item.quantity}</td>
-                      <td className="px-4 py-3 text-sm text-right text-gray-900">
-                        {formatAmount(item.unit_price)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right font-medium text-gray-900">
-                        {formatAmount(item.amount)}
-                      </td>
-                      {canEdit && (
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex justify-center gap-2">
-                            <button
-                              onClick={() => handleEdit(item)}
-                              className="text-blue-600 hover:bg-blue-50 p-1.5 rounded-md transition"
-                              title="Edit"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={() => onDelete(item)}
-                              className="text-red-600 hover:bg-red-50 p-1.5 rounded-md transition"
-                              title="Delete"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-                          </div>
-                        </td>
-                      )}
-                    </>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
-        </div>
-      ) : (
-        <div className="text-center py-8 text-gray-500 bg-gray-50 border border-dashed border-gray-300 rounded-lg">
-          <p>No line items found. {canEdit && "Click 'Add Item' to start building this invoice."}</p>
-        </div>
-      )}
-
     </div>
   );
 };

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>Prescription</title>
 <style>
-@page { size: A4; margin: 2mm; }
+{{page_rule}}{{letterhead_css}}
 :root {
   --accent: {{primary_color}};
   --ink: #111827;
@@ -176,7 +176,7 @@ body {
     <div class="brand">
       {{logo_html}}
       <div class="meta">
-        <div class="name">{{clinic_name}}</div>
+        {{clinic_name_html}}
         {{clinic_tagline_html}}
       </div>
     </div>
@@ -204,7 +204,7 @@ body {
     </div>
     <div class="col" style="text-align:right;">
       <h4>Details</h4>
-      <p>{{patient_age}} / {{patient_gender}}</p>
+      <p>{{patient_age_sex}}</p>
       <p style="color:#6B7280;font-size:10.5px;">{{patient_phone}}</p>
     </div>
   </div>

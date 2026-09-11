@@ -8,8 +8,10 @@ import { getCurrencySymbol } from '../../utils/currency';
 import {
     surfacesFor, surfacesForMany, surfaceLabel, formatSurfaces, toothFullName,
     normaliseSurfaces, readToothState, deriveStatus,
-    TOOTH_CONDITIONS, WORK_TYPES_BY_STAGE, TOOTH_MARKS, marksOf, stepTooth,
+    WORK_TYPES_BY_STAGE, TOOTH_MARKS, marksOf, stepTooth,
+    conditionsOf, allConditionsOf,
 } from './dentalConstants';
+import ConditionPicker from './ConditionPicker';
 import AnatomyIcon from './AnatomyIcons';
 import ClinicalMultiSelect from './ClinicalMultiSelect';
 import ClinicalAutocomplete from './ClinicalAutocomplete';
@@ -86,6 +88,7 @@ const ToothRightDrawer = ({
     onToothStateChange,
     onFindingsChange,
     onMarksChange,
+    onConditionsChange,
     onAddTreatment,
     onNavigate,
     editingTreatment,
@@ -210,10 +213,60 @@ const ToothRightDrawer = ({
      * tooth can carry a crown, a root canal and an abscess at once, and a single
      * status can only ever say one of those.
      */
-    const toggleMark = (value) => {
-        const next = marks.includes(value) ? marks.filter((m) => m !== value) : [...marks, value];
-        setMarks(next);
-        targets.forEach((t) => onMarksChange?.(t, next));
+    const toggleMark = (value, turnOn = !marks.includes(value)) => {
+        setMarks(turnOn ? [...marks.filter((m) => m !== value), value] : marks.filter((m) => m !== value));
+        // Each tooth's OWN list, changed by one item. This used to write the
+        // first tooth's whole list over every selected tooth, so turning on a
+        // sealant across four teeth erased a drifting mark on the third. It
+        // also matters now that the abscess can be switched from the condition
+        // list: a stale copy here would put back what was just taken off.
+        targets.forEach((t) => {
+            const cur = marksOf(teethData[t] || {});
+            const next = turnOn
+                ? (cur.includes(value) ? cur : [...cur, value])
+                : cur.filter((m) => m !== value);
+            onMarksChange?.(t, next);
+        });
+    };
+
+    /**
+     * The condition list, read from every selected tooth.
+     *
+     * Straight from `teethData` rather than a local copy: a condition can live
+     * in three places (the structural state, the abscess mark, the tooth's own
+     * list), and one reader for all three is what keeps the chips, the chart and
+     * the summary PDF from ever disagreeing about the same tooth.
+     */
+    const conditionState = (() => {
+        const counts = {};
+        targets.forEach((t) => {
+            allConditionsOf(teethData[t] || {}).forEach((v) => { counts[v] = (counts[v] || 0) + 1; });
+        });
+        return Object.fromEntries(
+            Object.entries(counts).map(([v, n]) => [v, n === targets.length ? 'all' : 'some'])
+        );
+    })();
+
+    /** Write one condition to wherever that kind of condition is kept. */
+    const toggleCondition = (item, turnOn) => {
+        if (item.structural) {
+            // One of impacted / missing / fractured: they change the drawing and
+            // exclude each other, so choosing one replaces the others, and
+            // removing it returns the tooth to normal.
+            pickCondition(turnOn ? item.structural : null);
+            return;
+        }
+        if (item.mark) {
+            toggleMark(item.mark, turnOn);
+            return;
+        }
+        targets.forEach((t) => {
+            const cur = conditionsOf(teethData[t] || {});
+            const next = turnOn
+                ? (cur.includes(item.value) ? cur : [...cur, item.value])
+                : cur.filter((v) => v !== item.value);
+            onConditionsChange?.(t, next);
+        });
     };
 
     /** Existing work is a record, not a plan, so it saves as soon as it is picked. */
@@ -429,17 +482,15 @@ const ToothRightDrawer = ({
                                 tooth can be impacted AND have an extraction
                                 planned, so it stays its own control. No collapse
                                 — one dropdown is not worth hiding behind a link. */}
-                            <Section title="Condition">
-                                <select
-                                    value={condition === 'sound' ? '' : condition}
-                                    onChange={(e) => pickCondition(e.target.value || null)}
-                                    className={SELECT}
-                                >
-                                    <option value="">Normal</option>
-                                    {TOOTH_CONDITIONS.map((c) => (
-                                        <option key={c.value} value={c.value}>{c.label}</option>
-                                    ))}
-                                </select>
+                            <Section
+                                title="Conditions"
+                                right={<span className="text-[11px] text-gray-400">Saved as you tap</span>}
+                            >
+                                <ConditionPicker
+                                    state={conditionState}
+                                    onToggle={toggleCondition}
+                                    multi={isMulti}
+                                />
                             </Section>
 
                             {/* The mode switch. Everything below it changes. */}
@@ -496,7 +547,7 @@ const ToothRightDrawer = ({
                                     than instead of it — these stack with each
                                     other and with whatever work is recorded. */}
                                 <div className="flex flex-wrap gap-2">
-                                    {TOOTH_MARKS.map((m) => {
+                                    {TOOTH_MARKS.filter((m) => m.value !== 'abscess').map((m) => {
                                         const on = marks.includes(m.value);
                                         return (
                                             <button

@@ -92,7 +92,7 @@ STATUS_LEGEND = {
     "to_extract": ("To be extracted", "A red diagonal through the tooth"),
     "impacted": ("Impacted", "Diagonal hatching over the tooth"),
     "fractured": ("Fractured", "A red zigzag on the crown"),
-    "planned": ("Planned work", "An amber dashed ring"),
+    "planned": ("Planned work", "Shaded amber, with a dashed ring"),
     "existing": ("Existing work", "Filled blue"),
     "implant": ("Implant", "A screw symbol"),
     "rootCanal": ("Root canal", "Two red canal lines"),
@@ -113,6 +113,58 @@ MARK_LEGEND = {
 }
 
 CONDITION_WORDS = {"missing": "Missing / extracted", "impacted": "Impacted", "fractured": "Fractured"}
+
+# The tooth's own `conditions` list, as words. Mirrors CONDITION_GROUPS in
+# frontend/src/components/patient/dentalConstants.js — the four that live
+# elsewhere (impacted, fractured, missing, periapical abscess) are absent here
+# on purpose, because they are never written into this list. A test reads the
+# JS file and fails if the two drift apart.
+CLINICAL_CONDITION_WORDS = {
+    "caries": "Dental caries",
+    "pulpitis": "Pulpitis",
+    "pericoronitis": "Pericoronitis",
+    "root_canal_infection": "Root canal infection",
+    "erosion": "Erosion",
+    "attrition": "Attrition",
+    "abrasion": "Abrasion",
+    "abfraction": "Abfraction",
+    "bruxism": "Bruxism",
+    "dental_trauma": "Dental trauma",
+    "malocclusion": "Malocclusion",
+    "hyperdontia": "Hyperdontia",
+    "hypodontia": "Hypodontia / anodontia",
+    "fluorosis": "Dental fluorosis",
+    "enamel_hypoplasia": "Enamel hypoplasia",
+    "macro_microdontia": "Macrodontia / microdontia",
+    "gingivitis": "Gingivitis",
+    "periodontitis": "Periodontitis",
+    "gingival_recession": "Gingival recession",
+    "tooth_mobility": "Mobility",
+    "dentin_hypersensitivity": "Dentin hypersensitivity",
+    "intrinsic_discoloration": "Intrinsic discoloration",
+    "extrinsic_discoloration": "Extrinsic discoloration",
+    "root_resorption": "Root resorption",
+}
+
+
+def clinical_conditions(data: dict) -> list:
+    """A tooth's condition list as words, in the order recorded.
+
+    Unknown values are printed as written rather than dropped: a condition added
+    on the frontend before this map learned its name should still reach the
+    paper, spelled as its key, instead of silently vanishing from the record.
+    """
+    raw = data.get("conditions")
+    # A list or nothing. The chart is clinic-writable JSON, and iterating
+    # whatever is there would turn a stray 7 into a crash that costs the whole
+    # summary, and a bare string into a row of single letters.
+    if not isinstance(raw, (list, tuple)):
+        return []
+    out = []
+    for value in raw:
+        if isinstance(value, str) and value:
+            out.append(CLINICAL_CONDITION_WORDS.get(value, value.replace("_", " ")))
+    return out
 WORK_WORDS = {"existing": "Already present", "planned": "Planned"}
 TYPE_WORDS = {
     "filling": "Filling", "crown_porcelain": "Porcelain crown", "crown_gold": "Gold crown",
@@ -151,7 +203,9 @@ def _tooth_rows(chart: dict, tooth_notes: dict) -> str:
         if not isinstance(data, dict):
             continue
 
-        condition = CONDITION_WORDS.get(data.get("condition"), "")
+        condition = ", ".join(x for x in (
+            [CONDITION_WORDS.get(data.get("condition"), "")] + clinical_conditions(data)
+        ) if x)
         work = data.get("work")
         work_text = ""
         if work:

@@ -49,6 +49,7 @@ from domains.auth.routes import auth_clean as auth
 from domains.auth.routes import clinic_users, permissions, security
 from domains.clinic.routes import clinics, subscriptions
 from domains.finance.routes import payments_clean as payments, invoices, ledger, offers
+from domains.finance.routes import purchase_bills, petty_cash
 from domains.communication.routes import notifications, message_templates
 from domains.scheduling.routes import attendance, attendance_mobile, appointments, scheduling, appointment_stats
 from domains.medical.routes import reports, xray, medications
@@ -169,6 +170,33 @@ async def lifespan(app: FastAPI):
             conn.execute(text(
                 "ALTER TABLE patients ADD COLUMN IF NOT EXISTS primary_doctor_id INTEGER REFERENCES users(id)"
             ))
+
+            # Doctor qualifications and the patient photo (added 2026-09).
+            for _ddl in (
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS qualifications VARCHAR",
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS photo_url TEXT",
+                "ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS doctor_id INTEGER REFERENCES users(id)",
+            ):
+                conn.execute(text(_ddl))
+
+            # Accounts payable and petty cash (added 2026-09). The four
+            # tables themselves come from create_all; these are the columns
+            # bolted onto tables that already existed, which create_all will
+            # never add — per project_prod_migrations, deploy-aws.sh migrations
+            # do not reach prod, so the self-heal here is the only path.
+            for _ddl in (
+                "ALTER TABLE vendors ADD COLUMN IF NOT EXISTS payment_terms_days INTEGER",
+                "ALTER TABLE vendors ADD COLUMN IF NOT EXISTS credit_limit DOUBLE PRECISION",
+                "ALTER TABLE expenses ADD COLUMN IF NOT EXISTS from_petty_cash BOOLEAN DEFAULT FALSE NOT NULL",
+                "CREATE INDEX IF NOT EXISTS ix_purchase_bills_clinic_id ON purchase_bills (clinic_id)",
+                "CREATE INDEX IF NOT EXISTS ix_purchase_bills_due_date ON purchase_bills (due_date)",
+                "CREATE INDEX IF NOT EXISTS ix_purchase_bills_status ON purchase_bills (status)",
+                "CREATE INDEX IF NOT EXISTS ix_purchase_bill_payments_bill_id ON purchase_bill_payments (bill_id)",
+                "CREATE INDEX IF NOT EXISTS ix_petty_cash_entries_clinic_id ON petty_cash_entries (clinic_id)",
+                "CREATE INDEX IF NOT EXISTS ix_petty_cash_entries_occurred_on ON petty_cash_entries (occurred_on)",
+                "CREATE INDEX IF NOT EXISTS ix_petty_cash_closes_closed_on ON petty_cash_closes (closed_on)",
+            ):
+                conn.execute(text(_ddl))
 
             # case_costs gained these after the table already existed, so
             # create_all will not add them: it only creates tables it cannot
@@ -929,6 +957,10 @@ app.include_router(google_places_routes.router, prefix="/api/v1/google-places", 
 app.include_router(review_redirect.router, prefix="/r", tags=["review-redirect"])
 app.include_router(notification_center.router, prefix="/api/v1/notifications", tags=["notifications"])
 app.include_router(vendors.router, prefix="/api/v1/vendors", tags=["vendors"])
+# Accounts payable and the cash drawer. Both carry their own prefix, so they
+# mount at the API root rather than under a section.
+app.include_router(purchase_bills.router, prefix="/api/v1", tags=["purchase-bills"])
+app.include_router(petty_cash.router, prefix="/api/v1", tags=["petty-cash"])
 # Ledger BEFORE the item router so /inventory/transactions isn't parsed as /inventory/{item_id}
 app.include_router(inventory_transactions.router, prefix="/api/v1", tags=["inventory-transactions"])
 app.include_router(inventory.router, prefix="/api/v1/inventory", tags=["inventory"])

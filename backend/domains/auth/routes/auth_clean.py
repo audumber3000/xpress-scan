@@ -955,6 +955,11 @@ async def update_profile(
     if "phone" in data:
         phone = (data["phone"] or "").strip()
         updates["phone"] = phone or None
+    # Emptying the field is a real edit — a doctor who mistyped their letters
+    # must be able to clear them, so "" is stored as NULL rather than ignored.
+    if "qualifications" in data:
+        quals = (data["qualifications"] or "").strip()
+        updates["qualifications"] = quals or None
 
     if not updates:
         raise HTTPException(status_code=400, detail="No profile fields to update")
@@ -974,6 +979,7 @@ async def update_profile(
         "last_name": refreshed.last_name,
         "name": refreshed.name,
         "phone": refreshed.phone,
+        "qualifications": refreshed.qualifications,
     }
 
 

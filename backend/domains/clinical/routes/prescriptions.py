@@ -18,6 +18,78 @@ from models import Clinic, TemplateConfiguration
 
 router = APIRouter(prefix="/prescriptions", tags=["prescriptions"])
 
+from pydantic import BaseModel as _BaseModel
+
+
+class RenderPreviewIn(_BaseModel):
+    patient_id: int
+    items: list = []
+    notes: Optional[str] = None
+    prescription_id: Optional[int] = None
+
+
+@router.post("/render-preview")
+def render_prescription_preview(
+    payload: RenderPreviewIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The prescription as it will actually print, before it is saved.
+
+    The drawer's Preview used to be a hand-drawn React imitation of a
+    prescription: one fixed layout, a hardcoded tagline, and nothing to do with
+    the template the clinic had chosen. So a clinic on the Plain layout, or on
+    pre-printed letterhead, was shown a Classic prescription that looked nothing
+    like what then came out of the printer.
+
+    This renders through the same `render_prescription_html` the PDF uses, with
+    the clinic's saved template configuration, so the two cannot disagree. The
+    letterhead guide is added for screen only, exactly as in the Templates
+    editor, so the reserved band is visible here too.
+    """
+    from types import SimpleNamespace
+    from domains.infrastructure.routes.template_configs import _with_screen_page_box
+    from domains.infrastructure.services.pdf_fields import resolve_letterhead
+
+    patient = db.query(Patient).filter(
+        Patient.id == payload.patient_id, Patient.clinic_id == current_user.clinic_id,
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+    config = db.query(TemplateConfiguration).filter(
+        TemplateConfiguration.clinic_id == current_user.clinic_id,
+        TemplateConfiguration.category == 'prescription',
+    ).first()
+
+    # The doctor the printed copy would carry: whoever wrote an existing one,
+    # otherwise the person writing it now.
+    doctor = current_user
+    if payload.prescription_id:
+        rx = db.query(Prescription).filter(
+            Prescription.id == payload.prescription_id,
+            Prescription.clinic_id == current_user.clinic_id,
+        ).first()
+        if rx and rx.doctor_id:
+            doctor = db.query(User).filter(User.id == rx.doctor_id).first() or current_user
+
+    items = [SimpleNamespace(
+        medicine_name=str(i.get('medicine_name') or ''),
+        dosage=str(i.get('dosage') or ''),
+        duration=str(i.get('duration') or ''),
+        # The drawer sends numbers; the renderer prints strings.
+        quantity=str(i.get('quantity') or ''),
+        notes=str(i.get('notes') or ''),
+    ) for i in (payload.items or []) if isinstance(i, dict) and (i.get('medicine_name') or '').strip()]
+
+    html = PrescriptionService(db).render_prescription_html(
+        patient, clinic, SimpleNamespace(items=items, notes=payload.notes or ''),
+        config_override=config, doctor=doctor,
+    )
+    return {"html": _with_screen_page_box(html, resolve_letterhead(config))}
+
+
 @router.get("/patient/{patient_id}", response_model=List[PrescriptionOut])
 def get_patient_prescriptions(
     patient_id: int,
@@ -69,7 +141,10 @@ def create_prescription(
     db_prescription = Prescription(
         **payload,
         items=items_data,
-        clinic_id=current_user.clinic_id
+        clinic_id=current_user.clinic_id,
+        # Whoever is saving it is who wrote it — this route already requires a
+        # doctor or the owner, so that person is the prescriber.
+        doctor_id=current_user.id,
     )
     db.add(db_prescription)
     db.commit()

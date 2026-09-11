@@ -519,10 +519,21 @@ def generate_prescription_pdf(
     if not clinic:
         raise HTTPException(status_code=404, detail="Clinic not found")
 
+    # The clinic's chosen prescription layout. Without this the patient file
+    # printed Classic no matter what the Templates editor said, because this
+    # route never looked the configuration up — the download and WhatsApp
+    # routes did, which is why the same prescription came out two ways.
+    from models import TemplateConfiguration
+    config = db.query(TemplateConfiguration).filter(
+        TemplateConfiguration.clinic_id == current_user.clinic_id,
+        TemplateConfiguration.category == 'prescription',
+    ).first()
+
     try:
         service = PrescriptionService(db)
-        pdf_key, file_name = service.generate_prescription_pdf(patient, clinic, prescription_data, doctor=current_user)
-        signed_url = get_presigned_url(pdf_key)
+        pdf_key, file_name = service.generate_prescription_pdf(
+            patient, clinic, prescription_data, doctor=current_user, config=config)
+        signed_url = get_presigned_url(pdf_key) if pdf_key else None
 
         # Determine visit number from appointment if provided
         visit_num = None
@@ -545,7 +556,17 @@ def generate_prescription_pdf(
         db.commit()
         db.refresh(rx)
 
+        # Saved either way. When the document could not be stored the caller is
+        # told so plainly rather than being handed a URL that opens a blank tab.
+        if not pdf_key:
+            raise HTTPException(
+                status_code=502,
+                detail="The prescription was saved, but its PDF could not be stored. "
+                       "Open it from the patient's file to try again.",
+            )
         return PrescriptionPDFResponseDTO(pdf_url=signed_url, file_name=file_name)
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error in generate_prescription_pdf: {e}")
         raise HTTPException(status_code=500, detail=str(e))

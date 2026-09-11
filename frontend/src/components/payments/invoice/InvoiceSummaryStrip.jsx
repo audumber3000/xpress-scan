@@ -6,17 +6,22 @@ import InvoicePaymentSummary from './InvoicePaymentSummary';
 /**
  * Who, how, and where it stands — one band across the top of the bill.
  *
- * Three cells in one bordered card divided by hairlines, rather than three
- * cards. This is the strip a paper invoice carries above its line items, and
- * running it full width lets the document below it be a document: table, totals,
- * note. The previous two-column split put the figures on one side and the goods
- * on the other, which reads like a dashboard, not a bill.
+ * Three cells divided by hairlines, with no box around them. This is the strip
+ * a paper invoice carries above its line items, and running it full width lets
+ * the document below it be a document: table, totals, note. The previous
+ * two-column split put the figures on one side and the goods on the other,
+ * which reads like a dashboard, not a bill.
+ *
+ * The box went too. The dividers already separate the three cells, and a border
+ * around them as well was a frame around a frame — it made the strip compete
+ * with the line-items card below, which is the one thing on this screen that
+ * genuinely is a container.
  */
 const InvoiceSummaryStrip = ({ invoice, onRecordPayment, onSendReminder, sendingReminder }) => {
   if (!invoice) return null;
 
   return (
-    <div className="rounded-lg border border-gray-200 p-3.5 sm:p-4 mb-4">
+    <div className="py-1 mb-5">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-0 md:divide-x md:divide-gray-100">
         <div className="md:pr-4">
           <InvoiceBillTo invoice={invoice} />

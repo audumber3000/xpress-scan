@@ -16,8 +16,11 @@ Layout uses tables and `display: flex` with explicit margins where needed.
 import datetime
 
 from domains.infrastructure.services.pdf_safety import safe_color, safe_signature_data_uri, safe_text
+from domains.finance.invoice_templates._common import qualifications_line
 from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
-from domains.infrastructure.services.pdf_fields import resolve_field_visibility
+from domains.infrastructure.services.pdf_fields import (
+    apply_letterhead, page_css, resolve_field_visibility, resolve_letterhead,
+)
 from domains.finance.invoice_templates.discount_block import render_discount_block
 
 
@@ -29,6 +32,11 @@ def render_invoice(invoice, clinic, config=None) -> str:
     )
     # Flags default to shown and can only hide — see pdf_fields.
     vis = resolve_field_visibility(config)
+    # Printing onto the clinic's own headed paper: reserve the four margins
+    # their stationery prints in, and drop our copy of the branding the sheet
+    # already carries. Off unless configured.
+    letterhead = resolve_letterhead(config)
+    vis = apply_letterhead(vis, letterhead)
 
     footer_text = safe_text((config.footer_text if config and config.footer_text else '') if config else '') if vis.footer else ''
 
@@ -48,7 +56,7 @@ def render_invoice(invoice, clinic, config=None) -> str:
             f'font-weight:700;font-size:14px;letter-spacing:0.5px;border-radius:6px;">{initials}</div>'
         )
 
-    c_name    = safe_text(clinic.name    if clinic else 'Dental Clinic')
+    c_name    = safe_text((clinic.name if clinic else 'Dental Clinic') if vis.clinic_name else '')
     c_phone   = safe_text(clinic.phone   if clinic and clinic.phone   and vis.contact else '')
     c_email   = safe_text(clinic.email   if clinic and clinic.email   and vis.contact else '')
     c_address = safe_text(clinic.address if clinic and clinic.address and vis.address else '')
@@ -75,6 +83,8 @@ def render_invoice(invoice, clinic, config=None) -> str:
     # Doctor from appointment + their signature (Phase 5)
     doctor_name = c_doctor
     doctor_signature = ''
+    # Letters after the name, travelling with whichever doctor was resolved.
+    doctor_qualifications = safe_text(getattr(clinic, 'doctor_qualifications', '') or '')
     try:
         appt = getattr(invoice, 'appointment', None)
         if appt:
@@ -82,9 +92,26 @@ def render_invoice(invoice, clinic, config=None) -> str:
             if doc:
                 doctor_name = safe_text(getattr(doc, 'name', '') or doctor_name)
                 doctor_signature = safe_signature_data_uri(getattr(doc, 'signature_url', None))
+                doctor_qualifications = safe_text(getattr(doc, 'qualifications', '') or '')
     except Exception:
         pass
 
+
+    # The per-field switches. Applied after the lookups above so the resolution
+    # logic is unchanged and only the printing is suppressed — and applied here
+    # rather than at each use so there is one place to read.
+    if not vis.doctor_name:
+        doctor_name = ''
+    # Hiding the name hides the letters with it: "BDS, MDS" under no name at
+    # all is not a thing anybody asked for.
+    if not vis.doctor_qualifications or not doctor_name:
+        doctor_qualifications = ''
+    if not vis.patient_contact:
+        p_phone = ''
+    if not vis.patient_age_gender:
+        p_age = p_gender = ''
+    if not vis.logo:
+        logo_html = ''
     created_at   = getattr(invoice, 'created_at', None)
     invoice_date = created_at.strftime('%d %b %Y') if created_at else datetime.date.today().strftime('%d %b %Y')
 
@@ -108,6 +135,10 @@ def render_invoice(invoice, clinic, config=None) -> str:
     )
 
     who_line = ' · '.join(filter(None, [doctor_name, c_tagline, c_address]))
+    # Not joined into `who_line`: that row is a single run of grey text, and
+    # the letters are meant to sit under the name rather than beside the
+    # address separated by a middot.
+    quals_html = qualifications_line(doctor_qualifications)
     contact_line = '  ·  '.join(filter(None, [
         f'Tel: {c_phone}' if c_phone else '', c_email,
     ]))
@@ -148,10 +179,27 @@ def render_invoice(invoice, clinic, config=None) -> str:
         cgst_row = f'<tr><td>Tax</td><td>{currency} {inv_tax:,.2f}</td></tr>' if inv_tax > 0 else ''
         sgst_row = ''
 
+    # The page box, and our own letterhead.
+    #
+    # On pre-printed stationery the whole brand block comes off — the sheet
+    # already carries the clinic name, logo and contact details — while the
+    # invoice number and date stay, because those belong to this document.
+    page_rule = page_css(letterhead)
+    brand_html = '' if letterhead.enabled else f'''    <div class="brand">
+      {logo_html}
+      <div class="meta">
+        {f'<div class="name">{c_name}</div>' if c_name else ''}
+        {(f'<div class="sub">{who_line}</div>' if who_line else '') + quals_html}
+        {f'<div class="sub">{contact_line}</div>' if contact_line else ''}
+        {f'<div class="sub">{tax_reg_label}: {c_gst}</div>' if c_gst else ''}
+        {f'<div class="sub">Reg No: {c_reg}</div>' if c_reg else ''}
+      </div>
+    </div>'''
+
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
 <style>
-@page {{ size: A4; margin: 2mm; }}
+{page_rule}
 :root {{
   --accent: {primary_color};
   --ink: #111827;
@@ -311,16 +359,7 @@ body {{
 
   <!-- LETTERHEAD -->
   <div class="head">
-    <div class="brand">
-      {logo_html}
-      <div class="meta">
-        <div class="name">{c_name}</div>
-        {f'<div class="sub">{who_line}</div>' if who_line else ''}
-        {f'<div class="sub">{contact_line}</div>' if contact_line else ''}
-        {f'<div class="sub">{tax_reg_label}: {c_gst}</div>' if c_gst else ''}
-        {f'<div class="sub">Reg No: {c_reg}</div>' if c_reg else ''}
-      </div>
-    </div>
+{brand_html}
     <div class="invoice-meta">
       <div class="label">Invoice</div>
       <div class="number">{invoice_number}</div>

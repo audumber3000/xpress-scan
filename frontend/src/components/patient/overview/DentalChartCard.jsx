@@ -14,9 +14,20 @@ const DentalChartCard = ({ teethData, onOpen }) => {
   // Adult vs child is the doctor's call, not something to infer from an age
   // that is often missing or wrong on an imported row.
   const [dentition, setDentition] = useState('adult');
-  const marked = Object.entries(teethData || {}).filter(
-    ([, t]) => t && t.status && t.status !== 'present'
-  );
+  // Anything recorded on a tooth, not just a change to how it is drawn. This
+  // used to count only a non-"present" status, so a patient with pulpitis on
+  // 46, or caries on three surfaces, was told "Nothing marked on this chart yet"
+  // — an empty-state that was simply false.
+  const marked = Object.entries(teethData || {}).filter(([, t]) => {
+    if (!t || typeof t !== 'object') return false;
+    if (t.status && t.status !== 'present') return true;
+    if (t.condition && t.condition !== 'sound') return true;
+    if (t.work) return true;
+    if (Array.isArray(t.conditions) && t.conditions.length) return true;
+    if (Array.isArray(t.findings) && t.findings.length) return true;
+    if (Array.isArray(t.marks) && t.marks.length) return true;
+    return Object.values(t.surfaces || {}).some((v) => v && v !== 'none');
+  });
 
   return (
     <OverviewCard

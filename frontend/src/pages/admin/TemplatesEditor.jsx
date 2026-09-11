@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Save, FileText, Stethoscope, ClipboardCheck, X, Eye,
-  ChevronDown, ChevronUp, Loader2, Check, LayoutTemplate, ExternalLink,
+  ChevronDown, ChevronUp, Loader2, Check, LayoutTemplate, ExternalLink, Printer,
+  AlertTriangle,
 } from 'lucide-react';
 import { notify } from '../../utils/notify';
 import { api } from '../../utils/api';
+import { printLetterheadRuler } from '../../utils/letterheadRuler';
 
 const TABS = [
   { id: 'invoice',      label: 'Invoices',      icon: FileText },
@@ -18,17 +20,50 @@ const TABS = [
 const ALL_SHOWN = {
   tax_number: true, contact: true, license_number: true, address: true,
   tagline: true, footer: true, signature: true, discount: true,
+  logo: true, doctor_name: true, patient_contact: true,
+  patient_age_gender: true, amount_in_words: true, computer_generated_note: true,
+  clinic_name: true, doctor_qualifications: true,
 };
 
+// Printing onto the clinic's own headed paper. Off unless they say otherwise —
+// a clinic that has never opened this screen must keep the document it has.
+const LETTERHEAD_OFF = {
+  enabled: false, top_mm: 45, bottom_mm: 20, left_mm: 15, right_mm: 15,
+};
+
+// A4, and the ceiling on a single edge. The limit that matters is the pair —
+// top plus bottom, left plus right, have to leave a strip worth printing on —
+// and the server enforces that where both halves are known. This is only here
+// so a slipped keypress cannot put 4500 in the box.
+// A4 at the CSS reference resolution of 96dpi: 210mm and 297mm exactly. The
+// preview iframe is laid out at this size so millimetres inside it are real,
+// then scaled down to whatever room the pane has.
+const A4_PX_W = Math.round((210 / 25.4) * 96);
+const A4_PX_H = Math.round((297 / 25.4) * 96);
+
+const MAX_OFFSET_MM = 250;
+const PAGE_W_MM = 210;
+const PAGE_H_MM = 297;
+const MIN_CONTENT_MM = 25;
+
+// The four edges, in the order somebody reads them off a sheet of paper.
+const EDGES = [
+  { key: 'top_mm', label: 'Top' },
+  { key: 'bottom_mm', label: 'Bottom' },
+  { key: 'left_mm', label: 'Left' },
+  { key: 'right_mm', label: 'Right' },
+];
+
 const DEFAULT_CONFIGS = {
-  invoice:      { template_id: 'classic', logo_url: '', primary_color: '#FF9800', footer_text: '', show: { ...ALL_SHOWN } },
-  prescription: { template_id: 'classic', logo_url: '', primary_color: '#2a276e', footer_text: '', show: { ...ALL_SHOWN } },
-  consent:      { template_id: 'classic', logo_url: '', primary_color: '#2a276e', footer_text: '', show: { ...ALL_SHOWN } },
+  invoice:      { template_id: 'classic', logo_url: '', primary_color: '#FF9800', footer_text: '', show: { ...ALL_SHOWN }, letterhead: { ...LETTERHEAD_OFF } },
+  prescription: { template_id: 'classic', logo_url: '', primary_color: '#2a276e', footer_text: '', show: { ...ALL_SHOWN }, letterhead: { ...LETTERHEAD_OFF } },
+  consent:      { template_id: 'classic', logo_url: '', primary_color: '#2a276e', footer_text: '', show: { ...ALL_SHOWN }, letterhead: { ...LETTERHEAD_OFF } },
 };
 
 // Which switches make sense on which document. Tax and discount are invoice
 // concepts — a prescription has no total to discount and no tax to declare.
 const FIELD_ROWS = [
+  { key: 'clinic_name',    label: 'Clinic name',        hint: 'The name at the top of the document' },
   { key: 'tagline',        label: 'Tagline',            hint: 'The line under your clinic name', settingsLink: true },
   { key: 'address',        label: 'Address',            hint: 'Clinic street address' },
   { key: 'contact',        label: 'Phone & email',      hint: 'Contact details in the letterhead' },
@@ -37,6 +72,13 @@ const FIELD_ROWS = [
   { key: 'signature',      label: 'Signature block',    hint: 'The authorised-signatory line', signatureLink: true },
   { key: 'footer',         label: 'Footer text',        hint: 'The disclaimer set below' },
   { key: 'discount',       label: 'Discount on invoice', hint: 'Hidden discounts are netted into the subtotal', only: ['invoice'] },
+  { key: 'logo',           label: 'Logo',               hint: 'Your clinic logo at the top' },
+  { key: 'doctor_name',    label: "Doctor's name",      hint: 'The treating doctor on this document' },
+  { key: 'doctor_qualifications', label: 'Doctor\'s qualifications', hint: 'The letters under the name, e.g. BDS, MDS', profileLink: true },
+  { key: 'patient_contact', label: 'Patient phone & address', hint: 'Useful on a bill, less so on a handout' },
+  { key: 'patient_age_gender', label: 'Patient age & sex', hint: 'The age / sex line under the name' },
+  { key: 'amount_in_words', label: 'Amount in words',   hint: '"Rupees four thousand only"', only: ['invoice'] },
+  { key: 'computer_generated_note', label: 'Computer-generated note', hint: 'The "does not require a signature" line', only: ['invoice'] },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -77,6 +119,27 @@ const TemplatesEditor = () => {
   const [saving, setSaving] = useState(false);
   const [previewHtml, setPreviewHtml] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
+  // A failed refresh used to leave the last good document on screen with only a
+  // console warning. That reads as "the toggle did nothing" — the pane is the
+  // only feedback this screen has, so a stale render is worse than an error.
+  const [previewError, setPreviewError] = useState('');
+  // How far the A4 page has to shrink to fit the pane. Measured rather than
+  // assumed: the pane is fluid, and a fixed guess would either clip the page or
+  // leave a gap beside it.
+  const previewBoxRef = useRef(null);
+  const [previewScale, setPreviewScale] = useState(1);
+  useEffect(() => {
+    const box = previewBoxRef.current;
+    if (!box || typeof ResizeObserver === 'undefined') return undefined;
+    const measure = () => {
+      const w = box.clientWidth;
+      if (w > 0) setPreviewScale(w / A4_PX_W);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [previewHtml]);
   const [lastSavedAt, setLastSavedAt] = useState(null);
   const [variants, setVariants] = useState({ invoice: [], prescription: [], consent: [] });
   const [taxLabel, setTaxLabel] = useState('GST No.'); // clinic's country-specific tax label
@@ -134,6 +197,7 @@ const TemplatesEditor = () => {
             // Absent keys stay shown, so a toggle added later doesn't
             // retroactively hide itself for clinics who saved before it existed.
             show: { ...ALL_SHOWN, ...(c.config_json?.show || {}) },
+            letterhead: { ...LETTERHEAD_OFF, ...(c.config_json?.letterhead || {}) },
           };
         }
       });
@@ -167,6 +231,14 @@ const TemplatesEditor = () => {
   // ── Debounced preview refresh (350 ms) ─────────────────────────────────────
   // Cancellable via the closure flag so a slow earlier request can't overwrite
   // a newer one (very common when the user drags the colour picker).
+  //
+  // `show` and `letterhead` are objects rebuilt on every render, so depending on
+  // them by reference would refetch the preview on every keystroke. Their
+  // serialised form is the real dependency — and reading it back inside the
+  // effect, rather than closing over the objects, is what lets the exhaustive
+  // deps rule verify this instead of being told to ignore it.
+  const showKey = JSON.stringify(cfg.show ?? {});
+  const letterheadKey = JSON.stringify(cfg.letterhead ?? {});
   useEffect(() => {
     if (loading) return;
     let cancelled = false;
@@ -179,20 +251,24 @@ const TemplatesEditor = () => {
           primary_color: cfg.primary_color,
           footer_text: cfg.footer_text,
           logo_url: cfg.logo_url || null,
-          config_json: { show: cfg.show },
+          config_json: { show: JSON.parse(showKey), letterhead: JSON.parse(letterheadKey) },
         });
-        if (!cancelled && data?.html) setPreviewHtml(data.html);
+        if (!cancelled && data?.html) {
+          setPreviewHtml(data.html);
+          setPreviewError('');
+        }
       } catch (err) {
-        if (!cancelled) console.warn('[TemplatesEditor] preview failed', err?.message);
+        if (!cancelled) {
+          console.warn('[TemplatesEditor] preview failed', err?.message);
+          setPreviewError(err?.message || 'Could not refresh the preview.');
+        }
       } finally {
         if (!cancelled) setPreviewLoading(false);
       }
     }, 350);
     return () => { cancelled = true; clearTimeout(handle); };
-    // `show` is stringified into the dep list: it's a new object each render,
-    // so comparing by reference would refetch the preview on every keystroke.
   }, [activeTab, cfg.template_id, cfg.primary_color, cfg.footer_text, cfg.logo_url,
-      JSON.stringify(cfg.show), loading]);
+      showKey, letterheadKey, loading]);
 
   // ── Mutators ────────────────────────────────────────────────────────────────
   const updateField = (field, value) => {
@@ -217,7 +293,7 @@ const TemplatesEditor = () => {
         logo_url:      null,
         primary_color: cfg.primary_color,
         footer_text:   cfg.footer_text,
-        config_json:   { show: cfg.show },
+        config_json:   { show: cfg.show, letterhead: cfg.letterhead },
       });
       // The old code also PATCHed /clinics/me here to mirror the GST number.
       // That route doesn't exist — it 405'd into a swallowed catch, so the GST
@@ -423,6 +499,15 @@ const TemplatesEditor = () => {
                               Upload your signature <ExternalLink size={10} />
                             </button>
                           )}
+                          {f.profileLink && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.preventDefault(); navigate('/doctor-profile'); }}
+                              className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-[#29828a] hover:underline"
+                            >
+                              Set them on your profile <ExternalLink size={10} />
+                            </button>
+                          )}
                         </span>
                       </label>
                     ))}
@@ -433,6 +518,101 @@ const TemplatesEditor = () => {
                       Payment receipts follow these same settings, so a field hidden on the
                       bill stays hidden on the receipt for that payment.
                     </p>
+                  )}
+                </Section>
+
+                {/* Pre-printed letterhead.
+                    Plenty of clinics already own headed paper and want our
+                    documents printed onto it. Their stationery is not just a
+                    band across the top: the sheet that prompted this has a
+                    services list down the left margin and a vitals box down the
+                    right, so all four edges are measured independently. */}
+                <Section title="Pre-printed letterhead" defaultOpen={false}>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!cfg.letterhead?.enabled}
+                      onChange={() => updateField('letterhead', {
+                        ...cfg.letterhead, enabled: !cfg.letterhead?.enabled,
+                      })}
+                      className="mt-0.5 w-4 h-4 accent-[#29828a]"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-gray-800">
+                        I print on my own letterhead
+                      </span>
+                      <span className="block text-xs text-gray-500 mt-0.5">
+                        Your clinic name, logo, address and footer come off the document,
+                        because the paper already carries them.
+                      </span>
+                    </span>
+                  </label>
+
+                  {cfg.letterhead?.enabled && (
+                    <div className="mt-4 space-y-4">
+                      <div>
+                        <FieldLabel>Blank space to leave, in millimetres</FieldLabel>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1">
+                          {EDGES.map(({ key, label }) => (
+                            <div key={key}>
+                              <label className="block text-[11px] text-gray-500 mb-1">{label}</label>
+                              <input
+                                type="number" min={0} max={MAX_OFFSET_MM}
+                                value={cfg.letterhead?.[key] ?? 0}
+                                onChange={(e) => updateField('letterhead', {
+                                  ...cfg.letterhead,
+                                  [key]: Math.max(0, Math.min(MAX_OFFSET_MM, Number(e.target.value) || 0)),
+                                })}
+                                className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded-md text-sm focus:border-[#29828a] focus:ring-1 focus:ring-[#29828a] outline-none"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        {/* Said here rather than discovered on paper. The server
+                            scales an impossible pair back in proportion, so the
+                            document still prints — but a clinic should be told
+                            the numbers it typed are not the ones being used. */}
+                        {(() => {
+                          const lh = cfg.letterhead || {};
+                          const h = (lh.top_mm || 0) + (lh.bottom_mm || 0);
+                          const w = (lh.left_mm || 0) + (lh.right_mm || 0);
+                          const tall = h > PAGE_H_MM - MIN_CONTENT_MM;
+                          const wide = w > PAGE_W_MM - MIN_CONTENT_MM;
+                          if (!tall && !wide) {
+                            return (
+                              <p className="mt-1.5 text-[11px] text-gray-400">
+                                Leaves {PAGE_W_MM - w} × {PAGE_H_MM - h}mm to print on.
+                              </p>
+                            );
+                          }
+                          return (
+                            <p className="mt-1.5 text-[11px] font-semibold text-amber-700">
+                              {tall && wide ? 'Those offsets leave no room'
+                                : tall ? 'Top and bottom leave no room'
+                                  : 'Left and right leave no room'}
+                              {' '}on an A4 sheet, so they will be scaled back to fit.
+                            </p>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Nobody can guess "45mm". Without this, setting it up is
+                          trial and error at one sheet of headed paper per go. */}
+                      <div className="rounded-lg border border-[#29828a]/20 bg-[#29828a]/5 p-3">
+                        <p className="text-xs text-gray-700 leading-relaxed">
+                          <strong>Not sure of the numbers?</strong> Print the test sheet on a
+                          blank page, hold it against your letterhead, and read off how much
+                          space each edge needs.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={printLetterheadRuler}
+                          className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#29828a] hover:bg-[#216b71] text-white text-xs font-semibold"
+                        >
+                          <Printer size={13} /> Print test sheet
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </Section>
 
@@ -467,16 +647,44 @@ const TemplatesEditor = () => {
                 <span>Refreshing…</span>
               </div>
             )}
+            {!previewLoading && previewError && (
+              <div className="flex items-center gap-2 text-xs font-semibold text-amber-700">
+                <AlertTriangle size={12} />
+                <span>Preview is out of date. Reload the page and sign in again.</span>
+              </div>
+            )}
           </div>
           <div className="p-4 sm:p-6 flex justify-center">
-            <div className="w-full max-w-[820px] bg-white shadow-lg rounded-md overflow-hidden border border-gray-200" style={{ aspectRatio: '210 / 297' }}>
+            <div
+              ref={previewBoxRef}
+              className="w-full max-w-[820px] bg-white shadow-lg rounded-md overflow-hidden border border-gray-200"
+              style={{ aspectRatio: '210 / 297' }}
+            >
               {previewHtml ? (
+                /* Rendered at a literal A4 in CSS pixels and then scaled to fit,
+                   rather than stretched to whatever the pane happens to be.
+                   The document is measured in millimetres — the letterhead band
+                   most of all — and a millimetre only means a millimetre if the
+                   page it sits on is A4-sized. Stretching instead of scaling is
+                   how a 45mm offset came out looking like 38. */
                 <iframe
                   title="Template preview"
                   srcDoc={previewHtml}
-                  className="w-full h-full border-0"
+                  className={`border-0 ${previewError ? 'opacity-40' : ''}`}
+                  style={{
+                    width: `${A4_PX_W}px`,
+                    height: `${A4_PX_H}px`,
+                    transform: `scale(${previewScale})`,
+                    transformOrigin: 'top left',
+                  }}
                   sandbox="allow-same-origin"
                 />
+              ) : previewError ? (
+                <div className="flex flex-col items-center justify-center h-full gap-2 px-6 text-center">
+                  <AlertTriangle size={20} className="text-amber-600" />
+                  <span className="text-sm font-semibold text-gray-700">Could not build the preview</span>
+                  <span className="text-xs text-gray-500">{previewError}</span>
+                </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full gap-3 text-gray-400">
                   <Loader2 size={20} className="animate-spin" />

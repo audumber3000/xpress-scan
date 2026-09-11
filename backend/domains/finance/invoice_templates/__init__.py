@@ -11,10 +11,22 @@ To add a new variant:
 2. Register it in `INVOICE_VARIANTS` below with name, description, and thumbnail path.
 3. Add a golden test in `tests/domains/finance/`.
 """
-from domains.finance.invoice_templates import classic, modern, banded, bold, mono, corporate
+from domains.finance.invoice_templates import (
+    classic, modern, banded, bold, mono, corporate, plain,
+)
 
 
 INVOICE_VARIANTS = {
+    # First in the list on purpose: a clinic that prints on its own headed paper
+    # is better served by a layout with no clinic header than by a decorated one
+    # with the header switched off.
+    'plain': {
+        'id': 'plain',
+        'name': 'Plain (for letterhead)',
+        'description': 'No clinic header, logo or colour at all — just the patient, the treatments and the total. Built for printing onto your own pre-printed letterhead.',
+        'thumbnail': '/static/template-thumbnails/invoice-plain.png',
+        'render': plain.render_invoice,
+    },
     'classic': {
         'id': 'classic',
         'name': 'Classic',

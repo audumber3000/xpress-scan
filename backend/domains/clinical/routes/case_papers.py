@@ -308,7 +308,7 @@ async def visit_summary_pdf(paper_id: int, db: Session = Depends(get_db),
     )
 
 
-def _treatment_plan_pdf(db: Session, cp) -> bytes:
+def _treatment_plan_pdf(db: Session, cp, chart_svg: str = "") -> bytes:
     import os
     from models import Clinic, User as U
     from domains.clinical.treatment_plan_pdf import render_treatment_plan
@@ -320,6 +320,8 @@ def _treatment_plan_pdf(db: Session, cp) -> bytes:
         cp, clinic, cp.patient,
         dentist.name if dentist else "",
         getattr(clinic, "currency_symbol", None) or "₹",
+        chart_svg=chart_svg,
+        dentist=dentist,
     )
     path = html_template_to_pdf(html)
     try:
@@ -345,6 +347,9 @@ async def treatment_plan_pdf(paper_id: int, db: Session = Depends(get_db),
     and needs a template approved before it delivers anything, so it would work
     for some clinics and silently fail for the rest. The frontend downloads this
     and opens WhatsApp for the clinic to attach it themselves.
+
+    This one has no chart image. The POST twin further down carries the chart
+    the browser is drawing; it lives below _safe_svg because it needs it.
     """
     cp = _load_paper(db, paper_id, current_user)
     return Response(
@@ -394,6 +399,7 @@ def _notes_input(cp, prescriptions) -> str:
     import json
     from domains.clinical.clinical_summary_pdf import (
         _as_list, _json_obj, CONDITION_WORDS, WORK_WORDS, TYPE_WORDS,
+        clinical_conditions,
     )
     from domains.clinical.tooth_notation import universal_to_fdi, format_surfaces
 
@@ -410,6 +416,9 @@ def _notes_input(cp, prescriptions) -> str:
         entry = {
             "tooth_fdi": universal_to_fdi(key),
             "condition": CONDITION_WORDS.get(data.get("condition")),
+            # What the tooth has. Without it the note-writer, which is told to
+            # use only what is recorded, would list these as omitted.
+            "conditions": clinical_conditions(data) or None,
             "work": (f"{TYPE_WORDS.get(data.get('workType'), 'work')} "
                      f"({WORK_WORDS.get(data.get('work'), '')})") if data.get("work") else None,
             "surfaces": format_surfaces(key, marked) or None,
@@ -611,6 +620,25 @@ async def clinical_summary_pdf(paper_id: int, payload: ClinicalSummaryRequest,
         content=_clinical_summary_pdf(db, cp, _safe_svg(payload.chart_svg or "")),
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="Clinical_summary_{paper_id}.pdf"'},
+    )
+
+
+@router.post("/{paper_id}/treatment-plan-pdf")
+async def treatment_plan_pdf_with_chart(paper_id: int, payload: ClinicalSummaryRequest,
+                                        db: Session = Depends(get_db),
+                                        current_user=Depends(get_current_user)):
+    """The treatment plan with the dental chart drawn on it.
+
+    The same document as the GET above, plus the chart the browser is showing,
+    for the same reason the clinical summary takes it that way. The GET stays
+    for anything that cannot send a chart; its plan still lists every finding
+    in words.
+    """
+    cp = _load_paper(db, paper_id, current_user)
+    return Response(
+        content=_treatment_plan_pdf(db, cp, _safe_svg(payload.chart_svg or "")),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="Treatment_plan_{paper_id}.pdf"'},
     )
 
 

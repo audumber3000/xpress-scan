@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Prescription</title>
+<style>
+{{page_rule}}{{letterhead_css}}
+/* Plain prescription, for printing onto pre-printed letterhead.
+
+   The other four variants each draw the clinic: a name set large, tinted side
+   panels, a footer bar with the address. On a clinic's own headed paper that is
+   all printed already, so this layout simply has no clinic header to suppress.
+   What remains is what the paper cannot carry — who the patient is, what was
+   prescribed, and a line to sign.
+
+   It stays plain with letterhead mode off too: choosing this layout is choosing
+   an unbranded sheet, so the branding must not quietly reappear. */
+body {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  margin: 0; padding: 0; color: #111827; font-size: 12px;
+  line-height: 1.5; background: #fff;
+}
+.page { padding: 15mm; }
+.top { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+.top td { vertical-align: top; }
+.doc-name { font-size: 13px; font-weight: 700; color: #111827; }
+.rx {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 30px; font-weight: 700; color: #111827;
+  line-height: 1; margin: 4px 0 12px;
+}
+table.pt {
+  width: 100%; border-collapse: collapse; margin-bottom: 16px;
+  border-top: 1px solid #111827; border-bottom: 1px solid #d1d5db;
+}
+table.pt td { padding: 7px 10px 7px 0; font-size: 11px; vertical-align: top; }
+table.pt .lbl {
+  width: 78px; color: #6B7280; font-size: 9.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .4px;
+}
+table.pt .val { color: #111827; }
+table.pt .val.nm { font-size: 14px; font-weight: 700; }
+table.meds { width: 100%; border-collapse: collapse; margin-top: 4px; }
+table.meds th {
+  border-bottom: 1px solid #111827; padding: 6px 8px; font-size: 9.5px;
+  font-weight: 700; text-transform: uppercase; letter-spacing: .4px; text-align: left;
+}
+table.meds td { border-bottom: 1px solid #e5e7eb; padding: 7px 8px; font-size: 11.5px; }
+table.meds td:first-child { width: 26px; color: #6B7280; }
+table.meds .text-left { text-align: left; }
+.med-name { font-weight: 600; }
+.med-composition { color: #6B7280; font-size: 10px; margin-left: 4px; }
+.notes-section, .advice-section { margin-top: 16px; font-size: 11px; }
+.notes-section h4, .advice-section h4 {
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .4px; color: #6B7280; margin: 0 0 4px;
+}
+.advice-section ul { margin: 0; padding-left: 16px; }
+.advice-section li { margin-bottom: 2px; }
+.follow-up { margin-top: 16px; font-size: 11px; font-weight: 600; color: #111827; }
+.foot { width: 100%; border-collapse: collapse; margin-top: 34px; }
+.foot td { vertical-align: bottom; }
+.signature-box { text-align: right; }
+.signature-line {
+  border-top: 1px solid #9aa3ad; padding-top: 4px; margin-top: 34px;
+  display: inline-block; min-width: 160px; font-size: 10.5px; color: #374151;
+}
+.signature-clinic { margin: 3px 0 0; font-size: 10px; color: #6B7280; }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- No clinic header by design: this layout exists for paper that already
+       carries one. Only the prescribing doctor's name appears, and only when
+       the clinic has left that toggle on. -->
+  <table class="top"><tr>
+    <td><div class="rx">R<span style="font-size:20px;">x</span></div></td>
+    <td style="text-align:right;">{{doctor_name_html}}</td>
+  </tr></table>
+
+  <table class="pt">
+    <tr>
+      <td class="lbl">Patient</td>
+      <td class="val nm" colspan="3">{{patient_name}}</td>
+    </tr>
+    <tr>
+      <td class="lbl">Age / Sex</td><td class="val" style="width:30%;">{{patient_age_sex}}</td>
+      <td class="lbl">Date</td><td class="val">{{current_date}}</td>
+    </tr>
+    <tr>
+      <td class="lbl">Patient ID</td><td class="val">{{patient_id}}</td>
+      <td class="lbl">Contact</td><td class="val">{{patient_phone}}</td>
+    </tr>
+  </table>
+
+  {{clinical_notes_html}}
+
+  <table class="meds">
+    <thead>
+      <tr>
+        <th style="width:26px;">#</th>
+        <th>Medicine</th>
+        <th style="width:90px;">Dosage</th>
+        <th style="width:90px;">Duration</th>
+        <th style="width:110px;">Instructions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{prescription_items}}
+    </tbody>
+  </table>
+
+  {{advice_html}}
+
+  <div class="follow-up">{{follow_up_html}}</div>
+
+  <table class="foot"><tr>
+    <td></td>
+    <td style="width:220px;">{{signature_box_html}}</td>
+  </tr></table>
+
+  {{footer_text_html}}
+
+</div>
+</body>
+</html>

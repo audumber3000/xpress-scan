@@ -2,7 +2,10 @@ import React, { useState } from 'react';
 import { X, Download } from 'lucide-react';
 import WhatsAppIcon from '../../common/WhatsAppIcon';
 import Spinner from '../../common/Spinner';
-import { downloadAuthedFile, shareTreatmentPlanManually } from '../../../utils/whatsapp';
+import {
+  fetchTreatmentPlanPdf, saveBlob, shareTreatmentPlanManually, treatmentPlanFilename,
+} from '../../../utils/whatsapp';
+import { serialiseChartSvg } from '../chartSvg';
 import { getCurrencySymbol } from '../../../utils/currency';
 import { notify } from '../../../utils/notify';
 import { planTotal, isCompleted } from './planUtils';
@@ -78,9 +81,9 @@ const SharePlanModal = ({ open, onClose, casePaper, patient, user, treatmentPlan
             disabled={busy !== null}
             onClick={() => run(
               'download',
-              () => downloadAuthedFile(
-                `/clinical/case-papers/${casePaper.id}/treatment-plan-pdf`,
-                `treatment_plan_${casePaper.id}.pdf`
+              async () => saveBlob(
+                await fetchTreatmentPlanPdf(casePaper, serialiseChartSvg()),
+                treatmentPlanFilename(casePaper)
               ),
               'Treatment plan downloaded'
             )}
@@ -100,7 +103,7 @@ const SharePlanModal = ({ open, onClose, casePaper, patient, user, treatmentPlan
             disabled={busy !== null || !hasPhone}
             onClick={() => run(
               'whatsapp',
-              () => shareTreatmentPlanManually(casePaper, patient, user),
+              () => shareTreatmentPlanManually(casePaper, patient, user, serialiseChartSvg()),
               null
             )}
             className={`${ACTION} bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300`}
@@ -119,9 +122,10 @@ const SharePlanModal = ({ open, onClose, casePaper, patient, user, treatmentPlan
           </button>
 
           <p className="pt-2 text-[11px] leading-relaxed text-gray-400">
-            The plan goes out as an estimate, not a bill. If you want something the
-            patient can formally accept or decline, build a quotation from this
-            patient's Billing tab instead.
+            The PDF carries the dental chart, what was found on each tooth, the
+            priced plan and a consent section to sign. It goes out as an estimate,
+            not a bill. If you want something the patient can formally accept or
+            decline, build a quotation from this patient's Billing tab instead.
           </p>
         </div>
       </div>

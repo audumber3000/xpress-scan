@@ -28,7 +28,7 @@
      The reserved band is on @page instead: every page stops short by the
      footer's height, and the footer is pushed down into that margin where no
      content is ever laid out. */
-  @page { size: A4; margin: 0 0 74px 0; }
+  {{page_rule}}{{letterhead_css}}
   :root { --accent: {{primary_color}}; }
   body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -134,7 +134,7 @@
   <table class="head"><tr>
     <td>
       {{doctor_name_html}}
-      <div class="clinic-line">{{clinic_name}}</div>
+      {{clinic_name_html}}
       {{clinic_tagline_html}}
     </td>
     <td style="width:90px;text-align:right;">

@@ -40,7 +40,8 @@ _REAL_LETTERHEAD_FIELDS = (
 )
 
 
-def preview_clinic(clinic, doctor_name: str | None = None) -> SimpleNamespace:
+def preview_clinic(clinic, doctor_name: str | None = None,
+                   doctor_qualifications: str | None = None) -> SimpleNamespace:
     """The real clinic's letterhead, with sample values only where it is blank
     for presentational fields. Anything the checkboxes govern is taken verbatim
     so the preview cannot promise something the PDF won't print."""
@@ -59,6 +60,11 @@ def preview_clinic(clinic, doctor_name: str | None = None) -> SimpleNamespace:
     # genuinely print, and "Dr. R. Sharma" was the preview claiming a doctor
     # the clinic does not have.
     out.doctor_name = (doctor_name or "").strip()
+    # Same reasoning as the name above: there is no column for it either, so the
+    # caller resolves the same user and hands both over together. Keeping them
+    # paired is what stops the preview printing one doctor's letters under
+    # another doctor's name.
+    out.doctor_qualifications = (doctor_qualifications or "").strip()
     return out
 
 
@@ -170,7 +176,7 @@ def sample_consent() -> dict:
 def config_from_payload(payload: dict) -> SimpleNamespace:
     """Convert preview request body → engine-compatible config object.
     Same shape as a TemplateConfiguration row, attribute access only."""
-    from domains.infrastructure.services.pdf_fields import sanitize_visibility
+    from domains.infrastructure.services.pdf_fields import sanitize_config_json
 
     return SimpleNamespace(
         primary_color=payload.get("primary_color") or None,
@@ -178,6 +184,8 @@ def config_from_payload(payload: dict) -> SimpleNamespace:
         logo_url=payload.get("logo_url") or None,
         template_id=payload.get("template_id") or "classic",
         # Sanitised the same way the save path does it, so ticking a box in the
-        # editor previews exactly what saving it would produce.
-        config_json=sanitize_visibility(payload.get("config_json")),
+        # editor previews exactly what saving it would produce — the letterhead
+        # band included, which is the setting most worth seeing before you
+        # commit a sheet of the clinic's headed paper to the printer.
+        config_json=sanitize_config_json(payload.get("config_json")),
     )

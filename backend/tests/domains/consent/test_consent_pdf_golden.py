@@ -121,3 +121,111 @@ def test_malicious_content_is_escaped():
     assert '<script>alert(1)' not in rendered
     assert '&lt;script&gt;' in rendered
     assert '&lt;bad&gt;' in rendered
+
+
+# ── Pre-printed letterhead ──────────────────────────────────────────────────
+#
+# The invoice and prescription sides of this live in
+# tests/domains/finance/test_letterhead_mode.py and
+# tests/domains/medical/test_prescription_letterhead.py. Consent has one thing
+# neither of those does: a fixed footer carrying the terms and the signature,
+# which is the legally meaningful part of the form. Letterhead mode must not
+# touch it — the clinic's stationery replaces their branding, not the consent.
+
+import re as _re
+from types import SimpleNamespace as _NS
+
+from domains.consent.consent_templates import resolve_variant as _resolve_variant
+
+_ON = {'enabled': True, 'top_mm': 45, 'bottom_mm': 20, 'left_mm': 30, 'right_mm': 28}
+
+
+def _lh_clinic():
+    return _NS(
+        id=1, name='Royal Smile Dental Care', address='12 MG Road, Pune',
+        phone='4441112222', email='hi@royalsmile.in',
+        tagline='Smile with confidence', license_number='MH-DEN-4471',
+        logo_url=None, primary_color='#2a276e', doctor_name='Dr R Sharma',
+    )
+
+
+def _lh_render(letterhead=None, show=None):
+    body = {}
+    if letterhead is not None:
+        body['letterhead'] = letterhead
+    if show is not None:
+        body['show'] = show
+    config = _NS(primary_color='#2a276e', footer_text='Thanks for visiting',
+                 logo_url=None, template_id='classic', config_json=body or None)
+    return _resolve_variant('classic')['render'](
+        clinic=_lh_clinic(), patient_name='Asha Mehta', patient_id='PT-42',
+        template_name='Extraction Consent', content='<p>I consent.</p>',
+        signature_base64='', config=config,
+    )
+
+
+def _lh_page_rule(html):
+    return _re.search(r'@page\s*\{[^}]*\}', html).group(0)
+
+
+def test_letterhead_off_by_default_keeps_the_page_box():
+    assert _lh_page_rule(_lh_render()) == '@page { size: A4; margin: 2mm; }'
+    assert 'display: none !important' not in _lh_render()
+
+
+def test_letterhead_disabled_renders_identically_to_no_config():
+    assert _lh_render({'enabled': False, 'top_mm': 45}) == _lh_render()
+
+
+def test_letterhead_enabled_reserves_the_four_margins():
+    assert _lh_page_rule(_lh_render(_ON)) == \
+        '@page { size: A4; margin: 45mm 28mm 20mm 30mm; }'
+
+
+def test_letterhead_enabled_drops_the_header_and_strips():
+    html = _lh_render(_ON)
+    assert '.header, .color-strip { display: none !important; }' in html
+    for leak in ('12 MG Road', '4441112222', 'hi@royalsmile.in',
+                 'Smile with confidence', 'MH-DEN-4471', 'Thanks for visiting'):
+        assert leak not in html, f'letterhead mode still prints {leak!r}'
+
+
+def test_letterhead_enabled_keeps_the_terms_and_the_consent():
+    """The stationery replaces the clinic's branding, not the form's substance."""
+    html = _lh_render(_ON)
+    assert 'Terms &amp; Conditions' in html
+    assert 'legally valid under the IT Act' in html
+    assert 'Asha Mehta' in html
+    assert 'I consent.' in html
+
+
+def test_letterhead_enabled_keeps_room_for_the_fixed_footer():
+    """The footer is position:fixed and the body reserves its height. Zeroing
+    that padding along with the rest would run the consent text underneath the
+    terms block."""
+    assert '.consent-body { padding: 0 0 200px 0; }' in _lh_render(_ON)
+
+
+def test_logo_hidden_draws_nothing_rather_than_the_initials_box():
+    assert 'dashed' not in _lh_render(show={'logo': False})
+
+
+def test_doctor_name_toggle():
+    assert 'Dr R Sharma' in _lh_render()
+    assert 'Dr R Sharma' not in _lh_render(show={'doctor_name': False})
+
+
+def test_clinic_name_toggle_on_consent():
+    assert 'Royal Smile Dental Care' in _lh_render()
+    assert 'Royal Smile Dental Care' not in _lh_render(show={'clinic_name': False})
+
+
+def test_unticking_everything_leaves_no_clinic_on_the_consent():
+    from domains.infrastructure.services.pdf_fields import FIELD_KEYS
+
+    html = _lh_render(show={k: False for k in FIELD_KEYS})
+    for leak in ('Royal Smile Dental Care', '12 MG Road', '4441112222',
+                 'hi@royalsmile.in', 'Smile with confidence', 'MH-DEN-4471'):
+        assert leak not in html, f'consent still prints {leak!r} with every box unticked'
+    # The form itself has to survive: this is the document's legal substance.
+    assert 'Terms &amp; Conditions' in html and 'Asha Mehta' in html

@@ -5,6 +5,11 @@ import { DOSAGE_OPTIONS, DURATION_OPTIONS, INSTRUCTION_SUGGESTIONS, withCurrent 
 import { useAuth } from '../../contexts/AuthContext';
 import { isManualWhatsApp, openWhatsApp, downloadAuthedFile } from "../../utils/whatsapp";
 
+// A4 at the CSS reference resolution: the preview is laid out at this literal
+// size so the template's millimetres are real, then scaled to the drawer.
+const A4_PX_W = Math.round((210 / 25.4) * 96);
+const A4_PX_H = Math.round((297 / 25.4) * 96);
+
 const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, initialData }) => {
     const { user } = useAuth();
     const [mode, setMode] = useState('edit');
@@ -13,7 +18,6 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
     ]);
     const [notes, setNotes] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [doctorSignature, setDoctorSignature] = useState(null);
     
     // Autocomplete state
     const [masterMedications, setMasterMedications] = useState([]);
@@ -30,6 +34,55 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
     const [groupsLoading, setGroupsLoading] = useState(false);
     const [appliedSet, setAppliedSet] = useState(null);
 
+    // ── The real preview ────────────────────────────────────────────────────
+    const [previewHtml, setPreviewHtml] = useState('');
+    const [previewLoading, setPreviewLoading] = useState(false);
+    const [previewError, setPreviewError] = useState('');
+    const previewBoxRef = useRef(null);
+    const [previewScale, setPreviewScale] = useState(0.5);
+
+    // Scale the A4 page to whatever width the drawer gives it.
+    useEffect(() => {
+        const box = previewBoxRef.current;
+        if (!box || typeof ResizeObserver === 'undefined') return undefined;
+        const measure = () => {
+            // Minus the p-4 padding on either side of the page.
+            const w = box.clientWidth - 32;
+            if (w > 0) setPreviewScale(w / A4_PX_W);
+        };
+        measure();
+        const ro = new ResizeObserver(measure);
+        ro.observe(box);
+        return () => ro.disconnect();
+    });
+
+    // Fetch the rendered prescription whenever Preview is showing and what is
+    // on it has changed. Keyed on the serialised items so it does not refetch
+    // on every render, only when the medicines or the notes actually move.
+    const previewKey = JSON.stringify({ items, notes });
+    useEffect(() => {
+        if (!isOpen || mode !== 'preview' || !patientId) return undefined;
+        let cancelled = false;
+        const handle = setTimeout(async () => {
+            setPreviewLoading(true);
+            try {
+                const { items: its, notes: nts } = JSON.parse(previewKey);
+                const res = await api.post('/clinical/prescriptions/render-preview', {
+                    patient_id: Number(patientId),
+                    items: its.filter((i) => (i.medicine_name || '').trim()),
+                    notes: nts,
+                    prescription_id: initialData?.id || null,
+                });
+                if (!cancelled) { setPreviewHtml(res?.html || ''); setPreviewError(''); }
+            } catch (e) {
+                if (!cancelled) setPreviewError(e?.message || 'Could not build the preview');
+            } finally {
+                if (!cancelled) setPreviewLoading(false);
+            }
+        }, 250);
+        return () => { cancelled = true; clearTimeout(handle); };
+    }, [isOpen, mode, patientId, previewKey, initialData?.id]);
+
     useEffect(() => {
         if (isOpen) {
             setMode(initialData ? 'preview' : 'edit');
@@ -42,7 +95,6 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
             }
             fetchMasterMedications();
             fetchMedStock();
-            fetchDoctorSignature();
             fetchGroups();
             setAppliedSet(null);
             setGroupsOpen(false);
@@ -113,13 +165,6 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
             || null;
     };
 
-    const fetchDoctorSignature = async () => {
-        try {
-            const data = await api.get('/auth/me');
-            if (data?.signature_url) setDoctorSignature(data.signature_url);
-        } catch { /* silent */ }
-    };
-
     const addItem = () => setItems([...items, { medicine_name: '', dosage: '1-0-1', duration: '5 days', quantity: '15', notes: '' }]);
     const removeItem = (i) => { if (items.length > 1) setItems(items.filter((_, idx) => idx !== i)); };
     
@@ -174,6 +219,10 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
         try {
             await onSave({ items: cleanItems, notes, dispenses });
             onClose();
+        } catch {
+            // The caller has already said what went wrong. Staying open is the
+            // point: closing here would throw away a prescription the doctor
+            // has just finished writing.
         } finally {
             setIsLoading(false);
         }
@@ -392,7 +441,6 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
 
     if (!isOpen) return null;
 
-    const validItems = items.filter(i => i.medicine_name.trim());
     const patientAge = patientData?.dob
         ? new Date().getFullYear() - new Date(patientData.dob).getFullYear()
         : patientData?.age || null;
@@ -423,98 +471,37 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
                 {/* Preview Mode */}
                 {mode === 'preview' && (
                     <>
-                        <div className="flex-1 overflow-y-auto bg-gray-100 p-4">
-                            <div className="bg-white shadow-lg min-h-[700px] flex flex-col">
-                                <div style={{ height: '8px', backgroundColor: primaryColor }}></div>
-                                <div className="p-8 flex-1 flex flex-col">
-                                    {/* Letterhead Preview */}
-                                    <div className="flex justify-between items-start border-b-2 border-gray-100 pb-4 mb-4">
-                                        <div className="flex items-center gap-4">
-                                            {user?.clinic?.logo_url ? (
-                                                <img src={user.clinic.logo_url} className="w-16 h-16 object-contain" />
-                                            ) : (
-                                                <div className="w-16 h-16 bg-gray-50 border-2 border-dashed rounded-lg flex items-center justify-center text-xs font-bold text-gray-400" style={{ borderColor: primaryColor, color: primaryColor }}>{clinicName.slice(0,2).toUpperCase()}</div>
-                                            )}
-                                            <div>
-                                                <h1 className="text-xl font-black uppercase tracking-tight" style={{ color: primaryColor }}>{clinicName}</h1>
-                                                <p className="text-xs font-bold opacity-70" style={{ color: primaryColor }}>{user?.clinic?.tagline || 'Comprehensive Clinical Care'}</p>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-sm font-bold" style={{ color: primaryColor }}>Dr. {doctorName}</p>
-                                            <p className="text-[10px] text-gray-500 max-w-[180px] ml-auto">{clinicAddress}</p>
-                                            <p className="text-[10px] text-gray-600 font-medium whitespace-pre-wrap">☎ {clinicPhone}\n✉ {user?.email || ''}\n{user?.clinic?.reg_number ? `Reg No: ${user.clinic.reg_number}` : ''}</p>
-                                        </div>
+                        {/* The prescription as it will actually print: rendered by the
+                            server through the same template the PDF uses, with the
+                            clinic's chosen layout, its toggles and its letterhead.
+                            This used to be a React imitation drawn by hand, which
+                            showed one fixed layout whatever the clinic had picked. */}
+                        <div ref={previewBoxRef} className="flex-1 overflow-y-auto bg-gray-100 p-4">
+                            <div
+                                className="bg-white shadow-lg mx-auto overflow-hidden"
+                                style={{ width: '100%', aspectRatio: '210 / 297' }}
+                            >
+                                {previewHtml ? (
+                                    <iframe
+                                        title="Prescription preview"
+                                        srcDoc={previewHtml}
+                                        sandbox="allow-same-origin"
+                                        className={`border-0 ${previewLoading ? 'opacity-60' : ''}`}
+                                        style={{
+                                            width: `${A4_PX_W}px`,
+                                            height: `${A4_PX_H}px`,
+                                            transform: `scale(${previewScale})`,
+                                            transformOrigin: 'top left',
+                                        }}
+                                    />
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center gap-2 text-gray-400">
+                                        <Loader2 size={18} className="animate-spin" />
+                                        <span className="text-sm">
+                                            {previewError || 'Building the preview…'}
+                                        </span>
                                     </div>
-
-                                    <div className="text-center mb-6">
-                                        <span className="text-sm font-black tracking-[4px] uppercase border-b-2 border-gray-900 pb-1">Prescription</span>
-                                    </div>
-
-                                    <div className="grid grid-cols-3 gap-2 bg-gray-50 p-3 rounded-lg border border-gray-100 mb-6">
-                                        <div>
-                                            <p className="text-[9px] font-bold text-gray-400 uppercase">Patient</p>
-                                            <p className="text-xs font-bold text-gray-900">{patientData?.name || '—'}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[9px] font-bold text-gray-400 uppercase">Age / Sex</p>
-                                            <p className="text-xs font-bold text-gray-900">{patientAge || '—'} / {patientData?.gender || '—'}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[9px] font-bold text-gray-400 uppercase">Date</p>
-                                            <p className="text-xs font-bold text-gray-900">{today}</p>
-                                        </div>
-                                    </div>
-
-                                    <div className="mb-2 text-2xl font-serif font-black" style={{ color: primaryColor }}>&#8478;</div>
-
-                                    <table className="w-full text-xs mb-6 border-collapse">
-                                        <thead>
-                                            <tr className="bg-gray-50">
-                                                <th className="border border-gray-200 p-2 text-left w-6">#</th>
-                                                <th className="border border-gray-200 p-2 text-left">Medicine</th>
-                                                <th className="border border-gray-200 p-2">Dosage</th>
-                                                <th className="border border-gray-200 p-2">Duration</th>
-                                                <th className="border border-gray-200 p-2">Instructions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {validItems.length > 0 ? validItems.map((it, idx) => (
-                                                <tr key={idx}>
-                                                    <td className="border border-gray-100 p-2 text-gray-400 text-[10px] text-center">{idx + 1}</td>
-                                                    <td className="border border-gray-100 p-2">
-                                                        <span className="font-bold block">{it.medicine_name}</span>
-                                                        {it.notes && <span className="text-[10px] text-gray-400 italic">({it.notes})</span>}
-                                                    </td>
-                                                    <td className="border border-gray-100 p-2 text-center font-medium">{it.dosage}</td>
-                                                    <td className="border border-gray-100 p-2 text-center">{it.duration}</td>
-                                                    <td className="border border-gray-100 p-2 text-[10px] text-gray-500">{it.instructions || it.quantity || '—'}</td>
-                                                </tr>
-                                            )) : (
-                                                <tr><td colSpan="5" className="p-8 text-center text-gray-400 italic">No medications added</td></tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-
-                                    <div className="flex-1">
-                                        {notes && (
-                                            <div className="border-t border-gray-100 pt-3">
-                                                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Advice / Instructions</p>
-                                                <p className="text-xs text-gray-600 whitespace-pre-wrap">{notes}</p>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="mt-6 flex justify-between items-end border-t border-gray-100 pt-4">
-                                        <div></div>
-                                        <div className="text-right">
-                                            <div className="w-32 border-t border-gray-400 ml-auto mb-1"></div>
-                                            <p className="text-[10px] font-bold text-gray-900">{doctorName}</p>
-                                            <p className="text-[9px] text-gray-400 font-bold uppercase">{clinicName}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div style={{ height: '8px', backgroundColor: primaryColor }}></div>
+                                )}
                             </div>
                         </div>
                         {/* Preview Actions */}

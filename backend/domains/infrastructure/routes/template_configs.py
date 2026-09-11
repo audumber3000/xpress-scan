@@ -6,6 +6,9 @@ from database import get_db
 from models import TemplateConfiguration, Clinic, User
 from core.auth_utils import get_current_user
 from core.dtos import TemplateConfigResponse, TemplateConfigCreate, TemplateConfigUpdate
+from domains.infrastructure.services.pdf_fields import (
+    resolve_letterhead, sanitize_config_json,
+)
 from domains.infrastructure.services.r2_storage import (
     StorageCategory,
     get_presigned_url,
@@ -81,6 +84,8 @@ def upsert_template_config(
         # toggles live in config_json: the mobile app never sends that key, so
         # a save from the phone would wipe every toggle set on the web.
         patch = config_in.model_dump(exclude_unset=True)
+        if 'config_json' in patch:
+            patch['config_json'] = sanitize_config_json(patch['config_json'])
         for field in ('template_id', 'logo_url', 'primary_color',
                       'secondary_color', 'footer_text', 'config_json'):
             if field in patch:
@@ -89,9 +94,14 @@ def upsert_template_config(
         db.refresh(existing)
         return existing
     
+    # The DTO types config_json as a free-form dict, so whitelist it here rather
+    # than trusting the client: the renderers clamp the letterhead offsets on
+    # read, but nothing else stops an unbounded blob being written to the row.
+    created = config_in.dict()
+    created['config_json'] = sanitize_config_json(created.get('config_json'))
     new_config = TemplateConfiguration(
         clinic_id=current_user.clinic_id,
-        **config_in.dict()
+        **created
     )
     db.add(new_config)
     # What a patient's invoice, prescription and consent form look like is
@@ -144,6 +154,28 @@ def list_variants(category: str, current_user = Depends(get_current_user)):
     raise HTTPException(status_code=400, detail="unknown category")
 
 
+def _preview_doctor(db: Session, current_user):
+    """The user whose name and letters the sample document should carry.
+
+    Split out from the name-only version so the two always describe the same
+    person: resolving them separately is exactly how a preview ends up printing
+    the owner's MDS under a hygienist's name.
+    """
+    from core.roles import is_clinical
+
+    if is_clinical(getattr(current_user, "role", None)):
+        return current_user
+    return (
+        db.query(User)
+        .filter(
+            User.clinic_id == current_user.clinic_id,
+            User.role == "clinic_owner",
+            User.is_active == True,  # noqa: E712 — SQLAlchemy column comparison
+        )
+        .first()
+    )
+
+
 def _preview_doctor_name(db: Session, current_user) -> str:
     """Whose name to print on the sample document's signature line.
 
@@ -172,6 +204,82 @@ def _preview_doctor_name(db: Session, current_user) -> str:
         .first()
     )
     return ((getattr(owner, "name", None) if owner else "") or "").strip()
+
+
+
+def _with_screen_page_box(html: str, letterhead) -> str:
+    """Make the reserved letterhead band visible in the browser preview.
+
+    `@page` margins are the only thing a renderer needs for the PDF, and they
+    are completely inert on screen — a browser applies them when paginating for
+    print and at no other time. So a clinic could type 100mm into the top offset
+    and watch the preview not move a pixel, which reads as the setting being
+    ignored and is the single most confusing thing about this feature.
+
+    The fix is a screen-only stylesheet appended to the preview's own markup:
+    the same four measurements re-expressed as padding, plus a tinted band over
+    each one labelled for what it is. WeasyPrint renders in `print` media and
+    never sees any of it, so the PDF is byte-for-byte what it always was — this
+    exists purely so the picture on screen tells the truth.
+
+    The bands are drawn in mm, exactly like the padding, so the two always agree
+    with each other whatever size the preview pane happens to be.
+    """
+    if not letterhead.enabled:
+        return html
+
+    t, r, b, l = (letterhead.top_mm, letterhead.right_mm,
+                  letterhead.bottom_mm, letterhead.left_mm)
+    style = f"""
+<style id="mp-letterhead-guide">
+@media screen {{
+  html {{ background: #fff; }}
+  body {{
+    box-sizing: border-box;
+    padding: {t}mm {r}mm {b}mm {l}mm !important;
+    position: relative;
+    min-height: 297mm;
+  }}
+  .mp-lh-band {{
+    position: absolute;
+    background: repeating-linear-gradient(
+      45deg, rgba(42,39,110,.07), rgba(42,39,110,.07) 6px,
+      rgba(42,39,110,.03) 6px, rgba(42,39,110,.03) 12px);
+    border: 1px dashed rgba(42,39,110,.35);
+    pointer-events: none;
+    font: 600 8pt/1.2 Helvetica, Arial, sans-serif;
+    color: rgba(42,39,110,.55);
+    display: flex; align-items: center; justify-content: center;
+    text-align: center;
+  }}
+  .mp-lh-top    {{ top: 0; left: 0; right: 0; height: {t}mm; }}
+  .mp-lh-bottom {{ bottom: 0; left: 0; right: 0; height: {b}mm; }}
+  .mp-lh-left   {{ top: {t}mm; bottom: {b}mm; left: 0; width: {l}mm; }}
+  .mp-lh-right  {{ top: {t}mm; bottom: {b}mm; right: 0; width: {r}mm; }}
+}}
+/* Print media, which is what WeasyPrint reads: none of this exists. */
+@media print {{ .mp-lh-band {{ display: none !important; }} }}
+</style>
+"""
+    bands = (
+        f'<div class="mp-lh-band mp-lh-top">Your letterhead prints here &middot; {t}mm</div>'
+        f'<div class="mp-lh-band mp-lh-bottom">{b}mm</div>'
+        f'<div class="mp-lh-band mp-lh-left">{l}mm</div>'
+        f'<div class="mp-lh-band mp-lh-right">{r}mm</div>'
+    )
+
+    if '</head>' in html:
+        html = html.replace('</head>', style + '</head>', 1)
+    else:
+        html = style + html
+
+    # Appended at the END of body so it cannot land between a table and its
+    # rows, which is what happened when it was injected after the opening tag.
+    if '</body>' in html:
+        html = html.replace('</body>', bands + '</body>', 1)
+    else:
+        html += bands
+    return html
 
 
 @router.post("/preview")
@@ -224,9 +332,12 @@ def preview_template(
     # fields, so a fixture here would let the preview show a licence number or
     # tagline the clinic has never filled in. Same reasoning for the doctor on
     # the signature line, which used to be a hardcoded "Dr. R. Sharma".
+    doctor = _preview_doctor(db, current_user)
     clinic = preview_clinic(
         db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first(),
-        doctor_name=_preview_doctor_name(db, current_user),
+        doctor_name=((getattr(doctor, "name", None) or "").strip() if doctor else ""),
+        doctor_qualifications=((getattr(doctor, "qualifications", None) or "").strip()
+                               if doctor else ""),
     )
 
     if category == "invoice":
@@ -252,7 +363,8 @@ def preview_template(
             config=config,
         )
 
-    return {"html": html}
+    # The screen-only guide. Nothing here reaches a PDF; see the helper.
+    return {"html": _with_screen_page_box(html, resolve_letterhead(config))}
 
 
 @router.post("/logo")

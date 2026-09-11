@@ -12,11 +12,20 @@ sits on the same ground as the rest of the document.
 from domains.finance.invoice_templates._common import (
     prepare, money, logo_block, tax_rows, signature_block,
 )
+from domains.infrastructure.services.pdf_fields import (
+    page_css,
+)
 from domains.finance.invoice_templates.discount_block import render_discount_block
 
 
 def render_invoice(invoice, clinic, config=None) -> str:
     d = prepare(invoice, clinic, config, default_color='#1F3864')
+
+    # This layout bleeds to the paper edge, so its normal page box is margin 0.
+    # On pre-printed stationery that is exactly wrong — the content would land
+    # under the clinic's printed header — so the resolved letterhead supplies
+    # the margins instead. `prepare` has already stripped the branding itself.
+    page_rule = page_css(d.letterhead, default_margin='0')
 
     rows = ''
     for item in d.items:
@@ -57,7 +66,7 @@ def render_invoice(invoice, clinic, config=None) -> str:
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
 <style>
-@page {{ size: A4; margin: 0; }}
+{page_rule}
 body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin:0; padding:0;
         color:#2b2b2b; font-size:11px; line-height:1.45; background:#fff; }}
 .rule {{ position:fixed; left:0; top:0; bottom:0; width:14px; background:{d.primary}; }}
@@ -108,13 +117,13 @@ table.items td.qty {{ text-align:center; width:46px; }}
       <div class="wordmark">Invoice</div>
       {f'<div class="tagline">{d.clinic.tagline}</div>' if d.clinic.tagline else ''}
     </td>
-    <td style="text-align:right;width:70px;">{logo_block(d, 62, '50%')}</td>
+    {f'<td style="text-align:right;width:70px;">{logo_block(d, 62, "50%")}</td>' if d.vis.logo else ''}
   </tr></table>
 
   <table class="cols"><tr>
     <td>
       <div class="lbl">From</div>
-      <div class="who">{d.clinic.name}</div>
+      {f'<div class="who">{d.clinic.name}</div>' if d.clinic.name else ''}
       {clinic_lines}
     </td>
     <td>

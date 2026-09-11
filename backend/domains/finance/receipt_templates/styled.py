@@ -23,7 +23,9 @@ from domains.infrastructure.services.pdf_safety import (
     safe_color, safe_signature_data_uri, safe_text,
 )
 from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
-from domains.infrastructure.services.pdf_fields import resolve_field_visibility
+from domains.infrastructure.services.pdf_fields import (
+    apply_letterhead, page_css, resolve_field_visibility, resolve_letterhead,
+)
 from domains.finance.invoice_templates.classic import _amount_in_words
 
 # How each style dresses the same document. `mono` pins the accent to black on
@@ -34,6 +36,9 @@ STYLES = {
     'bold':      {'header': 'rule',  'default': '#1F3864', 'ruled': False, 'force_black': False},
     'corporate': {'header': 'bars',  'default': '#44546A', 'ruled': False, 'force_black': False},
     'mono':      {'header': 'plain', 'default': '#000000', 'ruled': True,  'force_black': True},
+    # The counterpart to the Plain invoice. `none` draws no clinic block at all,
+    # because the sheet it prints on already carries one.
+    'plain':     {'header': 'none',  'default': '#111827', 'ruled': False, 'force_black': False},
 }
 
 
@@ -56,6 +61,13 @@ def _render_receipt(invoice, payment, clinic, config, style) -> str:
         accent = '#000000'
 
     vis = resolve_field_visibility(config)
+
+    # A receipt inherits the invoice's template and its settings, so it inherits
+    # letterhead mode too: a clinic printing bills on headed paper prints the
+    # receipt for that bill on the same stationery.
+    letterhead = resolve_letterhead(config)
+    vis = apply_letterhead(vis, letterhead)
+
     footer_text = safe_text(
         (config.footer_text if config and config.footer_text else '') if config else ''
     ) if vis.footer else ''
@@ -64,7 +76,7 @@ def _render_receipt(invoice, payment, clinic, config, style) -> str:
         (config.logo_url if config else None), getattr(clinic, 'logo_url', None),
     )
 
-    c_name = safe_text(clinic.name if clinic else 'Dental Clinic')
+    c_name = safe_text((clinic.name if clinic else 'Dental Clinic') if vis.clinic_name else '')
     c_addr = safe_text(clinic.address if clinic and clinic.address and vis.address else '')
     c_phone = safe_text(clinic.phone if clinic and clinic.phone and vis.contact else '')
     c_email = safe_text(clinic.email if clinic and clinic.email and vis.contact else '')
@@ -111,10 +123,12 @@ def _render_receipt(invoice, payment, clinic, config, style) -> str:
     )
     words = _amount_in_words(amount) if is_india else ''
 
-    if logo_data:
+    if not vis.logo:
+        logo_html = ''
+    elif logo_data:
         logo_html = f'<img src="{logo_data}" alt="" style="width:46px;height:46px;object-fit:contain;">'
     else:
-        initials = (c_name or 'DC')[:2].upper()
+        initials = (safe_text(clinic.name if clinic else '') or 'DC')[:2].upper()
         on_band = style['header'] == 'band'
         logo_html = (
             f'<div style="width:46px;height:46px;background:{"#fff" if on_band else accent};'
@@ -166,6 +180,12 @@ def _render_receipt(invoice, payment, clinic, config, style) -> str:
     <td style="text-align:right;"><div class="word">RECEIPT</div></td>
   </tr></table>
   <div class="bar">Received With Thanks</div>'''
+    elif header == 'none':
+        # Nothing but the word, so the clinic's own printed header is the only
+        # identity on the page.
+        head_html = f'''
+<div class="pad">
+  <div class="word" style="margin-bottom:20px;">RECEIPT</div>'''
     else:  # plain
         head_html = f'''
 <div class="pad">
@@ -175,16 +195,30 @@ def _render_receipt(invoice, payment, clinic, config, style) -> str:
     <td style="width:110px;text-align:right;"><div class="word">RECEIPT</div></td>
   </tr></table>'''
 
-    show_clinic_lines_below = header in ('band', 'rule')
+    # On pre-printed stationery the decorated headers have to go the same way
+    # the invoice's did: a colour band over a printed letterhead is the exact
+    # collision this feature exists to stop.
+    if letterhead.enabled:
+        head_html = f'''
+<div class="pad">
+  <div class="word" style="margin-bottom:20px;">RECEIPT</div>'''
+
+    # `.pad` supplies the inset when the page bleeds; under letterhead mode the
+    # measured margins do that instead, so the padding would stack on top.
+    page_rule = page_css(letterhead, default_margin='0')
+    pad_reset = '.pad { padding: 0; }' if letterhead.enabled else ''
+
+    show_clinic_lines_below = header in ('band', 'rule') and not letterhead.enabled
     ruled = style['ruled']
 
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
 <style>
-@page {{ size: A4; margin: 0; }}
+{page_rule}
 body {{ font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; margin:0; padding:0;
         color:#243746; font-size:11.5px; line-height:1.45; background:#fff; }}
 .pad {{ padding:30px 44px 40px 44px; }}
+{pad_reset}
 .band {{ background:{accent}; color:#fff; padding:24px 44px; }}
 .band .word {{ font-size:34px; font-weight:300; letter-spacing:1px; line-height:1; color:#fff; }}
 .band .sub {{ font-size:11px; opacity:.85; margin-top:5px; }}

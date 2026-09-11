@@ -125,11 +125,22 @@ const PatientPrescriptions = ({ patientId, patientPhone, visits = [], hideHeader
                 ? `/reports/${patientId}/prescriptions/generate-pdf?appointment_id=${selectedAppointmentId}`
                 : `/reports/${patientId}/prescriptions/generate-pdf`;
             const response = await api.post(url, { items: validItems, notes: generalNotes });
-            if (window.confirm('View PDF?')) window.open(response.pdf_url, '_blank');
+            // Only offer to open something there is something to open. A null
+            // URL here opened a blank tab, which is indistinguishable from the
+            // prescription itself having failed.
+            if (response?.pdf_url && window.confirm('View PDF?')) {
+                window.open(response.pdf_url, '_blank');
+            }
             resetNewForm();
             fetchPrescriptions();
         } catch (err) {
+            // The server saves the prescription before it renders the PDF, so a
+            // storage failure means "saved, no document" rather than "lost".
+            // Saying "failed to generate" would send the doctor to write it
+            // again and leave two on the file.
             notify.problem(err.message || 'Failed to generate prescription');
+            resetNewForm();
+            fetchPrescriptions();
         } finally {
             setIsGenerating(false);
         }

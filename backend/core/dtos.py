@@ -32,6 +32,9 @@ class PatientBaseDTO(BaseModel):
     case_paper_type: Optional[str] = Field(None, pattern="^(dental|general)$")
     notes: Optional[str] = None
     payment_type: Optional[str] = Field(default="Cash", pattern="^(Cash|Card|UPI|Online)$")
+    # Set by the photo endpoint rather than typed, so it is accepted on the way
+    # in only to keep create/update symmetrical with the response.
+    photo_url: Optional[str] = None
 
     @field_validator('gender', mode='before')
     @classmethod
@@ -386,6 +389,9 @@ class UserUpdateDTO(BaseModel):
     first_name: Optional[str] = Field(None, min_length=1, max_length=50)
     last_name: Optional[str] = Field(None, min_length=1, max_length=50)
     role: Optional[str] = Field(None, pattern="^(clinic_owner|doctor|receptionist)$")
+    # Letters after the name. Capped rather than unbounded — this prints on a
+    # document, and a paragraph would push the header off the page.
+    qualifications: Optional[str] = Field(None, max_length=120)
 
 
 class UserResponseDTO(UserBaseDTO, NullSafeResponse):
@@ -428,6 +434,7 @@ class UserResponseDTO(UserBaseDTO, NullSafeResponse):
     # responses are unchanged for accounts that never set them.
     phone: Optional[str] = None
     avatar_url: Optional[str] = None
+    qualifications: Optional[str] = None
     clinics: List[ClinicResponseDTO] = []
 
     # Overridden to be permissive. See the class docstring.
@@ -462,6 +469,7 @@ class UpdateProfileDTO(BaseModel):
     first_name: Optional[str] = Field(None, min_length=1, max_length=50)
     last_name: Optional[str] = Field(None, min_length=1, max_length=50)
     phone: Optional[str] = Field(None, max_length=20)
+    qualifications: Optional[str] = Field(None, max_length=120)
 
 
 # Payment DTOs
@@ -578,6 +586,11 @@ class VendorBaseDTO(BaseModel):
     address: Optional[str] = None
     gst_number: Optional[str] = None
     category: Optional[str] = "General"
+    # Credit terms. Only the default offered when a bill is entered — each bill
+    # keeps its own copy, so changing these never re-dates anything already
+    # on the book. See PurchaseBill in models.py.
+    payment_terms_days: Optional[int] = Field(None, ge=0, le=365)
+    credit_limit: Optional[float] = Field(None, ge=0)
     last_order_date: Optional[datetime] = None
 
 class VendorCreateDTO(VendorBaseDTO):
@@ -590,6 +603,9 @@ class VendorUpdateDTO(BaseModel):
     phone: Optional[str] = None
     address: Optional[str] = None
     gst_number: Optional[str] = None
+    category: Optional[str] = None
+    payment_terms_days: Optional[int] = Field(None, ge=0, le=365)
+    credit_limit: Optional[float] = Field(None, ge=0)
     is_active: Optional[bool] = None
 
 class VendorResponseDTO(VendorBaseDTO):

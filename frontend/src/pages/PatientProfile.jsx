@@ -162,6 +162,46 @@ const PatientProfile = () => {
     }
   }, [patientId]);
 
+  // Writing the prescription the drawer hands back.
+  //
+  // This used to be `() => { close; reload }` — it ignored the payload the
+  // drawer passes and never called the API, so a doctor could fill in a whole
+  // prescription, press Save, watch the drawer close, and find nothing on the
+  // file. The case-paper tab had the real handler all along; this is the same
+  // shape without a case paper to attach to.
+  const savePrescription = async ({ items, notes, dispenses = [] }) => {
+    try {
+      if (rxEditing?.id) {
+        await api.put(`/clinical/prescriptions/${rxEditing.id}`, {
+          items, notes, patient_id: Number(patientId),
+        });
+      } else {
+        await api.post('/clinical/prescriptions', {
+          items, notes, patient_id: Number(patientId),
+        });
+      }
+      // Stock goes down for anything dispensed over the counter. Not billed:
+      // billing hangs off a case paper, and this prescription has none.
+      for (const d of dispenses) {
+        await api.post('/clinical/inventory-consumption', {
+          patient_id: Number(patientId),
+          medication_stock_id: d.medication_stock_id,
+          quantity: d.quantity,
+          add_to_billing: false,
+        });
+      }
+      notify.done(rxEditing?.id ? 'Prescription updated' : 'Prescription saved');
+      setRxOpen(false);
+      setRxEditing(null);
+      await loadPrescriptions();
+    } catch (err) {
+      // Re-thrown so the drawer stays open with the doctor's work still in it,
+      // rather than closing on a failure and taking the prescription with it.
+      notify.problem(err?.message || 'Could not save that prescription');
+      throw err;
+    }
+  };
+
   const loadPrescriptions = useCallback(async () => {
     try {
       const res = await api.get(`/clinical/prescriptions/patient/${patientId}`);
@@ -503,6 +543,24 @@ const PatientProfile = () => {
     });
   };
 
+  // Chart overlays — sealant, abscess, drifting, diastema. This handler did not
+  // exist here: the drawer calls `onMarksChange?.()`, so from the patient file
+  // every one of those buttons lit up and saved nothing. The case-paper chart
+  // had it all along.
+  const handleMarksChange = (toothNum, marks) => {
+    setTeethData((prev) => {
+      const tooth = prev[toothNum] || { status: 'present', surfaces: {} };
+      return { ...prev, [toothNum]: { ...tooth, marks } };
+    });
+  };
+
+  const handleConditionsChange = (toothNum, conditions) => {
+    setTeethData((prev) => {
+      const tooth = prev[toothNum] || { status: 'present', surfaces: {} };
+      return { ...prev, [toothNum]: { ...tooth, conditions } };
+    });
+  };
+
   const handleToothStatusChange = (toothNum, status) => {
     setTeethData(prev => {
       const toothData = prev[toothNum] || { status: 'present', surfaces: {} };
@@ -595,6 +653,7 @@ const PatientProfile = () => {
               onPrint={handlePrintFile}
               onDelete={() => setDeleteOpen(true)}
               onViewBilling={() => setActiveTab('billing')}
+              onPhotoChange={(url) => setPatientData((prev) => ({ ...prev, photo_url: url }))}
             />
           )}
 
@@ -763,7 +822,7 @@ const PatientProfile = () => {
       <PrescriptionDrawer
         isOpen={rxOpen}
         onClose={() => { setRxOpen(false); setRxEditing(null); }}
-        onSave={() => { setRxOpen(false); setRxEditing(null); loadPrescriptions(); }}
+        onSave={savePrescription}
         patientId={patientId}
         patientData={patientData}
         initialData={rxEditing}
@@ -808,6 +867,8 @@ const PatientProfile = () => {
             onToothStatusChange={handleToothStatusChange}
             onToothStateChange={handleToothStateChange}
             onFindingsChange={handleFindingsChange}
+            onMarksChange={handleMarksChange}
+            onConditionsChange={handleConditionsChange}
             onNotesChange={handleNotesChange}
             onNavigate={(tooth) => setSelectedTooth(tooth)}
             onAddTreatment={(details) => {

@@ -21,7 +21,9 @@ from domains.infrastructure.services.pdf_safety import (
     safe_color, safe_signature_data_uri, safe_text,
 )
 from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
-from domains.infrastructure.services.pdf_fields import resolve_field_visibility
+from domains.infrastructure.services.pdf_fields import (
+    apply_letterhead, resolve_field_visibility, resolve_letterhead,
+)
 
 
 def prepare(invoice, clinic, config=None, default_color: str = '#111827') -> SimpleNamespace:
@@ -34,6 +36,13 @@ def prepare(invoice, clinic, config=None, default_color: str = '#111827') -> Sim
     # Flags default to shown and can only hide — see pdf_fields.
     vis = resolve_field_visibility(config)
 
+    # Printing onto the clinic's own headed paper. When it is on, our copy of
+    # the branding comes off — the sheet already carries it — and the renderer
+    # reserves the four margins the letterhead prints in. Off unless configured,
+    # so an untouched clinic renders exactly as before.
+    letterhead = resolve_letterhead(config)
+    vis = apply_letterhead(vis, letterhead)
+
     footer_text = safe_text(
         (config.footer_text if config and config.footer_text else '') if config else ''
     ) if vis.footer else ''
@@ -43,10 +52,10 @@ def prepare(invoice, clinic, config=None, default_color: str = '#111827') -> Sim
     logo_data = resolve_logo_data_uri(
         (config.logo_url if config else None),
         getattr(clinic, 'logo_url', None),
-    )
+    ) if vis.logo else ''
 
     c = SimpleNamespace(
-        name=safe_text(clinic.name if clinic else 'Dental Clinic'),
+        name=safe_text((clinic.name if clinic else 'Dental Clinic') if vis.clinic_name else ''),
         phone=safe_text(clinic.phone if clinic and clinic.phone and vis.contact else ''),
         email=safe_text(clinic.email if clinic and clinic.email and vis.contact else ''),
         address=safe_text(clinic.address if clinic and clinic.address and vis.address else ''),
@@ -64,17 +73,22 @@ def prepare(invoice, clinic, config=None, default_color: str = '#111827') -> Sim
     pat = getattr(invoice, 'patient', None)
     p = SimpleNamespace(
         name=safe_text(pat.name if pat else ''),
-        phone=safe_text(pat.phone if pat else ''),
-        age=safe_text(str(getattr(pat, 'age', '') or '') if pat else ''),
-        gender=safe_text((getattr(pat, 'gender', '') or getattr(pat, 'sex', '') or '') if pat else ''),
+        phone=safe_text(pat.phone if pat and vis.patient_contact else ''),
+        age=safe_text(str(getattr(pat, 'age', '') or '') if pat and vis.patient_age_gender else ''),
+        gender=safe_text((getattr(pat, 'gender', '') or getattr(pat, 'sex', '') or '')
+                         if pat and vis.patient_age_gender else ''),
         uhid=safe_text(getattr(pat, 'uhid', '') or (f'PT-{pat.id}' if pat else '')),
-        address=safe_text(getattr(pat, 'village', '') or getattr(pat, 'address', '') or '' if pat else ''),
+        address=safe_text((getattr(pat, 'village', '') or getattr(pat, 'address', '') or '')
+                          if pat and vis.patient_contact else ''),
     )
 
     # The prescribing doctor and their signature come off the appointment when
     # there is one, falling back to the clinic's own doctor.
     doctor_name = c.doctor
     doctor_signature = ''
+    # Letters after the name, travelling with whichever doctor was resolved: the
+    # clinic owner's MDS must not end up printed under a visiting associate.
+    doctor_qualifications = safe_text(getattr(clinic, 'doctor_qualifications', '') or '')
     try:
         appt = getattr(invoice, 'appointment', None)
         if appt:
@@ -82,9 +96,19 @@ def prepare(invoice, clinic, config=None, default_color: str = '#111827') -> Sim
             if doc:
                 doctor_name = safe_text(getattr(doc, 'name', '') or doctor_name)
                 doctor_signature = safe_signature_data_uri(getattr(doc, 'signature_url', None))
+                doctor_qualifications = safe_text(getattr(doc, 'qualifications', '') or '')
     except Exception:
         # A malformed relationship must not cost the clinic its invoice.
         pass
+
+    # Hidden last, so the lookup above still runs and the signature flag keeps
+    # behaving independently of the name.
+    if not vis.doctor_name:
+        doctor_name = ''
+    # Hiding the name hides the letters with it: "BDS, MDS" floating under no
+    # name at all is not a thing anybody asked for.
+    if not vis.doctor_qualifications or not doctor_name:
+        doctor_qualifications = ''
 
     created_at = getattr(invoice, 'created_at', None)
     subtotal = float(getattr(invoice, 'subtotal', 0) or 0)
@@ -92,10 +116,16 @@ def prepare(invoice, clinic, config=None, default_color: str = '#111827') -> Sim
     tax = float(getattr(invoice, 'tax', 0) or 0)
 
     return SimpleNamespace(
-        primary=primary, vis=vis, footer_text=footer_text, logo_data=logo_data,
+        primary=primary, vis=vis, letterhead=letterhead,
+        # The name before the flag hid it. Only the monogram fallback uses this:
+        # a clinic that hides its name but keeps its logo should still get its
+        # own initials rather than a generic "DC".
+        raw_clinic_name=safe_text(clinic.name if clinic else ''),
+        footer_text=footer_text, logo_data=logo_data,
         clinic=c, patient=p, currency=currency, is_india=is_india,
         tax_reg_label=tax_reg_label,
         doctor_name=doctor_name, doctor_signature=doctor_signature,
+        doctor_qualifications=doctor_qualifications,
         number=safe_text(getattr(invoice, 'invoice_number', '') or ''),
         date=(created_at.strftime('%d %b %Y') if created_at
               else datetime.date.today().strftime('%d %b %Y')),
@@ -122,10 +152,16 @@ def logo_block(d, size: int = 56, radius: str = '6px', on_dark: bool = False) ->
     element rather than an empty box — and on a coloured band it inverts, since
     an accent-on-accent monogram is invisible.
     """
+    # Hidden means nothing drawn. The initials are a *substitute* mark for a
+    # clinic that has no logo — offering them to a clinic that asked for no logo
+    # answers a different question, and on pre-printed paper it prints a second
+    # monogram next to the real one.
+    if not d.vis.logo:
+        return ''
     if d.logo_data:
         return (f'<img src="{d.logo_data}" alt="" '
                 f'style="width:{size}px;height:{size}px;object-fit:contain;">')
-    initials = (d.clinic.name or 'DC')[:2].upper()
+    initials = (d.raw_clinic_name or 'DC')[:2].upper()
     bg = '#ffffff' if on_dark else d.primary
     fg = d.primary if on_dark else '#ffffff'
     return (
@@ -133,6 +169,22 @@ def logo_block(d, size: int = 56, radius: str = '6px', on_dark: bool = False) ->
         f'border-radius:{radius};text-align:center;line-height:{size}px;'
         f'font-weight:700;font-size:{max(12, size // 3)}px;letter-spacing:.5px;">{initials}</div>'
     )
+
+
+
+def qualifications_line(quals: str, size: str = '9.5px', color: str = '#6B7280') -> str:
+    """The letters under a doctor's name, or nothing.
+
+    Small and bold on the line below the name, which is how a printed
+    prescription pad sets them and what a clinic recognises as correct. One
+    helper so the four places a doctor's name appears cannot each pick their own
+    size — the signature block and the header used to, and the result looked
+    like two different documents stapled together.
+    """
+    if not quals:
+        return ''
+    return (f'<div style="font-size:{size};font-weight:700;color:{color};'
+            f'letter-spacing:.2px;margin-top:1px;">{quals}</div>')
 
 
 def tax_rows(d, label_cls: str = '', value_cls: str = '') -> str:
@@ -152,16 +204,23 @@ def tax_rows(d, label_cls: str = '', value_cls: str = '') -> str:
     return f'<tr><td class="{label_cls}">Tax</td><td class="{value_cls}">{money(d, d.tax)}</td></tr>'
 
 
-def signature_block(d, align: str = 'right') -> str:
-    """The authorised signature, when the clinic has not hidden it."""
+def signature_block(d, align: str = 'right', with_qualifications: bool = True) -> str:
+    """The authorised signature, when the clinic has not hidden it.
+
+    `with_qualifications` exists for layouts that already name the doctor
+    elsewhere on the page. The letters belong once, on the line that identifies
+    them; repeating them above the signature of the same person is noise.
+    """
     if not d.vis.signature:
         return ''
     img = (f'<img src="{d.doctor_signature}" alt="" style="display:block;max-width:150px;'
            f'max-height:50px;margin-{"left" if align == "right" else "right"}:auto;'
            f'margin-bottom:2px;object-fit:contain;">') if d.doctor_signature else ''
+    quals = (qualifications_line(getattr(d, 'doctor_qualifications', ''), size='9px')
+             if with_qualifications else '')
     return (
         f'<div style="text-align:{align};">{img}'
         f'<div style="border-top:1px solid #9aa3ad;padding-top:4px;min-width:150px;'
         f'display:inline-block;font-size:10px;color:#6B7280;">'
-        f'{d.doctor_name or "Authorised Signatory"}</div></div>'
+        f'{d.doctor_name or "Authorised Signatory"}{quals}</div></div>'
     )

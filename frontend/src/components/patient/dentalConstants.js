@@ -269,6 +269,118 @@ export const TOOTH_CONDITIONS = [
     { value: 'fractured', label: 'Fractured' },
 ];
 
+/* ── Clinical conditions ───────────────────────────────────────────────────
+
+   What the tooth HAS, grouped the way a dentist thinks about it. Several at
+   once: a tooth can be eroded, sensitive and receding all together, which the
+   single `condition` field above can never say.
+
+   Four of these are not new facts, and are deliberately NOT stored twice:
+
+     impacted, fractured, missing  -> `condition`   (they change how the tooth
+                                                      is drawn, and exclude each
+                                                      other: a tooth cannot be
+                                                      both missing and impacted)
+     periapical abscess            -> the `abscess` mark (a ring at the apex)
+
+   Picking one of those here writes to where it already lives, so the chart,
+   the summary PDF and every chart saved before this keep reading one record.
+   Everything else goes in the tooth's own `conditions` list.
+
+   Whole-mouth conditions (bruxism, malocclusion, anodontia) are offered too.
+   They are recorded on the teeth they show on — select the teeth first to put
+   one on several at once.
+
+   `hint` is the plain-language line under each name, for the member of staff
+   who is charting and is not a dentist.
+*/
+export const CONDITION_GROUPS = [
+    {
+        id: 'infection',
+        label: 'Bacterial & infectious',
+        items: [
+            { value: 'caries', label: 'Dental caries', hint: 'Damage to enamel and dentin from plaque acids' },
+            { value: 'pulpitis', label: 'Pulpitis', hint: 'Inflamed nerve and blood vessels, usually from deep decay' },
+            { value: 'periapical_abscess', label: 'Periapical abscess', hint: 'Pus at the root tip from an advanced infection', mark: 'abscess' },
+            { value: 'pericoronitis', label: 'Pericoronitis', hint: 'Inflamed gum around a partly erupted tooth' },
+            { value: 'root_canal_infection', label: 'Root canal infection', hint: 'Bacteria in the deepest chamber of the tooth' },
+        ],
+    },
+    {
+        id: 'damage',
+        label: 'Physical damage & wear',
+        items: [
+            { value: 'fractured', label: 'Cracked or fractured', hint: 'From surface craze lines to a split root', structural: 'fractured' },
+            { value: 'erosion', label: 'Erosion', hint: 'Enamel dissolved by dietary acid or reflux' },
+            { value: 'attrition', label: 'Attrition', hint: 'Biting surfaces worn by tooth-on-tooth contact' },
+            { value: 'abrasion', label: 'Abrasion', hint: 'Wear from external friction, e.g. a hard brush' },
+            { value: 'abfraction', label: 'Abfraction', hint: 'Micro-lesions at the gumline from flexing under load' },
+            { value: 'bruxism', label: 'Bruxism', hint: 'Clenching or grinding, often in sleep' },
+            { value: 'dental_trauma', label: 'Dental trauma', hint: 'Loosened, displaced or knocked out by an impact' },
+        ],
+    },
+    {
+        id: 'development',
+        label: 'Alignment, growth & development',
+        items: [
+            { value: 'impacted', label: 'Impacted', hint: 'Trapped under the gum and unable to erupt', structural: 'impacted' },
+            { value: 'malocclusion', label: 'Malocclusion', hint: 'Overbite, underbite, crossbite or crowding' },
+            { value: 'hyperdontia', label: 'Hyperdontia', hint: 'An extra (supernumerary) tooth' },
+            { value: 'hypodontia', label: 'Hypodontia / anodontia', hint: 'Congenitally absent — never formed, not extracted' },
+            { value: 'fluorosis', label: 'Dental fluorosis', hint: 'Enamel marked by high fluoride in childhood' },
+            { value: 'enamel_hypoplasia', label: 'Enamel hypoplasia', hint: 'Thin, weak or pitted enamel from birth' },
+            { value: 'macro_microdontia', label: 'Macrodontia / microdontia', hint: 'Abnormally large or small tooth' },
+        ],
+    },
+    {
+        id: 'support',
+        label: 'Gum & supporting structures',
+        items: [
+            { value: 'gingivitis', label: 'Gingivitis', hint: 'Reversible inflammation and bleeding of the gum margin' },
+            { value: 'periodontitis', label: 'Periodontitis', hint: 'Infection destroying the bone and ligament' },
+            { value: 'gingival_recession', label: 'Gingival recession', hint: 'Gum pulled back, exposing the root' },
+            { value: 'tooth_mobility', label: 'Mobility', hint: 'Loose from trauma or bone loss' },
+            { value: 'missing', label: 'Missing / extracted', hint: 'Tooth no longer present (edentulous space)', structural: 'missing' },
+        ],
+    },
+    {
+        id: 'nerve_aesthetic',
+        label: 'Sensitivity & appearance',
+        items: [
+            { value: 'dentin_hypersensitivity', label: 'Dentin hypersensitivity', hint: 'Sharp pain to hot, cold, sweet or acid' },
+            { value: 'intrinsic_discoloration', label: 'Intrinsic discoloration', hint: 'Internal staining from trauma, age or medicines' },
+            { value: 'extrinsic_discoloration', label: 'Extrinsic discoloration', hint: 'Surface stain from food, drink or tobacco' },
+            { value: 'root_resorption', label: 'Root resorption', hint: 'The body breaking down the tooth, inside or out' },
+        ],
+    },
+];
+
+export const CONDITION_ITEMS = CONDITION_GROUPS.flatMap((g) => g.items);
+
+const CONDITION_BY_VALUE = Object.fromEntries(CONDITION_ITEMS.map((i) => [i.value, i]));
+
+/** A stored condition value, as words. Unknown values come back as written. */
+export const conditionLabel = (value) => CONDITION_BY_VALUE[value]?.label || value;
+
+/** The tooth's own list. Anything not an array reads as empty. */
+export const conditionsOf = (toothData = {}) =>
+    Array.isArray(toothData.conditions) ? toothData.conditions : [];
+
+/**
+ * Every condition a tooth carries, from wherever each one is stored — the
+ * structural state, the abscess mark and the list — as the picker's values.
+ * One reader for all three, so nothing displays a condition the others miss.
+ */
+export const allConditionsOf = (toothData = {}) => {
+    const out = [];
+    const { condition } = readToothState(toothData);
+    const structural = CONDITION_ITEMS.find((i) => i.structural && i.structural === condition);
+    if (structural) out.push(structural.value);
+    if (marksOf(toothData).includes('abscess')) out.push('periapical_abscess');
+    conditionsOf(toothData).forEach((v) => { if (!out.includes(v)) out.push(v); });
+    return out;
+};
+
 /**
  * What kind of work, and it is NOT the same list for both stages.
  *

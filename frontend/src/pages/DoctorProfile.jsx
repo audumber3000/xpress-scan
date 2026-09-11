@@ -27,7 +27,7 @@ const DoctorProfile = () => {
   const [userDataError, setUserDataError] = useState("");
 
   // Editable personal info
-  const [form, setForm] = useState({ first_name: "", last_name: "", phone: "" });
+  const [form, setForm] = useState({ first_name: "", last_name: "", phone: "", qualifications: "" });
   const [savingProfile, setSavingProfile] = useState(false);
 
   // Avatar
@@ -69,6 +69,7 @@ const DoctorProfile = () => {
         first_name: response.first_name || "",
         last_name: response.last_name || "",
         phone: response.phone || "",
+        qualifications: response.qualifications || "",
       });
       setSignaturePreview(response.signature_url || null);
       setAvatarPreview(response.avatar_url || null);
@@ -96,6 +97,7 @@ const DoctorProfile = () => {
         first_name: form.first_name.trim(),
         last_name: form.last_name.trim(),
         phone: form.phone.trim() || null,
+        qualifications: form.qualifications.trim() || null,
       });
       await fetchUserAndClinicData();
       refreshUser?.();
@@ -359,6 +361,23 @@ const DoctorProfile = () => {
                 <div>
                   <label className={labelCls}>Email</label>
                   <input className={`${inputCls} bg-gray-50 text-gray-500 cursor-not-allowed`} value={email} disabled readOnly title="Email can't be changed here" />
+                </div>
+                {/* Free text, not a picklist: qualifications differ by country
+                    and by council, and a clinic that cannot type its own is a
+                    clinic that leaves the field blank. */}
+                <div className="md:col-span-2">
+                  <label className={labelCls}>Qualifications</label>
+                  <input
+                    className={inputCls}
+                    value={form.qualifications}
+                    maxLength={120}
+                    onChange={(e) => setForm(f => ({ ...f, qualifications: e.target.value }))}
+                    placeholder="BDS, MDS (Orthodontics)"
+                  />
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    Printed in small bold under your name on prescriptions, invoices and consent
+                    forms. Each document has its own switch for it in Control Center → Templates.
+                  </p>
                 </div>
               </div>
               <div className="mt-5 flex justify-end">

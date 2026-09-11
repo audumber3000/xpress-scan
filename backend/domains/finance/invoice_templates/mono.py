@@ -12,6 +12,9 @@ choosing black and white, and the picker says so.
 from domains.finance.invoice_templates._common import (
     prepare, money, logo_block, tax_rows, signature_block,
 )
+from domains.infrastructure.services.pdf_fields import (
+    page_css,
+)
 from domains.finance.invoice_templates.discount_block import render_discount_block
 
 
@@ -19,6 +22,12 @@ def render_invoice(invoice, clinic, config=None) -> str:
     # Prepared with a black default, then the accent is pinned to black so the
     # shared helpers (signature rule, discount block) stay monochrome too.
     d = prepare(invoice, clinic, config, default_color='#000000')
+
+    # This layout bleeds to the paper edge, so its normal page box is margin 0.
+    # On pre-printed stationery that is exactly wrong — the content would land
+    # under the clinic's printed header — so the resolved letterhead supplies
+    # the margins instead. `prepare` has already stripped the branding itself.
+    page_rule = page_css(d.letterhead, default_margin='0')
     d.primary = '#000000'
 
     rows = ''
@@ -69,7 +78,7 @@ def render_invoice(invoice, clinic, config=None) -> str:
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
 <style>
-@page {{ size: A4; margin: 0; }}
+{page_rule}
 body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin:0; padding:0;
         color:#000; font-size:11px; line-height:1.45; background:#fff; }}
 .page {{ padding:44px 48px; }}
@@ -105,10 +114,10 @@ table.items tr.grand td {{ background:#f2f2f2; font-weight:700; font-size:13px; 
 <div class="page">
   <table class="head"><tr>
     <td>
-      <div class="clinic">{d.clinic.name}</div>
+      {f'<div class="clinic">{d.clinic.name}</div>' if d.clinic.name else ''}
       <div class="addr">{clinic_lines}</div>
     </td>
-    <td style="width:70px;text-align:right;">{logo_block(d, 46, '0')}</td>
+    {f'<td style="width:70px;text-align:right;">{logo_block(d, 46, "0")}</td>' if d.vis.logo else ''}
     <td class="word" style="width:110px;">INVOICE</td>
   </tr></table>
 

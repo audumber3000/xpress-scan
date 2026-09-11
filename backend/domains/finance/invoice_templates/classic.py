@@ -7,8 +7,11 @@ deliberate redesign, not a drift.
 import datetime
 
 from domains.infrastructure.services.pdf_safety import safe_color, safe_signature_data_uri, safe_text
+from domains.finance.invoice_templates._common import qualifications_line
 from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
-from domains.infrastructure.services.pdf_fields import resolve_field_visibility
+from domains.infrastructure.services.pdf_fields import (
+    apply_letterhead, page_css, resolve_field_visibility, resolve_letterhead,
+)
 from domains.finance.invoice_templates.discount_block import render_discount_block
 
 
@@ -51,6 +54,11 @@ def render_invoice(invoice, clinic, config=None) -> str:
     # What this clinic wants printed. Every flag defaults to shown and can only
     # ever hide, so a clinic that never opened the editor renders unchanged.
     vis = resolve_field_visibility(config)
+    # Printing onto the clinic's own headed paper: reserve the four margins
+    # their stationery prints in, and drop our copy of the branding the sheet
+    # already carries. Off unless configured.
+    letterhead = resolve_letterhead(config)
+    vis = apply_letterhead(vis, letterhead)
 
     footer_text = safe_text((config.footer_text if config and config.footer_text else '') if config else '') if vis.footer else ''
 
@@ -70,7 +78,7 @@ def render_invoice(invoice, clinic, config=None) -> str:
     # Clinic fields
     # Each line is gated with `and`, never `or`: a flag may hide a field that
     # would have printed, but must never make an empty one appear.
-    c_name    = clinic.name    if clinic else 'Dental Clinic'
+    c_name    = (clinic.name if clinic else 'Dental Clinic') if vis.clinic_name else ''
     c_phone   = clinic.phone   if clinic and clinic.phone and vis.contact else ''
     c_email   = clinic.email   if clinic and clinic.email and vis.contact else ''
     c_address = clinic.address if clinic and clinic.address and vis.address else ''
@@ -97,6 +105,8 @@ def render_invoice(invoice, clinic, config=None) -> str:
     # Doctor from appointment + their signature (Phase 5)
     doctor_name = c_doctor
     doctor_signature = ''
+    # Letters after the name, travelling with whichever doctor was resolved.
+    doctor_qualifications = safe_text(getattr(clinic, 'doctor_qualifications', '') or '')
     try:
         appt = getattr(invoice, 'appointment', None)
         if appt:
@@ -104,11 +114,28 @@ def render_invoice(invoice, clinic, config=None) -> str:
             if doc:
                 doctor_name = getattr(doc, 'name', '') or doctor_name
                 doctor_signature = safe_signature_data_uri(getattr(doc, 'signature_url', None))
+                doctor_qualifications = safe_text(getattr(doc, 'qualifications', '') or '')
             if not doctor_name:
                 doctor_name = getattr(appt, 'dentist_name', '') or getattr(appt, 'doctor_name', '') or ''
     except Exception:
         pass
 
+
+    # The per-field switches. Applied after the lookups above so the resolution
+    # logic is unchanged and only the printing is suppressed — and applied here
+    # rather than at each use so there is one place to read.
+    if not vis.doctor_name:
+        doctor_name = ''
+    # Hiding the name hides the letters with it: "BDS, MDS" under no name at
+    # all is not a thing anybody asked for.
+    if not vis.doctor_qualifications or not doctor_name:
+        doctor_qualifications = ''
+    if not vis.patient_contact:
+        p_phone = ''
+    if not vis.patient_age_gender:
+        p_age = p_gender = ''
+    if not vis.logo:
+        logo_html = ''
     # Dates
     created_at   = getattr(invoice, 'created_at', None)
     invoice_date = created_at.strftime('%d %B %Y') if created_at else datetime.date.today().strftime('%d %B %Y')
@@ -134,6 +161,7 @@ def render_invoice(invoice, clinic, config=None) -> str:
         c_name=c_name, c_phone=c_phone, c_email=c_email,
         c_address=c_address, c_tagline=c_tagline,
         c_reg=c_reg, c_gst=c_gst, doctor_name=doctor_name,
+        doctor_qualifications=doctor_qualifications,
         doctor_signature=doctor_signature,
         status_label=status_label,
         p_name=p_name, p_phone=p_phone,
@@ -142,7 +170,7 @@ def render_invoice(invoice, clinic, config=None) -> str:
         subtotal=subtotal, total=total,
         inv_tax=inv_tax, discount=discount, taxable=taxable,
         currency=currency, tax_label=tax_label, is_india=is_india,
-        vis=vis,
+        vis=vis, letterhead=letterhead,
     )
 
 
@@ -151,14 +179,17 @@ def _render_indian_tax(
     invoice, primary_color,
     footer_text, logo_html,
     c_name, c_phone, c_email, c_address, c_tagline,
-    c_reg, c_gst, doctor_name, status_label,
+    c_reg, c_gst, doctor_name, doctor_qualifications, status_label,
     p_name, p_phone, p_age, p_gender, p_uhid,
     invoice_date, subtotal, total, inv_tax, discount, taxable,
     doctor_signature='', currency='₹', tax_label='GST No.', is_india=True,
-    vis=None,
+    vis=None, letterhead=None,
 ):
-    from domains.infrastructure.services.pdf_fields import ALL_VISIBLE
+    from domains.infrastructure.services.pdf_fields import (
+        ALL_VISIBLE, LETTERHEAD_OFF, page_css,
+    )
     vis = vis or ALL_VISIBLE
+    letterhead = letterhead or LETTERHEAD_OFF
     # Line items
     rows = ''
     for i, item in enumerate(invoice.line_items, 1):
@@ -217,19 +248,66 @@ def _render_indian_tax(
         f'''<div class="signature-box">
         {f'<img src="{doctor_signature}" alt="Signature" style="max-width:140px;max-height:50px;display:block;margin:0 auto 4px auto;object-fit:contain;">' if doctor_signature else ''}
         <div class="signature-line">Authorized Signatory / Seal</div>
-        <p style="margin:5px 0 0 0;color:var(--text-muted);font-weight:bold;">{c_name}</p>
+        {f'<p style="margin:5px 0 0 0;color:var(--text-muted);font-weight:bold;">{c_name}</p>' if c_name else ''}
       </div>''' if vis.signature else ''
     )
+
+    # The page box, and our own letterhead.
+    #
+    # On pre-printed stationery the whole header block comes off: the sheet
+    # already carries the clinic name, the logo and the contact details, and the
+    # measured margins keep our content inside the blank centre of the page.
+    page_rule = page_css(letterhead)
+
+    # Each piece of the header is built separately and only if it has content.
+    # Interpolating a hidden value straight into its markup leaves the *element*
+    # behind — an empty <h1> still reserves its line height, an empty logo box
+    # still pushes the text across by its margin — so a clinic that hid its name
+    # and logo got a blank band instead of a header that had gone away. The
+    # flags have to remove the container, not just the words inside it.
+    name_html = f'<h1>{c_name}</h1>' if c_name else ''
+    tagline_html = f'<div class="tagline">{c_tagline}</div>' if c_tagline else ''
+    logo_cell = (f'<div style="margin-right:20px;flex-shrink:0;">{logo_html}</div>'
+                 if logo_html else '')
+    left_inner = (f"""<div class="clinic-info-left">
+          {name_html}
+          {tagline_html}
+        </div>""" if (name_html or tagline_html) else '')
+    left_html = (f"""<div class="header-left">
+        {logo_cell}
+        {left_inner}
+      </div>""" if (logo_cell or left_inner) else '')
+
+    doc_html = (f'<div class="doc-name">{doctor_name}</div>'
+                + qualifications_line(doctor_qualifications)) if doctor_name else ''
+    addr_html = f'<p>{c_address}</p>' if c_address else ''
+    tel_html = f'<p>Tel: {c_phone}</p>' if c_phone else ''
+    email_html = f'<p>Email: {c_email}</p>' if c_email else ''
+    right_html = (f"""<div class="clinic-info-right">
+        {doc_html}
+        {addr_html}
+        {tel_html}
+        {email_html}
+        {reg_gst_line}
+      </div>""" if (doc_html or addr_html or tel_html or email_html or reg_gst_line) else '')
+
+    # And when every part is hidden the header itself goes, rather than leaving
+    # a bordered empty row above the invoice title.
+    header_html = '' if (letterhead.enabled or not (left_html or right_html)) else f'''
+    <div class="header">
+      {left_html}
+      {right_html}
+    </div>'''
 
     age_gender = ' / '.join(filter(None, [p_age, p_gender]))
     notes      = getattr(invoice, 'notes', '') or ''
     # Amount-in-words uses Indian numbering/"Rupees" wording, so only show it for India.
-    aow        = _amount_in_words(total) if is_india else ''
+    aow        = _amount_in_words(total) if (is_india and vis.amount_in_words) else ''
 
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
 <style>
-@page {{ size: A4; margin: 2mm; }}
+{page_rule}
 :root {{
   --primary-color: {primary_color};
   --bg-color: #f4f7f6;
@@ -352,26 +430,10 @@ body {{
 </head><body>
 
 <div class="invoice-container">
-  <div class="color-strip"></div>
+  {'' if letterhead.enabled else '<div class="color-strip"></div>'}
   <div class="invoice-body">
 
-    <!-- HEADER -->
-    <div class="header">
-      <div class="header-left">
-        <div style="margin-right:20px;flex-shrink:0;">{logo_html}</div>
-        <div class="clinic-info-left">
-          <h1>{c_name}</h1>
-          {f'<div class="tagline">{c_tagline}</div>' if c_tagline else ''}
-        </div>
-      </div>
-      <div class="clinic-info-right">
-        {f'<div class="doc-name">{doctor_name}</div>' if doctor_name else ''}
-        {f'<p>{c_address}</p>' if c_address else ''}
-        {f'<p>Tel: {c_phone}</p>' if c_phone else ''}
-        {f'<p>Email: {c_email}</p>' if c_email else ''}
-        {reg_gst_line}
-      </div>
-    </div>
+    <!-- HEADER -->{header_html}
 
     <div class="invoice-title">INVOICE</div>
 
@@ -435,7 +497,7 @@ body {{
         <ul>
           {'<li>Clinical treatments (Consultation, RCT, Crowns, Implants) are exempt from GST as per Indian Govt. regulations (SAC 9993). GST applies only to cosmetic procedures &amp; pharmacy products.</li>' if is_india else ''}
           <li>Warranties for crowns/bridges are valid only with this original invoice.</li>
-          <li>This is a computer-generated invoice and does not require a physical signature.</li>
+          {'<li>This is a computer-generated invoice and does not require a physical signature.</li>' if vis.computer_generated_note else ''}
         </ul>
       </div>
       {signature_box}
@@ -444,7 +506,7 @@ body {{
     {f'<div style="text-align:center;color:#888;font-size:10px;margin-top:16px;border-top:1px solid #eee;padding-top:10px;">{footer_text}</div>' if footer_text else ''}
 
   </div>
-  <div class="color-strip"></div>
+  {'' if letterhead.enabled else '<div class="color-strip"></div>'}
 </div>
 
 </body></html>"""

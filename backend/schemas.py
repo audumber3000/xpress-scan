@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, Dict, Any, List
 from datetime import datetime, date
 
@@ -937,6 +937,25 @@ class PrescriptionItem(BaseModel):
     quantity: Optional[str] = None
     instructions: Optional[str] = None
     notes: Optional[str] = None
+
+    @field_validator('dosage', 'frequency', 'duration', 'quantity', 'instructions', 'notes',
+                     mode='before')
+    @classmethod
+    def _text(cls, v):
+        """These are free text on a prescription, but they are not always typed.
+
+        A medicine picked from a medication set or from the medicines list
+        arrives with `quantity` straight off a numeric column, so it is 10, not
+        "10". Rejecting that returned a 422 from the save, which the drawer
+        swallowed — the doctor saw it close and found nothing on the file.
+        """
+        if v is None or isinstance(v, str):
+            return v
+        if isinstance(v, bool):
+            return str(v)
+        if isinstance(v, (int, float)):
+            return str(int(v)) if float(v).is_integer() else str(v)
+        return str(v)
 
 class PrescriptionBase(BaseModel):
     patient_id: int

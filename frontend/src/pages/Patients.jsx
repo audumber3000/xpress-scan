@@ -21,6 +21,7 @@ import EmptyState from "../components/common/EmptyState";
 import SectionError from "../components/common/SectionError";
 import InlineFeedback from "../components/common/InlineFeedback";
 import { notify } from "../utils/notify";
+import PatientPhoto from "../components/patients/PatientPhoto";
 import MasterPasswordModal from "../components/common/MasterPasswordModal";
 import PatientEditModal from "../components/patient/PatientEditModal";
 import { medicalCare } from "../assets/illustrations";
@@ -177,6 +178,12 @@ const Patients = () => {
 
   // Edit/Create states
   const [editDrawerOpen, setEditDrawerOpen] = useState(false);
+  // The photo, which cannot be uploaded until the patient has an id. Until then
+  // the component hands back the blob and this holds it; the save posts it once
+  // the record exists. Editing an existing patient uploads immediately, so this
+  // stays null on that path.
+  const [pendingPhoto, setPendingPhoto] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
   const [editingPatient, setEditingPatient] = useState(null);
   // Edit opens a modal; the drawer below is only ever for creating someone new.
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -437,6 +444,10 @@ const Patients = () => {
     });
     setAgeMode("age");
     setEditErrors({});
+    // Otherwise the previous patient's face is still sitting in the drawer when
+    // the next one is created, and it would be uploaded to them.
+    setPendingPhoto(null);
+    setPhotoPreview(null);
     setEditDrawerOpen(true);
   };
 
@@ -523,6 +534,8 @@ const Patients = () => {
     }));
     setAgeMode('age');
     setEditErrors({});
+    setPendingPhoto(null);
+    setPhotoPreview(null);
     setDupCheckedPhone('');
     // Straight back to the first field, so a run of entries never needs the
     // mouse between one patient and the next.
@@ -568,6 +581,22 @@ const Patients = () => {
       const payload = buildPayload();
       const created = await api.post(`/patients/`, payload);
       track(EVENTS.PATIENT_CREATED, { source: 'patients_list' });
+
+      // The photo could not be attached before the record existed, so it goes
+      // up now. Deliberately not fatal: a patient who is saved but whose photo
+      // failed is a patient who is saved, and losing the whole record over a
+      // picture would be the wrong trade every time.
+      if (created?.id && pendingPhoto) {
+        try {
+          const body = new FormData();
+          body.append('file', pendingPhoto, 'photo.jpg');
+          await api.post(`/patients/${created.id}/photo`, body);
+        } catch {
+          notify.problem('Patient saved, but the photo did not upload. Add it from their file.');
+        }
+      }
+      setPendingPhoto(null);
+      setPhotoPreview(null);
       if (andAnother) {
         notify.done(`${created?.name || data.name} saved`);
         resetFormForNext();
@@ -716,11 +745,19 @@ const Patients = () => {
           // its content, so without it a long name refuses to shrink and shoves
           // the avatar out of the cell rather than truncating.
           <div className="flex items-center gap-3 min-w-0">
+            {/* The real face when there is one. The persona is the fallback:
+                recognising the patient in front of you is the whole reason the
+                photo exists, so it wins wherever both could show. */}
             <img
-              src={generatePatientPersona(patient, 80)}
-              onError={(e) => { e.target.onerror = null; e.target.src = generateInitialsAvatar(patient.name || 'Patient'); }}
+              src={patient.photo_url || generatePatientPersona(patient, 80)}
+              onError={(e) => {
+                e.target.onerror = null;
+                e.target.src = patient.photo_url
+                  ? generatePatientPersona(patient, 80)
+                  : generateInitialsAvatar(patient.name || 'Patient');
+              }}
               alt={patient.name}
-              className="w-9 h-9 rounded-full flex-shrink-0 object-cover border border-gray-100"
+              className={`w-9 h-9 ${patient.photo_url ? 'rounded-md' : 'rounded-full'} flex-shrink-0 object-cover border border-gray-100`}
             />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 min-w-0">
@@ -1267,6 +1304,24 @@ const Patients = () => {
                 onSubmit={(e) => { e.preventDefault(); handleSavePatient(); }}
                 className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4 pb-2"
               >
+                {/* Above the name, because it is the thing the front desk
+                    looks at first when the patient is standing there. */}
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Photo</label>
+                  <PatientPhoto
+                    patientId={editingPatient?.id || null}
+                    value={photoPreview || editingPatient?.photo_url || null}
+                    onChange={(next) => {
+                      if ('pendingBlob' in next) {
+                        setPendingPhoto(next.pendingBlob);
+                        setPhotoPreview(next.previewUrl);
+                      } else {
+                        setPhotoPreview(next.photo_url);
+                      }
+                    }}
+                  />
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Name <span className="text-red-500">*</span></label>
                   {/* The cursor lands here on open. This form is filled dozens

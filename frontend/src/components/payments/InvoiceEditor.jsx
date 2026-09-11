@@ -335,14 +335,12 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, onRefresh, prefill = null }
   // A line billed from case-paper stock usage gets the same choice the case
   // paper offers: drop it from the bill only, or remove it entirely and restock.
   // Plain lines delete after a simple confirm.
-  const requestDeleteLineItem = (item) => {
-    if (item?.linked_stock) {
-      setDeleteLinePrompt(item);
-      return;
-    }
-    if (!window.confirm("Are you sure you want to delete this line item?")) return;
-    performDeleteLineItem(item.id, false);
-  };
+  // Every delete goes through our own dialog. The plain case used to fall back
+  // to the browser's `window.confirm` — a grey system box with the page's URL
+  // for a title, which looks like an error from somewhere else and blocks the
+  // whole tab. The stock-linked case already had a proper dialog; now both do,
+  // differing only in the choices they offer.
+  const requestDeleteLineItem = (item) => setDeleteLinePrompt(item);
 
   const performDeleteLineItem = async (lineItemId, restock) => {
     try {
@@ -787,14 +785,22 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, onRefresh, prefill = null }
         onClose={() => !saving && setDeleteLinePrompt(null)}
         tone="danger"
         title="Remove this item?"
-        message={
+        message={deleteLinePrompt?.linked_stock ? (
           <>
             <span className="font-semibold text-gray-700">{deleteLinePrompt?.description}</span> was recorded as stock used on the case paper. Remove it from this bill only, or remove it entirely and put the stock back.
           </>
-        }
-        actions={[
+        ) : (
+          <>
+            <span className="font-semibold text-gray-700">{deleteLinePrompt?.description}</span>
+            {' '}comes off this bill
+            {deleteLinePrompt ? <> and the total drops by <span className="font-semibold text-gray-700">{getCurrencySymbol()}{Number(deleteLinePrompt.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></> : null}.
+          </>
+        )}
+        actions={deleteLinePrompt?.linked_stock ? [
           { label: 'Remove from bill only', variant: 'secondary', onClick: () => performDeleteLineItem(deleteLinePrompt.id, false), disabled: saving },
           { label: 'Remove entirely & restock', variant: 'danger', onClick: () => performDeleteLineItem(deleteLinePrompt.id, true), disabled: saving },
+        ] : [
+          { label: saving ? 'Removing…' : 'Remove item', variant: 'danger', onClick: () => performDeleteLineItem(deleteLinePrompt.id, false), disabled: saving },
         ]}
       />
 

@@ -14,7 +14,9 @@ from domains.infrastructure.services.pdf_safety import (
     safe_color, safe_signature_data_uri, safe_text,
 )
 from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
-from domains.infrastructure.services.pdf_fields import resolve_field_visibility
+from domains.infrastructure.services.pdf_fields import (
+    apply_letterhead, page_css, resolve_field_visibility, resolve_letterhead,
+)
 
 
 def render_consent(clinic, patient_name, patient_id, template_name,
@@ -31,6 +33,18 @@ def render_consent(clinic, patient_name, patient_id, template_name,
     # Flags default to shown and can only hide — see pdf_fields.
     vis = resolve_field_visibility(config)
 
+    # Printing onto the clinic's own headed paper: our header and colour strips
+    # come off, and the four margins the stationery prints in are reserved.
+    # The fixed footer stays — it carries the terms and the signature, which are
+    # the legally meaningful part of a consent form, not branding.
+    letterhead = resolve_letterhead(config)
+    vis = apply_letterhead(vis, letterhead)
+    page_rule = page_css(letterhead)
+    letterhead_css = (
+        ' .header, .color-strip { display: none !important; }'
+        ' .consent-body { padding: 0 0 200px 0; }'
+    ) if letterhead.enabled else ''
+
     footer_text = safe_text(
         (config.footer_text if config and config.footer_text else '') if config else ''
     ) if vis.footer else ''
@@ -43,7 +57,9 @@ def render_consent(clinic, patient_name, patient_id, template_name,
         getattr(clinic, 'logo_url', None),
     )
 
-    if logo_url:
+    if not vis.logo:
+        logo_html = ''
+    elif logo_url:
         logo_html = f'<img src="{logo_url}" alt="Logo" style="width:75px;height:75px;object-fit:contain;">'
     else:
         initials = safe_text(clinic.name[:2].upper() if clinic and clinic.name else 'DC')
@@ -54,13 +70,15 @@ def render_consent(clinic, patient_name, patient_id, template_name,
         )
 
     # ── Clinic fields ───────────────────────────────────────────────────────
-    c_name    = safe_text(clinic.name    if clinic else 'Dental Clinic')
+    c_name    = safe_text((clinic.name if clinic else 'Dental Clinic') if vis.clinic_name else '')
     c_tagline = safe_text((getattr(clinic, 'tagline', '') or '') if vis.tagline else '')
     c_address = safe_text((getattr(clinic, 'address', '') or '') if vis.address else '')
     c_phone   = safe_text((getattr(clinic, 'phone',   '') or '') if vis.contact else '')
     c_email   = safe_text((getattr(clinic, 'email',   '') or '') if vis.contact else '')
     c_reg     = safe_text((getattr(clinic, 'license_number', '') or '') if vis.license_number else '')
-    c_doctor  = safe_text(getattr(clinic, 'doctor_name', '') or '')
+    c_doctor  = safe_text((getattr(clinic, 'doctor_name', '') or '') if vis.doctor_name else '')
+    c_quals   = safe_text((getattr(clinic, 'doctor_qualifications', '') or '')
+                          if (vis.doctor_qualifications and c_doctor) else '')
 
     reg_line = f'<p>Reg No: {c_reg}</p>' if c_reg else ''
 
@@ -70,7 +88,7 @@ def render_consent(clinic, patient_name, patient_id, template_name,
     signature_box = (
         f'''<div class="signature-box">
         <div class="signature-line">{c_doctor or 'Authorized Signatory'}</div>
-        <p style="margin:5px 0 0 0;color:var(--text-muted);font-weight:bold;">{c_name}</p>
+        {f'<p style="margin:5px 0 0 0;color:var(--text-muted);font-weight:bold;">{c_name}</p>' if c_name else ''}
       </div>''' if vis.signature else ''
     )
 
@@ -114,7 +132,7 @@ def render_consent(clinic, patient_name, patient_id, template_name,
   --table-header-bg: #f8fafc;
   --highlight-bg: #f0f4f8;
 }}
-@page {{ size: A4; margin: 2mm; }}
+{page_rule}{letterhead_css}
 body {{
   font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
   color: var(--text-main);
@@ -241,7 +259,8 @@ body {{
         </div>
       </div>
       <div class="clinic-info-right">
-        {f'<div class="doc-name">{c_doctor}</div>' if c_doctor else ''}
+        {(f'<div class="doc-name">{c_doctor}</div>' if c_doctor else '')
+          + (f'<div style="font-size:9.5px;font-weight:700;color:#6B7280;letter-spacing:.2px;">{c_quals}</div>' if c_quals else '')}
         {f'<p>{c_address}</p>' if c_address else ''}
         {f'<p>Tel: {c_phone}</p>' if c_phone else ''}
         {f'<p>Email: {c_email}</p>' if c_email else ''}

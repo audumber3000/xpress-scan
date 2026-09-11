@@ -226,6 +226,12 @@ class User(Base):
     supabase_user_id = Column(String, nullable=True)  # Link to Supabase auth user
     password_hash = Column(String, nullable=True)  # Password hash for OAuth users who want desktop access
     signature_url = Column(Text, nullable=True)  # Base64 signature image for prescriptions/documents
+    # Letters after the name — "BDS", "MDS (Orthodontics)". Free text rather
+    # than a picklist on purpose: qualifications differ by country and by
+    # council, and a clinic that cannot type its own is a clinic that leaves the
+    # field blank. Printed under the doctor's name on documents, and only when
+    # the template's own toggle says so.
+    qualifications = Column(String, nullable=True)
     phone = Column(String, nullable=True)  # Optional personal contact number (profile)
     avatar_url = Column(Text, nullable=True)  # Optional base64 profile photo (profile)
     created_by = Column(Integer, ForeignKey('users.id'), nullable=True)  # Who created this user
@@ -263,6 +269,13 @@ class Patient(Base):
     # anomaly.
     treatment_type = Column(String, nullable=True)
     blood_group = Column(String, nullable=True)
+    # The patient's face, for recognising them at the desk.
+    #
+    # Stores the R2 *key*, never a URL. The signed link expires, and this
+    # codebase has already been bitten twice by a stored presigned URL going
+    # 403 some days later — see pdf_branding.resolve_logo_data_uri and
+    # _with_fresh_logo_url. Read paths re-sign it on the way out.
+    photo_url = Column(Text, nullable=True)
     # Standing allergies, on the patient rather than the visit.
     #
     # CasePaper carries its own `allergies` list, but that is a snapshot of what
@@ -313,6 +326,11 @@ class Prescription(Base):
     clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False)
     patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False)
     appointment_id = Column(Integer, ForeignKey('appointments.id'), nullable=True)  # Linked appointment (if any)
+    # Who wrote it. There was no such column, so a prescription made from the
+    # patient file — which has no appointment to borrow a doctor from — printed
+    # with no doctor's name, no signature and no qualifications at all. The
+    # prescribing doctor is part of the document, not a detail to reconstruct.
+    doctor_id = Column(Integer, ForeignKey('users.id'), nullable=True)
     case_paper_id = Column(Integer, ForeignKey('case_papers.id'), nullable=True)    # Linked case paper / visit
     visit_number = Column(Integer, nullable=True)   # Denormalised for quick display
     items = Column(JSON, nullable=False, default=list)  # List of medication dicts
@@ -605,6 +623,10 @@ class Expense(Base):
     category = Column(String, nullable=False, default='General')  # E.g., Inventory, Salary, Rent, Utilities, Maintenance
     notes = Column(Text, nullable=True)
     bill_file_url = Column(String, nullable=True)  # URL to uploaded bill image/pdf
+    # Paid out of the petty cash float rather than from a bank account. Display
+    # only: `PettyCashEntry.expense_id` is the authoritative link between the
+    # two ledgers, and this flag just saves the ledger a join per row.
+    from_petty_cash = Column(Boolean, default=False, nullable=False)
     date = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
     created_by = Column(Integer, ForeignKey('users.id'), nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -1178,6 +1200,12 @@ class Vendor(Base):
     # terms live here too rather than forcing every payee to be a user.
     fee_basis = Column(String, nullable=True)    # fixed | percentage | None
     fee_value = Column(Float, nullable=True)
+    # Credit terms. `payment_terms_days` is only the default offered when a new
+    # bill is entered — the bill stores its own copy, because a supplier who
+    # moves from 45 days to 30 must not silently re-date every bill already on
+    # the book.
+    payment_terms_days = Column(Integer, nullable=True)
+    credit_limit = Column(Float, nullable=True)
     last_order_date = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -2133,3 +2161,134 @@ class AppVersion(Base):
     message = Column(String, nullable=True)
     store_url = Column(String, nullable=True)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Accounts payable and petty cash
+#
+# `Expense` is money that has ALREADY LEFT. It has no due date, no terms and no
+# unpaid state, which is why a 45-day credit cycle could not be expressed with
+# it: a bill that arrives today and is payable in six weeks is not an expense
+# yet, and recording it as one would overstate this month's costs and understate
+# next month's. The two live side by side — a bill is the obligation, an Expense
+# is the payment that discharges it — and settling writes the Expense exactly as
+# the lab and consultant paths already do, so the ledger, the CSV export and the
+# dashboard keep one source of truth.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PurchaseBill(Base):
+    """A supplier's bill, payable on terms."""
+    __tablename__ = 'purchase_bills'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    vendor_id = Column(Integer, ForeignKey('vendors.id'), nullable=False, index=True)
+
+    bill_number = Column(String, nullable=True)   # the supplier's own reference
+    bill_date = Column(Date, nullable=False)
+    terms_days = Column(Integer, default=0, nullable=False)
+    # Stored rather than derived on read, because the ageing buckets and the
+    # "due this week" list both sort and filter on it, and a computed value
+    # cannot be indexed. It is always written as bill_date + terms_days, and
+    # supplying an explicit due date rewrites terms_days to match — so the two
+    # can never drift into disagreeing about the same bill.
+    due_date = Column(Date, nullable=False, index=True)
+
+    subtotal = Column(Float, default=0.0, nullable=False)
+    tax = Column(Float, default=0.0, nullable=False)
+    amount = Column(Float, nullable=False)        # the total payable
+
+    # unpaid | partial | paid | cancelled. Derived from the payments against it
+    # and rewritten on every change, never set by hand.
+    status = Column(String, default='unpaid', nullable=False, index=True)
+    category = Column(String, default='Other', nullable=False)  # written onto the Expense
+    notes = Column(Text, nullable=True)
+    bill_file_url = Column(String, nullable=True)
+
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow,
+                        onupdate=datetime.datetime.utcnow)
+
+    clinic = relationship("Clinic")
+    vendor = relationship("Vendor")
+    payments = relationship("PurchaseBillPayment", back_populates="bill",
+                            cascade="all, delete-orphan")
+
+
+class PurchaseBillPayment(Base):
+    """One payment against a bill. A bill may take several."""
+    __tablename__ = 'purchase_bill_payments'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    bill_id = Column(Integer, ForeignKey('purchase_bills.id'), nullable=False, index=True)
+
+    amount = Column(Float, nullable=False)
+    paid_on = Column(Date, nullable=False)
+    payment_method = Column(String, default='Cash', nullable=False)
+    reference = Column(String, nullable=True)     # cheque number, UPI ref
+    notes = Column(Text, nullable=True)
+
+    # The ledger row this payment wrote. Reversing the payment deletes it, so
+    # the money never lingers in the ledger after the payment is undone.
+    expense_id = Column(Integer, ForeignKey('expenses.id'), nullable=True)
+
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    bill = relationship("PurchaseBill", back_populates="payments")
+
+
+class PettyCashEntry(Base):
+    """One movement of the cash float.
+
+    `amount` is SIGNED, and the sign is its effect on the drawer: a top-up is
+    positive, a spend is negative, an adjustment is whichever it was. That makes
+    the balance `SUM(amount)` and nothing else — no second column to contradict
+    it, and no way to record a top-up that somehow reduces the float. The API
+    takes a positive figure plus a kind and applies the sign, so nobody has to
+    think about it when entering a row.
+    """
+    __tablename__ = 'petty_cash_entries'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+
+    kind = Column(String, nullable=False)         # top_up | spend | adjustment
+    amount = Column(Float, nullable=False)        # signed, see the docstring
+    occurred_on = Column(Date, nullable=False, index=True)
+    description = Column(String, nullable=True)
+    category = Column(String, nullable=True)      # for spends, the expense category
+
+    # A spend writes an Expense so the money appears in the ledger like any
+    # other cost. This is the authoritative link between the two ledgers.
+    expense_id = Column(Integer, ForeignKey('expenses.id'), nullable=True)
+
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    clinic = relationship("Clinic")
+
+
+class PettyCashClose(Base):
+    """The end-of-day count.
+
+    It records what was in the drawer against what should have been, and stops
+    there. A close deliberately does NOT write an adjustment to make the
+    variance disappear: a float that is short by 200 is a fact about the day,
+    and quietly correcting the balance would destroy the only evidence that it
+    happened. Correcting it is a separate, deliberate adjustment entry.
+    """
+    __tablename__ = 'petty_cash_closes'
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+
+    closed_on = Column(Date, nullable=False, index=True)
+    counted_amount = Column(Float, nullable=False)
+    expected_amount = Column(Float, nullable=False)   # the balance at the moment of closing
+    variance = Column(Float, nullable=False)          # counted - expected
+    notes = Column(Text, nullable=True)
+
+    closed_by = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    clinic = relationship("Clinic")
+    closer = relationship("User", foreign_keys=[closed_by])

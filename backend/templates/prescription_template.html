@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Prescription</title>
     <style>
-        @page { size: A4; margin: 2mm; }
+        {{page_rule}}{{letterhead_css}}
         :root {
             --primary-color: {{primary_color}};
             --bg-color: #f4f7f6;
@@ -181,9 +181,9 @@
         <!-- HEADER -->
         <div class="header">
             <div class="header-left">
-                <div style="margin-right:20px;flex-shrink:0;">{{logo_html}}</div>
+                {{logo_html}}
                 <div class="clinic-info-left">
-                    <h1>{{clinic_name}}</h1>
+                    {{clinic_name_html}}
                     {{clinic_tagline_html}}
                 </div>
             </div>
@@ -206,7 +206,7 @@
                     <p><strong>Patient ID:</strong> {{patient_id}}</p>
                 </td>
                 <td>
-                    <p><strong>Age / Sex:</strong> {{patient_age}} / {{patient_gender}}</p>
+                    <p><strong>Age / Sex:</strong> {{patient_age_sex}}</p>
                     <p><strong>Date:</strong> {{current_date}}</p>
                 </td>
                 <td>

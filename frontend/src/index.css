@@ -256,6 +256,33 @@
 .mp-table-fixed td { overflow: hidden; }
 .mp-table-fixed td div { min-width: 0; }
 
+/* Form fields in the money sections.
+
+   The same eleven Tailwind utilities were being repeated on every input in the
+   purchases and petty-cash forms, and a repeated class list is how two fields
+   on one form end up with different focus rings. Written here once, in the same
+   shape the rest of the app's inputs already use, so a field looks like a field
+   whichever form it is on. Kept to `mp-` prefixed plain CSS rather than an
+   @apply layer, matching mp-table-fixed above. */
+.mp-input {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  color: #111827;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.mp-input:focus {
+  outline: none;
+  border-color: #2a276e;
+  box-shadow: 0 0 0 3px rgb(42 39 110 / 0.12);
+}
+.mp-input::placeholder { color: #9ca3af; }
+.mp-input:disabled { background: #f9fafb; color: #9ca3af; }
+
 /* The help bulb catches the eye now and again rather than sitting grey in the
    corner forever: two soft pulses, then it goes quiet. It brightens and swells
    the way a bulb would instead of casting a ring, since nothing in this app

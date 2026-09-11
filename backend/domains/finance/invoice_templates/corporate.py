@@ -13,11 +13,20 @@ photocopying better than a hairline grid.
 from domains.finance.invoice_templates._common import (
     prepare, money, logo_block, tax_rows, signature_block,
 )
+from domains.infrastructure.services.pdf_fields import (
+    page_css,
+)
 from domains.finance.invoice_templates.discount_block import render_discount_block
 
 
 def render_invoice(invoice, clinic, config=None) -> str:
     d = prepare(invoice, clinic, config, default_color='#44546A')
+
+    # This layout bleeds to the paper edge, so its normal page box is margin 0.
+    # On pre-printed stationery that is exactly wrong — the content would land
+    # under the clinic's printed header — so the resolved letterhead supplies
+    # the margins instead. `prepare` has already stripped the branding itself.
+    page_rule = page_css(d.letterhead, default_margin='0')
 
     rows = ''
     for i, item in enumerate(d.items):
@@ -56,7 +65,7 @@ def render_invoice(invoice, clinic, config=None) -> str:
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
 <style>
-@page {{ size: A4; margin: 0; }}
+{page_rule}
 body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin:0; padding:0;
         color:#333; font-size:10.5px; line-height:1.45; background:#fff; }}
 .page {{ padding:34px 40px 40px 40px; }}
@@ -103,9 +112,9 @@ table.items td.c {{ text-align:center; width:50px; }}
 
 <div class="page">
   <table class="head"><tr>
-    <td style="width:64px;">{logo_block(d, 54, '4px')}</td>
+    {f'<td style="width:64px;">{logo_block(d, 54, "4px")}</td>' if d.vis.logo else ''}
     <td style="padding-left:12px;">
-      <div class="clinic">{d.clinic.name}</div>
+      {f'<div class="clinic">{d.clinic.name}</div>' if d.clinic.name else ''}
       <div class="addr">{clinic_lines}</div>
     </td>
     <td style="width:250px;">
@@ -157,7 +166,7 @@ table.items td.c {{ text-align:center; width:50px; }}
   {render_discount_block(invoice, currency=d.currency, accent=d.primary) if d.vis.discount else ''}
 
   <div class="thanks">
-    If you have any questions about this invoice, please contact {d.clinic.name}{f' on {d.clinic.phone}' if d.clinic.phone else ''}.<br>
+    {f'If you have any questions about this invoice, please contact {d.clinic.name}' + (f' on {d.clinic.phone}' if d.clinic.phone else '') + '.' if d.clinic.name else 'If you have any questions about this invoice, please contact us.'}<br>
     <em>Thank you for your visit.</em>
   </div>
 

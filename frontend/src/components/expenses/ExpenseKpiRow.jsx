@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Wallet, FlaskConical, Stethoscope, Building2,
   TrendingUp, Scale, Tag, Users,
+  Package, ArrowUpRight, ArrowDownLeft,
 } from 'lucide-react';
 import KpiRow from '../common/KpiRow';
 import { formatCompactMoney, formatMoney, formatCount } from '../../utils/currency';
@@ -33,7 +34,9 @@ function payablesCards(p) {
 
   const lab = p.byKind?.lab || { amount: 0, count: 0 };
   const consultant = p.byKind?.consultant || { amount: 0, count: 0 };
+  const bills = p.byKind?.bill || { amount: 0, count: 0 };
   const vendors = p.vendors || [];
+  const overdue = p.overdue || 0;
 
   return [
     {
@@ -82,6 +85,25 @@ function payablesCards(p) {
       storyShort: consultant.count > 0 ? `${formatCount(consultant.count)} cases` : 'none open',
     },
     {
+      key: 'bills',
+      isMoney: true,
+      title: 'Supplier bills',
+      display: formatCompactMoney(bills.amount),
+      icon: ico(Package),
+      variant: 'plain',
+      invert: true,
+      // Overdue leads when there is any, because that is the only number on
+      // this row that is costing the clinic a relationship rather than money.
+      story: overdue > 0
+        ? `${formatCompactMoney(overdue)} of it is past its due date across ${formatCount(p.overdueCount)} ${plural(p.overdueCount, 'bill', 'bills')}.`
+        : bills.count > 0
+          ? `${formatCount(bills.count)} open ${plural(bills.count, 'bill', 'bills')} from suppliers, none of them late yet.`
+          : 'Goods invoiced on credit appear here, and stay out of your costs until you pay them.',
+      storyShort: overdue > 0 ? `${formatCompactMoney(overdue)} overdue`
+        : bills.count > 0 ? `${formatCount(bills.count)} open` : 'none open',
+      tone: overdue > 0 ? 'warn' : undefined,
+    },
+    {
       key: 'payees',
       title: 'Who you owe',
       display: vendors[0]?.name || '—',
@@ -99,6 +121,80 @@ function payablesCards(p) {
     },
   ];
 }
+
+/**
+ * Petty cash: the drawer, and whether it still agrees with the record.
+ *
+ * The balance leads because it is the only reason anyone opens this tab, and
+ * the variance card exists because a drawer that is short is the thing a close
+ * is FOR. Recording it and not correcting it is the whole design, so it is
+ * reported here rather than quietly folded into the balance beside it.
+ */
+function pettyCashCards(c) {
+  const balance = c.balance || 0;
+  const toppedUp = c.toppedUp || 0;
+  const spent = c.spent || 0;
+  const last = c.lastClose || null;
+  const variance = last ? last.variance : 0;
+  const spentPct = pct(spent, toppedUp);
+
+  return [
+    {
+      key: 'balance',
+      isMoney: true,
+      title: 'In the drawer',
+      display: formatCompactMoney(balance),
+      icon: ico(Wallet),
+      variant: 'meter',
+      story: balance > 0
+        ? 'Every top-up, less every spend. Nothing else goes into this figure.'
+        : 'Top up the float with what you keep in the drawer, then record what comes out of it.',
+      storyShort: balance > 0 ? 'should be there' : 'empty',
+      meterPercent: spentPct,
+      meterTone: spentPct > 80 ? 'warn' : undefined,
+      meterLeft: toppedUp > 0 ? `${spentPct}% of the float spent` : '',
+      meterRight: toppedUp > 0 ? `${formatCompactMoney(toppedUp)} put in` : '',
+    },
+    {
+      key: 'spent',
+      isMoney: true,
+      title: 'Spent',
+      display: formatCompactMoney(spent),
+      icon: ico(ArrowUpRight),
+      variant: 'plain',
+      invert: true,
+      story: c.spendCount > 0
+        ? `Across ${formatCount(c.spendCount)} ${plural(c.spendCount, 'payment', 'payments')} out of the drawer. Each one lands in your ledger as a cash expense.`
+        : 'Anything paid out of the drawer shows here, and in your ledger as a cash expense.',
+      storyShort: c.spendCount > 0 ? `${formatCount(c.spendCount)} out` : 'nothing out',
+    },
+    {
+      key: 'topped',
+      isMoney: true,
+      title: 'Topped up',
+      display: formatCompactMoney(toppedUp),
+      icon: ico(ArrowDownLeft),
+      variant: 'plain',
+      story: 'Money moved from the bank into the drawer. Not an expense — counting it would book the same rupee twice.',
+      storyShort: toppedUp > 0 ? 'into the drawer' : 'nothing in',
+    },
+    {
+      key: 'close',
+      title: last ? 'Last counted' : 'Never counted',
+      display: last
+        ? (variance === 0 ? 'Balanced' : `${formatCompactMoney(Math.abs(variance))} ${variance < 0 ? 'short' : 'over'}`)
+        : '—',
+      icon: ico(Scale),
+      variant: 'plain',
+      tone: last && variance !== 0 ? 'warn' : undefined,
+      story: last
+        ? `Counted on ${last.closed_on} against ${formatCompactMoney(last.expected_amount)} expected. A difference is recorded, never corrected.`
+        : 'Close the day to record what was actually in the drawer against what should have been.',
+      storyShort: last ? last.closed_on : 'close the day',
+    },
+  ];
+}
+
 
 /**
  * Ledger tab: everything in and everything out.
@@ -230,11 +326,12 @@ function vendorCards(v) {
   ];
 }
 
-const ExpenseKpiRow = ({ tab, payables, ledger, vendors, onSelect }) => {
+const ExpenseKpiRow = ({ tab, payables, ledger, vendors, pettyCash, onSelect }) => {
   const cards =
     tab === 'ledger' ? ledgerCards(ledger || {})
       : tab === 'vendors' ? vendorCards(vendors || {})
-        : payablesCards(payables || {});
+        : tab === 'petty_cash' ? pettyCashCards(pettyCash || {})
+          : payablesCards(payables || {});
 
   return <KpiRow cards={cards} onSelect={onSelect} />;
 };

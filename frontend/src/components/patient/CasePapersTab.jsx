@@ -792,9 +792,31 @@ const CasePapersTab = ({
   };
 
   /** Sharing renders from a stored case paper, so persist a new one first. */
+  /* The shared plan is built from what is saved, so unsaved edits are saved
+     first. Without this a doctor who added three procedures and pressed Share
+     sent the patient the plan as it stood before any of them. */
   const handleRequestShare = async () => {
+    // The PDF draws the chart as it is on screen, and a selected tooth is
+    // outlined in navy. That is the doctor's cursor, not a finding, and on the
+    // patient's copy it reads as a tooth singled out for something.
+    selection.clear();
     try {
-      await ensureCasePaperSaved();
+      if (selectedCasePaper?.isNew) {
+        await ensureCasePaperSaved();
+      } else if (dirty && selectedCasePaper?.id) {
+        await api.put(`/clinical/case-papers/${selectedCasePaper.id}`, {
+          ...form,
+          status: selectedCasePaper.status || 'In Progress',
+          dental_chart_snapshot: sessionTeethData,
+          treatment_plan_snapshot: sessionTreatmentPlan,
+          tooth_notes_snapshot: sessionToothNotes,
+          perio_chart_snapshot: sessionPerioChart,
+        });
+        setDirty(false);
+        if (typeof onSaveClinicalRecords === 'function') {
+          onSaveClinicalRecords({ dental_chart: sessionTeethData, treatment_plan: sessionTreatmentPlan, tooth_notes: sessionToothNotes }).catch(() => {});
+        }
+      }
       return true;
     } catch (err) {
       console.error('Could not save the case paper before sharing:', err);
@@ -922,6 +944,15 @@ const CasePapersTab = ({
     setSessionTeethData((prev) => {
       const tooth = prev[toothId] || { surfaces: {} };
       return { ...prev, [toothId]: { ...tooth, marks } };
+    });
+  };
+
+  /** What the tooth has — pulpitis, erosion, recession… Several at once. */
+  const handleConditionsChange = (toothId, conditions) => {
+    setDirty(true);
+    setSessionTeethData((prev) => {
+      const tooth = prev[toothId] || { surfaces: {} };
+      return { ...prev, [toothId]: { ...tooth, conditions } };
     });
   };
 
@@ -1319,6 +1350,7 @@ const CasePapersTab = ({
           onToothStateChange={handleToothStateChange}
           onFindingsChange={handleFindingsChange}
           onMarksChange={handleMarksChange}
+          onConditionsChange={handleConditionsChange}
           onNotesChange={handleNotesChange}
           onAddTreatment={handleAddTreatment}
           editingTreatment={editingTreatment}

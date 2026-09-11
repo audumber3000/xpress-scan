@@ -199,6 +199,13 @@ export async function shareVisitSummaryManually(casePaper, patient, user) {
   return openWhatsApp(phone, msg, user?.clinic?.country || 'IN');
 }
 
+/** The treatment plan PDF, with the chart drawn on it when one is given. */
+export function fetchTreatmentPlanPdf(casePaper, chartSvg = '') {
+  return postForBlob(`/clinical/case-papers/${casePaper.id}/treatment-plan-pdf`, { chart_svg: chartSvg || null });
+}
+
+export const treatmentPlanFilename = (casePaper) => `treatment_plan_${casePaper.id}.pdf`;
+
 /**
  * Manually share the treatment plan: download the PDF and open WhatsApp.
  *
@@ -209,14 +216,16 @@ export async function shareVisitSummaryManually(casePaper, patient, user) {
  *
  * The message deliberately says "estimate": a plan is what was agreed in the
  * chair, not a bill, and the fees move if the treatment does.
+ *
+ * `chartSvg` is the dental chart as the browser draws it (see chartSvg.js).
+ * Passed in rather than captured here so this module does not reach into the
+ * page; the PDF still lists every finding in words when it is empty.
  */
-export async function shareTreatmentPlanManually(casePaper, patient, user) {
+export async function shareTreatmentPlanManually(casePaper, patient, user, chartSvg = '') {
   const phone = patient?.phone;
   if (!phone) return false;
-  await downloadAuthedFile(
-    `/clinical/case-papers/${casePaper.id}/treatment-plan-pdf`,
-    `treatment_plan_${casePaper.id}.pdf`
-  );
+  const blob = await fetchTreatmentPlanPdf(casePaper, chartSvg);
+  saveBlob(blob, treatmentPlanFilename(casePaper));
   const clinicName = user?.clinic?.name || 'our clinic';
   const msg = `Hello ${patient.name || ''}, here is the treatment plan we discussed at ${clinicName}. `
     + `I have attached it as a PDF. The fees in it are an estimate and we will tell you before anything changes. `

@@ -32,6 +32,45 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# ── Patient photo ────────────────────────────────────────────────────────────
+#
+# What is stored is the R2 *key*; what goes out is a freshly signed URL. The
+# stored-presigned-URL mistake has already been made twice in this codebase (the
+# clinic logo went 403 in every PDF some days after upload), so the read path
+# signs on the way out and the column never holds a link that can expire.
+#
+# Signing is a local HMAC, not a network call, so doing it per row on a page of
+# patients costs nothing worth optimising.
+
+_PHOTO_MAX_BYTES = 8 * 1024 * 1024      # what a phone camera actually produces
+_PHOTO_MAX_DIMENSION = 6000             # refuse anything absurd before decoding it fully
+_PHOTO_TARGET_DIMENSION = 800           # a face at the desk, not a print asset
+_PHOTO_ALLOWED_FORMATS = {"PNG", "JPEG", "WEBP"}
+
+
+def _sign_photo(patient):
+    """Swap the stored key for a usable link, in place, on a detached copy."""
+    key = getattr(patient, "photo_url", None)
+    if not key:
+        return patient
+    try:
+        from domains.infrastructure.services.r2_storage import get_presigned_url
+        fresh = get_presigned_url(key)
+        if fresh and fresh != key:
+            # Detached so the signed URL can never be flushed back to the row as
+            # if somebody had saved it.
+            from sqlalchemy.orm import object_session
+            session = object_session(patient)
+            if session is not None:
+                session.expunge(patient)
+            patient.photo_url = fresh
+    except Exception:
+        # A storage hiccup must not cost the clinic the rest of the record.
+        logger.warning("Could not sign patient photo for id=%s", getattr(patient, "id", "?"))
+    return patient
+
+
+
 
 def _parse_patient_dates(date_from: Optional[str], date_to: Optional[str]):
     """Parse optional YYYY-MM-DD registration-range strings into date objects."""
@@ -116,7 +155,7 @@ async def get_patients(
         result = []
         for patient in patients:
             try:
-                result.append(PatientResponseDTO.from_orm(patient))
+                result.append(PatientResponseDTO.from_orm(_sign_photo(patient)))
             except Exception as row_err:
                 logger.error(
                     "Skipping unserializable patient id=%s clinic_id=%s: %s",
@@ -647,7 +686,7 @@ async def get_patient(
                 detail="Patient not found"
             )
 
-        return PatientResponseDTO.from_orm(patient)
+        return PatientResponseDTO.from_orm(_sign_photo(patient))
 
     except HTTPException:
         raise
@@ -1316,3 +1355,128 @@ async def patient_activity(
 
     events.sort(key=lambda e: (e["at"], ORDER.get(e["kind"], 9)), reverse=True)
     return events[:limit]
+
+
+@router.post("/{patient_id}/photo", summary="Upload or replace a patient's photo")
+async def upload_patient_photo(
+    patient_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user = Depends(require_patients_edit),
+):
+    """Store a patient's photo.
+
+    The same shape as the clinic logo upload: re-decode with Pillow rather than
+    trusting the client's Content-Type (which catches a polyglot file or a
+    renamed executable), cap the size, then downscale before storing.
+
+    Downscaling is not only about cost. This is a face shown at a desk beside a
+    name, and a 12-megapixel phone photo is four megabytes of nothing useful —
+    on a clinic's connection that is the difference between a list that loads
+    and one that does not.
+
+    Accepts WEBP as well as PNG/JPEG because that is what a browser's canvas
+    will hand back on some platforms when the webcam capture is encoded.
+    """
+    from models import Patient
+
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id, Patient.clinic_id == current_user.clinic_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="empty upload")
+    if len(raw) > _PHOTO_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"photo too large (max {_PHOTO_MAX_BYTES // (1024 * 1024)} MB)",
+        )
+
+    try:
+        from PIL import Image, UnidentifiedImageError
+    except ImportError:
+        raise HTTPException(status_code=500, detail="image processing unavailable on server")
+
+    try:
+        probe = Image.open(io.BytesIO(raw))
+        probe.verify()                       # structural check; consumes the stream
+        img = Image.open(io.BytesIO(raw))    # reopen, verify() invalidates it
+    except (UnidentifiedImageError, Exception):
+        raise HTTPException(status_code=400, detail="that file is not an image")
+
+    if img.format not in _PHOTO_ALLOWED_FORMATS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unsupported format {img.format} — use JPEG, PNG or WEBP",
+        )
+    if img.width > _PHOTO_MAX_DIMENSION or img.height > _PHOTO_MAX_DIMENSION:
+        raise HTTPException(
+            status_code=400, detail=f"image dimensions exceed {_PHOTO_MAX_DIMENSION}px",
+        )
+
+    # Phone cameras write the orientation in EXIF rather than rotating the
+    # pixels, so a portrait photo arrives on its side unless it is applied here.
+    try:
+        from PIL import ImageOps
+        img = ImageOps.exif_transpose(img)
+    except Exception:
+        pass
+
+    if max(img.width, img.height) > _PHOTO_TARGET_DIMENSION:
+        img.thumbnail((_PHOTO_TARGET_DIMENSION, _PHOTO_TARGET_DIMENSION), Image.LANCZOS)
+
+    # Always JPEG on the way out. A face has no transparency to preserve, and
+    # one format means the browser never meets a surprise.
+    if img.mode in ("RGBA", "LA", "P"):
+        img = img.convert("RGB")
+    out = io.BytesIO()
+    img.save(out, format="JPEG", quality=85, optimize=True)
+
+    from domains.infrastructure.services.r2_storage import (
+        StorageCategory, get_presigned_url, upload_bytes_to_r2,
+    )
+    storage_key = upload_bytes_to_r2(
+        data=out.getvalue(),
+        filename=f"patient_{patient_id}_{int(datetime.utcnow().timestamp())}.jpg",
+        content_type="image/jpeg",
+        clinic_id=current_user.clinic_id,
+        patient_id=patient_id,
+        category=StorageCategory.DOCUMENTS,
+    )
+    if not storage_key:
+        raise HTTPException(status_code=502, detail="upload to storage failed")
+
+    # The key, never the signed link. See _sign_photo above.
+    patient.photo_url = storage_key
+    db.commit()
+
+    return {"photo_url": get_presigned_url(storage_key) or storage_key}
+
+
+@router.delete("/{patient_id}/photo", summary="Remove a patient's photo")
+async def delete_patient_photo(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_patients_edit),
+):
+    """Clear the photo.
+
+    The object is left in storage on purpose. Patient records are the one thing
+    in this product nobody wants to discover was deleted a little too eagerly,
+    and an orphaned 40KB thumbnail is a far cheaper mistake than a face that
+    cannot be recovered.
+    """
+    from models import Patient
+
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id, Patient.clinic_id == current_user.clinic_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    patient.photo_url = None
+    db.commit()
+    return {"ok": True}

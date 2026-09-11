@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import PatientPhoto from "../patients/PatientPhoto";
 import { X, UserRound, CheckCircle2 } from "lucide-react";
 import AgeOrDobField, { computeAgeFromDob } from "./AgeOrDobField";
 import InlineFeedback from "../common/InlineFeedback";
@@ -41,6 +42,7 @@ const emptyForm = {
 
 const PatientEditModal = ({ open, patient, onClose, onSaved }) => {
   const [form, setForm] = useState(emptyForm);
+  const [photo, setPhoto] = useState(null);
   const [ageMode, setAgeMode] = useState("age");
   const [errors, setErrors] = useState({});
   const [saveError, setSaveError] = useState("");
@@ -50,6 +52,7 @@ const PatientEditModal = ({ open, patient, onClose, onSaved }) => {
   // edit would be a form that silently describes someone else.
   useEffect(() => {
     if (!open || !patient) return;
+    setPhoto(patient.photo_url || null);
     setForm({
       name: patient.name || "",
       age: patient.age ?? "",
@@ -211,6 +214,22 @@ const PatientEditModal = ({ open, patient, onClose, onSaved }) => {
             onSubmit={(e) => { e.preventDefault(); handleSave(); }}
             className="space-y-4"
           >
+            {/* The patient already exists here, so the photo uploads the moment
+                it is taken rather than waiting for Save — there is no pending
+                state to lose, and no way to capture a face and then discard it
+                by closing the modal. */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Photo</label>
+              <PatientPhoto
+                patientId={patient?.id}
+                value={photo}
+                onChange={(next) => {
+                  setPhoto(next.photo_url);
+                  onSaved?.({ photo_url: next.photo_url });
+                }}
+              />
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
