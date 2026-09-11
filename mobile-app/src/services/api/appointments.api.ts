@@ -1,4 +1,5 @@
 import { BaseApiService } from './base.api';
+import { AppointmentStatus, normalizeStatus } from '../../shared/constants/appointmentStatus';
 
 export interface Appointment {
   id: string;
@@ -8,15 +9,9 @@ export interface Appointment {
   patientPhone?: string;
   startTime: string;
   endTime: string;
-  status:
-    | 'Finished'
-    | 'Encounter'
-    | 'Registered'
-    | 'Cancelled'
-    | 'confirmed'
-    | 'accepted'
-    | 'rejected'
-    | 'checking';
+  // Always the server's vocabulary, whatever a record was stored as. See
+  // shared/constants/appointmentStatus.ts.
+  status: AppointmentStatus;
   type?: string;
   date: string;
   treatment?: string;
@@ -59,7 +54,7 @@ const mapAppointment = (apt: any): Appointment => ({
   patientPhone: apt.patient_phone || '',
   startTime: apt.start_time?.substring(0, 5) || '',
   endTime: apt.end_time?.substring(0, 5) || '',
-  status: apt.status || 'confirmed',
+  status: normalizeStatus(apt.status),
   type: apt.treatment || 'General',
   date: apt.appointment_date,
   treatment: apt.treatment,
@@ -169,6 +164,26 @@ export class AppointmentsApiService extends BaseApiService {
       console.error('❌ [API] Error updating appointment:', error);
       throw error;
     }
+  }
+
+  /**
+   * Record how an appointment ended: completed, no_show or cancelled.
+   * The same endpoint the web uses; it stamps who decided and when, which is
+   * what the no-show rate is counted from, and alerts the front desk.
+   */
+  async setOutcome(id: string, status: 'completed' | 'no_show' | 'cancelled', cancelReason?: string): Promise<Appointment> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/appointments/${id}/outcome`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ status, cancel_reason: cancelReason || null }),
+    });
+    if (!response.ok) {
+      let detail = `HTTP ${response.status}`;
+      try { detail = (await response.json())?.detail || detail; } catch {}
+      throw new Error(detail);
+    }
+    return mapAppointment(await response.json());
   }
 
   async getAppointment(id: string): Promise<Appointment> {

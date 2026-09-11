@@ -253,9 +253,11 @@ export const AddPatientScreen: React.FC<AddPatientScreenProps> = ({
       if (initialData?.appointmentId) {
         try {
           console.log('🔗 [PATIENT] Linking to appointment:', initialData.appointmentId);
+          // Link only. Creating the file does not change where the visit is up
+          // to; sending "Registered" here used to put an arrived patient back to
+          // scheduled on the server.
           await appointmentsApiService.updateAppointment(initialData.appointmentId, {
             patient_id: Number(data.id),
-            status: 'Registered' // Update status to Registered once file is created
           });
         } catch (linkError) {
           console.error('❌ [PATIENT] Failed to link to appointment:', linkError);

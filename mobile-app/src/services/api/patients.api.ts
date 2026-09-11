@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BaseApiService } from './base.api';
+import { BaseApiService, DOCUMENT_TIMEOUT_MS } from './base.api';
 
 export interface MedicalRecord {
   id: string;
@@ -646,6 +646,7 @@ export class PatientsApiService extends BaseApiService {
     const response = await this.fetchWithTimeout(
       `${this.baseURL}/invoices/${invoiceId}/send-whatsapp`,
       { method: 'POST', headers },
+      DOCUMENT_TIMEOUT_MS,
     );
     if (!response.ok) {
       let detail = `HTTP ${response.status}`;
@@ -660,6 +661,7 @@ export class PatientsApiService extends BaseApiService {
     const response = await this.fetchWithTimeout(
       `${this.baseURL}/clinical/prescriptions/${prescriptionId}/send-whatsapp`,
       { method: 'POST', headers },
+      DOCUMENT_TIMEOUT_MS,
     );
     if (!response.ok) {
       let detail = `HTTP ${response.status}`;
@@ -669,17 +671,39 @@ export class PatientsApiService extends BaseApiService {
     return await response.json();
   }
 
-  async getInvoicesByAppointment(patientId: string, appointmentId: string): Promise<any[]> {
+  /** The invoices raised for one visit. Linked by `case_paper_id`, as the web
+   *  links them; the old lookup passed the case paper id as `appointment_id`
+   *  and never found the web's invoice, so a second one got raised. */
+  async getInvoicesByCasePaper(patientId: string, casePaperId: string): Promise<any[]> {
     try {
       const headers = await this.getAuthHeaders();
       const response = await this.fetchWithTimeout(
-        `${this.baseURL}/invoices?patient_id=${patientId}&appointment_id=${appointmentId}&limit=10`,
+        `${this.baseURL}/invoices?patient_id=${patientId}&case_paper_id=${casePaperId}&limit=10`,
         { method: 'GET', headers },
       );
       if (!response.ok) return [];
       const data = await response.json();
       return Array.isArray(data) ? data : (data.items ?? []);
     } catch { return []; }
+  }
+
+  /** Bill a completed procedure to its case paper's draft invoice, creating the
+   *  draft if there is none. Returns the ids needed to take the line back off. */
+  async addProcedureCharge(data: {
+    patient_id: number; case_paper_id: number; description: string; quantity: number; unit_price: number;
+  }): Promise<{ invoice_id: number; line_item_id: number; invoice_number?: string }> {
+    const headers = await this.getAuthHeaders();
+    const response = await this.fetchWithTimeout(`${this.baseURL}/invoices/procedure-charge`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      let detail = `HTTP ${response.status}`;
+      try { detail = (await response.json())?.detail || detail; } catch {}
+      throw new Error(detail);
+    }
+    return await response.json();
   }
 
   async addInvoiceLineItem(invoiceId: string, item: { description: string; quantity: number; unit_price: number }): Promise<any> {

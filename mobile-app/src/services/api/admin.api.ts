@@ -1,4 +1,4 @@
-import { BaseApiService } from './base.api';
+import { BaseApiService, DOCUMENT_TIMEOUT_MS } from './base.api';
 
 export interface ClinicInfo {
     id: string;
@@ -296,20 +296,6 @@ export class AdminApiService extends BaseApiService {
         }
     }
 
-    async syncRoles(): Promise<boolean> {
-        try {
-            const headers = await this.getAuthHeaders();
-            const response = await this.fetchWithTimeout(`${this.baseURL}/permissions/sync-roles`, {
-                method: 'POST',
-                headers,
-            });
-            return response.ok;
-        } catch (error) {
-            console.error('❌ [API] Error syncing roles:', error);
-            return false;
-        }
-    }
-
     async markAttendance(data: { user_id: string; date: string; status: string; reason?: string }): Promise<boolean> {
         try {
             const headers = await this.getAuthHeaders();
@@ -454,7 +440,7 @@ export class AdminApiService extends BaseApiService {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(payload),
-            });
+            }, DOCUMENT_TIMEOUT_MS);
             if (!r.ok) {
                 console.warn('[API] Preview failed:', r.status);
                 return null;

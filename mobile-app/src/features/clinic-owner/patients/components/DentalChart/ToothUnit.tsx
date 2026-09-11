@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Svg, { Path, Rect, Line, Defs, Pattern } from 'react-native-svg';
 import { CleanToothSVG } from './CleanToothSVG';
 import { SURFACE_COLORS, STATUS_COLORS } from './dentalConstants';
+import { toFDI } from '../../../../../shared/utils/teeth';
 
 interface ToothUnitProps {
     toothNum: number;
@@ -33,7 +34,7 @@ export const ToothUnit: React.FC<ToothUnitProps> = ({
 
     return (
         <View style={styles.container}>
-            {isUpper && <Text style={styles.toothNumTop}>{toothNum}</Text>}
+            {isUpper && <Text style={styles.toothNumTop}>{toFDI(toothNum)}</Text>}
             <TouchableOpacity
                 onPress={() => onToothPress(toothNum)}
                 activeOpacity={0.7}
@@ -103,7 +104,7 @@ export const ToothUnit: React.FC<ToothUnitProps> = ({
                     )}
                 </View>
             </TouchableOpacity>
-            {!isUpper && <Text style={styles.toothNum}>{toothNum}</Text>}
+            {!isUpper && <Text style={styles.toothNum}>{toFDI(toothNum)}</Text>}
         </View>
     );
 };

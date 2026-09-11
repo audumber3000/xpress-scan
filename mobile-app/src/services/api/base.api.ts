@@ -5,6 +5,14 @@ import { notifyPlanBlocked, PlanBlockedDetail } from './planLock';
 
 const FETCH_TIMEOUT_MS = 8000;
 
+/**
+ * For calls that render a PDF on the server before answering: WhatsApp sends
+ * and template previews. Eight seconds is fine for a list and too short for
+ * a document; cutting one off showed "failed" while the send went through, and
+ * the retry sent it twice (and billed the wallet twice).
+ */
+export const DOCUMENT_TIMEOUT_MS = 30000;
+
 export class BaseApiService {
   protected baseURL = `${getApiBaseUrl()}/api/v1`;
 
@@ -66,9 +74,13 @@ export class BaseApiService {
     });
   }
 
-  protected async fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
+  protected async fetchWithTimeout(
+    url: string,
+    options: RequestInit = {},
+    timeoutMs: number = FETCH_TIMEOUT_MS,
+  ): Promise<Response> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(url, { ...options, signal: controller.signal });
 

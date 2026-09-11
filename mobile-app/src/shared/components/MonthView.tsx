@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { colors } from '../constants/colors';
 import { Appointment } from '../../services/api/appointments.api';
+import { statusMeta } from '../constants/appointmentStatus';
 
 interface MonthViewProps {
   selectedDate: Date;
@@ -61,20 +62,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
     return days;
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Finished':
-        return '#10B981';
-      case 'Encounter':
-        return '#F59E0B';
-      case 'Registered':
-        return '#6B7280';
-      case 'Cancelled':
-        return '#EF4444';
-      default:
-        return '#6B7280';
-    }
-  };
+  const getStatusColor = (status: string) => statusMeta(status).border;
 
   return (
     <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>

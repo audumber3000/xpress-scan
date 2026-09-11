@@ -23,6 +23,9 @@ import {
   DuplicatePatient,
 } from '../../../../services/api/appointments.api';
 import { AddPatientScreen } from '../../patients/screens/AddPatientScreen';
+import {
+  ARRIVED, CANCELLED, COMPLETED, CONFIRMED, NO_SHOW, SCHEDULED, normalizeStatus, statusMeta,
+} from '../../../../shared/constants/appointmentStatus';
 
 interface AppointmentDetailsScreenProps {
   navigation: any;
@@ -41,7 +44,7 @@ export const AppointmentDetailsScreen: React.FC<AppointmentDetailsScreenProps> =
       endTime: '10:30',
       duration: 30,
       treatment: 'Consultation',
-      status: 'confirmed',
+      status: 'scheduled',
       notes: '',
     },
   );
@@ -83,41 +86,49 @@ export const AppointmentDetailsScreen: React.FC<AppointmentDetailsScreenProps> =
       : name.substring(0, 2).toUpperCase();
   };
 
-  const handleAccept = async () => {
+  // The patient said they are coming. Not the same as the clinic accepting a
+  // request, which is what "confirmed" used to mean on this screen.
+  const handleConfirm = async () => {
     setLoading(true);
     try {
-      const updated = await appointmentsApiService.updateAppointment(appointment.id, { status: 'accepted' });
+      const updated = await appointmentsApiService.updateAppointment(appointment.id, { status: CONFIRMED });
       setAppointment(updated);
-      showAlert('Success', 'Appointment accepted successfully!');
+      showAlert('Confirmed', 'Marked as confirmed by the patient.');
     } catch (error) {
-      console.error('Error accepting appointment:', error);
-      showAlert('Error', 'Failed to accept appointment');
+      console.error('Error confirming appointment:', error);
+      showAlert('Error', 'Failed to confirm appointment');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleReject = async () => {
-    showAlert('Confirm Reject', 'Are you sure you want to reject this appointment?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Reject',
-        style: 'destructive',
-        onPress: async () => {
-          setLoading(true);
-          try {
-            const updated = await appointmentsApiService.updateAppointment(appointment.id, { status: 'rejected' });
-            setAppointment(updated);
-            showAlert('Success', 'Appointment rejected');
-          } catch (error) {
-            console.error('Error rejecting appointment:', error);
-            showAlert('Error', 'Failed to reject appointment');
-          } finally {
-            setLoading(false);
-          }
-        },
-      },
-    ]);
+  // How it ended. Recorded through /outcome, like the web, so who and when are
+  // stamped and the no-show rate counts it.
+  const recordOutcome = async (status: 'completed' | 'no_show' | 'cancelled') => {
+    setLoading(true);
+    try {
+      const updated = await appointmentsApiService.setOutcome(appointment.id, status);
+      setAppointment(updated);
+    } catch (error: any) {
+      console.error('Error recording outcome:', error);
+      showAlert('Error', error?.message || 'Failed to update appointment');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const confirmOutcome = (status: 'no_show' | 'cancelled') => {
+    const noShow = status === 'no_show';
+    showAlert(
+      noShow ? 'Mark as no-show?' : 'Cancel this appointment?',
+      noShow
+        ? `${appointment.patientName} did not come and did not call.`
+        : `${appointment.patientName}'s appointment will be cancelled.`,
+      [
+        { text: 'Back', style: 'cancel' },
+        { text: noShow ? 'Mark no-show' : 'Cancel appointment', style: 'destructive', onPress: () => recordOutcome(status) },
+      ],
+    );
   };
 
   const openCheckIn = () => {
@@ -157,7 +168,7 @@ export const AppointmentDetailsScreen: React.FC<AppointmentDetailsScreenProps> =
     setLoading(true);
     try {
       const payload: AppointmentUpdatePayload = {
-        status: 'checking',
+        status: ARRIVED,
         patient_id: existingPatientId || (appointment.patientId ? parseInt(appointment.patientId, 10) : null),
         doctor_id: checkInData.doctor_id ? parseInt(checkInData.doctor_id, 10) : null,
         chair_number: checkInData.chair_number || undefined,
@@ -233,11 +244,7 @@ export const AppointmentDetailsScreen: React.FC<AppointmentDetailsScreenProps> =
   };
 
   const handlePatientAdded = (patient: any) => {
-    setAppointment(prev => ({
-      ...prev,
-      patientId: patient.id.toString(),
-      status: 'Registered',
-    }));
+    setAppointment(prev => ({ ...prev, patientId: patient.id.toString() }));
   };
 
   const renderActionButtons = () => {
@@ -249,69 +256,69 @@ export const AppointmentDetailsScreen: React.FC<AppointmentDetailsScreenProps> =
       );
     }
 
-    if (appointment.status === 'confirmed') {
-      return (
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={[styles.button, styles.acceptButton]}
-            activeOpacity={0.8}
-            onPress={handleAccept}
-          >
-            <Check size={20} color="#FFFFFF" />
-            <Text style={styles.buttonText}>Accept Appointment</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, styles.rejectButton]}
-            activeOpacity={0.8}
-            onPress={handleReject}
-          >
-            <X size={20} color="#EF4444" />
-            <Text style={[styles.buttonText, { color: '#EF4444' }]}>Reject</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
+    const status = normalizeStatus(appointment.status);
 
-    if (appointment.status === 'accepted') {
+    if (status === SCHEDULED || status === CONFIRMED) {
       return (
-        <View style={styles.actionButtons}>
-          <TouchableOpacity style={[styles.button, styles.checkInButton]} activeOpacity={0.8} onPress={openCheckIn}>
-            <UserPlus size={20} color="#FFFFFF" />
-            <Text style={styles.buttonText}>Check-in Patient</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
-    if (appointment.status === 'checking') {
-      if (appointment.patientId) {
-        return (
+        <View>
           <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={[styles.button, styles.checkInButton]}
-              activeOpacity={0.8}
-              onPress={() => navigation.navigate('PatientDetails', { patientId: appointment.patientId })}
-            >
-              <FileIcon size={20} color="#FFFFFF" />
-              <Text style={styles.buttonText}>Open Patient File</Text>
+            {status === SCHEDULED && (
+              <TouchableOpacity style={[styles.button, styles.acceptButton]} activeOpacity={0.8} onPress={handleConfirm}>
+                <Check size={20} color="#FFFFFF" />
+                <Text style={styles.buttonText}>Patient Confirmed</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={[styles.button, styles.checkInButton]} activeOpacity={0.8} onPress={openCheckIn}>
+              <UserPlus size={20} color="#FFFFFF" />
+              <Text style={styles.buttonText}>Check In</Text>
             </TouchableOpacity>
           </View>
-        );
-      }
-
-      return (
-        <View style={styles.actionButtons}>
-          <TouchableOpacity style={[styles.button, styles.checkInButton]} activeOpacity={0.8} onPress={() => setShowAddPatientModal(true)}>
-            <UserPlus size={20} color="#FFFFFF" />
-            <Text style={styles.buttonText}>Create Patient File</Text>
-          </TouchableOpacity>
+          <View style={[styles.actionButtons, { marginTop: 10 }]}>
+            <TouchableOpacity style={[styles.button, styles.rejectButton]} activeOpacity={0.8} onPress={() => confirmOutcome(NO_SHOW)}>
+              <Text style={[styles.buttonText, { color: '#EF4444' }]}>No-show</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.button, styles.rejectButton]} activeOpacity={0.8} onPress={() => confirmOutcome(CANCELLED)}>
+              <X size={20} color="#EF4444" />
+              <Text style={[styles.buttonText, { color: '#EF4444' }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       );
     }
 
-    if (appointment.status === 'Registered' && appointment.patientId) {
+    if (status === ARRIVED) {
       return (
-        <View style={styles.actionButtons}>
+        <View>
+          <View style={styles.actionButtons}>
+            {appointment.patientId ? (
+              <TouchableOpacity
+                style={[styles.button, styles.checkInButton]}
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate('PatientDetails', { patientId: appointment.patientId })}
+              >
+                <FileIcon size={20} color="#FFFFFF" />
+                <Text style={styles.buttonText}>Open Patient File</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={[styles.button, styles.checkInButton]} activeOpacity={0.8} onPress={() => setShowAddPatientModal(true)}>
+                <UserPlus size={20} color="#FFFFFF" />
+                <Text style={styles.buttonText}>Create Patient File</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <View style={[styles.actionButtons, { marginTop: 10 }]}>
+            <TouchableOpacity style={[styles.button, styles.acceptButton]} activeOpacity={0.8} onPress={() => recordOutcome(COMPLETED)}>
+              <Check size={20} color="#FFFFFF" />
+              <Text style={styles.buttonText}>Mark Completed</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.actionButtons}>
+        {appointment.patientId ? (
           <TouchableOpacity
             style={[styles.button, styles.checkInButton]}
             activeOpacity={0.8}
@@ -320,31 +327,16 @@ export const AppointmentDetailsScreen: React.FC<AppointmentDetailsScreenProps> =
             <FileIcon size={20} color="#FFFFFF" />
             <Text style={styles.buttonText}>View Patient File</Text>
           </TouchableOpacity>
-        </View>
-      );
-    }
-
-    return (
-      <View style={styles.actionButtons}>
-        <View style={styles.readOnlyState}>
-          <Text style={styles.readOnlyText}>No actions available for this status.</Text>
-        </View>
+        ) : (
+          <View style={styles.readOnlyState}>
+            <Text style={styles.readOnlyText}>This appointment is {statusMeta(status).label.toLowerCase()}.</Text>
+          </View>
+        )}
       </View>
     );
   };
 
-  const getStatusDisplay = (status: string) => {
-    switch (status) {
-      case 'confirmed': return { label: 'PENDING', color: '#F59E0B' };
-      case 'accepted': return { label: 'ACCEPTED', color: '#10B981' };
-      case 'checking': return { label: 'CHECKING IN', color: '#2D9596' };
-      case 'rejected': return { label: 'REJECTED', color: '#EF4444' };
-      case 'Registered': return { label: 'REGISTERED', color: '#6B7280' };
-      default: return { label: status.toUpperCase(), color: '#6B7280' };
-    }
-  };
-
-  const statusInfo = getStatusDisplay(appointment.status);
+  const statusInfo = { label: statusMeta(appointment.status).label.toUpperCase(), color: statusMeta(appointment.status).border };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

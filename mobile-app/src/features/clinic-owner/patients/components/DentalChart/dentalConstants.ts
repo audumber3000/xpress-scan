@@ -46,7 +46,7 @@ export const STATUS_COLORS: Record<string, string> = {
     implant: '#64748b',
     rootCanal: '#ef4444',
     impacted: '#94a3b8',
-    planned: '#ef4444',
+    planned: '#F59E0B',          // amber, as on the web: work to do
 
     // Written by the web case paper, which can now record what KIND of existing
     // work a tooth carries rather than calling all of it an implant. Mobile
@@ -75,6 +75,14 @@ export const STATUS_LABELS: Record<string, string> = {
     impacted: 'Impacted',
     planned: 'Planned Treatment',
     fractured: 'Fractured',
+    existing: 'Existing Work',
+    to_extract: 'To Be Extracted',
+    post_core: 'Post and Core',
+    crown_porcelain: 'Porcelain Crown',
+    crown_gold: 'Gold Crown',
+    crown_ss: 'Stainless Steel Crown',
+    veneer: 'Veneer',
+    bridge: 'Bridge',
 };
 
 // Surface definitions

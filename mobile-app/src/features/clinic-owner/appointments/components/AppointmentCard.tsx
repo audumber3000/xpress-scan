@@ -1,27 +1,18 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { statusMeta } from '../../../../shared/constants/appointmentStatus';
 
 interface AppointmentCardProps {
   appointment: any;
   onPress: () => void;
 }
 
+// Colours and words from the one status vocabulary. The card used to read the
+// old words ("finished", "accepted", "checking"), so a completed or checked-in
+// visit showed grey and a patient-confirmed one said PENDING.
 const getStatusColor = (status: string) => {
-  const s = (status || 'booked').toLowerCase();
-  if (s === 'finished') {
-    return { border: '#0694a2', bg: '#e1effe', text: '#1e429f' }; // Teal/Greenish
-  }
-  if (s === 'accepted') {
-    return { border: '#E29312', bg: '#FFF4E5', text: '#B45309' }; // Light Orange
-  }
-  if (s === 'checked in' || s === 'checking' || s === 'encounter') {
-    return { border: '#10B981', bg: '#D1FAE5', text: '#065F46' }; // Green
-  }
-  if (s === 'cancelled' || s === 'rejected') {
-    return { border: '#EF4444', bg: '#FEE2E2', text: '#991B1B' }; // Red
-  }
-  // Default/Booked/Confirmed
-  return { border: '#6B7280', bg: '#F3F4F6', text: '#374151' }; // Grey
+  const m = statusMeta(status);
+  return { border: m.border, bg: m.bg, text: m.color };
 };
 
 export const AppointmentCard: React.FC<AppointmentCardProps> = ({ appointment, onPress }) => {
@@ -48,7 +39,7 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({ appointment, o
         <View style={styles.appointmentRight}>
           <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
             <Text style={[styles.statusText, { color: statusColors.text }]}>
-              {(appointment.status || 'booked').toLowerCase() === 'confirmed' ? 'PENDING' : (appointment.status || 'booked').toUpperCase()}
+              {statusMeta(appointment.status).label.toUpperCase()}
             </Text>
           </View>
           <View style={[styles.statusDot, { backgroundColor: statusColors.border }]} />

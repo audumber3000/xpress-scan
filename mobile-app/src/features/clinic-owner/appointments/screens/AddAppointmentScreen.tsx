@@ -274,7 +274,8 @@ export const AddAppointmentScreen: React.FC<AddAppointmentScreenProps> = ({ navi
         doctor_id: form.doctorId ? Number(form.doctorId) : null,
         chair_number: form.chairNumber || undefined,
         notes: form.notes,
-        status: 'confirmed'
+        // Booked, not yet confirmed by the patient. "confirmed" is a later step.
+        status: 'scheduled'
       });
       
       Alert.alert('Success', 'Appointment scheduled successfully', [

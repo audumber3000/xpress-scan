@@ -16,6 +16,18 @@ import { DentalChart } from './DentalChart';
 import { WhatsAppIcon } from '../../../../shared/components/icons/WhatsAppIcon';
 import { useAuth } from '../../../../app/AuthContext';
 import { isManualWhatsApp, sharePdfViaWhatsApp } from '../../../../shared/utils/whatsappShare';
+import { fromFDI, planItemTeeth, procedureChargeDesc } from '../../../../shared/utils/teeth';
+
+/** A prescription's medicines as rows to show. The server stores `items`
+ *  (`medicine_name`, ...); `medicines` is the shape older builds wrote. */
+const medicinesOf = (rx: any): { name: string; dosage?: string; duration?: string; notes?: string }[] => {
+  if (Array.isArray(rx?.items) && rx.items.length) {
+    return rx.items.map((i: any) => ({
+      name: i.medicine_name, dosage: i.dosage, duration: i.duration, notes: i.notes || i.instructions,
+    }));
+  }
+  return Array.isArray(rx?.medicines) ? rx.medicines : [];
+};
 
 // ─── Constants ────────────────────────────────────────────────
 const NEXT_VISIT_OPTIONS = [
@@ -340,7 +352,7 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
     if (paperId && !paperId.startsWith('new-')) {
       const [lo, invs] = await Promise.all([
         patientsApiService.getLabOrders(paperId),
-        patientsApiService.getInvoicesByAppointment(patientId, paperId),
+        patientsApiService.getInvoicesByCasePaper(patientId, paperId),
       ]);
       setLabOrders(Array.isArray(lo) ? lo : []);
       setInvoice(invs.length > 0 ? invs[0] : null);
@@ -466,10 +478,17 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
   // ─── Treatment plan ──────────────────────────────────────
   const addTreatment = () => {
     if (!txProcedure.trim()) return;
+    // Typed as FDI (16, 36...), the numbers on the chart and on every document.
+    // Stored as Universal, like every other tooth in the app.
+    const tooth = txTooth.trim() ? fromFDI(txTooth) : null;
+    if (txTooth.trim() && tooth === null) {
+      Alert.alert('Tooth number', 'Use the FDI number shown on the chart, for example 16 or 36.');
+      return;
+    }
     setSessionTreatmentPlan(prev => [...prev, {
       id: Date.now() + Math.random(),
       procedure: txProcedure,
-      tooth: txTooth ? parseInt(txTooth) : null,
+      tooth,
       cost: txCost ? parseFloat(txCost) : 0,
       notes: txNotes,
       status: 'planned',
@@ -491,15 +510,64 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
     setSessionToothNotes((prev: any) => ({ ...prev, [toothNum]: notes }));
   };
 
-  const cycleTreatmentStatus = (id: number) => {
-    setSessionTreatmentPlan(prev => prev.map(item => {
-      if (item.id !== id) return item;
-      const next: Record<string, string> = { planned: 'in-progress', 'in-progress': 'completed', completed: 'planned' };
-      return { ...item, status: next[item.status] || 'planned' };
-    }));
+  // ─── Billing, as the web does it ─────────────────────────
+  // Completing a procedure bills it: a line on the case paper's draft invoice,
+  // made if there is none. Moving it off completed, or deleting it, takes the
+  // line back off. The phone used to do neither, so a procedure completed here
+  // went unbilled, and one deleted here left its charge on the bill.
+  const paperIsSaved = () =>
+    !!selectedPaper && !selectedPaper.isNew && !`${selectedPaper.id}`.startsWith('new-');
+
+  const billProcedure = async (item: any) => {
+    const res = await patientsApiService.addProcedureCharge({
+      patient_id: parseInt(patientId),
+      case_paper_id: parseInt(selectedPaper.id),
+      description: procedureChargeDesc(item),
+      quantity: Number(item.qty) || 1,
+      unit_price: Number(item.cost) || 0,
+    });
+    return { ...item, invoice_line_item_id: res.line_item_id, invoice_id: res.invoice_id };
   };
 
-  const removeTreatment = (id: number) => {
+  const unbillProcedure = async (item: any) => {
+    if (!item?.invoice_id || !item?.invoice_line_item_id) return;
+    try {
+      await patientsApiService.deleteInvoiceLineItem(String(item.invoice_id), String(item.invoice_line_item_id));
+    } catch (e) {
+      // A finalised or paid bill refuses edits. The web unlinks regardless and
+      // so do we: the bill is the record now, and it is changed on the bill.
+      console.warn('Could not remove procedure line:', e);
+    }
+  };
+
+  const cycleTreatmentStatus = async (id: number) => {
+    const item = sessionTreatmentPlan.find(i => i.id === id);
+    if (!item) return;
+    const next: Record<string, string> = { planned: 'in-progress', 'in-progress': 'completed', completed: 'planned' };
+    const nextStatus = next[item.status] || 'planned';
+    let updated: any = { ...item, status: nextStatus };
+    try {
+      if (nextStatus === 'completed' && !item.invoice_line_item_id && paperIsSaved()) {
+        updated = await billProcedure(updated);
+        fetchSubData(selectedPaper.id.toString());
+      } else if (item.status === 'completed' && item.invoice_line_item_id) {
+        await unbillProcedure(item);
+        delete updated.invoice_line_item_id;
+        delete updated.invoice_id;
+        fetchSubData(selectedPaper.id.toString());
+      }
+    } catch (e: any) {
+      Alert.alert('Billing', e?.message || 'Could not update the bill for that procedure.');
+    }
+    setSessionTreatmentPlan(prev => prev.map(i => (i.id === id ? updated : i)));
+  };
+
+  const removeTreatment = async (id: number) => {
+    const item = sessionTreatmentPlan.find(i => i.id === id);
+    if (item?.status === 'completed' && item.invoice_line_item_id) {
+      await unbillProcedure(item);
+      if (paperIsSaved()) fetchSubData(selectedPaper.id.toString());
+    }
     setSessionTreatmentPlan(prev => prev.filter(p => p.id !== id));
   };
 
@@ -535,10 +603,18 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
       return;
     }
     try {
+      // `items` with `medicine_name`, linked by `case_paper_id`. This used to
+      // send `medicines` with `name` in the appointment slot, which the server
+      // never read: every prescription written here was saved with no medicines.
       await patientsApiService.createClinicalPrescription({
         patient_id: parseInt(patientId),
-        appointment_id: selectedPaper?.id,
-        medicines: allMeds,
+        case_paper_id: parseInt(selectedPaper?.id),
+        items: allMeds.map(m => ({
+          medicine_name: m.name.trim(),
+          dosage: m.dosage || null,
+          duration: m.duration || null,
+          notes: m.notes || null,
+        })),
         notes: rxNotes,
       });
       setPrescriptionModal(false);
@@ -583,16 +659,18 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
     setInvoiceLoading(true);
     try {
       if (!invoice) {
+        // Completed, priced, and not already on a bill: the web bills a
+        // procedure the moment it is completed and records the line on it.
         const lineItems = sessionTreatmentPlan
-          .filter(t => t.cost > 0 && t.status === 'completed')
+          .filter(t => t.cost > 0 && t.status === 'completed' && !t.invoice_line_item_id)
           .map(t => ({
-            description: t.procedure + (t.tooth ? ` (Tooth #${t.tooth})` : ''),
-            quantity: 1,
+            description: procedureChargeDesc(t),
+            quantity: Number(t.qty) || 1,
             unit_price: t.cost,
           }));
         const newInv = await patientsApiService.createInvoice({
           patient_id: parseInt(patientId),
-          appointment_id: parseInt(selectedPaper.id),
+          case_paper_id: parseInt(selectedPaper.id),
           notes: `Case Paper #${visitNum}`,
           line_items: lineItems.length > 0 ? lineItems : undefined,
         });
@@ -675,10 +753,13 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
   };
 
   // ─── Computed ────────────────────────────────────────────
-  const casePrescriptions = prescriptions.filter(
-    rx => rx.appointment_id === selectedPaper?.id ||
-      rx.appointment_id?.toString() === selectedPaper?.id?.toString()
-  );
+  // By case paper. The appointment match stays for prescriptions written
+  // before the link existed, which carried the case paper id there.
+  const casePrescriptions = prescriptions.filter(rx => {
+    const id = selectedPaper?.id?.toString();
+    return rx.case_paper_id?.toString() === id ||
+      (!rx.case_paper_id && rx.appointment_id?.toString() === id);
+  });
 
   const invoiceSubtotal = (invoice?.line_items || []).reduce(
     (sum: number, li: any) => sum + (li.quantity || 1) * (li.unit_price || 0), 0
@@ -849,7 +930,7 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
                       </View>
                     </View>
                     <Text style={s.txDetail}>
-                      {item.tooth ? `Tooth #${item.tooth}` : 'General'}
+                      {planItemTeeth(item) ? `Tooth ${planItemTeeth(item)}` : 'General'}
                       {item.cost > 0 ? ` · ${getCurrencySymbol()}${(item.cost || 0).toLocaleString('en-US')}` : ''}
                       {item.diagnosis ? ` · ${item.diagnosis}` : ''}
                     </Text>
@@ -881,10 +962,10 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
               <View key={rx.id || i} style={s.rxRow}>
                 <Pill size={14} color="#10B981" />
                 <View style={{ flex: 1 }}>
-                  {(rx.medicines || []).map((m: any, mi: number) => (
-                    <Text key={mi} style={s.rxText}>{m.name} — {m.dosage} × {m.duration}</Text>
+                  {medicinesOf(rx).map((m: any, mi: number) => (
+                    <Text key={mi} style={s.rxText}>{[m.name, [m.dosage, m.duration].filter(Boolean).join(' × ')].filter(Boolean).join(' · ')}</Text>
                   ))}
-                  {(!rx.medicines || rx.medicines.length === 0) && <Text style={s.rxText}>Prescription #{rx.id}</Text>}
+                  {medicinesOf(rx).length === 0 && <Text style={s.rxText}>Prescription #{rx.id}</Text>}
                 </View>
                 {rx.id ? (
                   <TouchableOpacity
@@ -1023,7 +1104,7 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
               <Text style={s.sheetTitle}>Add Treatment</Text>
               <TextInput style={s.fieldInput} placeholder="Procedure *" placeholderTextColor="#9CA3AF" value={txProcedure} onChangeText={setTxProcedure} />
               <View style={{ flexDirection: 'row', gap: 10 }}>
-                <TextInput style={[s.fieldInput, { flex: 1 }]} placeholder="Tooth #" placeholderTextColor="#9CA3AF" value={txTooth} onChangeText={setTxTooth} keyboardType="number-pad" />
+                <TextInput style={[s.fieldInput, { flex: 1 }]} placeholder="Tooth (FDI, e.g. 16)" placeholderTextColor="#9CA3AF" value={txTooth} onChangeText={setTxTooth} keyboardType="number-pad" />
                 <TextInput style={[s.fieldInput, { flex: 1 }]} placeholder={`Cost (${getCurrencySymbol()})`} placeholderTextColor="#9CA3AF" value={txCost} onChangeText={setTxCost} keyboardType="numeric" />
               </View>
               <TextInput style={s.fieldInput} placeholder="Notes" placeholderTextColor="#9CA3AF" value={txNotes} onChangeText={setTxNotes} />
@@ -1164,7 +1245,7 @@ export const CasePapersTab: React.FC<CasePapersTabProps> = ({ patient, patientId
                     ) : casePrescriptions.map((rx: any, i: number) => (
                       <View key={rx.id || i} style={s.rxPreviewCard}>
                         <Text style={s.rxPreviewDate}>Rx #{i + 1} · {fmtDate(rx.created_at || rx.date || '')}</Text>
-                        {(rx.medicines || []).map((m: any, mi: number) => (
+                        {medicinesOf(rx).map((m: any, mi: number) => (
                           <View key={mi} style={s.rxPreviewRow}>
                             <Pill size={12} color="#10B981" />
                             <View style={{ flex: 1 }}>

@@ -13,6 +13,7 @@ import { colors } from '../../../../../shared/constants/colors';
 import { X, Search, ChevronDown } from 'lucide-react-native';
 import { patientsApiService } from '../../../../../services/api/patients.api';
 import { getCurrencySymbol } from '../../../../../shared/utils/currency';
+import { toFDI, withStatus } from '../../../../../shared/utils/teeth';
 
 interface DentalChartProps {
     teethData?: any;
@@ -145,7 +146,12 @@ export const DentalChart: React.FC<DentalChartProps> = ({
         // Save notes + status to tooth data
         if (examination) onNotesChange?.(selectedTooth, examination);
         const currentData = getToothData(selectedTooth);
-        onToothUpdate?.(selectedTooth, { ...currentData, status: clinicalStatus });
+        // Only a status the doctor actually changed is written, with the web's
+        // fields alongside it (see withStatus). Rewriting an unchanged one would
+        // flatten whatever the web recorded on this tooth.
+        if (clinicalStatus !== (currentData.status || 'present')) {
+            onToothUpdate?.(selectedTooth, withStatus(currentData, clinicalStatus));
+        }
         setIsModalVisible(false);
     };
 
@@ -154,16 +160,31 @@ export const DentalChart: React.FC<DentalChartProps> = ({
         setStatusOpen(false);
         if (selectedTooth) {
             const currentData = getToothData(selectedTooth);
-            onToothUpdate?.(selectedTooth, { ...currentData, status });
+            onToothUpdate?.(selectedTooth, withStatus(currentData, status));
         }
     };
 
+    // What the doctor can set here, each stored as the status the web draws for
+    // it. "Recommended Treatment" used to store `rootCanal` and "Treatment Taken
+    // Before" `implant`, so the web and every PDF drew an existing root canal or
+    // an implant screw on a tooth that had neither.
     const CLINICAL_STATUS_OPTIONS = [
         { value: 'present',    label: 'Present (Healthy)' },
-        { value: 'missing',    label: 'Teeth Removed' },
-        { value: 'implant',    label: 'Treatment Taken Before' },
-        { value: 'rootCanal',  label: 'Recommended Treatment' },
+        { value: 'planned',    label: 'Treatment Recommended' },
+        { value: 'existing',   label: 'Treated Before' },
+        { value: 'to_extract', label: 'To Be Extracted' },
+        { value: 'missing',    label: 'Missing / Extracted' },
+        { value: 'impacted',   label: 'Impacted' },
+        { value: 'fractured',  label: 'Fractured' },
     ];
+
+    // Statuses the web can record that are not offered above. Shown by name so
+    // a crowned tooth does not read "Present (Healthy)" on the phone.
+    const RECORDED_STATUS_LABELS: Record<string, string> = {
+        implant: 'Implant', rootCanal: 'Root Canal', post_core: 'Post and Core',
+        crown_porcelain: 'Porcelain Crown', crown_gold: 'Gold Crown', crown_ss: 'Stainless Steel Crown',
+        veneer: 'Veneer', bridge: 'Bridge',
+    };
 
     return (
         <ScrollView
@@ -248,7 +269,7 @@ export const DentalChart: React.FC<DentalChartProps> = ({
                                 {/* Header */}
                                 <View style={styles.drawerHeader}>
                                     <View>
-                                        <Text style={styles.drawerTitle}>Tooth #{selectedTooth}</Text>
+                                        <Text style={styles.drawerTitle}>Tooth {toFDI(selectedTooth)}</Text>
                                         <Text style={styles.drawerSub}>{TOOTH_NAMES[selectedTooth] || 'Tooth'}</Text>
                                     </View>
                                     <TouchableOpacity onPress={() => setIsModalVisible(false)} style={styles.closeBtn}>
@@ -315,7 +336,7 @@ export const DentalChart: React.FC<DentalChartProps> = ({
                                             onPress={() => setStatusOpen(o => !o)}
                                         >
                                             <Text style={ss.statusPickerText}>
-                                                {CLINICAL_STATUS_OPTIONS.find(o => o.value === clinicalStatus)?.label || 'Present (Healthy)'}
+                                                {CLINICAL_STATUS_OPTIONS.find(o => o.value === clinicalStatus)?.label || RECORDED_STATUS_LABELS[clinicalStatus] || 'Present (Healthy)'}
                                             </Text>
                                             <ChevronDown size={16} color="#6B7280" />
                                         </TouchableOpacity>

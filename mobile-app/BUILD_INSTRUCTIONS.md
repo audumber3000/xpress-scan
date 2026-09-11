@@ -376,3 +376,35 @@ Push, Sign in with Apple, HealthKit, App Groups.
 7. After processing:
    - iOS: TestFlight at https://appstoreconnect.apple.com/apps/6765472713/testflight/ios (~5–10 min after submit).
    - Android: Play Console → Test and release → Production. Build lands as a **draft release** — drag rollout slider to 100% and Save to publish (see Gotcha #10).
+
+## Android push notifications (FCM): one-time setup, not done yet
+
+Android has never registered a push token. In production (Sep 2026): 60 Android
+users in 30 days, zero `push_tokens` rows with platform `android`; iOS has 26.
+The Android build has no Firebase config, so `getExpoPushTokenAsync` throws and
+`pushToken.ts` logs the error and carries on. iOS works because
+`GoogleService-Info.plist` is present.
+
+It needs two files only the Firebase console can hand out:
+
+1. **Register the Android app.** Firebase console → project `betterclinic-f1179`
+   → Add app → Android → package `com.molarplus.app`. Download
+   `google-services.json` and save it as **both**
+   `mobile-app/google-services.json` and `mobile-app/android/app/google-services.json`.
+   (`android/` is a bare, gitignored project, so the second copy is the one the
+   build reads.)
+2. **Wire it into the bare Android project.**
+   - `android/build.gradle`, in `buildscript.dependencies`:
+     `classpath('com.google.gms:google-services:4.4.2')`
+   - `android/app/build.gradle`, under the other `apply plugin` lines:
+     `apply plugin: "com.google.gms.google-services"`
+   - `app.json` → `expo.android`: `"googleServicesFile": "./google-services.json"`
+3. **Give EAS the FCM V1 key.** Firebase → Project settings → Service accounts →
+   Generate new private key. Then `npx eas credentials -p android` →
+   production → Google Service Account → "Manage your Google Service Account Key
+   for Push Notifications (FCM V1)" → upload that JSON.
+4. **Build, then check it worked.** Sign in on an Android phone and confirm a row
+   appears: `select platform, count(*) from push_tokens group by 1;` should now
+   list `android`. Then send a test push from the backend.
+
+Do not add the gradle plugin line without the JSON file in place: the build fails.

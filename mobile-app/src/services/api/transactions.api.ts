@@ -1,4 +1,4 @@
-import { BaseApiService } from './base.api';
+import { BaseApiService, DOCUMENT_TIMEOUT_MS } from './base.api';
 
 export interface Transaction {
   id: string;
@@ -279,7 +279,7 @@ export class TransactionsApiService extends BaseApiService {
     const response = await this.fetchWithTimeout(`${this.baseURL}/invoices/${invoiceId}/send-whatsapp`, {
       method: 'POST',
       headers,
-    });
+    }, DOCUMENT_TIMEOUT_MS);
     if (!response.ok) {
       let detail = `HTTP ${response.status}`;
       try {

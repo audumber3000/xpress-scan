@@ -21,6 +21,7 @@ import { GetStartedChecklist } from './components/GetStartedChecklist';
 import { googleReviewsApiService, GooglePlaceStatus } from '../../../../../services/api/google-reviews.api';
 import { colors } from '../../../../../shared/constants/colors';
 import { RightNowStrip } from './components/RightNowStrip';
+import { isOpen } from '../../../../../shared/constants/appointmentStatus';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -170,9 +171,9 @@ function formatAppointmentTime(appointment: Appointment) {
 
 function getNextAppointmentTime(appointments: Appointment[]) {
   const now = new Date();
-  const inactiveStatuses = new Set(['cancelled', 'finished', 'rejected']);
+  // Anything already settled (completed, no-show, cancelled) is not "next".
   const next = appointments
-    .filter((appointment) => !inactiveStatuses.has(String(appointment.status).toLowerCase()))
+    .filter((appointment) => isOpen(appointment.status))
     .map((appointment) => ({ appointment, startsAt: appointmentDateTime(appointment) }))
     .filter(({ startsAt }) => startsAt >= now)
     .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())[0];
