@@ -23,8 +23,7 @@ import {
   Mail,
   Lock,
   Eye,
-  EyeOff
-} from 'lucide-react-native';
+  EyeOff, ScanLine } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../app/AppNavigator';
 import { signInWithGoogle, signInWithApple } from '../../../services/auth/authService';
@@ -307,6 +306,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
         >
           <Mail size={22} color={colors.gray900} />
           <Text style={styles.providerPillText}>Continue with Email</Text>
+        </TouchableOpacity>
+
+        {/* No password needed: the website shows a QR (profile menu, "Log in
+            to mobile app"), and the owner can show one for any staff member. */}
+        <TouchableOpacity
+          style={styles.providerPill}
+          onPress={() => navigation.navigate('ScanLogin')}
+          activeOpacity={0.85}
+        >
+          <ScanLine size={22} color={colors.gray900} />
+          <Text style={styles.providerPillText}>Scan QR to log in</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>

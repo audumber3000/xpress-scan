@@ -394,6 +394,27 @@ def _seed_clinic_defaults(db: Session, clinic_id: int):
     db.commit()
 
 
+
+def build_auth_response(db: Session, user, token: str, message: str = "Login successful") -> AuthResponseDTO:
+    """What every successful sign-in hands back: the token, the user with every
+    clinic they belong to, and their current clinic. One builder, so the
+    password login and the phone QR login cannot drift into returning
+    different shapes to the same app."""
+    user_clinics_list = (
+        db.query(Clinic)
+        .join(User.clinics)
+        .filter(User.id == user.id)
+        .all()
+    )
+    user_dto = UserResponseDTO.from_orm(user)
+    user_dto.clinics = [_enrich_clinic_dto(db, c) for c in user_clinics_list]
+    return AuthResponseDTO(
+        message=message,
+        user=user_dto,
+        token=token,
+        clinic=_get_clinic_for_user(db, user),
+    )
+
 @router.post(
     "/login",
     response_model=AuthResponseDTO,
@@ -508,26 +529,7 @@ async def login_user(
         )
 
         token = auth_service.create_jwt_token(user.id, device.id if device else None)
-        
-        # Load clinics for the user
-        user_clinics_list = (
-            db.query(Clinic)
-            .join(User.clinics)
-            .filter(User.id == user.id)
-            .all()
-        )
-        
-        user_dto = UserResponseDTO.from_orm(user)
-        user_dto.clinics = [_enrich_clinic_dto(db, c) for c in user_clinics_list]
-        
-        clinic = _get_clinic_for_user(db, user)
-
-        return AuthResponseDTO(
-            message="Login successful",
-            user=user_dto,
-            token=token,
-            clinic=clinic
-        )
+        return build_auth_response(db, user, token)
 
     except HTTPException:
         raise

@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import * as Device from 'expo-device';
 import { getFixIfAlreadyAllowed } from '../../shared/utils/location';
 import { BaseApiService } from './base.api';
 import { setCurrencySymbol } from '../../shared/utils/currency';
@@ -322,6 +323,45 @@ export class AuthApiService extends BaseApiService {
       return { user };
     } catch (error: any) {
       console.error('Error during backend login:', error);
+      return { user: null, error: error.message };
+    }
+  }
+
+  /**
+   * Sign in with a QR shown on the web (header menu, or the staff panel's
+   * Phone login tab). `scanned` is whatever the camera read; the server strips
+   * the molarplus://login?code= prefix and checks the rest. On success the
+   * session is stored exactly as a password sign-in stores it, so the app
+   * behaves the same from here on.
+   */
+  async phoneLogin(scanned: string): Promise<{ user: BackendUser | null; error?: string }> {
+    try {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/auth/phone-login/redeem`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: scanned,
+          device: {
+            // The model, so the screen that showed the code can say which
+            // phone signed in ("Signed in on Redmi Note 12").
+            device_name: Device.modelName || 'Mobile App',
+            device_type: 'mobile',
+            device_platform: Platform.OS === 'ios' ? 'iOS' : 'Android',
+            ...(await getFixIfAlreadyAllowed(4000) ?? {}),
+          },
+        }),
+      });
+      if (!response.ok) {
+        let detail = `HTTP ${response.status}`;
+        try { detail = (await response.json())?.detail || detail; } catch {}
+        throw new Error(detail);
+      }
+      const data = await response.json();
+      if (data.token) await AsyncStorage.setItem('access_token', data.token);
+      const user = this.transformUser(data);
+      await AsyncStorage.setItem('backend_user', JSON.stringify(user));
+      return { user };
+    } catch (error: any) {
       return { user: null, error: error.message };
     }
   }

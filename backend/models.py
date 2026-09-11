@@ -1084,6 +1084,29 @@ class XrayImage(Base):
 
 # Relationships are already defined in the classes above
 
+class PhoneLoginCode(Base):
+    """A one-time code, shown as a QR on the web, that signs a phone in.
+
+    The QR carries the code itself; this row keeps only its SHA-256, so a
+    database read cannot be turned into a login. A code lives about two minutes
+    and works once. `issued_by` is whoever put it on screen: the person
+    themselves (header menu) or somebody managing staff (the staff panel).
+    """
+    __tablename__ = 'phone_login_codes'
+    id = Column(Integer, primary_key=True, index=True)
+    code_hash = Column(String(64), nullable=False, unique=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    issued_by = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+    # The phone it signed in, so the screen that showed the code can say which
+    # one and block it if it was not them.
+    used_device_id = Column(Integer, ForeignKey('user_devices.id'), nullable=True)
+    used_device_name = Column(String, nullable=True)
+
+
 class UserDevice(Base):
     __tablename__ = 'user_devices'
     id = Column(Integer, primary_key=True, index=True)

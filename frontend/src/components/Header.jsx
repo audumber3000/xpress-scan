@@ -5,10 +5,10 @@ import { useHeader } from "../contexts/HeaderContext";
 import {
   Search, X, Menu, Bell, ChevronRight, Keyboard, Headset,
   UserRound, CreditCard, LifeBuoy, LogOut, Settings, BadgeCheck,
-  UserPlus, CalendarDays, Pill, Receipt, ShieldAlert, Clock,
-} from "lucide-react";
+  UserPlus, CalendarDays, Pill, Receipt, ShieldAlert, Clock, Smartphone } from "lucide-react";
 import ShortcutsDrawer from "./ShortcutsDrawer";
 import ClockModal from "./attendance/ClockModal";
+import PhoneLoginModal from "./phoneLogin/PhoneLoginModal";
 import { canAccess } from "../utils/permissions";
 import {
   ALL_SHORTCUTS, ACTION_HELP, ACTION_SEARCH, matchesCombo, isTypingTarget,
@@ -146,6 +146,7 @@ const Header = ({ onOpenMobileSidebar }) => {
   const { title, titlePath, refreshFunction, refreshPath, loading, handleRefresh } = useHeader();
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showClockModal, setShowClockModal] = useState(false);
+  const [showPhoneLogin, setShowPhoneLogin] = useState(false);
   const [showClinicDropdown, setShowClinicDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
@@ -848,6 +849,13 @@ const Header = ({ onOpenMobileSidebar }) => {
                   label="Clock in / Clock out"
                   onClick={() => { setShowProfileDropdown(false); setShowClockModal(true); }}
                 />
+                {/* Sign in on a phone by scanning, instead of typing a password
+                    on a small keyboard. See components/phoneLogin. */}
+                <MenuRow
+                  icon={Smartphone}
+                  label="Log in to mobile app"
+                  onClick={() => { setShowProfileDropdown(false); setShowPhoneLogin(true); }}
+                />
                 <MenuRow
                   icon={UserRound}
                   label="Profile settings"
@@ -1007,6 +1015,7 @@ const Header = ({ onOpenMobileSidebar }) => {
         to the dropdowns nested in it: they could not climb out. A modal
         rendered in there would sit under the page's own layers. */}
     <ClockModal open={showClockModal} onClose={() => setShowClockModal(false)} />
+    <PhoneLoginModal open={showPhoneLogin} onClose={() => setShowPhoneLogin(false)} />
 
     {/* The plan button is the one billing entry point staff can still see, and
         it stays visible on purpose: knowing which plan the clinic is on is

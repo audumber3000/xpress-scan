@@ -9,6 +9,7 @@ import { usePushNotifications } from '../hooks/usePushNotifications';
 import { OnboardingScreen, ONBOARDING_KEY } from '../features/auth/screens/OnboardingScreen';
 import { GetStartedScreen } from '../features/auth/screens/GetStartedScreen';
 import { LoginScreen } from '../features/auth/screens/LoginScreen';
+import { ScanLoginScreen } from '../features/auth/screens/ScanLoginScreen';
 import { SignupScreen } from '../features/auth/screens/SignupScreen';
 import { NoClinicLinkedScreen } from '../features/auth/screens/NoClinicLinkedScreen';
 import { IS_SIGNUP_ENABLED } from '../shared/constants/platform';
@@ -57,6 +58,7 @@ export type RootStackParamList = {
   Onboarding: undefined;
   GetStarted: undefined;
   Login: undefined;
+  ScanLogin: undefined;
   Signup: undefined;
   NoClinicLinked: undefined;
   ClinicOwnerTabs: undefined;
@@ -174,6 +176,7 @@ export const AppNavigator = () => {
               IS_SIGNUP_ENABLED ? (
                 <>
                   <Stack.Screen name="Login" component={LoginScreen} />
+                  <Stack.Screen name="ScanLogin" component={ScanLoginScreen} />
                   <Stack.Screen name="GetStarted" component={GetStartedScreen} />
                   <Stack.Screen name="Signup" component={SignupScreen} />
                 </>
@@ -274,6 +277,7 @@ export const AppNavigator = () => {
               <Stack.Screen name="Onboarding" component={OnboardingScreen} />
               <Stack.Screen name="GetStarted" component={GetStartedScreen} />
               <Stack.Screen name="Login" component={LoginScreen} />
+                  <Stack.Screen name="ScanLogin" component={ScanLoginScreen} />
               <Stack.Screen name="Signup" component={SignupScreen} />
             </>
           ) : (
@@ -282,6 +286,7 @@ export const AppNavigator = () => {
             // SignupScreen. Login screen is the only entry.
             <>
               <Stack.Screen name="Login" component={LoginScreen} />
+                  <Stack.Screen name="ScanLogin" component={ScanLoginScreen} />
             </>
           )}
         </Stack.Navigator>

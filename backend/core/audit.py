@@ -42,6 +42,9 @@ LOGIN_FAILED         = 'auth.login_failed'
 LOGIN_BLOCKED        = 'auth.login_blocked'
 LOGOUT               = 'auth.logout'
 PASSWORD_CHANGED     = 'auth.password_changed'
+# A phone-login QR shown for someone other than the person signed in. Showing
+# one for yourself is not recorded; the sign-in it leads to is.
+PHONE_LOGIN_ISSUED   = 'auth.phone_login_issued'
 
 # Shown in the UI's filter dropdown, in the order they appear there.
 ACTION_LABELS = {
@@ -67,6 +70,7 @@ ACTION_LABELS = {
     DEVICE_REMOVED:      'Device removed',
     SECURITY_UPDATED:    'Recovery contact changed',
     MASTER_PASSWORD_SET: 'Master password changed',
+    PHONE_LOGIN_ISSUED:  'Phone login QR shown',
 }
 
 

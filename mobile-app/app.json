@@ -21,7 +21,8 @@
       "infoPlist": {
         "CFBundleDisplayName": "MolarPlus",
         "ITSAppUsesNonExemptEncryption": false,
-        "NSLocationWhenInUseUsageDescription": "MolarPlus records where you clock in and out so your clinic can confirm attendance at the practice. Location is read only when you tap, never in the background."
+        "NSLocationWhenInUseUsageDescription": "MolarPlus records where you clock in and out so your clinic can confirm attendance at the practice. Location is read only when you tap, never in the background.",
+        "NSCameraUsageDescription": "MolarPlus uses the camera to scan the QR code that signs you in, and to photograph patient registers."
       }
     },
     "android": {
@@ -35,7 +36,8 @@
       "label": "MolarPlus",
       "permissions": [
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "CAMERA"
       ]
     },
     "plugins": [
@@ -67,6 +69,13 @@
           "locationAlwaysAndWhenInUsePermission": "MolarPlus records where you clock in and out so your clinic can confirm attendance at the practice.",
           "isAndroidBackgroundLocationEnabled": false
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "MolarPlus uses the camera to scan the QR code that signs you in, and to photograph patient registers.",
+          "recordAudioAndroid": false
+        }
       ]
     ],
     "web": {
@@ -76,6 +85,7 @@
       "eas": {
         "projectId": "717ac180-38d3-4b89-ade1-678090b3e324"
       }
-    }
+    },
+    "scheme": "molarplus"
   }
 }

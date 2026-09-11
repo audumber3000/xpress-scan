@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, User, Pencil, ShieldCheck } from 'lucide-react';
+import { X, User, Pencil, ShieldCheck, Smartphone } from 'lucide-react';
 import { getInitials } from '../../utils/avatar';
 import { resolveUserAvatar } from '../../utils/avatar';
 
@@ -39,6 +39,7 @@ const TABS = [
   { id: 'accounts',    label: 'Overview',    icon: User },
   { id: 'edit',        label: 'Edit',        icon: Pencil },
   { id: 'permissions', label: 'Permissions', icon: ShieldCheck },
+  { id: 'phone',       label: 'Phone login', icon: Smartphone },
 ];
 
 const Row = ({ label, children }) => (
@@ -48,13 +49,16 @@ const Row = ({ label, children }) => (
   </div>
 );
 
-const UserDetailsPanel = ({ user, activeTab = 'accounts', onTabChange, onClose, children }) => {
+const UserDetailsPanel = ({ user, activeTab = 'accounts', onTabChange, onClose, canPhoneLogin = false, children }) => {
   if (!user) return null;
 
   const isOwner = user.role === 'clinic_owner';
   // The owner's permissions are fixed and the backend refuses to edit them, so
   // offering the tab would be a promise the server breaks.
-  const tabs = TABS.filter((t) => !(t.id === 'permissions' && isOwner));
+  // Phone login only where the server would say yes: an active account the
+  // viewer is allowed to manage. Offering it elsewhere is a button that errors.
+  const tabs = TABS.filter((t) =>
+    !(t.id === 'permissions' && isOwner) && !(t.id === 'phone' && !canPhoneLogin));
 
   return (
     <div className="fixed inset-0 z-50">

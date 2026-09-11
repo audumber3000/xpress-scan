@@ -23,6 +23,7 @@ import AddStaffDrawer from "../components/settings/AddStaffDrawer";
 import StaffAddedModal from "../components/settings/StaffAddedModal";
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import GearLoader from "../components/GearLoader";
+import PhoneLoginQR from "../components/phoneLogin/PhoneLoginQR";
 
 const StaffManagement = () => {
   const { setTitle } = useHeader();
@@ -394,6 +395,12 @@ const StaffManagement = () => {
             onClose={handleClosePanel}
             activeTab={userPanelTab}
             onTabChange={setUserPanelTab}
+            canPhoneLogin={
+              !!selectedUser.is_active && (
+                selectedUser.id === user?.id ||
+                availableRoles.some((r) => (r?.value ?? r) === selectedUser.role)
+              )
+            }
           >
             {userPanelTab === "edit" && (
               <EditUserTab
@@ -402,6 +409,15 @@ const StaffManagement = () => {
                 isSaving={savingEditUser}
                 availableRoles={availableRoles}
               />
+            )}
+            {userPanelTab === "phone" && (
+              <div className="bg-white border border-gray-200 rounded-xl p-5">
+                <PhoneLoginQR
+                  key={selectedUser.id}
+                  userId={selectedUser.id === user?.id ? null : selectedUser.id}
+                  personName={selectedUser.id === user?.id ? null : (selectedUser.name || selectedUser.email)}
+                />
+              </div>
             )}
             {userPanelTab === "permissions" && (
               <PermissionsTab

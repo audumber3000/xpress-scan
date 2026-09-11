@@ -1,4 +1,5 @@
 import { createContext, FC, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { Linking } from "react-native"
 import { User, onAuthStateChanged } from "firebase/auth"
 import { auth } from "../config/firebase"
 import { signInWithEmail, signOutUser } from "../services/auth/authService"
@@ -18,6 +19,7 @@ export type AuthContextType = {
   authEmail?: string
   setAuthEmail: (email: string) => void
   signInEmail: (email: string, password: string) => Promise<{ error: string | null }>
+  signInWithPhoneCode: (scanned: string) => Promise<{ error: string | null }>
   logout: () => Promise<void>
   validationError: string
   isLoading: boolean
@@ -25,7 +27,7 @@ export type AuthContextType = {
   isClinicSwitcherVisible: boolean
   setIsClinicSwitcherVisible: (visible: boolean) => void
   switchBranch: (clinicId: string) => Promise<void>
-  authProvider: 'google' | 'email' | 'apple' | null
+  authProvider: 'google' | 'email' | 'apple' | 'qr' | null
   appleFullName: string | null
   setAppleFullName: (name: string | null) => void
 }
@@ -44,7 +46,7 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
   const [authEmail, setAuthEmail] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [isClinicSwitcherVisible, setIsClinicSwitcherVisible] = useState(false)
-  const [authProvider, setAuthProvider] = useState<'google' | 'email' | 'apple' | null>(null)
+  const [authProvider, setAuthProvider] = useState<'google' | 'email' | 'apple' | 'qr' | null>(null)
   const [appleFullName, setAppleFullName] = useState<string | null>(null)
 
   // Background-sync with backend — does NOT block loading
@@ -238,6 +240,44 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
     return { error: null }
   }, [])
 
+  // Signed in by scanning a QR on the web. The same backend-only path a staff
+  // password sign-in takes: no Firebase session, the stored token carries it,
+  // and a restart restores it from there like every other session.
+  const signInWithPhoneCode = useCallback(async (scanned: string) => {
+    const { user: be, error } = await authApiService.phoneLogin(scanned)
+    if (error || !be) return { error: error || 'Could not sign you in.' }
+    setBackendUser(be)
+    setAuthEmail(be.email || '')
+    setAuthProvider('qr')
+    setIsLoading(false)
+    return { error: null }
+  }, [])
+
+  // The phone's own camera app can open a scanned code straight into
+  // MolarPlus as molarplus://login?code=... Held until the startup session
+  // check has settled, so it cannot race the restore of an existing session.
+  const [pendingLoginLink, setPendingLoginLink] = useState<string | null>(null)
+  useEffect(() => {
+    const take = (url?: string | null) => {
+      if (url && url.startsWith('molarplus://login')) setPendingLoginLink(url)
+    }
+    Linking.getInitialURL().then(take).catch(() => {})
+    const sub = Linking.addEventListener('url', ({ url }) => take(url))
+    return () => sub.remove()
+  }, [])
+  useEffect(() => {
+    if (!pendingLoginLink || isLoading) return
+    const link = pendingLoginLink
+    setPendingLoginLink(null)
+    if (user || backendUser) {
+      showAlert('Already signed in', 'This phone is already signed in to MolarPlus. Sign out first to use this code.')
+      return
+    }
+    signInWithPhoneCode(link).then(({ error }) => {
+      if (error) showAlert('Could not sign in', error)
+    })
+  }, [pendingLoginLink, isLoading, user, backendUser, signInWithPhoneCode])
+
   const switchBranch = useCallback(async (clinicId: string) => {
     try {
       const updatedUser = await authApiService.switchClinic(clinicId);
@@ -264,6 +304,7 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
     authEmail,
     setAuthEmail,
     signInEmail,
+    signInWithPhoneCode,
     logout,
     validationError,
     isLoading,

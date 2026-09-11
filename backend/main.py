@@ -46,6 +46,7 @@ from domains.patient.routes import daily_register
 from domains.patient.routes import treatment_types, referring_doctors, treatment_plans, patient_files
 from domains.search.routes import global_search
 from domains.auth.routes import auth_clean as auth
+from domains.auth.routes import phone_login
 from domains.auth.routes import clinic_users, permissions, security
 from domains.clinic.routes import clinics, subscriptions
 from domains.finance.routes import payments_clean as payments, invoices, ledger, offers
@@ -911,6 +912,9 @@ mount_integration_api(app)
 
 
 # Register domain routers with clean architecture
+# Phone sign-in by QR. Mounted before the main auth router so its paths are
+# matched first; see domains/auth/routes/phone_login.py.
+app.include_router(phone_login.router, prefix="/api/v1/auth/phone-login", tags=["auth"])
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(clinic_users.router, prefix="/api/v1/clinic-users", tags=["clinic_users"])
 app.include_router(permissions.router, prefix="/api/v1/permissions", tags=["permissions"])
