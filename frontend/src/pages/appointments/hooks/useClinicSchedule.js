@@ -94,15 +94,25 @@ export default function useClinicSchedule(currentDate) {
 
   // Working hours per doctor for the day on screen, so the grid can shade time
   // nobody is available for. One request rather than one per doctor.
+  //
+  // dateKey, not toISOString: the latter resolves in UTC, so at IST the day
+  // shape for the 14th was fetched for the 13th.
+  //
+  // The effect keys on that STRING, never on the Date. A Date is compared by
+  // identity, so a caller passing `new Date()` inline handed this a new object
+  // on every render: effect runs, setDayShape re-renders, a new Date arrives,
+  // effect runs again, forever. On 2026-09-12 one open patient profile put out
+  // hundreds of requests a second and took the whole API down for three hours.
+  // The request only ever varies by day, so the day is the honest dependency
+  // and no caller can reintroduce this.
+  const on = dateKey(currentDate);
   useEffect(() => {
     let cancelled = false;
-    // dateKey, not toISOString: the latter resolves in UTC, so at IST the day
-    // shape for the 14th was fetched for the 13th.
-    api.get('/scheduling/day-shape', { params: { on: dateKey(currentDate) } })
+    api.get('/scheduling/day-shape', { params: { on } })
       .then((res) => { if (!cancelled) setDayShape(res); })
       .catch(() => { if (!cancelled) setDayShape(null); });
     return () => { cancelled = true; };
-  }, [currentDate]);
+  }, [on]);
 
   return {
     clinicData,

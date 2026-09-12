@@ -71,7 +71,15 @@ const PatientProfile = () => {
   // Doctors, treatments and the day's chair count, the three things
   // BookingModal needs. Same hook the calendar uses, so the two agree on what
   // the clinic looks like.
-  const { treatmentTypes, doctors, dayShape } = useClinicSchedule(new Date());
+  //
+  // `today` is memoised, and it matters as much as the `initial` below. This
+  // used to read `useClinicSchedule(new Date())`: an inline Date is a fresh
+  // object every render, the hook refetched the day shape whenever the date it
+  // was handed changed, and the resulting state update rendered again. One
+  // open patient profile put out hundreds of requests a second and took the
+  // whole API down for three hours on 2026-09-12.
+  const today = useMemo(() => new Date(), []);
+  const { treatmentTypes, doctors, dayShape } = useClinicSchedule(today);
 
   // Memoised, and it matters. BookingModal re-seeds its form from `initial` in
   // an effect keyed on that object, so an inline literal here would hand it a
