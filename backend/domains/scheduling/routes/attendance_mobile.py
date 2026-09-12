@@ -1,4 +1,7 @@
-from fastapi import APIRouter, HTTPException, Depends
+import math
+import os
+
+from fastapi import APIRouter, HTTPException, Depends, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -10,6 +13,9 @@ from core.auth_utils import get_current_user, require_clinic_owner
 from core.clinic_time import clinic_tzinfo, clinic_today, clinic_day_bounds_utc
 from domains.scheduling.services.attendance_view import (
     LATE_GRACE_MINUTES,
+    break_minutes,
+    breaks_of,
+    open_break,
     _late_by_minutes,
     _opening_time_for,
     _to_clinic_local,
@@ -18,6 +24,42 @@ from domains.scheduling.services.attendance_view import (
 from pydantic import BaseModel, Field
 
 router = APIRouter()
+
+# The same key the Google Reviews feature uses. Read here rather than passed to
+# the app: see the /map endpoint for why it must not ship in the bundle.
+PLACES_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
+STATIC_MAP_URL = "https://maps.googleapis.com/maps/api/staticmap"
+
+
+def _zoom_for(radius_m: int) -> int:
+    """A zoom level that leaves the fence filling most of the frame.
+
+    Each zoom step halves the ground covered, so this is a log: 150 m lands on
+    16, a 1 km fence on 13. Clamped either side because a clinic that typed 5 m
+    or 50 km should still get a legible picture.
+    """
+    zoom = 16 - math.log2(max(radius_m, 25) / 150)
+    return max(12, min(int(round(zoom)), 18))
+
+
+def _fence_path(lat: float, lng: float, radius_m: int, points: int = 40) -> str:
+    """The geofence as a circle Static Maps can draw.
+
+    Static Maps has no circle, only paths, so this walks `points` bearings
+    around the centre. Longitude degrees shrink towards the poles, hence the
+    cos(latitude); without it the ring is an ellipse everywhere but the equator.
+    """
+    lat_degree_m = 111_320.0
+    lng_degree_m = lat_degree_m * max(math.cos(math.radians(lat)), 0.01)
+    ring = []
+    for i in range(points + 1):
+        angle = 2 * math.pi * i / points
+        ring.append(
+            f"{lat + (radius_m * math.sin(angle)) / lat_degree_m:.6f},"
+            f"{lng + (radius_m * math.cos(angle)) / lng_degree_m:.6f}"
+        )
+    return "color:0x2A276ECC|weight:2|fillcolor:0x2A276E22|" + "|".join(ring)
+
 
 class ClockInRequest(BaseModel):
     latitude: float
@@ -104,50 +146,6 @@ def is_within_clinic_radius(clinic: Clinic, latitude: float, longitude: float, a
     # allowance so a garbage reading (+/- 5km) cannot wave anything through.
     slack = min(float(accuracy or 0), 200.0)
     return distance <= (radius + slack), distance
-
-# ── breaks ────────────────────────────────────────────────────────────────
-# Stored on the shift as [{"start": iso, "end": iso or null}]. See the column in
-# models.py. Server time, like check_in_time and check_out_time, so the three
-# can be compared without a conversion.
-
-def _is_time(value) -> bool:
-    try:
-        datetime.fromisoformat(value)
-        return True
-    except (TypeError, ValueError):
-        return False
-
-
-def _breaks(attendance) -> list:
-    """The shift's breaks, keeping only entries with a real start time. A row
-    edited by hand into nonsense must not read as a break that never ends."""
-    raw = getattr(attendance, "breaks", None)
-    if not isinstance(raw, list):
-        return []
-    return [b for b in raw if isinstance(b, dict) and _is_time(b.get("start"))]
-
-
-def _open_break(attendance):
-    for b in reversed(_breaks(attendance)):
-        if not b.get("end"):
-            return b
-    return None
-
-
-def _break_minutes(attendance, now: datetime) -> int:
-    """Minutes on break so far. An open break counts up to now, or to the
-    clock-out when the shift has ended with it open."""
-    total = 0.0
-    cap = getattr(attendance, "check_out_time", None) or now
-    for b in _breaks(attendance):
-        try:
-            start = datetime.fromisoformat(b["start"])
-            end = datetime.fromisoformat(b["end"]) if b.get("end") else cap
-        except (TypeError, ValueError):
-            continue
-        total += max(0.0, (end - start).total_seconds())
-    return int(total // 60)
-
 
 def _todays_open_shift(db: Session, user: User):
     return db.query(Attendance).filter(
@@ -268,10 +266,10 @@ async def clock_out(
     attendance.check_out_time = datetime.now()
     # A shift ended mid-break ends the break with it. Left open, it would keep
     # counting in every later read of the day.
-    if _open_break(attendance):
+    if open_break(attendance):
         attendance.breaks = [
             {**b, "end": b.get("end") or attendance.check_out_time.isoformat()}
-            for b in _breaks(attendance)
+            for b in breaks_of(attendance)
         ]
     attendance.clock_out_latitude = request.latitude
     attendance.clock_out_longitude = request.longitude
@@ -326,9 +324,9 @@ async def get_clock_status(
         "clock_out_time": attendance.check_out_time.isoformat() if attendance and attendance.check_out_time else None,
         "clock_in_distance_m": getattr(attendance, 'clock_in_distance_m', None) if attendance else None,
         # Breaks, so the screen can show "On break since 13:05" and a total.
-        "on_break": bool(open_shift and _open_break(attendance)),
-        "break_started_at": (_open_break(attendance) or {}).get("start") if open_shift else None,
-        "break_minutes": _break_minutes(attendance, datetime.now()) if attendance else 0,
+        "on_break": bool(open_shift and open_break(attendance)),
+        "break_started_at": (open_break(attendance) or {}).get("start") if open_shift else None,
+        "break_minutes": break_minutes(attendance) if attendance else 0,
         # So the screen can say "your clinic has not set its location yet"
         # rather than implying a geofence that is not actually being enforced.
         "geofence_set": bool(clinic and getattr(clinic, 'latitude', None) is not None),
@@ -470,13 +468,13 @@ async def start_break(
     attendance = _todays_open_shift(db, current_user)
     if not attendance:
         raise HTTPException(status_code=400, detail="You are not clocked in.")
-    if _open_break(attendance):
+    if open_break(attendance):
         raise HTTPException(status_code=400, detail="You are already on a break.")
     # A new list, not an append: SQLAlchemy only notices a JSON column change
     # when the value is reassigned.
-    attendance.breaks = _breaks(attendance) + [{"start": datetime.now().isoformat(), "end": None}]
+    attendance.breaks = breaks_of(attendance) + [{"start": datetime.now().isoformat(), "end": None}]
     db.commit()
-    return {"on_break": True, "break_minutes": _break_minutes(attendance, datetime.now())}
+    return {"on_break": True, "break_minutes": break_minutes(attendance)}
 
 
 @router.post("/break/end")
@@ -487,12 +485,12 @@ async def end_break(
     attendance = _todays_open_shift(db, current_user)
     if not attendance:
         raise HTTPException(status_code=400, detail="You are not clocked in.")
-    if not _open_break(attendance):
+    if not open_break(attendance):
         raise HTTPException(status_code=400, detail="You are not on a break.")
     now = datetime.now().isoformat()
-    attendance.breaks = [{**b, "end": b.get("end") or now} for b in _breaks(attendance)]
+    attendance.breaks = [{**b, "end": b.get("end") or now} for b in breaks_of(attendance)]
     db.commit()
-    return {"on_break": False, "break_minutes": _break_minutes(attendance, datetime.now())}
+    return {"on_break": False, "break_minutes": break_minutes(attendance)}
 
 
 @router.get("/history")
@@ -534,6 +532,95 @@ async def get_geofence(
         radius_m=getattr(clinic, 'geofence_radius_m', None) or 150,
         is_set=lat is not None and lng is not None,
         clinic_name=clinic.name,
+    )
+
+
+@router.get("/map")
+async def geofence_map(
+    lat: Optional[float] = None,
+    lng: Optional[float] = None,
+    width: int = 640,
+    height: int = 400,
+    scale: int = 2,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """A real map of the clinic and where the phone thinks it is.
+
+    The phone draws a stylised map of its own when this is unavailable, which is
+    honest but tells nobody standing on the street whether the pin is on the
+    right building. This is the actual streets.
+
+    It is a proxy rather than a URL the app builds, for one reason: the Google
+    key would otherwise have to ship inside the app bundle, where anybody can
+    read it out of the APK and spend the clinic's quota. The key never leaves
+    the server; the phone asks this endpoint, which is already authenticated.
+
+    Returns 404 when the clinic has no pin and 503 when no key is configured, so
+    the screen falls back to its own drawing instead of showing a broken image.
+    """
+    if not PLACES_KEY:
+        raise HTTPException(status_code=503, detail="Maps are not configured for this server.")
+
+    # Imported here, not at module scope. This is the only route that needs it,
+    # and a module-level import that failed would take the whole attendance
+    # router with it, so nobody could clock in or out.
+    try:
+        import httpx
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Maps are not configured for this server.")
+
+    clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clinic not found")
+    clinic_lat = getattr(clinic, "latitude", None)
+    clinic_lng = getattr(clinic, "longitude", None)
+    if clinic_lat is None or clinic_lng is None:
+        raise HTTPException(status_code=404, detail="This clinic has not dropped its pin yet.")
+
+    radius = getattr(clinic, "geofence_radius_m", None) or 150
+
+    # Clamp what the caller asks for. These go straight into a billed request,
+    # and Static Maps refuses anything over 640 before scaling anyway.
+    width = max(120, min(int(width), 640))
+    height = max(120, min(int(height), 640))
+    scale = 2 if int(scale) >= 2 else 1
+
+    params = [
+        ("size", f"{width}x{height}"),
+        ("scale", str(scale)),
+        ("maptype", "roadmap"),
+        # The clinic in the app's navy, so the pin reads as ours.
+        ("markers", f"color:0x2A276E|{clinic_lat},{clinic_lng}"),
+        ("path", _fence_path(clinic_lat, clinic_lng, radius)),
+        ("key", PLACES_KEY),
+    ]
+
+    if lat is not None and lng is not None:
+        # Both pins on screen, and Google picks the zoom that fits them. Without
+        # a second point it has nothing to frame, so the zoom is set by hand.
+        params.insert(0, ("markers", f"color:0x059669|label:Y|{lat},{lng}"))
+    else:
+        params.append(("center", f"{clinic_lat},{clinic_lng}"))
+        params.append(("zoom", str(_zoom_for(radius))))
+
+    try:
+        async with httpx.AsyncClient(timeout=12) as client:
+            upstream = await client.get(STATIC_MAP_URL, params=params)
+    except httpx.HTTPError:
+        # A map that will not load is not worth an error the screen has to
+        # explain. The caller falls back to its own drawing.
+        raise HTTPException(status_code=503, detail="The map could not be loaded right now.")
+
+    if upstream.status_code != 200:
+        raise HTTPException(status_code=503, detail="The map could not be loaded right now.")
+
+    return Response(
+        content=upstream.content,
+        media_type=upstream.headers.get("content-type", "image/png"),
+        # The clinic does not move and the staff member's own position is in the
+        # URL, so the same request always draws the same picture.
+        headers={"Cache-Control": "private, max-age=86400"},
     )
 
 

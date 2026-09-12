@@ -11,7 +11,7 @@ import os
 
 from database import get_db
 from models import Attendance, User, Clinic
-from core.auth_utils import get_current_user
+from core.auth_utils import get_current_user, has_permission
 from core.clinic_time import clinic_today
 from schemas import AttendanceOut, AttendanceCreate, AttendanceUpdate
 from domains.scheduling.services.attendance_view import (
@@ -34,6 +34,23 @@ def _parse_day(value: str, field: str) -> date:
         return datetime.strptime(value, "%Y-%m-%d").date()
     except (ValueError, TypeError):
         raise HTTPException(status_code=400, detail=f"{field} must be YYYY-MM-DD")
+
+
+def _scope_user(current_user: User, user_id: Optional[int]) -> Optional[int]:
+    """Whose attendance this caller may read.
+
+    Attendance is pay data, and every route here took a `user_id` from the query
+    string and honoured it without asking. Any signed-in staff member could
+    therefore read a colleague's month: when they arrived, how long they stayed,
+    where their phone was standing.
+
+    With the Attendance permission (owners always have it) nothing changes.
+    Without it you get your own days and nobody else's, whatever you asked for —
+    which is exactly what the employee's own attendance screen needs.
+    """
+    if has_permission(current_user, "view", "attendance"):
+        return user_id
+    return current_user.id
 
 
 def _clinic_of(db: Session, current_user: User) -> Clinic:
@@ -165,6 +182,7 @@ def get_attendance(
             end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
             query = query.filter(Attendance.date < end_dt)
         
+        user_id = _scope_user(current_user, user_id)
         if user_id:
             query = query.filter(Attendance.user_id == user_id)
         
@@ -246,7 +264,8 @@ def get_attendance_week(
 
     clinic = _clinic_of(db, current_user)
     start = _parse_day(week_start, "week_start")
-    payload = _build_range(db, clinic, start, start + timedelta(days=6))
+    payload = _build_range(db, clinic, start, start + timedelta(days=6),
+                           _scope_user(current_user, None))
     payload["week_start"] = week_start
     return payload
 
@@ -270,7 +289,7 @@ def get_attendance_calendar(
 
     clinic = _clinic_of(db, current_user)
     first, last = _resolve_range(start, end, month)
-    return _build_range(db, clinic, first, last, user_id)
+    return _build_range(db, clinic, first, last, _scope_user(current_user, user_id))
 
 
 def _resolve_range(start: Optional[str], end: Optional[str], month: Optional[str]):
@@ -314,7 +333,7 @@ def export_attendance(
 
     clinic = _clinic_of(db, current_user)
     first, last = _resolve_range(start, end, month)
-    data = _build_range(db, clinic, first, last, user_id)
+    data = _build_range(db, clinic, first, last, _scope_user(current_user, user_id))
 
     span = (
         first.strftime("%d %b %Y")

@@ -146,6 +146,52 @@ def status_for_check_in(clinic, day, check_in_utc) -> str:
     return "late" if late_by > LATE_GRACE_MINUTES else "on_time"
 
 
+# ── breaks ───────────────────────────────────────────────────────────────────
+# Stored on the shift as [{"start": iso, "end": iso or null}] (see Attendance in
+# models.py), in server time like check_in_time and check_out_time, so the three
+# compare without a conversion. Here rather than in the phone's own routes
+# because the owner's grid and the phone must count a break the same way.
+
+def is_time(value) -> bool:
+    try:
+        datetime.fromisoformat(value)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def breaks_of(record) -> list:
+    """The shift's breaks, keeping only entries with a real start time. A row
+    edited by hand into nonsense must not read as a break that never ends."""
+    raw = getattr(record, "breaks", None)
+    if not isinstance(raw, list):
+        return []
+    return [b for b in raw if isinstance(b, dict) and is_time(b.get("start"))]
+
+
+def open_break(record):
+    """The break still running, if there is one."""
+    for b in reversed(breaks_of(record)):
+        if not b.get("end"):
+            return b
+    return None
+
+
+def break_minutes(record, now: datetime | None = None) -> int:
+    """Minutes on break so far. An open break counts up to now, or to the
+    clock-out when the shift ended with it still open."""
+    total = 0.0
+    cap = getattr(record, "check_out_time", None) or now or datetime.now()
+    for b in breaks_of(record):
+        try:
+            start = datetime.fromisoformat(b["start"])
+            end = datetime.fromisoformat(b["end"]) if b.get("end") else cap
+        except (TypeError, ValueError):
+            continue
+        total += max(0.0, (end - start).total_seconds())
+    return int(total // 60)
+
+
 def serialize_day(record, clinic, user_names: dict | None = None) -> dict:
     """One attendance record as the grids and exports read it."""
     tz = clinic_tzinfo(clinic)
@@ -173,6 +219,8 @@ def serialize_day(record, clinic, user_names: dict | None = None) -> dict:
         "check_in": _hhmm(check_in),
         "check_out": _hhmm(check_out),
         "worked_minutes": worked_minutes,
+        # Time stepped away, so a long day and a long lunch do not read alike.
+        "break_minutes": break_minutes(record),
         "expected_open": opening,
         "late_by_minutes": _late_by_minutes(check_in, opening),
         "is_open_shift": bool(check_in and not check_out),

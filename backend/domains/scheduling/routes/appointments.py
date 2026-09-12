@@ -87,8 +87,13 @@ class AppointmentOut(BaseModel):
     patient_village: Optional[str] = None
     patient_referred_by: Optional[str] = None
     visit_number: Optional[int] = None
-    created_at: datetime
-    updated_at: datetime
+    # Optional for the same reason as sync_status below: these are set by the
+    # ORM on every normal write, but a row that arrived by import, migration or
+    # raw SQL can carry NULL, and a strict datetime here 500s the WHOLE day's
+    # list rather than the one bad row. Found on a local database whose seeded
+    # appointments had no updated_at: the calendar went blank for the clinic.
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     synced_at: Optional[datetime] = None
     # Optional, not `str = "local"`. A default only applies when the field is
     # ABSENT; a stored NULL is still passed in and fails string validation, and
