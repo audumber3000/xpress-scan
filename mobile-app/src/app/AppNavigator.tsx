@@ -15,8 +15,8 @@ import { NoClinicLinkedScreen } from '../features/auth/screens/NoClinicLinkedScr
 import { IS_SIGNUP_ENABLED } from '../shared/constants/platform';
 import { VerifyContactScreen } from '../features/auth/screens/VerifyContactScreen';
 import { ClinicOwnerTabNavigator } from './ClinicOwnerTabNavigator';
-import { ReceptionistHomeScreen } from '../features/receptionist/screens/ReceptionistHomeScreen';
-import { ReceptionistProfileScreen } from '../features/receptionist/screens/ReceptionistProfileScreen';
+import { EmployeeHomeScreen } from '../features/employee/screens/EmployeeHomeScreen';
+import { EmployeeAttendanceScreen } from '../features/employee/screens/EmployeeAttendanceScreen';
 import { HelpSupportScreen } from '../features/receptionist/screens/HelpSupportScreen';
 import { NotificationsScreen } from '../features/clinic-owner/home/screens/NotificationsScreen';
 import InboxScreen from '../features/clinic-owner/notifications/screens/InboxScreen';
@@ -62,8 +62,9 @@ export type RootStackParamList = {
   Signup: undefined;
   NoClinicLinked: undefined;
   ClinicOwnerTabs: undefined;
-  ReceptionistHome: undefined;
-  ReceptionistProfile: undefined;
+  /** The one screen every non-owner lives on. */
+  EmployeeHome: undefined;
+  EmployeeAttendance: undefined;
   HelpSupport: undefined;
   Notifications: undefined;
   /** The staff member's own notification inbox (not the messaging console). */
@@ -96,10 +97,11 @@ export type RootStackParamList = {
   Verification: undefined;
   ClockIn: undefined;
   Team: { initialTab?: 'staff' | 'attendance' | 'permissions' } | undefined;
-  Patients: undefined;
+  /** Opened from the employee home's search box with what they typed. */
+  Patients: { initialSearchQuery?: string; fromHomeSearch?: boolean } | undefined;
   Appointments: undefined;
   Utilities: { initialTab?: 'lab' | 'inventory' | 'consent' } | undefined;
-  UtilitySection: { section: 'inventory' | 'lab' | 'consent' };
+  UtilitySection: { section: 'inventory' | 'lab' | 'consent' | 'expenses' };
   GoogleReviews: undefined;
   TabletWebApp: undefined;
 };
@@ -156,7 +158,10 @@ export const AppNavigator = () => {
     }
     // Tablets get the responsive web app in a WebView instead of the native tabs.
     if (IS_TABLET) return 'TabletWebApp';
-    if (backendUser?.role === 'receptionist') return 'ReceptionistHome';
+    // Everybody who is not the owner works a shift, so everybody who is not
+    // the owner gets the employee app: one home screen, their own attendance,
+    // and only the Control Center screens they have been given.
+    if (backendUser?.role !== 'clinic_owner') return 'EmployeeHome';
     return 'ClinicOwnerTabs';
   };
 
@@ -207,16 +212,21 @@ export const AppNavigator = () => {
               <>
                 <Stack.Screen name="TabletWebApp" component={TabletWebAppScreen} />
               </>
-            ) : backendUser?.role === 'receptionist' ? (
+            ) : backendUser?.role !== 'clinic_owner' ? (
               <>
-                <Stack.Screen name="ReceptionistHome" component={ReceptionistHomeScreen} />
-                <Stack.Screen name="ReceptionistProfile" component={ReceptionistProfileScreen} />
+                <Stack.Screen name="EmployeeHome" component={EmployeeHomeScreen} />
+                <Stack.Screen name="EmployeeAttendance" component={EmployeeAttendanceScreen} />
+                {/* The same Settings screen the owner opens. It hides the rows
+                    that are the clinic's account rather than the person's:
+                    branches, patient-messaging settings and the plan. */}
+                <Stack.Screen name="Profile" component={ProfileScreen} />
                 {/* Registered here as well as in the owner stack. Clocking on is
                     for everybody who works a shift, and a receptionist is the
                     likeliest person to do it, but this stack did not carry the
                     screen — so the profile row would have thrown rather than
                     navigated. */}
                 <Stack.Screen name="ClockIn" component={ClockInScreen} />
+                <Stack.Screen name="ClinicInformation" component={ClinicInformationScreen} />
                 <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
                 <Stack.Screen name="Notifications" component={NotificationsScreen} />
                 {/* The inbox proper. NotificationsScreen above is the
@@ -234,6 +244,16 @@ export const AppNavigator = () => {
                 <Stack.Screen name="AllTransactions" component={AllTransactionsScreen} />
                 <Stack.Screen name="InvoiceDetails" component={InvoiceDetailsScreen} />
                 <Stack.Screen name="ExpenseDetails" component={ExpenseDetailsScreen} />
+                {/* The Manage section of the home screen. A doctor who was given
+                    one of these kept it through the Control Center tab, which
+                    they no longer have, so the screens have to live here too.
+                    The tile only appears with the permission, and the server
+                    checks every one of them again. */}
+                <Stack.Screen name="Team" component={TeamScreen} />
+                <Stack.Screen name="Attendance" component={AttendanceScreen} />
+                <Stack.Screen name="TreatmentsPricing" component={TreatmentsPricingScreen} />
+                <Stack.Screen name="PracticeSettings" component={PracticeSettingsScreen} />
+                <Stack.Screen name="Templates" component={TemplatesScreen} />
               </>
             ) : (
               <>
@@ -253,7 +273,6 @@ export const AppNavigator = () => {
                 <Stack.Screen name="Purchase" component={PurchaseScreen} />
                 <Stack.Screen name="ClinicInformation" component={ClinicInformationScreen} />
                 <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
-                <Stack.Screen name="ReceptionistHome" component={ReceptionistHomeScreen} />
                 <Stack.Screen name="Notifications" component={NotificationsScreen} />
                 {/* The inbox proper. NotificationsScreen above is the
                     outbound patient-messaging console, which is a
@@ -269,6 +288,7 @@ export const AppNavigator = () => {
                 <Stack.Screen name="ClockIn" component={ClockInScreen} />
                 <Stack.Screen name="Team" component={TeamScreen} />
                 <Stack.Screen name="Profile" component={ProfileScreen} />
+                <Stack.Screen name="EmployeeAttendance" component={EmployeeAttendanceScreen} />
                 <Stack.Screen name="GoogleReviews" component={GoogleReviewsScreen} />
               </>
             )

@@ -55,9 +55,17 @@ interface Props {
   onChange: (period: Period) => void;
   /** Renders light-on-dark, for the purple KPI block. */
   onDark?: boolean;
+  /**
+   * Which ranges to offer. Defaults to all five.
+   *
+   * The staff home passes just today and yesterday: a receptionist is looking
+   * at the desk in front of them, and a month of clinic revenue is a question
+   * the owner asks, not a shift.
+   */
+  options?: Period[];
 }
 
-export const PeriodFilter: React.FC<Props> = ({ value, onChange, onDark = false }) => {
+export const PeriodFilter: React.FC<Props> = ({ value, onChange, onDark = false, options = PERIODS }) => {
   const [open, setOpen] = useState(false);
 
   const chipStyle = onDark ? s.chipDark : s.chipLight;
@@ -82,7 +90,7 @@ export const PeriodFilter: React.FC<Props> = ({ value, onChange, onDark = false 
             reads as belonging to the chip rather than arriving from nowhere. */}
         <Pressable style={s.backdrop} onPress={() => setOpen(false)}>
           <View style={s.menu}>
-            {PERIODS.map((period, i) => {
+            {options.map((period, i) => {
               const active = period === value;
               return (
                 <TouchableOpacity

@@ -17,6 +17,8 @@ import {
 } from '../../../../services/api/attendance.api';
 import { formatTime, formatMinutes, parseServerTime } from '../../../../shared/utils/datetime';
 import { GeofenceMap } from '../components/GeofenceMap';
+import { LinearGradient } from 'expo-linear-gradient';
+import { colors } from '../../../../shared/constants/colors';
 
 /**
  * Clocking on, taking breaks, and clocking off.
@@ -38,7 +40,11 @@ import { GeofenceMap } from '../components/GeofenceMap';
  * to take back.
  */
 
-const TEAL = '#29828a';
+// The app's own navy, and the same header gradient the owner home uses. This
+// screen was teal, which read as a different product every time somebody moved
+// between their home screen and their shift.
+const NAVY = colors.primary;
+const HEADER_GRADIENT = ['#2E2A85', '#393399'] as const;
 const REFRESH_MS = 20000;
 const FRESH_FIX_MS = 30000;
 
@@ -240,8 +246,9 @@ export const ClockInScreen: React.FC<any> = ({ navigation }) => {
   if (!onShift && !done) {
     return (
       <View style={styles.heroScreen}>
-        <StatusBar barStyle="light-content" backgroundColor={TEAL} />
-        <SafeAreaView edges={['top']} style={styles.tealHeader}>
+        <StatusBar barStyle="light-content" backgroundColor={HEADER_GRADIENT[0]} />
+        <LinearGradient colors={HEADER_GRADIENT} style={styles.tealHeader}>
+        <SafeAreaView edges={['top']}>
           <View style={styles.tealHeaderRow}>
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={10}>
               <ChevronLeft size={24} color="#FFFFFF" />
@@ -249,6 +256,7 @@ export const ClockInScreen: React.FC<any> = ({ navigation }) => {
             <Text style={styles.tealTitle}>Clock In</Text>
           </View>
         </SafeAreaView>
+        </LinearGradient>
 
         <GeofenceMap
           variant="hero"
@@ -259,6 +267,7 @@ export const ClockInScreen: React.FC<any> = ({ navigation }) => {
           inside={inside}
           locating={locating}
           onLocate={locate}
+          fix={fix}
         />
 
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -324,7 +333,7 @@ export const ClockInScreen: React.FC<any> = ({ navigation }) => {
       <View style={[styles.chip, styles.chipMuted]}><Text style={styles.chipMutedText}>Finding you…</Text></View>
     ) : inside ? (
       <View style={styles.chip}>
-        <CheckCircle2 size={13} color={TEAL} />
+        <CheckCircle2 size={13} color={NAVY} />
         <Text style={styles.chipText}>Within Geofence Zone</Text>
       </View>
     ) : (
@@ -354,6 +363,7 @@ export const ClockInScreen: React.FC<any> = ({ navigation }) => {
                 locating={locating}
                 onLocate={locate}
                 overlay={chip}
+                fix={fix}
               />
               <View style={styles.verifiedRow}>
                 <MapPin size={13} color="#6B7280" />
@@ -408,7 +418,7 @@ export const ClockInScreen: React.FC<any> = ({ navigation }) => {
             <View style={styles.statsRow}>
               <View style={styles.stat}>
                 <Text style={styles.statLabel}>TOTAL DURATION</Text>
-                <Text style={[styles.statValue, { color: TEAL }]}>{formatMinutes(shiftMinutes)}</Text>
+                <Text style={[styles.statValue, { color: NAVY }]}>{formatMinutes(shiftMinutes)}</Text>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.stat}>
@@ -520,7 +530,7 @@ const ZoneCard: React.FC<{
 const PlainHeader: React.FC<{ title: string; navigation: any; centered?: boolean }> = ({ title, navigation, centered }) => (
   <View style={styles.plainHeader}>
     <TouchableOpacity onPress={() => navigation.goBack()} style={styles.roundBack} hitSlop={8}>
-      <ChevronLeft size={22} color={TEAL} />
+      <ChevronLeft size={22} color={NAVY} />
     </TouchableOpacity>
     <Text style={[styles.plainTitle, centered && styles.plainTitleCentered]}>{title}</Text>
     {centered && <View style={{ width: 38 }} />}
@@ -532,7 +542,7 @@ const styles = StyleSheet.create({
 
   // not started
   heroScreen: { flex: 1, backgroundColor: '#FFFFFF' },
-  tealHeader: { backgroundColor: TEAL },
+  tealHeader: {},
   tealHeaderRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 14 },
   backBtn: { padding: 6, marginRight: 6 },
   tealTitle: { fontSize: 19, fontWeight: '800', color: '#FFFFFF' },
@@ -556,7 +566,7 @@ const styles = StyleSheet.create({
   primaryBtn: {
     height: 58,
     borderRadius: 16,
-    backgroundColor: TEAL,
+    backgroundColor: NAVY,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -572,7 +582,7 @@ const styles = StyleSheet.create({
   plain: { flex: 1, backgroundColor: '#F4F6F8' },
   plainHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
   roundBack: {
-    width: 38, height: 38, borderRadius: 19, backgroundColor: '#E6F1F2',
+    width: 38, height: 38, borderRadius: 19, backgroundColor: colors.primaryBgLight,
     alignItems: 'center', justifyContent: 'center',
   },
   plainTitle: { fontSize: 18, fontWeight: '800', color: '#111827', marginLeft: 12 },
@@ -581,9 +591,9 @@ const styles = StyleSheet.create({
 
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: '#CDEBEC', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
+    backgroundColor: colors.primaryBg, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
   },
-  chipText: { fontSize: 11.5, fontWeight: '700', color: TEAL },
+  chipText: { fontSize: 11.5, fontWeight: '700', color: NAVY },
   chipWarn: { backgroundColor: '#FEF3C7' },
   chipWarnText: { fontSize: 11.5, fontWeight: '700', color: '#B45309' },
   chipMuted: { backgroundColor: 'rgba(255,255,255,0.9)' },
@@ -594,7 +604,7 @@ const styles = StyleSheet.create({
 
   shiftHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 26, marginBottom: 10 },
   shiftTitle: { fontSize: 17, fontWeight: '800', color: '#111827' },
-  shiftStarted: { fontSize: 13, fontWeight: '600', color: TEAL },
+  shiftStarted: { fontSize: 13, fontWeight: '600', color: NAVY },
   shiftCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#EEF0F2' },
   statsRow: { flexDirection: 'row', alignItems: 'center' },
   stat: { flex: 1 },
@@ -612,7 +622,7 @@ const styles = StyleSheet.create({
 
   bottomBar: { paddingHorizontal: 16, paddingTop: 10, backgroundColor: '#F4F6F8', borderTopWidth: 1, borderTopColor: '#E5E7EB' },
   endBtn: {
-    height: 54, borderRadius: 14, backgroundColor: TEAL, marginBottom: 8,
+    height: 54, borderRadius: 14, backgroundColor: NAVY, marginBottom: 8,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
   },
   endBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },

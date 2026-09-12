@@ -42,6 +42,9 @@ interface WelcomeHeaderProps {
   onAddInvoice?: () => void;
   onAddPatient?: () => void;
   onAddAppointment?: () => void;
+  /** Off for staff: the plan is the owner's business, and the screen behind the
+   *  chip is theirs to open. Everything else about the row is identical. */
+  showPlanChip?: boolean;
 }
 
 /**
@@ -209,6 +212,7 @@ export const WelcomeHeaderTopPart: React.FC<WelcomeHeaderProps> = ({
   onAddInvoice,
   onAddPatient,
   onAddAppointment,
+  showPlanChip = true,
 }) => {
   const chip = planChip({
     subscriptionPlan, isTrial, trialDaysRemaining, planState, planStateDays,
@@ -249,11 +253,12 @@ export const WelcomeHeaderTopPart: React.FC<WelcomeHeaderProps> = ({
               style={styles.clinicRow}
               onPress={onClinicPress}
               activeOpacity={0.7}
+              disabled={!onClinicPress}
             >
               <Text style={styles.clinicText} numberOfLines={1}>
                 {clinicName || 'My Clinic'}
               </Text>
-              <ChevronDown size={14} color="rgba(255,255,255,0.8)" />
+              {!!onClinicPress && <ChevronDown size={14} color="rgba(255,255,255,0.8)" />}
             </TouchableOpacity>
           </View>
 
@@ -267,13 +272,15 @@ export const WelcomeHeaderTopPart: React.FC<WelcomeHeaderProps> = ({
 
                 It never sells anything now. Tapping opens the Subscription
                 screen, which explains that plans are chosen on the web. */}
-            <TouchableOpacity
-              style={[styles.planChip, { borderColor: chip.border, backgroundColor: chip.fill }]}
-              onPress={onPlanPress}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.planChipText, { color: chip.text }]}>{chip.label}</Text>
-            </TouchableOpacity>
+            {showPlanChip && (
+              <TouchableOpacity
+                style={[styles.planChip, { borderColor: chip.border, backgroundColor: chip.fill }]}
+                onPress={onPlanPress}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.planChipText, { color: chip.text }]}>{chip.label}</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.iconButton}
               onPress={onNotificationPress}
@@ -303,6 +310,8 @@ interface WelcomeHeaderStatsProps {
   onAddAppointment?: () => void;
   onOutstandingPress?: () => void;
   onAppointmentsPress?: () => void;
+  /** Which ranges the filter offers. Defaults to all five. */
+  periods?: Period[];
 }
 
 /** ₹68.4K rather than ₹68,430. Tiles this size cannot hold the long form. */
@@ -359,6 +368,7 @@ export const WelcomeHeaderStats: React.FC<WelcomeHeaderStatsProps> = ({
   onAddAppointment,
   onOutstandingPress,
   onAppointmentsPress,
+  periods,
 }) => {
   const revenue = analytics?.dailyRevenue || 0;
   const billed = analytics?.billed || 0;
@@ -383,7 +393,7 @@ export const WelcomeHeaderStats: React.FC<WelcomeHeaderStatsProps> = ({
           counted. Same arrangement the web dashboard uses. */}
       <View style={styles.statsHead}>
         <Text style={styles.statsRange} numberOfLines={1}>{rangeCaption(period)}</Text>
-        <PeriodFilter value={period} onChange={onPeriodChange} onDark />
+        <PeriodFilter value={period} onChange={onPeriodChange} onDark options={periods} />
       </View>
 
       {/* The same four the web dashboard shows, in the same order:

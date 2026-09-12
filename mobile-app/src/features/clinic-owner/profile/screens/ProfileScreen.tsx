@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
 import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MoreVertical, Building2, Bell, CreditCard, LogOut, BellRing, User, Clock } from 'lucide-react-native';
+import { MoreVertical, Building2, Bell, CreditCard, LogOut, BellRing, User, Clock, CalendarCheck } from 'lucide-react-native';
 import { useAuth } from '../../../../app/AuthContext';
 import {
   sendLocalNotification,
@@ -17,10 +17,12 @@ import { ScreenHeader } from '../../../../shared/components/ScreenHeader';
 import { AppSkeleton } from '../../../../shared/components/Skeleton';
 import { ClinicSwitcherSheet } from '../../../../shared/components/ClinicSwitcherSheet';
 import { resolveUserPhoto } from '../../../../shared/utils/avatar';
+import { roleLabel } from '../../../employee/permissions';
 import { ClinicInfo } from '../../../../services/api/admin.api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { planBadge } from '../../../../shared/utils/planBadge';
 import { usePostHog } from 'posthog-react-native';
+import { runningVersion } from '../../../../services/api/appVersion.api';
 
 interface ProfileScreenProps {
   navigation: any;
@@ -30,6 +32,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
   const posthog = usePostHog();
   const { user, backendUser, logout, isLoading, switchBranch, refreshBackendUser } = useAuth();
   const subBadge = planBadge(backendUser?.clinic);
+  // Staff share this screen. What they do not share is the clinic's own
+  // account: branches, the patient-messaging wallet and the plan are the
+  // owner's, and every one of those screens refuses them anyway.
+  const isOwner = backendUser?.role === 'clinic_owner';
   const [showClinicSwitcher, setShowClinicSwitcher] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
 
@@ -125,7 +131,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
         <AppSkeleton show={isLoading} width="100%" height={200} radius={0}>
           <ProfileHeader
             name={userName}
-            role={backendUser?.role?.toUpperCase() || "LEAD DENTIST"}
+            role={roleLabel(backendUser?.role).toUpperCase()}
             clinic={backendUser?.clinic?.name || ""}
             photoURL={resolveUserPhoto(backendUser, user)}
             avatarSeed={user?.email || backendUser?.email}
@@ -156,6 +162,15 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
               subtitle="Start or end your day at the clinic"
               onPress={() => navigation.navigate('ClockIn')}
             />
+            <View style={styles.separator} />
+            <SettingsMenuItem
+              icon={CalendarCheck}
+              iconColor={colors.primary}
+              iconBgColor={colors.primaryBg}
+              title="My Attendance"
+              subtitle="Your shifts, month by month"
+              onPress={() => navigation.navigate('EmployeeAttendance')}
+            />
 
             {/* Clinic Management */}
             <Text style={[styles.sectionTitle, styles.sectionTitleSpacing]}>CLINIC MANAGEMENT</Text>
@@ -167,24 +182,28 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
               subtitle="Address, hours & contact"
               onPress={handleClinicInfo}
             />
-            <View style={styles.separator} />
-            <SettingsMenuItem
-              icon={Building2}
-              iconColor={colors.primary}
-              iconBgColor={colors.primaryBg}
-              title="Switch Branch"
-              subtitle={`Current: ${backendUser?.clinic?.name || 'Main'}`}
-              onPress={() => setShowClinicSwitcher(true)}
-            />
-            <View style={styles.separator} />
-            <SettingsMenuItem
-              icon={Bell}
-              iconColor={colors.primary}
-              iconBgColor={colors.primaryBg}
-              title="Notification Settings"
-              subtitle="Push, Email & SMS alerts"
-              onPress={handleNotificationSettings}
-            />
+            {isOwner && (
+              <>
+                <View style={styles.separator} />
+                <SettingsMenuItem
+                  icon={Building2}
+                  iconColor={colors.primary}
+                  iconBgColor={colors.primaryBg}
+                  title="Switch Branch"
+                  subtitle={`Current: ${backendUser?.clinic?.name || 'Main'}`}
+                  onPress={() => setShowClinicSwitcher(true)}
+                />
+                <View style={styles.separator} />
+                <SettingsMenuItem
+                  icon={Bell}
+                  iconColor={colors.primary}
+                  iconBgColor={colors.primaryBg}
+                  title="Notification Settings"
+                  subtitle="Push, Email & SMS alerts"
+                  onPress={handleNotificationSettings}
+                />
+              </>
+            )}
 
             {/* Shown on both platforms. It used to be hidden on iOS entirely,
                 which left that build unable to answer "which plan am I on?" —
@@ -195,17 +214,21 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
                 every Plus clinic — every paying customer — was labelled FREE.
                 It now comes from planBadge, the same answer the Control Center
                 and the home header show. */}
-            <Text style={[styles.sectionTitle, styles.sectionTitleSpacing]}>ACCOUNTING</Text>
-            <SettingsMenuItem
-              icon={CreditCard}
-              iconColor={colors.primary}
-              iconBgColor={colors.primaryBg}
-              title="Subscription & Billing"
-              subtitle="Your plan and what it includes"
-              badge={subBadge.label.toUpperCase()}
-              badgeColor={subBadge.fg}
-              onPress={handleSubscription}
-            />
+            {isOwner && (
+              <>
+                <Text style={[styles.sectionTitle, styles.sectionTitleSpacing]}>ACCOUNTING</Text>
+                <SettingsMenuItem
+                  icon={CreditCard}
+                  iconColor={colors.primary}
+                  iconBgColor={colors.primaryBg}
+                  title="Subscription & Billing"
+                  subtitle="Your plan and what it includes"
+                  badge={subBadge.label.toUpperCase()}
+                  badgeColor={subBadge.fg}
+                  onPress={handleSubscription}
+                />
+              </>
+            )}
           </View>
         )}
 
@@ -222,7 +245,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerTitle}>MOLARPLUS DENTAL MANAGEMENT</Text>
-          <Text style={styles.footerVersion}>Version 1.0.4 (Build 82)</Text>
+          <Text style={styles.footerVersion}>Version {runningVersion()}</Text>
         </View>
 
         <View style={{ height: 40 }} />

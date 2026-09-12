@@ -1,21 +1,30 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, LayoutChangeEvent } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, LayoutChangeEvent, Image,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Ellipse, Text as SvgText } from 'react-native-svg';
 import { LocateFixed } from 'lucide-react-native';
+import { colors } from '../../../../shared/constants/colors';
+import { attendanceApiService } from '../../../../services/api/attendance.api';
+import { Fix } from '../../../../shared/utils/location';
 
 /**
  * The clinic's geofence, and where you are standing against it.
  *
- * Drawn, not tiled. A street map needs a Google Maps key and a native module;
- * what this screen has to answer is only "am I inside the circle, and if not,
- * how far and which way", which a circle, a dot and a distance answer exactly.
- * Kept as one component with a narrow interface, so real map tiles can replace
- * the drawing later without the screen changing.
+ * Real streets when we can get them: the server draws the clinic pin, the fence
+ * and your position onto a Google map and sends back one picture. It is served
+ * by our own endpoint because the Google key must not ship inside the app.
  *
- * The dot is placed by the real bearing and distance from the clinic pin, to
- * scale with the fence. Somebody further out than the frame shows sits on its
- * edge in the right direction, rather than vanishing off it.
+ * When that is unavailable, and until it arrives, the component draws the same
+ * three things itself. That fallback is not a placeholder to be deleted: it is
+ * what a staff member sees in a basement with no signal, and it still answers
+ * the only question the screen asks, which is whether they are inside the
+ * circle and if not, how far and which way.
+ *
+ * The drawn dot is placed by the real bearing and distance from the clinic pin,
+ * to scale with the fence. Somebody further out than the frame shows sits on
+ * its edge in the right direction, rather than vanishing off it.
  */
 
 export interface GeofenceMapProps {
@@ -32,18 +41,43 @@ export interface GeofenceMapProps {
   /** Laid over the top-left corner, e.g. a status chip. */
   overlay?: React.ReactNode;
   style?: any;
+  /** Where the phone thinks it is, so the real map can mark it. */
+  fix?: Fix | null;
 }
 
-const TEAL = '#29828a';
-const TEAL_DARK = '#1f5f66';
+// The fence and your dot are drawn in the app's brand navy; amber is kept for
+// the one thing that is not brand, being outside the zone.
+const NAVY = colors.primary;
+const NAVY_DARK = colors.primaryDark;
 const AMBER = '#D97706';
 
 export const GeofenceMap: React.FC<GeofenceMapProps> = ({
-  variant, hasFence, radiusM, distanceM, bearingDeg, inside, locating, onLocate, overlay, style,
+  variant, hasFence, radiusM, distanceM, bearingDeg, inside, locating, onLocate, overlay, style, fix,
 }) => {
   const [size, setSize] = useState({ w: 0, h: 0 });
   const onLayout = (e: LayoutChangeEvent) =>
     setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height });
+
+  // The real map, once the server has one for us.
+  const [map, setMap] = useState<{ uri: string; headers: Record<string, string> } | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const [mapFailed, setMapFailed] = useState(false);
+
+  // Rounded, so drifting a few metres on a park bench does not fetch a new map
+  // every second. Roughly 10 m, which is finer than the pin is drawn anyway.
+  const fixKey = fix ? `${fix.latitude.toFixed(4)},${fix.longitude.toFixed(4)}` : '';
+
+  useEffect(() => {
+    if (!hasFence || mapFailed || !size.w) return;
+    let alive = true;
+    attendanceApiService
+      .mapSource(fix || null, size.w, size.h)
+      .then((source) => { if (alive) setMap(source); })
+      .catch(() => { if (alive) setMapFailed(true); });
+    return () => { alive = false; };
+  }, [hasFence, mapFailed, size.w, size.h, fixKey]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const showDrawing = !mapReady;
 
   const hero = variant === 'hero';
   const { w, h } = size;
@@ -61,7 +95,7 @@ export const GeofenceMap: React.FC<GeofenceMapProps> = ({
     const a = (bearingDeg * Math.PI) / 180;
     you = { x: cx + r * Math.sin(a), y: cy - r * Math.cos(a) };
   }
-  const youColour = inside === false ? AMBER : TEAL;
+  const youColour = inside === false ? AMBER : NAVY;
 
   return (
     <View style={[hero ? styles.hero : styles.card, style]} onLayout={onLayout}>
@@ -71,7 +105,20 @@ export const GeofenceMap: React.FC<GeofenceMapProps> = ({
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
-      {w > 0 && (
+
+      {!!map && !mapFailed && (
+        <Image
+          source={map}
+          style={StyleSheet.absoluteFill}
+          resizeMode="cover"
+          onLoad={() => setMapReady(true)}
+          // 404 when the clinic has no pin, 503 when the server has no key or
+          // Google is unreachable. All three mean: draw it ourselves.
+          onError={() => { setMapFailed(true); setMapReady(false); }}
+        />
+      )}
+
+      {showDrawing && w > 0 && (
         <Svg width={w} height={h} style={StyleSheet.absoluteFill}>
           {/* Contour lines: texture, not geography. */}
           {hero && [0.55, 0.8, 1.05, 1.3].map((k, i) => (
@@ -94,22 +141,22 @@ export const GeofenceMap: React.FC<GeofenceMapProps> = ({
                 cx={cx}
                 cy={cy}
                 r={fenceR}
-                fill={hero ? TEAL : '#C9D0D5'}
+                fill={hero ? NAVY : '#C9D0D5'}
                 fillOpacity={hero ? 0.07 : 0.9}
-                stroke={TEAL_DARK}
+                stroke={NAVY_DARK}
                 strokeOpacity={0.85}
                 strokeWidth={hero ? 1.5 : 2}
                 strokeDasharray={hero ? '6 6' : undefined}
               />
               {/* The clinic pin */}
-              <Circle cx={cx} cy={cy} r={hero ? 22 : 16} fill={TEAL_DARK} fillOpacity={0.12} />
-              <Circle cx={cx} cy={cy} r={4} fill={TEAL_DARK} />
+              <Circle cx={cx} cy={cy} r={hero ? 22 : 16} fill={NAVY_DARK} fillOpacity={0.12} />
+              <Circle cx={cx} cy={cy} r={4} fill={NAVY_DARK} />
               <SvgText
                 x={cx}
                 y={cy + fenceR - 10}
                 fontSize={11}
                 fontWeight="600"
-                fill={TEAL_DARK}
+                fill={NAVY_DARK}
                 fillOpacity={0.75}
                 textAnchor="middle"
               >
@@ -127,8 +174,8 @@ export const GeofenceMap: React.FC<GeofenceMapProps> = ({
           )}
           {!hasFence && (
             <>
-              <Circle cx={cx} cy={cy} r={22} fill={TEAL} fillOpacity={0.14} />
-              <Circle cx={cx} cy={cy} r={7} fill="#FFFFFF" stroke={TEAL} strokeWidth={3} />
+              <Circle cx={cx} cy={cy} r={22} fill={NAVY} fillOpacity={0.14} />
+              <Circle cx={cx} cy={cy} r={7} fill="#FFFFFF" stroke={NAVY} strokeWidth={3} />
             </>
           )}
         </Svg>
@@ -144,7 +191,7 @@ export const GeofenceMap: React.FC<GeofenceMapProps> = ({
           style={[styles.locate, hero ? styles.locateHero : styles.locateCard]}
           accessibilityLabel="Find my location again"
         >
-          {locating ? <ActivityIndicator size="small" color={TEAL} /> : <LocateFixed size={18} color="#1F2937" />}
+          {locating ? <ActivityIndicator size="small" color={NAVY} /> : <LocateFixed size={18} color="#1F2937" />}
         </TouchableOpacity>
       )}
 

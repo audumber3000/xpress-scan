@@ -5,12 +5,12 @@ import { MessageSquare, Mail, HelpCircle, ChevronRight } from 'lucide-react-nati
 import { ScreenHeader } from '../../../shared/components/ScreenHeader';
 import { colors } from '../../../shared/constants/colors';
 
-const VIOLET = '#2E2A85';
+const HEADER = '#2E2A85';
 
 export const HelpSupportScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="light-content" backgroundColor={VIOLET} />
+      <StatusBar barStyle="light-content" backgroundColor={HEADER} />
       
       <ScreenHeader
         variant="primary"
@@ -26,7 +26,7 @@ export const HelpSupportScreen: React.FC<{ navigation: any }> = ({ navigation })
             activeOpacity={0.7}
           >
             <View style={styles.infoRowIcon}>
-              <MessageSquare size={18} color={VIOLET} strokeWidth={2} />
+              <MessageSquare size={18} color={colors.primary} strokeWidth={2} />
             </View>
             <Text style={styles.infoRowLabel}>WhatsApp</Text>
             <Text style={styles.infoRowValue}>(chat with us)</Text>
@@ -39,7 +39,7 @@ export const HelpSupportScreen: React.FC<{ navigation: any }> = ({ navigation })
             activeOpacity={0.7}
           >
             <View style={styles.infoRowIcon}>
-              <Mail size={18} color={VIOLET} strokeWidth={2} />
+              <Mail size={18} color={colors.primary} strokeWidth={2} />
             </View>
             <Text style={styles.infoRowLabel}>Email</Text>
             <Text style={styles.infoRowValue}>(send email)</Text>

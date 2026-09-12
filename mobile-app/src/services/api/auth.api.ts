@@ -334,6 +334,27 @@ export class AuthApiService extends BaseApiService {
    * session is stored exactly as a password sign-in stores it, so the app
    * behaves the same from here on.
    */
+  /**
+   * Set or clear the signed-in person's photo. `PATCH /auth/me/avatar` takes a
+   * `data:` URI (the web profile sends the same), so the caller passes the
+   * picked image already encoded, or null to remove it.
+   */
+  async updateAvatar(dataUri: string | null): Promise<string | null> {
+    const headers = await this.getAuthHeaders();
+    const res = await this.fetchWithTimeout(`${this.baseURL}/auth/me/avatar`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ avatar_url: dataUri }),
+    });
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`;
+      try { detail = (await res.json())?.detail || detail; } catch {}
+      throw new Error(detail);
+    }
+    const data = await res.json();
+    return data?.avatar_url ?? null;
+  }
+
   async phoneLogin(scanned: string): Promise<{ user: BackendUser | null; error?: string }> {
     try {
       const response = await this.fetchWithTimeout(`${this.baseURL}/auth/phone-login/redeem`, {
