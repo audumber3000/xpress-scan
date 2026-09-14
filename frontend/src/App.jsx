@@ -84,6 +84,21 @@ import AnnouncementHost from "./components/announcements";
 import PlanStatusBanner from "./components/plan/PlanStatusBanner";
 import PlanBlockedModal from "./components/plan/PlanBlockedModal";
 
+/**
+ * A redirect that keeps the query string.
+ *
+ * Cashfree sends a payer back to /subscription?order_id=... (CASHFREE_RETURN_URL),
+ * and a plain <Navigate to="/admin/subscription"> dropped everything after the
+ * path. The Subscription page never saw the order id, so it never verified the
+ * payment on return and never opened the tab the payment was for: the plan or
+ * add-on still activated through the webhook, but the person who had just paid
+ * came back to a page that said nothing.
+ */
+const RedirectKeepingQuery = ({ to }) => {
+  const { search, hash } = useLocation();
+  return <Navigate to={{ pathname: to, search, hash }} replace />;
+};
+
 const BANNER_KEY = 'mp_mobile_banner_dismissed';
 
 function MobileAppBanner() {
@@ -370,7 +385,7 @@ function AppContent() {
                 <Route path="patient-forms" element={<Navigate to="/paperwork" replace />} />
                 <Route path="subscription" element={<OwnerOnlyRoute><Subscription /></OwnerOnlyRoute>} />
               </Route>
-              <Route path="/subscription" element={<Navigate to="/admin/subscription" replace />} />
+              <Route path="/subscription" element={<RedirectKeepingQuery to="/admin/subscription" />} />
               <Route path="/support-tickets" element={<ProtectedRoute><SupportTickets /></ProtectedRoute>} />
               <Route path="/vendors" element={<ProtectedRoute><Vendors /></ProtectedRoute>} />
               <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
