@@ -1433,3 +1433,20 @@ async def addon_expiry_job() -> None:
         logger.error("addon_expiry error: %s", exc)
     finally:
         db.close()
+
+
+async def plan_renewal_reminder_job() -> None:
+    """Paid plans: reminders 7, 3 and 1 days before the period ends. See core.plan_renewal."""
+    from database import SessionLocal
+    from core import plan_renewal
+
+    db = SessionLocal()
+    try:
+        sent = plan_renewal.send_due(db)
+        if sent:
+            logger.info("plan_renewal_reminder: sent %s", sent)
+    except Exception as exc:
+        db.rollback()
+        logger.error("plan_renewal_reminder error: %s", exc)
+    finally:
+        db.close()

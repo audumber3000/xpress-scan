@@ -14,7 +14,7 @@ plain UTC month puts a Toronto clinic's first-of-the-month nine and a half hours
 out and quietly misreports every clinic outside India.
 
 Patients and appointments are counted by when the ROW WAS CREATED, not by when
-the appointment happens. "500 new patients and appointments a month" on the
+the appointment happens. "600 new patients and appointments a month" on the
 pricing page measures intake, and counting scheduled dates would let a clinic
 booking a year ahead blow the month it booked in.
 """
@@ -119,9 +119,19 @@ def compute(db, clinic) -> dict:
         "storage_gb": round(stored_bytes / (1024 ** 3), 2),
     }
 
+    # Everything the clinic has ever put into MolarPlus, for the locked-plan
+    # banner: "your 97 patients and 134 invoices are safe" is a sentence about
+    # their own work, which is a stronger reason to carry on than any feature.
+    from models import Invoice
+    records = {
+        "patients": db.query(func.count(Patient.id)).filter(Patient.clinic_id == clinic_id).scalar() or 0,
+        "invoices": db.query(func.count(Invoice.id)).filter(Invoice.clinic_id == clinic_id).scalar() or 0,
+    }
+
     return {
         "plan_name": plan_name,
         "plan_label": plans.label(plan_name),
+        "records": records,
         "period": {"from": first.isoformat(), "to": last.isoformat()},
         "metrics": {
             key: {"used": used[key], "limit": plans.limit(plan_name, key)}

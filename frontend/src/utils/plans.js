@@ -32,16 +32,16 @@ const FALLBACK_PLANS = [
   {
     key: 'plus',
     label: 'Plus',
-    tagline: 'Everything one clinic needs to run its day',
+    tagline: 'Best for a single clinic and small team',
     popular: true,
     rank: 1,
     price: { INR: { monthly: 399, annual: 3830 }, USD: { monthly: 4, annual: 38 } },
-    limits: { branches: 1, staff: 5, patients: 500, appointments: 500, storage_gb: 100, report_months: 12 },
+    limits: { branches: 1, staff: 5, patients: 600, appointments: 600, storage_gb: 100, report_months: 12 },
     features: [
       '1 clinic location',
       '5 staff logins',
-      '500 new patients and 500 appointments a month',
-      '100 GB storage',
+      '600 new patients and appointments a month',
+      '100 GB for X-rays, photos and files',
       '12 months of report history',
       'WhatsApp and email reminders from the MolarPlus number',
       'Your own WhatsApp number, as an add-on',
@@ -51,7 +51,7 @@ const FALLBACK_PLANS = [
   {
     key: 'pro',
     label: 'Pro',
-    tagline: 'For clinics running more than one branch',
+    tagline: 'Best for clinics with up to 5 branches',
     popular: false,
     rank: 2,
     price: { INR: { monthly: 999, annual: 9590 }, USD: { monthly: 8, annual: 77 } },
@@ -61,7 +61,7 @@ const FALLBACK_PLANS = [
       'Up to 5 branches',
       '10 staff logins',
       '1,000 new patients and appointments a month',
-      '150 GB storage',
+      '150 GB for X-rays, photos and files',
       'WhatsApp from your own number',
       'Per-person permissions across 13 modules',
       'One inbox for email and WhatsApp',
@@ -74,7 +74,7 @@ const FALLBACK_PLANS = [
   {
     key: 'growth',
     label: 'Growth',
-    tagline: 'For clinic groups scaling without limits',
+    tagline: 'Best for groups that keep adding branches',
     popular: false,
     rank: 3,
     price: { INR: { monthly: 1500, annual: 14400 }, USD: { monthly: 12, annual: 115 } },
@@ -186,6 +186,13 @@ export const isIndia = (clinic = cachedClinic()) => billingCurrency(clinic) === 
 export const gstRate = (clinic = cachedClinic()) => (isIndia(clinic) ? GST_RATE : 0);
 
 /** "₹3,830" / "$38". Rupees group the Indian way. */
+/**
+ * Whole months an annual plan gives away, rounded DOWN so the claim stays true.
+ * 20% off twelve months is 2.4 months, which is said as "2 months free".
+ */
+export const monthsFree = (plan) =>
+  plan && plan.monthly ? Math.floor((plan.monthly * 12 - plan.annual_total) / plan.monthly) : 0;
+
 export function formatPrice(amount, currency = billingCurrency()) {
   const value = Number(amount || 0);
   if (currency === INR) {

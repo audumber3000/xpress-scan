@@ -53,7 +53,7 @@ PLANS = {
     "plus": {
         "rank": 1,
         "label": "Plus",
-        "tagline": "Everything one clinic needs to run its day",
+        "tagline": "Best for a single clinic and small team",
         "popular": True,
         "price": {
             "INR": {"monthly": 399, "annual": 3830},
@@ -62,16 +62,16 @@ PLANS = {
         "limits": {
             "branches": 1,
             "staff": 5,
-            "patients": 500,
-            "appointments": 500,
+            "patients": 600,
+            "appointments": 600,
             "storage_gb": 100,
             "report_months": 12,
         },
         "features": [
             "1 clinic location",
             "5 staff logins",
-            "500 new patients and 500 appointments a month",
-            "100 GB storage",
+            "600 new patients and appointments a month",
+            "100 GB for X-rays, photos and files",
             "12 months of report history",
             "WhatsApp and email reminders from the MolarPlus number",
             "Your own WhatsApp number, as an add-on",
@@ -81,7 +81,7 @@ PLANS = {
     "pro": {
         "rank": 2,
         "label": "Pro",
-        "tagline": "For clinics running more than one branch",
+        "tagline": "Best for clinics with up to 5 branches",
         "popular": False,
         "price": {
             "INR": {"monthly": 999, "annual": 9590},
@@ -100,7 +100,7 @@ PLANS = {
             "Up to 5 branches",
             "10 staff logins",
             "1,000 new patients and appointments a month",
-            "150 GB storage",
+            "150 GB for X-rays, photos and files",
             "WhatsApp from your own number",
             "Per-person permissions across 13 modules",
             "One inbox for email and WhatsApp",
@@ -113,7 +113,7 @@ PLANS = {
     "growth": {
         "rank": 3,
         "label": "Growth",
-        "tagline": "For clinic groups scaling without limits",
+        "tagline": "Best for groups that keep adding branches",
         "popular": False,
         "price": {
             "INR": {"monthly": 1500, "annual": 14400},
@@ -153,6 +153,12 @@ INCLUDED_IN_EVERY_PLAN = [
     "12 practice reports, plus attendance and audit logs",
     "Apps for Web, iOS, Android, and Windows",
 ]
+
+# A real clinic's words about MolarPlus, shown under the plan cards. None until a
+# clinic has given a quote AND agreed to be named. Never write one on their
+# behalf: a testimonial nobody said is a false claim on a page that takes money.
+#   {"quote": "...", "name": "Dr ...", "clinic": "...", "city": "..."}
+TESTIMONIAL = None
 
 DEFAULT_PLAN = "plus"
 TRIAL_PLAN = "pro"      # every trial is a Pro trial

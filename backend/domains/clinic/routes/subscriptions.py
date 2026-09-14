@@ -61,11 +61,17 @@ async def get_available_plans(
     that currency, which is what guarantees no dollar figure can reach an Indian
     dentist by way of a frontend bug or a stale bundle.
     """
+    from core import social_proof
     clinic = (
         db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
         if current_user.clinic_id else None
     )
-    return plans.catalogue(clinic)
+    catalogue = plans.catalogue(clinic)
+    # Trust, on the page that asks for money: a real count, and a real clinic's
+    # words only once one has agreed to be quoted (plans.TESTIMONIAL).
+    catalogue["social_proof"] = social_proof.cached(db)
+    catalogue["testimonial"] = plans.TESTIMONIAL
+    return catalogue
 
 
 class AddonCheckoutRequest(BaseModel):

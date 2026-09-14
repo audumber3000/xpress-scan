@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Check, ArrowRight, Star } from 'lucide-react';
-import { formatPrice, resolvePlan, planRank } from '../../../utils/plans';
+import { formatPrice, resolvePlan, planRank, monthsFree } from '../../../utils/plans';
 
 /**
  * The three plans, side by side.
@@ -39,8 +39,17 @@ const Feature = ({ text }) => {
   );
 };
 
-const PlanCard = ({ plan, cycle, isCurrent, isDowngrade, locked, continues, taxLabel, discount, adds, onChoose }) => {
+const PlanCard = ({ plan, cycle: pageCycle, isCurrent: isCurrentFor, isDowngrade, locked, continues: continuesFor, taxLabel, discount, adds, onChoose, className = '' }) => {
+  // A card can be flipped to annual on its own ("or ₹3,830/year, 2 months
+  // free") without moving the whole page. The page toggle still wins whenever
+  // it changes, so the two never disagree for long.
+  const [ownCycle, setOwnCycle] = useState(null);
+  useEffect(() => { setOwnCycle(null); }, [pageCycle]);
+  const cycle = ownCycle || pageCycle;
+  const isCurrent = isCurrentFor(cycle);
+  const continues = continuesFor(cycle);
   const annual = cycle === 'annual';
+  const free = monthsFree(plan);
   const listHeadline = annual ? plan.annual_monthly : plan.monthly;
   const headline = applyDiscount(listHeadline, discount);
   const discounted = discount && headline < listHeadline;
@@ -48,18 +57,22 @@ const PlanCard = ({ plan, cycle, isCurrent, isDowngrade, locked, continues, taxL
 
   return (
     <div
-      className={`relative flex flex-col rounded-2xl border bg-white p-5 ${
-        plan.popular ? 'border-[#29828a]' : 'border-gray-200'
-      }`}
+      className={`relative flex flex-col rounded-2xl bg-white p-5 ${
+        plan.popular
+          ? 'border-2 border-[#29828a] bg-gradient-to-b from-[#29828a]/[0.06] to-white to-40% lg:-my-2 lg:py-7'
+          : 'border border-gray-200'
+      } ${className}`}
     >
       {plan.popular && (
-        <span className="absolute -top-2.5 left-5 inline-flex items-center gap-1 rounded-full bg-[#29828a] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+        <span className="absolute -top-3 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-[#29828a] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
           <Star size={10} /> Most popular
         </span>
       )}
 
-      <h3 className="text-base font-bold text-gray-900">{plan.label}</h3>
-      <p className="mt-0.5 text-xs text-gray-400 leading-relaxed min-h-[2rem]">{plan.tagline}</p>
+      <h3 className={`font-bold text-gray-900 ${plan.popular ? 'text-lg' : 'text-base'}`}>{plan.label}</h3>
+      {/* "Best for ...": the line that lets somebody find their plan without
+          reading three feature lists. */}
+      <p className={`mt-0.5 text-xs leading-relaxed min-h-[2rem] ${plan.popular ? 'font-semibold text-[#1f6b72]' : 'text-gray-500'}`}>{plan.tagline}</p>
 
       <div className="mt-3">
         <div className="flex items-baseline gap-1.5 flex-wrap">
@@ -77,10 +90,31 @@ const PlanCard = ({ plan, cycle, isCurrent, isDowngrade, locked, continues, taxL
         </div>
         <p className="mt-1 text-[11px] text-gray-400 leading-relaxed">
           {annual
-            ? `${formatPrice(applyDiscount(plan.annual_total, discount), plan.currency)} billed once a year, saving ${formatPrice(saving, plan.currency)}`
-            : 'Billed monthly'}
+            ? `${formatPrice(applyDiscount(plan.annual_total, discount), plan.currency)} once a year${free >= 1 ? `, ${free} months free` : `, saving ${formatPrice(saving, plan.currency)}`}`
+            : 'Paid monthly'}
           {taxLabel ? ` · plus ${taxLabel}` : ''}
         </p>
+        {/* The annual offer where the decision is made, as one tap. A toggle at
+            the top of the page is a step most people never take, and "2 months
+            free" is something a clinic can picture where "20%" is not. */}
+        {!annual && plan.annual_total > 0 && free >= 1 && (
+          <button
+            type="button"
+            onClick={() => setOwnCycle('annual')}
+            className="mt-1 text-left text-[11px] font-semibold text-[#29828a] hover:underline"
+          >
+            or {formatPrice(applyDiscount(plan.annual_total, discount), plan.currency)}/year · {free} months free
+          </button>
+        )}
+        {annual && ownCycle === 'annual' && pageCycle !== 'annual' && (
+          <button
+            type="button"
+            onClick={() => setOwnCycle(null)}
+            className="mt-1 text-left text-[11px] font-semibold text-gray-500 hover:underline"
+          >
+            or pay monthly, {formatPrice(applyDiscount(plan.monthly, discount), plan.currency)}/month
+          </button>
+        )}
       </div>
 
       {/* What THIS clinic would gain, rather than the full feature list again.
@@ -156,11 +190,20 @@ const differentiator = (plan, currentPlan) => {
  * Now only a live paid plan marks a card as current. A trial or a grant makes
  * it "Continue on Plus", which is both truthful and the thing we want clicked.
  */
+// Desktop order: the plan we most want chosen sits in the middle, with a dearer
+// plan either side. Read left to right, ₹999 comes before ₹399 and makes it look
+// as small as it is, and the middle of three is the one people lean towards.
+// A stacked phone layout has no middle, so there the popular plan goes first.
+const DESKTOP_ORDER = ['pro', 'plus', 'growth'];
+
 const PlanCards = ({ catalogue, currentPlanName, cycle, onCycleChange, onChoose, discount, isPaying }) => {
   const current = resolvePlan(currentPlanName);
   const currentPlan = catalogue.plans.find((p) => p.key === current.key);
   const currentRank = planRank(currentPlanName);
-  const pctOff = catalogue.plans[0]?.annual_pct_off || 20;
+  const freeMonths = Math.max(0, ...catalogue.plans.map(monthsFree));
+  const ordered = [...catalogue.plans].sort(
+    (a, b) => (DESKTOP_ORDER.indexOf(a.key) + 99) % 99 - (DESKTOP_ORDER.indexOf(b.key) + 99) % 99
+  );
 
   return (
     <div>
@@ -182,9 +225,9 @@ const PlanCards = ({ catalogue, currentPlanName, cycle, onCycleChange, onChoose,
               }`}
             >
               {b.label}
-              {b.id === 'annual' && (
+              {b.id === 'annual' && freeMonths >= 1 && (
                 <span className="rounded-full bg-green-50 px-1.5 py-0.5 text-[9px] font-bold text-green-700">
-                  SAVE {pctOff}%
+                  {freeMonths} MONTHS FREE
                 </span>
               )}
             </button>
@@ -192,19 +235,20 @@ const PlanCards = ({ catalogue, currentPlanName, cycle, onCycleChange, onChoose,
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {catalogue.plans.map((plan) => (
+      <div className="grid grid-cols-1 items-stretch gap-4 pt-2 md:grid-cols-2 lg:grid-cols-3">
+        {ordered.map((plan) => (
           <PlanCard
             key={plan.key}
             plan={plan}
             cycle={cycle}
+            className={plan.popular ? 'order-first lg:order-none' : ''}
             taxLabel={catalogue.tax_label}
             discount={discount}
             adds={differentiator(plan, currentPlan)}
-            isCurrent={!!isPaying && plan.key === current.key && cycle === current.cycle}
+            isCurrent={(c) => !!isPaying && plan.key === current.key && c === current.cycle}
             isDowngrade={plan.rank < currentRank}
             locked={!!isPaying && plan.rank < currentRank}
-            continues={!isPaying && plan.key === current.key && cycle === current.cycle}
+            continues={(c) => !isPaying && plan.key === current.key && c === current.cycle}
             onChoose={onChoose}
           />
         ))}

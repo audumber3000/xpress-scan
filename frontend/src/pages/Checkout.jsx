@@ -371,7 +371,7 @@ const Checkout = () => {
               <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-4 pt-3.5 border-t border-gray-100 text-[11px] text-gray-400">
                 <span className="flex items-center gap-1.5"><ShieldCheck size={13} className="text-green-600" /> Encrypted</span>
                 <span>We never store your card</span>
-                <span>Cancel anytime</span>
+                <span>No auto-charge</span>
               </div>
             </div>
 
@@ -383,10 +383,13 @@ const Checkout = () => {
               </p>
             ) : (
             <p className="text-[11px] text-gray-500 leading-relaxed px-1">
+              {/* Plans do not renew on their own: every payment is one order.
+                  This used to say "Renews monthly ... until cancelled", which
+                  nothing did, and a clinic that believed it was locked a month
+                  later without having done anything wrong. */}
               {isAnnual
-                ? `Renews yearly at ${money(plan.annual_total)}${tax > 0 ? ' plus ' + (catalogue.tax_label || 'tax') : ''} until cancelled.`
-                : `Renews monthly at ${money(plan.monthly)}${tax > 0 ? ' plus ' + (catalogue.tax_label || 'tax') : ''} until cancelled.`}
-              {' '}Manage or cancel any time from Control Center.
+                ? `Covers one year. Nothing is charged automatically: we remind you 7, 3 and 1 days before it ends, and renewing is ${money(plan.annual_total)}${tax > 0 ? ' plus ' + (catalogue.tax_label || 'tax') : ''}.`
+                : `Covers one month. Nothing is charged automatically: we remind you 7, 3 and 1 days before it ends, and renewing is ${money(plan.monthly)}${tax > 0 ? ' plus ' + (catalogue.tax_label || 'tax') : ''}.`}
             </p>
             )}
 
