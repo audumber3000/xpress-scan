@@ -284,13 +284,19 @@ def for_clinic(db, clinic) -> dict:
     case to unwind: the Aug 2026 backfill gave every row-less clinic a grant,
     branches included, and those rows are real.
     """
+    return evaluate(subscription_for(db, clinic))
+
+
+def subscription_for(db, clinic):
+    """The subscription row that governs this clinic, walking up to the parent
+    for a branch (see for_clinic), or None."""
     seen = set()
     node = clinic
     while node is not None and getattr(node, "id", None) not in seen:
         seen.add(node.id)
         sub = _sub_attached_to(db, node.id)
         if sub is not None:
-            return evaluate(sub)
+            return sub
 
         parent_id = getattr(node, "parent_clinic_id", None)
         if not parent_id or parent_id in seen:
@@ -298,7 +304,7 @@ def for_clinic(db, clinic) -> dict:
         from models import Clinic
         node = db.query(Clinic).filter(Clinic.id == parent_id).first()
 
-    return evaluate(None)
+    return None
 
 
 # ── The guard ────────────────────────────────────────────────────────────────

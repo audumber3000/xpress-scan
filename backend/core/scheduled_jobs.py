@@ -1415,3 +1415,21 @@ async def wareach_reconcile_job() -> None:
             logger.info("wareach_reconcile: %s", result)
     except Exception as exc:
         logger.error("wareach_reconcile error: %s", exc)
+
+
+async def addon_expiry_job() -> None:
+    """Add-ons: renewal reminders (7, 3, 1 days), expiry, and telling a clinic
+    when its own WhatsApp number stops being included. See addon_service.sweep."""
+    from database import SessionLocal
+    from domains.clinic.services.addon_service import AddonService
+
+    db = SessionLocal()
+    try:
+        result = AddonService(db).sweep()
+        if any(result.values()):
+            logger.info("addon_expiry: %s", result)
+    except Exception as exc:
+        db.rollback()
+        logger.error("addon_expiry error: %s", exc)
+    finally:
+        db.close()

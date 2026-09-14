@@ -1,6 +1,9 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { CheckCircle2, AlertTriangle, Smartphone, Loader2, RefreshCw, Info } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { CheckCircle2, AlertTriangle, Smartphone, Loader2, RefreshCw, Info, ArrowRight } from 'lucide-react';
 import { api, getFriendlyErrorMessage } from '../../../utils/api';
+import { formatPrice } from '../../../utils/plans';
+import { fallbackAddonCatalogue, formatAddonDate } from '../../../utils/addons';
 import { useAuth } from '../../../contexts/AuthContext';
 import InlineFeedback from '../../../components/common/InlineFeedback';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
@@ -31,8 +34,15 @@ const displayPhone = (p) => {
  * If the linked number drops, messages keep going out from the MolarPlus
  * number (charged as usual) until it is reconnected, so no patient misses one.
  */
+const OWN_NUMBER_PRICE = fallbackAddonCatalogue().addons.find((a) => a.key === 'own_whatsapp');
+
 const WhatsAppPanel = () => {
   const { user, refreshUser } = useAuth();
+  const navigate = useNavigate();
+  // May this clinic send from its own number: included in its plan (Pro and
+  // up), or the add-on (bought, or a free grace period). Older backends do not
+  // send `entitled`, and are treated as allowing it, which is what they did.
+  const [entitlement, setEntitlement] = useState({ entitled: true, included_by_plan: false, addon_until: null, addon_source: null });
   const [savingManual, setSavingManual] = useState(false);
   const [manualError, setManualError] = useState('');
   const manualOn = !!user?.clinic?.manual_whatsapp;
@@ -53,6 +63,8 @@ const WhatsAppPanel = () => {
   refreshUserRef.current = refreshUser;
 
   const connected = status === 'connected';
+  // Manual mode is only overridden while the number is connected AND may send.
+  const manualPaused = connected && entitlement.entitled;
 
   const toggleManual = async (val) => {
     setManualError('');
@@ -73,6 +85,14 @@ const WhatsAppPanel = () => {
       setAvailable(res.available !== false);
       setStatus(res.status || 'disconnected');
       setPhoneNumber(res.phone_number || null);
+      if (typeof res.entitled === 'boolean') {
+        setEntitlement({
+          entitled: res.entitled,
+          included_by_plan: !!res.included_by_plan,
+          addon_until: res.addon_until || null,
+          addon_source: res.addon_source || null,
+        });
+      }
       if (res.status === 'connecting') pairingStartedAt.current = Date.now();
     } catch {
       // leave defaults
@@ -155,6 +175,50 @@ const WhatsAppPanel = () => {
 
   const phone = displayPhone(phoneNumber);
 
+  // Where the right to send from this number comes from, in one quiet line.
+  const entitlementLine = () => {
+    if (!entitlement.entitled) return addonOffer(true);
+    if (entitlement.included_by_plan) return null;
+    const until = formatAddonDate(entitlement.addon_until);
+    return (
+      <p className="mt-2 text-xs text-gray-500">
+        {entitlement.addon_source === 'grace'
+          ? <>Free until {until}. </>
+          : <>Add-on active until {until}. </>}
+        <button onClick={() => navigate('/admin/subscription?tab=addons')} className="font-semibold text-[#29828a] hover:underline">
+          {entitlement.addon_source === 'grace' ? 'Keep it' : 'Renew'}
+        </button>
+      </p>
+    );
+  };
+
+  // A Plus clinic that has not added it yet.
+  const addonOffer = (compact = false) => (
+    <div className={compact ? 'mt-3' : ''}>
+      {!compact && (
+        <p className="text-sm text-gray-600 mb-3">
+          Send patient messages from your clinic's own number
+          {OWN_NUMBER_PRICE?.priced ? ` for ${formatPrice(OWN_NUMBER_PRICE.monthly, OWN_NUMBER_PRICE.currency)} a month` : ''},
+          or get it included when you move to Pro.
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => navigate('/admin/subscription?tab=addons')}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#29828a] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#216b71]"
+        >
+          Add your own number <ArrowRight size={14} />
+        </button>
+        <button
+          onClick={() => navigate('/admin/subscription')}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+        >
+          See Pro
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="max-w-2xl">
       {/* Manual WhatsApp: staff send it themselves from WhatsApp. */}
@@ -162,7 +226,7 @@ const WhatsAppPanel = () => {
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-gray-900">Send WhatsApp manually from my own number</h3>
-            {connected ? (
+            {manualPaused ? (
               <p className="text-xs text-gray-500 mt-1 leading-relaxed">
                 Paused while your number is connected below. Patient WhatsApp buttons send
                 from {phone || 'your number'} automatically, so there is nothing to copy across.
@@ -174,12 +238,12 @@ const WhatsAppPanel = () => {
               </p>
             )}
           </div>
-          <label className={`relative inline-flex items-center shrink-0 mt-0.5 ${connected ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}>
+          <label className={`relative inline-flex items-center shrink-0 mt-0.5 ${manualPaused ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}>
             <input
               type="checkbox"
               className="sr-only peer"
-              checked={manualOn && !connected}
-              disabled={savingManual || connected}
+              checked={manualOn && !manualPaused}
+              disabled={savingManual || manualPaused}
               onChange={(e) => toggleManual(e.target.checked)}
               aria-label="Send WhatsApp manually"
             />
@@ -223,10 +287,21 @@ const WhatsAppPanel = () => {
                 <Smartphone size={16} className="text-gray-400" />
                 {phone || 'Your WhatsApp number'}
               </div>
-              <p className="mt-2 text-xs text-gray-500 leading-relaxed">
-                Patient WhatsApp now goes out from this number, <span className="font-semibold text-emerald-700">free</span>.
-                If the phone ever drops off, messages go out from the MolarPlus number until you reconnect, so no patient misses one.
-              </p>
+              {entitlement.entitled ? (
+                <p className="mt-2 text-xs text-gray-500 leading-relaxed">
+                  Patient WhatsApp now goes out from this number, <span className="font-semibold text-emerald-700">free</span>.
+                  If the phone ever drops off, messages go out from the MolarPlus number until you reconnect, so no patient misses one.
+                </p>
+              ) : (
+                <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                  <span>
+                    Paused. Your plan no longer includes sending from your own number, so patient messages are going out
+                    from the MolarPlus number. Add it back to resume.
+                  </span>
+                </div>
+              )}
+              {entitlementLine()}
               <button
                 onClick={() => setConfirmOpen(true)}
                 disabled={busy}
@@ -289,6 +364,8 @@ const WhatsAppPanel = () => {
                 <p className="text-sm text-gray-500">
                   Connecting your own number isn't available right now. Patient messages keep going out from the MolarPlus number.
                 </p>
+              ) : !entitlement.entitled ? (
+                addonOffer()
               ) : (
                 <>
                   <p className="text-sm text-gray-600 mb-4">

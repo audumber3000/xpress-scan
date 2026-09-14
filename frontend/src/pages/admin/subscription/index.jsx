@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { CreditCard, Receipt, RefreshCw } from 'lucide-react';
+import { CreditCard, Receipt, RefreshCw, Puzzle } from 'lucide-react';
 
 import { notify } from '../../../utils/notify';
 import { api } from '../../../utils/api';
@@ -14,6 +14,7 @@ import TrialCelebrationModal from '../../../components/TrialCelebrationModal';
 
 import PlansTab from './PlansTab';
 import HistoryTab from './HistoryTab';
+import AddOnsTab from './AddOnsTab';
 
 /**
  * Subscription & Billing.
@@ -28,6 +29,7 @@ import HistoryTab from './HistoryTab';
 
 const TABS = [
   { id: 'plans', label: 'Manage Subscription', icon: CreditCard },
+  { id: 'addons', label: 'Add-on Features', icon: Puzzle },
   { id: 'history', label: 'Billing History', icon: Receipt },
 ];
 
@@ -38,7 +40,12 @@ const Subscription = () => {
   const { catalogue } = usePlanCatalogue();
   const { usage } = usePlanUsage();
 
-  const [activeTab, setActiveTab] = useState('plans');
+  // ?tab=addons opens straight onto the add-ons, which is where Cashfree sends
+  // an add-on payment back to and where reminders about one link.
+  const [activeTab, setActiveTab] = useState(() => {
+    const t = new URLSearchParams(location.search).get('tab');
+    return TABS.some((x) => x.id === t) ? t : 'plans';
+  });
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState(null);
   const [history, setHistory] = useState([]);
@@ -77,7 +84,7 @@ const Subscription = () => {
       try {
         const res = await api.get(`/subscriptions/verify-status?order_id=${orderId}`);
         if (res.success) {
-          notify.done('Payment received. Your plan is active.');
+          notify.done(res.addon ? 'Payment received. Your add-on is active.' : 'Payment received. Your plan is active.');
           refreshUser?.();
         }
       } catch {
@@ -97,6 +104,11 @@ const Subscription = () => {
     const q = new URLSearchParams({ plan: planKey, billing: cycle });
     if (coupon) q.set('coupon', coupon);
     navigate(`/checkout?${q.toString()}`);
+  };
+
+  const handleBuyAddon = (addonKey, cycle) => {
+    track(EVENTS.SUBSCRIPTION_CTA_CLICKED, { addon: addonKey, billing_cycle: cycle });
+    navigate(`/checkout?${new URLSearchParams({ addon: addonKey, billing: cycle }).toString()}`);
   };
 
   const handleStartTrial = async () => {
@@ -149,6 +161,14 @@ const Subscription = () => {
           startingTrial={startingTrial}
           onStartTrial={handleStartTrial}
           onChoosePlan={handleChoosePlan}
+        />
+      )}
+
+      {activeTab === 'addons' && (
+        <AddOnsTab
+          clinicName={user?.clinic?.name}
+          isOwner={user?.role === 'clinic_owner'}
+          onBuy={handleBuyAddon}
         />
       )}
 

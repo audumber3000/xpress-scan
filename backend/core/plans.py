@@ -74,6 +74,7 @@ PLANS = {
             "100 GB storage",
             "12 months of report history",
             "WhatsApp and email reminders from the MolarPlus number",
+            "Your own WhatsApp number, as an add-on",
             "3 ready-made role presets",
         ],
     },

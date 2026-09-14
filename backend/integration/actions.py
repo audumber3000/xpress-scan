@@ -631,3 +631,81 @@ def _notify_trial_started(db: Session, clinic: Clinic, plan_code: str, ends_at) 
         # a template the provider rejected — leaves the trial granted.
         log.warning("trial notification failed for clinic %s: %s", clinic.id, error)
     return result
+
+
+# ── PATCH /accounts/{id}/addons/{key} ────────────────────────────────────────
+
+class AddonPatch(BaseModel):
+    # Managed add-ons (Google Business Profile): requested | access_given | in_progress | done
+    service_status: Optional[str] = None
+    # Grant or extend: add this many days, or run until this moment.
+    extend_days: Optional[int] = None
+    until: Optional[datetime.datetime] = None
+    # A branch of this account, when the add-on is for a branch rather than the
+    # main clinic. Add-ons are per location.
+    clinic_id: Optional[int] = None
+    reason: Optional[str] = None
+
+
+def _addon_shape(row, clinic_id: int) -> dict:
+    from core import addons
+    item = addons.get(row.addon_key) or {}
+    return {
+        "clinic_id": clinic_id,
+        "addon_key": row.addon_key,
+        "label": item.get("label"),
+        "status": row.status,
+        "source": row.source,
+        "cycle": row.cycle,
+        "current_end": to_rfc3339(row.current_end) if row.current_end else None,
+        "service_status": row.service_status,
+        "support_ticket_id": row.support_ticket_id,
+    }
+
+
+@router.patch("/accounts/{account_id}/addons/{addon_key}", tags=["actions"], operation_id="updateAddon")
+def update_addon(account_id: str, addon_key: str, body: AddonPatch, response: Response,
+                 idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+                 db: Session = Depends(get_db),
+                 caller: Caller = Depends(require_write)):
+    """Support's hand on a clinic's add-on: move a managed add-on through its
+    service steps, or grant/extend one (a manual deal, a clinic abroad, a
+    goodwill extension). Nothing is charged; the audit row says who and why."""
+    from core import addons
+    from domains.clinic.services.addon_service import AddonService, AddonError
+
+    payload = _body(body)
+    endpoint = "PATCH /accounts/addons"
+    replayed = _replayed(db, idempotency_key, endpoint, payload, response)
+    if replayed is not None:
+        return replayed
+
+    account = _account_clinic(db, account_id)
+    target = account
+    if body.clinic_id and body.clinic_id != account.id:
+        target = db.query(Clinic).filter(Clinic.id == body.clinic_id).first()
+        if target is None or target.parent_clinic_id != account.id:
+            raise ContractError(422, "not_a_branch",
+                                "clinic_id is not a branch of this account.",
+                                {"account_id": account_id, "clinic_id": body.clinic_id})
+    if not addons.get(addon_key):
+        raise ContractError(422, "unknown_addon", "MolarPlus offers no add-on {!r}.".format(addon_key),
+                            {"addon_key": addon_key, "offered": sorted(addons.ADDONS)})
+    if body.extend_days is not None and body.extend_days <= 0:
+        raise ContractError(422, "invalid_extend_days", "extend_days must be positive.",
+                            {"extend_days": body.extend_days})
+
+    service = AddonService(db)
+    existing = service._row(target.id, addon_key)
+    before = _addon_shape(existing, target.id) if existing is not None else None
+    try:
+        row = service.grant(target, addon_key, days=body.extend_days, until=body.until,
+                            service_status=body.service_status, commit=False)
+    except AddonError as e:
+        raise ContractError(422, "invalid_addon_change", str(e), {"addon_key": addon_key})
+
+    result = _addon_shape(row, target.id)
+    store.record(db, caller, "update_addon", account_id, target.id, reason=body.reason,
+                 before=before, after=result)
+    db.flush()
+    return _commit(db, idempotency_key, endpoint, payload, caller, result)

@@ -68,6 +68,9 @@ _MOCK_QR = (
 
 _REMOTE_STATUSES = ("connected", "connecting", "disconnected")
 
+# The core.addons key that pays for sending from the clinic's own number.
+OWN_NUMBER_ADDON = "own_whatsapp"
+
 
 class WAReachError(Exception):
     """WA Reach could not do what was asked. `status_code` is 0 when unreachable."""
@@ -146,7 +149,15 @@ def get_active_integration(db, clinic_id: int):
         logger.error("WA Reach key for clinic %s is unreadable; routing to MSG91", clinic_id)
         return None
     clinic = db.query(Clinic).filter(Clinic.id == clinic_id).first()
-    return row if is_pro(clinic) else None
+    if not is_pro(clinic):
+        return None
+    # Own-number sending is an add-on on Plus and included from Pro. A clinic
+    # whose add-on or plan has run out keeps its phone linked, and its messages
+    # simply go out from the MolarPlus number again until it renews.
+    from core import addons
+    if not addons.entitled(db, clinic, OWN_NUMBER_ADDON):
+        return None
+    return row
 
 
 def is_connected(db, clinic_id: int) -> bool:

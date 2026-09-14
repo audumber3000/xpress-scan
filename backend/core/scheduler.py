@@ -67,6 +67,7 @@ def _register_jobs(sched: AsyncIOScheduler) -> None:
         trial_lifecycle_job,
         account_verification_job,
         wareach_reconcile_job,
+        addon_expiry_job,
     )
 
     sched.add_job(
@@ -158,6 +159,15 @@ def _register_jobs(sched: AsyncIOScheduler) -> None:
         trigger="cron",
         minute="4,14,24,34,44,54",
         id="wareach_reconcile",
+        replace_existing=True,
+    )
+
+    # Add-ons: renewal reminders, expiry, and own-number access ending with a plan.
+    sched.add_job(
+        addon_expiry_job,
+        trigger="cron",
+        minute=27,
+        id="addon_expiry",
         replace_existing=True,
     )
 

@@ -1,6 +1,7 @@
 import logging
 import os
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import Optional
@@ -17,12 +18,9 @@ logger = logging.getLogger(__name__)
 
 TRIAL_DAYS = plans.TRIAL_DAYS
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# `get_db` is database.get_db, imported above. This module used to define an
+# identical copy of its own, which shadowed the import and meant the test
+# client's database override never reached these routes.
 
 router = APIRouter()
 
@@ -68,6 +66,58 @@ async def get_available_plans(
         if current_user.clinic_id else None
     )
     return plans.catalogue(clinic)
+
+
+class AddonCheckoutRequest(BaseModel):
+    addon_key: str
+    cycle: str = "monthly"
+
+
+@router.get("/addons")
+async def get_addons(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Every add-on, priced for this clinic and carrying this clinic's state
+    (included, active until, grace, coming soon...). See core.addons.
+
+    Open to anyone signed in, like /plans: it says what the clinic has, which
+    the Integrations screens read too. Buying is owner-only.
+    """
+    from core import addons
+    clinic = (
+        db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+        if current_user.clinic_id else None
+    )
+    return addons.catalogue(db, clinic)
+
+
+@router.post("/addons/checkout")
+async def create_addon_checkout(
+    body: AddonCheckoutRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Open a Cashfree order for one add-on on the clinic currently selected.
+
+    Never touches the subscription row: a plan checkout in progress survives an
+    add-on checkout and the reverse (see addon_service).
+    """
+    from domains.clinic.services.addon_service import AddonService, AddonError
+    _require_owner(current_user)
+    clinic = (
+        db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+        if current_user.clinic_id else None
+    )
+    if not clinic:
+        raise HTTPException(status_code=400, detail="User not in clinic")
+    try:
+        return AddonService(db).create_checkout(clinic, body.addon_key, body.cycle, current_user.id)
+    except AddonError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        logger.exception("add-on checkout failed for clinic %s", clinic.id)
+        raise HTTPException(status_code=502, detail="Could not start the payment. Please try again.")
 
 
 @router.get("/usage")
@@ -348,11 +398,12 @@ async def get_billing_history(
         ).order_by(SubscriptionPayment.paid_at.desc()).all()
 
     if payments:
+        from core import addons
         history = [
             {
                 "id": p.id,
                 "invoice": f"INV-{p.provider_order_id or p.id}",
-                "plan": plans.label(p.plan_name),
+                "plan": addons.label_for_payment(p.plan_name) or plans.label(p.plan_name),
                 # The total charged, its tax component, and the currency it was
                 # charged in. All three come from the payment row rather than
                 # from today's catalogue: an invoice has to show what was
@@ -530,6 +581,20 @@ async def verify_subscription_status(
 ):
     """Verify the status of a specific order for the current user"""
     _require_owner(current_user)
+    from core import addons
+    if addons.is_addon_order(order_id):
+        # Add-on orders live on clinic_addons, never on the subscription row.
+        from models import user_clinics
+        from domains.clinic.services.addon_service import AddonService
+        clinic_ids = {cid for (cid,) in db.query(user_clinics.c.clinic_id)
+                      .filter(user_clinics.c.user_id == current_user.id).all()}
+        if current_user.clinic_id:
+            clinic_ids.add(current_user.clinic_id)
+        result = AddonService(db).verify_order(order_id, clinic_ids)
+        if not result["success"]:
+            raise HTTPException(status_code=400, detail=result["message"])
+        return result
+
     subscription_service = SubscriptionService(db)
     result = subscription_service.verify_payment(current_user.id, order_id)
     
@@ -558,6 +623,16 @@ async def cashfree_webhook(
 
     try:
         payload = _json.loads(raw_body)
+        from core import addons
+        order_id = ((payload.get("data") or {}).get("order") or {}).get("order_id")
+        if addons.is_addon_order(order_id):
+            # Add-on orders settle on their own rails; the plan code below never
+            # sees them, so it behaves exactly as before.
+            from domains.clinic.services.addon_service import AddonService
+            if AddonService(db).handle_webhook(payload):
+                return {"status": "ok", "message": "Processed successfully"}
+            return {"status": "received", "message": "Webhook acknowledged"}
+
         subscription_service = SubscriptionService(db)
         success = subscription_service.handle_webhook("cashfree", payload)
         if success:

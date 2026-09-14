@@ -9,6 +9,7 @@ import { cashfreeService } from '../services/payments/cashfree/cashfree_service'
 import PaymentMarks from '../components/payments/PaymentMarks';
 import PaymentHelp from '../components/payments/PaymentHelp';
 import { usePlanCatalogue, resolvePlan, planLabel, formatPrice } from '../utils/plans';
+import { useAddonCatalogue } from '../utils/addons';
 
 /**
  * Checkout.
@@ -43,6 +44,11 @@ const Checkout = () => {
   const planName = queryParams.get('plan') || 'plus';
   const billing = queryParams.get('billing') || 'monthly';
   const isAnnual = billing === 'annual';
+  // ?addon= buys an add-on for the clinic currently selected instead of a plan.
+  // Same screen, same gateway, its own order (see addon_service): no promo
+  // codes on add-ons yet, and the price comes from the add-on catalogue.
+  const addonKey = queryParams.get('addon');
+  const isAddon = !!addonKey;
 
   const [loading, setLoading] = useState(false);
   const [couponCode, setCouponCode] = useState('');
@@ -56,21 +62,47 @@ const Checkout = () => {
   const preApplied = useRef(false);
 
   const { catalogue } = usePlanCatalogue();
+  const { catalogue: addonCatalogue, loading: addonsLoading } = useAddonCatalogue({ enabled: isAddon });
   const planKey = resolvePlan(planName).key;
   const plan = catalogue.plans.find((p) => p.key === planKey) || catalogue.plans[0];
-  const currency = catalogue.currency;
+  const addon = isAddon ? addonCatalogue.addons.find((a) => a.key === addonKey) : null;
+  // Only something the clinic can actually buy gets a Pay button. Included,
+  // coming soon, or not offered here, the server would refuse it anyway.
+  const addonBuyable = !!addon && addon.priced && ['not_bought', 'expired', 'grace', 'active'].includes(addon.state);
+
+  // What is being bought, in one shape for both kinds.
+  const product = isAddon
+    ? {
+        label: addon?.label || 'Add-on',
+        monthly: addon?.monthly || 0,
+        annual_total: addon?.annual_total || 0,
+        annual_pct_off: addon?.annual_pct_off || 0,
+        currency: addon?.currency || catalogue.currency,
+        tax_rate: addonCatalogue.tax_rate || 0,
+        tax_label: addonCatalogue.tax_label,
+      }
+    : {
+        label: plan.label,
+        monthly: plan.monthly,
+        annual_total: plan.annual_total,
+        annual_pct_off: plan.annual_pct_off,
+        currency: catalogue.currency,
+        tax_rate: catalogue.tax_rate || 0,
+        tax_label: catalogue.tax_label,
+      };
+  const currency = product.currency;
   const money = (amount) => formatPrice(amount, currency);
 
   const checkoutPlanName = isAnnual ? `${planKey}_annual` : planKey;
-  const listPrice = isAnnual ? plan.annual_total : plan.monthly;
+  const listPrice = isAnnual ? product.annual_total : product.monthly;
 
   // Discount first, then tax, matching create_checkout_session. Taxing the list
   // price and then discounting would charge GST on money nobody paid.
   const subtotal = discountInfo ? discountInfo.final_amount : listPrice;
-  const taxRate = catalogue.tax_rate || 0;
+  const taxRate = product.tax_rate;
   const tax = Math.round(subtotal * taxRate * 100) / 100;
   const total = Math.round((subtotal + tax) * 100) / 100;
-  const annualSaving = plan.monthly * 12 - plan.annual_total;
+  const annualSaving = product.monthly * 12 - product.annual_total;
 
   const setBilling = (next) => {
     const p = new URLSearchParams(location.search);
@@ -80,7 +112,7 @@ const Checkout = () => {
 
   useEffect(() => {
     const fromUrl = queryParams.get('coupon');
-    if (!fromUrl || preApplied.current) return;
+    if (!fromUrl || preApplied.current || isAddon) return;
     preApplied.current = true;
     setCouponCode(fromUrl.toUpperCase());
     setCouponOpen(true);
@@ -115,12 +147,16 @@ const Checkout = () => {
   const handlePayNow = async () => {
     setLoading(true);
     track(EVENTS.PAYMENT_BUTTON_CLICKED, {
-      plan: checkoutPlanName,
+      plan: isAddon ? `addon:${addonKey}` : checkoutPlanName,
       amount: total,
       has_discount: !!discountInfo,
     });
     try {
-      await cashfreeService.initiateCheckout(checkoutPlanName, discountInfo ? couponCode : null);
+      if (isAddon) {
+        await cashfreeService.initiateAddonCheckout(addonKey, isAnnual ? 'annual' : 'monthly');
+      } else {
+        await cashfreeService.initiateCheckout(checkoutPlanName, discountInfo ? couponCode : null);
+      }
     } catch (error) {
       notify.problem(error, 'Failed to initiate checkout');
     } finally {
@@ -166,7 +202,7 @@ const Checkout = () => {
 
           {/* ── Order summary ── */}
           <section className="bg-white border border-gray-200 rounded-2xl p-5 md:p-6">
-            <h2 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-4">Your plan</h2>
+            <h2 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-4">{isAddon ? 'Your add-on' : 'Your plan'}</h2>
 
             <div className="inline-flex bg-gray-100 rounded-lg p-1 mb-5">
               {[
@@ -185,7 +221,7 @@ const Checkout = () => {
                   {b.label}
                   {b.id === 'annual' && (
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-50 text-green-700">
-                      SAVE {plan.annual_pct_off}%
+                      SAVE {product.annual_pct_off}%
                     </span>
                   )}
                 </button>
@@ -194,12 +230,15 @@ const Checkout = () => {
 
             <div className="border-t border-gray-100 pt-3">
               <Row
-                label={`${plan.label}, ${isAnnual ? 'annual' : 'monthly'}`}
+                label={`${product.label}, ${isAnnual ? 'annual' : 'monthly'}`}
                 value={money(listPrice)}
               />
+              {isAddon && (
+                <p className="text-[11px] text-gray-500 -mt-0.5 mb-1">For this clinic location only.</p>
+              )}
               {isAnnual && annualSaving > 0 && (
                 <Row
-                  label={`${money(plan.monthly)} × 12 if paid monthly`}
+                  label={`${money(product.monthly)} × 12 if paid monthly`}
                   value={`You save ${money(annualSaving)}`}
                   muted
                 />
@@ -222,7 +261,7 @@ const Checkout = () => {
                 kind of surprise that turns into a support ticket. */}
             {tax > 0 && (
               <div className="border-t border-gray-100 pt-1.5">
-                <Row label={`${catalogue.tax_label || 'Tax'} at ${Math.round(taxRate * 100)}%`} value={money(tax)} />
+                <Row label={`${product.tax_label || 'Tax'} at ${Math.round(taxRate * 100)}%`} value={money(tax)} />
               </div>
             )}
 
@@ -241,6 +280,7 @@ const Checkout = () => {
             </div>
 
             {/* Demoted from the loudest element on the page to a link. */}
+            {!isAddon && (
             <div className="mt-4">
               {!couponOpen && !discountInfo ? (
                 <button
@@ -281,6 +321,7 @@ const Checkout = () => {
                 </div>
               )}
             </div>
+            )}
           </section>
 
           {/* ── Payment ── */}
@@ -298,13 +339,30 @@ const Checkout = () => {
                 <PaymentMarks className="mt-3" />
               </div>
 
+              {isAddon && !addonsLoading && !addonBuyable ? (
+                <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-sm text-gray-600">
+                  {addon?.state === 'included'
+                    ? `${product.label} is already included in your plan, so there is nothing to pay.`
+                    : addon?.state === 'coming_soon'
+                    ? `${product.label} is coming soon. We will let you know when you can add it.`
+                    : 'This add-on cannot be bought for this clinic here. Message us and we will set it up.'}
+                  <button
+                    onClick={() => navigate('/admin/subscription?tab=addons')}
+                    className="mt-2 block text-xs font-bold text-[#2a276e] hover:underline"
+                  >
+                    Back to add-ons
+                  </button>
+                </div>
+              ) : (
               <button
                 onClick={handlePayNow}
-                className="w-full mt-4 py-4 min-h-[3.25rem] rounded-xl bg-[#2a276e] hover:bg-[#1f1d52] text-white font-bold text-sm transition-colors flex items-center justify-center gap-2 group"
+                disabled={isAddon && addonsLoading}
+                className="w-full mt-4 py-4 min-h-[3.25rem] rounded-xl bg-[#2a276e] hover:bg-[#1f1d52] text-white font-bold text-sm transition-colors flex items-center justify-center gap-2 group disabled:opacity-60"
               >
                 Pay {money(total)}
                 <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
               </button>
+              )}
 
               <p className="text-[11px] text-gray-500 text-center mt-2.5">
                 You will be taken to Cashfree to complete the payment.
@@ -318,17 +376,24 @@ const Checkout = () => {
             </div>
 
             {/* Renewal terms stated before the click, not after. */}
+            {isAddon ? (
+              <p className="text-[11px] text-gray-500 leading-relaxed px-1">
+                {`Runs for one ${isAnnual ? 'year' : 'month'} from today, or from the end of your current period if it is still running. `}
+                We remind you before it ends, and you renew from Subscription, Add-on Features.
+              </p>
+            ) : (
             <p className="text-[11px] text-gray-500 leading-relaxed px-1">
               {isAnnual
                 ? `Renews yearly at ${money(plan.annual_total)}${tax > 0 ? ' plus ' + (catalogue.tax_label || 'tax') : ''} until cancelled.`
                 : `Renews monthly at ${money(plan.monthly)}${tax > 0 ? ' plus ' + (catalogue.tax_label || 'tax') : ''} until cancelled.`}
               {' '}Manage or cancel any time from Control Center.
             </p>
+            )}
 
             <PaymentHelp
               amount={total}
               currency={currency}
-              plan={planLabel(checkoutPlanName)}
+              plan={isAddon ? product.label : planLabel(checkoutPlanName)}
             />
           </section>
 

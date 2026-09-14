@@ -45,6 +45,12 @@ export interface WareachStatus {
   is_pro?: boolean;
   /** False when own-number WhatsApp isn't set up on the server. Absent on older backends. */
   available?: boolean;
+  /** May this clinic send from its own number: its plan includes it, or the add-on
+   *  (bought, or a free grace period) is running. Absent on older backends. */
+  entitled?: boolean;
+  included_by_plan?: boolean;
+  addon_until?: string | null;
+  addon_source?: string | null;
 }
 
 class NotificationsApi extends BaseApiService {

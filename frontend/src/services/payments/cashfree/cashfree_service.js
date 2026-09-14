@@ -44,6 +44,19 @@ class CashfreeService {
             throw error;
         }
     }
+
+    /** An add-on for the clinic currently selected. Same gateway, its own order. */
+    async initiateAddonCheckout(addonKey, cycle = 'monthly') {
+        const sessionData = await api.post('/subscriptions/addons/checkout', {
+            addon_key: addonKey,
+            cycle,
+        });
+        if (!sessionData.payment_session_id) {
+            throw new Error("Failed to create payment session - check server logs");
+        }
+        const cashfree = await this.getCashfree();
+        return cashfree.checkout({ paymentSessionId: sessionData.payment_session_id, redirectTarget: "_self" });
+    }
 }
 
 export const cashfreeService = new CashfreeService();

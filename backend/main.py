@@ -585,6 +585,38 @@ async def lifespan(app: FastAPI):
             conn.execute(text(
                 "CREATE INDEX IF NOT EXISTS ix_whatsapp_integrations_session_id ON whatsapp_integrations (session_id)"
             ))
+            # Add-ons (core.addons): one row per clinic location per add-on, and
+            # add-on payments in the same ledger as plan payments. The payment
+            # columns are mapped, so they must exist before anything SELECTs a
+            # payment, which is every billing screen.
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS clinic_addons (
+                    id SERIAL PRIMARY KEY,
+                    clinic_id INTEGER NOT NULL REFERENCES clinics(id),
+                    addon_key VARCHAR NOT NULL,
+                    cycle VARCHAR,
+                    status VARCHAR NOT NULL DEFAULT 'active',
+                    source VARCHAR NOT NULL DEFAULT 'paid',
+                    current_start TIMESTAMP,
+                    current_end TIMESTAMP,
+                    provider_order_id VARCHAR,
+                    pending JSON,
+                    service_status VARCHAR,
+                    support_ticket_id INTEGER,
+                    reminder_days_sent INTEGER,
+                    expiry_notified BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    CONSTRAINT uq_clinic_addon UNIQUE (clinic_id, addon_key)
+                )
+            """))
+            for _addon_ddl in (
+                "CREATE INDEX IF NOT EXISTS ix_clinic_addons_clinic_id ON clinic_addons (clinic_id)",
+                "CREATE INDEX IF NOT EXISTS ix_clinic_addons_provider_order_id ON clinic_addons (provider_order_id)",
+                "ALTER TABLE subscription_payments ADD COLUMN IF NOT EXISTS item_type VARCHAR DEFAULT 'plan'",
+                "ALTER TABLE subscription_payments ADD COLUMN IF NOT EXISTS addon_key VARCHAR",
+            ):
+                conn.execute(text(_addon_ddl))
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS notification_wallets (
                     id SERIAL PRIMARY KEY,
@@ -784,6 +816,22 @@ async def lifespan(app: FastAPI):
                        SET status = 'disconnected', session_id = NULL, api_key_enc = NULL,
                            phone_number = NULL, last_status_at = NOW(), updated_at = NOW();
                     INSERT INTO applied_data_migrations (key) VALUES ('wareach_partner_reset_v1');
+                  END IF;
+                END $do$;
+            """))
+            # Own-number WhatsApp became an add-on on Plus (included from Pro).
+            # Every clinic already sending from its own number keeps it free for
+            # 30 days, as a grace row the add-on gates and reminders already
+            # understand. Pro clinics get a row too; it changes nothing for them,
+            # because their plan includes it, and the reminders skip them.
+            conn.execute(text("""
+                DO $do$ BEGIN
+                  IF NOT EXISTS (SELECT 1 FROM applied_data_migrations WHERE key = 'addons_own_whatsapp_grace_v1') THEN
+                    INSERT INTO clinic_addons (clinic_id, addon_key, cycle, status, source, current_start, current_end, created_at, updated_at)
+                    SELECT clinic_id, 'own_whatsapp', 'monthly', 'active', 'grace', NOW(), NOW() + INTERVAL '30 days', NOW(), NOW()
+                      FROM whatsapp_integrations WHERE status = 'connected'
+                    ON CONFLICT (clinic_id, addon_key) DO NOTHING;
+                    INSERT INTO applied_data_migrations (key) VALUES ('addons_own_whatsapp_grace_v1');
                   END IF;
                 END $do$;
             """))

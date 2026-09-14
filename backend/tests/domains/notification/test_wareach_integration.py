@@ -24,6 +24,14 @@ from domains.notification.services.wareach_service import WAReachError, Workspac
 SECRET = "the-real-secret"
 
 
+@pytest.fixture(autouse=True)
+def _own_number_included(monkeypatch):
+    """These tests are about WA Reach itself, so the clinic may send from its own
+    number. Who may (plan, add-on, grace) is pinned in tests/domains/clinic/test_addons.py."""
+    from core import addons
+    monkeypatch.setattr(addons, "included_by_plan", lambda *a, **k: True)
+
+
 @pytest.fixture
 def configured(monkeypatch):
     monkeypatch.setattr(wareach_service, "WAREACH_URL", "http://wareach.test:3000")

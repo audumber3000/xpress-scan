@@ -85,7 +85,29 @@ def get_integration_status(
         except WAReachError as e:
             # The cached status is still the best answer we have.
             logger.info(f"WA Reach status refresh failed for clinic {clinic.id}: {e}")
-    return {**_serialize(row), "is_pro": wareach_service.is_pro(clinic), "available": wareach_service.is_configured()}
+    return {
+        **_serialize(row),
+        "is_pro": wareach_service.is_pro(clinic),
+        "available": wareach_service.is_configured(),
+        **_entitlement(db, clinic),
+    }
+
+
+def _entitlement(db: Session, clinic) -> dict:
+    """Whether this clinic may send from its own number, and why: its plan, or
+    the add-on (bought, or a free grace period) and until when."""
+    from core import addons
+    if clinic is None:
+        return {"entitled": False, "included_by_plan": False, "addon_until": None, "addon_source": None}
+    key = wareach_service.OWN_NUMBER_ADDON
+    included = addons.included_by_plan(db, clinic, key)
+    row = None if included else addons.active_row(db, clinic.id, key)
+    return {
+        "entitled": included or row is not None,
+        "included_by_plan": included,
+        "addon_until": row.current_end.isoformat() if row is not None and row.current_end else None,
+        "addon_source": row.source if row is not None else None,
+    }
 
 
 @router.post("/connect")
@@ -97,6 +119,14 @@ def connect(
     return the QR to scan."""
     clinic = _require_pro_clinic(current_user, db)
     _require_configured()
+    if not _entitlement(db, clinic)["entitled"]:
+        # 402, the same status the old Pro gate used, so both apps already know
+        # to show an upgrade path rather than an error.
+        raise HTTPException(
+            status_code=402,
+            detail="Sending from your own number is an add-on on the Plus plan. "
+                   "Add it from Subscription, Add-on Features, or move to Pro where it is included.",
+        )
     row = _get_or_create_row(db, clinic.id)
     try:
         wareach_service.ensure_workspace(db, clinic, row)

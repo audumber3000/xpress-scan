@@ -37,6 +37,8 @@ export const IntegrationsTab: React.FC<Props> = ({ manualOn, savingManual, onTog
   const [loading, setLoading] = useState(true);
   const [isPro, setIsPro] = useState(true);
   const [available, setAvailable] = useState(true);
+  // Older backends do not send `entitled`, and are treated as allowing it.
+  const [entitled, setEntitled] = useState(true);
   const [status, setStatus] = useState<WareachStatus['status']>('disconnected');
   const [phone, setPhone] = useState<string | null>(null);
   const [qr, setQr] = useState<string | null>(null);
@@ -53,6 +55,7 @@ export const IntegrationsTab: React.FC<Props> = ({ manualOn, savingManual, onTog
     const res = await notificationsApi.getWareachStatus();
     setIsPro(res.is_pro !== false);
     setAvailable(res.available !== false);
+    setEntitled(res.entitled !== false);
     setStatus(res.status || 'disconnected');
     setPhone(res.phone_number || null);
     if (res.status === 'connecting') pairingStartedAt.current = Date.now();
@@ -189,9 +192,18 @@ export const IntegrationsTab: React.FC<Props> = ({ manualOn, savingManual, onTog
                 <Smartphone size={15} color={colors.gray400} />
                 <Text style={styles.phoneText}>{shownPhone || 'Your WhatsApp number'}</Text>
               </View>
-              <Text style={styles.freeNote}>
-                Patient WhatsApp now goes out from this number, free. If the phone ever drops off, messages go out from the MolarPlus number until you reconnect.
-              </Text>
+              {entitled ? (
+                <Text style={styles.freeNote}>
+                  Patient WhatsApp now goes out from this number, free. If the phone ever drops off, messages go out from the MolarPlus number until you reconnect.
+                </Text>
+              ) : (
+                <View style={[styles.failBox, { marginTop: 10, marginBottom: 0 }]}>
+                  <AlertTriangle size={15} color="#B45309" />
+                  <Text style={styles.failText}>
+                    Paused. Your plan no longer includes sending from your own number, so patient messages are going out from the MolarPlus number. The clinic owner can add it back on the web, under Subscription.
+                  </Text>
+                </View>
+              )}
               <TouchableOpacity style={styles.disconnectBtn} onPress={handleDisconnect} disabled={busy} activeOpacity={0.85}>
                 {busy ? <ActivityIndicator size="small" color="#DC2626" /> : <Text style={styles.disconnectBtnText}>Disconnect</Text>}
               </TouchableOpacity>
@@ -239,6 +251,10 @@ export const IntegrationsTab: React.FC<Props> = ({ manualOn, savingManual, onTog
               {!available ? (
                 <Text style={styles.disconnectedText}>
                   Connecting your own number isn't available right now. Patient messages keep going out from the MolarPlus number.
+                </Text>
+              ) : !entitled ? (
+                <Text style={styles.disconnectedText}>
+                  Sending from your own number is an add-on on your plan, and included with Pro. The clinic owner can add it on the web, under Subscription, Add-on Features.
                 </Text>
               ) : (
                 <>

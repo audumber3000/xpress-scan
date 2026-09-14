@@ -764,10 +764,48 @@ class SubscriptionPayment(Base):
     status = Column(String, nullable=False)            # paid, failed, refunded
     paid_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    # 'plan' or 'addon'. Add-on payments share this ledger so billing history,
+    # invoices and revenue reads see every rupee in one place; `plan_name` then
+    # holds e.g. 'addon:own_whatsapp_annual' (see core.addons).
+    item_type = Column(String, default='plan')
+    addon_key = Column(String, nullable=True)
 
     subscription = relationship("Subscription", backref="payments")
     clinic = relationship("Clinic")
     user = relationship("User")
+
+
+class ClinicAddon(Base):
+    """An add-on for one clinic location: bought, granted, or on a free grace.
+
+    One row per (clinic, add-on), extended in place on renewal rather than a row
+    per purchase: the payments ledger already holds each purchase, and this row
+    answers the only question the gates ask, "is it running right now".
+    """
+    __tablename__ = 'clinic_addons'
+    __table_args__ = (UniqueConstraint('clinic_id', 'addon_key', name='uq_clinic_addon'),)
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_id = Column(Integer, ForeignKey('clinics.id'), nullable=False, index=True)
+    addon_key = Column(String, nullable=False)                 # core.addons.ADDONS key
+    cycle = Column(String, nullable=True)                      # monthly | annual
+    status = Column(String, nullable=False, default='active')  # active | expired | cancelled
+    source = Column(String, nullable=False, default='paid')    # paid | grace | support
+    current_start = Column(DateTime, nullable=True)
+    current_end = Column(DateTime, nullable=True)
+    # The open checkout, parked until Cashfree confirms: {order_id, cycle, user_id}.
+    provider_order_id = Column(String, nullable=True, index=True)
+    pending = Column(JSON, nullable=True)
+    # Managed add-ons only (Google Business Profile): requested | access_given | in_progress | done
+    service_status = Column(String, nullable=True)
+    support_ticket_id = Column(Integer, ForeignKey('support_tickets.id'), nullable=True)
+    # The last renewal reminder sent, in days before the end (7, 3, 1), so the
+    # hourly job says each one once.
+    reminder_days_sent = Column(Integer, nullable=True)
+    expiry_notified = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    clinic = relationship("Clinic")
 
 
 class ReferralCode(Base):
