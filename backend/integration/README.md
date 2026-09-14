@@ -52,6 +52,7 @@ Absent tokens mean the API refuses every request rather than running open.
 | `GET /leads` | the pipeline, out of `growth_leads` |
 | `GET /tickets` | declared `false` in `/meta` — not built yet |
 | `GET /accounts/{id}/operators`, `/messaging`, `/profile`, `/events` | the support panels — read on open, stored nowhere |
+| `GET /insights/accounts`, `/insights/activity`, `/insights/revenue` | totals and monthly series for the CRM's dashboards — counts only, never a patient |
 | `PATCH /accounts/{id}`, `POST /accounts/{id}/plan`, `/suspend`, `/activate` | the write actions, all idempotency-keyed |
 
 ## Layout
@@ -60,6 +61,7 @@ Absent tokens mean the API refuses every request rather than running open.
 mount.py        the only thing main.py touches
 reads.py        the bulk GETs the sync pulls
 panels.py       the four per-account support panels the CRM renders live
+insights.py     totals and monthly series for the CRM's dashboards
 actions.py      the writes, with the idempotency ledger
 shapes.py       rows -> the shapes the spec declares
 aggregates.py   patient/appointment/invoice counts — never rows

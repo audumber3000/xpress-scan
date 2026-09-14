@@ -105,7 +105,7 @@ def account(clinic, changed_at, branch_count: int, is_trial: bool = False,
     }
 
 
-def branch(clinic, account_clinic_id: int, metrics) -> Dict[str, Any]:
+def branch(clinic, account_clinic_id: int, account_name: str, metrics) -> Dict[str, Any]:
     """A site. In MolarPlus every clinic row is one, the account's own included.
 
     A closed branch is not a churned account: `clinics.status` answers both
@@ -116,6 +116,7 @@ def branch(clinic, account_clinic_id: int, metrics) -> Dict[str, Any]:
     return {
         "id": ext_id(clinic.id),
         "account_id": org.account_id(account_clinic_id),
+        "account_name": account_name or "",
         "name": clinic.name or "",
         "code": clinic.clinic_code,
         "status": vocab.branch_status(clinic.status, clinic.id),
@@ -141,7 +142,7 @@ def account_stats(account_id: str, totals, currency: str, as_of) -> Dict[str, An
     }
 
 
-def subscription(row, account_clinic_id: int, clinic) -> Dict[str, Any]:
+def subscription(row, account_clinic_id: int, account_name: str, clinic) -> Dict[str, Any]:
     """What an account pays ClinoHealth.
 
     Four plan fields because they answer four different questions, and the
@@ -166,6 +167,7 @@ def subscription(row, account_clinic_id: int, clinic) -> Dict[str, Any]:
     return {
         "id": ext_id(row.id),
         "account_id": org.account_id(account_clinic_id),
+        "account_name": account_name or "",
         "plan_code": plans.stored_name(tier, cycle),
         "plan_tier": tier,
         "effective_tier": plans.effective_plan(row.plan_name, row.status, row.current_end),
@@ -202,7 +204,7 @@ def subscription(row, account_clinic_id: int, clinic) -> Dict[str, Any]:
     }
 
 
-def payment(row, account_clinic_id: int) -> Dict[str, Any]:
+def payment(row, account_clinic_id: int, account_name: str) -> Dict[str, Any]:
     """Settled money — what MRR, ARR and revenue-over-time are actually built from.
 
     `amount` is what the provider settled: tax included, discount already
@@ -223,6 +225,7 @@ def payment(row, account_clinic_id: int) -> Dict[str, Any]:
     return {
         "id": ext_id(row.id),
         "account_id": org.account_id(account_clinic_id),
+        "account_name": account_name or "",
         "subscription_id": ext_id(row.subscription_id),
         "plan_name": row.plan_name,
         "amount": money(row.amount, row.currency),

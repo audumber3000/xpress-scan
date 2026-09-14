@@ -426,6 +426,21 @@ def test_branch_carries_its_own_numbers(client):
     assert branches["1"]["code"] == "CLN-1"
 
 
+def test_a_branch_names_the_clinic_it_belongs_to(client):
+    """The CRM's tables are read by people. `clinic:1` means nothing to them."""
+    branches = dict((b["id"], b) for b in get(client, "/branches")["data"])
+    assert branches["2"]["name"] == "Smile Dental — Kothrud"
+    assert branches["2"]["account_name"] == "Smile Dental Care"
+    assert branches["1"]["account_name"] == "Smile Dental Care"
+    # A parent that no longer exists leaves the clinic as its own account.
+    assert branches["5"]["account_name"] == "Orphaned Practice"
+
+
+def test_branches_search_by_the_clinic_they_belong_to(client):
+    page = get(client, "/branches", page=1, q="Smile Dental Care")
+    assert sorted(b["id"] for b in page["data"]) == ["1", "2", "3"]
+
+
 # ── Stats ────────────────────────────────────────────────────────────────────
 
 def test_account_stats_equal_the_sum_of_its_branches(client):
@@ -507,6 +522,7 @@ def test_a_branch_subscription_belongs_to_the_account(client):
     """Dropping it would delete real MRR from the CRM's totals."""
     subs = dict((s["id"], s) for s in get(client, "/subscriptions")["data"])
     assert subs["101"]["account_id"] == "clinic:1"
+    assert subs["101"]["account_name"] == "Smile Dental Care"
 
 
 def test_effective_tier_shows_a_lapse(client, db_session):
@@ -549,6 +565,8 @@ def test_payments_carry_their_account_and_provider(client):
     assert payments["200"]["account_id"] == "clinic:1"
     assert payments["200"]["provider"] == "cashfree"
     assert payments["202"]["account_id"] == "clinic:4"
+    assert payments["200"]["account_name"] == "Smile Dental Care"
+    assert payments["202"]["account_name"] == "Bright Smiles"
 
 
 def test_paid_after_filters(client):
@@ -658,6 +676,7 @@ def test_change_plan_moves_both_columns(client, db_session):
     subscription = response.json()
     assert subscription["plan_tier"] == "growth"
     assert subscription["mrr"]["amount_micros"] == 1500000000
+    assert subscription["account_name"] == "Smile Dental Care"
     # What was bought and what may be used both move, or the header says one
     # thing and the subscription page another.
     assert db_session.query(Clinic).filter(Clinic.id == 1).first().subscription_plan == "growth"
@@ -1559,7 +1578,27 @@ def test_a_date_bound_narrows_the_renewals_list(client):
 def test_search_matches_the_account_name(client):
     page = get(client, "/subscriptions", page=1, q="smile")
     assert page["total"] >= 1
-    assert all("mile" in row["account_id"] or True for row in page["data"])
+    assert all("smile" in row["account_name"].lower() for row in page["data"])
+
+
+def test_a_branch_subscription_is_found_by_its_clinics_name(client):
+    """Subscription 101 is held by the Kothrud branch. Searching for the clinic
+    the list says it belongs to has to find it."""
+    page = get(client, "/subscriptions", page=1, q="Smile Dental Care")
+    assert sorted(row["id"] for row in page["data"]) == ["100", "101"]
+
+
+def test_sorting_by_account_name_orders_by_the_name_displayed(client, db_session):
+    """Ordering by the row's own clinic would file the Kothrud branch's
+    subscription under its own name, out of step with the "Smile Dental Care"
+    printed beside it."""
+    # A branch name that sorts first on its own and last under its account.
+    db_session.query(Clinic).filter(Clinic.id == 2).first().name = "Aundh Dental"
+    db_session.commit()
+    for path in ("/subscriptions", "/branches"):
+        rows = get(client, path, page=1, sort="account_name:asc")["data"]
+        names = [row["account_name"] for row in rows]
+        assert names == sorted(names), path
 
 
 def test_sorting_by_mrr_uses_the_catalogue_not_the_plan_name(client):
@@ -1751,3 +1790,106 @@ def test_grouping_payments_and_branches_agrees_with_filtering_too(client):
             page = get(client, resource, page=1, status=value)
             assert page["total"] == count, "%s %s: %s vs %s" % (
                 resource, value, count, page["total"])
+
+
+# ── Insights: totals for the CRM's dashboards ────────────────────────────────
+
+import json as _json                                               # noqa: E402
+
+import integration.insights as insights                            # noqa: E402
+
+
+@pytest.fixture()
+def at_seed_time(monkeypatch):
+    """The windows are relative to now, and the seed is dated NOW. An hour after
+    it, so rows stamped NOW are in the past and inside the current month."""
+    monkeypatch.setattr(insights, "utcnow", lambda: NOW + datetime.timedelta(hours=1))
+
+
+def test_insights_count_accounts_by_what_they_pay(client, at_seed_time):
+    body = get(client, "/insights/accounts")
+    assert body["accounts"] == 3 and body["branches"] == 5
+    assert dict((s["key"], s["count"]) for s in body["by_state"]) == {
+        "paying": 2, "trial": 1, "past_due": 0, "expired": 0, "none": 0}
+    assert [t["key"] for t in body["paying_by_tier"]] == ["plus", "pro", "growth"]
+    assert body["trials_ending_7_days"] == 1
+
+
+def test_a_group_with_two_subscriptions_is_one_paying_clinic(client, at_seed_time):
+    """Smile Dental Care pays on its own row and on its Kothrud branch's. It is
+    still one customer, and the state counts add up to the accounts."""
+    body = get(client, "/insights/accounts")
+    assert sum(s["count"] for s in body["by_state"]) == body["accounts"]
+
+
+def test_a_quiet_month_is_zero_not_missing(client, at_seed_time):
+    body = get(client, "/insights/accounts", months=6)
+    assert body["months"] == ["2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09"]
+    for series in ("signups", "converted", "lapsed"):
+        assert [m["month"] for m in body[series]] == body["months"]
+
+
+def test_a_clinic_converts_in_the_month_of_its_first_payment(client, at_seed_time):
+    body = get(client, "/insights/accounts", months=13)
+    converted = dict((m["month"], m["count"]) for m in body["converted"] if m["count"])
+    # Smile Dental first paid in September 2025; Bright Smiles this month.
+    assert converted == {"2025-09": 1, "2026-09": 1}
+    assert dict((m["month"], m["count"]) for m in body["signups"] if m["count"]) == {"2025-09": 3}
+
+
+def test_a_lapsed_plan_is_expired_in_the_month_it_ended(client, db_session, at_seed_time):
+    sub = db_session.query(Subscription).filter(Subscription.id == 103).first()
+    sub.is_trial, sub.status = False, "expired"
+    sub.current_end = NOW - datetime.timedelta(days=3)
+    db_session.commit()
+    body = get(client, "/insights/accounts")
+    assert dict((s["key"], s["count"]) for s in body["by_state"])["expired"] == 1
+    assert body["lapsed"][-1] == {"month": "2026-09", "count": 1}
+
+
+def test_activity_counts_patients_appointments_and_active_clinics(client, at_seed_time):
+    body = get(client, "/insights/activity")
+    assert body["end_customers"] == 6 and body["transactions"] == 4
+    assert body["new_end_customers"][-1] == {"month": "2026-09", "count": 6}
+    assert body["transactions_by_month"][-1] == {"month": "2026-09", "count": 4}
+    assert body["active_accounts"] == {"accounts": 3, "days_7": 1, "days_30": 1}
+    top = body["top_accounts"][0]
+    assert top["account_name"] == "Smile Dental Care" and top["end_customer_count"] == 6
+
+
+def test_activity_gmv_leaves_out_drafts(client, at_seed_time):
+    body = get(client, "/insights/activity")
+    assert body["gmv_by_month"][-1]["amounts"] == [
+        {"amount_micros": 8500000000, "currency": "INR"}]
+
+
+def test_insights_never_carry_a_patient(client, at_seed_time):
+    """Counts and clinic names only. The seed's patients are named P1-0, P1-1…"""
+    for path in ("/insights/accounts", "/insights/activity", "/insights/revenue"):
+        assert "P1-" not in _json.dumps(get(client, path))
+
+
+def test_revenue_mrr_agrees_with_the_subscription_list(client, at_seed_time):
+    """Two ways to ask one question must give one answer."""
+    body = get(client, "/insights/revenue")
+    rows = get(client, "/subscriptions", page=1, page_size=200)["data"]
+    assert body["mrr"]["amount_micros"] == sum(r["mrr_base"]["amount_micros"] for r in rows)
+    assert body["mrr"]["currency"] == "INR" and body["paying_accounts"] == 2
+    assert body["arr"]["amount_micros"] == body["mrr"]["amount_micros"] * 12
+
+
+def test_revenue_collected_keeps_currencies_apart(client, at_seed_time):
+    body = get(client, "/insights/revenue")
+    this_month = body["collected"][-1]
+    assert this_month["count"] == 2
+    assert this_month["amounts"] == [
+        {"amount_micros": 1178820000, "currency": "INR"},
+        {"amount_micros": 77000000, "currency": "USD"},
+    ]
+
+
+def test_insights_refuse_a_window_they_cannot_serve(client):
+    for months in (0, 25):
+        response = client.get(integration.PREFIX + "/insights/revenue", headers=READONLY,
+                              params={"months": months})
+        assert response.status_code == 422

@@ -34,7 +34,7 @@ to share the number. A rename is loud; a silent wrong merge is not.
 import datetime
 from typing import List
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import aliased
 
 from models import Clinic
@@ -89,6 +89,24 @@ def is_account_root():
         Clinic.parent_clinic_id.is_(None),
         Clinic.parent_clinic_id == Clinic.id,
         ~select(parent.id).where(parent.id == Clinic.parent_clinic_id).exists(),
+    )
+
+
+def account_name():
+    """SQL expression: the name of the account a `clinics` row belongs to.
+
+    `account_of`, written for ORDER BY and WHERE. A list shows `account_name`,
+    so it has to sort and search by the same value — ordering by the row's own
+    clinic name files a branch's subscription under "Smile Dental — Kothrud"
+    while the cell beside it reads "Smile Dental Care".
+    """
+    parent = aliased(Clinic)
+    return func.coalesce(
+        select(parent.name)
+        .where(parent.id == Clinic.parent_clinic_id, parent.id != Clinic.id)
+        .correlate(Clinic)
+        .scalar_subquery(),
+        Clinic.name,
     )
 
 

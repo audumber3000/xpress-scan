@@ -79,6 +79,9 @@ def get_meta(caller: Caller = Depends(require_read)):
             "campaigns": True,
             "write_promotions": True,
             "promotion_redemptions": True,
+            # Totals and monthly series for the CRM's dashboards. See
+            # integration/insights.py.
+            "insights": True,
             "tickets": False,          # Phase 4
             # The support panels. Declared separately from the feeds
             # above because they fail differently: a product that
@@ -417,6 +420,7 @@ def get_account_stats(account_id: str, db: Session = Depends(get_db),
 
 BRANCH_SORTS = {
     "name": Clinic.name,
+    "account_name": org.account_name(),
     "status": Clinic.status,
     "created_at": Clinic.created_at,
     # The one the "going quiet" screens order by, and the reason this is a SQL
@@ -471,7 +475,8 @@ def list_branches(
     statuses = query.csv(status)
     if statuses:
         rows_q = rows_q.filter(vocab.branch_status_filter(Clinic.status, statuses))
-    rows_q = query.search(rows_q, browse.q, (Clinic.name, Clinic.clinic_code, Clinic.city))
+    rows_q = query.search(rows_q, browse.q, (Clinic.name, org.account_name(),
+                                             Clinic.clinic_code, Clinic.city))
 
     if browse.group_by:
         return query.group(rows_q, browse.group_by, BRANCH_GROUPS)
@@ -491,25 +496,10 @@ def list_branches(
 def _branches(db: Session, visible) -> List[Dict[str, Any]]:
 
     """One page of branches, with the account each belongs to and its numbers."""
-    # A branch's account is its parent — unless that parent no longer exists,
-    # in which case the row is an account in its own right. Resolving it here
-    # rather than trusting `parent_clinic_id` blindly is what stops an orphan
-    # being attributed to an account that is not there.
-    parent_ids = set(
-        c.parent_clinic_id for c in visible
-        if c.parent_clinic_id and c.parent_clinic_id != c.id
-    )
-    live_parents = set(
-        row[0] for row in db.query(Clinic.id).filter(Clinic.id.in_(parent_ids)).all()
-    ) if parent_ids else set()
-
+    accounts = _accounts_of(db, visible)
     metrics = aggregates.for_clinics(db, [c.id for c in visible])
     return [
-        shapes.branch(
-            clinic,
-            clinic.parent_clinic_id if clinic.parent_clinic_id in live_parents else clinic.id,
-            metrics[clinic.id],
-        )
+        shapes.branch(clinic, *accounts[clinic.id], metrics=metrics[clinic.id])
         for clinic in visible
     ]
 
@@ -538,7 +528,7 @@ SUBSCRIPTION_MRR = case(
 )
 
 SUBSCRIPTION_SORTS = {
-    "account_name": Clinic.name,
+    "account_name": org.account_name(),
     "plan_tier": plans_view.rank_expression(Subscription.plan_name),
     "mrr": SUBSCRIPTION_MRR,          # i.e. mrr_base — the comparable one
     "status": Subscription.status,
@@ -626,7 +616,8 @@ def list_subscriptions(
     after = parse_rfc3339(current_end_after)
     if after is not None:
         rows_q = rows_q.filter(Subscription.current_end >= after)
-    rows_q = query.search(rows_q, browse.q, (Clinic.name, Subscription.plan_name))
+    rows_q = query.search(rows_q, browse.q, (Clinic.name, org.account_name(),
+                                             Subscription.plan_name))
 
     if browse.group_by:
         # MRR by tier and by billing cycle, and the Kanban column counts, in one
@@ -663,8 +654,8 @@ def list_subscriptions(
 
 
 def _subscriptions(db: Session, rows) -> List[Dict[str, Any]]:
-    account_of = _account_clinic_ids(db, [clinic for _, clinic in rows])
-    return [shapes.subscription(sub, account_of[clinic.id], clinic)
+    accounts = _accounts_of(db, [clinic for _, clinic in rows])
+    return [shapes.subscription(sub, *accounts[clinic.id], clinic=clinic)
             for sub, clinic in rows]
 
 
@@ -707,25 +698,41 @@ def _warn_unattributable(db: Session) -> None:
         )
 
 
-def _account_clinic_ids(db: Session, clinics: List[Clinic]) -> Dict[int, int]:
-    """Clinic id → the clinic id of the account it belongs to."""
+def _accounts_of(db: Session, clinics: List[Clinic]) -> Dict[int, Tuple[int, str]]:
+    """Clinic id → the id and name of the account it belongs to.
+
+    A clinic's account is its parent — unless that parent no longer exists, in
+    which case the row is an account in its own right. Resolving it here rather
+    than trusting `parent_clinic_id` blindly is what stops an orphan being
+    attributed to an account that is not there.
+
+    The name travels with the id because a person reads these lists, and
+    `clinic:42` is not something anybody recognises. One query for the page's
+    parents, not one per row.
+    """
     parent_ids = set(
         c.parent_clinic_id for c in clinics
         if c.parent_clinic_id and c.parent_clinic_id != c.id
     )
-    live = set(
-        row[0] for row in db.query(Clinic.id).filter(Clinic.id.in_(parent_ids)).all()
-    ) if parent_ids else set()
+    parents = dict(
+        db.query(Clinic.id, Clinic.name).filter(Clinic.id.in_(parent_ids)).all()
+    ) if parent_ids else {}
     return dict(
-        (c.id, c.parent_clinic_id if c.parent_clinic_id in live else c.id)
+        (c.id, (c.parent_clinic_id, parents[c.parent_clinic_id])
+         if c.parent_clinic_id in parents else (c.id, c.name))
         for c in clinics
     )
+
+
+def _account_clinic_ids(db: Session, clinics: List[Clinic]) -> Dict[int, int]:
+    """Clinic id → the clinic id of the account it belongs to."""
+    return dict((cid, account[0]) for cid, account in _accounts_of(db, clinics).items())
 
 
 # ── Payments ─────────────────────────────────────────────────────────────────
 
 PAYMENT_SORTS = {
-    "account_name": Clinic.name,
+    "account_name": org.account_name(),
     "amount": SubscriptionPayment.amount,
     "paid_at": SubscriptionPayment.paid_at,
     "status": SubscriptionPayment.status,
@@ -793,15 +800,16 @@ def list_payments(
         rows_q = rows_q.filter(vocab.payment_status_filter(
             SubscriptionPayment.status, statuses))
     rows_q = query.search(rows_q, browse.q, (
-        Clinic.name, SubscriptionPayment.plan_name, SubscriptionPayment.coupon_code))
+        Clinic.name, org.account_name(), SubscriptionPayment.plan_name,
+        SubscriptionPayment.coupon_code))
 
     if browse.group_by:
         return query.group(rows_q, browse.group_by, PAYMENT_GROUPS,
                            {"amount": func.sum(SubscriptionPayment.amount)})
 
     def serialise(page_rows):
-        account_of = _account_clinic_ids(db, [clinic for _, clinic in page_rows])
-        return [shapes.payment(pay, account_of[clinic.id]) for pay, clinic in page_rows]
+        accounts = _accounts_of(db, [clinic for _, clinic in page_rows])
+        return [shapes.payment(pay, *accounts[clinic.id]) for pay, clinic in page_rows]
 
     if browse.paging:
         rows_q = query.order(rows_q, browse.sort, PAYMENT_SORTS, changed.desc())

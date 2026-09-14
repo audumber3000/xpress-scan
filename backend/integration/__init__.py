@@ -24,6 +24,7 @@ on different versions during a migration.
     reads.py       the bulk pull
     panels.py      the four per-account support panels, rendered not synced
     marketing.py   discount codes and broadcast history
+    insights.py    totals and monthly series for the CRM's dashboards
     actions.py     the writes, idempotent and audited
     store.py       the idempotency and audit tables
 
@@ -34,7 +35,7 @@ on, and they have different reasons to change.
 """
 from fastapi import APIRouter
 
-from . import actions, marketing, panels, reads
+from . import actions, insights, marketing, panels, reads
 
 PREFIX = "/integration/v1"
 
@@ -42,6 +43,7 @@ router = APIRouter()
 router.include_router(reads.router)
 router.include_router(panels.router)
 router.include_router(marketing.router)
+router.include_router(insights.router)
 router.include_router(actions.router)
 
 __all__ = ["router", "PREFIX"]

@@ -376,7 +376,7 @@ def change_plan(account_id: str, body: PlanChange, response: Response,
         )
     db.flush()
 
-    result = shapes.subscription(subscription, clinic.id, clinic)
+    result = shapes.subscription(subscription, clinic.id, clinic.name, clinic)
     headers = {MANDATE_HEADER: mandate_state}
     response.headers[MANDATE_HEADER] = mandate_state
     return _commit(db, idempotency_key, "POST /accounts/plan", payload, caller,
