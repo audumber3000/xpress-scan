@@ -49,6 +49,12 @@ jobs:
       LOCAL_DB_PASSWORD: postgres
       JWT_SECRET: test-jwt-secret-for-testing-only
       REDIS_URL: redis://localhost:6379/0
+      # The add-on checkout builds a Cashfree client before it dispatches a
+      # webhook, so the payment tests need these present. Dummy values, like
+      # the staging-smoke job's: nothing here ever reaches Cashfree.
+      CASHFREE_APP_ID: ci-dummy
+      CASHFREE_SECRET_KEY: ci-dummy
+      CASHFREE_ENV: sandbox
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
