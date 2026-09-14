@@ -102,6 +102,8 @@ const Checkout = () => {
   const taxRate = product.tax_rate;
   const tax = Math.round(subtotal * taxRate * 100) / 100;
   const total = Math.round((subtotal + tax) * 100) / 100;
+  // What renewing costs, said as the one figure that gets paid.
+  const withTax = (amount) => Math.round(amount * (1 + taxRate) * 100) / 100;
   const annualSaving = product.monthly * 12 - product.annual_total;
 
   const setBilling = (next) => {
@@ -388,8 +390,8 @@ const Checkout = () => {
                   nothing did, and a clinic that believed it was locked a month
                   later without having done anything wrong. */}
               {isAnnual
-                ? `Covers one year. Nothing is charged automatically: we remind you 7, 3 and 1 days before it ends, and renewing is ${money(plan.annual_total)}${tax > 0 ? ' plus ' + (catalogue.tax_label || 'tax') : ''}.`
-                : `Covers one month. Nothing is charged automatically: we remind you 7, 3 and 1 days before it ends, and renewing is ${money(plan.monthly)}${tax > 0 ? ' plus ' + (catalogue.tax_label || 'tax') : ''}.`}
+                ? `Covers one year. Nothing is charged automatically: we remind you 7, 3 and 1 days before it ends, and renewing is ${money(withTax(plan.annual_total))}.`
+                : `Covers one month. Nothing is charged automatically: we remind you 7, 3 and 1 days before it ends, and renewing is ${money(withTax(plan.monthly))}.`}
             </p>
             )}
 

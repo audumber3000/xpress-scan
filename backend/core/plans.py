@@ -101,7 +101,7 @@ PLANS = {
             "10 staff logins",
             "1,000 new patients and appointments a month",
             "150 GB for X-rays, photos and files",
-            "WhatsApp from your own number",
+            "Every add-on included, starting with your own WhatsApp number",
             "Per-person permissions across 13 modules",
             "One inbox for email and WhatsApp",
             "Local competitor tracking",

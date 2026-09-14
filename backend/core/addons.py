@@ -51,6 +51,8 @@ MANAGED = "managed"    # our team does the work after purchase
 #
 # `included_from_rank`: the plan rank from which the add-on is free. None means
 # it is never included, on any plan.
+# Pro and above include every add-on. That is the whole shape of the ladder:
+# Plus buys what it needs one at a time, Pro stops counting.
 ADDONS = {
     "own_whatsapp": {
         "order": 1,
@@ -70,8 +72,8 @@ ADDONS = {
         "icon": "google_business",
         "availability": LIVE,
         "fulfilment": MANAGED,
-        "price": {"INR": {"monthly": 299, "annual": 2870}},
-        "included_from_rank": None,
+        "price": {"INR": {"monthly": 150, "annual": 1440}},
+        "included_from_rank": plans.PLANS["pro"]["rank"],
         "manage_link": None,
     },
     "upi_payments": {
@@ -81,9 +83,8 @@ ADDONS = {
         "icon": "upi",
         "availability": COMING_SOON,
         "fulfilment": AUTO,
-        # Included with Pro. Not priced for Plus yet, so the card says so rather
-        # than inventing a number.
-        "price": None,
+        # Included with Pro; a Plus clinic adds it.
+        "price": {"INR": {"monthly": 200, "annual": 1920}},
         "included_from_rank": plans.PLANS["pro"]["rank"],
         "manage_link": "/admin/integrations/payments",
     },
@@ -95,9 +96,7 @@ ADDONS = {
         "availability": COMING_SOON,
         "fulfilment": AUTO,
         "price": {"INR": {"monthly": 350, "annual": 3360}},
-        # Not included in Plus or Pro. Growth is treated the same until told
-        # otherwise: one number to change here if Growth should include it.
-        "included_from_rank": None,
+        "included_from_rank": plans.PLANS["pro"]["rank"],
         "manage_link": "/admin/integrations/xray",
     },
 }
@@ -245,12 +244,14 @@ def entitled(db, clinic, key: str, now: Optional[_dt.datetime] = None) -> bool:
 
 # ── For the client ───────────────────────────────────────────────────────────
 def _state_of(item: dict, row, included: bool, available: bool, now: _dt.datetime) -> str:
+    if item["availability"] == COMING_SOON:
+        # Even for a plan that includes it. "In your plan" about something a
+        # clinic cannot switch on yet reads as a feature that is broken.
+        return "coming_soon"
     if included:
         return "included"
     if row is not None and row.status == STATUS_ACTIVE and (not row.current_end or row.current_end > now):
         return "grace" if row.source == SOURCE_GRACE else "active"
-    if item["availability"] == COMING_SOON:
-        return "coming_soon"
     if not available:
         return "unavailable"
     if row is not None and row.current_end is not None and row.status in (STATUS_ACTIVE, STATUS_EXPIRED):

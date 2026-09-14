@@ -39,7 +39,7 @@ const Feature = ({ text }) => {
   );
 };
 
-const PlanCard = ({ plan, cycle: pageCycle, isCurrent: isCurrentFor, isDowngrade, locked, continues: continuesFor, taxLabel, discount, adds, onChoose, className = '' }) => {
+const PlanCard = ({ plan, cycle: pageCycle, isCurrent: isCurrentFor, isDowngrade, locked, continues: continuesFor, discount, adds, onChoose, className = '' }) => {
   // A card can be flipped to annual on its own ("or ₹3,830/year, 2 months
   // free") without moving the whole page. The page toggle still wins whenever
   // it changes, so the two never disagree for long.
@@ -92,7 +92,6 @@ const PlanCard = ({ plan, cycle: pageCycle, isCurrent: isCurrentFor, isDowngrade
           {annual
             ? `${formatPrice(applyDiscount(plan.annual_total, discount), plan.currency)} once a year${free >= 1 ? `, ${free} months free` : `, saving ${formatPrice(saving, plan.currency)}`}`
             : 'Paid monthly'}
-          {taxLabel ? ` · plus ${taxLabel}` : ''}
         </p>
         {/* The annual offer where the decision is made, as one tap. A toggle at
             the top of the page is a step most people never take, and "2 months
@@ -242,7 +241,6 @@ const PlanCards = ({ catalogue, currentPlanName, cycle, onCycleChange, onChoose,
             plan={plan}
             cycle={cycle}
             className={plan.popular ? 'order-first lg:order-none' : ''}
-            taxLabel={catalogue.tax_label}
             discount={discount}
             adds={differentiator(plan, currentPlan)}
             isCurrent={(c) => !!isPaying && plan.key === current.key && c === current.cycle}

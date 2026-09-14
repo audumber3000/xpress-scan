@@ -90,7 +90,9 @@ def test_catalogue_prices_in_rupees_with_gst(db_session, test_clinic):
     wa = _item(cat, "own_whatsapp")
     assert (wa["monthly"], wa["annual_total"], wa["annual_pct_off"]) == (289.0, 2774.0, 20)
     gbp = _item(cat, "gbp_management")
-    assert (gbp["monthly"], gbp["annual_total"]) == (299.0, 2870.0)
+    assert (gbp["monthly"], gbp["annual_total"]) == (150.0, 1440.0)
+    upi = _item(cat, "upi_payments")
+    assert (upi["monthly"], upi["annual_total"]) == (200.0, 1920.0)
     assert _item(cat, "xray_integration")["monthly"] == 350.0
     assert "USD" not in json.dumps(cat)
 
@@ -101,17 +103,21 @@ def test_catalogue_states_for_a_plus_clinic(db_session, test_clinic):
     assert _item(cat, "own_whatsapp")["included_from_plan"] == "Pro"
     assert _item(cat, "gbp_management")["state"] == "not_bought"
     assert _item(cat, "upi_payments")["state"] == "coming_soon"
-    assert _item(cat, "upi_payments")["priced"] is False
+    assert _item(cat, "upi_payments")["priced"] is True
     assert _item(cat, "xray_integration")["state"] == "coming_soon"
 
 
-def test_pro_includes_own_whatsapp_and_upi_but_not_xray(db_session, test_clinic):
+def test_pro_includes_every_addon(db_session, test_clinic):
     _subscribe(db_session, test_clinic, "pro")
     cat = addons.catalogue(db_session, test_clinic)
     assert _item(cat, "own_whatsapp")["state"] == "included"
-    assert _item(cat, "upi_payments")["state"] == "included"
-    assert _item(cat, "xray_integration")["state"] == "coming_soon"
-    assert _item(cat, "gbp_management")["state"] == "not_bought"
+    assert _item(cat, "gbp_management")["state"] == "included"
+    for key in ("own_whatsapp", "gbp_management", "upi_payments", "xray_integration"):
+        assert addons.entitled(db_session, test_clinic, key) is True
+    # Included, but not yet built: the card says coming soon, not "in your plan".
+    for key in ("upi_payments", "xray_integration"):
+        assert _item(cat, key)["state"] == "coming_soon"
+        assert _item(cat, key)["included_by_plan"] is True
 
 
 def test_nothing_is_sold_outside_india_and_no_dollar_figure_appears(db_session, test_clinic):
