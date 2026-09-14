@@ -66,6 +66,7 @@ def _register_jobs(sched: AsyncIOScheduler) -> None:
         plan_limit_nudge_job,
         trial_lifecycle_job,
         account_verification_job,
+        wareach_reconcile_job,
     )
 
     sched.add_job(
@@ -146,6 +147,17 @@ def _register_jobs(sched: AsyncIOScheduler) -> None:
         trigger="cron",
         minute="*/15",
         id="appointment_reminder_scan",
+        replace_existing=True,
+    )
+
+    # Own-number WhatsApp: heal a connection whose webhook never arrived, so a
+    # clinic is not left paying for MSG91 while its own number is fine. Off
+    # the minutes the reminder scans use.
+    sched.add_job(
+        wareach_reconcile_job,
+        trigger="cron",
+        minute="4,14,24,34,44,54",
+        id="wareach_reconcile",
         replace_existing=True,
     )
 

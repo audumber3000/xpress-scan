@@ -169,8 +169,13 @@ def _request(method: str, path: str, json: dict | None = None, timeout: float = 
         data = resp.json()
     except Exception:
         data = {}
-    if resp.status_code == 404:
-        raise WorkspaceGone(404, (data or {}).get("error", "not found") if isinstance(data, dict) else "not found")
+    detail = data.get("error", "") if isinstance(data, dict) else ""
+    # Only WA Reach's own "no such workspace" answer means the workspace is gone.
+    # A 404 for the route itself (WA Reach not upgraded yet, or rolled back) must
+    # never read that way: callers forget the workspace on WorkspaceGone, and the
+    # reconcile job would do that to every clinic at once.
+    if resp.status_code == 404 and detail == "Workspace not found":
+        raise WorkspaceGone(404, detail)
     if resp.status_code >= 400:
         detail = data.get("error", "") if isinstance(data, dict) else ""
         raise WAReachError(resp.status_code, detail)
@@ -268,6 +273,55 @@ def refresh_from_remote(db, clinic, row) -> dict:
             logger.warning("WA Reach re-key failed for clinic %s: %s", clinic.id, e)
     db.commit()
     return remote
+
+
+RECONCILE_AFTER_SECONDS = 300
+
+
+def reconcile_connections(db, limit: int = 500) -> dict:
+    """Bring every clinic's stored connection in line with WA Reach.
+
+    Webhooks are the primary signal and the status endpoint heals a row when
+    somebody opens the panel. This covers the rest: a clinic whose number was
+    taken offline by a failed send and whose 'connected' webhook never made it
+    (WA Reach retries for a few hours, a MolarPlus outage can outlast that)
+    would otherwise keep paying for MSG91 until a person looked. Rows that
+    changed in the last few minutes are left alone; a webhook just did that.
+    """
+    from models import WhatsAppIntegration, Clinic
+    if not is_configured() or WAREACH_MOCK:
+        return {"checked": 0, "changed": 0}
+    cutoff = datetime.datetime.utcnow() - datetime.timedelta(seconds=RECONCILE_AFTER_SECONDS)
+    rows = (
+        db.query(WhatsAppIntegration)
+        .filter(WhatsAppIntegration.session_id.isnot(None))
+        .filter((WhatsAppIntegration.last_status_at.is_(None)) | (WhatsAppIntegration.last_status_at < cutoff))
+        .order_by(WhatsAppIntegration.last_status_at.asc().nullsfirst())
+        .limit(limit)
+        .all()
+    )
+    checked = changed = 0
+    for row in rows:
+        clinic = db.query(Clinic).filter(Clinic.id == row.clinic_id).first()
+        if not clinic:
+            continue
+        before = row.status
+        try:
+            refresh_from_remote(db, clinic, row)
+        except WAReachError as e:
+            # Raised before anything on the row changed, so there is nothing to undo.
+            if e.status_code in (0, 401, 403, 404) or e.status_code >= 500:
+                # Unreachable, refusing our partner key or address, or not
+                # speaking the partner API: every other row fails the same way,
+                # and sends are already falling back to MSG91.
+                logger.warning("WA Reach reconcile stopped: %s", e)
+                break
+            continue
+        checked += 1
+        if row.status != before:
+            changed += 1
+            logger.info("WA Reach reconcile: clinic %s %s -> %s", row.clinic_id, before, row.status)
+    return {"checked": checked, "changed": changed}
 
 
 def mark_offline(db, clinic_id: int, reason: str = "", drop_key: bool = False) -> None:

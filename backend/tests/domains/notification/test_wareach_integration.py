@@ -639,3 +639,78 @@ def test_auth_me_reports_the_own_number_connection(client, auth_headers, db_sess
     me = client.get("/api/v1/auth/me", headers=auth_headers).json()
     clinic = me.get("clinic") or (me.get("user") or {}).get("clinic") or {}
     assert clinic.get("own_whatsapp_connected") is True
+
+
+# ── Partner client and the reconcile safety net ──────────────────────────────
+
+class _HttpResp:
+    def __init__(self, status_code, payload):
+        self.status_code = status_code
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+
+def test_only_wareachs_own_404_means_the_workspace_is_gone(configured, monkeypatch):
+    replies = []
+    monkeypatch.setattr("httpx.Client.request", lambda self, method, url, **kw: replies.pop(0))
+
+    replies.append(_HttpResp(404, {"error": "Workspace not found"}))
+    with pytest.raises(WorkspaceGone):
+        wareach_service.fetch_status("ws-1")
+
+    # WA Reach not upgraded yet / rolled back: the route itself is missing.
+    replies.append(_HttpResp(404, {"error": "Not found", "path": "/api/partner/v1/workspaces/ws-1/status"}))
+    with pytest.raises(WAReachError) as err:
+        wareach_service.fetch_status("ws-1")
+    assert not isinstance(err.value, WorkspaceGone)
+
+
+def test_reconcile_heals_a_row_whose_webhook_never_arrived(db_session, test_clinic, fake_wareach):
+    import datetime
+    calls, state = fake_wareach
+    row = _connected_row(db_session, test_clinic)
+    row.status = "disconnected"           # taken offline by a failed send
+    row.last_status_at = datetime.datetime.utcnow() - datetime.timedelta(minutes=30)
+    db_session.commit()
+    state["remote"] = {"status": "connected", "qr": "", "phone_number": "919812345678"}
+
+    result = wareach_service.reconcile_connections(db_session)
+    assert result == {"checked": 1, "changed": 1}
+    assert _row(db_session, test_clinic.id).status == "connected"
+
+
+def test_reconcile_leaves_recently_updated_rows_alone(db_session, test_clinic, fake_wareach):
+    import datetime
+    calls, _ = fake_wareach
+    row = _connected_row(db_session, test_clinic)
+    row.last_status_at = datetime.datetime.utcnow()
+    db_session.commit()
+    assert wareach_service.reconcile_connections(db_session)["checked"] == 0
+    assert calls["status"] == []
+
+
+def test_reconcile_never_wipes_workspaces_when_wareach_is_misbehaving(db_session, test_clinic, configured, monkeypatch):
+    import datetime
+    row = _connected_row(db_session, test_clinic)
+    row.last_status_at = datetime.datetime.utcnow() - datetime.timedelta(hours=1)
+    db_session.commit()
+
+    def _route_missing(ws):
+        raise WAReachError(404, "Not found")
+    monkeypatch.setattr(wareach_service, "fetch_status", _route_missing)
+
+    assert wareach_service.reconcile_connections(db_session) == {"checked": 0, "changed": 0}
+    row = _row(db_session, test_clinic.id)
+    assert row.session_id == "ws-live" and row.api_key_enc and row.status == "connected"
+
+
+def test_reconcile_job_is_registered():
+    import ast
+    import pathlib
+    src = pathlib.Path(__file__).resolve().parents[3] / "core" / "scheduler.py"
+    tree = ast.parse(src.read_text())
+    ids = {kw.value.value for node in ast.walk(tree) if isinstance(node, ast.Call)
+           for kw in node.keywords if kw.arg == "id" and isinstance(kw.value, ast.Constant)}
+    assert "wareach_reconcile" in ids

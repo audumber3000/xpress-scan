@@ -1389,3 +1389,29 @@ async def account_verification_job() -> None:
         logger.error("account_verification error: %s", exc)
     finally:
         db.close()
+
+
+async def wareach_reconcile_job() -> None:
+    """Own-number WhatsApp: re-check stored connections against WA Reach.
+
+    See wareach_service.reconcile_connections. The HTTP calls run in a worker
+    thread, because this scheduler shares the API's event loop and a slow
+    WA Reach must not stall requests.
+    """
+    import asyncio
+
+    def _run():
+        from database import SessionLocal
+        from domains.notification.services import wareach_service
+        db = SessionLocal()
+        try:
+            return wareach_service.reconcile_connections(db)
+        finally:
+            db.close()
+
+    try:
+        result = await asyncio.to_thread(_run)
+        if result.get("changed"):
+            logger.info("wareach_reconcile: %s", result)
+    except Exception as exc:
+        logger.error("wareach_reconcile error: %s", exc)
