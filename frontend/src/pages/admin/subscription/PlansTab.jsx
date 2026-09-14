@@ -63,7 +63,7 @@ const REASSURANCE = [
   // this says how a smaller plan is actually reached rather than implying a
   // button that is disabled.
   { icon: <RefreshCcw size={14} />, text: 'Move up at any time. To move to a smaller plan, pick it when your current one comes up for renewal.' },
-  { icon: <FileText size={14} />, text: 'A GST invoice for every payment, so a registered clinic can claim input credit.' },
+  { icon: <FileText size={14} />, text: 'An invoice for every payment, ready to download from Billing History.' },
   { icon: <Lock size={14} />, text: 'Payments handled by Cashfree. We never see or store your card.' },
 ];
 
