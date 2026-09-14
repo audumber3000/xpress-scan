@@ -338,6 +338,10 @@ class ClinicResponseDTO(ClinicBaseDTO, NullSafeResponse):
     # introduced are never asked, because turning it on retrospectively would
     # lock every current customer out of their own account on deploy day.
     security_verification_required: bool = False
+    # True while the clinic's own WhatsApp number is connected (Integrations →
+    # WhatsApp). Patient WhatsApp buttons then send from that number
+    # automatically, even with manual_whatsapp on.
+    own_whatsapp_connected: bool = False
     # Where the clinic stands with its plan: 'ok', 'renewal_due', 'grant_due',
     # 'trial_ended', 'lapsed' or 'grant_ended'. Carried here so the header can
     # warn in the last few days without a second request, and so every client

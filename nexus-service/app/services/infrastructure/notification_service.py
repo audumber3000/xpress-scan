@@ -12,6 +12,72 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '../../../../.env'))
 logger = logging.getLogger(__name__)
 
 
+# ─── Own-number WhatsApp (WA Reach) outcome classification ────────────────────
+#
+# Whether MSG91 may step in depends entirely on whether the clinic's own number
+# could have sent the message. Getting this wrong in one direction drops a
+# patient's message; in the other it sends it twice. So:
+#
+#   sent       201                        done
+#   offline    409, 401, 403 (not opt-out), 404, 503, connect errors
+#                                         definitely not sent, and the number
+#                                         needs attention: fall back, and tell
+#                                         the backend to stop routing here
+#   busy       429                        not sent, number is fine: fall back
+#   rejected   502                        WhatsApp refused it: fall back
+#   opted_out  403 opted out              the patient said STOP to the clinic:
+#                                         never send it another way
+#   invalid    400                        our request was wrong; MSG91 would be too
+#   unknown    timeouts, other 5xx        may have been sent: never fall back
+WAREACH_FALLBACK_RESULTS = {"offline", "busy", "rejected"}
+
+
+def classify_wareach_response(status_code: int, data: Any) -> str:
+    if status_code in (200, 201):
+        return "sent"
+    if status_code == 403:
+        err = str((data or {}).get("error", "") if isinstance(data, dict) else "").lower()
+        return "opted_out" if "opted out" in err else "offline"
+    if status_code in (401, 404, 409, 503):
+        return "offline"
+    if status_code == 429:
+        return "busy"
+    if status_code == 502:
+        return "rejected"
+    if status_code == 400:
+        return "invalid"
+    return "unknown"
+
+
+def classify_wareach_exception(exc: Exception) -> str:
+    # The request never reached WA Reach: nothing can have been sent.
+    if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)):
+        return "offline"
+    # Anything later (a read timeout, a dropped connection) may have sent it.
+    return "unknown"
+
+
+_ATTACHMENT_NAMES = {
+    "invoice_notification": ("Invoice", "invoice_number"),
+    "receipt_notification": ("Receipt", "receipt_number"),
+    "quotation_sent": ("Quotation", "quotation_number"),
+    "prescription_notification": ("Prescription", None),
+    "treatment_summary": ("Visit_Summary", None),
+}
+
+
+def attachment_filename(event_type: str, kw: Dict[str, Any], media_url: Optional[str]) -> str:
+    """What the patient sees the file called in WhatsApp, e.g. Invoice_INV-001.pdf."""
+    import re
+    label, number_key = _ATTACHMENT_NAMES.get(event_type, (None, None))
+    if label:
+        number = str(kw.get(number_key) or "").strip() if number_key else ""
+        safe = re.sub(r"[^A-Za-z0-9._-]+", "-", number).strip("-")
+        return f"{label}_{safe}.pdf" if safe else f"{label}.pdf"
+    tail = str(media_url or "").split("?")[0].rstrip("/").rsplit("/", 1)[-1]
+    return tail if re.fullmatch(r"[A-Za-z0-9._-]{1,120}\.[A-Za-z0-9]{2,5}", tail or "") else "document.pdf"
+
+
 class NotificationService:
     """
     Unified Notification Service
@@ -475,40 +541,131 @@ class NotificationService:
     async def send_via_wareach(
         self,
         api_key: str,
-        session_id: str,
         to_phone: str,
         text: str,
         media_url: Optional[str] = None,
-        log_id: Optional[int] = None,
+        filename: Optional[str] = None,
+        mimetype: Optional[str] = None,
+        reference: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Send a free-text (optionally with media) WhatsApp from the clinic's
-        own number via WA Reach (whatsapp-web.js). Separate from MSG91.
+        """Send from the clinic's own number through WA Reach (Evolution API).
 
-        Passing log_id lets WA Reach echo it back on delivery-receipt webhooks
-        so the originating NotificationLog can be updated (sent/delivered/read)."""
-        base = os.getenv("WAREACH_URL", "http://116.203.142.56:3000").rstrip("/")
-        if not session_id or not api_key:
-            return {"success": False, "error": "WA Reach session not configured"}
-        payload = {"to": to_phone, "text": text}
+        POST {WAREACH_URL}/api/v1/messages with the clinic workspace's key.
+        `reference` is the NotificationLog id; WA Reach echoes it on the
+        delivered/read/failed webhooks so the right log row moves.
+
+        The result carries `wareach_result`, which is what decides whether
+        MSG91 may step in (see classify_wareach_response). Separate from MSG91.
+        """
+        base = (os.getenv("WAREACH_URL") or "").rstrip("/")
+        if not base:
+            return {"success": False, "error": "WAREACH_URL is not configured", "wareach_result": "offline"}
+        if not api_key:
+            return {"success": False, "error": "WA Reach workspace key missing", "wareach_result": "offline"}
+
+        payload: Dict[str, Any] = {"to": to_phone, "text": text}
         if media_url:
             payload["media_url"] = media_url
-        if log_id is not None:
-            payload["log_id"] = log_id
+            if filename:
+                payload["filename"] = filename
+            if mimetype:
+                payload["mimetype"] = mimetype
+        if reference:
+            payload["reference"] = reference
         headers = {"Authorization": f"Bearer {api_key}"}
+
+        # Connect fails fast (nothing was sent, so MSG91 can take over), the read
+        # is generous: WA Reach paces one send at a time per number, so a
+        # message can legitimately wait a few seconds for its turn.
+        timeout = httpx.Timeout(45.0, connect=5.0)
         try:
-            async with httpx.AsyncClient(timeout=20.0) as client:
-                resp = await client.post(
-                    f"{base}/api/sessions/{session_id}/send", json=payload, headers=headers
-                )
-                if resp.status_code in (200, 201):
-                    try:
-                        return {"success": True, "data": resp.json()}
-                    except Exception:
-                        return {"success": True, "data": {}}
-                return {"success": False, "error": f"WA Reach {resp.status_code}: {resp.text[:200]}"}
-        except Exception as e:
-            logger.error(f"WA Reach send error: {e}")
-            return {"success": False, "error": str(e)}
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.post(f"{base}/api/v1/messages", json=payload, headers=headers)
+        except Exception as e:  # noqa: BLE001
+            result = classify_wareach_exception(e)
+            logger.warning(f"WA Reach send {result}: {type(e).__name__}")
+            return {"success": False, "error": f"WA Reach {type(e).__name__}", "wareach_result": result}
+
+        try:
+            data = resp.json()
+        except Exception:  # noqa: BLE001
+            data = {}
+        result = classify_wareach_response(resp.status_code, data)
+        if result == "sent":
+            return {"success": True, "data": data if isinstance(data, dict) else {}, "wareach_result": result}
+        detail = data.get("error") if isinstance(data, dict) else None
+        return {
+            "success": False,
+            "error": f"WA Reach {resp.status_code}: {detail or 'send failed'}"[:300],
+            "wareach_result": result,
+            "status_code": resp.status_code,
+        }
+
+    async def _dispatch_own_number(
+        self,
+        event_type: str,
+        to_phone: str,
+        api_key: Optional[str],
+        log_id: Optional[int],
+        allow_fallback: bool,
+        template_kwargs: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """One WhatsApp from the clinic's own number, with MSG91 as the safety net.
+
+        MSG91 steps in only when the own number definitely did not send
+        (WAREACH_FALLBACK_RESULTS) and the backend said the wallet can pay for
+        it. Never on a timeout, which may have delivered, and never for a
+        patient who opted out on the clinic's number.
+        """
+        text = build_whatsapp_text(event_type, **template_kwargs)
+        media_url = (
+            template_kwargs.get("media_url")
+            or template_kwargs.get("media_id")
+            or template_kwargs.get("document_url")
+            or None
+        )
+        # Invoice/receipt/prescription PDFs can arrive as a bare R2 key. The
+        # MSG91 path resolves those in send_whatsapp; Evolution needs a URL it
+        # can fetch, so resolve here too.
+        if media_url and not str(media_url).startswith("http"):
+            media_url = self._resolve_r2_url(str(media_url))
+        filename = attachment_filename(event_type, template_kwargs, media_url) if media_url else None
+
+        own = await self.send_via_wareach(
+            api_key=api_key,
+            to_phone=to_phone,
+            text=text,
+            media_url=media_url,
+            filename=filename,
+            mimetype="application/pdf" if filename and filename.lower().endswith(".pdf") else None,
+            reference=str(log_id) if log_id else None,
+        )
+        outcome = own.get("wareach_result")
+        own["provider"] = "wareach"
+        own["wareach_offline"] = outcome == "offline"
+        # 401: WA Reach no longer accepts this workspace key (re-provisioned
+        # elsewhere, or revoked). The backend drops it and re-keys on next check.
+        own["wareach_key_rejected"] = own.get("status_code") == 401
+        if own.get("success") or outcome not in WAREACH_FALLBACK_RESULTS or not allow_fallback:
+            return own
+
+        logger.info(f"own-number WhatsApp {outcome} for [{event_type}] — falling back to MSG91")
+        try:
+            wa = build_whatsapp(event_type, **template_kwargs)
+            fallback = await self.send_whatsapp(
+                mobile_number=to_phone,
+                template_name=wa["template_name"],
+                language_code=wa.get("language") or "en",
+                components=wa["components"],
+            )
+        except Exception as e:  # noqa: BLE001
+            fallback = {"success": False, "error": f"MSG91 fallback could not be built: {e}"}
+        fallback["provider"] = "msg91"
+        fallback["fallback"] = True
+        fallback["wareach_offline"] = own["wareach_offline"]
+        fallback["wareach_key_rejected"] = own["wareach_key_rejected"]
+        fallback["wareach_error"] = own.get("error")
+        return fallback
 
     async def dispatch_event(
         self,
@@ -522,6 +679,7 @@ class NotificationService:
         wareach_session_id: Optional[str] = None,
         wareach_api_key: Optional[str] = None,
         log_id: Optional[int] = None,
+        allow_fallback: bool = False,
         **template_kwargs,
     ) -> Dict[str, Any]:
         """
@@ -554,20 +712,13 @@ class NotificationService:
             elif channel == "whatsapp":
                 # WA Reach (own number) — plain text + optional media, free.
                 if provider == "wareach":
-                    text = build_whatsapp_text(event_type, **template_kwargs)
-                    media_url = (
-                        template_kwargs.get("media_url")
-                        or template_kwargs.get("media_id")
-                        or template_kwargs.get("document_url")
-                        or None
-                    )
-                    return await self.send_via_wareach(
-                        api_key=wareach_api_key,
-                        session_id=wareach_session_id,
+                    return await self._dispatch_own_number(
+                        event_type=event_type,
                         to_phone=to_phone,
-                        text=text,
-                        media_url=media_url,
+                        api_key=wareach_api_key,
                         log_id=log_id,
+                        allow_fallback=allow_fallback,
+                        template_kwargs=template_kwargs,
                     )
                 # Default: MSG91 Meta template path (unchanged).
                 wa = build_whatsapp(event_type, **template_kwargs)

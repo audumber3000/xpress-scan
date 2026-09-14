@@ -602,8 +602,15 @@ def build_whatsapp_text(event_type: str, **kw) -> str:
     time = kw.get("appointment_time", "")
     phone = kw.get("clinic_phone", "")
 
+    # Whether a file is really going with this message. The texts below used to
+    # say "attached" unconditionally, and invoice-on-finalize, visit summaries
+    # and quotations go out with no PDF at all.
+    has_doc = bool(kw.get("media_url") or kw.get("media_id") or kw.get("document_url"))
+
     def sign() -> str:
-        return f"\n\n— {cn}" + (f"\n{phone}" if phone else "")
+        # Plain, like a person signs off. A clinic's own number carries these,
+        # and a dash-led signature reads as an automated message.
+        return f"\n\n{cn}" + (f"\n{phone}" if phone else "")
 
     if event_type == "appointment_booked":
         body = f"Hi {pn}, your appointment at {cn} is booked for {date} at {time}. We look forward to seeing you!"
@@ -616,19 +623,34 @@ def build_whatsapp_text(event_type: str, **kw) -> str:
     elif event_type == "appointment_reminder_2h":
         body = f"Hi {pn}, your appointment at {cn} is in about 2 hours, at {time}. See you soon. Reply here if you cannot make it."
     elif event_type == "invoice_notification":
-        body = f"Hi {pn}, please find your invoice from {cn} attached. Thank you for visiting us."
+        if has_doc:
+            body = f"Hi {pn}, please find your invoice from {cn} attached. Thank you for visiting us."
+        else:
+            num = kw.get("invoice_number", "")
+            total = kw.get("total_amount")
+            cur = kw.get("currency", "₹")
+            try:
+                amount = f" for {cur}{float(total):,.2f}" if total not in (None, "") else ""
+            except (TypeError, ValueError):
+                amount = ""
+            body = (f"Hi {pn}, your invoice" + (f" {num}" if num else "") + f" from {cn}{amount} is ready. "
+                    "Thank you for visiting us.")
     elif event_type == "receipt_notification":
         amt = kw.get("amount", "")
-        body = (f"Hi {pn}, thank you for your payment{f' of {amt}' if amt else ''} at {cn}. "
-                f"Your receipt is attached.")
+        body = (f"Hi {pn}, thank you for your payment{f' of {amt}' if amt else ''} at {cn}."
+                + (" Your receipt is attached." if has_doc else ""))
     elif event_type == "prescription_notification":
-        body = f"Hi {pn}, your prescription from {cn}" + (f" (Dr. {dn})" if dn else "") + " is attached. Get well soon!"
+        # Callers pass stand-ins like "your doctor" when no name is known,
+        # which read as "(Dr. your doctor)" here.
+        named = dn if dn and dn.strip().lower() not in ("your doctor", "our team", "doctor") else ""
+        body = (f"Hi {pn}, your prescription from {cn}" + (f" ({named})" if named else "")
+                + (" is attached." if has_doc else " is ready.") + " Get well soon!")
     elif event_type == "treatment_summary":
         vd = kw.get("visit_date", "")
         body = (f"Hi {pn}, thank you for visiting {cn}"
                 + (f" on {vd}" if vd else "") + ". "
-                "A summary of your visit is attached. "
-                "Please call us if anything changes or you are unsure about something.")
+                + ("A summary of your visit is attached. " if has_doc else "")
+                + "Please call us if anything changes or you are unsure about something.")
     elif event_type == "quotation_sent":
         num = kw.get("quotation_number", "")
         share = kw.get("patient_portion", "")
@@ -637,14 +659,34 @@ def build_whatsapp_text(event_type: str, **kw) -> str:
                 + (f" ({num})" if num else "") + ".\n"
                 + (f"Your estimated share: {share}\n" if share else "")
                 + (f"Valid until: {until}\n" if until else "")
-                + "\nThe attached PDF lists each procedure and its cost. "
-                  "Reply here if you would like to go ahead or have any questions.")
+                + ("\nThe attached PDF lists each procedure and its cost. " if has_doc else "\n")
+                + "Reply here if you would like to go ahead or have any questions.")
     elif event_type == "consent_form":
         link = kw.get("consent_link", "")
         body = f"Hi {pn}, please review and sign your consent form for {cn}: {link}"
+    elif event_type == "patient_form":
+        # The link is the whole message. The generic fallback used to drop it,
+        # so a patient got "you have an update" and nothing to open.
+        link = kw.get("form_link", "")
+        form = kw.get("form_name", "")
+        body = (f"Hi {pn}, {cn} has sent you "
+                + (f"the {form} form" if form else "a form")
+                + f" to fill in before your visit. It only takes a few minutes: {link}")
+    elif event_type == "staff_welcome":
+        # Never the password, even if a caller passes one: this goes over a
+        # personal WhatsApp account, not an approved template.
+        staff = kw.get("staff_name", "")
+        role = kw.get("role", "")
+        login = kw.get("login_id") or kw.get("email") or kw.get("username") or ""
+        app_url = kw.get("app_url", "")
+        body = ((f"Hi {staff}, " if staff else "Hi, ")
+                + f"you have been added to {cn} on MolarPlus" + (f" as {role}" if role else "") + "."
+                + (f"\nSign in with: {login}" if login else "")
+                + (f"\n{app_url}" if app_url else ""))
+        return body
     elif event_type == "google_review":
         link = kw.get("review_link", "")
-        body = f"Hi {pn}, thank you for visiting {cn}! We'd love your feedback — please leave us a review: {link}"
+        body = f"Hi {pn}, thank you for visiting {cn}! We'd love your feedback. Please leave us a review here: {link}"
     elif event_type == "lab_order_placed":
         lab = kw.get("lab_name", "")
         bits = [b for b in [

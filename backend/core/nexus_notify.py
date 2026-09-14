@@ -17,7 +17,7 @@ MAIN_BACKEND_URL = os.getenv("MAIN_BACKEND_URL", "http://localhost:8000")
 async def _fire(event_type: str, channel: str, to_email: str = "", to_name: str = "",
                 to_phone: str = "", template_data: dict = None, attachments=None,
                 log_id: int = None, provider: str = None,
-                wareach_session_id: str = None, wareach_api_key: str = None):
+                wareach_api_key: str = None, allow_fallback: bool = False):
     try:
         payload = {
             "event_type": event_type,
@@ -32,8 +32,10 @@ async def _fire(event_type: str, channel: str, to_email: str = "", to_name: str 
         # WA Reach (own-number WhatsApp) — only added when explicitly routing via it.
         if provider == "wareach":
             payload["provider"] = "wareach"
-            payload["wareach_session_id"] = wareach_session_id
             payload["wareach_api_key"] = wareach_api_key
+            # May nexus fall back to MSG91 if the clinic's number can't send?
+            # Only when the wallet could pay for it; see wareach_service.send_event.
+            payload["allow_fallback"] = bool(allow_fallback)
         if log_id:
             payload["log_id"] = log_id
             payload["callback_url"] = f"{MAIN_BACKEND_URL}/api/v1/notification-admin/logs/{log_id}"
@@ -53,14 +55,14 @@ _inflight_tasks: set = set()
 
 def notify(event_type: str, channel: str = "email", to_email: str = "", to_name: str = "",
            to_phone: str = "", template_data: dict = None, attachments=None, log_id: int = None,
-           provider: str = None, wareach_session_id: str = None, wareach_api_key: str = None):
+           provider: str = None, wareach_api_key: str = None, allow_fallback: bool = False):
     """
     Schedule a fire-and-forget Nexus notification from any sync or async context.
     Safe to call from within FastAPI route handlers — never raises.
     """
     coro = _fire(event_type, channel, to_email, to_name, to_phone,
                  template_data or {}, attachments, log_id, provider,
-                 wareach_session_id, wareach_api_key)
+                 wareach_api_key, allow_fallback)
     try:
         try:
             loop = asyncio.get_running_loop()

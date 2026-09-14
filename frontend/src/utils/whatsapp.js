@@ -55,7 +55,12 @@ let waWebWindow = null;
  * nothing. openWhatsApp already handles both worlds: the native app on desktop,
  * wa.me in a browser.
  */
-export const isManualWhatsApp = (user) => !!(user && user.clinic && user.clinic.manual_whatsapp);
+export const isManualWhatsApp = (user) =>
+  !!(user && user.clinic && user.clinic.manual_whatsapp && !user.clinic.own_whatsapp_connected);
+// A connected own number (Integrations → WhatsApp) wins over manual mode: the
+// server can send from that same number, with the PDF attached, so opening
+// WhatsApp by hand would only add steps. When the number is not connected,
+// manual mode behaves exactly as before.
 
 /**
  * Open WhatsApp with a prefilled message to `phone`, without piling up tabs.

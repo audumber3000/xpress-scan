@@ -740,6 +740,18 @@ async def template_test_send(
 
     cost = wallet_service.get_cost(channel, body.event_type)
 
+    # A clinic sending from its own number tests from it too, and for free.
+    # Platform templates (molarplus_*, the daily summary, OTPs) are MolarPlus
+    # talking to the clinic, and never go out from the clinic's own number.
+    from domains.notification.services import wareach_service
+    own_number = None
+    if (channel == "whatsapp"
+            and not body.event_type.startswith("molarplus_")
+            and body.event_type not in ("daily_summary", "otp_verification")):
+        own_number = wareach_service.get_active_integration(db, clinic_id)
+    if own_number:
+        cost = 0.0
+
     # Check wallet balance
     wallet = _get_or_create_wallet(clinic_id, db)
     if wallet.balance < cost:
@@ -866,6 +878,28 @@ async def template_test_send(
         },
     }
 
+    if own_number:
+        from core.phone import normalize_phone
+        demo = WA_DEMO_DATA.get(body.event_type, {
+            "patient_name": "Test Patient", "clinic_name": clinic_name,
+            "appointment_date": "25 Apr 2026", "appointment_time": "10:00 AM",
+            "clinic_phone": "+91 9000000000",
+        })
+        wareach_service.send_event(
+            db, clinic_id=clinic_id, event_type=body.event_type,
+            phone=normalize_phone(body.recipient, clinic.country if clinic else None),
+            data=demo, integration=own_number,
+        )
+        db.refresh(wallet)
+        # Handed to the clinic's number; the outcome lands on the log row.
+        return {
+            "success": True,
+            "rendered_message": rendered,
+            "cost": 0.0,
+            "new_balance": wallet.balance,
+            "provider": "wareach",
+        }
+
     # Send via Nexus
     success = False
     error_msg = None
@@ -948,6 +982,12 @@ class LogUpdateRequest(BaseModel):
     status: str                              # sent, failed
     provider_message_id: Optional[str] = None
     error_message: Optional[str] = None
+    # Own-number (WA Reach) sends only: who actually sent it, and whether the
+    # clinic's number needs attention. Absent on every MSG91 callback.
+    provider: Optional[str] = None
+    fallback: bool = False
+    wareach_offline: bool = False
+    wareach_key_rejected: bool = False
 
 
 @router.patch("/logs/{log_id}")
@@ -979,6 +1019,22 @@ async def update_notification_log(
     log = db.query(NotificationLog).filter(NotificationLog.id == log_id).first()
     if not log:
         raise HTTPException(status_code=404, detail="Log entry not found")
+
+    if log.provider == "wareach":
+        # Own-number send: may carry an MSG91 fallback to bill, or a number that
+        # went offline. MSG91 rows below are handled exactly as before.
+        from domains.notification.services import wareach_service
+        wareach_service.apply_send_outcome(
+            db, log,
+            status=body.status,
+            provider_message_id=body.provider_message_id,
+            error_message=body.error_message,
+            provider=body.provider,
+            fallback=body.fallback,
+            wareach_offline=body.wareach_offline,
+            wareach_key_rejected=body.wareach_key_rejected,
+        )
+        return {"ok": True}
 
     log.status = body.status
     if body.provider_message_id:

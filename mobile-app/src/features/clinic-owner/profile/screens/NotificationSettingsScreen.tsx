@@ -169,8 +169,8 @@ export const NotificationSettingsScreen: React.FC<Props> = ({ navigation }) => {
     setManualOn(value); // optimistic
     const ok = await notificationsApi.setManualWhatsApp(value);
     if (ok) {
+      // Silent: the switch already shows the new state.
       await refreshBackendUser();
-      notify.done(value ? 'Own-number WhatsApp turned on' : 'Turned off');
     } else {
       setManualOn(!value);
       notify.problem('Could not update the setting');
@@ -250,6 +250,7 @@ export const NotificationSettingsScreen: React.FC<Props> = ({ navigation }) => {
             manualOn={manualOn}
             savingManual={savingManual}
             onToggleManual={handleToggleManual}
+            onConnectionChange={refreshBackendUser}
             onUpgrade={() => navigation.navigate('Subscription')}
           />
         )}

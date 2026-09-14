@@ -1,30 +1,37 @@
 """
-WA Reach integration routes — connect a clinic's own WhatsApp number (Pro only).
+WA Reach integration routes: connect a clinic's own WhatsApp number.
 
-Separate from the MSG91 flow: these endpoints only manage the per-clinic WA
-Reach session/connection. Sending is unchanged and lives in dispatch/nexus.
+Separate from the MSG91 flow: these endpoints only manage the clinic's WA Reach
+workspace and its connection. Sending lives in the dispatcher and nexus.
+
+The response shapes of /status, /connect, /qr and /disconnect are what the web
+app and the shipped mobile app read, so they stay as they were.
 """
-import os
+import json
 import logging
+import os
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
 
 from database import get_db
-from models import Clinic, User, WhatsAppIntegration, NotificationLog
+from models import Clinic, User, WhatsAppIntegration
 from core.auth_utils import get_current_user
 from domains.notification.services import wareach_service
+from domains.notification.services.wareach_service import WAReachError, WorkspaceGone
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 WEBHOOK_SECRET = os.getenv("WAREACH_WEBHOOK_SECRET", "")
 
+_UNAVAILABLE = "Connecting your own WhatsApp number isn't available right now. Please try again later."
+_UNREACHABLE = "Couldn't reach the WhatsApp service. Please try again shortly."
+
 
 def _require_pro_clinic(current_user: User, db: Session) -> Clinic:
-    """Resolve the current user's clinic and ensure it's on a Pro plan."""
+    """Resolve the current user's clinic and ensure it may use WA Reach."""
     if not current_user.clinic_id:
         raise HTTPException(status_code=400, detail="No clinic associated with your account")
     clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
@@ -34,6 +41,11 @@ def _require_pro_clinic(current_user: User, db: Session) -> Clinic:
         # 402 Payment Required — frontend shows the upgrade prompt.
         raise HTTPException(status_code=402, detail="WA Reach is a Pro feature. Upgrade to connect your own WhatsApp number.")
     return clinic
+
+
+def _require_configured() -> None:
+    if not wareach_service.is_configured():
+        raise HTTPException(status_code=503, detail=_UNAVAILABLE)
 
 
 def _get_or_create_row(db: Session, clinic_id: int) -> WhatsAppIntegration:
@@ -60,13 +72,20 @@ def get_integration_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Current WA Reach connection state for this clinic. Available to any
-    logged-in user (so the UI can show 'connected'); connecting requires Pro."""
+    """Current connection state for this clinic. Available to any logged-in user
+    (so the UI can show 'connected'). A status older than a minute is refreshed
+    from WA Reach, which heals a missed webhook."""
     if not current_user.clinic_id:
-        return {"status": "disconnected", "phone_number": None, "connected": False, "is_pro": False}
+        return {"status": "disconnected", "phone_number": None, "connected": False, "is_pro": False, "available": False}
     clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
     row = _get_or_create_row(db, current_user.clinic_id)
-    return {**_serialize(row), "is_pro": wareach_service.is_pro(clinic)}
+    if clinic and row.session_id and wareach_service.is_configured() and wareach_service.status_is_stale(row):
+        try:
+            wareach_service.refresh_from_remote(db, clinic, row)
+        except WAReachError as e:
+            # The cached status is still the best answer we have.
+            logger.info(f"WA Reach status refresh failed for clinic {clinic.id}: {e}")
+    return {**_serialize(row), "is_pro": wareach_service.is_pro(clinic), "available": wareach_service.is_configured()}
 
 
 @router.post("/connect")
@@ -74,22 +93,28 @@ def connect(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Create (or restart) a WA Reach session and return a QR to scan."""
-    _require_pro_clinic(current_user, db)
-    row = _get_or_create_row(db, current_user.clinic_id)
+    """Create the clinic's workspace if it has none, then start pairing and
+    return the QR to scan."""
+    clinic = _require_pro_clinic(current_user, db)
+    _require_configured()
+    row = _get_or_create_row(db, clinic.id)
     try:
-        result = wareach_service.create_session(current_user.clinic_id)
-    except Exception as e:
-        logger.warning(f"WA Reach connect failed for clinic {current_user.clinic_id}: {e}")
-        raise HTTPException(status_code=502, detail="Couldn't reach the WhatsApp service. Please try again shortly.")
+        wareach_service.ensure_workspace(db, clinic, row)
+        try:
+            remote = wareach_service.connect(row.session_id)
+        except WorkspaceGone:
+            # Deleted on WA Reach's side: start over with a fresh workspace.
+            wareach_service.forget_workspace(row)
+            wareach_service.ensure_workspace(db, clinic, row)
+            remote = wareach_service.connect(row.session_id)
+    except WAReachError as e:
+        logger.warning(f"WA Reach connect failed for clinic {clinic.id}: {e}")
+        db.rollback()
+        raise HTTPException(status_code=502, detail=_UNREACHABLE)
 
-    row.session_id = result.get("session_id")
-    if result.get("api_key"):
-        row.api_key_enc = wareach_service.encrypt_key(result["api_key"])
-    row.status = result.get("status") or "connecting"
-    row.last_status_at = datetime.utcnow()
+    wareach_service.apply_remote_status(row, remote)
     db.commit()
-    return {"status": row.status, "qr": result.get("qr")}
+    return {"status": row.status, "qr": remote.get("qr") or ""}
 
 
 @router.get("/qr")
@@ -97,21 +122,19 @@ def refresh_qr(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Fetch a fresh QR while pairing (QRs rotate ~20s)."""
-    _require_pro_clinic(current_user, db)
-    row = _get_or_create_row(db, current_user.clinic_id)
+    """The current QR while pairing (WhatsApp rotates it every ~20s), and whether
+    the phone has connected yet."""
+    clinic = _require_pro_clinic(current_user, db)
+    _require_configured()
+    row = _get_or_create_row(db, clinic.id)
     if not row.session_id:
         raise HTTPException(status_code=400, detail="No active session. Click Connect first.")
     try:
-        result = wareach_service.get_qr(row.session_id)
-    except Exception as e:
-        logger.warning(f"WA Reach qr fetch failed for clinic {current_user.clinic_id}: {e}")
+        remote = wareach_service.refresh_from_remote(db, clinic, row)
+    except WAReachError as e:
+        logger.warning(f"WA Reach qr fetch failed for clinic {clinic.id}: {e}")
         raise HTTPException(status_code=502, detail="Couldn't refresh the QR code. Please try again.")
-    if result.get("status"):
-        row.status = result["status"]
-        row.last_status_at = datetime.utcnow()
-        db.commit()
-    return {"status": row.status, "qr": result.get("qr")}
+    return {"status": row.status, "qr": remote.get("qr") or ""}
 
 
 @router.post("/disconnect")
@@ -119,14 +142,21 @@ def disconnect(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Unlink the clinic's WhatsApp number. Session is torn down on WA Reach."""
-    _require_pro_clinic(current_user, db)
-    row = _get_or_create_row(db, current_user.clinic_id)
-    if row.session_id:
+    """Unlink the clinic's WhatsApp number, or cancel pairing.
+
+    If WA Reach can't be reached this fails rather than pretending: the phone
+    would still be linked there, and the next 'connected' event would quietly
+    start sending from it again after the clinic asked us to stop."""
+    clinic = _require_pro_clinic(current_user, db)
+    row = _get_or_create_row(db, clinic.id)
+    if row.session_id and wareach_service.is_configured():
         try:
-            wareach_service.delete_session(row.session_id)
-        except Exception as e:
-            logger.warning(f"WA Reach disconnect (remote) failed for clinic {current_user.clinic_id}: {e}")
+            wareach_service.disconnect(row.session_id)
+        except WorkspaceGone:
+            pass  # nothing left to unlink
+        except WAReachError as e:
+            logger.warning(f"WA Reach disconnect failed for clinic {clinic.id}: {e}")
+            raise HTTPException(status_code=502, detail="Couldn't unlink your number right now. Please try again in a minute.")
     row.status = "disconnected"
     row.phone_number = None
     row.last_status_at = datetime.utcnow()
@@ -134,63 +164,31 @@ def disconnect(
     return {"status": "disconnected"}
 
 
-class WebhookBody(BaseModel):
-    session_id: str | None = None
-    clinic_id: int | None = None
-    event: str | None = None          # 'connected' | 'qr' | 'disconnected' | 'failed' | 'message_status'
-    status: str | None = None
-    phone_number: str | None = None
-    log_id: int | None = None
-    message_status: str | None = None  # 'sent' | 'delivered' | 'read' | 'failed'
-    error: str | None = None
-
-
 @router.post("/webhook")
-def webhook(body: WebhookBody, request: Request, db: Session = Depends(get_db)):
-    """Signed callback from WA Reach for session status + delivery receipts.
-    Called server-to-server (no user auth) — verified by shared secret header.
+async def webhook(request: Request, db: Session = Depends(get_db)):
+    """Signed events from WA Reach: the number connecting or dropping, and
+    messages being delivered, read or failing. Server-to-server, no user auth.
 
-    Fails closed when WAREACH_WEBHOOK_SECRET isn't set, rather than
-    accepting anything: this endpoint takes no user auth at all, so an
-    unset secret used to mean anyone who found the URL could flip any
-    clinic's WhatsApp status or forge delivery receipts on any
-    NotificationLog by id.
+    Verified as `X-WAReach-Signature: sha256=HMAC(secret, "<X-WAReach-Timestamp>.<raw body>")`
+    over the exact bytes received, and refused when stale. Fails closed when
+    WAREACH_WEBHOOK_SECRET isn't set, rather than accepting anything.
     """
     if not WEBHOOK_SECRET:
         raise HTTPException(status_code=503, detail="Webhook not configured")
-    if request.headers.get("X-WAReach-Secret") != WEBHOOK_SECRET:
+    raw = await request.body()
+    if not wareach_service.verify_signature(
+        WEBHOOK_SECRET,
+        request.headers.get("X-WAReach-Timestamp", ""),
+        raw,
+        request.headers.get("X-WAReach-Signature", ""),
+    ):
         raise HTTPException(status_code=401, detail="Invalid signature")
+    try:
+        payload = json.loads(raw or b"{}")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid payload")
 
-    # Locate the clinic's integration row by session_id or clinic_id.
-    row = None
-    if body.session_id:
-        row = db.query(WhatsAppIntegration).filter(WhatsAppIntegration.session_id == body.session_id).first()
-    if not row and body.clinic_id:
-        row = db.query(WhatsAppIntegration).filter(WhatsAppIntegration.clinic_id == body.clinic_id).first()
-
-    # Session status change
-    new_status = body.status or (body.event if body.event in ("connected", "disconnected", "failed", "connecting") else None)
-    if row and new_status:
-        row.status = new_status
-        if body.phone_number:
-            row.phone_number = body.phone_number
-        if new_status != "connected":
-            # keep phone on connect; clear on disconnect/fail handled by UI alert
-            pass
-        row.last_status_at = datetime.utcnow()
-        db.commit()
-
-    # Delivery receipt → update the originating NotificationLog. Receipts can
-    # arrive out of order / more than once, so only advance the status (never
-    # downgrade read→delivered etc.); this also makes the handler idempotent.
-    if body.log_id and body.message_status:
-        rank = {"queued": 0, "sent": 1, "failed": 1, "delivered": 2, "read": 3}
-        log = db.query(NotificationLog).filter(NotificationLog.id == body.log_id).first()
-        if log and rank.get(body.message_status, 0) >= rank.get(log.status, 0):
-            log.status = body.message_status
-            if body.error:
-                log.error_message = body.error
-            log.updated_at = datetime.utcnow()
-            db.commit()
-
-    return {"ok": True}
+    result = wareach_service.handle_webhook(db, payload)
+    return {"ok": True, **result}

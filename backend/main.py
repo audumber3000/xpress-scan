@@ -581,6 +581,10 @@ async def lifespan(app: FastAPI):
                     updated_at TIMESTAMP DEFAULT NOW()
                 )
             """))
+            # WA Reach webhooks find the clinic by its workspace id.
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_whatsapp_integrations_session_id ON whatsapp_integrations (session_id)"
+            ))
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS notification_wallets (
                     id SERIAL PRIMARY KEY,
@@ -765,6 +769,21 @@ async def lifespan(app: FastAPI):
                   IF NOT EXISTS (SELECT 1 FROM applied_data_migrations WHERE key = 'wallet_welcome_credit_10_v1') THEN
                     UPDATE notification_wallets SET balance = 10 WHERE last_topup_at IS NULL AND balance > 10;
                     INSERT INTO applied_data_migrations (key) VALUES ('wallet_welcome_credit_10_v1');
+                  END IF;
+                END $do$;
+            """))
+            # Own-number WhatsApp moved to WA Reach's partner API. Every stored
+            # session id and key belongs to the retired Hetzner server, which no
+            # longer answers, so a row still saying "connected" was routing that
+            # clinic's WhatsApp into a dead end. Reset once; clinics reconnect
+            # from Integrations → WhatsApp and get a workspace on the new server.
+            conn.execute(text("""
+                DO $do$ BEGIN
+                  IF NOT EXISTS (SELECT 1 FROM applied_data_migrations WHERE key = 'wareach_partner_reset_v1') THEN
+                    UPDATE whatsapp_integrations
+                       SET status = 'disconnected', session_id = NULL, api_key_enc = NULL,
+                           phone_number = NULL, last_status_at = NOW(), updated_at = NOW();
+                    INSERT INTO applied_data_migrations (key) VALUES ('wareach_partner_reset_v1');
                   END IF;
                 END $do$;
             """))

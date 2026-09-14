@@ -359,7 +359,12 @@ async def get_my_clinic(
                 detail="Clinic not found"
             )
 
-        return ClinicResponseDTO.from_orm(clinic)
+        dto = ClinicResponseDTO.from_orm(clinic)
+        from sqlalchemy.orm import object_session
+        from domains.notification.services import wareach_service
+        session = object_session(clinic)
+        dto.own_whatsapp_connected = bool(session) and wareach_service.is_connected(session, clinic.id)
+        return dto
     except HTTPException:
         raise
     except Exception as e:

@@ -129,6 +129,8 @@ def _enrich_clinic_dto(db: Session, clinic: Clinic) -> ClinicResponseDTO:
     (plan_name, is_trial, plan_ends_at, trial_days_remaining) for header display."""
     dto = ClinicResponseDTO.from_orm(clinic)
     dto.security_verification_required = _verification_required(clinic)
+    from domains.notification.services import wareach_service as _wareach
+    dto.own_whatsapp_connected = _wareach.is_connected(db, clinic.id)
     # Defaulted here so it is present on EVERY path out of this function, including
     # the two early returns below. A field that is sometimes absent is worse than
     # one that is sometimes stale: the reader falls through to a different field

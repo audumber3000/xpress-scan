@@ -39,6 +39,9 @@ export interface ClinicInfo {
   // Clinic sends patient WhatsApp manually from its own number (opt-in). When on,
   // the installed app shares via the OS share sheet instead of the automated send.
   manual_whatsapp?: boolean;
+  // The clinic's own number is connected (Integrations → WhatsApp). Automated
+  // sends then go out from it, and it overrides manual_whatsapp.
+  own_whatsapp_connected?: boolean;
 }
 
 export interface BackendUser {
@@ -197,6 +200,7 @@ export class AuthApiService extends BaseApiService {
         trial_days_remaining: clinicSource.trial_days_remaining ?? null,
         currency_symbol: clinicSource.currency_symbol ?? '₹',
         manual_whatsapp: !!clinicSource.manual_whatsapp,
+        own_whatsapp_connected: !!clinicSource.own_whatsapp_connected,
       } : undefined,
       clinics: clinicsSource ? clinicsSource.map((c: any) => ({
         id: c.id.toString(),
@@ -210,6 +214,7 @@ export class AuthApiService extends BaseApiService {
         trial_days_remaining: c.trial_days_remaining ?? null,
         currency_symbol: c.currency_symbol ?? '₹',
         manual_whatsapp: !!c.manual_whatsapp,
+        own_whatsapp_connected: !!c.own_whatsapp_connected,
       })) : [],
       permissions: userData.permissions || {},
     };

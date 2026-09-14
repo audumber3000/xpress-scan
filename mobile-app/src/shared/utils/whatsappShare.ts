@@ -14,7 +14,10 @@ import type { BackendUser } from '../../services/api/auth.api';
  * manual path is purely additive and never replaces it.
  */
 export const isManualWhatsApp = (user?: BackendUser | null): boolean =>
-  !!(user && user.clinic && user.clinic.manual_whatsapp);
+  !!(user && user.clinic && user.clinic.manual_whatsapp && !user.clinic.own_whatsapp_connected);
+// A connected own number wins over manual mode: the automated send already goes
+// out from that same number with the PDF attached, so sharing by hand would only
+// add steps. With no number connected, manual mode behaves exactly as before.
 
 // Calling codes for the markets we serve; default to India (mirrors the web util).
 const CALLING_CODES: Record<string, string> = { IN: '91', US: '1', GB: '44', AE: '971', AU: '61', CA: '1', SG: '65', NZ: '64' };

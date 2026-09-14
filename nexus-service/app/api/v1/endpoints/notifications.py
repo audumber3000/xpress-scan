@@ -22,8 +22,11 @@ class SendEventRequest(BaseModel):
     callback_url: Optional[str] = None  # main backend PATCH URL
     # WA Reach (own-number WhatsApp) — present only when routing via WA Reach.
     provider: Optional[str] = None
-    wareach_session_id: Optional[str] = None
+    wareach_session_id: Optional[str] = None  # unused since the partner API; still accepted
     wareach_api_key: Optional[str] = None
+    # Set by the backend only when the clinic's wallet can pay for an MSG91
+    # send, so falling back never sends a message nobody can be charged for.
+    allow_fallback: bool = False
 
 
 @router.post("/send-event")
@@ -44,6 +47,7 @@ async def send_event(request: SendEventRequest):
         wareach_session_id=request.wareach_session_id,
         wareach_api_key=request.wareach_api_key,
         log_id=request.log_id,
+        allow_fallback=request.allow_fallback,
         **request.template_data,
     )
 
@@ -60,15 +64,26 @@ async def send_event(request: SendEventRequest):
                 data.get("message_id") or
                 data.get("messageId")
             )
+        callback = {
+            "status": "sent" if success else "failed",
+            "provider_message_id": provider_id,
+            "error_message": result.get("error") if not success else None,
+        }
+        # Own-number sends also report who actually sent it: the backend bills
+        # an MSG91 fallback and stops routing to a number that went offline.
+        # Only on that path, so MSG91 callbacks stay exactly as they were.
+        if request.provider == "wareach":
+            callback["provider"] = result.get("provider") or "wareach"
+            callback["fallback"] = bool(result.get("fallback"))
+            callback["wareach_offline"] = bool(result.get("wareach_offline"))
+            callback["wareach_key_rejected"] = bool(result.get("wareach_key_rejected"))
+            if result.get("wareach_error") and not callback["error_message"]:
+                callback["error_message"] = f"sent via MSG91 because: {result['wareach_error']}"[:300]
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 await client.patch(
                     request.callback_url,
-                    json={
-                        "status": "sent" if success else "failed",
-                        "provider_message_id": provider_id,
-                        "error_message": result.get("error") if not success else None,
-                    },
+                    json=callback,
                     # Backend's /notification-admin/logs/{id} requires this —
                     # it's reachable from the public internet (nginx only
                     # carves out /api/v1/consent/, everything else including

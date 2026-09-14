@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -307,3 +308,91 @@ async def list_patient_consents(
             created_at=c.created_at
         ))
     return result
+
+
+# ── Sending a consent link on WhatsApp ────────────────────────────────────────
+
+class ConsentLinkWhatsAppRequest(BaseModel):
+    consentLink: str
+
+
+@router.post("/links/{token}/send-whatsapp")
+async def send_consent_link_whatsapp(
+    token: str,
+    payload: ConsentLinkWhatsAppRequest,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    """Send an already-generated consent link to the patient on WhatsApp.
+
+    The link used to go straight from the browser to nexus, which always sent
+    it through MSG91: the one patient message that ignored a clinic's own
+    connected number. It now comes through here, so the clinic's number is
+    used when it is connected. Otherwise this makes exactly the call the
+    browser used to make, and the patient gets the same MSG91 message as before.
+
+    Consent tokens live in nexus (Redis), so nexus validates the token, and it
+    must belong to the caller's own clinic.
+    """
+    import os
+    import httpx
+    from models import Clinic
+    from core.phone import normalize_phone
+    from domains.notification.services import wareach_service
+
+    if not current_user.clinic_id:
+        raise HTTPException(status_code=400, detail="No clinic associated with your account")
+    link = (payload.consentLink or "").strip()
+    if not link.startswith(("http://", "https://")) or token not in link:
+        raise HTTPException(status_code=400, detail="That is not this consent form's link")
+
+    nexus = os.getenv("NEXUS_SERVICES_URL", "http://localhost:8001").rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            check = await client.get(f"{nexus}/api/v1/consent/validate/{token}")
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="Could not send that WhatsApp message. Please try again.")
+    if check.status_code == 404:
+        raise HTTPException(status_code=404, detail="Link expired or invalid.")
+    if check.status_code != 200:
+        raise HTTPException(status_code=502, detail="Could not send that WhatsApp message. Please try again.")
+    data = (check.json() or {}).get("data") or {}
+    if str(data.get("clinicId")) != str(current_user.clinic_id):
+        raise HTTPException(status_code=404, detail="Link expired or invalid.")
+
+    integration = wareach_service.get_active_integration(db, current_user.clinic_id)
+    if integration:
+        clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+        phone = normalize_phone(data.get("phone", ""), clinic.country if clinic else None)
+        if not phone:
+            raise HTTPException(status_code=400, detail="This patient has no phone number to send to.")
+        wareach_service.send_event(
+            db,
+            clinic_id=current_user.clinic_id,
+            event_type="consent_form",
+            phone=phone,
+            data={
+                "patient_name": data.get("patientName", ""),
+                "clinic_name": (clinic.name if clinic else "") or "",
+                "consent_link": link,
+                "procedure_name": data.get("templateName", ""),
+                "clinic_phone": (clinic.phone if clinic else "") or "",
+            },
+            integration=integration,
+        )
+        return {"success": True, "token": token, "provider": "wareach"}
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                f"{nexus}/api/v1/consent/send-whatsapp/{token}", json={"consentLink": link},
+            )
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="Could not send that WhatsApp message. Please try again.")
+    if resp.status_code != 200:
+        try:
+            detail = resp.json().get("detail")
+        except Exception:
+            detail = None
+        raise HTTPException(status_code=resp.status_code, detail=detail or "Failed to send WhatsApp message")
+    return resp.json()

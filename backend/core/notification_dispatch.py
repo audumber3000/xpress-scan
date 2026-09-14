@@ -119,9 +119,10 @@ def notify_event(
         data.setdefault("currency", clinic_currency)
 
     # ── WA Reach (own-number WhatsApp) ────────────────────────────────────────
-    # Default-off guard: None unless this clinic is Pro AND has connected its own
-    # number. When set, WhatsApp goes via their number for free (no wallet) — all
-    # other channels and clinics are untouched.
+    # Default-off guard: None unless this clinic has connected its own number
+    # (and WA Reach is configured here). When set, WhatsApp goes via their number
+    # for free, with MSG91 only as a fallback nexus takes when that number could
+    # not send. All other channels and clinics are untouched.
     from domains.notification.services import wareach_service
     wareach = wareach_service.get_active_integration(db, clinic_id)
 
@@ -159,7 +160,13 @@ def notify_event(
                 continue
 
             # Route WhatsApp via the clinic's own number when WA Reach is active.
-            use_wareach = channel == "whatsapp" and wareach is not None
+            # It writes its own log row and is never charged up front.
+            if channel == "whatsapp" and wareach is not None:
+                wareach_service.send_event(
+                    db, clinic_id=clinic_id, event_type=event_type, phone=recipient,
+                    data=data, integration=wareach,
+                )
+                continue
 
             # Log queued entry before firing
             log_entry = NotificationLog(
@@ -170,7 +177,7 @@ def notify_event(
                 template_name=event_type,
                 status="queued",
                 cost=0.0,
-                provider="wareach" if use_wareach else "msg91",
+                provider="msg91",
                 created_at=datetime.datetime.utcnow(),
                 updated_at=datetime.datetime.utcnow(),
             )
@@ -178,28 +185,17 @@ def notify_event(
             db.commit()
             db.refresh(log_entry)
 
-            # WA Reach sends are free — skip the wallet deduction entirely.
-            if use_wareach:
-                cost = 0.0
-            else:
-                cost = wallet_service.check_and_deduct(
-                    db=db,
-                    clinic_id=clinic_id,
-                    channel=channel,
-                    event_type=event_type,
-                    description=f"{event_type} via {channel}",
-                )
+            cost = wallet_service.check_and_deduct(
+                db=db,
+                clinic_id=clinic_id,
+                channel=channel,
+                event_type=event_type,
+                description=f"{event_type} via {channel}",
+            )
 
             # Fire notification
             if channel == "whatsapp":
-                if use_wareach:
-                    notify(
-                        event_type, channel="whatsapp", to_phone=phone, template_data=data, log_id=log_entry.id,
-                        provider="wareach", wareach_session_id=wareach.session_id,
-                        wareach_api_key=wareach_service.decrypt_key(wareach.api_key_enc),
-                    )
-                else:
-                    notify(event_type, channel="whatsapp", to_phone=phone, template_data=data, log_id=log_entry.id)
+                notify(event_type, channel="whatsapp", to_phone=phone, template_data=data, log_id=log_entry.id)
             elif channel == "email":
                 notify(event_type, channel="email", to_email=to_email, to_name=to_name, template_data=data, log_id=log_entry.id)
             elif channel == "sms":
@@ -221,8 +217,7 @@ def notify_event(
                 track_event(
                     f"clinic_{clinic_id}",
                     EVENTS.WHATSAPP_MESSAGE_SENT,
-                    {"provider": "wareach" if use_wareach else "msg91",
-                     "event_type": event_type, "paid": not use_wareach},
+                    {"provider": "msg91", "event_type": event_type, "paid": True},
                     clinic_id=clinic_id,
                 )
 

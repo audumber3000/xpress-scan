@@ -43,6 +43,8 @@ export interface WareachStatus {
   phone_number?: string | null;
   connected?: boolean;
   is_pro?: boolean;
+  /** False when own-number WhatsApp isn't set up on the server. Absent on older backends. */
+  available?: boolean;
 }
 
 class NotificationsApi extends BaseApiService {

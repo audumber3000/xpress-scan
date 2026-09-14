@@ -221,7 +221,9 @@ const Paperwork = () => {
         setSending(true);
         try {
             const fullLink = `${window.location.origin}${generatedLink}`;
-            await axios.post(`${NEXUS_API_URL}/consent/send-whatsapp/${generatedToken}`, {
+            // Through the backend rather than straight to nexus, so the link goes
+            // out from the clinic's own number when one is connected.
+            await api.post(`/consents/links/${generatedToken}/send-whatsapp`, {
                 consentLink: fullLink,
             });
 
