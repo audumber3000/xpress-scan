@@ -13,7 +13,7 @@ from domains.infrastructure.services.pdf_fields import (
     apply_letterhead, page_css, resolve_field_visibility, resolve_letterhead,
 )
 from domains.finance.invoice_templates.discount_block import render_discount_block
-from domains.finance.invoice_templates.payment_block import render_payment_block
+from domains.finance.invoice_templates.payment_block import as_on_line, balance_rows
 
 
 # ── Amount-in-words (Indian numbering) ───────────────────────────────────────
@@ -174,6 +174,7 @@ def render_invoice(invoice, clinic, config=None) -> str:
         c_reg=c_reg, c_gst=c_gst, doctor_name=doctor_name,
         doctor_qualifications=doctor_qualifications,
         doctor_header=doctor_header,
+        bal=balance_rows(invoice, clinic),
         doctor_signature=doctor_signature,
         status_label=status_label,
         p_name=p_name, p_phone=p_phone,
@@ -194,7 +195,7 @@ def _render_indian_tax(
     c_reg, c_gst, doctor_name, doctor_qualifications, status_label,
     p_name, p_phone, p_age, p_gender, p_uhid,
     invoice_date, subtotal, total, inv_tax, discount, taxable,
-    doctor_header=None,
+    doctor_header=None, bal=None,
     doctor_signature='', currency='₹', tax_label='GST No.', is_india=True,
     vis=None, letterhead=None,
 ):
@@ -235,11 +236,20 @@ def _render_indian_tax(
     # Concessions granted after issue are already inside `discount` above; this
     # itemises them so the patient can see why the total changed.
     discount_block = render_discount_block(invoice, currency=currency, accent=primary_color) if vis.discount else ''
-    # What has actually been paid against this bill. Unlike the discount
-    # block this is not behind a visibility flag: a patient holding an
-    # invoice is entitled to see what they have already given the clinic,
-    # and it prints nothing at all on a bill with no payments against it.
-    payment_block = render_payment_block(invoice, currency=currency, accent=primary_color)
+    # What has been paid, as the last rows of the summary — the receipt's
+    # shape. Grand Total steps down to a plain row and Balance Due takes the
+    # highlight, because once money has changed hands that is the figure the
+    # patient is looking for. Nothing changes on an unpaid bill.
+    if bal:
+        total_row = f'<tr><td>Grand Total</td><td>{currency} {total:,.2f}</td></tr>'
+        balance_html = (
+            f'<tr><td>Total Paid So Far</td><td>{currency} {bal.paid:,.2f}</td></tr>'
+            f'<tr class="grand-total"><td>Balance Due{as_on_line(bal, "11px")}</td>'
+            f'<td style="white-space:nowrap;">{currency} {bal.due:,.2f}</td></tr>'
+        )
+    else:
+        total_row = f'<tr class="grand-total"><td>Grand Total</td><td>{currency} {total:,.2f}</td></tr>'
+        balance_html = ''
     # India splits tax into CGST + SGST; everywhere else shows a single tax line
     # labelled with the country's tax term (VAT, Tax, etc.).
     if is_india:
@@ -477,7 +487,6 @@ body {{
     </table>
 
     {discount_block}
-    {payment_block}
 
     <!-- LINE ITEMS TABLE -->
     <table class="items-table">
@@ -503,7 +512,8 @@ body {{
         <tr><td>Net Taxable Amount</td><td>{currency} {taxable:,.2f}</td></tr>
         {cgst_row}
         {sgst_row}
-        <tr class="grand-total"><td>Grand Total</td><td>{currency} {total:,.2f}</td></tr>
+        {total_row}
+        {balance_html}
       </table>
     </div>
 

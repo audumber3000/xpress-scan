@@ -1,30 +1,28 @@
-"""What has actually been paid against a bill, printed on the bill.
+"""What has been paid against a bill, printed where the bill adds up.
 
-An invoice said what the treatment cost and nothing else. A patient who has paid
-two of three instalments was handed a document showing the full amount with no
-sign of what they had already given the clinic — and the front desk had to
-explain the difference by hand, every time.
+An invoice showed what the treatment cost and stopped there, so a patient who
+had paid part of it was handed a document with the full amount and no sign of
+what they had already given. The per-payment receipt answers this with two rows
+at the foot of its summary — paid so far, and the balance due as on a date — and
+that is the shape the bill now uses too.
 
-This is the same three lines the per-payment receipt already shows: what the
-bill came to, what has been paid so far, and what is still due. Kept in one
-place rather than written into each layout, so the bill and the receipt cannot
-disagree about how much is owed.
+They are rows in each layout's OWN totals table, drawn in that layout's style.
+Not a separate panel: an earlier version printed a bordered box with the list of
+instalments, which on the classic layout landed above the treatment table and
+read as something stuck on top of the invoice.
 
-Prints nothing on a bill with no payments against it. That document is already
-correct: the total IS the amount due, and adding "Paid 0.00 / Due 4,500.00"
-under it only tells the patient something the line above already said.
-
-WeasyPrint-safe HTML only — tables, no flex gap, no grid, no JS.
+Nothing changes on a bill with no payments against it. The total already IS the
+amount due there, and every such bill renders exactly as it did before.
 """
+from types import SimpleNamespace
 
 
 def payment_summary(invoice):
     """(paid, due, count) for one invoice, or None when nothing has been paid.
 
-    Derived from the instalment rows rather than read off a column, because that
-    is what every other reader of this data does: `Invoice.status` and the app's
-    own figures come from the same sum, and a second source of truth for "how
-    much has this patient paid" is how a bill and a receipt start disagreeing.
+    Summed from the instalment rows, which is what the app's own figures and
+    `Invoice.status` are derived from — a second source of truth for "how much
+    has this patient paid" is how a bill and a receipt start disagreeing.
     """
     payments = list(getattr(invoice, 'payments', None) or [])
     if not payments:
@@ -36,65 +34,28 @@ def payment_summary(invoice):
     return paid, max(total - paid, 0.0), len(payments)
 
 
-def render_payment_block(invoice, currency='₹', accent='#6B7280', settled_accent='#047857'):
-    """HTML for the paid / due summary, or '' when nothing has been paid."""
+def balance_rows(invoice, clinic):
+    """The figures for the two extra rows, or None when there is nothing to add.
+
+    `as_on` is the clinic's own today, because that is the moment the balance is
+    true for: printing the bill again next week may show a different figure, and
+    the date says so — the same wording the receipt uses.
+    """
     summary = payment_summary(invoice)
     if not summary:
-        return ''
+        return None
     paid, due, count = summary
-    total = float(getattr(invoice, 'total', 0) or 0)
-    settled = due <= 0.005  # half a paisa: floating point, not a real balance
-
-    # The dates, so "paid" is answerable rather than merely asserted. Only the
-    # instalments themselves — one line each, oldest first, the order somebody
-    # reads a statement in.
-    rows = ''
-    for p in sorted(
-        (getattr(invoice, 'payments', None) or []),
-        key=lambda x: (getattr(x, 'paid_on', None) or getattr(x, 'created_at', None) or 0),
-    ):
-        amount = float(getattr(p, 'amount', 0) or 0)
-        if amount <= 0:
-            continue
-        when = getattr(p, 'paid_on', None) or getattr(p, 'created_at', None)
-        when_text = when.strftime('%d %b %Y') if when else ''
-        method = str(getattr(p, 'method', '') or '')
-        rows += (
-            f'<tr>'
-            f'<td style="padding:2px 8px 2px 0; color:#6B7280; white-space:nowrap;">{when_text}</td>'
-            f'<td style="padding:2px 8px 2px 0; color:#6B7280;">{method}</td>'
-            f'<td style="padding:2px 0; text-align:right; white-space:nowrap;">'
-            f'{currency} {amount:,.2f}</td>'
-            f'</tr>'
-        )
-
-    edge = settled_accent if settled else accent
-    heading = (
-        'Paid in full' if settled
-        else f'Part paid: {count} payment{"s" if count != 1 else ""} received'
-    )
-    due_line = (
-        f'<tr><td style="padding:3px 8px 0 0; font-weight:700;">Balance due</td>'
-        f'<td></td>'
-        f'<td style="padding:3px 0 0; text-align:right; font-weight:700; '
-        f'color:{"#047857" if settled else "#B91C1C"}; white-space:nowrap;">'
-        f'{currency} {due:,.2f}</td></tr>'
+    from core.clinic_time import clinic_today
+    return SimpleNamespace(
+        paid=paid,
+        due=due,
+        count=count,
+        settled=due <= 0.005,   # half a paisa: floating point, not a real balance
+        as_on=clinic_today(clinic).strftime('%d %B %Y'),
     )
 
-    return (
-        f'<div style="margin-top:10px; padding:8px 10px; border:1px solid #E5E7EB; '
-        f'border-left:3px solid {edge}; border-radius:4px; font-size:10px;">'
-        f'<p style="margin:0 0 4px; font-weight:700; color:#374151;">{heading}</p>'
-        f'<table style="width:100%; border-collapse:collapse;">'
-        f'{rows}'
-        f'<tr><td style="padding:3px 8px 0 0; border-top:1px solid #E5E7EB;">Invoice total</td>'
-        f'<td style="border-top:1px solid #E5E7EB;"></td>'
-        f'<td style="padding:3px 0 0; text-align:right; border-top:1px solid #E5E7EB; '
-        f'white-space:nowrap;">{currency} {total:,.2f}</td></tr>'
-        f'<tr><td style="padding:1px 8px 0 0;">Paid to date</td><td></td>'
-        f'<td style="padding:1px 0 0; text-align:right; white-space:nowrap;">'
-        f'{currency} {paid:,.2f}</td></tr>'
-        f'{due_line}'
-        f'</table>'
-        f'</div>'
-    )
+
+def as_on_line(b, size='10px'):
+    """The small "as on 14 September 2026" line under the Balance Due label."""
+    return (f'<span style="display:block;font-weight:normal;font-size:{size};'
+            f'opacity:.8;">as on {b.as_on}</span>')

@@ -16,7 +16,7 @@ from domains.infrastructure.services.pdf_fields import (
     page_css,
 )
 from domains.finance.invoice_templates.discount_block import render_discount_block
-from domains.finance.invoice_templates.payment_block import render_payment_block
+from domains.finance.invoice_templates.payment_block import as_on_line, balance_rows
 
 
 def render_invoice(invoice, clinic, config=None) -> str:
@@ -64,6 +64,20 @@ def render_invoice(invoice, clinic, config=None) -> str:
     patient_lines = ''.join(f'<div>{x}</div>' for x in [d.patient.address, d.patient.phone] if x)
     age_gender = ' · '.join(filter(None, [d.patient.age, d.patient.gender]))
 
+
+    # Paid so far and the balance, as the last rows of the totals — the
+    # receipt's shape. The total steps down to a plain row once money has been
+    # paid, and the balance takes the highlight. An unpaid bill is unchanged.
+    bal = balance_rows(invoice, clinic)
+    if bal:
+        _total_row = f'<tr><td>Total</td><td class="num">{money(d, d.total)}</td></tr>'
+        _balance_rows = (
+            f'<tr><td>Total Paid So Far</td><td class="num">{money(d, bal.paid)}</td></tr>'
+            f'<tr class="grand"><td>Balance Due{as_on_line(bal)}</td><td class="num">{money(d, bal.due)}</td></tr>'
+        )
+    else:
+        _total_row = f'<tr class="grand"><td>Total</td><td class="num">{money(d, d.total)}</td></tr>'
+        _balance_rows = ''
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
 <style>
@@ -150,11 +164,11 @@ table.items td.qty {{ text-align:center; width:46px; }}
     <tr><td>Subtotal</td><td class="num">{money(d, shown_subtotal)}</td></tr>
     {disc_row}
     {tax_rows(d, value_cls='num')}
-    <tr class="grand"><td>Total</td><td class="num">{money(d, d.total)}</td></tr>
+    {_total_row}
+    {_balance_rows}
   </table>
 
   {render_discount_block(invoice, currency=d.currency, accent=d.primary) if d.vis.discount else ''}
-  {render_payment_block(invoice, currency=d.currency, accent=d.primary)}
 
   <div class="terms">
     <div class="lbl">Terms &amp; Conditions</div>

@@ -17,7 +17,7 @@ from domains.infrastructure.services.pdf_fields import (
     page_css,
 )
 from domains.finance.invoice_templates.discount_block import render_discount_block
-from domains.finance.invoice_templates.payment_block import render_payment_block
+from domains.finance.invoice_templates.payment_block import as_on_line, balance_rows
 
 
 def render_invoice(invoice, clinic, config=None) -> str:
@@ -63,6 +63,20 @@ def render_invoice(invoice, clinic, config=None) -> str:
          (f'{d.tax_reg_label}: {d.clinic.gst}' if d.clinic.gst else '')] if x
     )
 
+
+    # Paid so far and the balance, as the last rows of the totals — the
+    # receipt's shape. The total steps down to a plain row once money has been
+    # paid, and the balance takes the highlight. An unpaid bill is unchanged.
+    bal = balance_rows(invoice, clinic)
+    if bal:
+        _total_row = f'<tr><td class="k">TOTAL</td><td class="v">{money(d, d.total)}</td></tr>'
+        _balance_rows = (
+            f'<tr><td class="k">PAID SO FAR</td><td class="v">{money(d, bal.paid)}</td></tr>'
+            f'<tr class="grand"><td class="k">BALANCE DUE{as_on_line(bal)}</td><td class="v">{money(d, bal.due)}</td></tr>'
+        )
+    else:
+        _total_row = f'<tr class="grand"><td class="k">TOTAL</td><td class="v">{money(d, d.total)}</td></tr>'
+        _balance_rows = ''
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
 <style>
@@ -158,14 +172,14 @@ table.items td.c {{ text-align:center; width:50px; }}
         <tr><td class="k">Subtotal</td><td class="v">{money(d, shown_subtotal)}</td></tr>
         {disc_row}
         {tax_rows(d, label_cls='k', value_cls='v')}
-        <tr class="grand"><td class="k">TOTAL</td><td class="v">{money(d, d.total)}</td></tr>
+        {_total_row}
+    {_balance_rows}
       </table>
       <div style="margin-top:18px;">{signature_block(d)}</div>
     </td>
   </tr></table>
 
   {render_discount_block(invoice, currency=d.currency, accent=d.primary) if d.vis.discount else ''}
-  {render_payment_block(invoice, currency=d.currency, accent=d.primary)}
 
   <div class="thanks">
     {f'If you have any questions about this invoice, please contact {d.clinic.name}' + (f' on {d.clinic.phone}' if d.clinic.phone else '') + '.' if d.clinic.name else 'If you have any questions about this invoice, please contact us.'}<br>

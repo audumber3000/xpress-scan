@@ -16,7 +16,7 @@ from domains.infrastructure.services.pdf_fields import (
     page_css,
 )
 from domains.finance.invoice_templates.discount_block import render_discount_block
-from domains.finance.invoice_templates.payment_block import render_payment_block
+from domains.finance.invoice_templates.payment_block import as_on_line, balance_rows
 
 
 def render_invoice(invoice, clinic, config=None) -> str:
@@ -76,6 +76,24 @@ def render_invoice(invoice, clinic, config=None) -> str:
          (f'{d.tax_reg_label}: {d.clinic.gst}' if d.clinic.gst else '')] if x
     )
 
+
+    # Paid so far and the balance, as the last rows of the totals — the
+    # receipt's shape. The total steps down to a plain row once money has been
+    # paid, and the balance takes the highlight. An unpaid bill is unchanged.
+    bal = balance_rows(invoice, clinic)
+    if bal:
+        _total_row = ('<tr><td class="lbl" colspan="3">Total</td>'
+                      f'<td class="num">{money(d, d.total)}</td></tr>')
+        _balance_rows = (
+            '<tr><td class="lbl" colspan="3">Total Paid So Far</td>'
+            f'<td class="num">{money(d, bal.paid)}</td></tr>'
+            f'<tr class="grand"><td class="lbl" colspan="3">Balance Due{as_on_line(bal)}</td>'
+            f'<td class="num">{money(d, bal.due)}</td></tr>'
+        )
+    else:
+        _total_row = ('<tr class="grand"><td class="lbl" colspan="3">Total</td>'
+                      f'<td class="num">{money(d, d.total)}</td></tr>')
+        _balance_rows = ''
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
 <style>
@@ -145,12 +163,12 @@ table.items tr.grand td {{ background:#f2f2f2; font-weight:700; font-size:13px; 
       <tr><td colspan="3" class="lbl">Subtotal</td><td class="num">{money(d, shown_subtotal)}</td></tr>
       {disc_row}
       {tax_block}
-      <tr class="grand"><td colspan="3" class="lbl">Total</td><td class="num">{money(d, d.total)}</td></tr>
+  {_total_row}
+  {_balance_rows}
     </tbody>
   </table>
 
   {render_discount_block(invoice, currency=d.currency, accent='#000000') if d.vis.discount else ''}
-  {render_payment_block(invoice, currency=d.currency, accent='#000000')}
 
   <div class="terms">
     <div class="lbl">Terms &amp; Conditions</div>

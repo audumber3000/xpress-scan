@@ -23,7 +23,7 @@ from domains.infrastructure.services.pdf_fields import (
     apply_letterhead, page_css, resolve_field_visibility, resolve_letterhead,
 )
 from domains.finance.invoice_templates.discount_block import render_discount_block
-from domains.finance.invoice_templates.payment_block import render_payment_block
+from domains.finance.invoice_templates.payment_block import as_on_line, balance_rows
 
 
 def render_invoice(invoice, clinic, config=None) -> str:
@@ -193,7 +193,20 @@ def render_invoice(invoice, clinic, config=None) -> str:
     # block this is not behind a visibility flag: a patient holding an
     # invoice is entitled to see what they have already given the clinic,
     # and it prints nothing at all on a bill with no payments against it.
-    payment_block = render_payment_block(invoice, currency=currency, accent=primary_color)
+    # Paid so far and the balance, as the last rows of the totals — the
+    # receipt's shape. "Total Due" stops being the highlighted figure once money
+    # has been paid, because it no longer is the amount due.
+    bal = balance_rows(invoice, clinic)
+    if bal:
+        total_row = f'<tr><td>Invoice Total</td><td>{currency} {total:,.2f}</td></tr>'
+        balance_html = (
+            f'<tr><td>Total Paid So Far</td><td>{currency} {bal.paid:,.2f}</td></tr>'
+            f'<tr class="grand"><td>Balance Due{as_on_line(bal)}</td>'
+            f'<td>{currency} {bal.due:,.2f}</td></tr>'
+        )
+    else:
+        total_row = f'<tr class="grand"><td>Total Due</td><td>{currency} {total:,.2f}</td></tr>'
+        balance_html = ''
     if is_india:
         half = inv_tax / 2 if inv_tax > 0 else 0
         cgst_row = f'<tr><td>CGST 9%</td><td>{currency} {half:,.2f}</td></tr>' if half else ''
@@ -406,7 +419,6 @@ body {{
   </div>
 
   {discount_block}
-  {payment_block}
 
   <!-- ITEMS -->
   <table class="items">
@@ -429,7 +441,8 @@ body {{
       {disc_row}
       {cgst_row}
       {sgst_row}
-      <tr class="grand"><td>Total Due</td><td>{currency} {total:,.2f}</td></tr>
+      {total_row}
+      {balance_html}
     </table>
   </div>
 

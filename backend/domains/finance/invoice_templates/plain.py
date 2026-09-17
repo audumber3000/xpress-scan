@@ -24,7 +24,7 @@ from domains.finance.invoice_templates._common import (
 from domains.infrastructure.services.pdf_fields import page_css
 from domains.finance.invoice_templates.classic import _amount_in_words
 from domains.finance.invoice_templates.discount_block import render_discount_block
-from domains.finance.invoice_templates.payment_block import render_payment_block
+from domains.finance.invoice_templates.payment_block import as_on_line, balance_rows
 
 
 def render_invoice(invoice, clinic, config=None) -> str:
@@ -90,6 +90,24 @@ def render_invoice(invoice, clinic, config=None) -> str:
                                   d.patient.gender]))] if x
     )
 
+
+    # Paid so far and the balance, as the last rows of the totals — the
+    # receipt's shape. The total steps down to a plain row once money has been
+    # paid, and the balance takes the highlight. An unpaid bill is unchanged.
+    bal = balance_rows(invoice, clinic)
+    if bal:
+        _total_row = ('<tr class="sum"><td class="lbl" colspan="3">Total</td>'
+                      f'<td class="num">{money(d, d.total)}</td></tr>')
+        _balance_rows = (
+            '<tr class="sum"><td class="lbl" colspan="3">Total Paid So Far</td>'
+            f'<td class="num">{money(d, bal.paid)}</td></tr>'
+            f'<tr class="grand"><td class="lbl" colspan="3">Balance Due{as_on_line(bal)}</td>'
+            f'<td class="num">{money(d, bal.due)}</td></tr>'
+        )
+    else:
+        _total_row = ('<tr class="grand"><td class="lbl" colspan="3">Total</td>'
+                      f'<td class="num">{money(d, d.total)}</td></tr>')
+        _balance_rows = ''
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
 <style>
@@ -156,14 +174,13 @@ table.items tr.grand td {{ border-top:1px solid #111827; border-bottom:1px solid
       <td class="num">{money(d, shown_subtotal)}</td></tr>
   {disc_row}
   {tax_block}
-  <tr class="grand"><td class="lbl" colspan="3">Total</td>
-      <td class="num">{money(d, d.total)}</td></tr>
+  {_total_row}
+  {_balance_rows}
 </table>
 
 {f'<div class="aow">{aow}</div>' if aow else ''}
 
 {render_discount_block(invoice, d.currency, d.primary)}
-{render_payment_block(invoice, d.currency, d.primary)}
 
 {f'<div class="notes"><div class="lbl">Notes</div>{d.notes}</div>' if d.notes else ''}
 
