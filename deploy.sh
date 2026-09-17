@@ -319,6 +319,9 @@ run_migration "clinic_document_doctors" "ALTER TABLE clinics ADD COLUMN IF NOT E
 run_migration "patient_doc_tooth_area" "ALTER TABLE patient_documents ADD COLUMN IF NOT EXISTS tooth_area VARCHAR"
 run_migration "patient_doc_notes"      "ALTER TABLE patient_documents ADD COLUMN IF NOT EXISTS notes TEXT"
 
+# Pen notes drawn on a visit, as vector strokes.
+run_migration "case_paper_sketches" "ALTER TABLE case_papers ADD COLUMN IF NOT EXISTS sketches JSON"
+
 # ── One-shot data migrations ────────────────────────────────────────────────
 # Everything above is idempotent DDL that can safely run on every deploy. The
 # two below CHANGE DATA, and re-running them would undo decisions clinics made

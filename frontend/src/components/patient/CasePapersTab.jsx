@@ -11,6 +11,7 @@ import CaseWorkPanel from './caseWork';
 import ClinicalSummaryModal from './ClinicalSummaryModal';
 import CasePaperActionBar from './CasePaperActionBar';
 import CasePaperDateField from './CasePaperDateField';
+import VisitSketchPad from './sketch/VisitSketchPad';
 import InvoiceEditor from '../payments/InvoiceEditor';
 import CasePaperInvoicesPanel from './CasePaperInvoicesPanel';
 import NextVisitModal from './NextVisitModal';
@@ -151,7 +152,10 @@ const CasePapersTab = ({
       // Null on a dental case paper. The derm sections fill this in and it is
       // spread into the save payload with everything else, so it needs no
       // special handling on either the create or the update path.
-      derm_findings: null
+      derm_findings: null,
+      // What the clinician drew while explaining this visit. Same arrangement:
+      // it rides along in the payload and needs no special save path.
+      sketches: null
   });
 
   const [labOrders, setLabOrders] = useState([]);
@@ -187,6 +191,7 @@ const CasePapersTab = ({
       next_visit_date: paper.next_visit_date || null,
       notes: paper.notes || '',
       derm_findings: paper.derm_findings || null,
+      sketches: paper.sketches || null,
     });
     setDirty(false);
     onCasePaperStateChange?.(true);
@@ -546,7 +551,8 @@ const CasePapersTab = ({
           next_visit_recommendation: 'Not specified',
           next_visit_date: null,
           notes: '',
-          derm_findings: null
+          derm_findings: null,
+          sketches: null
       });
       setSelectedCasePaper(newPaper);
       setSessionPerioChart(normaliseChart(null));
@@ -625,7 +631,8 @@ const CasePapersTab = ({
               next_visit_recommendation: 'Not specified',
               next_visit_date: null,
               notes: '',
-              derm_findings: null
+              derm_findings: null,
+              sketches: null
           });
           onCasePaperStateChange?.(false);
       } catch (err) {
@@ -1144,7 +1151,22 @@ const CasePapersTab = ({
           />
         )}
 
-        {/* 5. Everything else the visit produced, plus the note written
+        {/* 5. What the clinician drew while explaining the visit.
+             Above the work panel and below the chart, because that is the order
+             the conversation happens in: look at the mouth, draw on it to show
+             the patient what you found, then record what was done. Collapsed
+             until there is ink on it — most visits are not drawn on, and an
+             open canvas would push the rest of the paper below the fold for
+             every one of them. */}
+        <VisitSketchPad
+          value={form.sketches}
+          onChange={(sketches) => handleFormChange({ ...form, sketches })}
+          patient={patientData}
+          disabled={!canWrite}
+          blockedReason={writeBlockedReason}
+        />
+
+        {/* 6. Everything else the visit produced, plus the note written
              while reading it. Four stacked full-width sections became one
              tabbed card: three of them are empty on a typical visit, so the
              page was mostly headings announcing that nothing had happened. */}

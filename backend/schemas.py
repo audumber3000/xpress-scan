@@ -842,6 +842,8 @@ class CasePaperBase(BaseModel):
     perio_chart_snapshot: Optional[Any] = None
     # The dermatology case paper's findings. Null on a dental paper.
     derm_findings: Optional[Any] = None
+    # Pen notes drawn on this visit. Null on every paper nobody drew on.
+    sketches: Optional[Any] = None
 
 class CasePaperCreate(CasePaperBase):
     clinic_id: Optional[int] = None
@@ -868,6 +870,7 @@ class CasePaperUpdate(BaseModel):
     tooth_notes_snapshot: Optional[Any] = None
     perio_chart_snapshot: Optional[Any] = None
     derm_findings: Optional[Any] = None
+    sketches: Optional[Any] = None
 
 import json as _json
 

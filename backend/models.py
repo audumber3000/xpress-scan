@@ -448,7 +448,23 @@ class CasePaper(Base):
     # Null on every dental case paper, and on a derm paper that has not been
     # filled in yet. Readers must treat it as optional.
     derm_findings = Column(JSON, nullable=True)
-    
+
+    # Pen notes: what the clinician drew while explaining this visit.
+    #
+    # Stored as VECTORS — a list of pages, each a list of strokes, each a list
+    # of [x, y, pressure] samples in a fixed logical coordinate space. A few
+    # dozen strokes is a couple of kilobytes, it stays sharp at any size and on
+    # paper, and it can be reopened and added to at the next visit. The same
+    # drawing as a PNG is a quarter of a megabyte that blurs when printed and
+    # can never be edited again.
+    #
+    # Null on every case paper nobody drew on, which is most of them. Shape is
+    # owned by the frontend (components/patient/sketch/sketchModel.js), the same
+    # arrangement as derm_findings and the perio chart above — a clinical
+    # drawing surface will keep growing, and a migration per change is how a
+    # feature like this stops being improved.
+    sketches = Column(JSON, nullable=True)
+
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     

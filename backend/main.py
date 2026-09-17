@@ -795,6 +795,12 @@ async def lifespan(app: FastAPI):
             conn.execute(text(
                 "ALTER TABLE patient_documents ADD COLUMN IF NOT EXISTS notes TEXT"
             ))
+            # Pen notes drawn on a visit. JSON of vector strokes; null on every
+            # case paper nobody drew on. On `case_papers`, so a missing column
+            # would break every clinical record read, not just the drawing.
+            conn.execute(text(
+                "ALTER TABLE case_papers ADD COLUMN IF NOT EXISTS sketches JSON"
+            ))
 
             # ── One-shot DATA migrations ────────────────────────────────────
             # Everything above is idempotent DDL, so re-running it every boot is
