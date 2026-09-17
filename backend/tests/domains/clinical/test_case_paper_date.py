@@ -149,3 +149,50 @@ def test_a_prescription_with_no_case_paper_falls_back_to_when_it_was_written(db)
     db.add(Prescription(id=2, clinic_id=CLINIC, patient_id=1, items=[], created_at=SEPT))
     db.commit()
     assert db.get(Prescription, 2).issued_on == SEPT
+
+
+# ─── The shadowing bug that shipped ──────────────────────────────────────────
+#
+# Adding a field called `date` above `next_visit_date: Optional[date]` rebound
+# `date` inside the class, so the follow-up date could only ever be None and
+# every case paper with one came back 422 in production.
+
+def test_a_follow_up_date_is_accepted_on_update():
+    from schemas import CasePaperUpdate
+    body = CasePaperUpdate(next_visit_date='2026-10-01')
+    assert body.next_visit_date == datetime.date(2026, 10, 1)
+
+
+def test_the_visit_date_and_the_follow_up_date_travel_together():
+    """The exact payload the case paper sends on Save."""
+    from schemas import CasePaperUpdate
+    body = CasePaperUpdate(
+        date='2026-06-03T10:00:00.000Z',
+        next_visit_date='2026-06-17',
+        next_visit_recommendation='Review After 2 Weeks',
+        status='Completed',
+    )
+    assert body.next_visit_date == datetime.date(2026, 6, 17)
+    assert body.date.year == 2026
+
+
+def test_no_schema_has_a_field_that_can_only_be_none():
+    """The general form of the bug, across every request and response model.
+
+    A field whose type resolved to NoneType rejects every real value. Nobody
+    declares one on purpose, so any that appears is a name hiding a type.
+    """
+    import inspect
+    from pydantic import BaseModel
+    import schemas
+    import core.dtos as dtos
+
+    bad = []
+    for mod in (schemas, dtos):
+        for name, cls in inspect.getmembers(mod, inspect.isclass):
+            if not (issubclass(cls, BaseModel) and cls.__module__ == mod.__name__):
+                continue
+            for field, info in cls.model_fields.items():
+                if info.annotation is type(None):
+                    bad.append(f'{mod.__name__}.{name}.{field}')
+    assert bad == []

@@ -1,6 +1,11 @@
 from pydantic import BaseModel, field_validator, model_validator
 from typing import Optional, Dict, Any, List
 from datetime import datetime, date
+# The same type under a name no field can hide. A class that declares a field
+# called `date` rebinds `date` for every annotation below it in that class —
+# which is how CasePaperUpdate.next_visit_date quietly became "must be None"
+# and every case paper with a follow-up date started failing to save.
+import datetime as _dt
 
 # Clinic Schemas
 class ClinicBase(BaseModel):
@@ -849,12 +854,6 @@ class CasePaperCreate(CasePaperBase):
     clinic_id: Optional[int] = None
 
 class CasePaperUpdate(BaseModel):
-    # When the visit happened. Editable because plenty of what a clinic records
-    # did not happen while somebody was sitting at the computer: a paper file
-    # being entered weeks later, a visit written up the next morning, a follow-up
-    # booked forward. Absent on a save that is not changing it, so an ordinary
-    # clinical edit never moves the date.
-    date: Optional[datetime] = None
     status: Optional[str] = None
     chief_complaint: Optional[Any] = None
     medical_history: Optional[Any] = None
@@ -863,7 +862,7 @@ class CasePaperUpdate(BaseModel):
     clinical_examination: Optional[str] = None
     diagnosis: Optional[str] = None
     next_visit_recommendation: Optional[str] = None
-    next_visit_date: Optional[date] = None
+    next_visit_date: Optional[_dt.date] = None
     notes: Optional[str] = None
     dental_chart_snapshot: Optional[Any] = None
     treatment_plan_snapshot: Optional[Any] = None
@@ -871,6 +870,16 @@ class CasePaperUpdate(BaseModel):
     perio_chart_snapshot: Optional[Any] = None
     derm_findings: Optional[Any] = None
     sketches: Optional[Any] = None
+    # When the visit happened. Editable because plenty of what a clinic records
+    # did not happen while somebody was sitting at the computer: a paper file
+    # being entered weeks later, a visit written up the next morning. Absent on
+    # a save that is not changing it, so an ordinary clinical edit never moves
+    # the date.
+    #
+    # LAST in the class, on purpose: a field named `date` hides the `date` type
+    # from every annotation after it. Declared above next_visit_date, it turned
+    # that field into "must be None" and broke every save with a follow-up date.
+    date: Optional[datetime] = None
 
 import json as _json
 
