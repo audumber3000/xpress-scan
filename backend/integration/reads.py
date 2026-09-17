@@ -93,6 +93,11 @@ def get_meta(caller: Caller = Depends(require_read)):
             "messaging": True,
             "profile": True,
             "events": True,
+            # Per-site add-ons a support agent can grant or progress. Declared
+            # because MolarPlus has answered PATCH /accounts/{id}/addons/{key}
+            # since it shipped — it was simply never in the contract, so the CRM
+            # had no way to know the action existed and nothing ever called it.
+            "addons": True,
             "update_contact": True,
             "change_plan": True,
             "plans": True,
@@ -207,13 +212,26 @@ def _group_map(db: Session, account_ids: List[int]) -> Dict[int, List[int]]:
     return groups
 
 
-def _trial_flags(db: Session, groups: Dict[int, List[int]]) -> Dict[int, bool]:
-    """Which accounts are on a trial.
+def _trial_flags(db: Session, groups: Dict[int, List[int]],
+                 now=None) -> Dict[int, bool]:
+    """Which accounts are on a trial **right now**.
 
     `clinics` says nothing about trials — MolarPlus keeps that on the
     subscription — so the account's status cannot be read off its own row. The
     CRM needs `trial` separated from `active` to chart trial→paid conversion at
     all, which is a metric the old console did not have.
+
+    The "right now" is the whole of the fix this function once needed. It asked
+    for `is_trial IS TRUE` and nothing else, and `is_trial` is set when a clinic
+    signs up and cleared only when it pays — never when the trial merely runs
+    out. So every clinic that took the seven days and did not buy stayed
+    `status: trial` in the CRM indefinitely, while the product's own middleware
+    was blocking them with "your trial has ended". Two screens, one clinic,
+    opposite answers.
+
+    `vocab.subscription_status(...) == "trial"` is the one definition of a live
+    trial; this reaches it in SQL so the filter, the list and the account status
+    cannot disagree.
     """
     member_ids = [cid for ids in groups.values() for cid in ids]
     if not member_ids:
@@ -222,7 +240,7 @@ def _trial_flags(db: Session, groups: Dict[int, List[int]]) -> Dict[int, bool]:
         row[0] for row in
         db.query(Subscription.clinic_id)
         .filter(Subscription.clinic_id.in_(member_ids))
-        .filter(Subscription.is_trial.is_(True))
+        .filter(vocab.subscription_status_filter(Subscription, ("trial",), now))
         .all()
     )
     return dict(
@@ -255,10 +273,10 @@ def _owners(db: Session, account_ids: List[int]) -> Dict[int, User]:
     return found
 
 
-def _serialise_accounts(db: Session, rows: List[Tuple]) -> List[dict]:
+def _serialise_accounts(db: Session, rows: List[Tuple], now=None) -> List[dict]:
     account_ids = [clinic.id for clinic, _, _ in rows]
     groups = _group_map(db, account_ids)
-    trials = _trial_flags(db, groups)
+    trials = _trial_flags(db, groups, now)
     owners = _owners(db, account_ids)
     return [
         shapes.account(clinic, changed_at, branch_count,
@@ -275,26 +293,30 @@ ACCOUNT_SORTS = {
 }
 
 
-def _on_trial():
-    """Whether any clinic in this account holds a trial subscription.
+def _on_trial(now=None):
+    """Whether any clinic in this account holds a **live** trial subscription.
 
     The clinic row says nothing about trials — MolarPlus keeps that on the
     subscription — so `account_status` takes it as an argument. A filter has to
     reach the same fact, and an EXISTS is how it does that without a join that
     would multiply the account rows.
+
+    Same rule as `_trial_flags`, and it has to be: this decides which accounts
+    `status=trial` returns and that one decides what each row is labelled. They
+    disagreed for as long as neither of them read the dates.
     """
     member = aliased(Clinic)
     return (
         select(Subscription.id)
         .join(member, Subscription.clinic_id == member.id)
         .where(org.belongs_to(member, Clinic.id))
-        .where(Subscription.is_trial.is_(True))
+        .where(vocab.subscription_status_filter(Subscription, ("trial",), now))
         .correlate(Clinic)
         .exists()
     )
 
 
-def _account_status_filter(wanted: List[str]):
+def _account_status_filter(wanted: List[str], now=None):
     """The contract's four account states, as SQL.
 
     `trial` and `active` share a clinic status and are told apart by whether
@@ -303,7 +325,7 @@ def _account_status_filter(wanted: List[str]):
     fact. Mirrors `vocab.account_status` exactly; the two disagreeing would mean
     a list whose rows are labelled something other than what was filtered for.
     """
-    trial = _on_trial()
+    trial = _on_trial(now)
     active = func.lower(func.trim(Clinic.status)).in_(("active",))
     clauses = []
     for value in wanted:
@@ -346,6 +368,9 @@ def list_accounts(
     limit = _limit(limit)
     since = parse_rfc3339(updated_since)
     browse = query.Browse(q=q, sort=sort, page=page, page_size=page_size)
+    # One instant for the request: whether an account is on a trial is a
+    # question about now, asked once by the filter and again by every row.
+    now = utcnow()
     rows_q, roll = _account_query(db)
     if since is not None:
         # Inclusive on purpose. An exclusive bound loses every record sharing
@@ -354,20 +379,20 @@ def list_accounts(
 
     statuses = query.csv(status)
     if statuses:
-        rows_q = rows_q.filter(_account_status_filter(statuses))
+        rows_q = rows_q.filter(_account_status_filter(statuses, now))
     rows_q = query.search(rows_q, browse.q, (Clinic.name, Clinic.clinic_code))
 
     if browse.paging:
         rows_q = query.order(rows_q, browse.sort, ACCOUNT_SORTS, Clinic.name.asc())
         return query.page(rows_q, browse,
-                          lambda visible: _serialise_accounts(db, visible))
+                          lambda visible: _serialise_accounts(db, visible, now))
 
     rows_q = apply_keyset(rows_q, roll.c.changed_at, Clinic.id, cursor)
     rows = rows_q.limit(limit + 1).all()
 
     return envelope(
         rows, limit,
-        lambda visible: _serialise_accounts(db, visible),
+        lambda visible: _serialise_accounts(db, visible, now),
         lambda row: (row[1], row[0].id),
     )
 
@@ -418,16 +443,33 @@ def get_account_stats(account_id: str, db: Session = Depends(get_db),
 
 # ── Branches ─────────────────────────────────────────────────────────────────
 
-BRANCH_SORTS = {
-    "name": Clinic.name,
-    "account_name": org.account_name(),
-    "status": Clinic.status,
-    "created_at": Clinic.created_at,
-    # The one the "going quiet" screens order by, and the reason this is a SQL
-    # expression at all — a page's own numbers are computed in Python, but the
-    # ORDER BY has to see every row.
-    "last_activity_at": aggregates.last_activity_expression(Clinic),
-}
+def branch_sorts():
+    """What a caller may order a branch list by.
+
+    Every number the branch shape reports is here, not just the timestamps.
+    "Which clinics are busiest", "which have the most patients" and "which have
+    gone quiet" are the three questions anybody asks of this list, and the first
+    two were unanswerable: the counts were computed in Python for whichever page
+    the database had already chosen, so there was nothing to order by. Sorting a
+    page by a value computed for that page ranks the rows that happened to load.
+
+    Built per call rather than at import because the GMV window is relative to
+    now — thirty days from whenever the module was imported is a window that
+    slides backwards for as long as the server stays up.
+    """
+    return {
+        "name": Clinic.name,
+        "account_name": org.account_name(),
+        "status": Clinic.status,
+        "created_at": Clinic.created_at,
+        "end_customer_count": aggregates.end_customer_count_expression(Clinic),
+        "transaction_count": aggregates.transaction_count_expression(Clinic),
+        "monthly_gmv": aggregates.monthly_gmv_expression(Clinic),
+        # The one the "going quiet" screens order by, and the reason any of this
+        # is SQL at all — a page's own numbers are computed in Python, but the
+        # ORDER BY has to see every row.
+        "last_activity_at": aggregates.last_activity_expression(Clinic),
+    }
 
 BRANCH_GROUPS = {
     "status": vocab.branch_status_expression(Clinic.status),
@@ -447,6 +489,13 @@ def list_branches(
     page_size: Optional[int] = Query(None, ge=1, le=query.MAX_PAGE_SIZE),
     group_by: Optional[str] = Query(None),
     status: Optional[str] = Query(None, description="Comma-separated"),
+    last_activity_before: Optional[str] = Query(
+        None, description="Sites not used since this instant. Includes sites "
+                          "that have never been used at all."),
+    last_activity_after: Optional[str] = Query(
+        None, description="Sites used since this instant."),
+    min_end_customers: Optional[int] = Query(
+        None, ge=0, description="Sites with at least this many end customers."),
     db: Session = Depends(get_db),
     caller: Caller = Depends(require_read),
 ):
@@ -475,6 +524,26 @@ def list_branches(
     statuses = query.csv(status)
     if statuses:
         rows_q = rows_q.filter(vocab.branch_status_filter(Clinic.status, statuses))
+
+    # "Active" on a branch means two different things and a sales team needs
+    # both. `status` is whether the product lets the site in; these are whether
+    # anybody actually used it. A clinic can be perfectly `active` and not have
+    # seen a patient since June, and that one is the churn risk.
+    activity = aggregates.last_activity_expression(Clinic)
+    quiet_since = parse_rfc3339(last_activity_before)
+    if quiet_since is not None:
+        # A site that has never been used satisfies "not used since" more
+        # completely than any other, so NULL belongs in this answer. Leaving it
+        # out would hide the quietest branches from the screen built to find
+        # them.
+        rows_q = rows_q.filter(or_(activity.is_(None), activity < quiet_since))
+    busy_since = parse_rfc3339(last_activity_after)
+    if busy_since is not None:
+        rows_q = rows_q.filter(activity >= busy_since)
+    if min_end_customers is not None:
+        rows_q = rows_q.filter(
+            aggregates.end_customer_count_expression(Clinic) >= min_end_customers)
+
     rows_q = query.search(rows_q, browse.q, (Clinic.name, org.account_name(),
                                              Clinic.clinic_code, Clinic.city))
 
@@ -482,7 +551,7 @@ def list_branches(
         return query.group(rows_q, browse.group_by, BRANCH_GROUPS)
 
     if browse.paging:
-        rows_q = query.order(rows_q, browse.sort, BRANCH_SORTS, Clinic.name.asc())
+        rows_q = query.order(rows_q, browse.sort, branch_sorts(), Clinic.name.asc())
         return query.page(rows_q, browse, lambda page_rows: _branches(db, page_rows))
 
     rows_q = apply_keyset(rows_q, changed, Clinic.id, cursor)
@@ -521,30 +590,54 @@ def _sort_value(updated_at, created_at):
 # subscription is not billing. Sorting or summing native `mrr` would order a
 # list by numbers in mixed currencies — a dollar plan ranked below a rupee one
 # it is worth five times more than.
-SUBSCRIPTION_MRR = case(
-    (vocab.subscription_is_billing(Subscription.status, Subscription.is_trial),
-     plans_view.mrr_expression(Subscription.plan_name, shapes.REPORTING_CURRENCY)),
-    else_=0,
-)
+# Built per request, not once at import. Whether a subscription is billing now
+# depends on whether its period has run out, and `utcnow()` evaluated while the
+# module loads is the moment the server last restarted — on a box that stays up
+# for a month, a sort and a group built from it drift a month out of date
+# without ever looking wrong.
+def _subscription_mrr(now=None):
+    """What the response reports as `mrr_base`, as SQL: list price in the
+    reporting currency where the subscription is billing, zero where it is not.
 
-SUBSCRIPTION_SORTS = {
-    "account_name": org.account_name(),
-    "plan_tier": plans_view.rank_expression(Subscription.plan_name),
-    "mrr": SUBSCRIPTION_MRR,          # i.e. mrr_base — the comparable one
-    "status": Subscription.status,
-    "current_end": Subscription.current_end,
-    "trial_ends_at": Subscription.trial_ends_at,
-    "created_at": Subscription.created_at,
-}
+    Sorting or summing native `mrr` would order a list by numbers in mixed
+    currencies — a dollar plan ranked below a rupee one it is worth five times
+    more than — and sorting on list price regardless of status would put a
+    trial above a paying account.
+    """
+    return case(
+        (vocab.subscription_is_billing(Subscription, now),
+         plans_view.mrr_expression(Subscription.plan_name, shapes.REPORTING_CURRENCY)),
+        else_=0,
+    )
 
-SUBSCRIPTION_GROUPS = {
-    "plan_tier": plans_view.tier_expression(Subscription.plan_name),
-    "billing_cycle": plans_view.cycle_expression(Subscription.plan_name),
-    # The contract's five states, not the column's — a bucket labelled "active"
-    # that quietly contains trials is worse than no bucket.
-    "status": vocab.subscription_status_expression(
-        Subscription.status, Subscription.is_trial),
-}
+
+def subscription_sorts(now=None):
+    """What a caller may sort a subscription list by, and the expression that
+    does it. Contract field names on the left, so the CRM sorts by what the
+    contract promised rather than by what MolarPlus happens to store a column
+    called."""
+    return {
+        "account_name": org.account_name(),
+        "plan_tier": plans_view.rank_expression(Subscription.plan_name),
+        "mrr": _subscription_mrr(now),    # i.e. mrr_base — the comparable one
+        # The contract's five states, not the raw column: sorting on the column
+        # would put an expired trial among the active rows, because that is
+        # what the column still says about it.
+        "status": vocab.subscription_status_expression(Subscription, now),
+        "current_end": Subscription.current_end,
+        "trial_ends_at": Subscription.trial_ends_at,
+        "created_at": Subscription.created_at,
+    }
+
+
+def subscription_groups(now=None):
+    return {
+        "plan_tier": plans_view.tier_expression(Subscription.plan_name),
+        "billing_cycle": plans_view.cycle_expression(Subscription.plan_name),
+        # The contract's five states, not the column's — a bucket labelled
+        # "active" that quietly contains trials is worse than no bucket.
+        "status": vocab.subscription_status_expression(Subscription, now),
+    }
 
 
 @router.get("/subscriptions", tags=["billing"], operation_id="listSubscriptions")
@@ -590,6 +683,10 @@ def list_subscriptions(
     changed = _changed(Subscription.updated_at, Subscription.created_at)
     browse = query.Browse(q=q, sort=sort, page=page, page_size=page_size,
                           group_by=group_by)
+    # One instant for the whole request. Every derived status below is a
+    # question about "now", and asking the clock twice inside one response can
+    # put a row in a bucket its own row then contradicts.
+    now = utcnow()
 
     if cursor is None and not browse.paging:
         _warn_unattributable(db)
@@ -605,8 +702,8 @@ def list_subscriptions(
         # In the contract's vocabulary, not MolarPlus's column. See
         # vocab.subscription_status_filter — `active` and `trial` share a raw
         # value, and `past_due` has no raw value at all.
-        rows_q = rows_q.filter(vocab.subscription_status_filter(
-            Subscription.status, Subscription.is_trial, statuses))
+        rows_q = rows_q.filter(
+            vocab.subscription_status_filter(Subscription, statuses, now))
     trial = query.parse_bool(is_trial)
     if trial is not None:
         rows_q = rows_q.filter(Subscription.is_trial.is_(trial))
@@ -623,8 +720,8 @@ def list_subscriptions(
         # MRR by tier and by billing cycle, and the Kanban column counts, in one
         # GROUP BY rather than a copied table the CRM could SUM for itself.
         return query.group(
-            rows_q, browse.group_by, SUBSCRIPTION_GROUPS,
-            {"mrr_micros": func.sum(SUBSCRIPTION_MRR)},
+            rows_q, browse.group_by, subscription_groups(now),
+            {"mrr_micros": func.sum(_subscription_mrr(now))},
         )
 
     # The two filters `core.plans` decides rather than SQL. See query.py.
@@ -632,7 +729,7 @@ def list_subscriptions(
     wants_mismatch = query.parse_bool(entitlement_mismatch)
 
     if browse.paging:
-        rows_q = query.order(rows_q, browse.sort, SUBSCRIPTION_SORTS,
+        rows_q = query.order(rows_q, browse.sort, subscription_sorts(now),
                              Subscription.id.asc())
         if wants_limit is None and wants_mismatch is None:
             return query.page(rows_q, browse, lambda page_rows: _subscriptions(db, page_rows))

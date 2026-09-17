@@ -182,6 +182,61 @@ def _greatest(*values):
     return result
 
 
+def _correlated(clinic_model, model, aggregate, *extra_filters):
+    """One aggregate over a site's rows, as a scalar subquery.
+
+    Still nothing below the aggregate, which is the invariant this module
+    exists to hold: a `COUNT` or a `SUM` over a foreign key selects no row from
+    `patients`, `appointments` or `invoices`, so patient data never leaves.
+    """
+    statement = (
+        select(aggregate)
+        .where(model.clinic_id == clinic_model.id)
+    )
+    for clause in extra_filters:
+        statement = statement.where(clause)
+    return statement.correlate(clinic_model).scalar_subquery()
+
+
+def end_customer_count_expression(clinic_model):
+    """`end_customer_count`, as SQL, so a database can sort on it.
+
+    "Which of our clinics are the busiest" cannot be answered by sorting a page:
+    the page is twenty-five rows the database already chose, so ordering them by
+    a number computed in Python ranks whichever rows happened to load. It looks
+    identical on screen and is useless, which is the worst combination.
+
+    The Python path in `for_clinics` still serves each page's own numbers — one
+    grouped query for the page rather than a subquery per row.
+    """
+    return func.coalesce(
+        _correlated(clinic_model, Patient, func.count(Patient.id)), 0)
+
+
+def transaction_count_expression(clinic_model):
+    """`transaction_count`, as SQL. Appointments in MolarPlus."""
+    return func.coalesce(
+        _correlated(clinic_model, Appointment, func.count(Appointment.id)), 0)
+
+
+def monthly_gmv_expression(clinic_model):
+    """`monthly_gmv`, as SQL: the same windowed, status-filtered sum.
+
+    **Sortable, never summable.** This is what the clinic bills its own
+    patients, in whatever currency that clinic bills in, so ordering by it is a
+    fair comparison of size and adding it up across a mixed-currency estate is
+    the float-summation bug `roll_up` above refuses to commit. Nothing here adds
+    it up; `ORDER BY` compares one row at a time.
+    """
+    since = datetime.datetime.utcnow() - datetime.timedelta(days=GMV_WINDOW_DAYS)
+    billed_at = func.coalesce(Invoice.finalized_at, Invoice.created_at)
+    return func.coalesce(
+        _correlated(clinic_model, Invoice, func.sum(Invoice.total),
+                    ~Invoice.status.in_(GMV_EXCLUDED_STATUSES),
+                    billed_at >= since),
+        0.0)
+
+
 def last_activity_expression(clinic_model):
     """The same `last_activity_at`, as SQL, so a database can sort on it.
 

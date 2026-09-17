@@ -62,7 +62,6 @@ _STATE_OF = {
     "cancelled": "expired",
     "expired": "expired",
 }
-BILLING_STATUSES = ("active", "past_due")
 
 
 # ── Shared ──────────────────────────────────────────────────────────────────
@@ -172,10 +171,23 @@ def _current_subscriptions(db: Session, account_of: Dict[int, int]):
     return dict((account, held[1]) for account, held in current.items())
 
 
-def _state(sub) -> str:
+def _state(sub, now=None) -> str:
+    """The account state these dashboards count by.
+
+    Goes through `vocab.subscription_status` with the row's dates and provider,
+    not just its status column, for the reason that function documents at
+    length: a trial that ended in March still says `active` / `is_trial` in the
+    database, and counting it as a live trial put the whole lapsed estate in the
+    Trials tile on the founder dashboard.
+
+    A clinic on the free introductory grant reads `active` and is counted as
+    paying here deliberately — the question `by_state` asks is "does this clinic
+    have the product", and it does. What it must not do is contribute revenue,
+    which is `vocab.is_billing`'s job in the MRR loop below.
+    """
     if sub is None:
         return "none"
-    return _STATE_OF[vocab.subscription_status(sub.status, bool(sub.is_trial), sub.id)]
+    return _STATE_OF[vocab.subscription_status(sub, now=now)]
 
 
 # ── Accounts ────────────────────────────────────────────────────────────────
@@ -206,7 +218,7 @@ def account_insights(
     lapsed = []
     for root in roots:
         sub = current.get(root.id)
-        state = _state(sub)
+        state = _state(sub, now)
         states[state] += 1
         if state == "paying":
             tier, _ = plans.resolve(sub.plan_name)
@@ -400,8 +412,8 @@ def revenue_insights(
     renewals = [0, 0]
     horizon = now + datetime.timedelta(days=30)
     for sub in db.query(Subscription).filter(Subscription.clinic_id.isnot(None)).all():
-        status = vocab.subscription_status(sub.status, bool(sub.is_trial), sub.id)
-        if status not in BILLING_STATUSES:
+        status = vocab.subscription_status(sub, now=now)
+        if not vocab.is_billing(status, sub.provider):
             continue
         amount = plans_view.monthly_mrr_micros(sub.plan_name, currency)
         tier, cycle = plans.resolve(sub.plan_name)

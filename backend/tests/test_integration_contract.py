@@ -314,6 +314,122 @@ def test_trial_subscription_makes_the_account_a_trial(client):
     assert get(client, "/accounts/clinic:5")["status"] == "trial"
 
 
+# ── A trial that has ended ───────────────────────────────────────────────────
+#
+# The bug these were written for: `is_trial` is set when a clinic signs up and
+# cleared only when it pays. Nothing clears it when the trial simply runs out,
+# and nothing rewrites `subscriptions.status` either — so a clinic that took the
+# seven days and never bought kept reporting `status: trial` indefinitely, while
+# `core.plan_state` was blocking every write it made with "your trial has
+# ended". The CRM's Trial column filled up with clinics that had left months
+# earlier, and the pipeline showed no one to win back.
+#
+# Every assertion below failed before integration/vocab.py learned to read the
+# dates. They are the reason it does.
+
+def _expire(db_session, subscription_id, days_ago=1):
+    """Age a subscription past its end date, leaving the columns exactly as
+    MolarPlus leaves them: `status` still `active`, `is_trial` still true."""
+    sub = db_session.query(Subscription).filter(Subscription.id == subscription_id).one()
+    ended = NOW - datetime.timedelta(days=days_ago)
+    sub.current_end = ended
+    sub.trial_ends_at = ended
+    db_session.commit()
+    return sub
+
+
+def test_a_trial_past_its_end_date_is_expired_not_trial(client, db_session):
+    _expire(db_session, 103)
+    subs = dict((s["id"], s) for s in get(client, "/subscriptions")["data"])
+    assert subs["103"]["status"] == "expired"
+    # The raw flag is still reported as the product stores it — the CRM reads
+    # the status, and `is_trial` stays the answer to "was this ever a trial".
+    assert subs["103"]["is_trial"] is True
+    assert subs["103"]["mrr"]["amount_micros"] == 0
+
+
+def test_an_account_whose_trial_ended_is_no_longer_on_trial(client, db_session):
+    """The symptom everybody saw: hundreds of clinics sitting in the CRM on
+    Trial, months after the trial ended."""
+    assert get(client, "/accounts/clinic:5")["status"] == "trial"
+    _expire(db_session, 103)
+    assert get(client, "/accounts/clinic:5")["status"] == "active"
+
+
+def test_the_trial_filter_and_the_trial_label_agree_after_expiry(client, db_session):
+    """The filter and the label are two pieces of SQL saying the same thing, and
+    they were both wrong in the same way. Fixing one and not the other gives a
+    list that does not contain what its own filter says."""
+    _expire(db_session, 103)
+    for value in ("active", "trial", "suspended", "churned"):
+        page = get(client, "/accounts", page=1, status=value)
+        assert all(row["status"] == value for row in page["data"]), value
+    assert get(client, "/accounts", page=1, status="trial")["total"] == 0
+
+
+def test_a_paid_plan_past_its_end_date_is_past_due_not_active(client, db_session):
+    """Not `expired`: a renewal that has not landed is money owed, and the
+    mandate may still settle it. It keeps its MRR for the same reason."""
+    sub = db_session.query(Subscription).filter(Subscription.id == 100).one()
+    sub.current_end = NOW - datetime.timedelta(days=2)
+    db_session.commit()
+    subs = dict((s["id"], s) for s in get(client, "/subscriptions")["data"])
+    assert subs["100"]["status"] == "past_due"
+    assert subs["100"]["mrr"]["amount_micros"] > 0
+
+
+def test_the_introductory_grant_pays_nothing(client, db_session):
+    """Every clinic that existed on 2026-08-24 was put on Plus free, with
+    `provider='migration'` and `status='active'` and `is_trial` false. Read off
+    the status alone they are indistinguishable from paying customers, which is
+    how the entire cohort came to be counted at list price on the revenue
+    dashboard."""
+    sub = db_session.query(Subscription).filter(Subscription.id == 100).one()
+    sub.provider = "migration"
+    db_session.commit()
+    subs = dict((s["id"], s) for s in get(client, "/subscriptions")["data"])
+    # Still active — the grant is not enforced, and the clinic is using the
+    # product. It just is not revenue.
+    assert subs["100"]["status"] == "active"
+    assert subs["100"]["mrr"]["amount_micros"] == 0
+    assert subs["100"]["mrr_base"]["amount_micros"] == 0
+
+
+def test_an_expired_grant_stays_active_while_the_grant_is_not_enforced(client, db_session):
+    """`ENFORCE_GRANT_END` is off, so the product keeps letting these clinics
+    in. Reporting them expired would send somebody to win back a customer who
+    never left."""
+    sub = db_session.query(Subscription).filter(Subscription.id == 100).one()
+    sub.provider = "migration"
+    sub.current_end = NOW - datetime.timedelta(days=10)
+    db_session.commit()
+    subs = dict((s["id"], s) for s in get(client, "/subscriptions")["data"])
+    assert subs["100"]["status"] == "active"
+
+
+def test_expired_trials_are_counted_as_expired_not_as_live_trials(client, db_session):
+    """The founder dashboard's Trials tile read the same broken flag."""
+    _expire(db_session, 103)
+    insights = get(client, "/insights/accounts", months=3)
+    by_state = dict((row["key"], row["count"]) for row in insights["by_state"])
+    assert by_state["trial"] == 0
+    assert insights["trials_ending_7_days"] == 0
+
+
+def test_the_status_case_and_the_python_status_agree_on_every_row(client, db_session):
+    """`group_by=status` is a CASE and the response body is a Python function,
+    written twice from the same table. This runs both over every row in the
+    fixture, expired trials included, and fails if they ever disagree — which is
+    the failure that hides best, because each half looks right on its own."""
+    _expire(db_session, 103)
+    groups = get(client, "/subscriptions", group_by="status")["groups"]
+    grouped = dict((row["key"], row["count"]) for row in groups)
+    listed = {}
+    for row in get(client, "/subscriptions")["data"]:
+        listed[row["status"]] = listed.get(row["status"], 0) + 1
+    assert grouped == listed
+
+
 def test_branch_id_is_not_an_account_id(client):
     """`clinic:2` is a branch. Asking for it as an account is a 404, not a
     silently wrong answer about its parent."""
@@ -1709,6 +1825,64 @@ def test_branches_sort_by_last_activity_sees_rows_beyond_the_page(client):
                   sort="last_activity_at:desc")["data"]
     assert quietest and busiest
     assert quietest[0]["id"] != busiest[0]["id"]
+
+
+def test_branches_sort_by_patient_count_across_the_whole_list(client):
+    """"Which clinics are busiest" was unanswerable: the counts were computed
+    in Python for the page the database had already chosen, so there was
+    nothing to order by. Asking for one row at a time proves the ORDER BY sees
+    rows the page never fetched."""
+    busiest = get(client, "/branches", page=1, page_size=1,
+                  sort="end_customer_count:desc")["data"]
+    smallest = get(client, "/branches", page=1, page_size=1,
+                   sort="end_customer_count:asc")["data"]
+    assert busiest[0]["end_customer_count"] >= smallest[0]["end_customer_count"]
+    # Clinic 1 has three patients in the fixture, more than any other. Branch
+    # ids are the site's own, not the account's — "1", not "clinic:1".
+    assert busiest[0]["id"] == "1"
+    assert busiest[0]["end_customer_count"] == 3
+
+
+def test_branches_sort_by_appointments_and_by_revenue(client):
+    for field in ("transaction_count", "monthly_gmv"):
+        top = get(client, "/branches", page=1, page_size=1, sort=field + ":desc")["data"]
+        bottom = get(client, "/branches", page=1, page_size=1, sort=field + ":asc")["data"]
+        assert top and bottom
+        assert top[0]["id"] != bottom[0]["id"], field
+
+
+def test_an_unsortable_branch_field_is_still_a_422(client):
+    """Adding sorts must not turn the allowlist into a passthrough. A silent
+    fallback produces a list that looks sorted and is not."""
+    response = client.get(integration.PREFIX + "/branches", headers=FULL,
+                          params={"page": 1, "sort": "patients:desc"})
+    assert response.status_code == 422
+
+
+def test_branches_filter_by_when_they_were_last_used(client):
+    """The two halves of "active": whether the product lets the site in, and
+    whether anybody used it. A clinic can be perfectly active and not have seen
+    a patient since June, and that one is the churn risk."""
+    cutoff = (NOW - datetime.timedelta(days=1)).isoformat() + "Z"
+    quiet = get(client, "/branches", page=1, last_activity_before=cutoff)["data"]
+    busy = get(client, "/branches", page=1, last_activity_after=cutoff)["data"]
+    assert set(b["id"] for b in quiet) & set(b["id"] for b in busy) == set()
+    assert len(quiet) + len(busy) == get(client, "/branches", page=1)["total"]
+
+
+def test_a_branch_never_used_counts_as_quiet(client):
+    """A site nobody has ever opened satisfies "not used since" more completely
+    than any other. Leaving NULL out would hide the quietest branches from the
+    screen built to find them."""
+    cutoff = (NOW + datetime.timedelta(days=365)).isoformat() + "Z"
+    quiet = get(client, "/branches", page=1, last_activity_before=cutoff)["data"]
+    never = [b for b in quiet if b["last_activity_at"] is None]
+    assert never, "the fixture has a branch with no patients, appointments or invoices"
+
+
+def test_branches_filter_by_minimum_patient_count(client):
+    page = get(client, "/branches", page=1, min_end_customers=2)["data"]
+    assert page and all(b["end_customer_count"] >= 2 for b in page)
 
 
 def test_a_bad_boolean_is_refused_rather_than_read_as_false(client):

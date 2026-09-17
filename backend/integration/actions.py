@@ -643,7 +643,12 @@ class AddonPatch(BaseModel):
     until: Optional[datetime.datetime] = None
     # A branch of this account, when the add-on is for a branch rather than the
     # main clinic. Add-ons are per location.
-    clinic_id: Optional[int] = None
+    #
+    # `branch_id` on the wire, not `clinic_id`: the contract's word for a site
+    # is `branch`, so that SyrupDesk's stores and MolarPlus's clinics reach the
+    # CRM as one thing. It is read as a string for the same reason every id in
+    # the contract is — the CRM must not learn that MolarPlus counts in integers.
+    branch_id: Optional[str] = None
     reason: Optional[str] = None
 
 
@@ -651,7 +656,7 @@ def _addon_shape(row, clinic_id: int) -> dict:
     from core import addons
     item = addons.get(row.addon_key) or {}
     return {
-        "clinic_id": clinic_id,
+        "branch_id": str(clinic_id),
         "addon_key": row.addon_key,
         "label": item.get("label"),
         "status": row.status,
@@ -682,12 +687,21 @@ def update_addon(account_id: str, addon_key: str, body: AddonPatch, response: Re
 
     account = _account_clinic(db, account_id)
     target = account
-    if body.clinic_id and body.clinic_id != account.id:
-        target = db.query(Clinic).filter(Clinic.id == body.clinic_id).first()
-        if target is None or target.parent_clinic_id != account.id:
+    if body.branch_id:
+        try:
+            branch_id = int(body.branch_id)
+        except (TypeError, ValueError):
             raise ContractError(422, "not_a_branch",
-                                "clinic_id is not a branch of this account.",
-                                {"account_id": account_id, "clinic_id": body.clinic_id})
+                                "branch_id is not a site of this account.",
+                                {"account_id": account_id, "branch_id": body.branch_id})
+        if branch_id != account.id:
+            target = db.query(Clinic).filter(Clinic.id == branch_id).first()
+            # Checked rather than trusted: this grants a paid feature, and a
+            # branch id belonging to somebody else would grant it to them.
+            if target is None or target.parent_clinic_id != account.id:
+                raise ContractError(422, "not_a_branch",
+                                    "branch_id is not a site of this account.",
+                                    {"account_id": account_id, "branch_id": body.branch_id})
     if not addons.get(addon_key):
         raise ContractError(422, "unknown_addon", "MolarPlus offers no add-on {!r}.".format(addon_key),
                             {"addon_key": addon_key, "offered": sorted(addons.ADDONS)})

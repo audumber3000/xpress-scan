@@ -29,13 +29,10 @@ from .wire import ext_id, micros, money, to_rfc3339
 # every tier does not appear twice in the CRM with nothing to say why.
 PRODUCT_LABEL = "MolarPlus"
 
-# Statuses that are billing right now. A trial pays nothing and a cancelled or
-# expired subscription pays nothing, so their MRR is zero rather than the list
-# price of the plan attached to them — `mrr` means recurring revenue, and
-# reporting the price of a plan nobody is paying for is how a pipeline number
-# ends up on a revenue chart. `past_due` keeps its price: that money is owed,
-# not gone.
-BILLING_STATUSES = ("active", "past_due")
+# Which statuses are billing lives in `vocab.BILLING_STATUSES`, beside the
+# function that decides — `vocab.is_billing`, which also knows about the one
+# case the status cannot show you: a clinic on the free introductory grant reads
+# `active`, is not a trial, and pays nothing.
 
 # What `GET /meta` declares, and the currency every comparable figure is
 # reported in. One constant, because a total in a different currency from the
@@ -160,9 +157,13 @@ def subscription(row, account_clinic_id: int, account_name: str, clinic) -> Dict
     them.
     """
     tier, cycle = plans.resolve(row.plan_name)
-    status = vocab.subscription_status(row.status, bool(row.is_trial), row.id)
+    # The dates and the provider, not just the column: nothing in MolarPlus
+    # rewrites `subscriptions.status` when a period runs out, so `active` on its
+    # own is a claim about the day the row was written. See vocab.
+    status = vocab.subscription_status(row)
+    billing = vocab.is_billing(status, row.provider)
     currency = plans_view.billing_currency(clinic.country if clinic is not None else None)
-    mrr_micros = plans_view.monthly_mrr_micros(row.plan_name, currency) if status in BILLING_STATUSES else 0
+    mrr_micros = plans_view.monthly_mrr_micros(row.plan_name, currency) if billing else 0
 
     return {
         "id": ext_id(row.id),
@@ -187,7 +188,7 @@ def subscription(row, account_clinic_id: int, account_name: str, clinic) -> Dict
         # go stale.
         "mrr_base": micros(
             plans_view.monthly_mrr_micros(row.plan_name, REPORTING_CURRENCY)
-            if status in BILLING_STATUSES else 0,
+            if billing else 0,
             REPORTING_CURRENCY),
         "branch_limit": plans.limit(row.plan_name, "branches"),
         "staff_limit": plans.limit(row.plan_name, "staff"),

@@ -12,11 +12,24 @@ caused it. Under-reporting is a visible anomaly somebody investigates;
 over-reporting revenue is the exact failure the contract exists to prevent, and
 it looks like success until the quarter closes.
 """
+import datetime
 import logging
 
 from sqlalchemy import and_, case, func, not_, or_
 
+from core import plan_state
+
 log = logging.getLogger("integration.vocab")
+
+# The provider MolarPlus writes on a subscription nobody is paying for.
+#
+# `trial` is the 7-day signup trial; `migration` is the introductory grant every
+# clinic that existed on 2026-08-24 was put on, free, to a date somebody moves
+# by hand. Both entitle a clinic to the product and neither is revenue, which is
+# why they are named here rather than left to `provider()` below to flatten into
+# `other`.
+TRIAL_PROVIDER = "trial"
+GRANT_PROVIDER = "migration"
 
 # The contract's enums, repeated here so a typo is a NameError rather than a
 # record the CRM rejects at sync time. These must match
@@ -91,16 +104,90 @@ def branch_status(clinic_status, row_id=None) -> str:
     return _warn("clinics.status", clinic_status, row_id, "closed")
 
 
-def subscription_status(status, is_trial: bool = False, row_id=None) -> str:
-    """`subscriptions.status` → the contract's five subscription states.
+def runs_to(sub):
+    """The instant this subscription runs to.
 
-    MolarPlus writes `active`, `pending`, `expired` and (per the model comment)
-    `paused` and `cancelled`. `pending` is a checkout that has not settled and
-    `paused` is a mandate that stopped collecting; both are money we expect and
-    have not received, which is what `past_due` means.
+    `current_end` is what the product enforces — `core.plan_state.evaluate` and
+    `plans.effective_plan` both read it, and both trial routes write it and
+    `trial_ends_at` to the same value. `trial_ends_at` is the fallback for a row
+    where only it was set, so a trial with a known end date is never treated as
+    endless.
     """
-    value = _clean(status)
+    return getattr(sub, "current_end", None) or getattr(sub, "trial_ends_at", None)
+
+
+def ended(sub, now=None) -> bool:
+    """Whether a subscription has run past the date it runs to.
+
+    The same test `core.plan_state.evaluate` makes. A row with no end date has
+    nothing to run out and is never ended — a support-granted plan with no
+    expiry is a real state.
+    """
+    end = runs_to(sub)
+    if end is None:
+        return False
+    return end < (now or datetime.datetime.utcnow())
+
+
+def is_grant(provider) -> bool:
+    """A clinic on the free introductory grant rather than a paid plan."""
+    return _clean(provider) == GRANT_PROVIDER
+
+
+def _grant_runs_out() -> bool:
+    """Whether the grant's end date is enforced.
+
+    It is off by default, and that is a business decision with a support cost
+    rather than an oversight: every migrated clinic shares one `current_end`, so
+    enforcing it blocks the entire estate at the same midnight, none of them
+    having ever been invoiced. While it is off the product keeps letting them
+    in, so the contract must keep calling them active — a CRM that reports a
+    working clinic as expired sends somebody to win back a customer who never
+    left.
+    """
+    return plan_state.ENFORCE_GRANT_END
+
+
+def subscription_status(sub, row_id=None, now=None) -> str:
+    """A subscription row → the contract's five subscription states.
+
+    Takes the row rather than its status column, because the status column
+    cannot answer the question on its own. MolarPlus writes `active`,
+    `pending`, `expired` and (per the model comment) `paused` and `cancelled`.
+    `pending` is a checkout that has not settled and `paused` is a mandate that
+    stopped collecting; both are money we expect and have not received, which is
+    what `past_due` means.
+
+    **`active` is a claim about today, and the column cannot make it.** Nothing
+    in MolarPlus ever rewrites `subscriptions.status` when a period simply runs
+    out: `is_trial` is set at signup and cleared only by a payment, and `status`
+    stays `active` for as long as the row exists. Expiry is evaluated from the
+    dates at read time — `core.plan_state` does it to decide whether to block
+    the clinic, `plans.effective_plan` does it to decide what the clinic may use
+    — and this function did not, so a trial that ended in March was still
+    reported as a live trial in September. Clinics sat in the CRM's Trial column
+    while the product told them, on their own screen, that their trial was over.
+
+    So the dates are read here too, by the same rule, and the three answers
+    agree:
+
+      a trial past its end        -> `expired`  (the product blocks it)
+      a paid plan past its end    -> `past_due` (money owed, mandate may settle)
+      a grant past its end        -> unchanged while the grant is not enforced
+
+    `past_due` rather than `expired` for the paid case on purpose. A renewal
+    that has not landed is not a customer who left, and `past_due` keeps its
+    MRR — the contract's own words: "a renewal that has not been paid yet is a
+    shop that still trades."
+    """
+    row_id = row_id if row_id is not None else getattr(sub, "id", None)
+    value = _clean(getattr(sub, "status", None))
+    is_trial = bool(getattr(sub, "is_trial", False))
+    provider = getattr(sub, "provider", None)
     if value == "active":
+        over = ended(sub, now) and not (is_grant(provider) and not _grant_runs_out())
+        if over:
+            return "expired" if is_trial else "past_due"
         return "trial" if is_trial else "active"
     if value in ("pending", "paused", "halted", "past_due", "on_hold"):
         return "past_due"
@@ -108,7 +195,21 @@ def subscription_status(status, is_trial: bool = False, row_id=None) -> str:
         return "cancelled"
     if value in ("expired", "completed", "ended"):
         return "expired"
-    return _warn("subscriptions.status", status, row_id, "expired")
+    return _warn("subscriptions.status", getattr(sub, "status", None), row_id, "expired")
+
+
+# The contract statuses that are money. A trial pays nothing and a cancelled or
+# expired subscription pays nothing, so their MRR is zero rather than the list
+# price of the plan attached to them. `past_due` keeps its price: that money is
+# owed, not gone.
+BILLING_STATUSES = ("active", "past_due")
+
+
+def is_billing(status: str, provider=None) -> bool:
+    """Whether this subscription is revenue. The Python twin of
+    `subscription_is_billing` below — see it for why the grant is the case the
+    status alone cannot tell you about."""
+    return status in BILLING_STATUSES and not is_grant(provider)
 
 
 def payment_status(status, row_id=None) -> str:
@@ -275,35 +376,73 @@ _KNOWN_SUBSCRIPTION_RAW = tuple(
 )
 
 
-def subscription_status_filter(status_column, is_trial_column, wanted):
+def subscription_over(model, now=None):
+    """SQL for `ended()` above: this row is past the date it runs to.
+
+    `model` is the Subscription mapper (or an alias of it) — the same object the
+    Python side takes a row of, so the two read the same four columns and cannot
+    drift apart over which ones matter.
+
+    The grant carve-out is here rather than at the call sites because there are
+    three of them — the filter, the CASE and the billing test — and a rule that
+    holds in two of them produces a list whose rows are labelled something other
+    than what was filtered for.
+    """
+    now = now or datetime.datetime.utcnow()
+    runs_to_column = func.coalesce(model.current_end, model.trial_ends_at)
+    over = and_(runs_to_column.isnot(None), runs_to_column < now)
+    if not _grant_runs_out():
+        over = and_(over, func.lower(func.trim(
+            func.coalesce(model.provider, ""))) != GRANT_PROVIDER)
+    return over
+
+
+def _subscription_clauses(model, now=None):
+    """Every contract status as SQL, paired with its name, in CASE order.
+
+    One definition, read by the filter and by the CASE, because the two
+    disagreeing is the failure that hides best: a bucket headed "Trial 214"
+    whose list shows 38 rows, and nobody can say which number is wrong.
+
+    Mirrors `subscription_status()` line for line. If you change one, change
+    both — `tests/test_integration_contract.py` runs the pair over the same
+    rows and fails if they disagree.
+    """
+    normalised = func.lower(func.trim(model.status))
+    raw_active = normalised.in_(_SUBSCRIPTION_SOURCES["active"])
+    trial_flag = model.is_trial.is_(True)
+    not_trial = or_(model.is_trial.is_(False), model.is_trial.is_(None))
+    over = subscription_over(model, now)
+    live = not_(over)
+
+    return [
+        ("trial", and_(raw_active, trial_flag, live)),
+        ("active", and_(raw_active, not_trial, live)),
+        # Two ways to owe money: a mandate that stopped collecting, and a paid
+        # period that simply ran out while the row still said `active`.
+        ("past_due", or_(normalised.in_(_SUBSCRIPTION_SOURCES["past_due"]),
+                         and_(raw_active, not_trial, over))),
+        ("cancelled", normalised.in_(_SUBSCRIPTION_SOURCES["cancelled"])),
+        # The fallback, and it has to catch three things: the raw values that
+        # mean expired, a trial whose end date has passed, and any status this
+        # module has never seen — because that is what the response reports for
+        # it, and a row missing from the list its own label names is the kind of
+        # gap nobody finds by looking.
+        ("expired", or_(normalised.in_(_SUBSCRIPTION_SOURCES["expired"]),
+                        and_(raw_active, trial_flag, over),
+                        not_(normalised.in_(_KNOWN_SUBSCRIPTION_RAW)))),
+    ]
+
+
+def subscription_status_filter(model, wanted, now=None):
     """SQL for "the contract would call this row one of `wanted`".
 
-    Two details that are easy to get wrong and expensive to miss:
-
-    `active` and `trial` share a raw value and are told apart by `is_trial`, so
-    each carries that condition rather than both matching every active row.
-
-    An unrecognised raw status is reported as `expired` — the vocabulary falls
-    back downward on purpose — so the `expired` filter must also match rows
-    whose status this module has never seen. Otherwise a row the response calls
-    expired is missing from the expired list, which is the kind of gap nobody
-    finds by looking.
+    `active` and `trial` share a raw value and are told apart by `is_trial` and
+    by whether the period has run out — see `subscription_status()` for why the
+    dates have to be read here and cannot be left to the column.
     """
-    normalised = func.lower(func.trim(status_column))
-    clauses = []
-    for value in wanted:
-        sources = _SUBSCRIPTION_SOURCES.get(value)
-        if sources is None:
-            continue
-        clause = normalised.in_(sources)
-        if value == "active":
-            clause = and_(clause, or_(is_trial_column.is_(False),
-                                      is_trial_column.is_(None)))
-        elif value == "trial":
-            clause = and_(clause, is_trial_column.is_(True))
-        elif value == "expired":
-            clause = or_(clause, not_(normalised.in_(_KNOWN_SUBSCRIPTION_RAW)))
-        clauses.append(clause)
+    by_name = dict(_subscription_clauses(model, now))
+    clauses = [by_name[value] for value in wanted if value in by_name]
     if not clauses:
         # A filter naming nothing the contract knows must return nothing, not
         # everything. Silently dropping it would widen the list.
@@ -384,24 +523,32 @@ def payment_status_expression(column):
     return _status_case(column, _PAYMENT_SOURCES, "failed")
 
 
-def subscription_status_expression(status_column, is_trial_column):
-    """As above, with the twist that makes subscriptions different: `active` and
-    `trial` share a raw value and are told apart by `is_trial`."""
-    normalised = func.lower(func.trim(status_column))
-    return _status_case(
-        status_column, _SUBSCRIPTION_SOURCES, "expired",
-        extra=[
-            (and_(normalised.in_(("active",)), is_trial_column.is_(True)), "trial"),
-            (normalised.in_(("active",)), "active"),
-        ],
-    )
+def subscription_status_expression(model, now=None):
+    """The same five states as a CASE, for `group_by=status`.
+
+    Not `_status_case` like the other three vocabularies: subscriptions are the
+    one whose status is not a function of its own column, so the conditions come
+    from `_subscription_clauses` and the last one becomes the `else_`.
+    """
+    clauses = _subscription_clauses(model, now)
+    whens = [(condition, value) for value, condition in clauses[:-1]]
+    return case(*whens, else_=clauses[-1][0])
 
 
-def subscription_is_billing(status_column, is_trial_column):
-    """Whether MRR is real money. Trials, cancellations and expiries pay nothing.
+def subscription_is_billing(model, now=None):
+    """Whether MRR is real money. Trials, grants, cancellations and expiries are not.
 
     `shapes.subscription` reports `mrr` as zero for these, so an ORDER BY that
     used list price regardless would sort a list by numbers it does not show.
+
+    **The grant is the one that is not visible from the status.** Every clinic
+    that existed on 2026-08-24 was put on Plus free, with `provider='migration'`
+    and `status='active'` and `is_trial` false — indistinguishable from a paying
+    customer to anything that reads the status alone, which is how the whole
+    introductory cohort came to be counted at list price on the CRM's revenue
+    dashboard. They pay nothing. Their MRR is nothing.
     """
-    return subscription_status_filter(status_column, is_trial_column,
-                                      ("active", "past_due"))
+    return and_(
+        subscription_status_filter(model, BILLING_STATUSES, now),
+        func.lower(func.trim(func.coalesce(model.provider, ""))) != GRANT_PROVIDER,
+    )
